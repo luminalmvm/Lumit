@@ -1,7 +1,3 @@
-//! `lumit-cli export --data <file>`: one export of a graphics template for
-//! each row of a CSV, TSV or JSON file, through the same row versions the
-//! Data window's **Export rows** makes.
-
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 
@@ -14,7 +10,6 @@ use uuid::Uuid;
 use super::Export;
 use crate::api::export::BridgeExportSpec;
 
-/// The footage item in `doc` that reads `file`, when there is one.
 fn footage_at(doc: &Document, file: &Path) -> Option<Uuid> {
     doc.items.iter().find_map(|item| match item {
         ProjectItem::Footage(f) if Path::new(&f.media.absolute_path) == file => Some(f.id),
@@ -22,7 +17,6 @@ fn footage_at(doc: &Document, file: &Path) -> Option<Uuid> {
     })
 }
 
-/// Export the template `how` names once for each row of its `--data` file.
 pub(super) fn export(
     project: &Path,
     how: &Export,
@@ -77,7 +71,6 @@ pub(super) fn export(
         return Err(format!("The file has {count} rows."));
     }
 
-    // The files the rows name, brought in once.
     let mut wanted: Vec<PathBuf> = Vec::new();
     for row in first - 1..last {
         let Some(read) = feed::row_values(&template, &data, row as usize) else {

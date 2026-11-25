@@ -25,7 +25,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// The wire-only data input.
 pub const POINTS_PORT: &str = "points";
 
 const POINTS_IN: &[Port] = &[Port::new(POINTS_PORT, "Points", PortType::Points)];
@@ -94,7 +93,6 @@ pub const LABEL_ENABLED_WHEN: &[EnabledWhen] = &[
     },
 ];
 
-/// What a label's colour does while it is in the wave.
 pub const FLASH_COLOUR: &[&str] = &[
     "Off",
     "Random hue",
@@ -134,10 +132,8 @@ pub enum Tint {
     Multiply([f32; 4]),
 }
 
-/// The dice a flashing colour rolls.
 const TINT_ATTR: u32 = 95;
 
-/// Label points' controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "label_points",
@@ -155,7 +151,6 @@ const TINT_ATTR: u32 = 95;
     enabled_when = LABEL_ENABLED_WHEN,
 )]
 pub struct LabelPoints {
-    /// Which points get a label.
     #[choice(
         label = "Apply to",
         options = ["All points", "Picked", "Not picked"],
@@ -183,7 +178,6 @@ pub struct LabelPoints {
     #[text(label = "Text", default = "")]
     pub text: ShortText,
 
-    /// How many decimal places the numbers in a label are written to.
     #[counter(
         label = "Decimals",
         min = 0,
@@ -285,15 +279,12 @@ pub struct LabelPoints {
     )]
     pub flash_colour: u32,
 
-    /// One of the two colours Two colours flashes between.
     #[colour(label = "Colour A", default = [1.0, 0.2, 0.1, 1.0], max = 4.0)]
     pub colour_a: [f32; 4],
 
-    /// The other.
     #[colour(label = "Colour B", default = [0.1, 0.6, 1.0, 1.0], max = 4.0)]
     pub colour_b: [f32; 4],
 
-    /// By strength: the hue a little Change gives.
     #[dial(label = "Hue start", default = 0.0)]
     pub hue_start: f32,
 
@@ -349,15 +340,12 @@ pub struct LabelPoints {
     #[colour(label = "Gradient 1", default = [1.0, 1.0, 1.0, 1.0], max = 4.0)]
     pub gradient_1: [f32; 4],
 
-    /// Gradient: the next colour along.
     #[colour(label = "Gradient 2", default = [0.63, 0.67, 0.34, 1.0], max = 4.0)]
     pub gradient_2: [f32; 4],
 
-    /// Gradient: the next, with three or four stops.
     #[colour(label = "Gradient 3", default = [0.08, 0.41, 0.13, 1.0], max = 4.0)]
     pub gradient_3: [f32; 4],
 
-    /// Gradient: the colour at Change 100, with four stops.
     #[colour(label = "Gradient 4", default = [0.006, 0.11, 0.22, 1.0], max = 4.0)]
     pub gradient_4: [f32; 4],
 
@@ -391,7 +379,6 @@ pub struct LabelPoints {
     #[dial(label = "Label rotation", default = 0.0)]
     pub label_rotation: f32,
 
-    /// The Mix every effect ends with, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -410,11 +397,8 @@ fn number(v: f32, decimals: usize) -> String {
     format!("{:.decimals$}", (v * unit).round() / unit + 0.0)
 }
 
-/// The characters `{chars:N}` writes.
 const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-/// The characters `{hex:N}` writes.
 const HEX: &[u8] = b"0123456789abcdef";
-/// The longest `{chars:N}` or `{hex:N}`.
 const RANDOM_MAX: usize = 64;
 /// The dice the random text rolls, kept off the numbers the points effects use.
 const TEXT_ATTR: u32 = 90;
@@ -432,7 +416,6 @@ fn random_text(text: &str, seed: u32, id: u64) -> String {
     let mut out = String::with_capacity(text.len());
     let mut rest = text;
     let mut token = 0u32;
-    // One roll in 0..1 for character `k` of token `token`.
     let roll = |token: u32, k: u32| {
         let attr = TEXT_ATTR
             .wrapping_add(token.wrapping_mul(1_000))
@@ -495,7 +478,6 @@ fn random_text(text: &str, seed: u32, id: u64) -> String {
 /// so a slip shows in the picture.
 fn named<'a>(template: &'a str, stream: &PointsStream) -> (Vec<(&'a str, Column)>, &'a str) {
     let mut cuts = Vec::new();
-    // Where the text not yet handed out starts, and where the search is.
     let (mut from, mut at) = (0, 0);
     while let Some(close) = template.get(at..).and_then(|s| s.find('}')) {
         let close = at + close;
@@ -526,13 +508,11 @@ impl LabelPoints {
     /// colour step by.
     pub const DERIVED_TIME: ParamId = ParamId::new("derived.time");
 
-    /// This instance's layer time, read back out of a resolved bag.
     #[must_use]
     pub fn time_of(p: Params<'_>) -> f64 {
         f64::from(p.float(Self::DERIVED_TIME, 0.0))
     }
 
-    /// This instance's raster factor, read back out of a resolved bag.
     #[must_use]
     pub fn px_scale_of(p: Params<'_>) -> f32 {
         p.float(Self::DERIVED_PX_SCALE, 1.0)
@@ -612,7 +592,6 @@ impl LabelPoints {
         let most = self.max_labels.clamp(0, LABELS_HARD as i32) as usize;
         let decimals = self.decimals.clamp(0, 4) as usize;
         let get = |v: &[f32], i: usize| v.get(i).copied().unwrap_or(0.0);
-        // The driven rows, per point where a driver wrote them, else the row.
         let column_of = |row: &str| {
             let name = LABEL_DRIVEN_ROWS.iter().find(|(r, _)| *r == row)?.1;
             match stream.column(name) {
@@ -752,7 +731,6 @@ impl EffectDef for LabelPointsDef {
         &<LabelPoints as EffectMetadata>::SCHEMA
     }
 
-    /// A picture in, a picture out, and a stream in beside it.
     fn signature(&self) -> Signature {
         Signature::Image {
             inputs: POINTS_IN,
@@ -775,11 +753,6 @@ mod tests {
     use crate::fx::points::PointsStream;
     use crate::fx::registry::EffectMetadata;
 
-    /// The wave on Label points: a point below Change above keeps its
-    /// resting text and the Text layer's colour; a point above it scrambles
-    /// with time at Scramble rate and flashes one of the two colours; Label
-    /// scale and Change are read per point from the columns the render
-    /// writes. Guards the decode effect drawing the wrong labels.
     #[test]
     fn labels_scramble_and_flash_only_in_the_wave() {
         let mut l = LabelPoints::read(Params::EMPTY);
@@ -839,11 +812,6 @@ mod tests {
         );
     }
 
-    /// The ring look on Label points: Text step moves the resting
-    /// text on and keeps it, By strength tints smoothly by Change (none at
-    /// nought, more colour and darker as it grows), Grow sizes by Change, and
-    /// Label rotation is read per point. Guards the text a ring leaves behind
-    /// and the colours and sizes it gives.
     #[test]
     fn labels_keep_the_text_a_ring_leaves_and_colour_by_strength() {
         let mut l = LabelPoints::read(Params::EMPTY);
@@ -891,7 +859,6 @@ mod tests {
         assert_eq!((labels[0].rotation, labels[1].rotation), (-30.0, 45.0));
         assert_eq!(labels[0].tint, None);
 
-        // Gradient: the stops in turn, evenly along Change, mixed between.
         let mut g = l;
         g.flash_colour = 4;
         g.gradient_stops = 3;
@@ -907,21 +874,16 @@ mod tests {
             Some(Tint::Multiply(g.gradient_2))
         );
         assert_eq!(g.in_wave(0.0, 0.0, 5, 0.0).1, None, "at rest, untouched");
-        // By strength past 100 turns the hue on round, as rings that add up.
         let past = |change: f32| match l.in_wave(change, 0.0, 5, 0.0).1 {
             Some(Tint::Multiply(c)) => c,
             other => panic!("{other:?}"),
         };
         assert_ne!(past(100.0), past(150.0));
-        // The vertical anchor: Top hangs a label from its point.
         let mut top = l;
         top.vertical_anchor = 1;
         assert_eq!((l.anchor_down(), top.anchor_down()), (0.5, 0.0));
     }
 
-    /// Random text: each token is replaced, a point keeps its
-    /// text, points differ, the Seed re-rolls, unknown braces stay. Guards
-    /// labels that change from frame to frame or read the same everywhere.
     #[test]
     fn random_text_fills_tokens_per_point() {
         let t = "{pick:alpha|beta|gamma}-{chars:6}-{hex:4}";

@@ -71,7 +71,6 @@ pub const SPARK_ID: u64 = 1 << 63;
 /// How many bits of a spark's index count its place.
 const SPARK_SHIFT: u32 = 6;
 
-/// The most sparks one death throws out.
 const SPARKS_MAX: u32 = 50;
 
 /// Where a parent's burst bit sits in a spark's index, before the shift.
@@ -83,7 +82,6 @@ const STEER: f32 = 4.0;
 /// The most others one particle steers by. Past it, an even spread of them.
 const NEIGHBOURS: usize = 64;
 
-/// A placement that moves nothing: a collider already in this layer's pixels.
 pub const SAME: Place = Place {
     m: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
     t: (0.0, 0.0, 0.0),
@@ -104,14 +102,12 @@ pub fn stopping() -> bool {
     STOP.with(|stop| stop.get().is_some_and(|check| check()))
 }
 
-/// One particle as the walk carries it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Particle {
     /// Its birth index, as the closed forms number it.
     id: u64,
     /// Where it was born, across and down: where turbulence's noise is read.
     born: [f32; 2],
-    /// Where it is drawn.
     pos: [f32; 3],
     /// How fast it is going, before turbulence.
     vel: [f32; 3],
@@ -123,7 +119,6 @@ struct Particle {
     held: Option<[f32; 3]>,
 }
 
-/// Where a walk has got to at the start of a frame.
 #[derive(Debug, Clone, Default, PartialEq)]
 struct State {
     /// The frame, from the layer's in point.
@@ -144,7 +139,6 @@ impl State {
     }
 }
 
-/// What one step reads at one layer time.
 pub struct Inputs {
     /// Particulate's rows at this time, in px@comp.
     pub rows: Particulate,
@@ -152,7 +146,6 @@ pub struct Inputs {
     params: PointsParams,
     /// The polyline a Mask path emitter walks, px@comp.
     path: MaskPolyline,
-    /// What the particles hit, if anything.
     collider: Option<Collider>,
 }
 
@@ -248,15 +241,12 @@ pub fn definition(
     *h.finalize().as_bytes()
 }
 
-/// The layer `inst` collides with in `comp`, if its Collide with row names
-/// one that is there.
 #[must_use]
 pub fn target<'a>(comp: &'a Composition, inst: &EffectInstance) -> Option<&'a Layer> {
     let id = inst.layer_ref("collide_with")?;
     comp.layers.iter().find(|l| l.id == id)
 }
 
-/// The rows beside Collide with that walk once above nought.
 const WALK_ROWS: [&str; 4] = ["separation", "alignment", "cohesion", "sparks"];
 
 /// Whether Particulate `inst` walks in `comp`: Collide with names a layer
@@ -378,7 +368,6 @@ fn step(s: &mut State, now: &Inputs, then: &Inputs, h: f64, dt: f64) {
     let p = &now.params;
     let hf = h as f32;
     let steer = flock(&s.particles, &now.rows);
-    // A particle that dies hands back its id and where, for its sparks.
     let advance = |(i, mut q): (usize, Particle)| -> Result<Particle, (u64, [f32; 3])> {
         let age = q.age + hf;
         if age >= q.life {
@@ -468,7 +457,6 @@ fn step(s: &mut State, now: &Inputs, then: &Inputs, h: f64, dt: f64) {
     }
 }
 
-/// The burst on `s`'s frame, if one goes off, read at that frame.
 fn bursts(s: &mut State, now: &Inputs) {
     let f = s.frame;
     let n = burst_at(&now.rows, f, &mut s.high);
@@ -516,7 +504,6 @@ pub(super) fn burst_at(rows: &Particulate, f: i64, high: &mut bool) -> u32 {
     }
 }
 
-/// Spark `j` of the particle `parent`.
 fn spark_id(parent: u64, j: u32) -> u64 {
     let burst = if parent & BURST_ID != 0 {
         SPARK_BURST
@@ -526,7 +513,6 @@ fn spark_id(parent: u64, j: u32) -> u64 {
     SPARK_ID | ((burst | (parent & (SPARK_BURST - 1))) << SPARK_SHIFT) | u64::from(j)
 }
 
-/// The particle spark `id` came from.
 fn parent_of(id: u64) -> u64 {
     let field = (id & !SPARK_ID) >> SPARK_SHIFT;
     let burst = if field & SPARK_BURST != 0 {
@@ -589,14 +575,12 @@ fn sparks(s: &mut State, deaths: &mut [(u64, [f32; 3])], now: &Inputs) {
 /// all are before any of them moves, so the order of work changes nothing.
 /// `None` with the three strengths at nought.
 fn flock(particles: &[Particle], rows: &Particulate) -> Option<Vec<[f32; 3]>> {
-    // Nought for a row that is not a number.
     let k = |v: f32| if v > 0.0 { (v / 100.0).min(1.0) } else { 0.0 };
     let (apart, along, together) = (k(rows.separation), k(rows.alignment), k(rows.cohesion));
     let r = rows.flock_radius;
     if apart + along + together <= 0.0 || !(r > 0.0 && r.is_finite()) {
         return None;
     }
-    // The free particles by the cell they are in, a radius on a side.
     let cell = |p: [f32; 3]| p.map(|v| (v / r).floor() as i64);
     let mut cells: Vec<([i64; 3], u32)> = particles
         .iter()
@@ -694,8 +678,6 @@ fn born(p: &PointsParams, walk: &MaskPolyline, b: u64, age: f32) -> Option<(Part
     Some((q, [p0[0] + first[0], p0[1] + first[1], p0[2] + first[2]]))
 }
 
-/// `q` moved from `from` to `to` at `vel`, after what it hit on the way and
-/// the frame's edge. Where it died when it did.
 fn settle(
     mut q: Particle,
     from: [f32; 3],
@@ -734,7 +716,6 @@ fn settle(
     Ok(q)
 }
 
-/// The stream `s` draws, looked at with `now`'s rows.
 fn stream_of(s: &State, now: &Inputs, dt: f64) -> PointsStream {
     let p = &now.params;
     let eps = (dt as f32 * 0.5).max(1e-6);
@@ -744,7 +725,6 @@ fn stream_of(s: &State, now: &Inputs, dt: f64) -> PointsStream {
         let speed = if q.held.is_some() {
             [0.0; 3]
         } else {
-            // Turbulence's own rate of change, as the closed forms add it.
             let born = [q.born[0], q.born[1], 0.0];
             let phase = draw(p.seed, q.id, attr::TURB_PHASE) * 1000.0;
             let next = turbulence(born, phase, &p.forces, p.seed, q.age + eps);
@@ -755,8 +735,6 @@ fn stream_of(s: &State, now: &Inputs, dt: f64) -> PointsStream {
                 q.vel[2] + (next[2] - prev[2]) / (2.0 * eps),
             ]
         };
-        // A spark looks like the particle it came from, at its own age, and
-        // smaller.
         let (look, scale) = if q.id & SPARK_ID != 0 {
             (parent_of(q.id), small)
         } else {
@@ -775,7 +753,6 @@ fn stream_of(s: &State, now: &Inputs, dt: f64) -> PointsStream {
     out
 }
 
-/// A walk kept for the frames after it.
 struct Kept {
     key: [u8; 32],
     /// Kept for good, as against the latest frame drawn, which the next
@@ -787,7 +764,6 @@ struct Kept {
 /// Kept walks, the latest used first. Only ever a shortcut.
 static KEPT: Mutex<Vec<Kept>> = Mutex::new(Vec::new());
 
-/// The furthest kept state of `key` at or before `frame`.
 fn kept(key: &[u8; 32], frame: i64) -> Option<Arc<State>> {
     let mut all = KEPT.lock().ok()?;
     let found = all
@@ -802,8 +778,6 @@ fn kept(key: &[u8; 32], frame: i64) -> Option<Arc<State>> {
     Some(state)
 }
 
-/// Keep `state` under `key`, and let go of the states used longest ago once
-/// they hold too much.
 fn keep(key: [u8; 32], state: &State, sticky: bool) {
     let Ok(mut all) = KEPT.lock() else {
         return;

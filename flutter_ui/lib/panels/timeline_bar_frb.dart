@@ -1,7 +1,3 @@
-// One layer's bar in the Timeline, and the geometry a bar drag works in: the
-// live preview, the bounds a bar may be dragged within, and the end marks.
-//
-// Split out of timeline_panel_frb.dart.
 
 import 'dart:math';
 import 'package:flutter/foundation.dart' show listEquals;
@@ -39,8 +35,6 @@ import 'stagger.dart';
 /// and each property draws its own at full size, where they can be dragged.
 const double _summaryKeyHalf = 4;
 
-/// How near the end of a bar counts as grabbing its edge to trim rather than its
-/// middle to move.
 const double _trimGrab = 8;
 
 /// Which part of a bar [width] pixels wide a press at [dx] takes hold of.
@@ -61,7 +55,6 @@ BarGrab barGrabAt(double dx, double width) {
 /// lane, so the transients travel with the bar rather than jumping on release.
 /// Null between gestures.
 class BarDragPreview {
-  /// The layer whose bar the hand is on.
   final String layerId;
 
   /// Every layer the drag carries: [layerId] alone for a trim or a
@@ -80,7 +73,6 @@ class BarDragPreview {
       this.layerId, this.layers, this.deltaIn, this.deltaOut, this.offsetShift,
       {this.fan});
 
-  /// How far a move carries [id]: its share of a fan, or the one shift.
   int shiftOf(String id) => fan?[id] ?? offsetShift;
 }
 
@@ -115,18 +107,14 @@ int keyShiftOf(BarDragPreview? preview, String layerId) =>
 /// layer — a locked layer sits still, exactly as it refuses its share of a
 /// switch batch — and the wall the set stops at.
 class SelectionMove {
-  /// In stack order; the grabbed layer is among them.
   final List<UuidValue> layerIds;
 
-  /// Each layer's in frame, beside [layerIds], for a fan's wall.
   final List<int> inFrames;
 
   /// The earliest in frame among them: the whole set's travel stops where
   /// this one meets comp zero, so the set hits the wall with its shape
   /// intact — the same clamp the group bar's slide has.
   final int minIn;
-  /// The same layers in the order a stagger drag takes them, which the
-  /// Stagger panel sets.
   final List<UuidValue> staggerOrder;
 
   const SelectionMove(this.layerIds, this.inFrames, this.minIn,
@@ -316,7 +304,6 @@ class BarEndMarksPainter extends CustomPainter {
       old.atIn != atIn || old.atOut != atOut || old.colour != colour;
 }
 
-/// One layer's bar: drag its middle to move it, its ends to trim.
 class Bar extends StatefulWidget {
   final CompositionReference comp;
   final BridgeLayerEntry entry;
@@ -335,7 +322,6 @@ class Bar extends StatefulWidget {
   /// blade's line is drawn with, so the two cannot disagree (docs/07 §4.5).
   final double Function(double x) razorFrameAt;
 
-  /// Clicking (or grabbing) the bar selects its layer.
   final VoidCallback onSelect;
 
   /// Double-clicking this bar opens what double-clicking its name opens: a
@@ -345,11 +331,8 @@ class Bar extends StatefulWidget {
   final VoidCallback? onOpenSequence;
   final VoidCallback onChanged;
 
-  /// Where the live preview is published, for the waveform lane to follow.
   final ValueNotifier<BarDragPreview?> dragPreview;
 
-  /// How far this layer's ends may be dragged. [BarBounds.free] for
-  /// every kind that has no source to run out of.
   final BarBounds bounds;
 
   /// Whether this layer is in the selection. The bar is the only mark a
@@ -363,11 +346,8 @@ class Bar extends StatefulWidget {
   /// Twirl the layer open and each property's lane draws its own.
   final List<BridgeKeyframe> summaryKeys;
 
-  /// The comp's rate, to place [summaryKeys] on the frame axis.
   final double fps;
 
-  /// Everything the bar's ends can land on (docs/07 §4.5) — the panel's one
-  /// shared list, the same one the lane keys reach for.
   final List<SnapTarget> snapTargets;
 
   /// Whether the magnet is on; `Ctrl` held suspends it for the moment.
@@ -390,7 +370,6 @@ class Bar extends StatefulWidget {
   /// moment the hand closes, not the one the panel last built with.
   final SelectionMove Function()? selectionMove;
 
-  /// A shut caption layer's captions, marked faintly along its bar.
   final CaptionTrack? captions;
 
   const Bar({
@@ -462,11 +441,8 @@ class _BarState extends State<Bar> {
   /// out ([fanShares]) rather than carrying them together.
   bool _fanned = false;
 
-  /// Each bar's travel while [_fanned], as last published.
   Map<String, int>? _fan;
 
-  /// How far a move drag carries this bar: its share of a stagger, or the
-  /// drag itself.
   int get _moveShift => _fanned
       ? (_fan?['${widget.entry.layer.internallayerId}'] ?? 0)
       : _delta;
@@ -509,7 +485,6 @@ class _BarState extends State<Bar> {
     super.dispose();
   }
 
-  /// Put the bar back where the drag found it, preview and all.
   void _abandon() {
     if (!mounted) return;
     setState(() {
@@ -546,8 +521,6 @@ class _BarState extends State<Bar> {
   /// leaves the moment the pointer does (P1).
   bool _hover = false;
 
-  /// What the drag in flight last landed on, so the capture can be drawn — the
-  /// same hairline a lane key's drag draws (docs/07 §4.5).
   SnapTarget? _caught;
 
   /// How far the bar has travelled, in whole frames, with the magnet applied
@@ -562,7 +535,6 @@ class _BarState extends State<Bar> {
       // it.
       rawFrames: widget.axis.framesOfPx(_deltaPx),
       perFrame: widget.axis.perFrame,
-      // Whichever ends this grab moves.
       sources: switch (_grab ?? BarGrab.move) {
         BarGrab.move => [inFrame.toDouble(), outFrame.toDouble()],
         BarGrab.trimIn => [inFrame.toDouble()],
@@ -650,8 +622,6 @@ class _BarState extends State<Bar> {
       // there are.
       child: Stack(
         children: [
-          // Desk's rail: a full-width band on the lane ground with a pixel of
-          // ground above and below, the bar standing on it.
           if (t.shape == ThemeShape.desk)
             Positioned(
               key: ValueKey<String>(
@@ -875,15 +845,6 @@ class _BarState extends State<Bar> {
                             _stretch = _grab != BarGrab.move &&
                                 HardwareKeyboard.instance.isShiftPressed &&
                                 info.kind != BridgeLayerKind.sequence;
-                            // A move that starts on a selected bar carries the
-                            // whole unlocked selection; a real plural
-                            // only, and only while this bar is still in it — a
-                            // Ctrl press on the way down may have just toggled
-                            // it out. Trims stay single-layer whatever is
-                            // selected.
-                            // ponytail: no multi-trim — one edge over many
-                            // bars has no one honest answer yet; build it when
-                            // testers reach for it.
                             _moving = null;
                             _movingIds = null;
                             if (_grab == BarGrab.move && widget.selected) {
@@ -983,8 +944,6 @@ class _BarState extends State<Bar> {
                                 .labelColour(info.label)
                                 .withValues(alpha: clipFillAlpha),
                       },
-                      // Desk outlines the bar in its hue, and in the accent
-                      // when selected; Lantern rings it from outside (below).
                       border: t.shape == ThemeShape.desk
                           ? Border.all(
                               color: widget.selected
@@ -1112,8 +1071,6 @@ class _BarState extends State<Bar> {
                           _trimCursor(width, left: true),
                           _trimCursor(width, left: false),
                         ],
-                        // A copy of a graphics template shades the stretches
-                        // it plays its intro and its outro in.
                         if (info.copy case final copy?)
                           Positioned.fill(
                             child: IgnorePointer(
@@ -1129,8 +1086,6 @@ class _BarState extends State<Bar> {
                               ),
                             ),
                           ),
-                        // The corner marks: this bar is as long as its source
-                        // allows in that direction.
                         Positioned.fill(
                           child: IgnorePointer(
                             child: CustomPaint(
@@ -1139,8 +1094,6 @@ class _BarState extends State<Bar> {
                               painter: BarEndMarksPainter(
                                 atIn: minIn != null && drawIn <= minIn,
                                 atOut: maxOut != null && drawOut >= maxOut,
-                                // The same ink the clip splits use, so the bar
-                                // keeps one vocabulary of marks.
                                 colour: t.surface0,
                               ),
                             ),
@@ -1226,9 +1179,6 @@ class _BarState extends State<Bar> {
                 ),
               ),
             ),
-          // The live readout, while the button is down: where the bar's two
-          // ends have reached and how long it is now. The pill a key drag
-          // carries, over everything in the row and gone on release.
           if (_grab != null) _dragHint(inFrame, drawIn, drawOut),
         ],
       ),
@@ -1246,7 +1196,6 @@ class _BarState extends State<Bar> {
             count: moving.staggerOrder.length,
             delta: _delta))
         : l10n.timelineBarDragHint(drawIn, drawOut, drawOut - drawIn);
-    // Where the pointer is: where it took hold, and how far it has gone.
     final x = widget.axis.xOf(restIn) + _downDx + _deltaPx;
     // Beside the pointer, or on its other side where the axis has run out.
     // The text is 8px mono, so its width is near enough five a letter.
@@ -1280,8 +1229,6 @@ class _BarState extends State<Bar> {
     );
   }
 
-  /// One end's hover strip: the pointer becomes the horizontal resize arrow
-  /// over exactly the width [barGrabAt] treats as that end.
   Widget _trimCursor(double width, {required bool left}) {
     final edge = min(_trimGrab, width / 3);
     return Positioned(
@@ -1297,9 +1244,6 @@ class _BarState extends State<Bar> {
     );
   }
 
-  /// Publish where the gesture has the bar right now — and, on a selection
-  /// move, where it has every bar riding along — for the waveform
-  /// lanes, the key lanes and the mates' own bars to follow.
   void _publishPreview() {
     final grab = _grab;
     if (grab == null) return;
@@ -1415,7 +1359,6 @@ class _BarState extends State<Bar> {
       case BarGrab.move:
         newIn += delta;
         newOut += delta;
-        // Moving carries the content with the bar, so time 0 travels too.
         offsetShift = delta;
       case BarGrab.trimIn:
         newIn += delta;
@@ -1442,7 +1385,6 @@ class _BarState extends State<Bar> {
   }
 }
 
-/// Which part of a bar a drag grabbed: its middle, or one of its two ends.
 enum BarGrab { move, trimIn, trimOut }
 
 /// A shut layer's keys as outlined diamonds on its bar, Lantern's mark: 7px
@@ -1452,7 +1394,6 @@ class OutlinedKeysPainter extends CustomPainter {
   final TimelineAxis axis;
   final Color colour;
 
-  /// Half the diamond's height.
   static const double half = 3.5;
 
   const OutlinedKeysPainter(

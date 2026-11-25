@@ -53,19 +53,14 @@
 /// blob of any other length is not this format and is refused outright.
 const BLOB_LEN: usize = 1644;
 
-/// The only header version this understands.
 const VERSION: u16 = 1;
 
-/// How many channels: Master, Red, Green, Blue, Alpha.
 pub(crate) const CHANNELS: usize = 5;
 
-/// Entries in one channel's baked lookup table — one an 8-bit input value.
 const TABLE: usize = 256;
 
-/// Where the five lookup tables start.
 const TABLES_AT: usize = 4;
 
-/// Where the five point records start: past the header and the five tables.
 const POINTS_AT: usize = TABLES_AT + CHANNELS * TABLE;
 
 /// The most control points a record has room for. Lumit's own curve carries
@@ -73,7 +68,6 @@ const POINTS_AT: usize = TABLES_AT + CHANNELS * TABLE;
 /// needs no thinning on the way across.
 const MAX_POINTS: usize = 16;
 
-/// One channel's record: sixteen pairs, the count, the selected index.
 const RECORD: usize = MAX_POINTS * 4 + 4 + 4;
 
 /// The largest value a control point coordinate takes — the blob is 8-bit
@@ -229,8 +223,6 @@ mod tests {
         assert_eq!(got[4].len(), 4);
     }
 
-    /// Every way the blob can fail to be the thing this module claims it is.
-    /// Each of these is a placeholder rather than a wrong curve.
     #[test]
     fn a_blob_that_is_not_this_format_is_refused() {
         let good = blob(&[IDENTITY; CHANNELS]);
@@ -246,8 +238,6 @@ mod tests {
         version[1] = 2;
         assert!(decode(&version).is_none(), "an unknown version");
 
-        // A count outside 2..=16 — one point has no curve, seventeen has no
-        // room.
         for count in [0u32, 1, 17, u32::MAX] {
             let mut bad = good.clone();
             let at = POINTS_AT + MAX_POINTS * 4;
@@ -255,21 +245,15 @@ mod tests {
             assert!(decode(&bad).is_none(), "count {count}");
         }
 
-        // A point that does not sit on After Effects' own table: the check
-        // that turns this from a guess into a decode.
         let mut moved = good.clone();
         moved[POINTS_AT + 3] = 9;
         assert!(decode(&moved).is_none(), "a point off the table");
 
-        // The same bytes read little-endian would put the count in the wrong
-        // half of its word, so a byte-swapped blob is refused too.
         let mut swapped = good.clone();
         let at = POINTS_AT + MAX_POINTS * 4;
         swapped[at..at + 4].copy_from_slice(&2u32.to_le_bytes());
         assert!(decode(&swapped).is_none(), "little-endian");
 
-        // Points out of x order — a record read at a shifted offset looks like
-        // this long before it looks like anything else.
         let mut shifted = good.clone();
         shifted.copy_within(POINTS_AT + 2..BLOB_LEN, POINTS_AT);
         assert!(decode(&shifted).is_none(), "a shifted record");

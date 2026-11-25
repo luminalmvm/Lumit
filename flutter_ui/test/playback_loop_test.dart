@@ -13,12 +13,10 @@ void main() {
       playbackLoop(workStart: 40, workEnd: 90, playhead: 91, lastFrame: 300),
       isNull,
     );
-    // The end frame itself is still inside the span, and still loops.
     expect(
       playbackLoop(workStart: 40, workEnd: 90, playhead: 90, lastFrame: 300),
       (start: 40, end: 90),
     );
-    // The whole-comp fallback has nowhere past its end to be parked.
     expect(
       playbackLoop(
           workStart: null, workEnd: null, playhead: 300, lastFrame: 300),
@@ -27,12 +25,10 @@ void main() {
   });
 
   test('a span with no room in it does not loop', () {
-    // Would otherwise restart on every frame that arrived.
     expect(
       playbackLoop(workStart: 40, workEnd: 40, playhead: 40, lastFrame: 300),
       isNull,
     );
-    // A one-frame comp is the same case through the fallback.
     expect(
       playbackLoop(workStart: null, workEnd: null, playhead: 0, lastFrame: 0),
       isNull,

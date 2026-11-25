@@ -78,7 +78,6 @@ fn roughen_edges(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (o.a <= 1e-4) {
         col = s.rgb / max(s.a, 1e-4);
     }
-    // The same band paints the chewed border, and nothing else.
     let paint = band * p.colour_on;
     col = col + (p.colour.rgb - col) * paint;
     let out = vec4<f32>(col * k, k);

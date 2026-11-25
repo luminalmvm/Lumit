@@ -86,7 +86,6 @@ pub struct Gradient {
     #[slider(label = "End y", min = 0.0, max = 2160.0, default = 1080.0, unit = Px)]
     pub end_y: f32,
 
-    /// The colour at End.
     #[colour(label = "End colour", default = [0.0, 0.0, 0.0, 1.0], max = 4.0)]
     pub end_colour: [f32; 4],
 
@@ -95,7 +94,6 @@ pub struct Gradient {
     #[choice(label = "Colours", options = ["Two", "Three", "Four", "Five"], default = 0)]
     pub colours: u32,
 
-    /// The first colour after Start colour.
     #[colour(label = "Colour 2", default = [1.0, 0.5, 0.0, 1.0], max = 4.0)]
     pub colour_2: [f32; 4],
 
@@ -111,7 +109,6 @@ pub struct Gradient {
     )]
     pub position_2: f32,
 
-    /// The next colour, with Four or Five.
     #[colour(label = "Colour 3", default = [0.0, 0.5, 1.0, 1.0], max = 4.0)]
     pub colour_3: [f32; 4],
 
@@ -127,7 +124,6 @@ pub struct Gradient {
     )]
     pub position_3: f32,
 
-    /// The last colour before End colour, with Five.
     #[colour(label = "Colour 4", default = [0.0, 1.0, 1.0, 1.0], max = 4.0)]
     pub colour_4: [f32; 4],
 
@@ -163,7 +159,6 @@ pub struct Gradient {
     )]
     pub scatter: f32,
 
-    /// Which draw the scatter follows (§2.4).
     #[seed]
     pub seed: u32,
 
@@ -238,7 +233,6 @@ impl Gradient {
     }
 }
 
-/// Gradient's behaviour.
 pub struct GradientDef;
 
 impl EffectDef for GradientDef {
@@ -274,7 +268,6 @@ mod tests {
         assert_eq!(cpu::gradient_ramp(&g, 1.0), [1.0, 1.0, 1.0]);
         let quarter = cpu::gradient_ramp(&g, 0.25);
         assert!((quarter[1] - 0.75).abs() < 1e-6);
-        // Two colours ignore the ones in between.
         let two = Gradient {
             colours: 0,
             ..plain()

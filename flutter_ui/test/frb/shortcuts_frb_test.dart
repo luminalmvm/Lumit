@@ -26,10 +26,6 @@ void main() {
   group('Shell shortcuts (frb)', () {
     Future<({LumitState state, LumitUiState uiState})> mount(
         WidgetTester tester) async {
-      // A desktop-sized window. The whole shell is mounted here, and at the
-      // 800x600 default several panel toolbars are narrower than their controls
-      // and overflow — a real defect at that width, but a pre-existing one and
-      // not what these tests are about (recorded in docs/TODO.md).
       tester.view.physicalSize = const Size(1800, 1100);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -93,7 +89,6 @@ void main() {
       var asked = 0;
       p.uiState.togglePlayRequest.addListener(() => asked++);
 
-      // The broken state: nothing in the app holds focus.
       FocusManager.instance.primaryFocus?.unfocus();
       await tester.pump();
 
@@ -123,11 +118,9 @@ void main() {
       await step(LogicalKeyboardKey.arrowLeft);
       expect(p.uiState.playheadFrame.value, 0);
 
-      // A frame before the comp is not a frame.
       await step(LogicalKeyboardKey.arrowLeft);
       expect(p.uiState.playheadFrame.value, 0);
 
-      // And a bare arrow leaves the playhead where it is.
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
       await tester.pump();
       expect(p.uiState.playheadFrame.value, 0,
@@ -160,8 +153,6 @@ void main() {
       final comp = p.uiState.selectedComp!;
       comp.addSolidLayer();
 
-      // Nothing selected: the key must be inert rather than deleting something
-      // the user did not point at.
       await tester.sendKeyEvent(LogicalKeyboardKey.delete);
       await tester.pump();
       expect(comp.getLayers(), hasLength(1));
@@ -175,7 +166,6 @@ void main() {
           reason: 'the selection cannot outlive the layer');
     });
 
-    /// Delete in Effect controls never reaches the layer, picked or not.
     testWidgets('Delete in Effect controls leaves the layer', (tester) async {
       final p = await mount(tester);
       final comp = p.uiState.selectedComp!;
@@ -230,9 +220,6 @@ void main() {
       expect(layer.getRetimeProperty(), isNull);
     });
 
-    /// After Effects' Alt+Shift+P keys Position on the selected layer and a
-    /// second press takes the key away again, and Shift+= and Shift+- step
-    /// the layer's blend mode.
     testWidgets('Alt+Shift+P keys Position, Shift+= steps the blend mode',
         (tester) async {
       final p = await mount(tester);
@@ -274,8 +261,6 @@ void main() {
       expect(layer.getBlend(), 0);
     });
 
-    /// Layer ▸ New from the keyboard, on After Effects' chords: Ctrl+Y makes
-    /// a Solid and Ctrl+Alt+Y an Adjustment layer, in the fronted comp.
     testWidgets('Ctrl+Y and Ctrl+Alt+Y add a Solid and an Adjustment layer',
         (tester) async {
       final p = await mount(tester);
@@ -286,7 +271,6 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.keyY);
       await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
       await tester.pumpAndSettle();
-      // A solid asks for its settings first.
       await tester.tap(find.byKey(const ValueKey('layer-settings-confirm')));
       await tester.pumpAndSettle();
       expect(comp.getLayers().single.getKind(), BridgeLayerKind.solid);
@@ -297,13 +281,9 @@ void main() {
       await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
       await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
       await tester.pump();
-      // With nothing selected a new layer goes on top of the stack, so the
-      // Adjustment reads first.
       expect(comp.getLayers().map((l) => l.getKind()),
           [BridgeLayerKind.adjustment, BridgeLayerKind.solid]);
 
-      // With a layer selected the next one lands directly above it, exactly as
-      // the menu row does.
       p.uiState.setSelection([comp.getLayers().last]);
       await tester.pump();
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
@@ -340,7 +320,6 @@ void main() {
       expect(asked, 0,
           reason: 'the space went into the field, not the transport');
 
-      // And once the field gives focus back, the key is a command again.
       FocusManager.instance.primaryFocus?.unfocus();
       await tester.pump();
       await tester.sendKeyEvent(LogicalKeyboardKey.space);
@@ -376,9 +355,6 @@ void main() {
           reason: 'the chord reached the same save the File menu runs');
     });
 
-    /// B and N set the work area's ends from the playhead (docs/07 §15). They
-    /// were bound but dispatched by nobody, which is why the work area read as
-    /// unimplemented.
     testWidgets('B and N set the work area from the playhead', (tester) async {
       final p = await mount(tester);
       final comp = p.uiState.selectedComp!;
@@ -400,9 +376,6 @@ void main() {
       expect(comp.frameAtTime(time: work.outPoint), 30);
     });
 
-    /// Numbered markers. The pairing is the whole feature: the chord
-    /// that marks a moment is the key that goes back to it, so both halves are
-    /// asserted together — a set that does not return is not the feature.
     testWidgets('Shift+1 sets marker 1 and the bare 1 returns to it',
         (tester) async {
       final p = await mount(tester);
@@ -427,10 +400,6 @@ void main() {
           reason: 'the bare digit went back to the marker');
     });
 
-    /// **`Ctrl+C` on a selected layer copied nothing.** Cut, copy and
-    /// paste had menu rows and no chord in the keymap at all, and no case in
-    /// the shell's handler either — so the three keys everyone reaches for
-    /// first did nothing, and the only way to copy a layer was the Edit menu.
     testWidgets('Ctrl+C copies the selected layer, Ctrl+V pastes it',
         (tester) async {
       final p = await mount(tester);
@@ -575,8 +544,6 @@ void main() {
       final was = outFrame();
       expect(keyFrames(), [10, 40]);
 
-      // `[` — the whole layer moves so its head lands on the playhead, and the
-      // animation comes with it.
       p.uiState.playheadFrame.value = 20;
       await tester.pump();
       await tester.sendKeyEvent(LogicalKeyboardKey.bracketLeft);
@@ -585,8 +552,6 @@ void main() {
       expect(outFrame(), was + 20, reason: 'the tail travelled the same way');
       expect(keyFrames(), [30, 60], reason: 'the keyframes slid with the bar');
 
-      // `Alt+[` — the head is cut back to the playhead over content that has
-      // not moved, so the keys stay where they are on the comp's clock.
       p.uiState.playheadFrame.value = 25;
       await tester.pump();
       await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
@@ -598,9 +563,6 @@ void main() {
       expect(keyFrames(), [30, 60], reason: 'a trim moves no keyframes');
     });
 
-    /// Every one of these was in the shipped keymap with nothing answering it:
-    /// the chord looked up an action the shell's switch had no case for, so it
-    /// fell through and the key did nothing at all.
     group('the navigation chords the table shipped', () {
       Future<void> chord(WidgetTester tester, LogicalKeyboardKey key,
           {bool shift = false}) async {
@@ -627,8 +589,6 @@ void main() {
             reason: 'the whole selection, not the primary alone');
       });
 
-      /// The 3D views on After Effects' keys, from any panel, and Escape
-      /// back to the last view only once nothing else wanted the press.
       testWidgets('F10 to F12 switch 3D views and Escape waits its turn',
           (tester) async {
         final p = await mount(tester);
@@ -644,7 +604,6 @@ void main() {
         await chord(tester, LogicalKeyboardKey.f12);
         expect(ui.viewOf(id), ViewerView.activeCamera);
 
-        // An open menu takes the first Escape, and only that.
         ui.activePane.value = Panel.viewer.pane();
         await tester.pump();
         var menuOpen = true;

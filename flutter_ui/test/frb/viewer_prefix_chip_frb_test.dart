@@ -68,7 +68,6 @@ void main() {
   setUpAll(() => initEngineForTests(handler: counter));
 
   group('The Viewer\'s "at effect" chip', () {
-    /// A comp with one solid carrying a blur and an exposure, selected.
     ({LumitState state, LumitUiState uiState, LayerReference layer}) withTwo() {
       final p = freshProject();
       final comp = p.state.project!.newComposition(name: 'Scene');
@@ -169,8 +168,6 @@ void main() {
       expect(onCost, 1, reason: 'turning it on is one render');
       expect(total, 2, reason: 'and turning it off is one more');
 
-      // A rebuild that changes nothing asks for nothing: the chip draws from
-      // the read model and the selection, both already in Dart.
       counter
         ..renders = 0
         ..counting = true;

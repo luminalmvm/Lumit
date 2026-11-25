@@ -1,6 +1,3 @@
-//! Shadows between 3D layers: which layers cast on which, and the squares
-//! their pictures are shrunk into for the lighting pass.
-
 use super::lighting::lighting_op;
 use super::{scene, Realiser};
 use crate::draw::{CompLayerDraw, DrawSource};
@@ -68,8 +65,6 @@ impl Realiser<'_> {
         let frame = width.max(height).max(64).next_power_of_two();
         let mut sets = Vec::new();
         let mut each = vec![(None, None); layers.len()];
-        // ponytail: made again every frame. Keep a run's squares while its
-        // casters' pictures and places hold still if they show in a profile.
         for (start, plan) in plans {
             let casters: Vec<(&wgpu::Texture, lumit_gpu::fx::lighting::CasterPlane)> = plan
                 .kept
@@ -108,11 +103,8 @@ impl Realiser<'_> {
 /// shared out between the runs of 3D layers that cast.
 const SHADOW_BUDGET: u64 = 96 << 20;
 
-/// Which of a run's layers cast, chosen before any square is made.
 struct RunPlan {
-    /// Each kept caster's place in the run and its plane, in stack order.
     kept: Vec<(usize, lumit_gpu::fx::lighting::CasterPlane)>,
-    /// Each layer's place among the kept casters.
     own: Vec<Option<usize>>,
     /// Whether the comp lights the display-encoded picture.
     encoded: bool,
@@ -165,7 +157,6 @@ fn run_plan(
         let at = |a: f32, b: f32| [0, 1, 2].map(|k| o[k] + u[k] * a + v[k] * b);
         let corners = [o, at(1.0, 0.0), at(0.0, 1.0), at(1.0, 1.0)];
         let mid = centre(&corners);
-        // How near it is to the nearest layer it can shade, if any.
         let near = receivers
             .iter()
             .filter(|(r, l, corners)| {
@@ -186,8 +177,6 @@ fn run_plan(
     if kept.is_empty() {
         return None;
     }
-    // ponytail: the farthest past 16 drop without a word. Say so once the
-    // render has a list of notes to show, beside lights past eight.
     kept.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
     kept.truncate(MAX_SHADOW_CASTERS);
     kept.sort_by_key(|k| k.1);
@@ -210,8 +199,6 @@ fn run_plan(
     })
 }
 
-/// Whether any layer in `layers` casts a shadow that a light carries onto
-/// another layer taking them.
 pub(super) fn casts_shadows(layers: &[CompLayerDraw]) -> bool {
     use lumit_gpu::fx::lighting::LightingShadows as S;
     // A view showing the models themselves leaves them out of the shadows.
@@ -253,7 +240,6 @@ pub(super) fn models_last(layers: &[CompLayerDraw], shadowed: bool) -> Vec<usize
         .collect()
 }
 
-/// `drawn`, made in `order`, put back in the order the layers stack.
 pub(super) fn unpermute<T>(drawn: Vec<T>, order: &[usize]) -> Vec<T> {
     let mut back: Vec<Option<T>> = std::iter::repeat_with(|| None).take(drawn.len()).collect();
     for (t, &i) in drawn.into_iter().zip(order) {

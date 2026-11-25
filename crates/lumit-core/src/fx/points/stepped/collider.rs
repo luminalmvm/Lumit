@@ -1,20 +1,15 @@
-//! What Particulate's particles hit: a layer's outline at one time, seen from
-//! the layer the particles are on.
-
 use crate::camera::Place;
 use crate::expression::ExpressionContext;
 use crate::fx::points::Contact;
 use crate::mask::MaskPolyline;
 use crate::model::{Composition, Document, Layer, LayerKind};
 
-/// The most surfaces one particle comes off in one step.
 const MAX_HITS: usize = 4;
 
 /// How far off a surface a particle is left after hitting it, px, so its
 /// next move does not start on the surface.
 const NUDGE: f32 = 1e-3;
 
-/// A collider's outline at one time, seen from the Particulate layer.
 #[derive(Debug, Clone)]
 pub struct Collider {
     /// Each edge's two ends: in this layer's pixels for walls, in the
@@ -22,9 +17,7 @@ pub struct Collider {
     edges: Vec<[[f32; 2]; 2]>,
     /// The collider layer's own pixels to this layer's, in 3D.
     pub(super) to_layer: Place,
-    /// And back.
     pub(super) from_layer: Place,
-    /// Whether it is a surface turned against this layer, rather than walls.
     surface: bool,
     grid: Grid,
 }
@@ -83,7 +76,6 @@ impl Collider {
                 let points = [[l, t0], [r, t0], [r, b], [l, b], [l, t0]];
                 let points: Vec<[f32; 2]> =
                     points.iter().map(|p| [p[0] as f32, p[1] as f32]).collect();
-                // Only the arc's steps are read, to tell a jump from an edge.
                 let arc = (0..points.len()).map(|i| i as f32).collect();
                 lines.push(MaskPolyline {
                     points,
@@ -93,7 +85,6 @@ impl Collider {
                 });
             }
         }
-        // Where both layers sit in the comp's 3D space, as toWorld reads it.
         let read = crate::expression::space::reader(context, comp.id, t);
         let world =
             |l: &Layer| crate::expression::space::space(&context.document, comp, l, t, &read).world;
@@ -146,12 +137,8 @@ impl Collider {
         Collider::new(edges, to_layer, surface)
     }
 
-    /// A collider of `edges` from a layer whose own pixels `to_layer` carries
-    /// into this layer's. The edges are walls in this layer's pixels, or a
-    /// `surface` in the collider's own.
     #[must_use]
     pub fn new(edges: Vec<[[f32; 2]; 2]>, to_layer: Place, surface: bool) -> Self {
-        // A layer scaled to nothing has nothing to hit.
         let (edges, from_layer) = match to_layer.invert() {
             Some(back) => (edges, back),
             None => (Vec::new(), to_layer),
@@ -188,40 +175,32 @@ impl Collider {
         Collider::new(Vec::new(), to_layer, true)
     }
 
-    /// Each edge's two ends: in this layer's pixels for walls, in the
-    /// collider's own for a surface.
     #[must_use]
     pub fn edges(&self) -> &[[[f32; 2]; 2]] {
         &self.edges
     }
 
-    /// The collider's own pixels to this layer's.
     #[must_use]
     pub fn to_layer(&self) -> &Place {
         &self.to_layer
     }
 
-    /// This layer's pixels to the collider's own.
     #[must_use]
     pub fn from_layer(&self) -> &Place {
         &self.from_layer
     }
 
-    /// Whether it is a surface, rather than walls.
     #[must_use]
     pub fn is_surface(&self) -> bool {
         self.surface
     }
 
-    /// The grid its edges are found through: its corner, the side of a cell,
-    /// its cells each way, where each cell's items start and the items.
     #[must_use]
     pub fn grid(&self) -> ([f32; 2], f32, [usize; 2], &[u32], &[u32]) {
         let g = &self.grid;
         (g.origin, g.cell, g.size, &g.starts, &g.items)
     }
 
-    /// Where a particle moving from `from` to `to` at `vel` ends up.
     pub(super) fn hit(
         &self,
         contact: Contact,
@@ -314,7 +293,6 @@ impl Collider {
         if !self.inside([at[0] as f32, at[1] as f32]) {
             return None;
         }
-        // The way its own z grows, seen from this layer.
         let z = self.from_layer.m[2];
         let len = (z[0] * z[0] + z[1] * z[1] + z[2] * z[2]).sqrt() * p.2.signum();
         Some((s as f32, z.map(|v| (v / len) as f32)))
@@ -346,17 +324,12 @@ pub(super) fn narrow(p: (f64, f64, f64)) -> [f32; 3] {
     [p.0 as f32, p.1 as f32, p.2 as f32]
 }
 
-/// What a move came to.
 pub(super) enum Hit {
-    /// It got here, going this fast.
     Clear([f32; 3], [f32; 3]),
-    /// It stuck here.
     Held([f32; 3]),
-    /// It died here.
     Gone([f32; 3]),
 }
 
-/// The edges by where they are, so a particle only looks at the few near it.
 #[derive(Debug, Clone, Default)]
 struct Grid {
     origin: [f32; 2],
@@ -368,7 +341,6 @@ struct Grid {
 }
 
 impl Grid {
-    /// About this many cells across the longer side.
     const CELLS: f32 = 64.0;
 
     fn of(edges: &[[[f32; 2]; 2]]) -> Self {

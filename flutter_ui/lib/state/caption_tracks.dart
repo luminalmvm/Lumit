@@ -53,12 +53,10 @@ class CaptionTrack {
   final String? source;
   final double fps;
 
-  /// The document revision these were read at.
   final int? revision;
 
   int get length => cues.length;
 
-  /// How many captions start before [frame].
   int before(double frame) {
     var lo = 0, hi = starts.length;
     while (lo < hi) {
@@ -76,7 +74,6 @@ class CaptionTrack {
   /// first to start there, which may not have ended yet.
   int firstFrom(double frame) => math.max(0, before(frame) - 1);
 
-  /// The caption showing at [frame], by its place here.
   int? at(double frame) {
     var i = before(frame);
     // One starting exactly here shows here.
@@ -144,7 +141,6 @@ class CaptionTracks extends ChangeNotifier {
     super.dispose();
   }
 
-  /// Read [layer]'s captions again now, after an edit made here.
   void reread(LayerReference layer) {
     if (_read(layer)) notifyListeners();
   }

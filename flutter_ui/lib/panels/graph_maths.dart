@@ -25,7 +25,6 @@ import 'package:lumit_flutter/src/rust/api/effect.dart';
 /// authoritative times stay rational; evaluation converts once).
 double rationalSeconds(BridgeRational r) => r.num / r.den.toDouble();
 
-/// The AE easy-ease constant (F9): speed 0, influence one third.
 const BridgeSideInterp easyEase = BridgeSideInterp.bezier(
   BridgeBezierSide(speed: 0, influence: 1 / 3),
 );
@@ -56,7 +55,6 @@ List<BridgeKeyframe> keysInTimeOrder(List<BridgeKeyframe> keys) {
   return keys;
 }
 
-/// The keys of a scalar, or empty for a static one.
 List<BridgeKeyframe> keysOf(BridgeScalar scalar) => switch (scalar) {
       BridgeScalar_Keyframed(:final field0) => field0,
       BridgeScalar_Static() => const [],
@@ -172,15 +170,10 @@ class CubicSpan {
       _ => (chordSlope, 1.0 / 3.0),
     };
 
-// ---------------------------------------------------------------------------
-// Tangent modes — Auto / Clamp / Free (docs/impl/keyframe-eval.md §6).
-// ---------------------------------------------------------------------------
-
 /// The three tangent modes a keyframe side can be in — the graph strip's
 /// buttons. Mirrors `lumit_core::anim::TangentMode`.
 enum TangentMode { auto, clamp, free }
 
-/// Which mode [side] is in.
 TangentMode tangentModeOf(BridgeSideInterp side) => switch (side) {
       BridgeSideInterp_Auto(:final field0) =>
         field0.clamped ? TangentMode.clamp : TangentMode.auto,
@@ -312,7 +305,6 @@ double evaluateKeys(List<BridgeKeyframe> keys, double t) {
   return _cubicOf(keys, i).valueAt(t);
 }
 
-/// The value of a scalar at `t` seconds — a static one is itself everywhere.
 double evaluateScalar(BridgeScalar scalar, double t) => switch (scalar) {
       BridgeScalar_Static(:final field0) => field0,
       BridgeScalar_Keyframed(:final field0) => evaluateKeys(field0, t),
@@ -363,8 +355,6 @@ double evaluateKeysAcceleration(List<BridgeKeyframe> keys, double t) {
   return accelerationInSpan(keys, i, t);
 }
 
-/// [evaluateKeysAcceleration] inside the span leaving `keys[i]`, with no search
-/// for the span ([speedInSpan]).
 double accelerationInSpan(List<BridgeKeyframe> keys, int i, double t) {
   final cubic = _shapedSpan(keys, i);
   return cubic == null ? 0 : cubic.accelerationAtU(cubic.solveU(t));
@@ -414,7 +404,6 @@ double? influenceForAcceleration(List<BridgeKeyframe> keys, int index,
       sideParams(a.interpOut, chord, _autoOf(keys, span, isOut: true));
   final (s2, r2) =
       sideParams(b.interpIn, chord, _autoOf(keys, span + 1, isOut: false));
-  // The far side as the curve uses it.
   final (b1, b2) = spanInfluences(r1, r2);
   final k = isOut ? chord - s1 - b2 * (s2 - s1) : s2 - chord + b1 * (s1 - s2);
   if (k.abs() < 1e-12) return null;
@@ -452,7 +441,6 @@ BridgeSideInterp? sideForAcceleration(List<BridgeKeyframe> keys, int index,
               (isOut ? r1 : r2))
           .clamp(minTangentReach, 1.0)
           .toDouble();
-  // The far side as the curve uses it, as in [influenceForAcceleration].
   final (b1, b2) = spanInfluences(r1, r2);
   BridgeSideInterp side(double s, double b) => BridgeSideInterp.bezier(
       BridgeBezierSide(speed: s, influence: b.clamp(1e-3, 1.0).toDouble()));
@@ -467,8 +455,6 @@ BridgeSideInterp? sideForAcceleration(List<BridgeKeyframe> keys, int index,
       1e-6 * (target.abs() + 1)) {
     return side(speed, influence);
   }
-  // Solve the speed for k = 3 · target · b² · Δt / 2. Approximate where the
-  // far side is over 1, as the scale then moves with this side.
   final k = 3 * target * influence * influence * dt / 2;
   if (isOut) {
     // k = chord − s − b2·(s2 − s) = chord − b2·s2 − s·(1 − b2)
@@ -715,7 +701,6 @@ double sideSpeedAtKey(List<BridgeKeyframe> keys, int index,
       ? (index + 1 < keys.length ? keys[index + 1] : null)
       : (index > 0 ? keys[index - 1] : null);
   if (neighbour == null) return 0;
-  // The span between the two, in span order.
   final a = isOut ? key : neighbour;
   final b = isOut ? neighbour : key;
   final dt = rationalSeconds(b.time) - rationalSeconds(a.time);
@@ -744,10 +729,6 @@ double sideInfluence(BridgeSideInterp side) => switch (side) {
       _ => 1.0 / 3.0,
     };
 
-// ---------------------------------------------------------------------------
-// A key's two eases as four numbers.
-// ---------------------------------------------------------------------------
-
 /// One keyframe's two eases as numbers: speed in value units per second and
 /// influence as a fraction of the span, for the side the key arrives on and the
 /// side it leaves by.
@@ -773,7 +754,6 @@ class KeyEase {
   bool get hasOut => outSpeed != null || outInfluence != null;
   bool get isEmpty => !hasIn && !hasOut;
 
-  /// This ease with [other]'s numbers laid over it, where [other] has any.
   KeyEase merge(KeyEase other) => KeyEase(
         inSpeed: other.inSpeed ?? inSpeed,
         inInfluence: other.inInfluence ?? inInfluence,
@@ -781,7 +761,6 @@ class KeyEase {
         outInfluence: other.outInfluence ?? outInfluence,
       );
 
-  /// Only the side named, the other side dropped.
   KeyEase side({required bool isOut}) => isOut
       ? KeyEase(outSpeed: outSpeed, outInfluence: outInfluence)
       : KeyEase(inSpeed: inSpeed, inInfluence: inInfluence);
@@ -845,17 +824,12 @@ BridgeKeyframe keyWithEase(List<BridgeKeyframe> keys, int index, KeyEase ease) {
   );
 }
 
-/// [keys] with [keyWithEase] applied to the one at [index].
 List<BridgeKeyframe> keysWithEase(
         List<BridgeKeyframe> keys, int index, KeyEase ease) =>
     [
       for (var i = 0; i < keys.length; i++)
         if (i == index) keyWithEase(keys, i, ease) else keys[i],
     ];
-
-// ---------------------------------------------------------------------------
-// Tangent-handle geometry (value lens).
-// ---------------------------------------------------------------------------
 
 /// Where a key's tangent handle endpoint sits, in (seconds, value) — the
 /// bezier control point itself: reach `influence·Δt` toward the neighbour,
@@ -931,10 +905,6 @@ const double maxInfluence = 10.0;
   return (speed: speed, influence: influence);
 }
 
-// ---------------------------------------------------------------------------
-// Vertical framing (auto-fit).
-// ---------------------------------------------------------------------------
-
 /// The (low, high) a set of curves needs vertically: every key's value, every
 /// bezier handle endpoint (a steep handle pokes past the curve), and the
 /// curve's own samples (a bezier overshoots its keys), padded 15%. `values`
@@ -1002,7 +972,6 @@ const double maxInfluence = 10.0;
 (double, double) fitSpeedRange(List<List<BridgeKeyframe>> channels) =>
     _fitRate(channels, sideSpeedAtKey, evaluateKeysSpeed);
 
-/// The same again for the acceleration lens.
 (double, double) fitAccelerationRange(List<List<BridgeKeyframe>> channels) =>
     _fitRate(channels, sideAccelerationAtKey, evaluateKeysAcceleration);
 
@@ -1033,10 +1002,6 @@ const double maxInfluence = 10.0;
   final pad = ((hi - lo).abs() < 1e-9 ? 1.0 : hi - lo) * 0.15;
   return (lo - pad, hi + pad);
 }
-
-// ---------------------------------------------------------------------------
-// The keyframe clipboard text (docs/07 §5.3).
-// ---------------------------------------------------------------------------
 
 /// One property's worth of clipboard rows: the property line (tab-joined, e.g.
 /// `Transform<TAB>Position`), its value column headings, and one row per frame
@@ -1158,11 +1123,9 @@ String lumitClipboardText({
   return b.toString();
 }
 
-/// What marks the two easing columns a value column carries.
 const String easeInSuffix = ' Ease In';
 const String easeOutSuffix = ' Ease Out';
 
-/// Numbers written plainly: integers bare, fractions trimmed.
 String _number(double v) {
   if (v == v.roundToDouble()) return v.round().toString();
   var s = v.toStringAsFixed(6);
@@ -1261,10 +1224,6 @@ String _number(double v) {
   return (fps: fps, groups: groups);
 }
 
-// ---------------------------------------------------------------------------
-// The Vegas speed envelope.
-// ---------------------------------------------------------------------------
-
 /// The vertical range a Retime channel's envelope opens at, in per cent.
 ///
 /// Headroom over normal playback, and enough below zero to show that dragging
@@ -1309,7 +1268,6 @@ SpeedCurve speedCurveOf(BridgeSideInterp side) {
   return SpeedCurve.linear;
 }
 
-/// One curve per span of [keys].
 List<SpeedCurve> envelopeCurves(List<BridgeKeyframe> keys) => [
       for (var i = 0; i + 1 < keys.length; i++) speedCurveOf(keys[i].interpOut),
     ];
@@ -1600,7 +1558,6 @@ List<BridgeKeyframe> rampEnvelope(
     for (var i = 1; i + 1 < keys.length; i++)
       if (at(keys[i]) > end + near) i,
   ];
-  // Reaching the end, or with nothing left to come back to.
   if (end >= last - near) {
     point(keys.last, percent, null);
   } else {
@@ -1621,7 +1578,6 @@ List<BridgeKeyframe> resetEnvelope(List<BridgeKeyframe> keys) => keys.length < 2
     : envelopeToKeys([keys.first, keys.last], const [100.0, 100.0],
         curves: const [SpeedCurve.linear]);
 
-/// [keys] with span [span] played in [curve].
 List<BridgeKeyframe> setEnvelopeCurve(
     List<BridgeKeyframe> keys, int span, SpeedCurve curve) {
   if (span < 0 || span + 1 >= keys.length) return keys;
@@ -1687,7 +1643,6 @@ List<BridgeKeyframe> envelopeWithSpeedAt(List<BridgeKeyframe> keys,
   return envelopeToKeys(split, speeds, curves: curves);
 }
 
-/// [keys] with the envelope point at [index] moved to [percent].
 List<BridgeKeyframe> setEnvelopeSpeed(
     List<BridgeKeyframe> keys, int index, double percent) {
   if (index < 0 || index >= keys.length) return keys;
@@ -1744,10 +1699,6 @@ String speedText(double percent, {required bool fine}) =>
 /// so 8 reads 8 and 23.976 in 300 reads 7.99.
 String guideSpeedText(double percent) =>
     percent.toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '');
-
-// ---------------------------------------------------------------------------
-// Grid ruling.
-// ---------------------------------------------------------------------------
 
 /// The power of ten at or just under [v] (0.03 -> 0.01, 30 -> 10).
 ///
@@ -1814,8 +1765,6 @@ const double graphGridMinSpacing = 45;
   return (major, perUnit * minor > minSpacing / 5 ? minor : null);
 }
 
-/// The lines at multiples of [step] from [lo] to [hi], at most [limit] of
-/// them.
 List<double> gridLines(double lo, double hi, double step, {int limit = 400}) {
   if (!lo.isFinite || !hi.isFinite || !(step > 0)) return const [];
   final out = <double>[];
@@ -1957,7 +1906,6 @@ List<BridgeKeyframe> keysWithKeyOnCurve(
   final cubic = _shapedSpan(sorted, i);
   if (cubic == null || t <= t1 || t >= t2) return plain();
 
-  // de Casteljau at the curve parameter of `t`.
   final u = cubic.solveU(t);
   Offset at(int k) => Offset(cubic.x[k], cubic.y[k]);
   Offset lerp(Offset p, Offset q) => p + (q - p) * u;
@@ -1975,7 +1923,6 @@ List<BridgeKeyframe> keysWithKeyOnCurve(
           speed: speed,
           influence:
               influence.clamp(minTangentReach, maxInfluence).toDouble()));
-  // The far sides of the two keys, fixed where automatic.
   final aIn = resolvedSide(sorted, i, isOut: false);
   final bOut = resolvedSide(sorted, i + 1, isOut: true);
   final grown = [...sorted];

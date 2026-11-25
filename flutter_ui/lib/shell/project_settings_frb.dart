@@ -35,7 +35,6 @@ const List<int> _aaCounts = [1, 2, 4, 8];
 String _aaLabel(int samples) =>
     samples <= 1 ? l10n.off : l10n.samples('$samples');
 
-/// The colour depths the compositor works in (docs/06 §3.4).
 const List<int> _depths = [8, 16, 32];
 
 String _depthLabel(int bits) => l10n.bitsPerChannel('$bits');
@@ -181,8 +180,6 @@ class _ProjectSettingsWindowState extends State<_ProjectSettingsWindow> {
             ),
           ),
         ),
-        // As the anti-aliasing row below: only when the card cannot manage what
-        // was asked for, and a statement rather than a warning.
         if (depthInUse != depth)
           settingsRow(
             t,
@@ -239,8 +236,6 @@ class _ProjectSettingsWindowState extends State<_ProjectSettingsWindow> {
             ),
           ),
         ),
-        // Maximum lets a box grow to the largest picture, so say what that
-        // costs at the depth the card is working in.
         if (room == 0)
           Padding(
             key: const ValueKey('project-graph-room-memory'),
@@ -359,8 +354,6 @@ class _ProjectSettingsWindowState extends State<_ProjectSettingsWindow> {
     return l10n.projectColourNotInForce(why);
   }
 
-  /// A recessed box holding something the user did not type — here, the path
-  /// the project names.
   Widget _well(LumitTheme t, String text) => Container(
         key: const ValueKey('project-colour-config-path'),
         height: settingsControlHeight,

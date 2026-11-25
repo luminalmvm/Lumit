@@ -27,8 +27,6 @@ struct Params {
     paint: u32,
 };
 
-// ---- The SICELIOT texture helpers: the same text in every SICELIOT texture ----
-
 // A point in layer pixels turned by -angle about centre: the pattern turns.
 fn sx_turn(px: vec2<f32>, centre: vec2<f32>, degrees: f32) -> vec2<f32> {
     let d = px - centre;
@@ -36,14 +34,12 @@ fn sx_turn(px: vec2<f32>, centre: vec2<f32>, degrees: f32) -> vec2<f32> {
     return vec2<f32>(d.x * cos(a) - d.y * sin(a), d.x * sin(a) + d.y * cos(a));
 }
 
-// The finished colour, kept inside the layer when Paint asks for it.
 fn sx_paint(c: vec4<f32>, uv: vec2<f32>) -> vec4<f32> {
     if (p.paint == 0u) {
         return c * lumit_sample(uv).a;
     }
     return c;
 }
-// ---- The SICELIOT texture noise: the same text in every SICELIOT texture ----
 
 // A hash of a lattice cell and a salt, 0 to 1, seeded by Seed and the layer.
 fn sx_hash(c: vec2<i32>, salt: u32) -> f32 {
@@ -89,7 +85,6 @@ fn sx_fbm(q: vec2<f32>, octaves: i32, rough: f32, salt: u32) -> f32 {
 }
 
 
-// Whether dot (x, y) of a 5 by 7 glyph is lit, for glyph number g.
 fn mx_dot(g: vec2<i32>, x: i32, y: i32) -> bool {
     // Mirrored left to right about the middle column, as most glyphs are,
     // which reads as writing rather than static.
@@ -119,7 +114,6 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
         return sx_paint(c, uv);
     }
     let fade = 1.0 - behind / trail;
-    // A glyph changes now and then, each cell at its own moments.
     let tick = i32(floor(lumit.time * p.changes * (0.5 + sx_hash(vec2<i32>(col, i32(row)), 4u))));
     let g = vec2<i32>(col * 131 + tick, i32(row));
     let f = (q - vec2<f32>(f32(col), row) * cell) / cell * vec2<f32>(6.0, 8.0) - vec2<f32>(0.5);

@@ -14,7 +14,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Block glitch's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "block_glitch",
@@ -104,7 +103,6 @@ pub struct BlockGlitch {
     #[seed]
     pub seed: u32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -116,7 +114,6 @@ pub struct BlockGlitch {
     pub mix: f32,
 }
 
-/// Everything [`cpu::block_glitch`] and the WGSL twin want, in their order.
 type Packed = (f32, u32, i32, f32, f32, f32, f32, f32, f32);
 
 impl BlockGlitch {
@@ -125,8 +122,6 @@ impl BlockGlitch {
     /// rate is deliberately not exposed.
     pub const DERIVED_TICK: ParamId = ParamId::new("derived.tick");
 
-    /// This instance's tick read back out of a resolved bag: [`BlockGlitch::
-    /// packed`]'s missing argument, so no caller has to know the id.
     pub fn tick_of(p: Params<'_>) -> i32 {
         p.int(Self::DERIVED_TICK, 0)
     }
@@ -154,7 +149,6 @@ impl BlockGlitch {
     }
 }
 
-/// Block glitch's behaviour.
 pub struct BlockGlitchDef;
 
 impl EffectDef for BlockGlitchDef {
@@ -162,7 +156,6 @@ impl EffectDef for BlockGlitchDef {
         &<BlockGlitch as EffectMetadata>::SCHEMA
     }
 
-    /// A hit that lands on the playhead.
     fn presets(&self) -> &'static [crate::fx::presets::EffectPreset] {
         use crate::fx::presets::PresetValue::Keys;
         &[crate::fx::presets::EffectPreset {

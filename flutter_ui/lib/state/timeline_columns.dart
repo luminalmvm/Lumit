@@ -10,9 +10,7 @@
 // rule, and where the fold-out's value column lands for a given order. The
 // widgets that draw them live in the Timeline panel.
 
-/// One draggable cluster of outline columns.
 enum TimelineGroup {
-  /// Visibility · audio · solo · lock · shy · guide.
   switches,
 
   /// Twirl · label chip · layer number · name. The one flexible-width group:
@@ -23,7 +21,6 @@ enum TimelineGroup {
   /// the span the fold-out rows align their value cells to.
   render,
 
-  /// Matte · blend.
   compose,
 
   /// Parent. **A cluster of its own** (owner, desktop testing): the bottom
@@ -41,8 +38,6 @@ enum TimelineGroup {
   timings,
 }
 
-/// The order shipped: switches, identity, render, compose — the After Effects
-/// arrangement the owner asked for.
 const List<TimelineGroup> defaultGroupOrder = [
   TimelineGroup.switches,
   TimelineGroup.identity,
@@ -52,8 +47,6 @@ const List<TimelineGroup> defaultGroupOrder = [
   TimelineGroup.timings,
 ];
 
-/// One switch cell's width, shared by the header and the rows so the icons
-/// stack into columns. Wide enough for the boxed icon plus breathing room.
 const double switchCellWidth = 22;
 
 /// **One gap, everywhere in an outline row: 8** (owner, 2026-08-24). The
@@ -72,15 +65,8 @@ const double switchCellWidth = 22;
 /// the clusters, the marks in the identity cluster, and the pickers.
 const double outlineGap = 8;
 
-/// The gap between two cells of the *same* group — the compose group's
-/// pickers. [outlineGap], like every other gap in a row.
 const double cellGap = outlineGap;
 
-/// The gap between the pieces of the **identity** cluster — the twirl, the
-/// layer number and the label dot. [outlineGap], like every other gap
-/// in a row; the outline used to run the twirl hard against the dot and give
-/// the number 4, which packed the three smallest marks in the panel into the
-/// one place they most need air.
 const double identityGap = outlineGap;
 
 /// The A/V switch cells — **six** since the guide switch took the cell beside
@@ -111,7 +97,6 @@ const double switchesGroupWidth = 6 * switchCellWidth;
 /// ([defaultGroupWidths]).
 const double renderGroupWidth = 6 * switchCellWidth;
 
-/// The A/V switch cells, in the order they are drawn.
 enum SwitchCell { visible, audible, solo, locked, shy, guide }
 
 /// The order the Switches column gives its cells up in as it is dragged
@@ -195,7 +180,6 @@ const double parentCellWidth = matteFaceWidth;
 /// bottom bar's Parent toggle can hide it on its own.
 const double composeGroupWidth = matteFaceWidth + cellGap + blendCellWidth;
 
-/// The parent group: its dropdown face, and nothing else in the cluster.
 const double parentGroupWidth = parentCellWidth;
 
 /// The render-time cell: wide enough for "1234 ms" and its switch, and no
@@ -252,8 +236,6 @@ const Map<TimelineGroup, double> defaultGroupWidths = {
 /// [maxGroupWidth] stops it at its last one.
 bool groupIsFixedWidth(TimelineGroup group) => group == TimelineGroup.timings;
 
-/// How narrow a group may be dragged: enough for the cells that cannot
-/// shrink — its icons, or a dropdown you can still read a name in.
 double minGroupWidth(TimelineGroup group) => switch (group) {
       // What the hide ladders never take away: visibility and audio, and fx,
       // 3D and motion blur.
@@ -264,7 +246,6 @@ double minGroupWidth(TimelineGroup group) => switch (group) {
         (ModeCell.values.length - modeHideOrder.length) * switchCellWidth,
       TimelineGroup.compose => 120,
       TimelineGroup.parent => 60,
-      // Enough for the widest number the readout writes ("12.34 s").
       TimelineGroup.timings => 56,
     };
 
@@ -335,11 +316,9 @@ Map<String, dynamic> columnsToJson(List<TimelineGroup> order,
   final widths = j?['widths'];
   final version = j?['version'];
   final current = version is num && version >= columnsVersion;
-  // A width a group no longer starts at, kept by an older Lumit.
   bool former(TimelineGroup group, num width) =>
       !current && formerGroupWidths[group] == width.toDouble();
   return (
-    // A group the file does not name takes its default place after the rest.
     order: {...named(j?['order']), ...defaultGroupOrder}.toList(),
     widths: {
       for (final e in defaultGroupWidths.entries)
@@ -397,8 +376,6 @@ double outlineWidthOf(Map<TimelineGroup, double> widths) =>
   return (usable * matte / total, usable * blendCellWidth / total);
 }
 
-/// The order after dropping [dragged] onto [target]: the dragged group takes
-/// the target's slot, everything between shuffles one place along.
 List<TimelineGroup> reorderedGroups(
   List<TimelineGroup> order,
   TimelineGroup dragged,
@@ -441,10 +418,6 @@ double rightInsetOf(List<TimelineGroup> order,
   return right;
 }
 
-/// The value column for a group order. If the identity group has been dragged
-/// to the right of the render group its flexible width cannot be measured
-/// here, so it counts as zero — the values sit near enough until a real
-/// measurement is worth its plumbing.
 ValueColumn valueColumnFor(
     List<TimelineGroup> order, Map<TimelineGroup, double> widths) {
   // The value cells start under the render group and are never narrower than
@@ -477,7 +450,7 @@ ValueColumn timingsColumnFor(
 /// property's twirl sits just inside its layer's (docs/07 §4.3).
 double identityStart(
     List<TimelineGroup> order, Map<TimelineGroup, double> widths) {
-  var x = 8.0; // the row's edge padding
+  var x = 8.0;
   for (final group in order) {
     if (group == TimelineGroup.identity) return x;
     x += (widths[group] ?? 0) + groupDividerWidth;
@@ -489,7 +462,7 @@ double identityStart(
 /// in, which the entries of a shape layer's contents put their own eyes in.
 double switchesStart(
     List<TimelineGroup> order, Map<TimelineGroup, double> widths) {
-  var x = 8.0; // the row's edge padding
+  var x = 8.0;
   for (final group in order) {
     if (group == TimelineGroup.switches) return x;
     x += (widths[group] ?? 0) + groupDividerWidth;

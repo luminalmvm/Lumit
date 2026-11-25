@@ -1,5 +1,3 @@
-//! The selectors that follow speech: a letter's weight from the words' times.
-
 use super::selector::{RangeSelector, SelectorBasis, SelectorMode, SelectorShape};
 use super::SpokenWord;
 
@@ -70,7 +68,6 @@ pub(super) fn weights(
                 (None, SelectorMode::Said) => 1.0,
                 (None, _) | (Some(_), SelectorMode::Range) => 0.0,
                 (Some(word), SelectorMode::Said | SelectorMode::Unsaid) => {
-                    // Letter by letter, each is said at its share of the word.
                     let moment = if letters {
                         #[allow(clippy::cast_precision_loss)] // a word is far shorter than 2^52
                         let at = c.saturating_sub(word.chars.start) as f64
@@ -88,7 +85,7 @@ pub(super) fn weights(
                 (Some(word), SelectorMode::Current) => said(word.start) - said(word.end),
                 (Some(word), SelectorMode::Emphasis) => f64::from(u8::from(word.emphasis)),
             };
-            #[allow(clippy::cast_possible_truncation)] // a weight, an f32 picture
+            #[allow(clippy::cast_possible_truncation)]
             let w = w as f32;
             w
         })

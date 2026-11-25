@@ -15,8 +15,6 @@ import 'package:flutter/widgets.dart';
 import '../theme/theme.dart';
 import 'controls.dart';
 
-/// The colours the strip shows, in reading order: grounds, then what sits on
-/// them, then the accents.
 List<Color> swatchesOf(LumitTheme t) => [
       t.surface0,
       t.surface1,

@@ -40,7 +40,6 @@ void main() {
     ));
     await tester.pump();
 
-    // Open the sequence view: double-click the layer's name.
     final name =
         find.byKey(ValueKey<String>('tl-name-${layer.internallayerId}'));
     await tester.tap(name);
@@ -53,13 +52,10 @@ void main() {
     final outgoing = clips[0];
     final incoming = clips[1];
 
-    // A butt cut has no overlap, so no ramps — a hard cut on the beat.
     expect(find.byKey(ValueKey<String>('seq-crossfade-${outgoing.id}')),
         findsNothing,
         reason: 'a butt cut gets no crossfade');
 
-    // Trim the incoming clip's start back over the join: the overlap is the
-    // crossfade, so the join now wears the pair and its two handles.
     layer.trimClip(
       clip: incoming.id,
       startFrame: incoming.startFrame - 10,
@@ -77,8 +73,6 @@ void main() {
         find.byKey(ValueKey<String>('seq-fade-out-${outgoing.id}'));
     expect(outHandle, findsOneWidget);
 
-    // Drag the outgoing end's handle right: the outgoing clip's tail grows,
-    // which is the fade getting longer.
     final endBefore = layer
         .getClips()
         .firstWhere((c) => c.id == outgoing.id)
@@ -110,7 +104,6 @@ void main() {
     expect(endAfter, greaterThan(endBefore),
         reason: 'dragging the fade handle trimmed the outgoing end later');
 
-    // And the widened overlap still draws as one crossfade.
     clips = layer.getClips()
       ..sort((a, b) => a.startFrame.compareTo(b.startFrame));
     expect(clips[0].endFrame.toInt(),

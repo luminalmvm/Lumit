@@ -13,48 +13,39 @@ use super::particulate_params::ParticulateParams;
 use super::FxEngine;
 use crate::GpuContext;
 
-/// The bytes before the first particle.
 const HEAD_BYTES: u64 = 16;
-/// The bytes a particle takes between steps.
 pub const PART_BYTES: u64 = 48;
 
-/// The bytes one state of `cap` particles takes.
 #[must_use]
 pub fn state_bytes(cap: u32) -> u64 {
     HEAD_BYTES + u64::from(cap) * PART_BYTES
 }
 
-/// The bytes a walk of `cap` particles holds to step through.
 #[must_use]
 pub fn work_bytes(cap: u32) -> u64 {
     let blocks = u64::from(cap.div_ceil(SCAN_BLOCK));
     2 * state_bytes(cap) + (2 * u64::from(cap) + 2 * blocks + 4) * 4
 }
 
-/// What a kind of collider is, as the kernel reads it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
 pub enum ColliderKind {
     /// Across and down, along `edges`, through every depth.
     Walls = 0,
-    /// A rectangular card.
     Rect = 1,
     /// A card cut to the shapes `edges` hold.
     Shapes = 2,
-    /// A floor with no end.
     Floor = 3,
     /// A box of distances in the buffer of them.
     Model = 4,
 }
 
-/// One thing the particles hit, flattened for the kernel.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct SimCollider {
     /// This layer's pixels to the collider's own, by rows, at the frame's end.
     /// For a model, to the cells of its box of distances.
     pub from: [[f32; 4]; 3],
-    /// And back.
     pub to: [[f32; 4]; 3],
     /// The same at the frame's start.
     pub was_from: [[f32; 4]; 3],
@@ -86,7 +77,6 @@ pub struct SimFrame<'a> {
     pub distances: Option<&'a wgpu::Buffer>,
 }
 
-/// One step's own numbers.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct SimStep {
     /// How long it is, seconds, and the walk's clock at its end.
@@ -176,7 +166,6 @@ struct OutUniform {
     _pad: [f32; 2],
 }
 
-/// The particles on the card, ready for a [`ParticulateOp`] to draw.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SimView<'a> {
     pub state: &'a wgpu::Buffer,
@@ -186,27 +175,21 @@ pub struct SimView<'a> {
     pub spark_size: f32,
 }
 
-/// The buffers one walk steps through.
 pub struct SimWork {
-    /// The state, between steps and after them.
     pub state: wgpu::Buffer,
-    /// What each particle moved to, within a step.
     moved: wgpu::Buffer,
     counts: wgpu::Buffer,
-    /// A flock's cells, made the first time one is asked for.
     cells: std::sync::OnceLock<wgpu::Buffer>,
     pub cap: u32,
 }
 
 impl SimWork {
-    /// The bytes all three take.
     #[must_use]
     pub fn bytes(&self) -> u64 {
         self.state.size() + self.moved.size() + self.counts.size()
     }
 }
 
-/// The buffer the Model colliders read their distances from.
 #[must_use]
 pub fn distances_buffer(ctx: &GpuContext, values: &[f32]) -> wgpu::Buffer {
     ctx.device
@@ -224,7 +207,6 @@ fn entry(binding: u32, buffer: &wgpu::Buffer) -> wgpu::BindGroupEntry<'_> {
     }
 }
 
-/// The sim's layouts and pipelines, built the first time a sim runs.
 pub(super) struct SimPipelines {
     main: wgpu::BindGroupLayout,
     step: wgpu::BindGroupLayout,
@@ -402,7 +384,6 @@ impl FxEngine {
             .get_or_init(|| SimPipelines::new(self, ctx))
     }
 
-    /// The buffers a walk of `cap` particles steps through, with none born.
     pub fn sim_work(&self, ctx: &GpuContext, cap: u32) -> SimWork {
         use wgpu::BufferUsages as U;
         let buffer = |label, size, usage| {
@@ -434,13 +415,11 @@ impl FxEngine {
         }
     }
 
-    /// Everything but the frame's steps: no particles.
     pub fn sim_clear(&self, ctx: &GpuContext, work: &SimWork) {
         ctx.encoder("fx-particulate-sim-clear")
             .clear_buffer(&work.state, 0, Some(HEAD_BYTES));
     }
 
-    /// A copy of where `work` has got to, for later.
     pub fn sim_keep(&self, ctx: &GpuContext, work: &SimWork) -> wgpu::Buffer {
         use wgpu::BufferUsages as U;
         let kept = ctx.device.create_buffer(&wgpu::BufferDescriptor {
@@ -454,7 +433,6 @@ impl FxEngine {
         kept
     }
 
-    /// `work` back to a state [`Self::sim_keep`] kept.
     pub fn sim_restore(&self, ctx: &GpuContext, work: &SimWork, kept: &wgpu::Buffer) {
         ctx.encoder("fx-particulate-sim-restore")
             .copy_buffer_to_buffer(kept, 0, &work.state, 0, work.state.size().min(kept.size()));
@@ -499,7 +477,6 @@ impl FxEngine {
         true
     }
 
-    /// `steps`, in order, on `work`.
     pub fn sim_steps(
         &self,
         ctx: &GpuContext,
@@ -665,7 +642,6 @@ impl FxEngine {
         }
     }
 
-    /// The bind group that turns `view` into the closed forms' stream.
     pub(super) fn sim_out_bind(&self, ctx: &GpuContext, view: &SimView<'_>) -> wgpu::BindGroup {
         let set = self.sim_pipelines(ctx);
         let uniform = ctx

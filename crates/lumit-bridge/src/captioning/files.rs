@@ -1,6 +1,3 @@
-//! Writing a caption layer's captions out as a subtitle file, on the comp's
-//! clock.
-
 use super::*;
 
 /// Every caption `layer` shows in its comp, on the comp's clock, frame by
@@ -56,7 +53,6 @@ pub(crate) fn comp_cues(
         .collect()
 }
 
-/// `cues` as the text of a file in `format`.
 pub(crate) fn file_text(cues: &[Cue], format: BridgeCaptionFormat, language: &str) -> String {
     match format {
         BridgeCaptionFormat::Srt => srt::write(cues),

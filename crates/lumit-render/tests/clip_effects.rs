@@ -1,7 +1,3 @@
-//! A clip's own effects and blend mode on a Sequence layer that draws a
-//! picture: they reach that clip's part of the row and no other, and they
-//! name the frame.
-
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use lumit_core::model::{
@@ -117,8 +113,6 @@ fn key_of(doc: &Arc<Document>, comp: Uuid, t: f64) -> lumit_eval::FrameKey {
         .expect("a solid comp is always keyable")
 }
 
-/// A red comp cut into two one-second clips on a Sequence layer, over a grey
-/// plate. `dress` sets up the first clip.
 fn two_clips(dress: impl Fn(&mut Clip)) -> (Arc<Document>, Uuid) {
     let mut doc = Document::new();
     let (red, grey) = (Uuid::now_v7(), Uuid::now_v7());
@@ -171,7 +165,6 @@ fn a_clips_effects_and_blend_reach_that_clip_alone() {
     let red = centre(&plain, plain_comp, 30);
     assert!(red[0] > 200 && red[1] < 30, "the clip is red: {red:?}");
 
-    // Invert on the first clip: cyan while it shows, red once the second does.
     let (inverted, comp) = two_clips(|c| {
         c.effects
             .push(lumit_core::fx::builtins::instantiate("invert").unwrap());
@@ -193,7 +186,6 @@ fn a_clips_effects_and_blend_reach_that_clip_alone() {
         "and leaves the frames of the next clip alone"
     );
 
-    // The stack's bypass takes it off again.
     let (bypassed, comp) = two_clips(|c| {
         c.effects
             .push(lumit_core::fx::builtins::instantiate("invert").unwrap());
@@ -201,15 +193,12 @@ fn a_clips_effects_and_blend_reach_that_clip_alone() {
     });
     assert_eq!(centre(&bypassed, comp, 30), red);
 
-    // Multiply on the first clip darkens it against the grey plate.
     let (multiplied, comp) = two_clips(|c| c.blend = Some(BlendMode::Multiply));
     let dark = centre(&multiplied, comp, 30);
     assert!(dark[0] < red[0] - 20, "red times grey is darker: {dark:?}");
     assert_eq!(centre(&multiplied, comp, 90), red);
 }
 
-/// In a dissolve a clip's effects leave with the clip: its stack is worn all
-/// the way through, at less and less of its Mix, so nothing changes at once.
 #[test]
 fn a_clips_effects_fade_with_it_through_a_dissolve() {
     let second = |n: i64| Rational::new(n, 1).unwrap();
@@ -222,7 +211,6 @@ fn a_clips_effects_fade_with_it_through_a_dissolve() {
             second(length),
         )
     };
-    // Two seconds each, the second laid over the last second of the first.
     let mut first = clip(0, 2);
     first
         .effects
@@ -244,8 +232,6 @@ fn a_clips_effects_fade_with_it_through_a_dissolve() {
     assert_eq!(mix(2.5), None, "and gone with the clip");
 }
 
-/// A grade group's grade reaches a member clip through its reference, names
-/// the frame, and a group that has gone leaves the clip as it was.
 #[test]
 fn a_grade_groups_grade_reaches_its_member_and_names_the_frame() {
     use lumit_core::fx::effects::grade_group::{reference, Part};

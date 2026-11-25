@@ -19,8 +19,6 @@ import 'package:lumit_flutter/widgets/controls.dart';
 
 import 'frb_test_support.dart';
 
-/// Nothing said: what an unwritten store answers, and what each test leaves
-/// behind when it found nothing.
 const BridgeExportDefaults nothingSaid = BridgeExportDefaults(
   preset: '',
   codec: '',
@@ -34,12 +32,10 @@ void main() {
   // The rows these tests reach live inside the Export window's folds.
   setUp(() => exportOpenSections.addAll(ExportSection.values));
 
-  // The machine's own defaults are borrowed, not taken.
   late BridgeExportDefaults borrowed;
   setUp(() => borrowed = exportDefaultsGet());
   tearDown(() => exportDefaultsSet(defaults: borrowed));
 
-  /// The word one dropdown's closed face is showing.
   String face(WidgetTester tester, String key) => tester
       .widget<Text>(find
           .descendant(

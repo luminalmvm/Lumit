@@ -48,8 +48,6 @@ const double _itemRow = 36;
 const double _headerRow = 22;
 const double _pad = dialogPadding;
 
-/// A sidebar row and the accent tick down the one in force, as Settings
-/// draws them.
 const double _navHeight = 24;
 const double _navTick = 2;
 
@@ -76,8 +74,6 @@ Future<void> showLibrary(BuildContext context,
   );
 }
 
-/// Which list the middle shows: everything, one kind, the conflicts, or
-/// what was recently deleted.
 class _Page {
   final LibraryKind? kind;
   final bool needsYou, deleted;
@@ -110,7 +106,6 @@ class _Page {
   int get hashCode => Object.hash(kind, needsYou, deleted);
 }
 
-/// A line of the middle: a folder's name, or an item.
 class _Row {
   final String? header;
   final LibraryEntry? entry;
@@ -119,7 +114,6 @@ class _Row {
   double get height => entry == null ? _headerRow : _itemRow;
 }
 
-/// One thing that can be done to an item, for its buttons and its menu.
 class _Act {
   final String id, label;
   final Future<void> Function() run;
@@ -132,8 +126,6 @@ class LibraryWindow extends StatefulWidget {
   final LibraryState library;
   final LibraryKind? kind;
 
-  /// The key of an item to open with chosen, and whether to open on the
-  /// conflicts.
   final String? select;
   final bool conflicts;
   final VoidCallback close;
@@ -179,15 +171,12 @@ class _LibraryWindowState extends State<LibraryWindow> {
   final Set<String> _selected = {};
   String? _anchor, _cursor;
 
-  /// Whether the arrow keys walk the kinds rather than the list.
   bool _inSidebar = false;
 
-  /// The item being renamed in its row, and the field it is typed in.
   String? _renaming;
   final _renameText = TextEditingController();
   final _renameFocus = FocusNode(debugLabel: 'library rename');
 
-  /// Files held over the window.
   bool _dragging = false;
 
   /// Conflicts settled a moment ago, kept while their cards leave.
@@ -246,7 +235,6 @@ class _LibraryWindowState extends State<LibraryWindow> {
     if (!mounted) return;
     setState(() {
       final now = {for (final c in _library.conflicts) c.entry.key};
-      // A conflict that went leaves its card behind for a beat.
       for (final was in _conflictKeys.difference(now)) {
         final gone = _leavingOf(was);
         if (gone != null) _leaving[was] = gone;
@@ -256,7 +244,6 @@ class _LibraryWindowState extends State<LibraryWindow> {
       if (_page.needsYou && now.isEmpty && _leaving.isEmpty) {
         WidgetsBinding.instance.addPostFrameCallback((_) => _afterLeaving());
       }
-      // What is chosen keeps to what is still there.
       final keys = {
         for (final e in _library.entries) e.key,
         for (final e in _library.recentlyDeleted) e.key,
@@ -275,8 +262,6 @@ class _LibraryWindowState extends State<LibraryWindow> {
     return null;
   }
 
-  // --- What is shown ---------------------------------------------------------
-
   bool _wanted(LibraryEntry e) {
     final q = _search.text.trim().toLowerCase();
     if (q.isEmpty) return true;
@@ -292,7 +277,6 @@ class _LibraryWindowState extends State<LibraryWindow> {
     return a.name.toLowerCase().compareTo(b.name.toLowerCase());
   }
 
-  /// The items of the page in force, in the order they are listed.
   List<LibraryEntry> _listed() {
     if (_page.deleted) {
       return _library.recentlyDeleted.where(_wanted).toList()
@@ -340,8 +324,6 @@ class _LibraryWindowState extends State<LibraryWindow> {
   List<LibraryEntry> get _chosen =>
       [for (final k in _selected) if (_entry(k) case final e?) e];
 
-  // --- Choosing -------------------------------------------------------------
-
   void _open(_Page page) {
     if (page == _page) return;
     setState(() {
@@ -385,7 +367,6 @@ class _LibraryWindowState extends State<LibraryWindow> {
     _focus.requestFocus();
   }
 
-  /// Scroll the list so [e]'s row is in view.
   void _reveal(LibraryEntry e, List<_Row> rows) {
     if (!_scroll.hasClients) return;
     var top = 0.0;
@@ -408,8 +389,6 @@ class _LibraryWindowState extends State<LibraryWindow> {
         ? _scroll.jumpTo(at)
         : _scroll.animateTo(at, duration: spec.duration, curve: spec.curve);
   }
-
-  // --- Keys -----------------------------------------------------------------
 
   List<_Page> get _pages => [
         const _Page.all(),
@@ -501,7 +480,6 @@ class _LibraryWindowState extends State<LibraryWindow> {
     return KeyEventResult.handled;
   }
 
-  /// Whether a text field has the keyboard.
   bool get _typing => _searchFocus.hasFocus || _renameFocus.hasFocus;
 
   KeyEventResult _sidebarKey(LogicalKeyboardKey key) {
@@ -518,8 +496,6 @@ class _LibraryWindowState extends State<LibraryWindow> {
     _open(pages[to]);
     return KeyEventResult.handled;
   }
-
-  // --- Doing ------------------------------------------------------------------
 
   /// A notice on the status line, with Undo beside it when the library can
   /// take the thing back.
@@ -734,7 +710,6 @@ class _LibraryWindowState extends State<LibraryWindow> {
     ));
   }
 
-  /// Undo and Redo, named after what they would do, over a row's own rows.
   List<Widget> _undoRows(void Function(void) close) {
     final undo = _library.undoing, redo = _library.redoing;
     if (undo == null && redo == null) return const [];
@@ -759,8 +734,6 @@ class _LibraryWindowState extends State<LibraryWindow> {
         },
         child: MenuLabel(label),
       );
-
-  // --- Drawing ----------------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
@@ -852,7 +825,6 @@ class _LibraryWindowState extends State<LibraryWindow> {
                     _footer(t),
                   ],
                 ),
-                // Files held over the window light its edge.
                 Positioned.fill(
                   child: IgnorePointer(
                     child: AnimatedContainer(
@@ -931,8 +903,6 @@ class _LibraryWindowState extends State<LibraryWindow> {
         ),
       );
 
-  /// One calm line: what the library is doing. A conflict count is pressable
-  /// and goes to Needs you.
   Widget _status(LumitTheme t) {
     final (words, tone) = libraryStatusWords(_library);
     final colour = libraryToneColour(t, tone);
@@ -981,8 +951,6 @@ class _LibraryWindowState extends State<LibraryWindow> {
         ? pressable
         : LumitTooltip(message: l10n.settingsSyncNow, child: pressable);
   }
-
-  // --- The sidebar ------------------------------------------------------------
 
   Widget _sidebar(LumitTheme t) {
     final counts = <LibraryKind, int>{};
@@ -1078,8 +1046,6 @@ class _LibraryWindowState extends State<LibraryWindow> {
               ? 'deleted'
               : page.kind!.name;
 
-  /// The account's computers under the kinds: a disc, the name, and when it
-  /// was last seen.
   Widget _computers(LumitTheme t) => Padding(
         padding: const EdgeInsets.fromLTRB(_pad, 8, _pad, 10),
         child: Column(
@@ -1122,8 +1088,6 @@ class _LibraryWindowState extends State<LibraryWindow> {
           ],
         ),
       );
-
-  // --- The middle ------------------------------------------------------------
 
   Widget _middle(LumitTheme t, List<LibraryEntry> items) {
     if (_page.needsYou) return _needsYou(t);
@@ -1197,8 +1161,6 @@ class _LibraryWindowState extends State<LibraryWindow> {
     );
   }
 
-  /// The list's own header: what is listed, how many and how much, and for
-  /// a kind the switch that keeps it on this computer.
   Widget _listHeader(LumitTheme t, List<LibraryEntry> items) {
     final kind = _page.kind;
     final title = _page.all
@@ -1270,8 +1232,6 @@ class _LibraryWindowState extends State<LibraryWindow> {
         ),
       );
 
-  /// The conflicts, each as two cards side by side and the three ways out.
-  /// One that was settled leaves calmly rather than vanishing.
   Widget _needsYou(LumitTheme t) {
     final scope = ThemeScope.of(context);
     final live = _library.conflicts;
@@ -1314,7 +1274,6 @@ class _LibraryWindowState extends State<LibraryWindow> {
     );
   }
 
-  /// The right pane for more than one chosen item.
   Widget _many(LumitTheme t, List<LibraryEntry> chosen) {
     var bytes = 0;
     for (final e in chosen) {
@@ -1354,8 +1313,6 @@ class _LibraryWindowState extends State<LibraryWindow> {
       ),
     );
   }
-
-  // --- The footer -------------------------------------------------------------
 
   Widget _footer(LumitTheme t) {
     final usage = _library.usage;
@@ -1402,10 +1359,6 @@ class _LibraryWindowState extends State<LibraryWindow> {
   }
 }
 
-// --- Rows ---------------------------------------------------------------------
-
-/// One item: its tile, name and detail, size, a disc per computer, and the
-/// mark it wears when it is not simply in sync.
 class _ItemRow extends StatelessWidget {
   final LibraryEntry entry;
 
@@ -1518,7 +1471,6 @@ class _ItemRow extends StatelessWidget {
                 width: 44,
                 child: Align(
                   alignment: AlignmentDirectional.centerEnd,
-                  // A change of state fades from one mark to the next.
                   child: AnimatedSwitcher(
                     duration: scope.motion.mark.duration,
                     switchInCurve: scope.motion.mark.curve,
@@ -1537,7 +1489,6 @@ class _ItemRow extends StatelessWidget {
   }
 }
 
-/// A recently deleted item: when and where it went, and the two ways on.
 class _DeletedRow extends StatelessWidget {
   final LibraryEntry entry;
   final bool selected;
@@ -1628,8 +1579,6 @@ class _DeletedRow extends StatelessWidget {
     );
   }
 }
-
-// --- The detail pane ----------------------------------------------------------
 
 /// The chosen item: its preview, what it is, where it is, its history and
 /// its actions. The history is asked for as the pane opens and kept while
@@ -1820,8 +1769,6 @@ class _DetailState extends State<_Detail> {
         ),
       );
 
-  /// The preview over the pane: a font's own face at size, a theme's or
-  /// style's colours, or the kind's glyph.
   Widget _preview(LumitTheme t, LibraryEntry e) {
     final Widget face;
     if (e.kind == LibraryKind.fonts) {
@@ -1843,7 +1790,6 @@ class _DetailState extends State<_Detail> {
         ],
       );
     } else if (e.colours.isNotEmpty) {
-      // All eight, outlined once, as Settings ▸ Appearance shows a theme.
       face = Container(
         height: 28,
         decoration: BoxDecoration(
@@ -1876,7 +1822,6 @@ class _DetailState extends State<_Detail> {
         ),
       );
     } else if (e.kind == LibraryKind.presets && e.detail.isNotEmpty) {
-      // A preset shows its stack, top to bottom, as Effect controls lists it.
       final names = libraryDetail(e).split(', ');
       final shown = names.take(names.length > 4 ? 3 : 4).toList();
       face = Column(
@@ -1991,8 +1936,6 @@ class _DetailState extends State<_Detail> {
     );
   }
 }
-
-// --- Conflicts -----------------------------------------------------------------
 
 /// One item changed on two computers: this computer's version and the
 /// other's side by side, with what each is and when, and the three ways out.
@@ -2223,7 +2166,6 @@ class _LeaveState extends State<_Leave> {
       );
 }
 
-/// A file's name without its extension.
 String _stemOf(String file) {
   final dot = file.lastIndexOf('.');
   return dot <= 0 ? file : file.substring(0, dot);

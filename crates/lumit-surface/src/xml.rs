@@ -27,7 +27,6 @@ const PREV_BALL_BANK: u32 = 0x8000_0007;
 /// The transport ring: the Hub turns it into jog and shuttle.
 const TRANSPORT_RING: u32 = 0x8100_0001;
 
-/// What a control does: one of ours by name, or one of Tangent's.
 #[derive(Clone, Copy)]
 enum Key {
     Ours(&'static str),
@@ -42,7 +41,6 @@ enum Kind {
     Encoder,
 }
 
-/// One physical control's mapping, normally and with Alt held.
 #[derive(Clone, Copy)]
 struct Control {
     kind: Kind,
@@ -78,15 +76,12 @@ const fn both(kind: Kind, number: u32, std: u32, alt: u32) -> Control {
     }
 }
 
-/// One panel's default map: its Tangent name, its file, and its control
-/// banks, each a `ControlBank` id with one list of controls per bank.
 struct PanelMap {
     kind: &'static str,
     file: &'static str,
     banks: Vec<(&'static str, Vec<Vec<Control>>)>,
 }
 
-/// Each run of `numbers` given `keys` in turn.
 fn row(kind: Kind, numbers: &[u32], keys: &[&'static str]) -> Vec<Control> {
     numbers
         .iter()
@@ -212,7 +207,6 @@ fn panels() -> Vec<PanelMap> {
             &[0, 1, 2],
             &["offset.x", "offset.y", "offset.master"],
         );
-        // Alt and the ring jogs and shuttles.
         if let Some(ring) = ball.get_mut(2) {
             ring.alt = Some(Tangent(TRANSPORT_RING));
         }
@@ -404,7 +398,6 @@ fn panels() -> Vec<PanelMap> {
     ]
 }
 
-/// Write `controls.xml` and every panel's default map into `folder`.
 pub(crate) fn write_all(folder: &Path) -> io::Result<()> {
     std::fs::create_dir_all(folder)?;
     std::fs::write(folder.join("controls.xml"), controls())?;
@@ -416,7 +409,6 @@ pub(crate) fn write_all(folder: &Path) -> io::Result<()> {
 
 const HEAD: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n";
 
-/// `controls.xml`: the mode, then every control in the Mapper's groups.
 fn controls() -> String {
     let mut x = String::from(HEAD);
     x.push_str("<TangentWave fileType=\"ControlSystem\" fileVersion=\"3.0\">\n");
@@ -449,7 +441,6 @@ fn controls() -> String {
                 p.id, p.name, p.short, p.min, p.max, p.step
             );
         }
-        // A trackball takes a wheel's X, Y and Master together.
         for p in PARAMS
             .iter()
             .filter(|p| p.group == group && p.axis == Some(table::Axis::X))
@@ -472,7 +463,6 @@ fn controls() -> String {
                 a.id, a.name, a.short
             );
         }
-        // The two menus sit with the pages they choose between.
         if group == "Pages" {
             for m in MENUS {
                 let _ = writeln!(
@@ -488,7 +478,6 @@ fn controls() -> String {
     x
 }
 
-/// One panel's default map file.
 fn map(panel: &PanelMap) -> String {
     let mut x = String::from(HEAD);
     x.push_str("<TangentWave fileType=\"PanelMap\" fileVersion=\"3.0\">\n  <Panels>\n");
@@ -526,7 +515,6 @@ fn write_control(x: &mut String, control: &Control) {
             Ours(name) => {
                 let id = table::id_of(name);
                 let extra = if MENUS.iter().any(|m| m.menu == name) {
-                    // A button steps a menu forwards.
                     "                <Argument>0</Argument>\n"
                 } else if control.kind == Kind::Encoder {
                     "                <Display>Bar</Display>\n"

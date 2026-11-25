@@ -1189,6 +1189,13 @@ jobs:
       - name: Icon Composer keys actool cannot compile
         run: python3 scripts/check-icon.py
 
+  comment-ratchet:
+    name: comments (none added, the baseline only falls)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: python3 scripts/comments.py check
+
   # clippy cannot enforce the no-panic rule (docs/14 §4) on the bridge's frb
   # API. `#[frb(...)]` is a proc-macro attribute, and clippy's restriction lints
   # (unwrap_used, expect_used, panic, todo, unimplemented) skip code that comes

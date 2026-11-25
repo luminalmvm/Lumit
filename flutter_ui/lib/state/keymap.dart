@@ -84,7 +84,6 @@ String? keyName(LogicalKeyboardKey key) {
   if (_modifierKeys.contains(key)) return null;
   final named = _namedKeys[key];
   if (named != null) return named;
-  // Function keys are F-and-a-number in both worlds.
   final label = key.keyLabel;
   if (label.isEmpty) return null;
   // A single letter is upper-cased, which is how the keymap stores it; anything
@@ -204,7 +203,6 @@ class KeymapState extends ChangeNotifier {
   List<BridgeWheelBinding> _wheel = const [];
   BridgeHandleModifier _breakHandles = BridgeHandleModifier.alt;
 
-  /// The whole table, grouped by where each binding is live.
   List<BridgeKeymapGroup> get groups => _groups;
 
   /// Chords that could fire two actions at once. Empty in the shipped keymap;
@@ -217,8 +215,6 @@ class KeymapState extends ChangeNotifier {
   /// keymap carries one on purpose (`L` in the Timeline).
   List<BridgeKeyShadow> get shadows => _shadows;
 
-  /// Which modifier turns the scroll wheel into each of its actions, as the
-  /// engine last answered.
   List<BridgeWheelBinding> get wheel => _wheel;
 
   /// Whether the modifier [action] answers to is held right now. Read from the
@@ -247,11 +243,8 @@ class KeymapState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// The modifier that breaks or joins a keyframe's handles as a drag begins
-  /// in the Graph editor.
   BridgeHandleModifier get breakHandles => _breakHandles;
 
-  /// Whether that modifier is held right now.
   bool get breakHandlesHeld => switch (_breakHandles) {
         BridgeHandleModifier.alt => altActuallyHeld(),
         BridgeHandleModifier.ctrl => HardwareKeyboard.instance.isControlPressed,
@@ -345,7 +338,6 @@ class KeymapState extends ChangeNotifier {
     _byChord = byChord;
   }
 
-  /// Re-read the table, the conflicts and the shadows from the engine.
   void refresh() {
     _groups = keymapGroups();
     _conflicts = keymapConflicts();
@@ -383,17 +375,14 @@ class KeymapState extends ChangeNotifier {
     }
   }
 
-  /// Leave an action with no chord at all.
   Future<void> unbind(BridgeKeyContext context, String action) async {
     _adopt(await keymapUnbind(context: context, action: action));
   }
 
-  /// Put one row back to what the shipped keymap gives it.
   Future<void> resetBinding(BridgeKeyContext context, String action) async {
     _adopt(await keymapResetBinding(context: context, action: action));
   }
 
-  /// Replace the whole keymap with a shipped preset.
   Future<void> loadPreset(BridgeKeymapPreset preset) async {
     _adopt(await keymapLoadPreset(preset: preset), set: preset.name);
   }
@@ -403,7 +392,6 @@ class KeymapState extends ChangeNotifier {
   /// gone.
   Object? get inForce {
     final set = _workspace?.keymapSet;
-    // Nothing stored is the shipped keymap, untouched.
     if (set == null && _workspace?.keymapJson == null) {
       return BridgeKeymapPreset.lumit;
     }
@@ -432,7 +420,6 @@ class KeymapState extends ChangeNotifier {
     return _sets;
   }
 
-  /// Read the shortcuts folder again, after something else changed it.
   void reloadSets() {
     _readSets();
     notifyListeners();
@@ -458,8 +445,6 @@ class KeymapState extends ChangeNotifier {
   File _setFile(String name) => File('${Workspace.shortcutsFolder()}'
       '${Platform.pathSeparator}$name.$_setExtension');
 
-  /// The name a set is saved under: what the person typed, with what a file
-  /// name cannot hold taken out.
   static String _setName(String name) =>
       name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '').trim();
 
@@ -481,7 +466,6 @@ class KeymapState extends ChangeNotifier {
     return named;
   }
 
-  /// Use the set called [name]. Null on success, else why not.
   Future<String?> useSet(String name) async {
     final String text;
     try {
@@ -527,8 +511,6 @@ class KeymapState extends ChangeNotifier {
   /// workspace stores, so a file a user shares is a file that restores.
   String toJson() => keymapToJson();
 
-  /// Take a keymap from text — an imported file, or the stored blob. Returns
-  /// null on success or the engine's words when the text is not a keymap.
   Future<String?> fromJson(String json, {String? set}) async {
     try {
       _adopt(await keymapFromJson(json: json), set: set);

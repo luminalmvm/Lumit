@@ -25,7 +25,6 @@ Widget _tickRow(
           action: action, ticked: ticked, enabled: run != null),
     );
 
-/// The width every menu on the pane opens at, chords included.
 const double _menuWidth = 218;
 
 extension _GraphMenus on GraphEditorFrbState {
@@ -44,15 +43,12 @@ extension _GraphMenus on GraphEditorFrbState {
   ProjectReference? get _project =>
       Provider.of<LumitState>(context, listen: false).project;
 
-  /// The clipboard's two rows for keys, the chords' own road.
   List<Widget> _keyClipboardRows(void Function(Object?) close) => [
         _tickRow(close, l10n.menuCopy, widget.onCopyKeys, action: 'edit.copy'),
         _tickRow(close, l10n.menuPaste,
             graphKeyClipboard.isEmpty ? null : widget.onPasteKeys,
             action: 'edit.paste'),
       ];
-
-  // --- a key ---------------------------------------------------------------
 
   /// The key's menu. [side] is the speed-lens dot it was opened on, or null
   /// for the value lens's one key.
@@ -89,8 +85,6 @@ extension _GraphMenus on GraphEditorFrbState {
     );
   }
 
-  // --- a speed point -------------------------------------------------------
-
   /// A speed point's menu: type its speed, put it back to 100%, choose the
   /// curve the speed takes to the next point, or delete it. The easing rows
   /// a key has would bend the envelope out of the shape its points describe.
@@ -98,7 +92,6 @@ extension _GraphMenus on GraphEditorFrbState {
       GraphChannel channel, int index, Offset position) async {
     final picked = _pickFor('${channel.id}#$index');
     final keys = channel.keys;
-    // The points picked on this curve, which is the one being written.
     final points = [
       for (var i = 0; i < keys.length; i++)
         if (picked.contains('${channel.id}#$i')) i,
@@ -139,7 +132,6 @@ extension _GraphMenus on GraphEditorFrbState {
     );
   }
 
-  /// The six curves a speed span can take, the one in force ticked.
   List<Widget> _curveRows(void Function(Object?) close, GraphChannel channel,
           int span, SpeedCurve current) =>
       [
@@ -161,8 +153,6 @@ extension _GraphMenus on GraphEditorFrbState {
               ticked: curve == current,
               keyName: 'graph-speed-curve-${curve.name}'),
       ];
-
-  // --- a stretch of curve --------------------------------------------------
 
   /// Which span of [channel] [local] stands over: the key it starts at, or
   /// null off either end.
@@ -251,8 +241,6 @@ extension _GraphMenus on GraphEditorFrbState {
     );
   }
 
-  // --- a tangent handle ----------------------------------------------------
-
   void _showHandleMenu(
       GraphChannel channel, int index, bool isOut, Offset position) {
     final keys = _pickFor('${channel.id}#$index');
@@ -303,8 +291,6 @@ extension _GraphMenus on GraphEditorFrbState {
       ],
     );
   }
-
-  // --- a curve in the list -------------------------------------------------
 
   void _setHidden(Set<String> ids) {
     widget.selectedKeys.removeWhere(
@@ -365,7 +351,6 @@ extension _GraphMenus on GraphEditorFrbState {
     };
   }
 
-  /// A small box holding the layer's name, written on Enter.
   void _renameLayer(GraphChannel channel, Offset position) {
     final field = TextEditingController(text: channel.entry.info.name);
     showLumitPopup<void>(
@@ -392,8 +377,6 @@ extension _GraphMenus on GraphEditorFrbState {
     ).whenComplete(field.dispose);
   }
 
-  /// The rows a curve answers wherever it is clicked, on the plot or in the
-  /// list.
   List<Widget> _curveListRows(
       void Function(Object?) close, GraphChannel channel,
       {bool reset = true}) {
@@ -459,8 +442,6 @@ extension _GraphMenus on GraphEditorFrbState {
     );
   }
 
-  // --- the empty plot ------------------------------------------------------
-
   void _showPlotMenu(
       Offset local, Offset global, (double, double) range, double height) {
     final ui = Provider.of<LumitUiState>(context, listen: false);
@@ -470,7 +451,6 @@ extension _GraphMenus on GraphEditorFrbState {
       for (final c in _channels)
         for (var i = 0; i < c.keys.length; i++) '${c.id}#$i',
     };
-    // On the speed graph, the Retime row's own two first.
     final frame = ui.playheadFrame.value;
     final retimed = widget.lens == GraphLens.speed
         ? retimeTargets(ui)
@@ -527,7 +507,6 @@ extension _GraphMenus on GraphEditorFrbState {
                     widget.onSelectionChanged();
                   }),
         const MenuDivider(),
-        // The node canvases' order and keys: F the picked, Shift+F the lot.
         _tickRow(close, l10n.graphFrameSelected,
             widget.selectedKeys.isEmpty ? null : widget.onFrame,
             action: 'graph.fit'),

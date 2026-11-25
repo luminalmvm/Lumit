@@ -1,6 +1,3 @@
-//! Time-based kernels (docs/08 §3.2, §3.12, §3.13): echo/trails, flow motion
-//! blur and datamosh, each sampling neighbour frames or a flow field.
-
 use crate::GpuContext;
 
 use super::{work_texture, FxEngine};
@@ -256,7 +253,6 @@ impl FxEngine {
             }
             _ => now.clone(),
         };
-        // The layer looping itself takes its picture's place.
         let over = if replace {
             looped
         } else {

@@ -19,8 +19,6 @@ void main() {
   setUpAll(initEngineForTests);
 
   group('Settings → Autosave (frb)', () {
-    /// Open Settings on the Autosave page, with [minutes] and [keep] already in
-    /// the settings file as a launch would leave them.
     Future<LumitUiState> open(WidgetTester tester,
         {int minutes = 5, int keep = 5}) async {
       tester.view.physicalSize = const Size(1200, 900);

@@ -29,7 +29,6 @@ bool canRetime(BridgeLayerEntry entry) =>
         entry.info.kind == BridgeLayerKind.footage ||
         entry.info.kind == BridgeLayerKind.precomp);
 
-/// The selected layers a Retime command reaches.
 List<BridgeLayerEntry> retimeTargets(LumitUiState ui) => [
       for (final entry in selectedEntries(ui))
         if (canRetime(entry) && !entry.info.switches.locked) entry,
@@ -70,7 +69,6 @@ void _forEach(BuildContext context, List<BridgeLayerEntry> targets,
   _uiOf(context).model.refresh();
 }
 
-/// Give every target a Retime, or take it away.
 void setRetime(BuildContext context, List<BridgeLayerEntry> targets, bool on) =>
     _forEach(context, targets, (entry) {
       if ((entry.info.retime != null) != on) {
@@ -101,7 +99,6 @@ void stretchToLength(
       (entry) => entry.layer.stretch(speedPercent: was / frames * 100));
 }
 
-/// Ask for a speed or a length, then stretch.
 Future<void> askToStretch(
     BuildContext context, List<BridgeLayerEntry> targets) async {
   if (targets.isEmpty) return;
@@ -133,7 +130,6 @@ void freezeAtPlayhead(BuildContext context, List<BridgeLayerEntry> targets) {
           entry.layer.freezeAtPlayhead(frame: frame, holdFrames: hold));
 }
 
-/// Every target playing at [percent] at the playhead, from a point there.
 void setSpeedAtPlayhead(
     BuildContext context, List<BridgeLayerEntry> targets, double percent) {
   final ui = _uiOf(context);
@@ -152,7 +148,6 @@ void setSpeedAtPlayhead(
   });
 }
 
-/// Ramp every target from the speed at the playhead to [percent] over [frames].
 void rampLayers(BuildContext context, List<BridgeLayerEntry> targets,
     double percent, int frames, SpeedCurve curve) {
   final model = _uiOf(context).model;
@@ -174,7 +169,6 @@ void rampLayers(BuildContext context, List<BridgeLayerEntry> targets,
   });
 }
 
-/// One picked clip, as the Retime panel reads and writes it.
 typedef RetimeClip = ({LayerReference layer, BridgeClip clip});
 
 /// The clips picked in the Cut timeline that a Retime command reaches, the
@@ -265,7 +259,6 @@ void reverseClips(BuildContext context, List<RetimeClip> clips) {
   });
 }
 
-/// Back to 100%, as Reset speed on the clip's menu has it.
 void resetClips(BuildContext context, List<RetimeClip> clips) => _forEachClip(
     context,
     clips,
@@ -343,7 +336,6 @@ Future<void> askToFreezeClips(
   );
 }
 
-/// Ramp… on a layer or on clips: ask how, then write it.
 Future<void> askToRamp(BuildContext context, List<BridgeLayerEntry> targets,
     List<RetimeClip> clips, Offset position) {
   final ui = _uiOf(context);
@@ -421,7 +413,6 @@ void setInterpolation(BuildContext context, List<BridgeLayerEntry> targets,
       }
     });
 
-/// The name of a way of finding in-between frames.
 String interpLabel(BridgeRetimeInterp interp) => switch (interp) {
       BridgeRetimeInterp.nearest => l10n.interpNearest,
       BridgeRetimeInterp.blend => l10n.interpBlend,
@@ -433,7 +424,6 @@ String interpLabel(BridgeRetimeInterp interp) => switch (interp) {
 bool canFreezeAt(BridgeLayerEntry entry, int frame) =>
     frame > entry.info.inFrame && frame < entry.info.outFrame;
 
-/// The menu for [targets]' Retime, at [position], with [more] after its own rows.
 void showRetimeMenu(BuildContext context, LumitUiState ui,
     List<BridgeLayerEntry> targets, Offset position,
     {List<Widget> Function(VoidCallback close)? more}) {

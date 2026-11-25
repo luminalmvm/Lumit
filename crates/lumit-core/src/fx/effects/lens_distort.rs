@@ -14,7 +14,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Lens distort's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "lens_distort",
@@ -89,7 +88,6 @@ pub struct LensDistort {
     )]
     pub edge: u32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -147,7 +145,6 @@ impl LensDistort {
     }
 }
 
-/// Lens distort's behaviour.
 pub struct LensDistortDef;
 
 impl EffectDef for LensDistortDef {
@@ -186,10 +183,6 @@ impl EffectDef for LensDistortDef {
             let radius = f * (r / f).min(cpu::LENS_MAX_THETA).tan();
             (l.centre[0] + dx * radius / r, l.centre[1] + dy * radius / r)
         };
-        // The map is radial and keeps its order, so the edge of the picture
-        // lands on the edge of where it went. Walked in steps, from half a
-        // pixel out for the bilinear tap, which is close enough with a pixel
-        // of margin.
         const STEPS: usize = 32;
         let [x0, y0, x1, y1] = [rect[0] - 0.5, rect[1] - 0.5, rect[2] + 0.5, rect[3] + 0.5];
         let mut out = rect;

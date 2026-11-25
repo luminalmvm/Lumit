@@ -21,8 +21,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// The panel's one disclosure — the loop controls, which most projects never
-/// open. Everything that shapes the warp stays in the open.
 pub const TURBULENT_DISPLACE_GROUPS: &[ParamGroup] = &[ParamGroup {
     label: "Evolution options",
     params: &["cycle_evolution", "cycle"],
@@ -31,7 +29,6 @@ pub const TURBULENT_DISPLACE_GROUPS: &[ParamGroup] = &[ParamGroup {
     visible_when_lens_elements: None,
 }];
 
-/// A loop length means nothing until the field is looping.
 pub const TURBULENT_DISPLACE_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
     param: "cycle",
     on: "cycle_evolution",
@@ -49,7 +46,6 @@ pub const TURBULENT_DISPLACE_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
     label = "Turbulent displace",
     version = 1,
     category = Distortion,
-    // Up to ten octaves of 3-D noise, twice, plus a bilinear tap.
     cost = Moderate,
     // The Amount slider's own reach; its hard maximum is open, so the padding
     // is the slider's 500 px@comp doubled, and the pin ramp only ever shortens
@@ -70,9 +66,6 @@ pub const TURBULENT_DISPLACE_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
     ),
 )]
 pub struct TurbulentDisplace {
-    /// Which components of the warp survive. Turbulent uses both, which swirls;
-    /// Horizontal and Vertical keep one axis, which shears the picture into
-    /// ripples along the other.
     #[choice(
         label = "Displacement",
         options = ["Turbulent", "Horizontal", "Vertical"],
@@ -90,8 +83,6 @@ pub struct TurbulentDisplace {
     #[slider(min = 1.0, max = 2000.0, default = 100.0, hard_min = 1.0, unit = Px)]
     pub size: f32,
 
-    /// How many octaves of swirl are summed. One is a smooth swell; three is
-    /// where it reads as turbulence, which is what the effect is called.
     #[counter(min = 1, max = 10, default = 3, hard_min = 1, hard_max = 10, unit = Raw)]
     pub complexity: i32,
 
@@ -109,7 +100,6 @@ pub struct TurbulentDisplace {
     #[dial(default = 0.0, step = 45.0)]
     pub evolution: f32,
 
-    /// On, Evolution loops seamlessly after [`cycle`](Self::cycle) turns.
     #[toggle(label = "Cycle evolution", default = false)]
     pub cycle_evolution: bool,
 
@@ -128,11 +118,9 @@ pub struct TurbulentDisplace {
     )]
     pub pinning: u32,
 
-    /// Which field this instance warps by (§2.4).
     #[seed]
     pub seed: u32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -156,7 +144,6 @@ impl TurbulentDisplace {
     /// Fixed rather than exposed (§3.38 decision 2) — AE does not offer them on
     /// this effect either, and a warp is judged by its shape.
     pub const GAIN: f32 = 0.5;
-    /// See [`GAIN`](Self::GAIN).
     pub const LACUNARITY: f32 = 2.0;
 
     /// The bundle both kernels consume (docs/impl/effect-registry.md §2.4).

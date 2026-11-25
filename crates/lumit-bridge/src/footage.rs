@@ -40,12 +40,8 @@ use crate::api::export::BridgeExportSpec;
 
 mod analyses;
 
-/// How fast this machine sends and takes footage. One for the machine, kept
-/// to across every shared project.
 pub(crate) static LIMITS: LazyLock<Arc<Limits>> = LazyLock::new(|| Arc::new(Limits::default()));
 
-/// Whether this machine makes stand-ins of its footage for the others, and
-/// whether it asks for stand-ins of what it lacks without being told to.
 static GIVE: AtomicBool = AtomicBool::new(true);
 static TAKE: AtomicBool = AtomicBool::new(true);
 
@@ -73,33 +69,23 @@ pub(crate) fn carrier(project: Uuid) -> Option<Arc<Carrier>> {
     CARRIERS.lock().ok()?.get(&project).cloned()
 }
 
-/// What tells the interface something about footage changed.
 pub(crate) type Tell = Arc<dyn Fn(Told) + Send + Sync>;
 
 /// What the interface is told. Everything else it reads when it is told.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Told {
-    /// A file arrived, a transfer moved, or who has what changed.
     Changed,
-    /// A file this machine now reads a footage item from arrived, so what
-    /// is on screen of it is stale.
     Placed,
-    /// Someone asks this machine to export for them.
     Asked { job: Uuid, from: u32, comp: String },
 }
 
-/// Where a footage item is on this machine.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Here {
     Missing,
-    /// A stand-in someone sent.
     StandIn(PathBuf),
-    /// The file itself, the person's own or one fetched.
     Original(PathBuf),
 }
 
-/// The folder everything sent is kept under: `root` when a carrier was
-/// given one of its own, and otherwise the machine's.
 fn kept_under(root: Option<&Path>) -> Option<PathBuf> {
     root.map(Path::to_path_buf)
         .or_else(lumit_project::shared_footage_dir)
@@ -125,12 +111,10 @@ pub(crate) fn key(footage: &FootageItem) -> String {
     }
 }
 
-/// The folder files sent for `footage` are kept in.
 fn folder(root: Option<&Path>, footage: &FootageItem) -> Option<PathBuf> {
     Some(kept_under(root)?.join(key(footage)))
 }
 
-/// The item's file name with nothing of a path about it.
 fn file_name(footage: &FootageItem) -> String {
     let name = footage.media.relative_path.rsplit(['/', '\\', ':']).next();
     let name = name.filter(|name| !name.is_empty() && *name != "." && *name != "..");
@@ -267,7 +251,6 @@ pub(crate) fn restore(doc: &mut Document) {
     }
 }
 
-/// The footage items of `comp` this machine has no original of.
 pub(crate) fn lacking(doc: &Document, comp: Uuid) -> Vec<Uuid> {
     let Some(comp) = doc.comp(comp) else {
         return Vec::new();
@@ -292,7 +275,6 @@ fn moves(footage: &FootageItem, path: &Path) -> bool {
             .is_ok_and(|index| index.frame_count() > 1)
 }
 
-/// Whether the file at `path` says its pictures are interlaced.
 #[cfg(feature = "media")]
 fn has_fields(path: &Path) -> bool {
     let source = lumit_media::sequence::MediaSource::file(path.to_path_buf());
@@ -331,7 +313,6 @@ fn moves(_: &FootageItem, _: &Path) -> bool {
     false
 }
 
-/// How many frames the moving picture at `path` has.
 #[cfg(feature = "media")]
 fn frames_of(path: &Path) -> Option<u64> {
     let source = lumit_media::sequence::MediaSource::file(path.to_path_buf());
@@ -354,65 +335,36 @@ fn encode(_: &Path, _: &Path, _: Option<&[(usize, usize)]>, _: Smaller, _: &Atom
     false
 }
 
-/// What the carrier's own thread is handed.
 enum Job {
     News(News),
-    /// The document changed, so what this machine has and wants may have.
     Changed,
-    Note {
-        from: u32,
-        body: Value,
-    },
+    Note { from: u32, body: Value },
 }
 
-/// How an export asked of someone else is getting on.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Asking {
     Idle,
-    /// Sent, and the other person has not said yes yet.
     Waiting,
-    Running {
-        frame: u64,
-        total: u64,
-    },
-    /// Their export is done and the file is on its way.
-    Fetching {
-        done: u64,
-        total: u64,
-    },
-    Done {
-        path: String,
-    },
-    /// They said no, or their export stopped. In their words, or empty.
-    Failed {
-        why: String,
-    },
+    Running { frame: u64, total: u64 },
+    Fetching { done: u64, total: u64 },
+    Done { path: String },
+    Failed { why: String },
 }
 
-/// How fetching what an export lacks is getting on.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Fetching {
     Idle,
-    Working {
-        done: u64,
-        total: u64,
-    },
-    /// Everything is here and the export was queued under `id`.
-    Queued {
-        id: u32,
-    },
-    /// Nobody could send something, or the export would not queue.
+    Working { done: u64, total: u64 },
+    Queued { id: u32 },
     Failed,
 }
 
-/// An export someone asked this machine to do.
 struct Ask {
     from: u32,
     comp: Uuid,
     spec: Value,
 }
 
-/// An export this machine is doing for someone.
 struct Doing {
     job: Uuid,
     from: u32,
@@ -421,7 +373,6 @@ struct Doing {
     told: Instant,
 }
 
-/// One shared project's footage on this machine.
 pub(crate) struct Carrier {
     project: Uuid,
     store: Arc<DocumentStore>,
@@ -442,21 +393,14 @@ pub(crate) struct Carrier {
     /// one more than [`ASKS`] is turned away.
     asks: Mutex<HashMap<Uuid, Ask>>,
     doing: Mutex<Vec<Doing>>,
-    /// Exports this machine did for someone, for them to fetch. Emptied with
-    /// the carrier.
     made: Mutex<HashMap<Uuid, PathBuf>>,
-    /// The one export asked of someone else: its job, where its file goes,
-    /// and how it is getting on.
     asked: Mutex<(Uuid, PathBuf, Asking)>,
     fetching: Mutex<Fetching>,
     cancel_fetch: AtomicBool,
 }
 
-/// The most exports that can be waiting on this person's answer.
 const ASKS: usize = 4;
 
-/// The most taken for a file somebody else made: a stand-in, a run of
-/// frames, an export.
 const MOST_MADE: u64 = 64 << 30;
 
 impl Footage for Carrier {
@@ -483,7 +427,6 @@ impl Footage for Carrier {
             })
         };
         match (wanted, here(item)) {
-            // What someone else sent is passed on whoever asks.
             (Wanted::StandIn { .. }, Here::StandIn(path)) => Some(path),
             (Wanted::StandIn { .. }, Here::Original(path)) if give && own(&path) => {
                 if !moves(item, &path) {
@@ -526,12 +469,8 @@ impl Footage for Carrier {
             .and_then(|item| item.media.fingerprint.as_ref())
             .map(|print| print.size);
         match (wanted, size) {
-            // The file itself is as big as the item says it is.
             (Wanted::Original { .. }, Some(size)) => size,
             (Wanted::Original { .. }, None) => 0,
-            // An encode has no size to hold it to but a ceiling.
-            // ponytail: one flat ceiling. Work it out from the frames asked
-            // for and the encode's rate if a disk is ever filled under it.
             _ => MOST_MADE,
         }
     }
@@ -572,19 +511,15 @@ impl Footage for Carrier {
     }
 }
 
-/// The frames a [`Wanted::Part`] names, as the one run the encoder keeps.
 fn runs_of(first: u64, count: u64) -> Vec<(usize, usize)> {
     vec![(first as usize, first.saturating_add(count) as usize)]
 }
 
 impl Carrier {
-    /// Start carrying footage for a shared project. `tell` is how the
-    /// interface hears of it.
     pub(crate) fn start(project: Uuid, store: Arc<DocumentStore>, tell: Tell) -> Arc<Carrier> {
         Self::start_under(project, store, tell, None)
     }
 
-    /// [`Self::start`], keeping what is sent under `root`.
     pub(crate) fn start_under(
         project: Uuid,
         store: Arc<DocumentStore>,
@@ -620,7 +555,6 @@ impl Carrier {
         carrier
     }
 
-    /// Stop carrying footage for `project`, whose sharing is over.
     pub(crate) fn stop(project: Uuid) {
         let carrier = CARRIERS
             .lock()
@@ -632,14 +566,12 @@ impl Carrier {
         }
     }
 
-    /// The document changed. Looked at on the carrier's own thread.
     pub(crate) fn changed(project: Uuid) {
         if let Some(carrier) = carrier(project) {
             let _ = carrier.jobs.try_send(Job::Changed);
         }
     }
 
-    /// Another person's Lumit said something to this one.
     pub(crate) fn note(&self, from: u32, body: Value) {
         let _ = self.jobs.try_send(Job::Note { from, body });
     }
@@ -801,7 +733,6 @@ impl Carrier {
         }
     }
 
-    /// A file is here, whole. Put it where the project reads it from.
     fn arrived(&self, wanted: &Wanted, path: &Path, tell: &Tell) {
         let place = |item: Uuid| {
             let path = path.to_string_lossy().into_owned();
@@ -862,9 +793,6 @@ impl Carrier {
         tell(Told::Changed);
     }
 
-    // --- What the interface asks -----------------------------------------
-
-    /// Transfers in flight: what, how much of how much, and which way.
     pub(crate) fn moving(&self) -> Vec<(Wanted, u64, u64, bool)> {
         let Ok(moving) = self.moving.lock() else {
             return Vec::new();
@@ -874,12 +802,10 @@ impl Carrier {
             .collect()
     }
 
-    /// Whether nobody could send `wanted` when it was last asked for.
     pub(crate) fn was_refused(&self, wanted: &Wanted) -> bool {
         self.refused.lock().is_ok_and(|r| r.contains(wanted))
     }
 
-    /// Ask for a stand-in of `item`, or its original, whatever the settings.
     pub(crate) fn fetch(&self, item: Uuid, original: bool) {
         let wanted = if original {
             Wanted::Original { item }
@@ -1000,7 +926,6 @@ impl Carrier {
         for wanted in &wants {
             self.want(wanted.clone());
         }
-        // Wait for them all, saying how far along the bytes are.
         loop {
             if self.stop.load(Ordering::Relaxed) || self.cancel_fetch.load(Ordering::Relaxed) {
                 // Told to whoever is sending, so the fetch stops at their
@@ -1098,14 +1023,10 @@ impl Carrier {
         HashMap::new()
     }
 
-    // --- An export done by someone else ----------------------------------
-
     pub(crate) fn asking(&self) -> Asking {
         self.asked.lock().map_or(Asking::Idle, |a| a.2.clone())
     }
 
-    /// Ask the person numbered `to` to export `comp` by `spec` and send the
-    /// file back, to be written at `path`.
     pub(crate) fn ask_export(&self, to: u32, comp: Uuid, spec: &BridgeExportSpec, path: &str) {
         let doc = self.store.snapshot();
         let Some(size) = doc.comp(comp).map(|c| (c.width, c.height)) else {
@@ -1124,7 +1045,6 @@ impl Carrier {
         );
     }
 
-    /// Answer an export someone asked of this machine. Saying yes queues it.
     pub(crate) fn answer_export(&self, job: Uuid, yes: bool) {
         let Some(ask) = self.asks.lock().ok().and_then(|mut asks| asks.remove(&job)) else {
             return;
@@ -1180,8 +1100,6 @@ impl Carrier {
         }
     }
 
-    /// Tell whoever asked how the exports this machine is doing for them
-    /// are getting on.
     fn watch_exports(&self) {
         use crate::export::QueueRowState;
         let Ok(mut doing) = self.doing.lock() else {
@@ -1340,14 +1258,12 @@ pub(crate) fn online_pass(
     passed.is_ok()
 }
 
-/// An export's settings as they cross to another machine.
 #[cfg(feature = "media")]
 fn spec_value(spec: &BridgeExportSpec, size: (u32, u32)) -> Result<Value, String> {
     let spec = crate::export::to_export_spec(spec, size.0, size.1)?;
     serde_json::to_value(spec).map_err(|e| e.to_string())
 }
 
-/// The settings another machine sent, as this one's own.
 #[cfg(feature = "media")]
 fn spec_from(value: &Value) -> Option<BridgeExportSpec> {
     let spec: lumit_render::export::ExportSpec = serde_json::from_value(value.clone()).ok()?;

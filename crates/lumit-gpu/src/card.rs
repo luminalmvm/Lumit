@@ -1,6 +1,3 @@
-//! The name of the card the first context opened, kept for whoever asks
-//! after, as [`crate::adapter_summary`] keeps the whole line.
-
 use std::sync::OnceLock;
 
 static NAME: OnceLock<String> = OnceLock::new();

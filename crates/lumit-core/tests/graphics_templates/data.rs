@@ -1,8 +1,3 @@
-//! Data feeding a template: a table read from a file, its columns matched to
-//! controls, each row read as a copy's values or its faults, a copy fed from
-//! a row, each row's version of the project and its file's name. And the
-//! Custom controls effect, whose menu a template's own menus follow.
-
 use std::path::{Path, PathBuf};
 
 use lumit_core::fx::builtins;
@@ -38,8 +33,6 @@ const COLUMNS: [&str; 14] = [
     "Notes",
 ];
 
-/// Two rows: one every cell of which reads, and one most of whose cells do
-/// not. Written out as CSV and read back, as a linked file is.
 fn data_for(template: &Template) -> Data {
     let cells = |row: [&str; 14]| row.iter().map(|c| (*c).to_owned()).collect::<Vec<_>>();
     let written = Table {
@@ -76,7 +69,6 @@ fn data_for(template: &Template) -> Data {
     }
 }
 
-/// The footage the project holds: the badge, for the one file it reads.
 fn pictures_of(kit: &Kit) -> impl Fn(&Path) -> Option<(Uuid, (u32, u32))> {
     let badge = kit.badge;
     let file = version::cell_file("jobs/rows.csv", "logo.png");
@@ -123,7 +115,6 @@ fn columns_feed_controls_and_each_row_reads_as_values_or_faults() {
             (id("glow_on"), Value::Tick(true)),
             (id("style"), Value::Choice(1)),
             (id("position"), Value::Point(vec![10.0, 20.0])),
-            // The radius's hard limit is a wall here as on a copy.
             (id("radius"), Value::Number(2000.0)),
         ]
     );
@@ -153,13 +144,10 @@ fn columns_feed_controls_and_each_row_reads_as_values_or_faults() {
     assert!(second.files.is_empty() && second.length.is_none());
     assert!(feed::row_values(&template, &data, 2).is_none());
 
-    // A display colour is kept scene-linear.
     let grey = feed::row_colour("#888").unwrap();
     assert!((grey[0] - 0.246_201).abs() < 1e-5, "{grey:?}");
     assert_eq!(grey[3], 1.0);
     assert_eq!(feed::row_colour("grey"), None);
-    // A column named after a text row that the copy may not change feeds
-    // nothing.
     let mut plain = template.clone();
     plain.controls[0].size = false;
     assert_eq!(feed::matched(&plain, &[id("Title size")]), [Feeds::Nothing]);
@@ -230,7 +218,6 @@ fn a_starting_table_holds_the_templates_own_values_and_reads_back() {
     assert!(!data.feeds.contains(&Feeds::Nothing));
     let read = feed::row_values(&template, &data, 0).unwrap();
     assert!(read.faults.is_empty());
-    // Every cell reads back as the row it came from holds.
     for (id, value) in &read.values {
         let held = rows::read(&kit.doc, kit.comp(), &control(&template, id).target);
         assert_eq!(held.as_ref(), Some(value), "{id}");
@@ -238,7 +225,6 @@ fn a_starting_table_holds_the_templates_own_values_and_reads_back() {
     assert_eq!(read.values.len(), 9, "every control but the logo");
     assert_eq!(read.extras.len(), 3, "the title's font, size and colour");
 
-    // A colour with alpha, a fraction and a font with no face.
     let mut doc = kit.doc.clone();
     let tint = &control(&template, "tint").target;
     rows::write(
@@ -360,7 +346,6 @@ fn each_row_feeds_a_copy_and_makes_its_own_version() {
     let pictures = pictures_of(&kit);
     let c = |id: &str| control(&template, id);
 
-    // A copy fed from a row keeps what it set itself.
     let mut inst = values::instance_for(kit.tpl, &template);
     values::set_value(&mut inst, c("opacity"), &Value::Number(25.0));
     version::feed_copy(&template, &data, 0, &mut inst, &pictures);
@@ -381,7 +366,6 @@ fn each_row_feeds_a_copy_and_makes_its_own_version() {
     let held = values::held(&inst);
     assert_eq!(held.row, Some(0));
     assert!(held.fed.iter().any(|r| r == "title_size") && held.own == ["opacity"]);
-    // The next row takes away what the first fed.
     version::feed_copy(&template, &data, 1, &mut inst, &pictures);
     assert_eq!(
         title_of(&inst, &template),
@@ -401,7 +385,6 @@ fn each_row_feeds_a_copy_and_makes_its_own_version() {
     let ignored = version::fed(kit.tpl, &template, &data, 1, Some(&stranger), &pictures).unwrap();
     assert_eq!(values::comp_of(&ignored), Some(kit.tpl));
 
-    // Changing the data feeds every copy that follows a row again.
     let on_layer = version::fed(kit.tpl, &template, &data, 0, None, &pictures);
     let on_clip = version::fed(kit.tpl, &template, &data, 1, None, &pictures);
     let show = kit::show(&mut kit, on_layer, on_clip);
@@ -421,7 +404,6 @@ fn each_row_feeds_a_copy_and_makes_its_own_version() {
         title_of(inst, &template),
         Some(Value::Text("Ada L.".into()))
     );
-    // Unlinking the data leaves each copy bare.
     let gone = version::refeed_ops(&kit.doc, kit.tpl, &template, None, &pictures);
     assert!(matches!(
         &gone[0],
@@ -432,7 +414,6 @@ fn each_row_feeds_a_copy_and_makes_its_own_version() {
     };
     assert!(clips[0].inputs.is_none());
 
-    // One row's version: the copy in its video, or the template on its own.
     let owner = kit.doc.comp(show).unwrap();
     let copy = kit::layer_named(owner, "Copy").id;
     let cut = kit::layer_named(owner, "Cut");
@@ -523,7 +504,6 @@ fn each_row_feeds_a_copy_and_makes_its_own_version() {
         version::row_version(&kit.doc, kit.tpl, &template, &data, 2, None, &pictures).is_none()
     );
 
-    // A row is faulty for a cell that will not read or a file not held.
     let first = feed::row_values(&template, &data, 0).unwrap();
     let second = feed::row_values(&template, &data, 1).unwrap();
     let nothing = |_: &Path| -> Option<(Uuid, (u32, u32))> { None };
@@ -582,7 +562,6 @@ fn custom_controls_hold_a_menu_and_its_own_words() {
         rig("on", "On", RigKind::Checkbox, 1.0, &[]),
         rig("tint", "Tint", RigKind::Colour, 0.5, &[]),
         rig("mode", "Mode", RigKind::Menu, 1.0, &["Calm", "Wild"]),
-        // A second control under one id is one value, shown once.
         rig("amp", "Again", RigKind::Number, 9.0, &[]),
     ];
     let mut inst = builtins::instantiate("custom_controls").unwrap();
@@ -624,7 +603,6 @@ fn custom_controls_hold_a_menu_and_its_own_words() {
     let words = vec!["Calm".to_owned(), "Wild".to_owned()];
     assert_eq!(def.row_state(&inst).options, vec![("mode", words)]);
 
-    // A control taken away takes its value with it.
     custom::set_controls(&mut inst, &list[4..5]);
     let ids: Vec<&str> = inst.params.iter().map(|p| p.id.as_str()).collect();
     assert_eq!(ids, ["mode"]);

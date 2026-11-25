@@ -9,7 +9,6 @@ use crate::GpuContext;
 
 use super::work_texture;
 
-/// Timewarp's pipelines on one device.
 pub struct TimewarpKernels {
     layout: wgpu::BindGroupLayout,
     mix: wgpu::ComputePipeline,
@@ -31,7 +30,6 @@ struct Params {
     _pad: [u32; 2],
 }
 
-/// One pass: the picture's size, the motion's, and the size it runs over.
 struct Sizes {
     picture: (u32, u32),
     motion: (u32, u32),
@@ -112,7 +110,6 @@ impl TimewarpKernels {
         }
     }
 
-    /// `a` towards `b` by `amount`, both `w` by `h`.
     pub fn mix(
         &self,
         ctx: &GpuContext,

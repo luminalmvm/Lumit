@@ -202,7 +202,6 @@ class ViewerLayerMap {
         depth: z == null ? depth : depth?.at(z),
       );
 
-  /// Whether this layer is seen through a camera rather than flat.
   bool get projected => depth != null;
 
   /// Parent space `(x, y, z, 1)` to `(X, Y, W)` in comp pixels, row by row:
@@ -284,7 +283,6 @@ class ViewerLayerMap {
       ? _dot(_parentRows, 2, x, y, z ?? depth!.z, 1)
       : 1;
 
-  /// Whether the parent-space point ([x], [y], [z]) is in front of the eye.
   bool parentInFront(double x, double y, [double? z]) =>
       parentDepthOf(x, y, z) > viewerNear;
 
@@ -303,7 +301,6 @@ class ViewerLayerMap {
     return h[6] * x + h[7] * y + h[8];
   }
 
-  /// Whether the layer point ([x], [y]) is in front of the eye.
   bool inFront(double x, double y) => depthOf(x, y) > viewerNear;
 
   /// How far away the layer is under the screen point [pos], as the depth
@@ -400,7 +397,6 @@ class ViewerLayerMap {
     final c = parentOf(pos);
     final dx = c.dx - px;
     final dy = c.dy - py;
-    // Inverse rotation (transpose of the forward matrix).
     final rx = dx * cos + dy * sin;
     final ry = -dx * sin + dy * cos;
     return Offset(rx / sx + ax, ry / sy + ay);
@@ -432,7 +428,6 @@ class ViewerLayerMap {
       final at = parentOf(pointer);
       final ex = at.dx - px;
       final ey = at.dy - py;
-      // Un-rotate the screen delta into the layer's un-scaled frame.
       ux = ex * cos + ey * sin;
       uy = -ex * sin + ey * cos;
     }
@@ -487,7 +482,6 @@ class ViewerDepth {
     this.aeOrder = false,
   });
 
-  /// The same layer at Position z [z].
   ViewerDepth at(double z) => ViewerDepth(
         view: view,
         z: z,
@@ -500,7 +494,6 @@ class ViewerDepth {
         aeOrder: aeOrder,
       );
 
-  /// The view's rows times the parent chain.
   List<double> parentRows() {
     final rows = view();
     final m = parent?.storage;
@@ -544,7 +537,6 @@ List<double>? _invert3(List<double> m) {
   ];
 }
 
-/// [inv] times `(c, 1)`, divided through.
 Offset _dehom(List<double> inv, Offset c) {
   final x = inv[0] * c.dx + inv[1] * c.dy + inv[2];
   final y = inv[3] * c.dx + inv[4] * c.dy + inv[5];

@@ -64,7 +64,6 @@ pub(super) enum Expr {
     Ident(Sym),
     Array(Vec<Expr>),
     Object(Vec<(Rc<str>, Expr)>),
-    /// Text and holes, in order.
     Template(Vec<Result<Rc<str>, Expr>>),
     Unary(Unary, Box<Expr>),
     /// `++x`, `x--`: the amount, and whether the old value is the answer.
@@ -100,7 +99,6 @@ pub(super) struct Function {
     pub body: Vec<Stmt>,
 }
 
-/// What a declaration binds: one name, or the items of an array by position.
 #[derive(Debug)]
 pub(super) enum Pattern {
     Name(Sym),
@@ -124,7 +122,6 @@ pub(super) enum Stmt {
         update: Option<Expr>,
         body: Box<Stmt>,
     },
-    /// `for (x of list)` and, with `keys`, `for (x in list)`.
     ForEach {
         name: Sym,
         keys: bool,
@@ -165,7 +162,6 @@ impl Program {
         self.names.get(sym as usize).map_or("", |n| n)
     }
 
-    /// The names the text reads without declaring.
     pub(crate) fn free_names(&self) -> impl Iterator<Item = &str> {
         self.free.iter().map(|s| self.name(*s))
     }
@@ -559,7 +555,6 @@ impl<'n> Parser<'n> {
 
     fn for_statement(&mut self) -> Result<Stmt, String> {
         self.expect("(")?;
-        // `for (var x of list)` and `for (x in list)`.
         let declares =
             matches!(self.peek(), Tok::Ident(w) if matches!(w.as_str(), "var" | "let" | "const"));
         let name_at = usize::from(declares);
@@ -668,7 +663,6 @@ impl<'n> Parser<'n> {
         Ok(Stmt::Switch { subject, cases })
     }
 
-    /// The parameters and body of a function, after its name.
     fn function_rest(&mut self, name: Option<Sym>) -> Result<Rc<Function>, String> {
         self.expect("(")?;
         let mut params = Vec::new();
@@ -699,8 +693,6 @@ impl<'n> Parser<'n> {
         Ok(Expr::Seq(all))
     }
 
-    /// Whether the tokens from here are an arrow function's parameters:
-    /// `x =>` or `(a, b) =>`.
     fn arrow_ahead(&self) -> bool {
         match self.peek() {
             Tok::Ident(_) => self.is_at(1, "=>"),
@@ -989,7 +981,6 @@ impl<'n> Parser<'n> {
                     let value = if self.eat(":") {
                         self.assignment()?
                     } else {
-                        // `{x, y}` is `{x: x, y: y}`.
                         let sym = self.names.sym(&key);
                         self.names.read.push(sym);
                         Expr::Ident(sym)

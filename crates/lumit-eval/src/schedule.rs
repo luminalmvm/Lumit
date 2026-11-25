@@ -26,12 +26,8 @@
 /// resolution). Below Quarter the picture stops being judgeable.
 pub const COARSEST_TIER: u32 = 4;
 
-/// Finest tier (Full resolution).
 pub const FINEST_TIER: u32 = 1;
 
-/// Drop a tier when the smoothed cost exceeds this fraction of the frame
-/// budget (`0.9 / fps` of headroom is gone). Starting point per
-/// docs/impl/playback-scheduler.md §5 — tune on reference hardware.
 pub const DROP_BUDGET_FRACTION: f64 = 0.9;
 
 /// Rise a tier only when the smoothed cost sits below this fraction of the
@@ -39,12 +35,8 @@ pub const DROP_BUDGET_FRACTION: f64 = 0.9;
 /// in between changes nothing. Starting point — tune on reference hardware.
 pub const RISE_BUDGET_FRACTION: f64 = 0.4;
 
-/// How many consecutive comfortably-cheap frames it takes to earn a finer
-/// tier. Starting point per the impl note — tune on reference hardware.
 pub const RISE_SUSTAIN_FRAMES: u32 = 12;
 
-/// Ceiling on the rise requirement after repeated flapping (see
-/// [`RealtimeController`]'s anti-flap back-off).
 pub const MAX_RISE_SUSTAIN_FRAMES: u32 = 96;
 
 /// A rise that gets reversed within this many frames counts as a flap, and
@@ -52,9 +44,6 @@ pub const MAX_RISE_SUSTAIN_FRAMES: u32 = 96;
 /// tier this long clears the penalty. Starting point — tune on hardware.
 pub const FLAP_WINDOW_FRAMES: u32 = 48;
 
-/// How much one new measurement moves the smoothed cost (exponentially
-/// weighted moving average). Higher reacts faster but jitters more.
-/// Starting point — tune on reference hardware.
 pub const COST_EWMA_ALPHA: f64 = 0.3;
 
 /// The realtime-mode resolution picker
@@ -73,19 +62,14 @@ pub const COST_EWMA_ALPHA: f64 = 0.3;
 /// away doubles the patience required before trying again.
 #[derive(Debug, Clone)]
 pub struct RealtimeController {
-    /// Current preview divisor, [`FINEST_TIER`]..=[`COARSEST_TIER`].
     tier: u32,
     /// Smoothed render cost at the current tier, seconds. `None` right after
     /// a tier change: costs from another resolution describe different work,
     /// so the average restarts.
     cost_ewma: Option<f64>,
-    /// Consecutive frames below the rise threshold so far.
     rise_streak: u32,
-    /// Cheap frames currently required before rising (grows on flaps).
     required_rise_streak: u32,
-    /// Frames spent at the current tier since the last change.
     frames_at_tier: u32,
-    /// Whether the last tier change was a rise (needed to spot a flap).
     last_change_was_rise: bool,
 }
 
@@ -96,8 +80,6 @@ impl Default for RealtimeController {
 }
 
 impl RealtimeController {
-    /// Starts optimistic, at Full resolution; the first slow frames will
-    /// walk it down to wherever the machine can keep up.
     pub fn new() -> Self {
         Self {
             tier: FINEST_TIER,
@@ -109,7 +91,6 @@ impl RealtimeController {
         }
     }
 
-    /// The preview divisor currently in force (1 = Full … 4 = Quarter).
     pub fn tier(&self) -> u32 {
         self.tier
     }
@@ -137,10 +118,7 @@ impl RealtimeController {
         }
 
         if ewma > DROP_BUDGET_FRACTION * budget && self.tier < COARSEST_TIER {
-            // Too slow for the budget: coarsen immediately.
             if self.last_change_was_rise && self.frames_at_tier <= FLAP_WINDOW_FRAMES {
-                // We only just rose and are already backing out — a flap.
-                // Demand a longer proof of cheapness next time.
                 self.required_rise_streak =
                     (self.required_rise_streak * 2).min(MAX_RISE_SUSTAIN_FRAMES);
             }
@@ -149,7 +127,6 @@ impl RealtimeController {
         } else if ewma < RISE_BUDGET_FRACTION * budget && self.tier > FINEST_TIER {
             self.rise_streak += 1;
             if self.rise_streak >= self.required_rise_streak {
-                // Comfortably fast for long enough: refine one step.
                 self.tier -= 1;
                 self.after_tier_change(true);
             }
@@ -176,19 +153,13 @@ impl RealtimeController {
 mod tests {
     use super::*;
 
-    // ---- RealtimeController ----
-
-    /// docs/impl/playback-scheduler.md §6 test #5, first half: a cost cliff
-    /// (a heavy effect appears) drops the tier within 3 frames.
     #[test]
     fn realtime_cost_cliff_drops_tier_within_three_frames() {
         let fps = 60.0;
         let mut rc = RealtimeController::new();
-        // Comfortable playback at Full for a while (4 ms per frame).
         for _ in 0..120 {
             assert_eq!(rc.record(0.004, fps), FINEST_TIER);
         }
-        // The cliff: frames suddenly cost 50 ms (budget is ~16.7 ms).
         let mut frames_to_drop = 0;
         for frame in 1..=10 {
             if rc.record(0.05, fps) > FINEST_TIER {
@@ -202,8 +173,6 @@ mod tests {
         );
     }
 
-    /// Walk a fresh controller down to Quarter with brutal costs, stopping
-    /// the moment it arrives (so its smoothed cost is freshly reset there).
     fn controller_forced_to_quarter(fps: f64) -> RealtimeController {
         let mut rc = RealtimeController::new();
         for _ in 0..10 {
@@ -216,28 +185,21 @@ mod tests {
         rc
     }
 
-    /// Recovery: sustained comfortably-cheap frames earn the tier back after
-    /// the 12-frame sustain, one step at a time.
     #[test]
     fn realtime_sustained_cheap_cost_rises_tier() {
         let fps = 60.0;
         let mut rc = controller_forced_to_quarter(fps);
-        // Now frames are cheap (2 ms, well under 0.4 × 16.7 ms ≈ 6.7 ms).
-        // Fewer than the sustain: no rise yet.
         for _ in 0..(RISE_SUSTAIN_FRAMES - 1) {
             rc.record(0.002, fps);
         }
         assert_eq!(rc.tier(), COARSEST_TIER, "must not rise before the sustain");
-        // One more cheap frame completes the sustain.
         assert_eq!(rc.record(0.002, fps), COARSEST_TIER - 1);
-        // Kept cheap long enough, it climbs all the way back to Full.
         for _ in 0..200 {
             rc.record(0.002, fps);
         }
         assert_eq!(rc.tier(), FINEST_TIER);
     }
 
-    /// Nonsense measurements change nothing.
     #[test]
     fn realtime_ignores_nonsense_inputs() {
         let mut rc = RealtimeController::new();

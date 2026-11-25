@@ -28,47 +28,36 @@ mod tests;
 
 /// The rate sound is analysed at. Speech and most onsets live below 4 kHz.
 const RATE: u32 = 8000;
-/// Samples between onset frames: 5 ms, so 200 frames a second.
 const HOP: usize = 40;
-/// Onset frames a second.
 const FPS: usize = RATE as usize / HOP;
 /// Inputs shorter than this are never matched: there is too little sound to
 /// tell one place from another.
 const SHORTEST: f64 = 5.0;
-/// Frames read from a file at a time while analysing it.
 const BLOCK: usize = 65_536;
 /// The longest stretch of a file analysed, so a runaway file cannot take
 /// unbounded memory in the correlations: twelve hours.
 const LONGEST_FRAMES: u64 = 12 * 3600 * RATE as u64;
 
-/// Why sync stopped.
 #[derive(Debug, thiserror::Error)]
 pub enum SyncError {
-    /// A file could not be opened or decoded.
     #[error("media: {0}")]
     Media(#[from] MediaError),
-    /// An FFT was handed buffers of the wrong size.
     #[error("fft: {0}")]
     Fft(#[from] realfft::FftError),
-    /// The caller cancelled.
     #[error("cancelled")]
     Cancelled,
 }
 
-/// One file's sound as sync sees it: its onset curve and its length.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Onsets {
     /// The onset curve, 200 values a second, normalised to a unit spread and
     /// nought where the file is silent.
     pub feature: Vec<f32>,
-    /// The sound's length in seconds.
     pub seconds: f64,
 }
 
-/// One recording handed to [`solve`].
 #[derive(Debug, Clone, Copy)]
 pub struct Input<'a> {
-    /// Its sound, from [`analyse`].
     pub onsets: &'a Onsets,
     /// Inputs sharing a group came from one device: they are never compared
     /// with each other and never overlap.
@@ -81,25 +70,18 @@ pub struct Input<'a> {
     pub steady: bool,
 }
 
-/// What [`solve`] may do.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Options {
-    /// Measure and report clock drift as a speed.
     pub drift: bool,
 }
 
-/// How sure [`solve`] is of one input's place.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum State {
-    /// Placed, and the sound agrees well.
     Synced,
-    /// Placed, but the match is weak or disagrees with another.
     Uncertain,
-    /// No shared sound was found.
     Unmatched,
 }
 
-/// Where one input landed.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Placed {
     /// Where the input's own time 0 sits on the shared clock, in seconds.
@@ -109,7 +91,6 @@ pub struct Placed {
     /// reference: its own time `t` sits at `start + t / speed` on the shared
     /// clock, so a clip played at this speed stays in sync.
     pub speed: f64,
-    /// How sure the placement is.
     pub state: State,
 }
 
@@ -121,10 +102,8 @@ pub trait Windows {
     fn window(&self, input: usize, start_seconds: f64, frames: usize) -> Option<Vec<f32>>;
 }
 
-/// [`Windows`] read from the inputs' files, in the order handed to [`solve`].
 #[derive(Debug, Clone)]
 pub struct FileWindows {
-    /// One sound per input.
     pub sounds: Vec<SoundSource>,
 }
 
@@ -146,7 +125,6 @@ impl Windows for FileWindows {
     }
 }
 
-/// Average interleaved stereo into `out`, as far as both reach.
 fn mix_into(out: &mut [f32], stereo: &[f32]) {
     for (o, s) in out.iter_mut().zip(stereo.chunks_exact(2)) {
         if let [l, r] = s {

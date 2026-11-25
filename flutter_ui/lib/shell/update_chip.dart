@@ -21,8 +21,6 @@ import 'menu_bar_frb.dart' show saveProjectFrb;
 import 'profile_chip.dart' show SyncRing;
 import 'update_dialog_frb.dart';
 
-/// The button on the bottom strip, or with [labelled] the welcome screen's,
-/// which says it in words and is only there while an update is under way.
 class UpdateChip extends StatelessWidget {
   final bool labelled;
   const UpdateChip({super.key, this.labelled = false});
@@ -45,7 +43,6 @@ class UpdateChip extends StatelessWidget {
         };
         if (labelled && !waiting) return const SizedBox.shrink();
         return LumitTooltip(
-          // The Help menu's row says the same thing in words.
           message: updates.menuLabel,
           maxWidth: 380,
           body: _changes(t, updates),
@@ -129,8 +126,6 @@ Widget? _changes(LumitTheme t, UpdateService updates) {
   );
 }
 
-/// The mark for where [updates] has got to. Quiet while there is nothing to
-/// do, and lit once there is an update to fetch or to finish.
 class UpdateMark extends StatefulWidget {
   final UpdateService updates;
   const UpdateMark(this.updates, {super.key});
@@ -185,8 +180,6 @@ class _UpdateMarkState extends State<UpdateMark> {
             children: [
               glyph.LumitIcon(LumitIcons.downloadUpdate,
                   size: _size, colour: t.textPrimary),
-              // The dot that says something is waiting, edged in the strip's
-              // own surface so it stands off the arrow.
               Positioned(
                 top: -2,
                 right: -3,
@@ -219,7 +212,6 @@ class _UpdateMarkState extends State<UpdateMark> {
   }
 }
 
-/// The download while it comes: the arrow, inside a ring that fills.
 class _DownloadRing extends CustomPainter {
   final double progress;
   final Color track, arc, arrow;

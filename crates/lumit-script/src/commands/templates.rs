@@ -1,6 +1,3 @@
-//! Graphics templates: a comp's controls, what a copy has set for itself,
-//! the data that feeds them, and the library.
-
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -28,7 +25,6 @@ use crate::{Host, ScriptError};
 /// The most bytes of a data file that are read, as Lumit's own Data window
 /// reads one.
 const DATA_FILE_MAX_BYTES: u64 = 64 << 20;
-/// What a row's file is called when nobody says.
 const ROW_NAME: &str = "{comp} {row}";
 
 /// The comp called `key` and its controls. A comp with none is refused.
@@ -43,7 +39,6 @@ fn find_template<'a>(
     Ok((comp, template))
 }
 
-/// The control of `comp` called `key`, by its id or else its label.
 fn find_control<'a>(
     template: &'a Template,
     comp: &Composition,
@@ -60,7 +55,6 @@ fn find_control<'a>(
         })
 }
 
-/// The footage item or the comp called `key` as a picture, with its size.
 fn picture(host: &dyn Host, doc: &Document, key: &str) -> Result<Picture, ScriptError> {
     let id = Uuid::try_parse(key).ok();
     let shows =
@@ -88,7 +82,6 @@ fn picture(host: &dyn Host, doc: &Document, key: &str) -> Result<Picture, Script
     })
 }
 
-/// `value` as control `control` keeps it.
 fn value_in(
     host: &dyn Host,
     doc: &Document,
@@ -254,8 +247,6 @@ pub(super) fn comp_controls(host: &dyn Host, a: ControlsArgs) -> Result<Value, S
     Ok(json!({ "controls": controls }))
 }
 
-/// A copy of a graphics template: where it sits, the template it places and
-/// what it has stored for itself.
 struct Copy {
     at: CopyAt,
     template: Uuid,
@@ -312,7 +303,6 @@ fn copy_of(
     })
 }
 
-/// The controls that follow the template again.
 #[derive(Deserialize)]
 #[serde(untagged)]
 pub(super) enum Reset {
@@ -676,7 +666,6 @@ pub(super) fn data_export(
     if first < 1 || first > last {
         return Err(bad(format!("The data has {count} rows, counted from 1.")));
     }
-    // The copy that follows each row, in whichever comp it sits.
     let copy = match &a.layer {
         Some(key) => {
             let id = Uuid::try_parse(key).ok();
@@ -792,15 +781,12 @@ pub(super) fn template_place(
             )))
         }
     };
-    // Bringing it in and placing it are one undo step.
     store.begin_undo_group();
     let placed = place(host, &file, a.comp.as_deref(), a.at);
     store.end_undo_group();
     placed
 }
 
-/// Bring the template in `file` into the project, and place it in the comp
-/// called `comp` when there is one, from `at` for as long as it runs.
 fn place(
     host: &dyn Host,
     file: &Path,

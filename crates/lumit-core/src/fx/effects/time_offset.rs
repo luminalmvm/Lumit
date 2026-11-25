@@ -17,18 +17,14 @@
 use crate::fx::{registry::EffectDef, registry::EffectMetadata, schema::EffectSchema};
 use lumit_fx_macros::Effect;
 
-/// The Time offset's one control.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "time_offset",
     label = "Time offset",
     version = 1,
     category = Compositing,
-    // It shows a picture somebody else made, at another moment.
     cost = Trivial,
     roi = FullFrame,
-    // Nothing to dissolve, as the Merge has nothing: the box makes no picture
-    // of its own.
     matte = false,
 )]
 pub struct TimeOffset {
@@ -39,7 +35,6 @@ pub struct TimeOffset {
     pub offset: f32,
 }
 
-/// The Time offset's behaviour: none of its own, for the Merge's reason.
 pub struct TimeOffsetDef;
 
 impl EffectDef for TimeOffsetDef {

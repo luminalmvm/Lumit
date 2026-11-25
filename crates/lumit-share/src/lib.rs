@@ -50,7 +50,6 @@ use uuid::Uuid;
 /// forwarded once on a router and stay forwarded.
 pub const DEFAULT_PORT: u16 = 47856;
 
-/// The port a relay listens on unless its owner picked another.
 pub const RELAY_PORT: u16 = lumit_relay::DEFAULT_PORT;
 
 /// Lumit's own relay, as an invite names it. Nothing dials it as it is
@@ -59,10 +58,8 @@ pub const RELAY_PORT: u16 = lumit_relay::DEFAULT_PORT;
 /// lets out.
 pub const CLOUD_RELAY: &str = "cloud.lumitlab.com:443";
 
-/// The port that door listens on, on this machine. 0 while there is none.
 static CLOUD_DOOR: AtomicU16 = AtomicU16::new(0);
 
-/// Say which port the door to [`CLOUD_RELAY`] is on, or that it has shut.
 pub fn set_cloud_door(port: Option<u16>) {
     CLOUD_DOOR.store(port.unwrap_or(0), Ordering::Relaxed);
 }
@@ -85,24 +82,17 @@ pub(crate) fn dialled(relay: &str) -> Option<String> {
 /// server is spoken to through a second door the interface keeps.
 pub const ONLINE: &str = "online.lumitlab.com:443";
 
-/// The port that door listens on, on this machine. 0 while there is none.
 static ONLINE_DOOR: AtomicU16 = AtomicU16::new(0);
 
-/// Say which port the door to projects kept online is on, or that it has
-/// shut.
 pub fn set_online_door(port: Option<u16>) {
     ONLINE_DOOR.store(port.unwrap_or(0), Ordering::Relaxed);
 }
 
-/// The most people in one shared project, the host included.
 pub const MAX_PEOPLE: usize = 16;
 
-/// What one person is looking at, for the others to see.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct Presence {
-    /// The composition they have open.
     pub comp: Option<Uuid>,
-    /// The layers they have selected in it.
     pub layers: Vec<Uuid>,
     pub playhead: Option<CompTime>,
     /// Their pointer over the Viewer, in composition pixels.
@@ -132,7 +122,6 @@ const MARKED_KEYS: usize = 2048;
 const MARK_LENGTH: usize = 256;
 
 impl Presence {
-    /// Cut down to what is worth relaying, whoever sent it.
     fn tidied(mut self) -> Self {
         self.layers.truncate(256);
         self.cursor = self.cursor.filter(|(x, y)| x.is_finite() && y.is_finite());
@@ -146,7 +135,6 @@ impl Presence {
     }
 }
 
-/// One person in a shared project.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Person {
     /// The host is 0. Guests are numbered as they join.
@@ -166,13 +154,13 @@ pub struct Person {
     pub look: bool,
 }
 
-/// Why a host turned a guest away.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Refusal {
     /// The two run different versions of Lumit. Edits are the wire format, so
     /// both ends have to agree on every one of them.
-    Version { host: String },
-    /// The project already has [`MAX_PEOPLE`] in it.
+    Version {
+        host: String,
+    },
     Full,
 }
 
@@ -194,20 +182,19 @@ pub enum Versions {
     HostFirst { version: String },
 }
 
-/// Whether people outside the host's network can reach it.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum Reach {
     /// The router was not asked. Only people on the host's own network, or
     /// on a VPN with it, or through a port forwarded by hand, can join.
     #[default]
     Off,
-    /// The router is being asked.
     Asking,
     /// The router sends the port to this machine. `address` is the one it
     /// has on the internet, which is what goes in an invite for someone
     /// outside.
-    Open { address: String },
-    /// No router answered, or the one that did would not open the port.
+    Open {
+        address: String,
+    },
     Refused,
     /// The router is not on the internet itself: it sits behind another, or
     /// behind an address its provider shares between customers. Opening its
@@ -215,16 +202,11 @@ pub enum Reach {
     Behind,
 }
 
-/// Whether a host has a room at a relay, for guests no address of its own
-/// lets in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Relayed {
-    /// It was given no relay.
     #[default]
     Off,
-    /// The relay is being asked.
     Asking,
-    /// The room is open, and an invite made now leads to it.
     Open,
     /// The relay did not answer, or would not open a room. It is asked again
     /// every few seconds.
@@ -239,41 +221,33 @@ pub(crate) fn room(link: &[u8; 32]) -> String {
     hex::encode(&name[..16])
 }
 
-/// Why sharing stopped for a guest.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ending {
-    /// The host stopped sharing.
     Closed,
-    /// The host would not take this guest back.
     Refused(Refusal),
-    /// The host's document is one this machine will not hold.
     Unsafe,
-    /// The host took this guest out of the project.
     Removed,
 }
 
-/// The most dropped edits a return names.
 pub const MAX_DROPPED: usize = 20;
 
 /// One edit a return dropped, because what it was to was gone: what it did
 /// and to what, by the names this machine had before the merge.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Dropped {
-    /// What the edit is called in the History list.
     pub step: String,
-    /// The composition it was in, or the project item it was to.
     pub item: Option<String>,
-    /// The layer it was to, for an edit to one.
     pub layer: Option<String>,
 }
 
-/// What a shared project tells whoever is sharing it.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Event {
     /// Who is here and what each is looking at, sent whole each time, and
     /// which of them is this end.
-    People { me: u32, people: Vec<Person> },
-    /// A guest has lost its host and is carrying on alone until it is back.
+    People {
+        me: u32,
+        people: Vec<Person>,
+    },
     Away,
     /// The host is back and the edits made meanwhile are merged. The document
     /// was replaced, `held` conflicts wait to be chosen between, and `refused`
@@ -294,17 +268,16 @@ pub enum Event {
     /// The copy stays a member, away, with what was made on it kept. It asks
     /// the server no more until it is given the new invite.
     Replaced,
-    /// Sharing is over for this guest. The document stays as it is.
     Ended(Ending),
-    /// For a host: what came of asking its router to let people outside
-    /// the network in.
     Reach(Reach),
-    /// For a host: what came of asking a relay for a room.
     Relayed(Relayed),
     /// Another person's Lumit said something to this one that is not an
     /// edit. `from` is who, and `body` is theirs to have written and this
     /// end's to judge.
-    Note { from: u32, body: serde_json::Value },
+    Note {
+        from: u32,
+        body: serde_json::Value,
+    },
     /// For a project kept online: whether Lumit's server is taking edits to
     /// it. It stops when the host's account no longer has Lumit Pro, and
     /// for a project that has grown too large ([`Self::TooLarge`]) once the
@@ -369,11 +342,8 @@ pub enum ShareError {
     NoRandomness(String),
     #[error("that password could not be used")]
     Password,
-    /// What Lumit's server answered when it would not do what was asked of
-    /// it for a project kept online, in its own word for why.
     #[error("Lumit's server would not: {0}")]
     Server(String),
-    /// Another version of Lumit keeps the project kept online.
     #[error("another version of Lumit keeps that project: {0:?}")]
     Versions(Versions),
 }
@@ -409,16 +379,13 @@ pub fn global_address() -> Option<String> {
     }
 }
 
-/// One end of a shared project, whichever it is.
 pub enum Sharing {
     Host(Host),
     Guest(Guest),
-    /// A member of a project that is kept online, the host's machine too.
     Online(online::Member),
 }
 
 impl Sharing {
-    /// Everyone in the project, this end included.
     #[must_use]
     pub fn people(&self) -> Vec<Person> {
         match self {
@@ -428,7 +395,6 @@ impl Sharing {
         }
     }
 
-    /// Which of [`Self::people`] is this end.
     #[must_use]
     pub fn me(&self) -> u32 {
         match self {
@@ -438,7 +404,6 @@ impl Sharing {
         }
     }
 
-    /// Tell the others what this end is looking at. Latest wins.
     pub fn set_presence(&self, presence: Presence) {
         match self {
             Sharing::Host(host) => host.set_presence(presence),
@@ -470,8 +435,6 @@ impl Sharing {
         }
     }
 
-    /// Who has the original of the footage item `item`, by their number,
-    /// and how big it is on their disk.
     #[must_use]
     pub fn holders(&self, item: Uuid) -> Vec<(u32, u64)> {
         match self {
@@ -491,8 +454,6 @@ impl Sharing {
         }
     }
 
-    /// Stop taking `wanted`, and tell whoever is sending it, so a fetch that
-    /// was cancelled stops at both ends.
     pub fn unwant(&self, wanted: &Wanted) {
         match self {
             Sharing::Host(host) => host.unwant(wanted),
@@ -610,10 +571,6 @@ mod tests {
         here
     }
 
-    /// The whole road over real sockets: a guest is sent the document, both
-    /// ends edit at once, the same item included, and they end on the same
-    /// document. Presence crosses, a dropped connection loses nothing and
-    /// makes no edit twice, and the guest hears the host stop.
     #[test]
     fn a_host_and_a_guest_end_on_the_same_document() {
         let hosted = Arc::new(DocumentStore::new(Document::new()));
@@ -632,8 +589,6 @@ mod tests {
         let deaf = Arc::new(AtomicUsize::new(0));
         let through = relay(host.port(), deaf.clone());
         let invite: Invite = host.invite("127.0.0.1").to_string().parse().unwrap();
-        // With an address that leads nowhere in it too, as the host's
-        // address on its own network does for a guest somewhere else.
         let invite = Invite {
             addresses: vec!["127.0.0.1:1".into(), format!("127.0.0.1:{through}")],
             ..invite
@@ -666,9 +621,6 @@ mod tests {
             host.people().iter().any(|p| p.presence.comp == comp)
         });
 
-        // Someone else joins and is taken out. The invite they hold lets
-        // nobody in after that, and the guest still here is sent the new one,
-        // which is what it finds the host by from here on.
         let (document, joining) = join(invite.clone(), "Other", None).unwrap();
         let theirs = Arc::new(DocumentStore::new(document));
         let other = joining.start(theirs, quiet()).unwrap();
@@ -680,11 +632,6 @@ mod tests {
             guest.key() == (host.key(), host.key())
         });
 
-        // The connection drops, with an edit on it that the host took and
-        // never got to answer. The host says so when the guest is back, and
-        // the edit is not made a second time, which here would be refused:
-        // the item is already gone. An edit made on each side of the gap is
-        // on both ends once the guest has found its host again.
         heard.lock().clear();
         deaf.store(1, Ordering::Relaxed);
         joined.commit(Op::RemoveItem { id: hosts }).unwrap();
@@ -705,10 +652,6 @@ mod tests {
         };
         until("nothing was merged twice", || heard.lock().contains(&back));
 
-        // The host goes without saying it is over, as a closed project or a
-        // crash does, and the guest works on. The same project shared again
-        // by the same key on the same port is found, and what the guest did
-        // meanwhile is on both ends.
         heard.lock().clear();
         let (key, port) = (host.key(), host.port());
         drop(host);
@@ -738,12 +681,6 @@ mod tests {
         });
     }
 
-    /// Closing Lumit loses nobody's work. A host that closed without saving
-    /// has every edit since its last save back when it shares again, its
-    /// guest's included. A guest that closed while its host was away opens
-    /// its copy as it left it, and that finds the host and merges. What it
-    /// chose not to save is not in it, and a conflict it closed on is asked
-    /// again.
     #[test]
     fn a_host_and_a_guest_that_both_closed_carry_on_where_they_left_off() {
         let hosted = Arc::new(DocumentStore::new(Document::new()));
@@ -767,7 +704,6 @@ mod tests {
         let events: Events = Arc::new(move |event| sink.lock().push(event));
         let guest = joining.start(joined.clone(), events).unwrap();
 
-        // An edit, a save, and then one from each end the file never sees.
         let before = add_solid(&hosted, "made before the save");
         let (saved, _, mark) = host.saving();
         let file = Document::clone(&saved);
@@ -779,7 +715,6 @@ mod tests {
             h.item(guests).is_some() && g.item(hosts).is_some()
         });
 
-        // The host closes without saving. The guest works on, and closes too.
         let (key, port) = (host.key(), host.port());
         drop(host);
         until("the guest misses its host", || {
@@ -793,7 +728,6 @@ mod tests {
         }
         rename(&joined, before, "renamed with no host");
         rename(&joined, both, "the guest's name");
-        // It saves, makes one more edit, and closes without saving that.
         let (copy, _, mark) = guest.saving().expect("the host is away");
         let copy = Document::clone(&copy);
         guest.saved(mark);
@@ -802,7 +736,6 @@ mod tests {
         drop(guest);
         drop(joined);
 
-        // The host opens the file it saved and shares it again.
         let hosted = Arc::new(DocumentStore::new(file));
         let again = crate::host::host(
             hosted.clone(),
@@ -820,8 +753,6 @@ mod tests {
         assert!(back.item(hosts).is_some() && back.item(guests).is_some());
         rename(&hosted, both, "the host's name");
 
-        // The guest opens its copy: what it did with no host and saved is in
-        // it, and goes to the host once that is found.
         let nowhere = std::path::Path::new("");
         let kept = resume(&mut copy.clone(), nowhere);
         let (document, resuming) = kept.expect("the guest's edits were kept");
@@ -838,8 +769,6 @@ mod tests {
             resume(&mut copy.clone(), nowhere).is_none()
         });
 
-        // Both renamed one item, so the guest's name for it was held back.
-        // It closes without choosing, and its copy opened again still asks.
         until("the merge held the guest's name back", || {
             guest.conflicts().len() == 1
         });
@@ -856,7 +785,6 @@ mod tests {
             hosted.snapshot().item(both).map(ProjectItem::name) == Some("the guest's name")
         });
 
-        // A host that stops for good keeps nothing to put back either.
         host.stop();
         drop(guest);
         let afresh = Arc::new(DocumentStore::new(Document::clone(&hosted.snapshot())));
@@ -865,10 +793,6 @@ mod tests {
         assert_eq!(host.restored(), 0);
     }
 
-    /// A guest that no address of the host's lets in meets it at a relay,
-    /// and the two end on the same document. Taking someone out replaces
-    /// the invite, and the room with it: the old invite finds nobody at the
-    /// relay and the new one finds the host.
     #[test]
     fn a_guest_reaches_its_host_through_a_relay() {
         let listener = TcpListener::bind((LOOPBACK, 0)).unwrap();
@@ -893,7 +817,6 @@ mod tests {
         .unwrap();
         host.relay_through(&relay);
         until("the host has its room", || host.relayed() == Relayed::Open);
-        // With the relay as the only way: nothing in it leads to the host.
         let by_relay = || {
             let invite = Invite {
                 addresses: Vec::new(),
@@ -925,8 +848,6 @@ mod tests {
         serving.join().unwrap().unwrap();
     }
 
-    /// A machine's footage for the tests: the originals it was given, and
-    /// a folder of its own that what it is sent lands in.
     struct Shelf {
         folder: std::path::PathBuf,
         originals: Vec<(Uuid, std::path::PathBuf)>,
@@ -947,10 +868,6 @@ mod tests {
         fn told(&self, _: News) {}
     }
 
-    /// Footage one guest has reaches a guest that has not, by way of a host
-    /// that has not either and keeps what passes through it. A file part of
-    /// which is here already is carried on with, and one whose part here is
-    /// not how the file starts is begun again.
     #[test]
     fn footage_one_guest_has_reaches_another_through_the_host() {
         let root = std::env::temp_dir().join(format!("lumit-bulk-test-{}", std::process::id()));
@@ -999,7 +916,6 @@ mod tests {
             lacks.holders(clip) == theirs && host.holders(other) == theirs
         });
 
-        // Part of one is here already, and part of the other is not it.
         let part = |name: Uuid| lacks_shelf.folder.join(format!("{name}.bin.part"));
         std::fs::write(part(clip), &bytes(1)[..100_000]).unwrap();
         std::fs::write(part(other), &bytes(9)[..100_000]).unwrap();
@@ -1018,8 +934,6 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
     }
 
-    /// The invite's secret is what lets a guest in. One bit out and the
-    /// handshake fails before the host has said anything.
     #[test]
     fn a_guest_with_the_wrong_key_is_not_let_in() {
         let hosted = Arc::new(DocumentStore::new(Document::new()));
@@ -1029,10 +943,6 @@ mod tests {
         assert!(join(invite, "Guest", None).is_err());
     }
 
-    /// With a password set, the link is not enough: a guest has to give the
-    /// password too, and the wrong one gets no answer. The password outlives
-    /// the invite, so after someone is taken out the new link opens with the
-    /// same one, and the guest still here is sent a key that finds the host.
     #[test]
     fn a_password_is_asked_for_as_well_as_the_link() {
         let hosted = Arc::new(DocumentStore::new(Document::new()));
@@ -1048,7 +958,6 @@ mod tests {
             Err(ShareError::Locked)
         ));
         assert!(join(link().unlocked("wrong"), "Guest", None).is_err());
-        // The link's own secret is not the key either.
         let bare = Invite {
             locked: false,
             ..link()

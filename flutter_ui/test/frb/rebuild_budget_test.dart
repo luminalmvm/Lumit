@@ -37,7 +37,6 @@ import 'package:uuid/uuid.dart';
 
 import 'frb_test_support.dart';
 
-/// Counts widget rebuilds by name, from the framework's own log.
 class _Rebuilds {
   final Map<String, int> byName = {};
   bool counting = false;
@@ -87,8 +86,6 @@ void main() {
     });
     tearDown(() => rebuilds.remove());
 
-    /// Mount the two panels a scrub is felt in, over a small but honest
-    /// document: two layers, three effects, every parameter still.
     Future<({dynamic ui, dynamic comp})> mount(WidgetTester tester) async {
       final p = freshProject();
       final comp = p.state.project!.newComposition(name: 'Scene');
@@ -138,9 +135,6 @@ void main() {
 
       // ignore: avoid_print
       print('SCRUB REBUILDS ${rebuilds.total}\n${rebuilds.ranking()}');
-      // **The panel does not follow the playhead.** Every card and every row in
-      // Effect controls used to, which is what made a flick of the playhead lag
-      // the pointer.
       expect(
         rebuilds.byName['FxSection'] ?? 0,
         0,
@@ -184,8 +178,6 @@ void main() {
     testWidgets('a scrub repaints the playhead and not the lanes',
         (tester) async {
       final p = await mount(tester);
-      // Twirled open, so the lanes carry rows and not only bars — the state the
-      // complaint is about.
       for (final layer in p.comp.getLayers()) {
         final id = layer.internallayerId.toString();
         await tester.tap(find.byKey(ValueKey<String>('tl-twirl-$id')));
@@ -287,8 +279,6 @@ void main() {
       // rebuilding whole.
       expect(rebuilds.total, lessThan(700),
           reason: 'an edge drag redrew far too much:\n${rebuilds.ranking()}');
-      // And the signature of that regression, named: an outline row and a lane
-      // bar have nothing to do with where the work area ends.
       for (final name in ['OutlineRow', 'Bar']) {
         expect(rebuilds.byName[name] ?? 0, 0,
             reason: 'a $name redrew on a work-area drag:\n'
@@ -360,8 +350,6 @@ void main() {
     Future<({dynamic ui, dynamic comp, LayerReference layer, UuidValue effect})>
         pickAnEffect(WidgetTester tester) async {
       final p = await mount(tester);
-      // The layer Effect controls is showing, so the heading that lights is on
-      // screen to be counted as well as the Timeline row.
       final LayerReference layer = p.ui.selectedLayer.value;
       final effect = layer.getEffects().first.id();
       rebuilds
@@ -426,8 +414,6 @@ void main() {
         (tester) async {
       final picked = await pickAnEffect(tester);
 
-      // The Timeline: the layer the effect belongs to is marked, and it was
-      // redrawn to say so.
       final row = tester.widgetList<OutlineRow>(find.byType(OutlineRow)).where(
           (r) => r.entry.layer.internallayerId == picked.layer.internallayerId);
       expect(row, isNotEmpty, reason: 'the layer has a row on screen');
@@ -568,8 +554,6 @@ void main() {
         reason: 'the card that was kept stopped drawing its heading',
       );
 
-      // Its heading menu is read from the stack as it is now: the top of a
-      // stack has nowhere to move up to.
       await tester.tapAt(
         tester.getCenter(find.byKey(ValueKey<String>('fx-twirl-$top'))) +
             const Offset(40, 0),
@@ -688,8 +672,6 @@ void main() {
         reason: 'no property row redrew, so nothing on screen changed:\n'
             '${rebuilds.ranking()}',
       );
-      // And the shell heard it too: the Viewer outlines the layer a
-      // picked row belongs to.
       expect(picked.ui.selectedProperties.value, contains(picked.path));
     });
 
@@ -743,7 +725,6 @@ void main() {
         lessThan(900),
         reason: 'one row request redrew far too much:\n${rebuilds.ranking()}',
       );
-      // And the row really is lit, which is what the request was for.
       final rows = tester
           .widgetList<FoldRow>(find.byType(FoldRow))
           .where((r) => r.path == path);
@@ -853,7 +834,6 @@ void main() {
       expect(rebuilds.byName['OutlineRow'] ?? 0, greaterThan(0),
           reason: 'no row redrew, so nothing on screen changed:\n'
               '${rebuilds.ranking()}');
-      // And the shell holds it, so the Viewer and Delete act on it.
       expect(picked.ui.selectedLayer.value?.equals(layer: picked.layer), isTrue,
           reason: 'the click did not reach the shell selection');
     });
@@ -886,10 +866,10 @@ void main() {
       final at = tester.getRect(header);
       final numberCell = Offset(
           at.left +
-              8 + // the row's own padding
+              8 +
               switchesGroupWidth +
               groupDividerWidth +
-              16 + // the twirl's cell
+              16 +
               identityGap +
               numberCellWidth / 2,
           at.center.dy);
@@ -905,7 +885,6 @@ void main() {
 
       // ignore: avoid_print
       print('GROUP CLICK REBUILDS ${rebuilds.total}\n${rebuilds.ranking()}');
-      // The click reached the shell: the whole band is the selection.
       expect({
         for (final LayerReference l in p.ui.selectedLayers.value)
           l.internallayerId
@@ -1072,7 +1051,6 @@ void main() {
       rebuilds
         ..reset()
         ..counting = true;
-      // A wheel notch's worth: a couple of rows.
       vertical.first.jumpTo(1050);
       await tester.pump(const Duration(milliseconds: 16));
       rebuilds
@@ -1338,7 +1316,6 @@ void main() {
 
       final lanesBefore = bandPaints(tester, 'tl-lane-blocks');
       final outlineBefore = bandPaints(tester, 'tl-outline-blocks');
-      // A wheel notch's worth: a couple of rows.
       vertical.first.jumpTo(1050);
       await tester.pump(const Duration(milliseconds: 16));
       final lanes =
@@ -1389,7 +1366,6 @@ void main() {
       await tester.sendEventToBinding(pointer.hover(barBefore.center));
       await tester.sendEventToBinding(pointer.scroll(const Offset(0, -1)));
       await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-      // The flight, frame by frame.
       final paints = await recordedOver(tester, 20);
       final bandAfter = bandPaints(tester, 'tl-outline-blocks').band;
       await tester.pumpAndSettle();
@@ -1504,8 +1480,6 @@ void main() {
       bool reported() => RegExp(r'\d').hasMatch(header() ?? '');
       final rows = bandPaints(tester, 'tl-outline-blocks').blocks.length;
 
-      // Off, and settled: the column goes, and whatever the worker reported
-      // during the mount is cleared with it.
       p.ui.renderTimings.setMeasuring(false);
       await settleFrb(tester, minRounds: 4);
       expect(reported(), isFalse,
@@ -1533,7 +1507,6 @@ void main() {
       expect(reported(), isTrue,
           reason: 'the column never filled in (${header()}), so no report '
               'was measured');
-      // The flip's own rebuild, and no other.
       expect(rebuilds.byName['TimelinePanelFrb'] ?? 0, lessThanOrEqualTo(1),
           reason: 'a frame report rebuilt the whole panel again: '
               '${rebuilds.ranking()}');

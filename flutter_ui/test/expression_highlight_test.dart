@@ -1,6 +1,3 @@
-// An expression's text is coloured by the grammar of the language it is
-// written in. JavaScript's comes with the highlighter; Rhai's is Lumit's own
-// file, so this is the test that it loads and tells a line's parts apart.
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -17,7 +14,6 @@ void main() {
         .runAsync(ExpressionTextEditingController.initSyntaxHighlighting);
     final theme = ExpressionTextEditingController.darkTheme!;
 
-    /// The colour each piece of [text] is drawn in, by the piece.
     Map<String, Color?> colours(BridgeExpressionLanguage language, String text) {
       final out = <String, Color?>{};
       void walk(InlineSpan span) {

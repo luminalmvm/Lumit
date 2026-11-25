@@ -18,7 +18,6 @@ fn lead(silence: Rational) -> Rational {
     quarter.min(Rational::new(3, 20).unwrap_or(Rational::ZERO))
 }
 
-/// A token that is not a word.
 fn blank(kind: TokenKind, start: Rational, end: Rational) -> Token {
     Token {
         kind,
@@ -66,7 +65,6 @@ pub(super) fn lay_out(
     let end = edge(rate, tile.1).max(start);
     let fillers = fillers::mark(doc, heard, look.pause);
     let mut tokens: Vec<Token> = Vec::with_capacity(heard.len() * 2 + 1);
-    // Where the next token starts, and the word whose end waits for it.
     let mut cursor = start;
     let mut open: Option<usize> = None;
     // The latest end of any word so far: a word on another row can still be
@@ -172,7 +170,6 @@ pub(super) fn lay_out(
     tokens
 }
 
-/// Set each token's `edit_before` and `tight`.
 fn flag(tokens: &mut [Token], edits: &[Rational], start: Rational) {
     let word_heard = |t: Option<&Token>| {
         t.filter(|t| t.kind == TokenKind::Word)
@@ -190,8 +187,6 @@ fn flag(tokens: &mut [Token], edits: &[Rational], start: Rational) {
             (TokenKind::Word, Some((s, _))) => s,
             _ => token.end,
         };
-        // The first edit point past `start` and the low end, which is open
-        // when no word comes before, and whether it is inside the high end.
         let low = lo.min(hi);
         let first =
             edits.partition_point(|e| *e <= start || *e < low || (prev_end.is_none() && *e == low));
@@ -208,8 +203,6 @@ fn flag(tokens: &mut [Token], edits: &[Rational], start: Rational) {
 /// whose middle lies in what was skipped, each at the edit point. The head
 /// and tail trims of clips are not counted.
 pub(super) fn add_removed(doc: &Document, comp: &Composition, tokens: &mut Vec<Token>) {
-    // Each word's edit point, its token, and where it would be said had the
-    // earlier clip run on.
     let mut found: Vec<(Rational, Token, (Rational, Rational))> = Vec::new();
     for (_, layer) in heard_layers(comp) {
         let LayerKind::Sequence { clips } = &layer.kind else {
@@ -270,7 +263,6 @@ pub(super) fn add_removed(doc: &Document, comp: &Composition, tokens: &mut Vec<T
             }
         }
     }
-    // At one edit point, in the order they were said.
     found.sort_by_key(|(at, _, span)| (*at, span.0));
     // Each goes in at the token edge nearest its edit point, so the tiling
     // holds. The edges are in order, and so is `placed` by edge.

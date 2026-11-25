@@ -74,7 +74,6 @@ List<LibraryFile> _filesFrom(Object? j) => [
             file
     ]..sort((a, b) => a.name.compareTo(b.name));
 
-/// One version of an item, as the account keeps it.
 class LibraryVersion {
   final int n;
   final List<LibraryFile> files;
@@ -104,7 +103,6 @@ class LibraryVersion {
       };
 }
 
-/// A computer signed in to the account, and the kinds it keeps.
 class LibraryMachine {
   final String id, name;
   final bool me, online;
@@ -114,7 +112,6 @@ class LibraryMachine {
       this.id, this.name, this.me, this.online, this.seen, this.kinds);
 }
 
-/// One item, here, in the account, or both.
 class LibraryEntry {
   /// The server's id, or `local:<kind>/<path>` for one not in the account.
   final String key;
@@ -123,10 +120,8 @@ class LibraryEntry {
   /// `/` separated, inside the kind's folder.
   final String path;
 
-  /// What it is called: a preset's own name, a font's family.
   final String name;
 
-  /// The folder part of [path], or null.
   final String? group;
 
   /// One short line: a preset's effects, a font's faces, a set's binding
@@ -140,16 +135,13 @@ class LibraryEntry {
   final LibraryItemState state;
   final bool here;
 
-  /// The account's newest version.
   final LibraryVersion? head;
 
   /// Machine id to the version it holds, 0 when it does not keep it.
   final Map<String, int> held;
 
-  /// Set while it is in Recently deleted.
   final DateTime? gone;
 
-  /// The file or folder on this computer, when it is here.
   final String? pathHere;
 
   /// Not on this computer because its name, or a name inside it, is one
@@ -186,7 +178,6 @@ class LibraryConflict {
   final String theirsPath;
   final DateTime? mineChanged;
 
-  /// The other version's one line, as [LibraryEntry.detail] is this one's.
   final String theirsDetail;
   const LibraryConflict(
       this.entry, this.theirs, this.theirsPath, this.mineChanged,
@@ -205,12 +196,11 @@ const Map<LibraryKind, Set<String>> _extensions = {
   LibraryKind.lenses: {'.lens'},
   LibraryKind.flares: {'.flare'},
   LibraryKind.luts: {
-    '.cube', '.spi1d', '.spi3d', '.clf', '.ctf', '.cc', '.ccc', '.cdl' //
+    '.cube', '.spi1d', '.spi3d', '.clf', '.ctf', '.cc', '.ccc', '.cdl'
   },
   LibraryKind.templates: {'.lumt'},
 };
 
-/// The kinds whose sub-folders are groups.
 const Set<LibraryKind> _deep = {
   LibraryKind.presets,
   LibraryKind.luts,
@@ -290,7 +280,6 @@ void _move(String from, String to) {
     // A change of case names the same file on Windows and macOS, so the copy
     // below would end by deleting what it copied. Left as it is instead.
     if (from.toLowerCase() == to.toLowerCase()) rethrow;
-    // Another volume, or held open: copied below.
   }
   final part = '${File(to).parent.path}${Platform.pathSeparator}'
       '.${_base(to)}.${DateTime.now().microsecondsSinceEpoch}.part';
@@ -339,7 +328,6 @@ bool _zipped(String path) {
   }
 }
 
-/// A style folder's own file follows the folder's name.
 void _fixStyleFile(String folder, String was) {
   final now = _base(folder);
   if (now == was) return;
@@ -347,8 +335,6 @@ void _fixStyleFile(String folder, String was) {
   final file = File('$folder$sep$was.$styleFileExtension');
   if (file.existsSync()) file.renameSync('$folder$sep$now.$styleFileExtension');
 }
-
-// --- Reading the folders, off the UI thread --------------------------------
 
 typedef _ScanJob = ({
   Map<LibraryKind, String> folders,
@@ -455,7 +441,6 @@ _Described? _describe(LibraryKind kind, String abs, List<LibraryFile> files) {
         return null;
     }
   } catch (_) {
-    // Not what its name says it is. Listed by its file's name.
     return null;
   }
 }
@@ -491,7 +476,6 @@ _ScanOut _scan(_ScanJob job) {
     }
   }
 
-  /// Every file in a style's folder, by its path inside it.
   void inside(LibraryKind kind, String item, Directory dir, String rel,
       List<(LibraryFile, int)> into) {
     for (final e in dir.listSync(followLinks: false)) {
@@ -565,9 +549,6 @@ _ScanOut _scan(_ScanJob job) {
 
 Future<_ScanOut> _scanOff(_ScanJob job) => Isolate.run(() => _scan(job));
 
-// --- The library -------------------------------------------------------------
-
-/// An item as it is on this computer now.
 class _Here {
   final List<LibraryFile> files;
   final DateTime modified;
@@ -596,7 +577,6 @@ class LibraryState extends ChangeNotifier {
   final Workspace workspace;
   final KeymapState Function() keymap;
 
-  /// Bumped so the Effects & presets panel reads its folder again.
   final ValueNotifier<int> presetsChanged;
 
   LibraryState({
@@ -607,8 +587,6 @@ class LibraryState extends ChangeNotifier {
     required this.presetsChanged,
   });
 
-  /// Bumped once the engine has read the library's fonts again, for the
-  /// Text panel to list families again.
   static final ValueNotifier<int> fontsChanged = ValueNotifier(0);
 
   late final HttpClient _http = HttpClient()
@@ -625,8 +603,6 @@ class LibraryState extends ChangeNotifier {
   String _following = '';
   int _seq = 0;
 
-  // --- What this computer knows ----------------------------------------------
-
   String _profile = '';
   final Map<LibraryKind, String> _folders = {};
 
@@ -638,7 +614,6 @@ class LibraryState extends ChangeNotifier {
   final Set<String> _removed = {}, _got = {};
   final Map<String, String> _renamed = {};
 
-  /// Items in conflict by id: where theirs belongs and the version it is.
   final Map<String, Map<String, dynamic>> _conflicts = {};
 
   Map<String, List<Object>> _index = {};
@@ -658,8 +633,6 @@ class LibraryState extends ChangeNotifier {
   final Map<String, LibraryVersion> _heads = {};
   final Map<String, DateTime> _goneAt = {};
   final Map<String, Map<String, int>> _holds = {};
-
-  // --- What the window reads -------------------------------------------------
 
   LibraryStatus _status = LibraryStatus.off;
   LibraryStatus get status => syncing ? _status : LibraryStatus.off;
@@ -686,7 +659,6 @@ class LibraryState extends ChangeNotifier {
   List<LibraryConflict> _conflictList = const [];
   List<LibraryConflict> get conflicts => _conflictList;
 
-  /// Pro, signed in, and the profile's sync on.
   bool get syncing => profiles.current.sync && account.pro;
 
   bool kindOn(LibraryKind k) => _kinds.contains(k);
@@ -700,8 +672,6 @@ class LibraryState extends ChangeNotifier {
   }
 
   String? folderOf(LibraryKind k) => _dir(k);
-
-  // --- Folders and files -----------------------------------------------------
 
   void _readFolders() {
     _folders.clear();
@@ -747,11 +717,9 @@ class LibraryState extends ChangeNotifier {
       ? _abs(k, path)
       : '${_abs(k, path)}$_sep${f.name.replaceAll('/', _sep)}';
 
-  /// The kinds this pass may touch: on here, with a folder that read.
   Set<LibraryKind> get _kindsHere =>
       {for (final k in _kinds) if (_folders.containsKey(k) && !_failed.contains(k)) k};
 
-  /// Every item's path here, in lower case, for picking a free name.
   Set<String> _taken([Iterable<LibraryKey> more = const []]) => {
         for (final k in [..._here.keys, ...more])
           '${k.$1.name}/${k.$2}'.toLowerCase()
@@ -773,8 +741,6 @@ class LibraryState extends ChangeNotifier {
   static bool _samePath(String a, String b) =>
       a == b || (_caseless && a.toLowerCase() == b.toLowerCase());
 
-  /// The path an item here is read under that names the same file as [path],
-  /// or null when nothing here does.
   String? _herePath(LibraryKind k, String path) {
     if (_here.containsKey((k, path))) return path;
     if (!_caseless) return null;
@@ -784,8 +750,6 @@ class LibraryState extends ChangeNotifier {
     return null;
   }
 
-  /// Move an item here to the kind's trash. Where it went, or null when there
-  /// was nothing there.
   String? _trash(LibraryKind k, String path) {
     final from = _abs(k, path);
     if (!_exists(from)) return null;
@@ -803,11 +767,9 @@ class LibraryState extends ChangeNotifier {
     part.renameSync(file.path);
   }
 
-  /// A new folder in a kind's trash, named by when, with its separator.
   String _trashSlot(LibraryKind k) => '${_work('trash', k)}$_sep'
       '${DateTime.now().millisecondsSinceEpoch}-${_seq++}$_sep';
 
-  /// Put [kept] back at [path], or beside it when something is there now.
   void _putBack(LibraryKind k, String kept, String path) {
     if (!_exists(kept)) return;
     final to = freePath(k, path, _taken());
@@ -841,8 +803,6 @@ class LibraryState extends ChangeNotifier {
       }
     }
   }
-
-  // --- The journal -----------------------------------------------------------
 
   File _file(String what) => File('${Workspace.storeFile().parent.path}$_sep'
       'profiles$_sep$_profile.$what.json');
@@ -1043,8 +1003,6 @@ class LibraryState extends ChangeNotifier {
     if (keep) _writeJson(_file('library-listing'), {...body, 'account': _jAccount});
   }
 
-  // --- Starting, stopping and switching --------------------------------------
-
   /// Read the library and keep it in step from now on. Not called by a
   /// test, which keeps a test run off the network.
   void start() {
@@ -1081,15 +1039,12 @@ class LibraryState extends ChangeNotifier {
     if (running != null) await running;
   }
 
-  /// Pick up the profile switched to: its journal and its folders.
   void resume() {
     _paused = false;
     if (!_started || _gone) return;
     _load();
     _readFolders();
     _watch();
-    // Another profile's library is in place now, so whatever lists one reads
-    // it again.
     _landed(LibraryKind.values.toSet());
     _rebuild();
     notifyListeners();
@@ -1126,8 +1081,6 @@ class LibraryState extends ChangeNotifier {
     _watches.clear();
   }
 
-  // --- A pass ----------------------------------------------------------------
-
   /// Bring this computer and the account level. One pass at a time: one asked
   /// for during a pass runs after it.
   Future<void> syncNow() {
@@ -1162,7 +1115,6 @@ class LibraryState extends ChangeNotifier {
     _later = Timer(const Duration(seconds: 30), () => unawaited(syncNow()));
   }
 
-  /// Read the folders again, for a library that is not being synced.
   Future<void> _refresh() async {
     if (_folders.isEmpty) _readFolders();
     await _scanNow();
@@ -1312,7 +1264,6 @@ class LibraryState extends ChangeNotifier {
             s
       ];
 
-  /// Whether this system can hold the item at [path] with [files] in it.
   bool _writable(LibraryKind k, String path, List<LibraryFile> files) {
     if (_dir(k) == null) return false;
     final longest = Platform.isWindows ? 259 : 1023;
@@ -1428,7 +1379,6 @@ class LibraryState extends ChangeNotifier {
         _meta[key] = (name: '', detail: '', colours: const []);
       }
     }
-    // The other side of each conflict, fetched beside the journal.
     for (final MapEntry(key: id, value: c) in _conflicts.entries) {
       final theirs = LibraryVersion.from(c['version']);
       final kind = _remote[id]?.kind;
@@ -1448,7 +1398,6 @@ class LibraryState extends ChangeNotifier {
     if (said.text.isEmpty) {
       return (name: said.name, detail: said.detail, colours: const []);
     }
-    // The eight colours Settings ▸ Appearance shows a theme by.
     List<int> argb(LumitTheme t) => [for (final c in swatchesOf(t)) c.toARGB32()];
     try {
       if (key.startsWith('${LibraryKind.themes.name}:')) {
@@ -1535,7 +1484,6 @@ class LibraryState extends ChangeNotifier {
         final to = _theirsAt(s.kind, id!, s.path);
         _remove(File(to).parent.path);
         await _fetch(s.files, to);
-        // Read like anything here, so its card says what is in it.
         final key = _metaKey(s.kind, s.files);
         if (!_meta.containsKey(key)) {
           if (_describe(s.kind, to, s.files) case final said?) {
@@ -1561,8 +1509,6 @@ class LibraryState extends ChangeNotifier {
   String _theirsAt(LibraryKind k, String id, String path) =>
       '${_work('conflicts', k)}$_sep$id$_sep${_base(path)}';
 
-  /// Send what the server lacks of [files], then make them the item's newest
-  /// version.
   Future<void> _upload(LibraryKind k, String id, String path, int base,
       List<LibraryFile> files) async {
     if (files.any((f) => f.size > _largest)) {
@@ -1736,7 +1682,6 @@ class LibraryState extends ChangeNotifier {
     throw CloudError(code, response.statusCode);
   }
 
-  /// Tell whatever reads a kind's files that they changed.
   void _landed(Set<LibraryKind> kinds) {
     for (final k in kinds) {
       try {
@@ -1760,8 +1705,6 @@ class LibraryState extends ChangeNotifier {
       }
     }
   }
-
-  // --- What the window shows -------------------------------------------------
 
   String _nameOf(LibraryKind k, String path, List<LibraryFile> files) {
     final said = _meta[_metaKey(k, files)]?.name ?? '';
@@ -1891,8 +1834,6 @@ class LibraryState extends ChangeNotifier {
     ]);
   }
 
-  // --- Undo --------------------------------------------------------------------
-
   final List<_Undo> _undo = [], _redo = [];
 
   bool get canUndo => _undo.isNotEmpty;
@@ -1935,10 +1876,6 @@ class LibraryState extends ChangeNotifier {
     }
   }
 
-  // --- Actions -------------------------------------------------------------------
-
-  /// Make the account's item [id] its version [n] again, which also brings
-  /// back a deleted one.
   Future<void> _restoreTo(String id, int n) =>
       account.call('POST', '/v1/library/items/$id/restore', body: {'n': n});
 
@@ -2053,7 +1990,6 @@ class LibraryState extends ChangeNotifier {
         final kind = LibraryKind.values.asNameMap()[it.kind];
         if (kind == null || _dir(kind) == null || !_safe(it.name)) continue;
         if (kind == LibraryKind.exports) {
-          // One list: what it holds is added to this one's, by name.
           final mine = File(_folders[kind]!);
           final ours = mine.existsSync() ? mine.readAsStringSync() : '[]';
           final merged =
@@ -2213,7 +2149,6 @@ class LibraryState extends ChangeNotifier {
     await syncNow();
   }
 
-  /// [v] of [e] as a new item beside it.
   Future<void> saveCopy(LibraryEntry e, LibraryVersion v) async {
     await _quiet();
     if (_dir(e.kind) == null) return;

@@ -1,6 +1,3 @@
-//! The frame index (docs/impl/media-io.md §2): a packet scan without decoding
-//! that maps frame number ↔ pts ↔ nearest keyframe, cached in the sidecar.
-
 use crate::sequence::MediaSource;
 use crate::{Fingerprint, MediaError};
 #[cfg(not(target_arch = "wasm32"))]
@@ -20,9 +17,7 @@ pub struct FrameIndex {
     pub timebase_den: i32,
     /// Sorted by pts (B-frames arrive reordered; we sort once at build).
     pub entries: Vec<IndexEntry>,
-    /// Variable frame rate detected (docs/impl/media-io.md §2 VFR policy).
     pub vfr: bool,
-    /// Median pts delta between successive frames (frame duration in pts).
     pub median_delta: i64,
     pub fingerprint: Fingerprint,
     /// How the source this index was asked for reads its frames. Not part of
@@ -60,15 +55,12 @@ impl FrameIndex {
             .unwrap_or(0)
     }
 
-    /// Effective frames per second from the median delta.
     pub fn fps_estimate(&self) -> f64 {
         if self.median_delta <= 0 || self.timebase_num <= 0 {
             return 0.0;
         }
         f64::from(self.timebase_den) / (f64::from(self.timebase_num) * self.median_delta as f64)
     }
-
-    // ---- sidecar cache -------------------------------------------------
 
     pub fn cache_path(dir: &Path, fp: &Fingerprint) -> PathBuf {
         // The number is the table's meaning, not its layout: 2 is the first
@@ -85,7 +77,6 @@ impl FrameIndex {
         Ok(path)
     }
 
-    /// Load a cached index if one matches the file's current fingerprint.
     pub fn load_cached(dir: &Path, fp: &Fingerprint) -> Option<Self> {
         let bytes = std::fs::read(Self::cache_path(dir, fp)).ok()?;
         let index: Self = bincode::deserialize(&bytes).ok()?;
@@ -197,7 +188,6 @@ fn scan(src: &MediaSource, fingerprint: Fingerprint) -> Result<FrameIndex, Media
     })
 }
 
-/// The packet scan itself, for everything ffmpeg opens.
 #[cfg(not(target_arch = "wasm32"))]
 fn scan(src: &MediaSource, fingerprint: Fingerprint) -> Result<FrameIndex, MediaError> {
     let mut input = crate::probe::open_input(src)?;
@@ -334,7 +324,6 @@ fn conformed(
     if rate.num <= 0 || rate.den <= 0 || timebase.num <= 0 || timebase.den <= 0 {
         return None;
     }
-    // One frame of the rate in pts, as the exact fraction `num / den`.
     let num = i128::from(rate.den) * i128::from(timebase.den);
     let den = i128::from(rate.num) * i128::from(timebase.num);
     // The last frame is on screen for a frame's length of its own.
@@ -363,7 +352,6 @@ pub mod tests_support {
     use std::path::{Path, PathBuf};
     use std::process::Command;
 
-    /// Locate an ffmpeg CLI for fixture generation (any version encodes fine).
     pub fn ffmpeg_bin() -> Option<&'static str> {
         [
             "ffmpeg",
@@ -385,7 +373,6 @@ pub mod tests_support {
         fixture_as(dir, "yuv420p")
     }
 
-    /// [`fixture`] in another pixel format, such as `yuv422p10le`.
     pub fn fixture_as(dir: &Path, pix_fmt: &str) -> Option<PathBuf> {
         let bin = ffmpeg_bin()?;
         let out = dir.join("fixture.mp4");
@@ -585,7 +572,6 @@ pub mod tests_support {
         status.success().then_some(out)
     }
 
-    /// The value [`exr_fixture`] carries in every colour channel.
     pub const EXR_FIXTURE_VALUE: f32 = 3.984_619;
 
     /// A 4×4 OpenEXR holding more than a picture: `R`, `G`, `B`, `A`, a `Z`
@@ -636,7 +622,6 @@ pub mod tests_support {
         out
     }
 
-    /// The depth `multichannel_exr` writes at pixel `i`.
     pub fn multichannel_depth_at(i: usize) -> f32 {
         100.0 * (i as f32 + 1.0)
     }
@@ -662,8 +647,6 @@ pub mod tests_support {
         path
     }
 
-    /// A copy of `src` cut down to its first `keep_bytes` bytes — simulates
-    /// a cut-short download, a crashed export, or a half-written proxy.
     pub fn truncated_copy(src: &Path, dir: &Path, keep_bytes: usize) -> PathBuf {
         let bytes = std::fs::read(src).expect("read source fixture");
         let cut = &bytes[..keep_bytes.min(bytes.len())];
@@ -679,29 +662,22 @@ mod tests {
     use super::tests_support::fixture;
     use super::*;
 
-    /// A recording that stalls is laid out at its rate by time: the picture
-    /// that was on screen is repeated through the stall, so what comes after
-    /// it is still where the sound has it.
     #[test]
     fn a_variable_rate_is_conformed_by_time_and_not_by_count() {
         let entry = |pts: i64| IndexEntry {
             pts,
             keyframe: pts == 0,
         };
-        // Ticks of a thirtieth of a second: frames at 0, 1 and 2, nothing for
-        // three ticks, then 6 and 7. Eight frame lengths, five pictures.
         let read: Vec<IndexEntry> = [0, 1, 2, 6, 7].into_iter().map(entry).collect();
         let timebase = ffi::AVRational { num: 1, den: 30 };
         let rate = ffi::AVRational { num: 30, den: 1 };
         let laid = conformed(&read, timebase, rate, 1).expect("a usable rate");
         let pts: Vec<i64> = laid.iter().map(|e| e.pts).collect();
         assert_eq!(pts, [0, 1, 2, 2, 2, 2, 6, 7]);
-        // At half the rate every other picture is passed over.
         let half = ffi::AVRational { num: 15, den: 1 };
         let laid = conformed(&read, timebase, half, 1).expect("a usable rate");
         let pts: Vec<i64> = laid.iter().map(|e| e.pts).collect();
         assert_eq!(pts, [0, 2, 2, 6]);
-        // No rate to conform to leaves the table as it was read.
         let none = ffi::AVRational { num: 0, den: 1 };
         assert!(conformed(&read, timebase, none, 1).is_none());
     }
@@ -724,19 +700,12 @@ mod tests {
         assert_eq!(index.frame_count(), 120);
         assert!(!index.vfr);
         assert!((index.fps_estimate() - 60.0).abs() < 0.01);
-        // GOP 30: keyframes at 0, 30, 60, 90
         for (n, expect) in [(0, 0), (29, 0), (30, 30), (75, 60), (119, 90)] {
             assert_eq!(index.nearest_keyframe_at_or_before(n), expect, "frame {n}");
         }
-        // pts strictly increasing
         assert!(index.entries.windows(2).all(|w| w[0].pts < w[1].pts));
     }
 
-    /// Regression: `nearest_keyframe_at_or_before` used to index
-    /// `entries[0]` unconditionally, which panicked when a `FrameIndex` had
-    /// zero entries (a video stream declared but no readable packets — e.g.
-    /// a file truncated right after the header). It must return a plain 0
-    /// instead.
     #[test]
     fn nearest_keyframe_on_empty_index_does_not_panic() {
         let index = FrameIndex {
@@ -789,11 +758,6 @@ mod tests {
         path
     }
 
-    /// The regression this whole helper exists for: with a sidecar already on
-    /// disk for this file's content, opening a decoder must read it, not scan
-    /// the file again. Before the fix the decode path called
-    /// `build_frame_index` unconditionally and every session paid for a full
-    /// packet scan of every clip.
     #[test]
     fn a_matching_sidecar_is_reused_and_nothing_is_scanned() {
         let dir = tempfile::tempdir().unwrap();
@@ -814,9 +778,6 @@ mod tests {
         assert_eq!(index.frame_count(), 7, "the cached index is the one used");
     }
 
-    /// A file that changed since its index was written must be rebuilt — never
-    /// replayed from the stale sidecar — and the fresh index written back under
-    /// the new fingerprint, so the session after this one is warm again.
     #[test]
     fn a_sidecar_for_different_content_is_rebuilt_and_rewritten() {
         let dir = tempfile::tempdir().unwrap();
@@ -826,7 +787,6 @@ mod tests {
             .save_to(&cache)
             .unwrap();
 
-        // Re-export over the same path: same name, different bytes.
         std::fs::write(&file, vec![9u8; 8192]).unwrap();
 
         let scans = std::cell::Cell::new(0);
@@ -847,8 +807,6 @@ mod tests {
         );
     }
 
-    /// A truncated or scribbled-on sidecar is a cache miss, not a failure: the
-    /// index is rebuilt calmly and the bad file replaced.
     #[test]
     fn a_corrupt_sidecar_falls_back_to_a_build() {
         let dir = tempfile::tempdir().unwrap();
@@ -873,8 +831,6 @@ mod tests {
         );
     }
 
-    // A file cut short, as a download that stopped or an export that crashed
-    // leaves one: its start reads as media and the rest is not there.
     #[test]
     fn build_frame_index_on_truncated_file_errors_not_panics() {
         let dir = tempfile::tempdir().unwrap();

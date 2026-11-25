@@ -58,14 +58,10 @@ use crate::{
 /// The rate the speech model hears at, and so the grid word times land on.
 const RATE: u32 = 16_000;
 
-/// How many frames of sound are decoded and fed at a time: two seconds.
 #[cfg(feature = "media")]
 const BLOCK: usize = 1 << 15;
 
-/// The fewest seconds between two progress reports.
 const REPORT_EVERY: f64 = 0.2;
-
-// ---- Reading and editing -------------------------------------------------
 
 fn document(project: Uuid) -> Result<Arc<Document>, BridgeError> {
     let projects = PROJECTS.read().map_err(|_| BridgeError::ReadFailed)?;
@@ -373,8 +369,6 @@ pub(crate) fn ready() -> BridgeSpeechReady {
     }
 }
 
-// ---- The job ---------------------------------------------------------------
-
 /// The one job that may run.
 struct Running {
     project: Uuid,
@@ -411,7 +405,6 @@ pub(crate) fn progress(project: Uuid) -> Option<BridgeTranscribeEvent> {
         .and_then(|j| j.latest.clone())
 }
 
-/// A project is closing: stop its job and let its watchers go.
 pub(crate) fn forget(project: Uuid) {
     cancel(project);
     if let Ok(mut watchers) = WATCHERS.lock() {
@@ -419,7 +412,6 @@ pub(crate) fn forget(project: Uuid) {
     }
 }
 
-/// Say `event` to the job's own listener and to everyone watching.
 fn tell(
     project: Uuid,
     own: Option<&StreamSink<BridgeTranscribeEvent>>,
@@ -438,7 +430,6 @@ fn tell(
     }
 }
 
-/// Lets the slot go however the job ends.
 struct Release;
 
 impl Drop for Release {

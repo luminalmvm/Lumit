@@ -62,8 +62,6 @@ Future<void> scrollAt(Offset at, double dy, {int times = 1}) async {
   await pause(0.5);
 }
 
-/// The outline, scrolled to its end — where the last layer and everything its
-/// twirls open live.
 Future<void> scrollOutlineToEnd() async {
   final panel = boxOfTypeNamed('TimelinePanelFrb');
   if (panel == null) return;
@@ -159,8 +157,6 @@ Future<void> main() async {
   ui.workspace.applyWorkspacePreset(WorkspacePreset.audio);
   await pause(3);
 
-  // Which rows can make a sound — the question the Mixer asks, asked here so
-  // the sweep knows which layer's lane to open.
   final sounding = <BridgeLayerEntry>[];
   for (final entry in ui.model.heldLayers) {
     if (await entry.layer.hasAudio()) sounding.add(entry);
@@ -194,8 +190,6 @@ Future<void> main() async {
   final list = openPopup(margin: 0);
   say('source list at $list');
   if (list != null) {
-    // The music is the last of the sounding rows, so it is the last row of
-    // the list; the first is *This comp*.
     await tapAt(Offset(list.left + 40, list.bottom - 14), settle: 1);
   }
   await tapKey('beats-generate', settle: 1);
@@ -236,8 +230,6 @@ Future<void> main() async {
   ui.scrubTo((duration * 0.12).round());
   await pause(45);
 
-  // The Mixer, fronted: picking a layer fronts Effect controls over it
-  // (ui_state item 6.28), which is exactly what a real session does too.
   ui.frontPanel(Panel.mixer);
   await pause(3);
 
@@ -303,8 +295,6 @@ Future<void> main() async {
     }
   }
 
-  // Playing, last: the meters light, the peak holds rest above them, the clip
-  // lamp says whether the ceiling was reached, and the playhead runs.
   final playIn = duck ?? target;
   say('playing ${playIn.$2}');
   ui.setSelectedComp(playIn.$1);
@@ -325,8 +315,6 @@ Future<void> main() async {
   ui.stopPlayback();
   await pause(2);
 
-  // And once more on the long comp, which is the one the desk is really for —
-  // at quarter preview, the way anybody plays a comp this heavy back.
   if (duck != null) {
     ui.setSelectedComp(target.$1);
     await pause(6);

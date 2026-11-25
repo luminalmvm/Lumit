@@ -49,7 +49,6 @@ pub struct SpokenWord {
     pub emphasis: bool,
 }
 
-/// serde default for [`RangeSelector::end`]: the whole run.
 fn hundred() -> Property {
     Property::fixed(100.0)
 }
@@ -201,7 +200,6 @@ pub struct TextAnimator {
     /// every number counts whether listed or not.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub properties: Option<Vec<String>>,
-    /// Unknown fields from newer Lumit versions (docs/10 §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -210,7 +208,6 @@ pub struct TextAnimator {
 /// Effects allows.
 pub const MAX_ANIMATED_AXES: usize = 8;
 
-/// One font axis an animator moves the letters along.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AnimatorAxis {
     /// The axis's four-letter tag, such as `wght`, `wdth`, `slnt` or a
@@ -222,7 +219,6 @@ pub struct AnimatorAxis {
     pub value: Property,
 }
 
-/// A place the whole layer is set at on one of its font's axes.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FontAxisValue {
     pub tag: String,
@@ -246,7 +242,6 @@ fn is_default_selector(s: &RangeSelector) -> bool {
     *s == RangeSelector::default()
 }
 
-/// A soft yellow, the box's colour until one is picked.
 const BOX: [f64; 3] = [1.0, 0.75, 0.15];
 
 fn box_red() -> Property {
@@ -278,7 +273,6 @@ fn is_static_box_blue(p: &Property) -> bool {
 }
 
 impl TextAnimator {
-    /// A fresh animator that changes nothing until a number is moved.
     #[must_use]
     pub fn new(name: impl Into<String>) -> Self {
         Self {
@@ -306,7 +300,6 @@ impl TextAnimator {
         }
     }
 
-    /// True when the animator can draw a box behind its letters.
     #[must_use]
     pub fn has_box(&self) -> bool {
         !is_static_zero(&self.box_opacity)
@@ -392,8 +385,6 @@ impl GlyphAxes {
         self.add[i] = self.add[i] * (1.0 - weight) + weight * value;
     }
 
-    /// Each axis this letter is moved on, and its place there given the
-    /// layer's value from `base`.
     pub fn resolved<'a>(
         &'a self,
         base: &'a dyn Fn([u8; 4]) -> f32,
@@ -411,7 +402,6 @@ impl GlyphAxes {
 }
 
 impl GlyphXform {
-    /// True when this letter is left exactly as the font drew it.
     #[must_use]
     pub fn is_identity(&self) -> bool {
         *self == Self::default()
@@ -440,7 +430,6 @@ pub fn unit_indices(text: &str, basis: SelectorBasis) -> (Vec<usize>, usize) {
             let mut any = false;
             for ch in text.chars() {
                 if ch.is_whitespace() {
-                    // A gap belongs to the word it follows.
                     out.push(word);
                     in_word = false;
                 } else {
@@ -483,8 +472,6 @@ pub fn glyph_xforms(
     glyph_xforms_near(animators, text, lt, spoken, &Near::default())
 }
 
-/// [`glyph_xforms`] with the letters' places, which a Proximity selector
-/// needs.
 #[must_use]
 pub fn glyph_xforms_near(
     animators: &[TextAnimator],
@@ -508,8 +495,6 @@ pub fn glyph_xforms_near(
                 SelectorKind::Range => animator.selector.weights_at(total, lt),
                 SelectorKind::Wiggly => animator.selector.wiggly_weights(total, lt),
                 SelectorKind::Proximity => {
-                    // A unit's middle is the mean of its characters' middles, so
-                    // a word is measured from its own middle.
                     let mut sums = vec![([0.0f32; 2], 0u32); total];
                     for (ch, unit) in units.iter().enumerate() {
                         if let (Some(Some(m)), Some(sum)) =
@@ -520,7 +505,7 @@ pub fn glyph_xforms_near(
                             sum.1 += 1;
                         }
                     }
-                    #[allow(clippy::cast_precision_loss)] // a word is short
+                    #[allow(clippy::cast_precision_loss)]
                     let middles: Vec<Option<[f32; 2]>> = sums
                         .iter()
                         .map(|(s, n)| (*n > 0).then(|| [s[0] / *n as f32, s[1] / *n as f32]))
@@ -540,14 +525,14 @@ pub fn glyph_xforms_near(
         if weights.is_empty() {
             continue;
         }
-        #[allow(clippy::cast_possible_truncation)] // a place on a font's axis
+        #[allow(clippy::cast_possible_truncation)]
         let axes: Vec<([u8; 4], f32)> = animator
             .axes
             .iter()
             .filter_map(|a| Some((axis_tag(&a.tag)?, a.value.value_at(lt) as f32)))
             .filter(|(_, v)| v.is_finite())
             .collect();
-        #[allow(clippy::cast_possible_truncation)] // px, degrees and per cent, all f32 pictures
+        #[allow(clippy::cast_possible_truncation)]
         let (px, py, rot, sx, sy, opacity, fr, fg, fb) = (
             animator.position_x.value_at(lt) as f32,
             animator.position_y.value_at(lt) as f32,
@@ -559,13 +544,13 @@ pub fn glyph_xforms_near(
             animator.fill_g.value_at(lt) as f32,
             animator.fill_b.value_at(lt) as f32,
         );
-        #[allow(clippy::cast_possible_truncation)] // px and degrees, f32 pictures
+        #[allow(clippy::cast_possible_truncation)]
         let (depth, turn_x, turn_y) = (
             animator.position_z.value_at(lt) as f32,
             animator.rotation_x.value_at(lt) as f32,
             animator.rotation_y.value_at(lt) as f32,
         );
-        #[allow(clippy::cast_possible_truncation)] // per cent and colour, f32 pictures
+        #[allow(clippy::cast_possible_truncation)]
         let (box_opacity, box_colour) = (
             animator.box_opacity.value_at(lt) as f32 / 100.0,
             [
@@ -609,8 +594,6 @@ pub fn glyph_xforms_near(
     }
     out
 }
-
-// ---- Character and paragraph style --------------------------------------
 
 fn is_default<T: Default + PartialEq>(v: &T) -> bool {
     *v == T::default()
@@ -656,7 +639,6 @@ fn is_black(c: &crate::model::LinearColour) -> bool {
     *c == crate::model::LinearColour::BLACK
 }
 
-/// The plate's colour until one is picked: black, a little see-through.
 const PLATE: crate::model::LinearColour = crate::model::LinearColour([0.0, 0.0, 0.0, 0.6]);
 
 fn plate() -> crate::model::LinearColour {
@@ -686,7 +668,6 @@ pub enum Kerning {
     Metrics,
 }
 
-/// Capitals: as typed, all capitals, or small capitals for the lower case.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum Caps {
     #[default]
@@ -695,7 +676,6 @@ pub enum Caps {
     Small,
 }
 
-/// Where the letters sit against the baseline.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum Script {
     #[default]
@@ -723,7 +703,6 @@ pub enum AxisSpacing {
     Default,
 }
 
-/// Which side the lines of a block line up on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum TextAlign {
     #[default]
@@ -732,7 +711,6 @@ pub enum TextAlign {
     Right,
 }
 
-/// Where the lines sit in a box of fixed height.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum VerticalAlign {
     #[default]
@@ -815,7 +793,6 @@ pub struct TextStyle {
     /// the letter beside it.
     #[serde(default, skip_serializing_if = "is_default")]
     pub strokes_together: bool,
-    /// A plate drawn behind the words.
     #[serde(default, skip_serializing_if = "is_default")]
     pub plate_on: bool,
     /// Kept while the plate is off, the same as the outline's.
@@ -869,8 +846,6 @@ impl Default for TextStyle {
 }
 
 impl TextStyle {
-    /// True while nothing has been styled, which is when the layer draws the
-    /// way it always did.
     #[must_use]
     pub fn is_default(&self) -> bool {
         *self == Self::default()
@@ -923,7 +898,6 @@ pub struct ParagraphStyle {
     /// precision, so a text layer stays as small as it was.
     #[serde(default, skip_serializing_if = "is_nought")]
     pub box_height: f32,
-    /// Where the lines sit in that height.
     #[serde(default, skip_serializing_if = "is_default")]
     pub vertical: VerticalAlign,
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
@@ -936,7 +910,6 @@ impl ParagraphStyle {
         *self == Self::default()
     }
 
-    /// The same idea as [`TextStyle::key_bytes`].
     #[must_use]
     pub fn key_bytes(&self) -> Vec<u8> {
         serde_json::to_vec(self).unwrap_or_default()
@@ -970,7 +943,6 @@ pub fn install_glyph_middles(middles: GlyphMiddles) {
     let _ = GLYPH_MIDDLES.set(middles);
 }
 
-/// The box [`install_words_box`] measures, or `None` before it is installed.
 #[must_use]
 pub fn words_box(document: &crate::model::TextDocument, text: &str) -> Option<[f64; 4]> {
     WORDS_BOX.get()?(document, text)

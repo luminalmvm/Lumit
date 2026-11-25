@@ -44,7 +44,6 @@ fn sx_turn(px: vec2<f32>, centre: vec2<f32>, degrees: f32) -> vec2<f32> {
     return vec2<f32>(d.x * cos(a) - d.y * sin(a), d.x * sin(a) + d.y * cos(a));
 }
 
-// The finished colour, kept inside the layer when Paint asks for it.
 fn sx_paint(c: vec4<f32>, uv: vec2<f32>) -> vec4<f32> {
     if (p.paint == 0u) {
         return c * lumit_sample(uv).a;
@@ -97,7 +96,6 @@ fn sx_fbm(q: vec2<f32>, octaves: i32, rough: f32, salt: u32) -> f32 {
 }
 
 
-// One thread at a point: its colour, how much of the pixel it covers.
 struct Thread {
     colour: vec4<f32>,
     cover: f32,
@@ -134,7 +132,6 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
     let warp = wv_thread(f.x - 0.5, u.y, i, 0, p.warp_width, p.warp_colour, 5u);
     let weft = wv_thread(f.y - 0.5, u.x, j, 1, p.weft_width, p.weft_colour, 9u);
     var out = lumit_premult(p.gap_colour);
-    // The one underneath first, then the one on top over it.
     if (((i + j) & 1) == 0) {
         out = mix(out, weft.colour, weft.cover);
         out = mix(out, warp.colour, warp.cover);

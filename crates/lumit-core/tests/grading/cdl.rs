@@ -1,6 +1,3 @@
-//! CDL in and out: the CDL effect against the ASC formula worked by hand, and
-//! a Correction no CDL can say exactly, fitted closely.
-
 use lumit_core::fx::effects::cdl::Cdl;
 use lumit_core::fx::effects::correction::Correction;
 use lumit_core::fx::params::Params;
@@ -16,7 +13,6 @@ const PROBES: [[f32; 3]; 4] = [
     [0.9, 0.9, 0.9],
 ];
 
-/// The ASC list on one scene-linear colour, worked on video gamma.
 fn asc(u: [f32; 3], slope: [f32; 3], offset: [f32; 3], power: [f32; 3], sat: f32) -> [f32; 3] {
     let v = u.map(|c| c.powf(1.0 / 2.4));
     let x: [f32; 3] =
@@ -56,7 +52,6 @@ fn cdl_follows_the_asc_formula_and_a_correction_fits_close() {
     assert_near(at(&out, PROBES.len()), want, 1e-4, "half clear");
     assert_eq!(out[PROBES.len() * 4 + 3], 0.5);
 
-    // At Mix 50 the halfway point is on the video signal.
     let out = run(&[rows(50.0)], &img, n, 1);
     let u = PROBES[2];
     let full = asc(u, slope, offset, power, sat);
@@ -65,7 +60,6 @@ fn cdl_follows_the_asc_formula_and_a_correction_fits_close() {
     });
     assert_near(at(&out, 2), want, 1e-4, "mix");
 
-    // The GPU's uniform holds the same numbers.
     let ops = resolve(&[rows(100.0)]);
     let pk = Cdl::read(ops.get(0).unwrap().params).packed();
     let words = pk.words();
@@ -73,8 +67,6 @@ fn cdl_follows_the_asc_formula_and_a_correction_fits_close() {
     assert_eq!(words[1][..3], slope);
     assert_eq!(words[3][..3], power);
 
-    // A CDL has no Contrast row, so these numbers are a fit. On video gamma
-    // contrast is a straight line, so the fit lands on it.
     let node = fx(
         "correction",
         &[

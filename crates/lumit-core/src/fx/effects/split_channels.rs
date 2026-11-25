@@ -13,7 +13,6 @@
 use crate::fx::{registry::EffectDef, registry::EffectMetadata, schema::EffectSchema};
 use lumit_fx_macros::Effect;
 
-/// Split channels has no controls: the sockets are the whole box.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "split_channels",
@@ -28,7 +27,6 @@ use lumit_fx_macros::Effect;
 )]
 pub struct SplitChannels;
 
-/// Split channels' behaviour: none of its own, for the Merge's reason.
 pub struct SplitChannelsDef;
 
 impl EffectDef for SplitChannelsDef {

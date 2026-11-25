@@ -18,13 +18,6 @@ use lumit_core::ops::{AutoFolderKind, Op};
 use lumit_core::time::{CompTime, Rational};
 use uuid::Uuid;
 
-/// A transform anchored on the content's own centre and placed at the comp
-/// centre — `lumit-ui`'s `centred_transform`, the seeding every add-layer path
-/// uses so a fresh layer appears centred and pivots about its middle.
-///
-/// Shared with the frb API rather than copied: a second set of layer-seeding
-/// defaults would drift, and a footage layer added through the new bridge would
-/// then land in a different place from one added through the old.
 pub fn centred_transform(nat_w: f64, nat_h: f64, comp_w: u32, comp_h: u32) -> TransformGroup {
     use lumit_core::anim::Property;
     TransformGroup {
@@ -67,11 +60,6 @@ pub fn fresh_camera(
     )
 }
 
-/// A layer with the house defaults every add path shares, given the parts that
-/// differ (name, kind, span end, transform). The span starts at comp 0 and the
-/// switches are the model defaults — exactly as the egui add-layer paths build.
-///
-/// Shared with the frb API for the same reason as [`centred_transform`].
 pub fn base_layer(
     name: String,
     kind: LayerKind,
@@ -470,7 +458,6 @@ pub fn link_copies(layers: &[Layer], moving: &[Uuid]) -> LinkCopies {
     out
 }
 
-/// What a Pre-compose packs, and how. See [`precompose_ops`].
 pub struct Precompose<'a> {
     /// The layers to pack, in any order.
     pub layers: &'a [Uuid],
@@ -478,7 +465,6 @@ pub struct Precompose<'a> {
     pub name: String,
     pub leave_attributes: bool,
     pub adjust_duration: bool,
-    /// The layer group being packed, when there is one.
     pub group: Option<Uuid>,
     /// How long a layer's source runs, where it can be known: a nested comp's
     /// length, or a footage file's once probed.
@@ -674,8 +660,6 @@ pub fn precompose_ops(
         inner_layers.push(layer);
     }
 
-    // A parent or matte link that would cross the new comp's edge is kept
-    // by a hidden copy of the layer at the far end, on the near side.
     let ids: Vec<Uuid> = packed.iter().map(|l| l.id).collect();
     let copies = if leave_attributes {
         LinkCopies::default()
@@ -802,8 +786,6 @@ pub fn precompose_ops(
         layer.retime = src.retime.clone();
         layer.blend = src.blend;
         layer.switches = src.switches;
-        // It stands where the layer stood: under the same id, with the
-        // same parent and the same matte.
         layer.id = src.id;
         layer.parent = src.parent;
         layer.matte = src.matte;
@@ -1040,8 +1022,6 @@ pub fn fresh_ids(comps: &mut [lumit_core::model::Composition]) -> Option<()> {
     Some(())
 }
 
-/// What a composition is made with, or changed to: the engine's half of the
-/// New composition and Composition settings dialogues.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CompSettings {
     /// A blank name on a new comp gets the next "Comp N".

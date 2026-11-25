@@ -1,5 +1,3 @@
-//! Slices' pass: one dispatch of `fx_slices.wgsl`.
-
 use crate::GpuContext;
 
 use super::{work_texture, FxEngine};
@@ -20,7 +18,6 @@ pub struct SlicesOp {
     pub stagger: f32,
     /// 0 Linear, 1 Smooth, 2 Sharp.
     pub ease: u32,
-    /// This is the incoming picture.
     pub incoming: bool,
     /// Half the widest smear window, in a strip's own time.
     pub smear: f32,
@@ -47,8 +44,6 @@ struct SlicesParams {
 }
 
 impl FxEngine {
-    /// Apply one frame of Slices to a linear working texture, returning a new
-    /// texture of the same size.
     pub fn slices(
         &self,
         ctx: &GpuContext,

@@ -34,8 +34,6 @@ import 'package:lumit_flutter/panels/layer_fold_frb.dart' show maxShapeCopies;
 import 'package:lumit_flutter/panels/shape_entries.dart';
 import 'package:uuid/uuid.dart';
 
-/// What Geometry options are known by: a Text or Shape layer's, then each
-/// 3D shape's.
 const geometryOptionsNames = {
   'geometry_options',
   'cube_geometry',
@@ -46,7 +44,6 @@ const geometryOptionsNames = {
   'plane_geometry',
 };
 
-/// Whether [fx] is those rows rather than a material's.
 bool isGeometryOptions(BridgeEffectInstanceInfo fx) =>
     geometryOptionsNames.contains(fx.name);
 
@@ -209,7 +206,6 @@ Rect? shapeContentsRect(List<BridgeShapeEntry> contents, {double t = 0}) {
           break;
       }
     }
-    // Half the outline sits outside the path.
     final half =
         (item.stroke != null && !item.strokeHidden
                 ? evaluateScalar(item.strokeWidth, t) / 2 : 0.0) +
@@ -238,7 +234,6 @@ Rect? shapeContentsRect(List<BridgeShapeEntry> contents, {double t = 0}) {
   return Rect.fromLTRB(minX, minY, maxX, maxY);
 }
 
-/// Every vertex of [item]'s path and both its handles' ends.
 Iterable<(double, double)> _controlPoints(BridgeShapeItem item) => [
       for (final v in item.vertices) ...[
         (v.x, v.y),
@@ -328,7 +323,6 @@ List<List<double>> shapeCopyTransforms(
 /// `MAX_COPIES_DRAWN` in the engine.
 const int maxShapeCopiesDrawn = 1000;
 
-/// The copies one repeater draws at [t]: the engine's `Repeater::copies_at`.
 List<List<double>> _repeaterCopies(BridgeShapeRepeater item, double t) {
   final copies = evaluateScalar(item.copies, t)
       .round()
@@ -346,7 +340,6 @@ List<List<double>> _repeaterCopies(BridgeShapeRepeater item, double t) {
   final b = math.sin(rotation) * scale;
   final c = -math.sin(rotation) * scale;
   final d = math.cos(rotation) * scale;
-  // Move to the anchor, turn and scale there, move back, then translate.
   final step = <double>[
     a,
     b,
@@ -369,7 +362,6 @@ List<List<double>> _repeaterCopies(BridgeShapeRepeater item, double t) {
   return out;
 }
 
-/// The transform that changes nothing.
 const List<double> identityTransform = [1, 0, 0, 1, 0, 0];
 
 /// [m] followed by [n].
@@ -396,12 +388,9 @@ List<double> _inverse(List<double> m) {
   return [a, b, c, d, -(m[4] * a + m[5] * c), -(m[4] * b + m[5] * d)];
 }
 
-/// Every layer's own size, answered from the document and remembered.
 class LayerBoundsCache extends ChangeNotifier {
-  /// Sizes by layer id, good for as long as [_revision] is.
   final Map<UuidValue, Size> _byLayer = {};
 
-  /// Model boxes by layer id, the same. Only kept once the model is read.
   final Map<UuidValue, List<double>> _boxes = {};
   final Map<UuidValue, int> _boxFrames = {};
 
@@ -463,10 +452,8 @@ class LayerBoundsCache extends ChangeNotifier {
       final box = entry.layer.getModelBox(atFrame: frame);
       _boxFrames[id] = frame;
       if (box.length == 24) return _boxes[id] = box;
-      // Asked once a revision of a 3D layer with no box.
       if (!model) _boxes[id] = const [];
     } catch (_) {
-      // The layer went away between the model being read and this call.
     }
     return null;
   }
@@ -513,17 +500,11 @@ class LayerBoundsCache extends ChangeNotifier {
       return nullLayerBounds;
     }
 
-    // A shape layer is exactly as big as its art, and **that changes as the art
-    // is edited** — the first kind whose size is not fixed by a source.
-    // The cache follows the document's revision, so it keeps up; this comment
-    // is here because the rest of this file was written when "a layer's size"
-    // was a constant.
     if (entry.info.kind == BridgeLayerKind.shape) {
       final art = shapeContentsBounds(entry.info.shapeContents, t: t);
       return art ?? _compSize(compSize);
     }
 
-    // Text measures its own line, exactly as the engine lays it out.
     if (entry.info.kind == BridgeLayerKind.text) {
       try {
         final document = entry.layer.getText();
@@ -531,7 +512,6 @@ class LayerBoundsCache extends ChangeNotifier {
           return textLayerBounds(document);
         }
       } catch (_) {
-        // The layer went away between the model being read and this call.
       }
       return _compSize(compSize);
     }

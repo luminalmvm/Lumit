@@ -22,9 +22,7 @@ struct MaterialUniform {
     projector_eye: [f32; 4],
 }
 
-/// One material as its layer's rows have it this frame.
 pub struct Look {
-    /// Which of the file's materials it is.
     pub index: usize,
     pub material: Material,
     /// A layer's picture for the base colour, the emission, the opacity and
@@ -58,8 +56,6 @@ impl Shared {
     }
 }
 
-/// What a material's bind group is made of besides its numbers: each slot's
-/// uv transform and picture, as the upload made them.
 pub(super) struct Kept {
     pub(super) uv: [[f32; 4]; 10],
     pub(super) bound: Vec<wgpu::TextureView>,

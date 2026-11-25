@@ -1,5 +1,3 @@
-// The dropdowns: the closed face they share, and the three open lists —
-// eager, searchable and lazily built.
 
 import 'package:flutter/material.dart';
 
@@ -30,8 +28,6 @@ Widget dropdownFace(LumitTheme t, String label, {Widget? face}) =>
       // column at its minimum), the caret is the first thing to go — a
       // sliver of the word still says more than striped overflow tape.
       final caretFits = !c.hasBoundedWidth || c.maxWidth >= 20;
-      // Stretched across a form's value column: the word on its left edge,
-      // the caret on the right, as the fields beside it read.
       final fill = c.hasTightWidth && face == null;
       return Row(
         mainAxisSize: fill ? MainAxisSize.max : MainAxisSize.min,
@@ -102,8 +98,6 @@ Widget dropdownButton({
       ),
     );
 
-/// A dropdown drawn as a bare label + caret; the open list floats on the
-/// standard menu surface (`bare_dropdown` in the Rust settings window).
 class BareDropdown<T> extends StatelessWidget {
   final T value;
   final List<T> options;
@@ -136,12 +130,8 @@ class BareDropdown<T> extends StatelessWidget {
   /// reader hunting for a name they know exists.
   final String? Function(T)? disabledReason;
 
-  /// A word on what an option does, shown on it while the list is open, or
-  /// null for none.
   final String? Function(T)? note;
 
-  /// A few quiet words at the end of an option's row while the list is open,
-  /// such as how a computer stands, or null for none.
   final String? Function(T)? aside;
 
   /// Called with the option under the pointer while the list is open, so it
@@ -256,7 +246,6 @@ class BareDropdown<T> extends StatelessWidget {
     if (picked != null) onChanged!(picked.single);
   }
 
-  /// An option's name, and its [aside] after it.
   Widget _row(LumitTheme t, T option) {
     final words = aside?.call(option);
     if (words == null) return Text(label(option));
@@ -292,7 +281,6 @@ class BareSearchDropdown extends StatelessWidget {
   final List<String> options;
   final ValueChanged<int> onChanged;
 
-  /// The heading an option sits under, or null for none.
   final String? Function(String)? group;
 
   /// Placeholder for the search field — what the user is looking for. Null
@@ -354,7 +342,6 @@ class BareSearchDropdown extends StatelessWidget {
   }
 }
 
-/// One row of the picker's flattened list: a heading, or an option.
 class _PickerEntry {
   final String? heading;
   final int? optionIndex;
@@ -433,8 +420,6 @@ class _SearchPickerBodyState extends State<_SearchPickerBody> {
               width: 288,
               autofocus: true,
               hint: widget.hint,
-              // Enter takes the row that is lit: the first match as the
-              // search narrows, or wherever the arrow keys moved it.
               onSubmitted: (_) {
                 final lit = FloatSurface.litRow(context)?.value;
                 if (lit is int) widget.onPick(lit);
@@ -506,7 +491,6 @@ class _SearchPickerBodyState extends State<_SearchPickerBody> {
 /// the resting button then costs nothing per rebuild, and the reads happen
 /// once per click instead of once per rebuild.
 class BareLazyDropdown<T> extends StatelessWidget {
-  /// What the closed button shows.
   final String label;
 
   /// The value chosen, which the list marks. Two options can share a name,

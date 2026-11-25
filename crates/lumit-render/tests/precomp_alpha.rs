@@ -32,7 +32,6 @@ fn comp(doc: &mut Document) -> Uuid {
     id
 }
 
-/// A comp-sized solid, added under whatever `comp` holds.
 fn solid(doc: &mut Document, comp: Uuid, colour: [f32; 4], edit: impl Fn(&mut Layer)) {
     let def = Uuid::now_v7();
     doc.items.push(ProjectItem::Solid(SolidDef {

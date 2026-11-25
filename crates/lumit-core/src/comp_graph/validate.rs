@@ -1,5 +1,3 @@
-//! The rules a node graph is checked against before it's stored.
-
 use uuid::Uuid;
 
 use super::{ports_of, CompGraph, GraphNode};

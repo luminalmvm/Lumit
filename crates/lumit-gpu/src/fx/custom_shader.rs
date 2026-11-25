@@ -51,7 +51,6 @@ const LFX_CACHE_ENTRIES: usize = 64;
 /// ceiling.
 const LAST_GOOD_ENTRIES: usize = 32;
 
-/// The compute entry point the assembled module declares (the epilogue's).
 const ENTRY_POINT: &str = "lumit_shade";
 
 /// How many pass pictures an LFX layout carries, after the Custom shader's
@@ -89,7 +88,6 @@ pub struct CustomShaderPipelines {
     /// LFX modules that would not compile, with the compiler's message, so a
     /// broken shader is checked once rather than every frame.
     lfx_failed: Mutex<Vec<(u64, String)>>,
-    /// One transparent pixel, bound for a pass that has not run yet.
     blank: wgpu::Texture,
 }
 
@@ -243,8 +241,6 @@ impl FxEngine {
         self.custom_shader.stale_ok.store(on, Ordering::Relaxed);
     }
 
-    /// How many custom-shader pipelines this engine has compiled — one per
-    /// distinct source, whatever the stack does with them.
     pub fn shader_compiles(&self) -> u64 {
         self.custom_shader.compiles.lock().map_or(0, |n| *n)
     }
@@ -352,7 +348,6 @@ impl FxEngine {
         )
     }
 
-    /// Validate, compile and file one module under `key` in `cache`.
     fn compile_into(
         &self,
         ctx: &GpuContext,

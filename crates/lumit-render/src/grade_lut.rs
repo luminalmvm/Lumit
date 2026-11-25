@@ -38,19 +38,15 @@ use crate::colour::{Loaded, OcioRequest, TableRequest};
 /// applications ask for, and 65³ colours is already a quarter of a million.
 pub const MAX_CUBE_SIZE: usize = 65;
 
-/// The encoding a baked cube's colours are in, going in and coming out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CubeSpace {
     /// The working linear with a 2.4 gamma: Rec. 709 video as a monitor shows it.
     Video,
-    /// ACEScct, the log most grading is done in.
     Log,
-    /// The sRGB curve.
     Srgb,
 }
 
 impl CubeSpace {
-    /// One encoded value into the working linear.
     #[must_use]
     pub fn decode(self, v: f32) -> f32 {
         match self {
@@ -66,7 +62,6 @@ impl CubeSpace {
         }
     }
 
-    /// One working linear value into this encoding.
     #[must_use]
     pub fn encode(self, x: f32) -> f32 {
         match self {
@@ -88,21 +83,18 @@ const ACESCCT_A: f32 = 10.540_237;
 const ACESCCT_B: f32 = 0.072_905_53;
 const ACESCCT_BREAK: f32 = 0.155_251_14;
 
-/// Why a grade could not be baked.
 #[derive(Debug, thiserror::Error)]
 pub enum GradeLutError {
     #[error("a cube needs 2 to {MAX_CUBE_SIZE} points a side, not {0}")]
     Size(usize),
 }
 
-/// Whether an effect is part of a shot's grade: one of the Colour effects.
 #[must_use]
 pub fn in_grade(e: &EffectInstance) -> bool {
     lumit_core::fx::builtins::def(&e.effect.match_name)
         .is_some_and(|d| d.schema().category == FxCategory::Colour)
 }
 
-/// A table a grade's LUT or OCIO effect reads, held on the CPU.
 enum Table {
     Cube(Lut3d),
     Ocio(Arc<Artefact>),
@@ -171,7 +163,6 @@ pub fn bake(
             Some(Table::Ocio(artefact)) => apply_table_cpu(rgba, p, |c| artefact.eval(c)),
             None => fx.def.apply_cpu_pointwise(rgba, w, h, p),
         };
-        // The Blend row, applied as `apply_stack` applies it.
         match blend_seam(fx.def.schema(), fx.params) {
             Some((mode, mix, entries)) => {
                 let input = rgba.clone();
@@ -301,7 +292,6 @@ mod tests {
             let x = c.map(|v| space.decode(v) * 2.0);
             [x[2], x[0], x[1]].map(|v| space.encode(v))
         };
-        // Every point of the cube, and a spread of colours between them.
         let mut colours: Vec<[f32; 3]> = (0..17 * 17 * 17)
             .map(|i| [i % 17, i / 17 % 17, i / 289].map(|k| k as f32 / 16.0))
             .collect();

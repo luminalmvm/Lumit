@@ -1,6 +1,3 @@
-//! Shape layers made from another layer's outlines: Create ▸ Shapes from
-//! text, Shapes from vector layer, and Split into shape layers.
-
 use lumit_core::model::{Layer, LayerKind, TextDocument};
 use lumit_core::shape::modifier::ShapeEntry;
 use uuid::Uuid;
@@ -111,7 +108,6 @@ fn parts(contents: &[ShapeEntry]) -> Vec<Vec<ShapeEntry>> {
         .collect()
 }
 
-/// A Type layer's letters as shape art at layer time `t`, a group for each.
 pub(crate) fn text_art(
     source: &LayerReference,
     layer: &Layer,
@@ -150,7 +146,6 @@ pub(crate) fn text_art(
     ))
 }
 
-/// The Illustrator file a footage layer reads, and which of its layers.
 #[cfg(feature = "media")]
 pub(crate) fn vector_source(
     source: &LayerReference,
@@ -203,9 +198,6 @@ pub(crate) fn vector_art(paths: Vec<lumit_media::ai::paths::AiPath>) -> Vec<Shap
                 item.stroke = Some(colour::still(linear(c)));
                 item.stroke_width = lumit_core::anim::Property::fixed(path.stroke_width);
             }
-            // ponytail: holes are cut by even-odd, as a letter's are. A path
-            // that crosses itself and is filled by winding comes out hollow
-            // where it crosses; the upgrade is reading the path's own rule.
             item.combine = u32::from(path.fill.is_some() && i > 0) * 4;
             items.push(ShapeEntry::Item(item));
         }

@@ -1,12 +1,3 @@
-// The Project panel on frb, tested against the real engine.
-//
-// These are the ported equivalents of the 12 v0 tests that lived in
-// project_placement_test.dart, section_d_test.dart and final_sweep_test.dart,
-// plus coverage for three things v0 never asserted at all: the folder tree, the
-// per-depth indent, and the row keys.
-//
-// Every document operation here is genuine — see frb_test_support.dart for why
-// these are integration tests rather than fake-bridge unit tests.
 
 import 'dart:io';
 import 'dart:typed_data';
@@ -86,8 +77,6 @@ void main() {
       ));
       await tester.pump();
 
-      // The first click selects on its down stroke; the double-click opens the
-      // dialogue, after the media has been probed.
       await doubleClick(tester, rowText('shot.mov'));
       await settleFrb(
         tester,
@@ -108,8 +97,6 @@ void main() {
           reason: 'the clip it was made from is in it');
     });
 
-    /// Opening a folder is showing what is in it, so a double-click shuts it
-    /// and another opens it again. The Compositions auto-folder is one.
     testWidgets('a double-click on a folder opens and shuts it',
         (tester) async {
       final p = freshProject();
@@ -191,15 +178,12 @@ void main() {
       expect((run.sequenceRate()!.fpsNum, run.sequenceRate()!.fpsDen), (25, 1),
           reason: 'one gesture, one op, one undo step');
 
-      // One file is not a run, so there is no speed of its own to correct.
       await openMenu('shot.mov');
       expect(find.byKey(const ValueKey('project-menu-sequence-rate')),
           findsNothing);
       dir.deleteSync(recursive: true);
     });
 
-    /// **New node graph on the panel's own menu** (§4.4). It goes through the
-    /// same settings dialogue New composition does, and fronts what it made.
     testWidgets('New node graph from the ground menu makes one and fronts it',
         (tester) async {
       final p = freshProject();
@@ -226,8 +210,6 @@ void main() {
       final made = p.uiState.selectedComp;
       expect(made, isNotNull, reason: 'a graph you just made is fronted');
       expect(made!.getModel().isNodeGraph, isTrue);
-      // Blank through the dialogue, so the engine names it and counts the
-      // node graphs apart from the comps.
       expect(made.getSettings().name, 'Node graph 1');
       expect(rowText('Node graph 1'), findsOneWidget,
           reason: 'the panel re-read after its own edit');
@@ -256,7 +238,6 @@ void main() {
         await tester.pumpAndSettle();
       }
 
-      // No comp open: the entry is not there to be clicked.
       await openMenu();
       expect(find.byKey(const ValueKey('project-menu-add-audio-only')),
           findsNothing,
@@ -279,7 +260,6 @@ void main() {
           reason: 'the sound arrived as an Audio layer, not a footage layer');
       expect(layers.first.hasPicture(), isFalse);
 
-      // One op: one undo takes it away again.
       p.state.project!.undo();
       expect(comp.getLayers(), isEmpty);
     });
@@ -306,7 +286,6 @@ void main() {
       expect(find.byKey(const ValueKey('rename-field')), findsNothing,
           reason: 'opening a comp is not renaming it');
 
-      // The rename it gave up is still reachable from the row menu.
       await tester.tapAt(tester.getCenter(rowText('Scene')),
           buttons: kSecondaryButton);
       await tester.pumpAndSettle();
@@ -317,9 +296,6 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
     });
 
-    /// Selecting several rows is what makes "drop four clips on the Timeline",
-    /// or on New composition, a single gesture. Ctrl adds one at a time, Shift
-    /// takes the run between, and a plain click goes back to just one.
     testWidgets('Ctrl and Shift select more than one row', (tester) async {
       final p = freshProject();
       for (final name in ['a.mov', 'b.mov', 'c.mov']) {
@@ -359,9 +335,6 @@ void main() {
           reason: 'a plain click goes back to just that row');
     });
 
-    /// **Move to folder** files everything picked, in one undo step — the
-    /// gesture for the rows that do not drag, and for a selection spanning
-    /// kinds.
     testWidgets('the context menu files the whole selection into a folder',
         (tester) async {
       final p = freshProject();
@@ -384,7 +357,6 @@ void main() {
         buttons: kSecondaryButton,
       );
       await tester.pumpAndSettle();
-      // The folders wait behind the entry, exactly as the effect categories do.
       await tester.tap(find.text('Move to folder'));
       await tester.pumpAndSettle();
       await tester.tap(
@@ -396,16 +368,12 @@ void main() {
       expect(folder.getChildren(), hasLength(2),
           reason: 'both picked rows were filed, not just the one clicked');
 
-      // One undo step for the pair: the group is what makes the gesture whole.
       p.state.project!.undo();
       expect(folder.getChildren(), isEmpty);
       expect(p.state.project!.getItems(), hasLength(3),
           reason: 'the folder and both clips, back at the root');
     });
 
-    /// **Delete takes the whole selection**. It read the clicked row
-    /// alone while Move to folder, two entries away in the same menu, already
-    /// took `_targets` — the shape this ruling exists to stamp out.
     testWidgets('the context menu deletes the whole selection', (tester) async {
       final p = freshProject();
       p.state.project!.importFootage(path: 'C:/clips/a.mov');
@@ -472,7 +440,6 @@ void main() {
         findsOneWidget,
       );
 
-      // The header appears only while something is missing, and filters to it.
       expect(find.byKey(const ValueKey('missing-toggle')), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('missing-toggle')));
       await tester.pumpAndSettle();
@@ -486,7 +453,6 @@ void main() {
       final p = freshProject();
       final gone = p.state.project!.importFootage(path: 'C:/nowhere/gone.mp4');
 
-      // A file the engine's probe genuinely accepts, for the relink to land on.
       final target = _probeableMediaFile('relinked.wav');
 
       await tester.pumpWidget(hostPanel(
@@ -596,7 +562,6 @@ void main() {
           reason: 'the needle narrowed the tree');
       expect(find.text('Scene'), findsNothing);
 
-      // A folder name matches: its children show as the path to them.
       await tester.enterText(
           find.byKey(const ValueKey('project-search')), 'compositions');
       await tester.pump();
@@ -610,11 +575,6 @@ void main() {
           reason: 'clearing the needle widens back to everything');
     });
 
-    // Without the built library there is nothing to test against; the harness
-    // throws with the command to run.
-    /// The reason these exist: the panel used to show "import footage or
-    /// create a composition" and offer no way to do either, so an empty
-    /// project was a dead end unless you found the menu bar.
     testWidgets('the footer imports footage into the project', (tester) async {
       final p = freshProject();
       await tester.pumpWidget(hostPanel(
@@ -655,7 +615,6 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('project-new-comp')));
       await tester.pump();
-      // The button asks before it commits: nothing exists until Create.
       expect(find.text('New composition'), findsWidgets);
       expect(p.state.project!.getItems(), isEmpty);
 
@@ -682,7 +641,6 @@ void main() {
               .runAsync(() => p.state.importFootagePaths([file.path])),
           isTrue);
 
-      // The roots: the Compositions folder and the folder of layer items.
       final roots = p.state.project!.getItems();
       expect(roots, hasLength(2));
       expect(roots, everyElement(isA<ItemReference_Folder>()),
@@ -695,8 +653,6 @@ void main() {
           reason: 'one import, one undo step');
     });
 
-    /// Enter renames the lone selected item — the keyboard path that
-    /// replaced the old second-click rename, live for every item kind.
     testWidgets('Enter renames the selected item', (tester) async {
       final p = freshProject();
       p.state.project!.importFootage(path: 'C:/clips/shot.mov');
@@ -739,7 +695,6 @@ void main() {
       expect(rowText('Hero shot'), findsOneWidget,
           reason: 'and writes nothing: the old name stands');
 
-      // While another panel is the active one, the key is not this panel's.
       p.uiState.activePane.value = Panel.timeline.pane();
       await tester.tap(rowText('Hero shot'));
       await tester.pump(const Duration(milliseconds: 400));
@@ -748,11 +703,6 @@ void main() {
       expect(find.byKey(const ValueKey('rename-field')), findsNothing,
           reason: 'a per-panel binding is live in the focused panel only');
     });
-
-    // -----------------------------------------------------------------------
-    // The five the mockup drew and the engine could not answer until now
-    // (docs/07 §3.1, docs/15 §12A.3a).
-    // -----------------------------------------------------------------------
 
     testWidgets('the bottom bar makes a folder, filed into the picked one',
         (tester) async {
@@ -769,8 +719,6 @@ void main() {
       expect(rowText('Folder 1'), findsOneWidget,
           reason: 'a blank name takes the next unused "Folder N"');
 
-      // Picking it and pressing again files the second one inside it, which
-      // is what "the folder you are looking at" means.
       await tester.tap(rowText('Folder 1'));
       await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
       await tester.tap(find.byKey(const ValueKey('project-new-folder')));
@@ -794,7 +742,6 @@ void main() {
       ));
       await settleFrb(tester, minRounds: 6);
 
-      // Tagged through the row menu's chip strip — one click, no submenu.
       await tester.tap(rowText('shot.mov'), buttons: kSecondaryButton);
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('project-menu-label-4')));
@@ -804,8 +751,6 @@ void main() {
           i is ItemReference_Footage && i.field0.internalid == shot.internalid);
       expect(item.label(), 4, reason: 'the engine holds the tag');
 
-      // The swatch filter narrows to that colour, and the picker's neutral
-      // chip clears it.
       await pickFilterColour(tester, 4);
       expect(rowText('shot.mov'), findsOneWidget);
       expect(rowText('other.mov'), findsNothing,
@@ -841,11 +786,8 @@ void main() {
 
       expect(button, findsOneWidget,
           reason: 'a file with sound and no picture offers the play button');
-      // And nothing to scrub: there are no frames behind it.
       expect(find.byKey(const ValueKey('project-preview-scrub')), findsNothing);
 
-      // What the button says it will do, which is also what it says the
-      // preview is doing.
       String says() => tester
           .widget<LumitTooltip>(
               find.ancestor(of: button, matching: find.byType(LumitTooltip)))
@@ -857,14 +799,11 @@ void main() {
       expect(says(), isNot(idle),
           reason: 'the button turned round: it stops the preview now');
 
-      // Pressing again silences it and the button goes back to offering a play.
       await tester.tap(button);
       await settleFrb(tester, minRounds: 4);
       expect(says(), idle);
     });
 
-    /// **Proxies on the row menu.** Four commands and one badge, all
-    /// over the seam: attach a file, read from it or not, forget it.
     testWidgets('the proxy commands round-trip from the row menu',
         (tester) async {
       final p = freshProject();
@@ -872,7 +811,6 @@ void main() {
 
       await tester.pumpWidget(hostPanel(
         child: ProjectPanelFrb(
-          // The Set proxy… picker, stubbed: the same seam the relink uses.
           relinkPicker: () async => 'C:/clips/shot_proxy.mov',
         ),
         state: p.state,
@@ -893,8 +831,6 @@ void main() {
       final badge = find.byKey(ValueKey<String>('proxy-${footage.internalid}'));
       expect(badge, findsNothing, reason: 'nothing attached, nothing to say');
 
-      // Nothing attached: the two commands that need a proxy are absent
-      // rather than dead.
       await openMenu();
       expect(
           find.byKey(const ValueKey('project-menu-set-proxy')), findsOneWidget);
@@ -905,7 +841,6 @@ void main() {
       expect(
           find.byKey(const ValueKey('project-menu-clear-proxy')), findsNothing);
 
-      // Set proxy… attaches the picked file, switched on.
       await tester.tap(find.byKey(const ValueKey('project-menu-set-proxy')));
       await tester.pumpAndSettle();
       expect(footage.getProxy()?.path, contains('shot_proxy.mov'));
@@ -913,7 +848,6 @@ void main() {
       expect(badge, findsOneWidget,
           reason: 'a row reading from its proxy says so');
 
-      // Use proxy is the tick, and it writes both ways.
       await openMenu();
       await tester.tap(find.byKey(const ValueKey('project-menu-use-proxy')));
       await tester.pumpAndSettle();
@@ -926,7 +860,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(footage.getProxy()?.enabled, isTrue);
 
-      // Clear proxy detaches it, and the two commands go with it.
       await openMenu();
       await tester.tap(find.byKey(const ValueKey('project-menu-clear-proxy')));
       await tester.pumpAndSettle();
@@ -983,8 +916,6 @@ void main() {
     /// plugin's method channel; these drive that channel directly, which is
     /// the whole mechanism minus the operating system.
     group('a drop from the file manager', () {
-      /// One `desktop_drop` platform message, delivered the way the plugin's
-      /// native side delivers it.
       Future<void> dropEvent(String method, Object? arguments) =>
           TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
               .handlePlatformMessage(
@@ -1035,8 +966,6 @@ void main() {
       });
     });
 
-    /// The import road itself, driven without the plugin: what each shape of
-    /// dropped path turns into.
     group('what a dropped path becomes', () {
       testWidgets('a batch of files is one import and one undo step',
           (tester) async {
@@ -1108,7 +1037,6 @@ String _probeableMediaFile(String name) {
   return file.path;
 }
 
-/// 0.1 s of 8-bit mono silence, as a WAV byte for byte.
 Uint8List _silentWav() {
   const sampleRate = 8000;
   final samples = Uint8List(sampleRate ~/ 10)
@@ -1123,13 +1051,13 @@ Uint8List _silentWav() {
   u32(36 + samples.length); // everything after this field
   ascii('WAVE');
   ascii('fmt ');
-  u32(16); // fmt chunk size
+  u32(16);
   u16(1); // PCM, uncompressed
-  u16(1); // mono
+  u16(1);
   u32(sampleRate);
   u32(sampleRate); // byte rate: 1 channel × 1 byte × rate
-  u16(1); // block align
-  u16(8); // bits per sample
+  u16(1);
+  u16(8);
   ascii('data');
   u32(samples.length);
   out.add(samples);
@@ -1161,26 +1089,26 @@ Uint8List _tinyBmp() {
   // Two pixels per row is 6 bytes, padded to 8; two rows.
   const pixelBytes = 16;
   ascii('BM');
-  u32(14 + 40 + pixelBytes); // file size
-  u32(0); // reserved
-  u32(14 + 40); // offset to the pixel array
+  u32(14 + 40 + pixelBytes);
+  u32(0);
+  u32(14 + 40);
 
   u32(40); // BITMAPINFOHEADER
-  u32(2); // width
-  u32(2); // height
-  u16(1); // planes
-  u16(24); // bits per pixel
+  u32(2);
+  u32(2);
+  u16(1);
+  u16(24);
   u32(0); // BI_RGB, uncompressed
   u32(pixelBytes);
   u32(2835); // ~72 dpi
   u32(2835);
-  u32(0); // palette colours used
-  u32(0); // all colours important
+  u32(0);
+  u32(0);
 
   // BGR triples: two rows of orange/blue, each padded to four bytes.
   for (var row = 0; row < 2; row++) {
     out.add([20, 120, 220, 220, 120, 20]);
-    out.add([0, 0]); // row padding
+    out.add([0, 0]);
   }
   return out.takeBytes();
 }

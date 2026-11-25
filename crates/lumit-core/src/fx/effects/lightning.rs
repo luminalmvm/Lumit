@@ -28,10 +28,8 @@ const STEPS: usize = 24;
 const MULTI_STEPS: usize = 16;
 const FORK_STEPS: usize = 6;
 const MAX_FORKS: usize = 12;
-/// The longest bolt this module walks, in points.
 const MAX_POINTS: usize = STEPS + 1;
 
-/// Lightning's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "lightning",
@@ -146,7 +144,6 @@ pub struct Lightning {
     )]
     pub glow_radius: f32,
 
-    /// The halo's colour.
     #[colour(label = "Glow colour", default = [0.25, 0.45, 1.0, 1.0], max = 4.0)]
     pub glow_colour: [f32; 4],
 
@@ -162,16 +159,12 @@ pub struct Lightning {
     )]
     pub glow_opacity: f32,
 
-    /// On, the layer that arrived stays under the bolt; off, the bolt is all
-    /// there is.
     #[toggle(label = "Composite on original", default = true)]
     pub composite_on_original: bool,
 
-    /// Which bolt (§2.4).
     #[seed]
     pub seed: u32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -202,7 +195,6 @@ fn bolt_points(
     let dx = b[0] - a[0];
     let dy = b[1] - a[1];
     let len = (dx * dx + dy * dy).sqrt().max(1e-3);
-    // The unit perpendicular the displacement rides on.
     let nx = -dy / len;
     let ny = dx / len;
     let field = FractalField {
@@ -231,11 +223,9 @@ fn bolt_points(
     out
 }
 
-/// Everything the emitter needs to append one bolt's segments to the list.
 struct Bolt<'a> {
     points: &'a [[f32; 2]; MAX_POINTS],
     steps: usize,
-    /// The brightness at the bolt's root and at its far end.
     fade0: f32,
     fade1: f32,
 }
@@ -295,7 +285,6 @@ impl Lightning {
         let seed = self.seed;
         let mut count = 0usize;
 
-        // The bolt the forks hang off, whatever the type draws beside it.
         let main;
         let main_steps;
         match self.lightning_type {
@@ -351,7 +340,6 @@ impl Lightning {
                 main = first;
             }
             3 => {
-                // Two-way strike: one bolt from each end, meeting in the middle.
                 let mid = [(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5];
                 main_steps = MULTI_STEPS;
                 main = bolt_points(a, mid, main_steps, seed, amp, z, true);
@@ -457,7 +445,6 @@ impl Lightning {
     }
 }
 
-/// Lightning's behaviour.
 pub struct LightningDef;
 
 impl EffectDef for LightningDef {

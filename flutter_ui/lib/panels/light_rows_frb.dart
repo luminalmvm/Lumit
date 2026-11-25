@@ -1,7 +1,3 @@
-// The rows of a layer that are a choice rather than a number: a light's type,
-// falloff and shadows, and how a 3D layer takes lights and shadows. They sit
-// at the head of their section, above the keyframed rows, in both the
-// Timeline's fold-out and the Effect controls card.
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -40,7 +36,6 @@ String orientLabel(BridgeOrient orient) => switch (orient) {
       BridgeOrient.towardsCamera => l10n.orientTowardsCamera,
     };
 
-/// One choice row.
 enum LayerSetting {
   orient,
   lightType,
@@ -53,7 +48,6 @@ enum LayerSetting {
   holdout,
   acceptsLights;
 
-  /// The heading the row sits under.
   TransformSection get section => switch (this) {
         orient => TransformSection.transform,
         lightType ||
@@ -152,24 +146,19 @@ bool canSurround(BridgeLayerEntry l) => switch (l.info.kind) {
       _ => false,
     };
 
-/// Whether layer [id] is an Environment light's picture, and so never drawn.
 bool feedsEnvironment(List<BridgeLayerEntry> stack, UuidValue id) =>
     stack.any((e) =>
         e.info.light?.kind == BridgeLightKind.environment &&
         e.info.light?.source == id);
 
-/// Whether a light of this kind weakens with distance.
 bool lightFallsOff(BridgeLightKind kind) =>
     kind == BridgeLightKind.point ||
     kind == BridgeLightKind.spot ||
     kind == BridgeLightKind.area;
 
-/// Whether a light of this kind comes from somewhere a shadow can be cast
-/// from.
 bool lightCasts(BridgeLightKind kind) =>
     kind != BridgeLightKind.ambient && kind != BridgeLightKind.environment;
 
-/// Whether a light of this kind has a direction to aim.
 bool lightAims(BridgeLightKind kind) =>
     kind == BridgeLightKind.spot ||
     kind == BridgeLightKind.parallel ||
@@ -197,7 +186,6 @@ String lightFalloffLabel(BridgeLightFalloff falloff) => switch (falloff) {
         l10n.lightFalloffInverseSquare,
     };
 
-/// The same settings with one thing changed.
 BridgeLightSettings lightSettingsWith(
   BridgeLightSettings s, {
   BridgeLightKind? kind,
@@ -227,7 +215,6 @@ class LayerSettingRowFrb extends StatelessWidget {
   final bool acceptsLights;
   final VoidCallback onChanged;
 
-  /// The layer's Orient, and what decides which choices it has.
   final BridgeOrient orient;
   final bool threeD;
   final BridgeLayerKind kind;
@@ -280,8 +267,6 @@ class LayerSettingRowFrb extends StatelessWidget {
     }
 
     final key = ValueKey<String>('$keyPrefix-${setting.name}');
-    // The row's menu: its choices by name with the one in force ticked, or its
-    // tick, then Reset, so the row answers a right press as every row does.
     ParamMenu menuOf<T>(List<T> options, T now, String Function(T) label,
             ValueChanged<T> pick, T fallback) =>
         ParamMenu(
@@ -360,7 +345,6 @@ class LayerSettingRowFrb extends StatelessWidget {
           label: lightKindLabel,
           onChanged: (k) => write(lightSettingsWith(s, kind: k)),
         ),
-      // Any layer of the comp with a picture, read as a panorama.
       LayerSetting.lightSource => LayerPicker(
           key: key,
           dense: valueColumn != null,
@@ -421,7 +405,6 @@ class LayerSettingRowFrb extends StatelessWidget {
             onChanged: (on) => shadows(holdout: on),
           ),
         ),
-      // The same switch as the layer's right-click item, one op a click.
       LayerSetting.acceptsLights => Align(
           alignment: AlignmentDirectional.centerStart,
           child: HouseCheckbox(

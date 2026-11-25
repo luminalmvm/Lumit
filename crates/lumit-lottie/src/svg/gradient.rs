@@ -15,7 +15,6 @@ use super::{Scope, Svg};
 use crate::fit::tolerance;
 
 impl Svg<'_> {
-    /// A gradient fill in the art's own pixels, and its id.
     pub(super) fn gradient(
         &mut self,
         scope: &Scope<'_>,
@@ -199,8 +198,6 @@ fn write_stop(svg: &Svg<'_>, out: &mut String, s: &[f64; 5], animations: &str) {
 /// and alpha.
 type Point = (f64, [f64; 4]);
 
-/// Where stops go between each two of a gradient's own, placed for every
-/// moment in `moments`.
 fn splits(moments: &[Vec<Point>], display: &dyn Fn([f64; 3]) -> [f64; 3]) -> Vec<Vec<f64>> {
     let colours: Vec<Vec<[f64; 3]>> = moments
         .iter()
@@ -238,7 +235,6 @@ fn stops(
     out
 }
 
-/// The stops of `item`'s gradient at `lt`, in linear light.
 fn points(item: &ShapeItem, lt: f64) -> Vec<Point> {
     let faded = |p: &Property| p.value_at(lt).clamp(0.0, 100.0) / 100.0;
     let from = item
@@ -289,7 +285,6 @@ fn points(item: &ShapeItem, lt: f64) -> Vec<Point> {
     points
 }
 
-/// A radial gradient's radius from its start and end points.
 fn radius(v: &[f64]) -> f64 {
     let g = |i: usize| v.get(i).copied().unwrap_or(0.0);
     (g(2) - g(0)).hypot(g(3) - g(1))

@@ -55,10 +55,8 @@ import 'viewer_tool_cursor.dart';
 /// How near, in screen pixels, the pointer has to be to take hold of a pin.
 const double puppetPinGrab = 9;
 
-/// The radius a pin's dot is drawn at.
 const double puppetPinRadius = 4;
 
-/// Which kind of pin each puppet tool places.
 BridgePuppetPinKind puppetKindFor(ToolMode tool) => switch (tool) {
       ToolMode.puppetStarch => BridgePuppetPinKind.starch,
       ToolMode.puppetOverlap => BridgePuppetPinKind.overlap,
@@ -66,8 +64,6 @@ BridgePuppetPinKind puppetKindFor(ToolMode tool) => switch (tool) {
       _ => BridgePuppetPinKind.position,
     };
 
-/// What a pin of that kind is called — its default name, and the word its
-/// Timeline row is headed with.
 String puppetKindLabel(BridgePuppetPinKind kind) => switch (kind) {
       BridgePuppetPinKind.position => l10n.puppetPinPosition,
       BridgePuppetPinKind.starch => l10n.puppetPinStarch,
@@ -75,7 +71,6 @@ String puppetKindLabel(BridgePuppetPinKind kind) => switch (kind) {
       BridgePuppetPinKind.bend => l10n.puppetPinBend,
     };
 
-/// The still value of a scalar, or null when it is keyed or an expression.
 double? _still(BridgeScalar s) => s is BridgeScalar_Static ? s.field0 : null;
 
 /// Where a pin stands at the frame on screen, in layer pixels.
@@ -96,7 +91,6 @@ double _firstKey(BridgeScalar s) => switch (s) {
       _ => 0,
     };
 
-/// The puppet tools over the picture.
 class ViewerPuppetLayer extends StatefulWidget {
   /// Whether a puppet tool is armed. Inert otherwise — and standing down is
   /// what takes the mesh preview off the render.
@@ -113,7 +107,6 @@ class ViewerPuppetLayer extends StatefulWidget {
 
   final VoidCallback onChanged;
 
-  /// Where a right click away from a pin goes.
   final ViewerMenuHost menus;
 
   const ViewerPuppetLayer({
@@ -137,7 +130,6 @@ class _ViewerPuppetLayerState extends State<ViewerPuppetLayer> {
   /// the document so a hover asks nothing.
   final PuppetGhosts _ghosts = PuppetGhosts();
 
-  /// Where the pointer is, for the tool's own mark.
   Offset? _pointer;
 
   /// The pin being dragged, and where the press landed. The framework only
@@ -150,7 +142,6 @@ class _ViewerPuppetLayerState extends State<ViewerPuppetLayer> {
   /// while the pointer is down. The document still holds where it was.
   Offset? _dragTo;
 
-  /// A bend pin's turn and size in flight, when the bend tool is dragging one.
   double? _dragRotation;
   double? _dragScale;
 
@@ -194,7 +185,6 @@ class _ViewerPuppetLayerState extends State<ViewerPuppetLayer> {
       try {
         disarmPuppetPreview();
       } catch (_) {
-        // The engine went away first; nothing to stand down.
       }
     }
     super.dispose();
@@ -229,8 +219,6 @@ class _ViewerPuppetLayerState extends State<ViewerPuppetLayer> {
         );
       }
     } catch (_) {
-      // No layer, or it went away between the selection and the ask. The
-      // overlay simply draws nothing.
     }
   }
 
@@ -251,7 +239,6 @@ class _ViewerPuppetLayerState extends State<ViewerPuppetLayer> {
     try {
       _pushMeshOptions(box, widget.uiState.tools);
     } catch (_) {
-      // The layer went away between the drag and the commit.
     }
   }
 
@@ -273,8 +260,6 @@ class _ViewerPuppetLayerState extends State<ViewerPuppetLayer> {
     widget.onChanged();
   }
 
-  /// The layer being pinned: the primary selection, as every other drawing tool
-  /// uses.
   LayerBox? get _target =>
       primarySelectedBox(widget.boxes, widget.uiState.selectedLayerIds);
 
@@ -313,7 +298,6 @@ class _ViewerPuppetLayerState extends State<ViewerPuppetLayer> {
     }
   }
 
-  /// The pin whose dot is under [screen], nearest first.
   BridgePuppetPin? _pinNear(LayerBox box, Offset screen) {
     BridgePuppetPin? best;
     var nearest = puppetPinGrab;
@@ -400,8 +384,6 @@ class _ViewerPuppetLayerState extends State<ViewerPuppetLayer> {
     );
   }
 
-  // --- The gestures ---------------------------------------------------------
-
   /// A click drives a pin of the armed tool's kind in.
   ///
   /// The engine decides whether it may: it looks the point up in the *deformed*
@@ -431,26 +413,12 @@ class _ViewerPuppetLayerState extends State<ViewerPuppetLayer> {
       );
       widget.onChanged();
     } catch (_) {
-      // The refusals of §6, in the reader's own language. Which of the two it
-      // is, is read off the wireframe rather than off the error: a
-      // `BridgeError` reaches Dart as an opaque handle with nothing readable on
-      // it, and the engine's two answers — no mesh at all, and a point outside
-      // the one there is — are exactly "is there a wireframe" and "there is".
-      // The overlay is holding that answer already, so nothing is asked and
-      // nothing is scraped.
-      //
-      // ponytail: the held wireframe is a frame behind the engine's, so on the
-      // one frame where the layer's alpha has just emptied the message can be
-      // the wrong one of two calm sentences. The upgrade is a typed placement
-      // result across the seam. Observable trigger: a refusal naming the mesh
-      // on a layer that visibly has none.
       widget.state.postNotice(
         _ghosts.ghost == null ? l10n.puppetNoMesh : l10n.puppetOutsideMesh,
       );
     }
   }
 
-  /// A pin's own menu, and the picture's anywhere else.
   void _onSecondaryTapUp(TapUpDetails details) {
     final box = _target;
     final pin = box == null ? null : _pinNear(box, details.localPosition);
@@ -463,7 +431,6 @@ class _ViewerPuppetLayerState extends State<ViewerPuppetLayer> {
         write();
         widget.onChanged();
       } catch (_) {
-        // The pin went away under the open menu.
       }
     }
 
@@ -539,13 +506,6 @@ class _ViewerPuppetLayerState extends State<ViewerPuppetLayer> {
     setState(() => _dragTo = box.map.layerOf(details.localPosition));
   }
 
-  /// One drag, one op, one undo step.
-  ///
-  /// ponytail: the picture does not deform until the pointer is released — the
-  /// wireframe and the dot follow it, the pixels catch up on the commit. The
-  /// upgrade is a puppet-preview render call beside the transform one the gizmo
-  /// drags through, which is a bridge surface and a solve per throttled tick.
-  /// Observable trigger: pin drags reading as blind on a real character.
   void _onPanEnd() {
     final box = _target;
     final id = _dragging;
@@ -576,7 +536,6 @@ class _ViewerPuppetLayerState extends State<ViewerPuppetLayer> {
       box.layer.setPuppetPin(pin: next);
       widget.onChanged();
     } catch (_) {
-      // The pin went away mid-drag. Not worth a dialogue.
     }
   }
 }
@@ -588,10 +547,8 @@ class _ViewerPuppetLayerState extends State<ViewerPuppetLayer> {
 /// engine's vertex cap that is nearly three thousand triangles, and nine
 /// thousand `drawLine` calls a frame is a redraw budget spent on scaffolding.
 class PuppetOverlayPainter extends CustomPainter {
-  /// The engine's mesh at this frame, or null when there is none to draw.
   final BridgePuppetGhost? ghost;
 
-  /// The layer↔screen map, or null when nothing is selected.
   final ViewerLayerMap? map;
 
   final List<BridgePuppetPin> pins;

@@ -88,7 +88,6 @@ pub struct CornerPin {
     #[choice(label = "Edges", options = *EDGE_OPTIONS, default = 0)]
     pub edge: u32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -152,7 +151,6 @@ impl CornerPin {
         // The adjugate: the inverse up to the determinant, which cancels in the
         // perspective divide the kernel takes anyway.
         let mut inv = adjugate(m);
-        // A quad with no area maps everything onto a line: no inverse.
         let det = m[0][0] * inv[0][0] + m[0][1] * inv[1][0] + m[0][2] * inv[2][0];
         if !det.is_finite() || det.abs() < 1e-6 {
             return cpu::CornerPinParams {
@@ -204,7 +202,6 @@ impl CornerPin {
     }
 }
 
-/// `m`'s adjugate: its inverse times its determinant.
 fn adjugate(m: [[f32; 3]; 3]) -> [[f32; 3]; 3] {
     [
         [
@@ -225,7 +222,6 @@ fn adjugate(m: [[f32; 3]; 3]) -> [[f32; 3]; 3] {
     ]
 }
 
-/// Corner pin's behaviour.
 pub struct CornerPinDef;
 
 impl EffectDef for CornerPinDef {
@@ -304,9 +300,6 @@ mod tests {
         p
     }
 
-    /// Pulled out past the frame, a node graph box gives it room out to
-    /// the corners. On a raster grown past the frame, the frame is what is
-    /// pinned, so a pin onto the frame's own corners leaves every pixel be.
     #[test]
     fn a_pin_reaches_its_corners_and_pins_the_frame() {
         let out = pin(
@@ -342,13 +335,9 @@ mod tests {
         assert!(worst < 1e-3, "{worst}");
     }
 
-    /// A floor pinned in perspective, its horizon below the frame's top-left
-    /// corner: the quad is drawn, and only past its horizon is transparent.
     #[test]
     fn a_pin_whose_horizon_passes_the_top_left_corner_still_draws() {
         let n = 64u32;
-        // Narrow at the top, wide at the bottom: the horizon is at about
-        // y = 27, under the top-left pixel.
         let floor = pin(
             [28.0, 32.0, 36.0, 32.0, 0.0, 64.0, 64.0, 64.0],
             [0.0, 0.0, 64.0, 64.0],

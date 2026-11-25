@@ -1,6 +1,3 @@
-//! The undo history as a list: every step, where the document stands on it,
-//! and the jump to another point, which is what the History window reads.
-
 use super::{DocumentStore, HistoryEntry};
 use crate::ops::{Op, OpError};
 use std::borrow::Cow;
@@ -50,8 +47,6 @@ impl DocumentStore {
             .collect()
     }
 
-    /// How many of [`Self::history`]'s steps are applied — where the document
-    /// stands on the road.
     #[must_use]
     pub fn applied_steps(&self) -> usize {
         self.journal.lock().undo.len()

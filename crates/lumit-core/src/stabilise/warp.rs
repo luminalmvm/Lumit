@@ -18,7 +18,6 @@
 pub struct WarpParams {
     pub map: [[f32; 3]; 3],
     pub keep: [f32; 4],
-    /// How the picture moved while the frame was read, see [`unroll`].
     pub motion: [f32; 4],
     /// The rolling shutter, see [`unroll`]. A nought first value is no term.
     pub readout: [f32; 4],
@@ -124,8 +123,6 @@ pub fn bicubic(src: &[f32], w: u32, h: u32, sx: f32, sy: f32) -> [f32; 4] {
     acc
 }
 
-/// Draw `src` (`w` by `h`, premultiplied RGBA) through the warp into a new
-/// picture of the same size.
 #[must_use]
 pub fn warp(src: &[f32], w: u32, h: u32, p: &WarpParams) -> Vec<f32> {
     let mut out = vec![0.0f32; (w * h * 4) as usize];

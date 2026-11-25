@@ -12,15 +12,12 @@ use crate::fx::cpu;
 use crate::fx::effects::correction::{maths, Correction};
 use crate::linalg::{cholesky, cholesky_solve, Dense};
 
-/// Patches across and down.
 pub const COLUMNS: usize = 6;
 pub const ROWS: usize = 4;
 pub const PATCHES: usize = COLUMNS * ROWS;
 
-/// The patch whose level Exposure matches: Neutral 5, the fourth grey.
 pub const NEUTRAL_5: usize = 21;
 
-/// How much more a grey counts in the fit.
 const GREY_WEIGHT: f64 = 4.0;
 
 /// The chart's patches in CIE Lab under D50, row by row from dark skin at
@@ -56,7 +53,6 @@ pub const CHART_LAB: [[f32; 3]; PATCHES] = [
 /// D50's white, the white the chart's Lab is measured against.
 const D50: [f64; 3] = [0.964_22, 1.0, 0.825_21];
 
-/// Bradford's adaptation from D50 to D65, and back.
 const BRADFORD_D50_D65: [[f64; 3]; 3] = [
     [0.955_576_6, -0.023_039_3, 0.063_163_6],
     [-0.028_289_5, 1.009_941_6, 0.021_007_7],
@@ -68,7 +64,6 @@ const BRADFORD_D65_D50: [[f64; 3]; 3] = [
     [-0.009_234_5, 0.015_043_6, 0.752_131_6],
 ];
 
-/// Linear Rec. 709 to XYZ (D65), and back.
 const RGB_XYZ: [[f64; 3]; 3] = [
     [0.412_456_4, 0.357_576_1, 0.180_437_5],
     [0.212_672_9, 0.715_152_2, 0.072_175_0],
@@ -98,12 +93,9 @@ impl Primaries {
 
 const IDENTITY: [[f64; 3]; 3] = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
 
-/// What a chart match writes and how far each patch was out.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChartMatch {
     pub rows: Rows,
-    /// Delta E 2000 of each patch, in chart order, as the picture came and
-    /// after the rows.
     pub before: [f32; PATCHES],
     pub after: [f32; PATCHES],
 }
@@ -165,8 +157,6 @@ fn face(corners: [[f32; 2]; 4]) -> impl Fn(f32, f32) -> [f32; 2] {
     let d1 = [0, 1].map(|k| p1[k] - p2[k]);
     let d2 = [0, 1].map(|k| p3[k] - p2[k]);
     let den = d1[0] * d2[1] - d2[0] * d1[1];
-    // Four corners in a line have no perspective to find; the affine part
-    // still places them.
     let (g, h) = if den.abs() > 1e-12 {
         (
             (s[0] * d2[1] - d2[0] * s[1]) / den,
@@ -180,7 +170,6 @@ fn face(corners: [[f32; 2]; 4]) -> impl Fn(f32, f32) -> [f32; 2] {
         let w = g * u + h * v + 1.0;
         [0, 1].map(|k| {
             let x = (p1[k] - p0[k] + g * p1[k]) * u + (p3[k] - p0[k] + h * p3[k]) * v + p0[k];
-            // Behind the camera: nowhere on the picture.
             if w > 1e-9 {
                 (x / w) as f32
             } else {
@@ -209,7 +198,6 @@ pub fn chart_match(
     let gain_g = cpu::tint_gain((node.tint / 100.0).clamp(-2.0, 2.0));
     let pre = [gain_r, gain_g, gain_b].map(f64::from);
 
-    // Normal equations, one output row at a time, all sharing one matrix.
     let mut ata = Dense::zero(3);
     let mut atb = [[0.0f64; 3]; 3];
     let mut read = 0;
@@ -300,7 +288,6 @@ fn mul64(m: &[[f64; 3]; 3], v: [f64; 3]) -> [f64; 3] {
     m.map(|r| r[0] * v[0] + r[1] * v[1] + r[2] * v[2])
 }
 
-/// Patch `i`'s published colour in linear Rec. 709 (D65).
 pub fn reference_rgb(i: usize) -> [f64; 3] {
     let lab = CHART_LAB.get(i).copied().unwrap_or_default().map(f64::from);
     let fy = (lab[0] + 16.0) / 116.0;
@@ -317,7 +304,6 @@ pub fn reference_rgb(i: usize) -> [f64; 3] {
     mul64(&XYZ_RGB, mul64(&BRADFORD_D50_D65, xyz50))
 }
 
-/// A linear Rec. 709 colour in Lab under D50, Bradford-adapted.
 fn lab_of(rgb: [f64; 3]) -> [f64; 3] {
     let xyz = mul64(&BRADFORD_D65_D50, mul64(&RGB_XYZ, rgb));
     let f = |t: f64| {
@@ -331,7 +317,6 @@ fn lab_of(rgb: [f64; 3]) -> [f64; 3] {
     [116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz)]
 }
 
-/// CIEDE2000 between two Lab colours (Sharma, Wu and Dalal's formulation).
 fn de2000(a: [f64; 3], b: [f64; 3]) -> f64 {
     use std::f64::consts::PI;
     let deg = |r: f64| r * 180.0 / PI;
@@ -398,7 +383,6 @@ mod tests {
     use super::*;
     use crate::grade_solve::test_support::{declared, with_rows};
 
-    /// Sharma's published pairs land on their published differences.
     #[test]
     fn delta_e_2000_matches_the_published_pairs() {
         let pairs = [
@@ -411,17 +395,10 @@ mod tests {
         }
     }
 
-    /// A chart drawn through a known cast and level, turned away from the
-    /// camera, is read, and the fit takes it back to the published colours.
-    /// A straight blend of the corners would read the far patches off their
-    /// borders.
     #[test]
     fn a_chart_through_a_known_matrix_is_recovered() {
         let skew = [[0.9, 0.12, 0.0], [0.05, 0.85, 0.1], [0.0, 0.15, 1.1]];
         let level = 0.6;
-        // Chart units (0..6 across, 0..4 down) to pixels, its right side
-        // further away, and back by the adjugate. A dark border runs between
-        // patches.
         let q: [[f64; 3]; 3] = [[90.0, 8.0, 40.0], [2.0, 95.0, 30.0], [0.08, 0.004, 1.0]];
         let to_px = |u: f64, v: f64| {
             let p = mul64(&q, [u, v, 1.0]);

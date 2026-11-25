@@ -70,14 +70,10 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('open-settings')));
       await tester.pumpAndSettle();
 
-      // General opens first. What this build *is* is no longer stated here —
-      // that is Help ▸ About Lumit now; Settings is for what you
-      // change, and a version number is not that.
       expect(find.textContaining('lumit-bridge'), findsNothing);
       expect(find.byKey(const ValueKey('settings-reset-workspace')),
           findsOneWidget);
 
-      // The engine's own readouts and buttons live on Performance.
       await tester
           .tap(find.byKey(const ValueKey('settings-page-previewAndCache')));
       await tester.pumpAndSettle();
@@ -189,8 +185,6 @@ void main() {
       expect(p.uiState.workspace.performance.diskCacheLocation,
           BridgeCacheLocation.besideProject.name);
 
-      // The custom location grows a Choose… button beside the dropdown; the
-      // others do not, because they have nothing to choose.
       expect(find.byKey(const ValueKey('settings-disk-folder')), findsNothing);
       await tester.tap(find.byKey(const ValueKey('settings-disk-location')));
       await tester.pumpAndSettle();
@@ -203,11 +197,6 @@ void main() {
       setDiskCacheLocation(location: BridgeCacheLocation.appData, folder: '');
     });
 
-    /// **Nothing was lost in the rebuild.** The window was taken apart
-    /// and put back to a new drawing with six pages instead of five, and every
-    /// control it hosted has to still be somewhere. This walks the pages and
-    /// names them: a setting dropped on the way would fail here rather than be
-    /// found missing by whoever wanted it.
     testWidgets('every setting the window hosts is on one of its pages',
         (tester) async {
       const pages = <String, List<String>>{
@@ -336,7 +325,6 @@ void main() {
         }
       }
 
-      // And the frame's own three, on every page.
       expect(find.byKey(const ValueKey('settings-search')), findsOneWidget);
       expect(find.byKey(const ValueKey('settings-reset-page')), findsOneWidget);
       expect(find.byKey(const ValueKey('settings-close')), findsOneWidget);
@@ -393,7 +381,6 @@ void main() {
 
       final dir = Directory.systemTemp.createTempSync('lumit-recover-some');
       final path = '${dir.path}/scene.lum';
-      // A real autosave, written by the engine, so the listing is genuine.
       p.state.project!.autosave(projectPath: path, keep: 3);
       expect(listAutosaves(project: path), hasLength(1));
 
@@ -423,8 +410,6 @@ void main() {
       expect(find.byKey(const ValueKey('recover-autosave')), findsOneWidget);
       expect(find.byKey(const ValueKey('recover-discard')), findsOneWidget);
 
-      // Not restoring leaves everything where it is — the copies are not
-      // deleted.
       await tester.tap(find.byKey(const ValueKey('recover-discard')));
       await tester.pumpAndSettle();
       expect(listAutosaves(project: path), hasLength(1));
@@ -485,7 +470,6 @@ void main() {
         return choice;
       }
 
-      // The filled, focused action: every change since the save.
       expect(
         await run('lumit-recover-journal', () async {
           await tester.tap(find.byKey(const ValueKey('recover-journal')));
@@ -494,7 +478,6 @@ void main() {
         RecoveryChoice.journal,
       );
 
-      // The leftmost: open the saved file as it is.
       expect(
         await run('lumit-recover-none', () async {
           await tester.tap(find.byKey(const ValueKey('recover-discard')));
@@ -502,7 +485,6 @@ void main() {
         RecoveryChoice.discard,
       );
 
-      // The close mark is no answer at all: the project opens as it was saved.
       expect(
         await run('lumit-recover-close', () async {
           await tester.tap(find.byKey(const ValueKey('recover-close')));
@@ -524,7 +506,6 @@ void main() {
 
       final p = freshProject();
       final state = p.state;
-      // The welcome screen is the window, and the question opens over it.
       await tester.pumpWidget(hostPanel(
         child: const BootGate(),
         state: state,
@@ -540,7 +521,6 @@ void main() {
         return answer;
       }
 
-      // A clean project goes at once, and quitting is not held up.
       final clean = state.project;
       state.newProject();
       await tester.pump();
@@ -548,7 +528,6 @@ void main() {
       expect(question, findsNothing);
       expect(await quit(), AppExitResponse.exit);
 
-      // With work in it, each way out asks, and Cancel changes nothing.
       state.project!.newComposition(name: 'Scene');
       final kept = state.project;
       Future<void> cancel() async {
@@ -576,8 +555,6 @@ void main() {
       await cancel();
       expect(answer, AppExitResponse.cancel);
 
-      // Save on a project with no file asks where. Backing out of that keeps
-      // the project open.
       final dir = Directory.systemTemp.createTempSync('lumit-unsaved');
       addTearDown(() => dir.deleteSync(recursive: true));
       final path = '${dir.path}/scene.lum';
@@ -592,7 +569,6 @@ void main() {
       expect(identical(state.project, kept), isTrue);
       expect(question, findsNothing);
 
-      // Saved for real, the project is on disk before it goes.
       picked = path;
       state.newProject();
       await tester.pumpAndSettle();
@@ -601,7 +577,6 @@ void main() {
       expect(identical(state.project, kept), isFalse);
       expect(File(path).existsSync(), isTrue);
 
-      // Discard lets it go, and so lets the window close.
       state.project!.newComposition(name: 'Scratch');
       tester.binding.handleRequestAppExit().then((a) => answer = a);
       await tester.pumpAndSettle();
@@ -686,7 +661,6 @@ void main() {
       // lands on the real turns settleFrb provides.
       p.state.project!.save(path: '${dir.path}/probe.lum');
       await settleFrb(tester, until: () => !p.state.project!.isDirty());
-      // As the application's own save path does once the write lands.
       p.state.notifyDocumentChanged();
       await tester.pump(const Duration(milliseconds: 600));
       expect(find.text('probe'), findsOneWidget,
@@ -695,8 +669,6 @@ void main() {
           reason: 'the save stamped the revision clean');
     });
 
-    /// The notice area: the latest message shows with its close button, and
-    /// closing it leaves the strip quiet.
     testWidgets('a notice shows in the strip until closed', (tester) async {
       final p = freshProject();
       await tester.pumpWidget(hostPanel(
@@ -720,7 +692,6 @@ void main() {
   }, skip: !engineAvailable);
 
   group('Export dialog (frb)', () {
-    /// Open the dialog over a fresh comp, in a view big enough for its frame.
     Future<void> open(
       WidgetTester tester, {
       Future<String?> Function()? picker,
@@ -758,7 +729,6 @@ void main() {
     testWidgets('the rate and span default to the comp and its work area',
         (tester) async {
       await open(tester, before: (_, comp) {
-        // A 60 fps comp with a work area over frames 60..180 (1 s .. 3 s).
         comp.setWorkArea(
           span: const BridgeSpan(
             inPoint: BridgeRational(num: 1, den: 1),
@@ -802,7 +772,6 @@ void main() {
               .onPressed !=
           null;
 
-      // An mp4: sound and a bitrate, no alpha and one depth.
       expect(live('export-audio'), isTrue);
       expect(live('export-channels'), isFalse,
           reason: 'no v1 codec in an mp4 carries alpha (docs/06 §7.4)');
@@ -827,7 +796,6 @@ void main() {
       expect(live('export-audio'), isTrue);
       expect(live('export-channels'), isFalse,
           reason: 'a sound file has no picture to put channels in');
-      // The rate and span stay whatever the format: every export has both.
       expect(find.byKey(const ValueKey('export-fps')), findsOneWidget);
       expect(find.byKey(const ValueKey('export-span')), findsOneWidget);
 
@@ -877,9 +845,6 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    /// A preset is the whole settings payload under a name: saving one lists
-    /// it, applying it fills the fields back in, and deleting it takes it off
-    /// the list. The built-ins are read-only, and Edit greys on them.
     testWidgets('a preset saves, applies and is forgotten again',
         (tester) async {
       await open(tester);
@@ -903,7 +868,6 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('export-preset-save')));
       await tester.pumpAndSettle();
 
-      // Back to a video export, then the preset puts the stills back.
       await tester.tap(find.byKey(const ValueKey('export-type-video')));
       await tester.pumpAndSettle();
       expect(find.text('H.264 video (.mp4)'), findsOneWidget);
@@ -914,7 +878,6 @@ void main() {
       expect(find.text('PNG image sequence'), findsOneWidget,
           reason: 'the preset carried the format it was saved with');
 
-      // And it can be taken off the list again.
       await tester.tap(find.byKey(const ValueKey('export-preset-more')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('export-preset-edit')));
@@ -1192,8 +1155,6 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('open-queue')));
       await tester.pumpAndSettle();
 
-      // Held over the first row, the line stands on the edge the row would
-      // land against, and nothing has moved. Only where the drag is marked.
       if (level != AnimationLevel.all) {
         final held = await tester.startGesture(tester
             .getCenter(find.byKey(const ValueKey('export-queue-item-3'))));
@@ -1259,7 +1220,6 @@ void main() {
       expect(find.byType(LumitAppView), findsNothing,
           reason: 'and the shell is not behind it');
 
-      // New project is the way straight through.
       await tester.tap(find.byKey(const ValueKey('welcome-card-new')));
       await tester.pumpAndSettle();
       expect(find.byType(LumitAppView), findsOneWidget);

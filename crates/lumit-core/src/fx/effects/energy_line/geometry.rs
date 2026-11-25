@@ -1,6 +1,3 @@
-//! The path as straight pieces in raster pixels, cut to the lit stretch, and
-//! the tiles each piece can reach.
-
 use crate::mask::MaskPolyline;
 
 /// The most pieces a frame draws. A longer path is walked with fewer, longer
@@ -28,14 +25,12 @@ pub struct Pieces {
 }
 
 impl Pieces {
-    /// Another moment's pieces after these.
     pub fn extend(&mut self, more: Pieces) {
         self.segs.extend(more.segs);
         self.along.extend(more.along);
     }
 }
 
-/// Which pieces each tile has to measure.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Bins {
     pub cols: u32,
@@ -46,7 +41,6 @@ pub struct Bins {
 }
 
 impl Bins {
-    /// The pieces the pixel at `(x, y)` measures.
     #[must_use]
     pub fn at(&self, x: u32, y: u32) -> &[u32] {
         let (c, r) = (x / TILE, y / TILE);
@@ -147,8 +141,6 @@ pub fn pieces(poly: &MaskPolyline, scale: f32, trim: [f32; 3], sample: u32, widt
     let span = ((b0 - a0) * total).max(1e-6);
     let present = (span * scale / width.max(1e-6)).clamp(0.0, 1.0);
     let edges = poly.points.len() - 1;
-    // ponytail: a path past the cap is walked every `stride` vertices, which
-    // cuts corners on a very long path. Simplify by curvature if that shows.
     let drawn = poly.arc.windows(2).filter(|a| a[1] > a[0]).count();
     let stride = drawn.div_ceil(MAX_PIECES).max(1);
     for &(wa, wb, into) in &windows {

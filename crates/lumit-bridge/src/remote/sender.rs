@@ -1,8 +1,3 @@
-//! The sender's side of a remote export: choosing a computer, working out
-//! the project's files, offering the job, following it, and landing the
-//! file that comes back. And what either computer does to a job it has:
-//! cancel it, hold it, forget it.
-
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -22,29 +17,21 @@ use crate::api::export::{BridgeCaptionsOut, BridgeExportSpec};
 use crate::api::remote::{BridgeExportNewsKind, BridgeRemoteFit};
 use crate::api::BridgeError;
 
-/// How often the sender asks the worker how a job stands.
 const ASK_EVERY: Duration = Duration::from_secs(3);
 
-/// How often the sender asks again for a finished export's files.
 const WANT_EVERY: Duration = Duration::from_secs(5);
 
-/// What a job's files are worked out from.
 pub(super) enum Snapshot {
-    /// The project as it stood when it was sent.
     Project {
         doc: Arc<Document>,
         project_dir: PathBuf,
         bakes: Option<PathBuf>,
     },
-    /// The snapshot of an earlier job, sent again.
     Job(Uuid),
-    /// Its own snapshot, after a restart.
     Kept,
 }
 
 impl Remote {
-    // --- Sending -----------------------------------------------------------
-
     pub(super) fn send(
         self: &Arc<Self>,
         comp: &CompositionReference,
@@ -139,7 +126,6 @@ impl Remote {
         Ok(id.to_string())
     }
 
-    /// Keep a new sent job, whose files are being worked out.
     fn add(&self, job: Job) {
         let id = job.job;
         if let Ok(mut started) = self.job_started.lock() {
@@ -181,7 +167,6 @@ impl Remote {
             .ok_or(BridgeError::NoComputer)
     }
 
-    /// Work out a sent job's files and their hashes, on the disk thread.
     pub(super) fn prepare(self: &Arc<Self>, id: Uuid, from: Snapshot) {
         let Some(job) = self.job(id) else {
             return;
@@ -237,7 +222,6 @@ impl Remote {
                 }
             },
         };
-        // Hashed, saying how far it has got.
         let size: u64 = found
             .iter()
             .filter_map(|f| std::fs::metadata(&f.from).ok())
@@ -301,7 +285,6 @@ impl Remote {
         });
     }
 
-    /// Keep what the sender holds for `job`, by the item each is asked for as.
     fn hold(&self, id: Uuid, listed: &Manifest, manifest: &Piece, document: &Piece) {
         let dir = job::folder(&self.root, id);
         let mut holding: HashMap<Uuid, (PathBuf, u64)> = listed
@@ -322,13 +305,11 @@ impl Remote {
         }
     }
 
-    /// What the sender holds for `job`, for its link to say.
     pub(super) fn holds(&self, id: Uuid) -> Vec<lumit_share::bulk::Held> {
         let holding = self.holding.lock().ok().and_then(|h| h.get(&id).cloned());
         holding.map(|h| end::holds(&h)).unwrap_or_default()
     }
 
-    /// Move a sent job on, once a turn.
     pub(super) fn drive(self: &Arc<Self>, job: &Job) {
         let id = job.job;
         // As it stands now, which may have ended earlier in this turn.
@@ -430,7 +411,6 @@ impl Remote {
         })
     }
 
-    /// The worker answered an offer.
     pub(super) fn offered(self: &Arc<Self>, id: Uuid, body: Option<&Value>, error: &str) {
         if !error.is_empty() {
             return self.fail(id, error);
@@ -443,14 +423,12 @@ impl Remote {
         });
     }
 
-    /// The other computer is away: a job waiting on it says so.
     pub(super) fn away(&self, what: &For) {
         if let For::Offer(id) = what {
             self.progress(*id, |j| j.stage = Stage::Away);
         }
     }
 
-    /// End a job of this computer's as failed, as the other computer said.
     pub(super) fn fail(&self, id: Uuid, error: &str) {
         let Some(j) = self.job(id).filter(|j| !j.stage.ended()) else {
             return;
@@ -472,7 +450,6 @@ impl Remote {
         }
     }
 
-    /// The worker said how a job stands.
     pub(super) fn status(self: &Arc<Self>, id: Uuid, body: Option<&Value>, error: &str) {
         if error == "not_found" {
             // A kept file it no longer knows of has gone with it.
@@ -496,8 +473,6 @@ impl Remote {
         self.seen(id, body);
     }
 
-    /// Follow the room's list: the worker's queue items of jobs sent from
-    /// here move them on as an answer to a status does.
     pub(super) fn follow_room(self: &Arc<Self>) {
         let seen: Vec<(Uuid, Value)> = {
             let Ok(room) = self.room.lock() else {
@@ -607,8 +582,6 @@ impl Remote {
         }
     }
 
-    /// A file of a sent job arrived: the list of what its export wrote, or
-    /// one of those files. On the disk thread.
     pub(super) fn land(self: &Arc<Self>, id: Uuid, item: Uuid, path: &Path) {
         let Some(job) = self.job(id).filter(|j| !j.stage.ended()) else {
             let _ = std::fs::remove_file(path);
@@ -632,7 +605,6 @@ impl Remote {
         if !moved {
             return self.give_up(id, "failed");
         }
-        // A file of its own is named in the notice as it landed.
         let alone = job.landing.len() == 1 && job.landed.is_empty();
         let left = self.update(id, |j| {
             j.landing.retain(|(i, ..)| *i != item);
@@ -650,7 +622,6 @@ impl Remote {
         }
     }
 
-    /// The list of what a finished export wrote: where each file goes here.
     fn listed_out(&self, job: &Job, list: &Path) {
         let text = lumit_ingress::read_to_string_capped(list, 16 << 20).ok();
         let list: Option<Value> = text.and_then(|t| serde_json::from_str(&t).ok());
@@ -720,7 +691,6 @@ impl Remote {
         }
     }
 
-    /// Every file of a sent job is here.
     fn landed_here(&self, id: Uuid) {
         let Some(job) = self.job(id) else {
             return;
@@ -743,7 +713,6 @@ impl Remote {
         }
     }
 
-    /// Throw away what came back of a job that ended before it all had.
     pub(super) fn forget_landing(&self, job: &Job) {
         for (_, to, _) in &job.landing {
             let room = end::landing_room(to, job.job);
@@ -754,8 +723,6 @@ impl Remote {
         }
     }
 
-    /// Send a job once more: the same snapshot and settings, to `to` or the
-    /// same computer.
     pub(super) fn again(
         self: &Arc<Self>,
         id: Uuid,
@@ -894,7 +861,6 @@ impl Remote {
         Ok(())
     }
 
-    /// The worker answered a fetch: where it now listens for this job.
     pub(super) fn fetched(&self, id: Uuid, body: Option<&Value>, error: &str) {
         if !error.is_empty() {
             return self.fail(id, error);
@@ -909,7 +875,6 @@ impl Remote {
     }
 }
 
-/// Where the worker said a job's link listens.
 fn listed_addresses(body: Option<&Value>) -> Vec<String> {
     let listed = body
         .and_then(|b| b.get("addresses"))
@@ -918,13 +883,11 @@ fn listed_addresses(body: Option<&Value>) -> Vec<String> {
     listed.take(8).map(str::to_owned).collect()
 }
 
-/// A document from a job's snapshot, as this Lumit reads one.
 pub(super) fn read_document(path: &Path) -> Option<Document> {
     let text = lumit_ingress::read_to_string_capped(path, files::DOCUMENT_MOST).ok()?;
     serde_json::from_str(&text).ok()
 }
 
-/// The files a manifest lists, to hash again. `None` when it can't be read.
 fn listed(manifest: &Path) -> Option<Vec<files::Found>> {
     let found = read_manifest(manifest)?
         .files
@@ -938,7 +901,6 @@ fn listed(manifest: &Path) -> Option<Vec<files::Found>> {
     Some(found.collect())
 }
 
-/// A job's manifest.
 pub(super) fn read_manifest(path: &Path) -> Option<Manifest> {
     let text = lumit_ingress::read_to_string_capped(path, files::MANIFEST_MOST).ok()?;
     serde_json::from_str(&text).ok()

@@ -156,7 +156,6 @@ fn winding(path: &lumit_core::mask::BezierPath) -> f64 {
         .sum()
 }
 
-/// A gradient fill's ramp, or a gradient stroke's first colour.
 fn gradient(
     cx: &mut Cx<'_>,
     here: &ItemPath,
@@ -248,7 +247,6 @@ struct Ramp {
 }
 
 impl Ramp {
-    /// The stops in `flat`, `count` of them colours and the rest opacities.
     fn of(flat: &[f64], count: usize) -> Ramp {
         let split = (count * 4).min(flat.len());
         let (c, a) = flat.split_at(split);

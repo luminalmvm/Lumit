@@ -21,7 +21,6 @@ import 'package:flutter/foundation.dart';
 import '../src/rust/api/cache.dart';
 import '../src/rust/api/state.dart';
 
-/// The numbers from the last measured frame, and the switch that asks for them.
 class RenderTimings extends ChangeNotifier {
   /// How the engine is asked to start or stop measuring. Injectable so the
   /// rules below can be tested without a bridge library loaded; the default is
@@ -146,7 +145,6 @@ class RenderTimings extends ChangeNotifier {
 /// them come from the arb (`stagePlan`…`stagePresent`) — this is only which.
 enum RenderStageKind { plan, decode, build, composite, present }
 
-/// One stage's share of the measured frame.
 class RenderStageMs {
   final RenderStageKind kind;
   final double ms;

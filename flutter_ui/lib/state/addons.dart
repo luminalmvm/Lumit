@@ -47,12 +47,9 @@ const String addonCatalogueUrl =
 /// every model needs; a model pack is one model and its licence.
 enum AddonKind { runtime, model }
 
-/// What the engine says about the model runtime.
 enum RuntimeState {
-  /// Nothing is installed.
   missing,
 
-  /// The files are there and nothing has asked for them yet.
   present,
 
   /// It loaded since Lumit started, and the provider and version are known.
@@ -70,29 +67,22 @@ enum AddonStage { idle, checking, downloading, verifying, installing, done, fail
 /// Why the last thing asked for did not happen. Turned into a sentence by the
 /// page, never held here as one.
 enum AddonFailure {
-  /// The catalogue or a file could not be fetched.
   network,
 
-  /// The catalogue came back as something this build cannot read.
   catalogue,
 
   /// A hand-picked `addon.json` could not be read, or the files it names are
   /// not beside it.
   manifest,
 
-  /// The addon has nothing for this machine.
   unsupported,
 
-  /// A file arrived at the wrong length.
   incomplete,
 
-  /// A file arrived with the wrong digest.
   checksum,
 
-  /// Something is already installing.
   busy,
 
-  /// The engine refused, or there is nowhere to install to.
   refused,
 
   /// The engine would not delete the folder, which is what happens when the
@@ -100,7 +90,6 @@ enum AddonFailure {
   removeRefused,
 }
 
-/// What the engine knows about the model runtime, as the page draws it.
 @immutable
 class RuntimeStatus {
   final RuntimeState state;
@@ -124,7 +113,6 @@ class RuntimeStatus {
   });
 }
 
-/// One addon: a row in the catalogue, or one the engine has found installed.
 @immutable
 class Addon {
   final String id;
@@ -143,7 +131,6 @@ class Addon {
   /// that is when the user is deciding. Empty for most packs.
   final String notes;
 
-  /// What the whole addon weighs, for the size on the row.
   final int sizeBytes;
 
   /// What a model pack does: `depth`, `matte`, `segmentation`, `synthesis`
@@ -202,10 +189,8 @@ class Addon {
   static String _text(Object? value) => value is String ? value : '';
 }
 
-/// The engine's scan of the addons folder.
 typedef AddonLister = List<Addon> Function();
 
-/// Whether the engine would take this manifest, given as JSON text.
 typedef AddonAcceptor = bool Function(String manifest);
 
 /// Handing the engine a manifest and the files it names, for it to unpack and
@@ -237,8 +222,6 @@ class AddonService extends ChangeNotifier {
   final TextFetcher _fetch;
   final AssetDownloader _download;
 
-  /// Which platform block of a manifest this machine reads
-  /// (docs/impl/addons.md §4). Set outright in tests.
   final String platformKey;
 
   AddonService({
@@ -271,7 +254,6 @@ class AddonService extends ChangeNotifier {
   String? _folder;
   bool _cancelRequested = false;
 
-  /// What the catalogue offers, once it has been read. Empty until then.
   List<Addon> get entries => _entries;
 
   /// What the engine found in the addons folder, as of the last [refresh].
@@ -282,35 +264,29 @@ class AddonService extends ChangeNotifier {
 
   AddonStage get stage => _stage;
 
-  /// Why the last thing asked for did not happen, or null.
   AddonFailure? get failure => _failure;
 
   /// How far the download has got, 0 to 1. Zero at every other stage.
   double get fraction => _fraction;
 
-  /// Which addon is being installed, or null.
   String? get working => _working;
 
   /// The addons folder, for the row that reveals it. Read on [refresh] rather
   /// than on demand, because the page must not cross the bridge to draw itself.
   String? get folder => _folder;
 
-  /// Whether something is in flight, and so every button is unpressable.
   bool get busy =>
       _stage == AddonStage.checking ||
       _stage == AddonStage.downloading ||
       _stage == AddonStage.verifying ||
       _stage == AddonStage.installing;
 
-  /// The installed runtime, or null when there is none.
   Addon? get runtimeInstalled => _firstOrNull(
       _installed.where((a) => a.kind == AddonKind.runtime));
 
-  /// The catalogue's runtime entry, or null until the catalogue has been read.
   Addon? get runtimeOffered =>
       _firstOrNull(_entries.where((a) => a.kind == AddonKind.runtime));
 
-  /// The model packs that are installed.
   List<Addon> get packs =>
       [for (final a in _installed) if (a.kind != AddonKind.runtime) a];
 
@@ -334,7 +310,6 @@ class AddonService extends ChangeNotifier {
     return here == null || here.version != offer.version || here.broken;
   }
 
-  /// The installed addon with this id, or null.
   Addon? installedById(String id) =>
       _firstOrNull(_installed.where((a) => a.id == id));
 
@@ -395,8 +370,6 @@ class AddonService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Install the catalogue entry called [id]: every file it names, verified,
-  /// then handed to the engine with the manifest it came from.
   Future<void> install(String id) async {
     if (busy) {
       _refuse(AddonFailure.busy);
@@ -505,7 +478,6 @@ class AddonService extends ChangeNotifier {
     _cancelRequested = true;
   }
 
-  /// The whole install: each file down, each file checked, then the engine.
   Future<void> _fetchAndInstall(
     Addon entry,
     Map<String, dynamic> manifest,
@@ -619,7 +591,6 @@ class AddonService extends ChangeNotifier {
     refresh();
   }
 
-  /// Back to resting, with nothing to report: what a cancelled download leaves.
   void _idle() {
     _stage = AddonStage.idle;
     _fraction = 0;

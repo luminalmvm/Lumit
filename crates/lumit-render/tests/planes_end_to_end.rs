@@ -35,13 +35,9 @@ use uuid::Uuid;
 const COMP: u32 = 64;
 /// The model's own raster, deliberately not the comp's: the draw resamples.
 const PLANE: u32 = 16;
-/// Well inside the plane's far half.
 const FAR: u32 = 12;
-/// Well inside its near half.
 const NEAR: u32 = 52;
 
-/// A white layer wearing a Depth effect, with `view` and `invert` as asked, and
-/// the effect's own id so a plane can be filed under it.
 fn project(view: u32, invert: bool) -> (Arc<Document>, Uuid, Uuid) {
     let white = Uuid::now_v7();
     let mut doc = Document::new();
@@ -139,8 +135,6 @@ fn comp_of(layers: Vec<Layer>) -> Composition {
     }
 }
 
-/// A plane that is the bottom of its range on the left half of the frame and
-/// the top on the right.
 fn half_plane() -> PlaneOut {
     let mut data = Vec::with_capacity((PLANE as usize) * (PLANE as usize) * 2);
     for _ in 0..PLANE {
@@ -163,7 +157,6 @@ fn px(rgba: &[u8], w: u32, x: u32) -> [u8; 4] {
     [rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]]
 }
 
-/// File `half_plane` for source frame 0 under `instance`.
 fn publish(instance: Uuid, frame: i64) {
     let run = lumit_render::planes::run_from_planes(
         60.0,
@@ -182,7 +175,6 @@ fn a_depth_plane_is_drawn_and_the_effect_passes_through_without_one() {
         return;
     };
 
-    // Nothing analysed yet: the effect is a passthrough and the layer is whole.
     lumit_render::planes::clear();
     let (doc, comp, instance) = project(0, false);
     let (before, w, _) = r.render_rgba(&doc, comp, 0, 1.0).expect("the plain render");
@@ -192,7 +184,6 @@ fn a_depth_plane_is_drawn_and_the_effect_passes_through_without_one() {
         "with nothing analysed the Depth effect changes no pixel"
     );
 
-    // The plane, filed for source frame 0 under this effect instance.
     publish(instance, 0);
     assert_eq!(lumit_render::planes::span(instance), Some((0, 0)));
 
@@ -219,8 +210,6 @@ fn a_depth_plane_is_drawn_and_the_effect_passes_through_without_one() {
     lumit_render::planes::clear();
 }
 
-/// A red layer wearing a Remove background effect, with `view` and `invert` as
-/// asked, and the effect's own id so a matte can be filed under it.
 fn cutting(view: u32, invert: bool) -> (Arc<Document>, Uuid, Uuid) {
     let red = Uuid::now_v7();
     let mut doc = Document::new();
@@ -252,8 +241,6 @@ fn cutting(view: u32, invert: bool) -> (Arc<Document>, Uuid, Uuid) {
     (Arc::new(doc), comp_id, instance)
 }
 
-/// A coverage that is nothing on the left half of the frame and all of the
-/// subject on the right.
 fn half_matte() -> PlaneOut {
     let mut data = Vec::with_capacity((PLANE as usize) * (PLANE as usize));
     for _ in 0..PLANE {
@@ -269,7 +256,6 @@ fn half_matte() -> PlaneOut {
     }
 }
 
-/// File `half_matte` for source frame 0 under `instance`.
 fn publish_matte(instance: Uuid) {
     let run = lumit_render::planes::run_from_planes(
         60.0,
@@ -281,14 +267,6 @@ fn publish_matte(instance: Uuid) {
     lumit_render::planes::publish(instance, run);
 }
 
-/// **Composite view cuts the layer by the matte and Matte view draws the matte
-/// itself** (docs/impl/addons.md §6.1, §11 test 8).
-///
-/// The layer is red and the coverage is nothing on the left and everything on
-/// the right. Composited, the left half of the layer is gone and the right half
-/// is the red it was; in Matte view the picture is the coverage as a grey one,
-/// black on the left and white on the right; Invert swaps which half survives;
-/// and with nothing analysed the effect changes no pixel.
 #[test]
 fn composite_view_cuts_the_layer_and_matte_view_draws_the_coverage() {
     let Ok(mut r) = HeadlessRenderer::shared() else {
@@ -296,7 +274,6 @@ fn composite_view_cuts_the_layer_and_matte_view_draws_the_coverage() {
         return;
     };
 
-    // Nothing analysed yet: the layer is whole.
     lumit_render::planes::clear();
     let (doc, comp, instance) = cutting(0, false);
     let (before, w, _) = r.render_rgba(&doc, comp, 0, 1.0).expect("the plain render");
@@ -320,7 +297,6 @@ fn composite_view_cuts_the_layer_and_matte_view_draws_the_coverage() {
         "and the half it covers is the layer's own red"
     );
 
-    // Inverted: the background is what is kept.
     lumit_render::planes::clear();
     let (doc, comp, instance) = cutting(0, true);
     publish_matte(instance);
@@ -334,7 +310,6 @@ fn composite_view_cuts_the_layer_and_matte_view_draws_the_coverage() {
     );
     assert_eq!(px(&turned, w, NEAR)[0], 0);
 
-    // Matte view: the coverage itself, as an opaque grey picture.
     lumit_render::planes::clear();
     let (doc, comp, instance) = cutting(1, false);
     publish_matte(instance);
@@ -348,17 +323,6 @@ fn composite_view_cuts_the_layer_and_matte_view_draws_the_coverage() {
     lumit_render::planes::clear();
 }
 
-/// **A layer read as another effect's matte source runs its own analysis
-/// effects** (docs/impl/addons.md §13, and §11 test 7's second half).
-///
-/// A referenced layer's stack used to run with every side carriage empty, so a
-/// Depth or a Roto brush on the layer somebody pointed a Matte row at rendered
-/// as a passthrough and the consumer read the plain footage instead. Here the
-/// source layer is a white solid wearing a Depth effect whose plane is black on
-/// the left and white on the right, and Set matte reads its luminance: with the
-/// carriage threaded through, the consuming layer is cut away on the left and
-/// kept on the right. Without it the source reads as plain white and the
-/// consumer is untouched.
 #[test]
 fn a_layer_read_as_a_matte_source_draws_its_own_plane() {
     let Ok(mut r) = HeadlessRenderer::shared() else {
@@ -412,7 +376,6 @@ fn a_layer_read_as_a_matte_source_draws_its_own_plane() {
     let mut consumer = layer("the consumer", LayerKind::Solid { def: red });
     consumer.effects = vec![set_matte];
 
-    // The consumer on top, the depth layer under it and therefore behind it.
     let comp = comp_of(vec![consumer, source]);
     let comp_id = comp.id;
     doc.items.push(ProjectItem::Composition(comp));
@@ -420,11 +383,6 @@ fn a_layer_read_as_a_matte_source_draws_its_own_plane() {
 
     publish(instance, 0);
     let (cut, w, _) = r.render_rgba(&doc, comp_id, 0, 1.0).expect("the render");
-    // Where the plane is white the consumer is kept; where it is black the
-    // consumer is cut away and the depth layer behind it shows, which on its
-    // own far half is black. Without the carriage the source would read as
-    // plain white everywhere, the consumer would be kept everywhere, and the
-    // far half would be red.
     assert_eq!(
         px(&cut, w, NEAR),
         [255, 0, 0, 255],
@@ -439,9 +397,6 @@ fn a_layer_read_as_a_matte_source_draws_its_own_plane() {
     lumit_render::planes::clear();
 }
 
-/// A node graph whose picture is a red solid `size` pixels square, read
-/// through a Transform box at its defaults into a Remove background box, and
-/// that box's own id so a matte can be filed under it.
 fn graph_cutting(size: u32) -> (Arc<Document>, Uuid, Uuid) {
     use lumit_core::comp_graph::{CompGraph, GraphEdge, GraphNode};
 
@@ -520,7 +475,6 @@ fn a_box_in_a_node_graph_cuts_by_the_matte_of_the_file_behind_it() {
         return;
     };
 
-    // Nothing analysed yet: the box changes no pixel.
     lumit_render::planes::clear();
     let (doc, comp, instance) = graph_cutting(COMP);
     let (before, w, _) = r.render_rgba(&doc, comp, 0, 1.0).expect("the plain render");
@@ -539,8 +493,6 @@ fn a_box_in_a_node_graph_cuts_by_the_matte_of_the_file_behind_it() {
         "and the half it covers is the solid's own red"
     );
 
-    // A solid half the frame wide: it sits from a quarter to three quarters of
-    // the way across, and its own left half is what goes.
     lumit_render::planes::clear();
     let (doc, comp, instance) = graph_cutting(COMP / 2);
     publish_matte(instance);
@@ -585,14 +537,6 @@ impl lumit_render::planes::PlaneModel for SixthFrame {
     }
 }
 
-/// **Remove background on a Precomp layer reads the nested comp and cuts by
-/// the frame of it the layer is showing.**
-///
-/// Analyse used to refuse anything but a footage layer, so an effect put on a
-/// precomp did nothing. Here the nested comp is a red solid twelve frames
-/// long, the layer showing it starts half a second into the outer comp, and
-/// the model covers the right half of nested frame 5 alone. That frame is on
-/// screen at outer frame 35 and at no other.
 #[test]
 fn a_precomp_layer_is_cut_by_the_matte_of_its_nested_comp() {
     let Ok(mut r) = HeadlessRenderer::shared() else {

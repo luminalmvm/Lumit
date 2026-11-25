@@ -1,7 +1,3 @@
-// The Grade panel on a node that isn't a Correction: a 0.11 Colour balance, a
-// LUT, a Film. Its own rows, drawn by Effect controls' row, so every node of
-// a grade can be worked here. A CDL lays out as slope, offset and power, and
-// the Colour warper shows its mesh.
 
 part of 'grade_panel_frb.dart';
 
@@ -67,7 +63,6 @@ mixin _GradeGeneric on _GradeModel, _GradePrimaries {
     );
   }
 
-  /// A choice row as a segmented control, one step a press.
   Widget _choiceRow(LumitTheme t, String id, bool enabled) {
     final options = switch (_kind(id)) {
       BridgeParamKind_Choice(:final options) => options,
@@ -118,9 +113,6 @@ mixin _GradeGeneric on _GradeModel, _GradePrimaries {
     );
   }
 
-  // --- CDL -----------------------------------------------------------------------
-
-  /// Slope, offset and power as a number a channel, then saturation and mix.
   Widget _cdlPage(LumitTheme t, Widget heading, bool enabled) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -179,8 +171,6 @@ mixin _GradeGeneric on _GradeModel, _GradePrimaries {
         ),
       );
 
-  // --- Colour warper -------------------------------------------------------------
-
   List<Offset> get _warperMoves => switch (_value('points')) {
         BridgeEffectValue_Shape(:final field0) => [
             for (final p in field0)
@@ -194,7 +184,6 @@ mixin _GradeGeneric on _GradeModel, _GradePrimaries {
         for (final m in moves) Float32List.fromList([m.dx, m.dy])
       ]);
 
-  /// The mesh with its rows beside it, or under it in a narrow pane.
   Widget _warperPage(LumitTheme t, Widget heading, bool enabled) {
     final hues = _choice('resolution') == 1 ? 8 : 6;
     return Column(

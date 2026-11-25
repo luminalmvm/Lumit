@@ -33,20 +33,16 @@ use crate::{
     session::{Feed, Held, Place, Prefer, Session},
 };
 
-/// An open Whisper.
 #[derive(Debug)]
 pub struct Whisper {
     encoder: Session,
     decoder: Session,
     names: manifest::Whisper,
-    /// What the pack says about itself.
     pub settings: Settings,
-    /// Its word pieces.
     pub tokens: Tokens,
     mel: Mel,
 }
 
-/// The decoder's cache between steps.
 #[derive(Debug)]
 pub struct Cache {
     /// Key then value, per layer, one row per piece so far.
@@ -162,12 +158,6 @@ impl Whisper {
         Ok((cache, rows))
     }
 
-    /// One more piece through the cache. Hands back the scores for the piece
-    /// after it.
-    ///
-    /// # Errors
-    ///
-    /// Whatever the run refuses.
     pub fn step(&mut self, hidden: &Held, cache: &mut Cache, id: u32) -> Result<Vec<f32>, MlError> {
         let ids = [i64::from(id)];
         let flag = [true];
@@ -256,7 +246,6 @@ impl Whisper {
         Ok(matrices)
     }
 
-    /// One run of the decoder over a whole sequence with an empty cache.
     fn run_whole(
         &mut self,
         hidden: &Held,

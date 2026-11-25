@@ -1,8 +1,5 @@
 use super::*;
 
-/// An old flare's glow and streak draw exactly what they drew, about the
-/// middle of the picture it runs on, and its ghosts land where they were. One
-/// whose rows move keeps them, and they go on drawing the same.
 #[test]
 fn a_version_1_sprite_flare_carries_over() {
     use crate::anim::{Keyframe, Property, SideInterp};
@@ -32,7 +29,6 @@ fn a_version_1_sprite_flare_carries_over() {
             extra: serde_json::Map::new(),
         });
     }
-    // The same flare with its glow keyed, 1.2 halfway through a second.
     let mut moving = e.clone();
     for p in &mut moving.params {
         if p.id == "glow_intensity" {
@@ -77,7 +73,6 @@ fn a_version_1_sprite_flare_carries_over() {
     );
     assert!((d.elements[2].num("place") - 1.8).abs() < 1e-6);
 
-    // Without the ghosts, the new drawing is the old formula.
     let matches_v1 = |d: &Design| {
         let only: Vec<Element> = (d.elements.iter())
             .filter(|el| el.kind != Kind::Ghost)
@@ -110,8 +105,6 @@ fn a_version_1_sprite_flare_carries_over() {
     };
     matches_v1(&d);
 
-    // A keyed or wired row keeps every old row, drawn in front of an empty
-    // design.
     for kept in [&moving, &wired] {
         assert!(V1_PARAMS.iter().all(|row| kept.param(row.id).is_some()));
         assert_eq!(SpriteFlareDef.derived(kept).len(), V1_PARAMS.len());
@@ -132,7 +125,6 @@ fn a_version_1_sprite_flare_carries_over() {
     matches_v1(&with_v1_rows(kept, op.params));
 }
 
-/// Mask points lights each corner of the mask, where it is at that moment.
 #[test]
 fn mask_points_light_each_corner_as_the_mask_moves() {
     use crate::mask::{Mask, PathKeyframe};
@@ -180,7 +172,6 @@ fn mask_points_light_each_corner_as_the_mask_moves() {
     );
     let get = |id| pushed.iter().find(|(k, _)| *k == id).map(|(_, v)| *v);
     assert_eq!(get(SpriteFlare::DERIVED_LIGHT_COUNT), Some(Value::Int(4)));
-    // Halfway between the keys, half the 40 px move.
     assert_eq!(
         get(SpriteFlare::DERIVED_LIGHTS[0]),
         Some(Value::Vec4([120.0, 50.0, 1.0, 1.0]))

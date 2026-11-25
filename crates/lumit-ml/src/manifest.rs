@@ -52,13 +52,11 @@ const PLATFORM_KEYS: [&str; 5] = [
     "any",
 ];
 
-/// Which of the two things an addon is (§2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Kind {
     /// ONNX Runtime and its provider libraries. Exactly one may be installed.
     Runtime,
-    /// One analysis model, with its licence and its tensor contract.
     Model,
 }
 
@@ -67,17 +65,11 @@ pub enum Kind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Task {
-    /// The frame between two real ones, for Retime's Flow.
     Synthesis,
-    /// How far away every pixel is.
     Depth,
-    /// Coverage: how much of each pixel is the subject.
     Matte,
-    /// The thing that was clicked on, traced.
     Segmentation,
-    /// The words somebody said, with when they said them.
     Speech,
-    /// Speech kept and everything else turned down.
     Voice,
 }
 
@@ -94,11 +86,9 @@ impl fmt::Display for Task {
     }
 }
 
-/// How one download becomes files on disk.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Unpack {
-    /// The download is the file. It is copied to `dest`.
     File,
     /// The download is a zip, and only the named entries are taken out of it.
     Zip,
@@ -108,7 +98,6 @@ pub enum Unpack {
     TarGz,
 }
 
-/// One file the installer fetches and places.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Download {
     /// Where the catalogue says the bytes are. Read by the download side,
@@ -119,7 +108,6 @@ pub struct Download {
     pub sha256: String,
     /// The size in bytes, checked with the digest and again on every scan.
     pub size: u64,
-    /// Copied whole, or opened as an archive.
     pub unpack: Unpack,
     /// The file name inside the addon folder, for `unpack: file`.
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -130,7 +118,6 @@ pub struct Download {
     pub entries: BTreeMap<String, String>,
 }
 
-/// What one platform needs downloading.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Platform {
     /// Unpacked in the order written, so a later entry may overwrite an
@@ -138,7 +125,6 @@ pub struct Platform {
     pub downloads: Vec<Download>,
 }
 
-/// How a depth model's numbers are to be read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum DepthKind {
@@ -176,7 +162,6 @@ impl Default for Normalise {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Rife {
-    /// The `.onnx` file inside the addon folder.
     pub file: String,
     /// The earlier frame, `[1, 3, H, W]` RGB 0..1.
     pub img0: String,
@@ -207,7 +192,6 @@ impl Default for Rife {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DepthAnything {
-    /// The `.onnx` file inside the addon folder.
     pub file: String,
     /// The frame, `[1, 3, h, w]`, normalised.
     pub input: String,
@@ -217,10 +201,8 @@ pub struct DepthAnything {
     pub size: u32,
     /// Both sides are then rounded to a multiple of this.
     pub multiple: u32,
-    /// How the input is normalised.
     #[serde(flatten)]
     pub normalise: Normalise,
-    /// How to read what comes back.
     pub output_kind: DepthKind,
 }
 
@@ -243,7 +225,6 @@ impl Default for DepthAnything {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Rvm {
-    /// The `.onnx` file inside the addon folder.
     pub file: String,
     /// The frame, `[1, 3, H, W]` 0..1.
     pub src: String,
@@ -277,7 +258,6 @@ impl Default for Rvm {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Birefnet {
-    /// The `.onnx` file inside the addon folder.
     pub file: String,
     /// The frame, `[1, 3, size, size]`, normalised.
     pub input: String,
@@ -285,7 +265,6 @@ pub struct Birefnet {
     pub output: String,
     /// The square the frame is resized to.
     pub size: u32,
-    /// How the input is normalised.
     #[serde(flatten)]
     pub normalise: Normalise,
 }
@@ -307,9 +286,7 @@ impl Default for Birefnet {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Sam2 {
-    /// The encoder `.onnx` file inside the addon folder.
     pub encoder: String,
-    /// The decoder `.onnx` file inside the addon folder.
     pub decoder: String,
     /// The frame the encoder takes, `[1, 3, size, size]`, normalised.
     pub image: String,
@@ -329,9 +306,7 @@ pub struct Sam2 {
     pub masks: String,
     /// How good the model thinks each of the three is, `[1, 3]`.
     pub iou: String,
-    /// The square the frame is resized to.
     pub size: u32,
-    /// How the input is normalised.
     #[serde(flatten)]
     pub normalise: Normalise,
 }
@@ -366,7 +341,6 @@ impl Default for Sam2 {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Whisper {
-    /// The encoder `.onnx` file inside the addon folder.
     pub encoder: String,
     /// The merged decoder `.onnx` file, the one with and without a cache.
     pub decoder: String,
@@ -461,19 +435,13 @@ impl Default for Whisper {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "arch", rename_all = "kebab-case")]
 pub enum Arch {
-    /// Frame synthesis, RIFE.
     Rife(Rife),
-    /// Depth, Depth Anything.
     DepthAnything(DepthAnything),
-    /// Matte, Robust Video Matting.
     Rvm(Rvm),
-    /// Matte, BiRefNet.
     Birefnet(Birefnet),
-    /// Segmentation, SAM 2.
     Sam2(Sam2),
     /// Speech, Whisper. Boxed, because it names far more than the others.
     Whisper(Box<Whisper>),
-    /// Voice, DeepFilterNet.
     DeepFilter(deep_filter::DeepFilter),
 }
 
@@ -492,7 +460,6 @@ impl Arch {
         }
     }
 
-    /// The files inside the addon folder this family names.
     #[must_use]
     pub fn files(&self) -> Vec<&str> {
         match self {
@@ -519,40 +486,30 @@ impl Arch {
     }
 }
 
-/// The `model` block of a pack's manifest.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Model {
     /// What the pack does, and what a control binds to.
     pub task: Task,
-    /// Which family it is, and its tensors.
     #[serde(flatten)]
     pub arch: Arch,
 }
 
-/// One addon's `addon.json`, whole.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Manifest {
-    /// The manifest format. [`FORMAT`] is what this build reads.
     pub format: u32,
     /// `[a-z0-9-]+`, and the folder name.
     pub id: String,
-    /// Runtime or model.
     pub kind: Kind,
-    /// What the page calls it.
     pub name: String,
-    /// The addon's own version, shown beside the name.
     pub version: String,
-    /// One line saying what it does.
     #[serde(default)]
     pub summary: String,
     /// An SPDX expression, or a short name with [`Manifest::licence_url`]
     /// beside it. Both are shown.
     #[serde(default)]
     pub licence: String,
-    /// Where the licence can be read.
     #[serde(default)]
     pub licence_url: String,
-    /// Where the model itself came from.
     #[serde(default)]
     pub homepage: String,
     /// The download size the page shows, in bytes.
@@ -561,7 +518,6 @@ pub struct Manifest {
     /// Addon ids this one needs; today always the runtime.
     #[serde(default)]
     pub requires: Vec<String>,
-    /// What to fetch, per platform key.
     pub platforms: BTreeMap<String, Platform>,
     /// The model block. Present for a pack, absent for the runtime.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -601,7 +557,6 @@ impl Manifest {
         out
     }
 
-    /// The task this pack does, or `None` for the runtime.
     #[must_use]
     pub fn task(&self) -> Option<Task> {
         self.model.as_ref().map(|model| model.task)

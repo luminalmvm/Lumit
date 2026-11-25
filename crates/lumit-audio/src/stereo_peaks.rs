@@ -9,10 +9,8 @@ use lumit_media::audio::SoundSource;
 
 use crate::peaks::{peak_path, PeakPyramid, PyramidBuilder};
 
-/// Frames read a stretch at a time while building.
 const BUILD_FRAMES: usize = 1 << 15;
 
-/// Where one channel's peak file goes, beside the mixed one.
 fn channel_path(
     dir: &Path,
     fp: &lumit_media::Fingerprint,
@@ -91,7 +89,6 @@ pub fn load_or_build_channels(
         return None;
     }
     if let (Some(dir), Some(fp)) = (cache_dir, &fingerprint) {
-        // Best-effort, as the mixed peak file is.
         if std::fs::create_dir_all(dir).is_ok() {
             for (side, pyramid) in ["l", "r"].iter().zip(&pyramids) {
                 let _ = std::fs::write(

@@ -1,10 +1,5 @@
-//! Tests for the in use badge.
-
 use super::*;
 
-/// The `in use` badge: footage, a solid and a nested composition all count
-/// as used the moment a layer names them, and an item nothing names does
-/// not — whatever else the project holds.
 #[test]
 fn an_item_is_used_when_some_comps_layer_names_it() {
     let footage = bare_footage("a.mp4", "a.mp4", "");
@@ -35,7 +30,6 @@ fn an_item_is_used_when_some_comps_layer_names_it() {
     outer
         .layers
         .push(bare_layer(LayerKind::Solid { def: solid_id }));
-    // A drawn layer names no project item at all.
     outer.layers.push(bare_layer(LayerKind::Adjustment));
 
     let mut doc = Document::new();

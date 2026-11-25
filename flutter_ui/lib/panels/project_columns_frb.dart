@@ -102,7 +102,6 @@ const double projectNameColumn = 220;
 /// already reads in: size, rate, length.
 enum ProjectColumn { name, items, size, fps, duration, date, path }
 
-/// Each column's width before anybody has dragged it.
 const Map<ProjectColumn, double> defaultProjectColumnWidths = {
   ProjectColumn.name: projectNameColumn,
   ProjectColumn.items: projectItemsColumn,
@@ -127,7 +126,6 @@ bool projectColumnIsFixedWidth(ProjectColumn column) =>
     column == ProjectColumn.date ||
     column == ProjectColumn.path;
 
-/// How narrow a column may be dragged: enough for what cannot shrink.
 double minProjectColumnWidth(ProjectColumn column) => switch (column) {
       // **Enough for everything else a row keeps in this column.** The twirl,
       // the type mark and their gaps come to 42, and the badge run — `in use`,
@@ -145,7 +143,6 @@ double minProjectColumnWidth(ProjectColumn column) => switch (column) {
       ProjectColumn.path => projectPathColumn,
     };
 
-/// The gap between every element in a row, headers included.
 const double projectRowGap = 8;
 
 /// What a glyph in this panel draws at. The set is still drawn on the
@@ -215,15 +212,11 @@ const double _widthForPath = projectHeaderPadLeft +
     projectFpsColumn +
     projectDurationColumn +
     projectPathColumn;
-/// Date comes last, once there is room for it beside everything else.
 const double _widthForDate = _widthForPath + projectRowGap + projectDateColumn;
 // What a name needs ahead of them, with a row's indent, twirl and mark.
 const double _widthForFps = 300;
 const double _widthForSize = 240;
 
-/// Which optional columns a given panel width can carry, how wide each of them
-/// has been dragged, and — because the two answers cannot be given apart —
-/// where the Name column ends.
 class ProjectColumns {
   final bool items;
   final bool size;
@@ -281,7 +274,6 @@ class ProjectColumns {
         ProjectColumn.path => path,
       };
 
-  /// The columns drawn at this width, in order.
   List<ProjectColumn> get visible => [
         for (final c in ProjectColumn.values)
           if (shows(c)) c
@@ -375,8 +367,6 @@ class ProjectColumns {
               overflow: column == ProjectColumn.path
                   ? TextOverflow.ellipsis
                   : TextOverflow.clip,
-              // The gap comes first and stays bare. The cell after it is
-              // what a heading wraps.
             ).indexed.map((part) => part.$1 == 1 && heading != null
                 ? heading(column, part.$2)
                 : part.$2),
@@ -425,8 +415,6 @@ class ProjectColumns {
 TextStyle projectMetaStyle(LumitTheme t) =>
     t.mono.copyWith(fontSize: 10, color: t.textMuted);
 
-/// The em dash a column shows when the item cannot answer — a missing file has
-/// no size and no rate, and the mockup writes the dash rather than a blank.
 const String projectNoValue = '—';
 
 /// A rate as the mockup writes it: bare integers where the rate is whole, two
@@ -451,7 +439,6 @@ class ProjectCells {
   /// a folder, a still, a solid, and footage that has not probed yet.
   final String? duration;
 
-  /// When the file was last changed, or null where there is none to state.
   final String? date;
   final String? path;
   const ProjectCells(

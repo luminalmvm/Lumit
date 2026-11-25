@@ -1,10 +1,3 @@
-// The Viewer's **deck**: the strip under the picture that holds everything
-// about playing, when the arrangement setting asks for one. The transport,
-// the clock and the frame count, the preview mode, the quality, the
-// cache-ready meter, and the progress bar at the right.
-//
-// Built from viewer_bar.dart's transport and viewer_strips.dart's sizes, so
-// a mark on the deck is the same mark it is on the bar.
 
 import 'dart:math' as math;
 
@@ -39,8 +32,6 @@ const double _deckClockSize = 15;
 /// shed: the transport is first on the row, so it is what a narrow deck keeps.
 const double _deckMinimum = 800;
 
-/// The Viewer's **deck** (key `viewer-deck`): the playing half of the Viewer's
-/// chrome, under the picture, when the arrangement is [ViewerBars.deck].
 class ViewerDeck extends StatelessWidget {
   final bool playing;
   final int frame;
@@ -99,7 +90,6 @@ class ViewerDeck extends StatelessWidget {
             ? math.max(concentric, ShapeTokens.capsuleEnd)
             : viewerStripPadding,
       ),
-      // The empty deck's own menu. Every mark on it takes its own click first.
       child: ViewerRightClick(
         rows: (close) => viewerBarRows(ui, close),
         child: LayoutBuilder(
@@ -141,9 +131,6 @@ class ViewerDeck extends StatelessWidget {
                     ]),
                   ),
                   viewerBarGapBox(viewerBarGap),
-                  // Preview mode and quality: the same two answers the header's
-                  // quality menu carries, each as its own picker here, then the
-                  // speed.
                   ViewerRightClick(
                     rows: (close) => viewerQualityRows(ui),
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -180,13 +167,9 @@ class ViewerDeck extends StatelessWidget {
                   const SizedBox(width: viewerHeaderGap),
                   const ViewerSpeedPicker(),
                   viewerBarGapBox(viewerBarGap),
-                  // The loop mode, the same mark the bar carries.
                   viewerLoopMark(t,
                       loop: loop, onLoop: ui.workspace.setLoopMode),
                   viewerBarGapBox(viewerBarGap),
-                  // The three switches for a slow machine, lit while on:
-                  // Decode footage at shown size, Wireframe while dragging and
-                  // the Viewer's updates (Caps Lock drives the last as well).
                   viewerBarMark(
                     key: const ValueKey('viewer-shown-size'),
                     icon: LumitIcon.footage,
@@ -207,8 +190,6 @@ class ViewerDeck extends StatelessWidget {
                         !ui.workspace.performance.wireframeDrags),
                     tip: l10n.tipWireframeDrags,
                   ),
-                  // The Adaptive resolution limit beside them: how coarse a
-                  // slow drag may go.
                   LumitTooltip(
                     message: l10n.settingsAdaptiveResolutionLimit,
                     child: BareDropdown<int>(
@@ -233,8 +214,6 @@ class ViewerDeck extends StatelessWidget {
                     ),
                   ),
                   viewerBarGapBox(viewerBarGap),
-                  // The mute: lit while the output is silenced, which is the
-                  // state worth noticing.
                   viewerBarMark(
                     key: const ValueKey('viewer-mute'),
                     icon: muted ? LumitIcon.mute : LumitIcon.audio,
@@ -243,7 +222,6 @@ class ViewerDeck extends StatelessWidget {
                     tip: muted ? l10n.tipTransportUnmute : l10n.tipTransportMute,
                   ),
                   viewerBarGapBox(viewerBarGap),
-                  // Nothing cached is nothing to say, so the meter waits.
                   _CacheMeter(comp: comp, duration: duration),
                   if (loose) const Spacer() else const SizedBox(width: 24),
                   ViewerProgressBar(
@@ -309,7 +287,6 @@ class _CacheMeterState extends State<_CacheMeter> {
     super.dispose();
   }
 
-  /// The engine says the cache moved: count again and redraw.
   void _read() {
     if (!mounted) return;
     final fraction = _count(_ui!);
@@ -353,8 +330,6 @@ class _CacheMeterState extends State<_CacheMeter> {
         key: const ValueKey('viewer-cache-ready'),
         mainAxisSize: MainAxisSize.min,
         children: [
-          // The Lantern drawing's 54 by 6 meter; the held colour is the cache
-          // bar's own mint.
           ClipRRect(
             borderRadius: radius,
             child: SizedBox(

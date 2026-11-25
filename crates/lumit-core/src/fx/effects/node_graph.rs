@@ -39,7 +39,6 @@ use crate::model::{Document, EffectInstance};
 use lumit_fx_macros::Effect;
 use uuid::Uuid;
 
-/// The `extra` key the bound comp and the Inputs copy live under.
 pub const EXTRA_KEY: &str = "node_graph";
 
 /// The ids this effect's own declaration uses. A derived row may not collide
@@ -58,18 +57,13 @@ pub const DECLARED_IDS: &[&str] = &[
     "matte_channel",
 ];
 
-/// The Node graph effect's declared controls. Everything else it shows is
-/// derived from the graph it names.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "node_graph",
     label = "Node graph",
     version = 1,
     category = Utility,
-    // A graph nobody here has read: the honest class is the cautious one.
     cost = Heavy,
-    // Anything inside may sample anywhere, so the whole frame is the only
-    // correct region.
     roi = FullFrame,
 )]
 pub struct NodeGraph {
@@ -116,8 +110,6 @@ pub fn inputs_of(inst: &EffectInstance) -> Vec<GraphInput> {
         .unwrap_or_default()
 }
 
-/// Point `inst` at `comp` and write the Inputs copy from `graph` - what adding
-/// a Node graph effect does, and what binding it to another graph does.
 pub fn bind(inst: &mut EffectInstance, comp: Uuid, graph: &CompGraph) {
     let inputs: Vec<GraphInput> = graph.inputs().cloned().collect();
     inst.extra.insert(
@@ -228,7 +220,6 @@ pub fn input_rows(inputs: &[GraphInput]) -> &'static [ParamSchema] {
     built
 }
 
-/// Every Input list this process has derived rows from, by its hash.
 type RowCache = RwLock<HashMap<u64, &'static [ParamSchema]>>;
 
 fn cache() -> &'static RowCache {
@@ -276,7 +267,6 @@ fn build_rows(inputs: &[GraphInput]) -> Vec<ParamSchema> {
                 },
                 input.unit,
             ),
-            // An angle is degrees by definition, exactly as `#[dial]` is.
             InputKind::Angle => (
                 ParamKind::Angle {
                     default: d[0],
@@ -302,7 +292,6 @@ fn build_rows(inputs: &[GraphInput]) -> Vec<ParamSchema> {
     rows
 }
 
-/// The Node graph effect's behaviour.
 pub struct NodeGraphDef;
 
 impl EffectDef for NodeGraphDef {
@@ -391,8 +380,6 @@ mod tests {
         }
     }
 
-    /// The rows follow the Inputs copy, one kind at a time - and the **first**
-    /// picture Input derives none, because it is the layer's own picture.
     #[test]
     fn the_derived_rows_follow_the_inputs_copy() {
         let inputs = vec![
@@ -442,9 +429,6 @@ mod tests {
         );
     }
 
-    /// What a host hands the Inputs (§1.5): the stored row, the driver's
-    /// number in front of it where a wire feeds the socket, and nothing at all
-    /// for a picture Input or an Input under one of this effect's own ids.
     #[test]
     fn the_overrides_prefer_a_driver_and_skip_the_declared_ids() {
         use crate::fx::params::ParamId;
@@ -476,8 +460,6 @@ mod tests {
             "no picture, and none of the effect's own ids"
         );
 
-        // A wire onto the row hands its number over instead of the stored one.
-        // Math, because its answer is arithmetic anybody can predict.
         let mut math = crate::fx::builtins::instantiate("math").expect("the catalogue knows it");
         for p in &mut math.params {
             match p.id.as_str() {
@@ -523,9 +505,6 @@ mod tests {
         }
     }
 
-    /// **Offered, never adopted**: `refresh` rewrites the copy from the live
-    /// graph and says whether it did, so the panel can show a new row without
-    /// the document being edited behind anybody's back.
     #[test]
     fn binding_writes_the_copy_and_refresh_follows_the_live_graph() {
         let first = vec![declared("amount", InputKind::Number, Unit::Raw)];
@@ -547,7 +526,6 @@ mod tests {
             "nothing moved, so nothing is rewritten"
         );
 
-        // A row added inside the graph is picked up on the next read.
         let mut grown = first.clone();
         grown.push(declared("turn", InputKind::Angle, Unit::Degrees));
         let live = graph_of(&grown);
@@ -558,8 +536,6 @@ mod tests {
         assert_eq!(inputs_of(&inst), grown);
         assert_eq!(NodeGraphDef.derived(&inst).len(), 2);
 
-        // A comp that is not there, or is not a node graph, leaves the copy
-        // exactly as it was.
         if let Some(ProjectItem::Composition(c)) = doc.item_mut(comp_id) {
             c.graph = None;
         }

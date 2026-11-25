@@ -34,22 +34,13 @@ use crate::model::EffectInstance;
 
 pub mod looks;
 
-/// The picture leaving a Source node, entering the Layer out node, or the
-/// image a node hands on.
 pub const IMAGE_PORT: Port = Port::new("image", "Image", PortType::Image);
-/// Coverage: the layer's own masked source alpha, and the socket on an effect
-/// that reads one.
 pub const MATTE_PORT: Port = Port::new("matte", "Matte", PortType::Matte);
 /// An effect node's one picture in — by construction the previous stack
 /// entry's output (§1.1), which is why no gesture can branch the chain.
 pub const INPUT_PORT: Port = Port::new("input", "Input", PortType::Image);
-/// An effect node's one picture out.
 pub const OUTPUT_PORT: Port = Port::new("output", "Output", PortType::Image);
-/// A Correction's key out, which a wire hands to a Matte further down.
 pub const KEY_PORT: Port = Port::new("key", "Key", PortType::Matte);
-/// The Layer out node's sound. Drawn and unfilled: audio comes only from a
-/// footage layer's own stream, so this accepts no wire in this phase
-/// (§7) — listed rather than faked.
 pub const AUDIO_PORT: Port = Port::new("audio", "Audio", PortType::Audio);
 /// The Layer out node's **Volume** — the one layer property a wire may land on
 /// (the Audio workspace board's *Duck under*). A number in decibels: driven, it
@@ -75,9 +66,7 @@ pub const DERIVED_PORTS: [Port; 7] = [
     OUT_VOLUME_PORT,
 ];
 
-/// What the canvas calls [`NodeRef::Source`] — display text.
 pub const SOURCE_LABEL: &str = "Source";
-/// What the canvas calls [`NodeRef::Out`] — display text.
 pub const OUT_LABEL: &str = "Layer out";
 
 /// Names anything the graph canvas draws.
@@ -89,24 +78,16 @@ pub const OUT_LABEL: &str = "Layer out";
 /// its instance in [`LayerGraph::nodes`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum NodeRef {
-    /// The layer's own source — its picture and its matte outputs.
     Source,
-    /// An [`EffectInstance`] in `Layer::effects`.
     Effect(Uuid),
-    /// An [`EffectInstance`] in [`LayerGraph::nodes`] — a driver.
     Driver(Uuid),
-    /// The layer's output.
     Out,
 }
 
-/// Where a wire comes from.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OutputRef {
-    /// A driver node's declared output port
-    /// ([`Signature::Data`](crate::fx::registry::Signature::Data)).
     Driver {
         node: Uuid,
-        /// The port's stable id, as the driver's signature declares it.
         port: String,
     },
     /// The layer's **own** masked source alpha at that point in the chain — a
@@ -123,35 +104,35 @@ pub enum OutputRef {
     /// chain, so `Layer::effects` is still the picture's only authority.
     EffectData {
         effect: Uuid,
-        /// The port's stable id, as the effect's signature declares it.
         port: String,
     },
     /// A stack effect's picture, as it leaves that effect, into the Matte of an
     /// effect further down. The chain is untouched: the picture still flows on
     /// down the stack, and this hands a copy of it to the matte as well.
-    EffectOutput { effect: Uuid },
+    EffectOutput {
+        effect: Uuid,
+    },
     /// A Correction's key, as it leaves that node, into the Matte of an effect
     /// further down: white where the node grades, black where it leaves the
     /// picture alone.
-    EffectKey { effect: Uuid },
+    EffectKey {
+        effect: Uuid,
+    },
 }
 
-/// Where a wire goes.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum InputRef {
     /// A parameter socket: the destination parameter follows the source output
     /// instead of its own keyframes. At most one wire per socket.
     Param {
         node: NodeRef,
-        /// The parameter's stable snake_case id.
         port: String,
     },
-    /// An effect's matte input, fed by [`OutputRef::SourceMatte`] or by an
-    /// effect above it ([`OutputRef::EffectOutput`], [`OutputRef::EffectKey`]).
-    Matte { effect: Uuid },
+    Matte {
+        effect: Uuid,
+    },
 }
 
-/// One wire.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Edge {
     pub from: OutputRef,
@@ -165,11 +146,8 @@ pub struct Edge {
 /// byte for byte.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct LayerGraph {
-    /// The driver nodes — ordinary [`EffectInstance`]s whose definition
-    /// declares a data signature rather than an image kernel (§1.3).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub nodes: Vec<EffectInstance>,
-    /// The wires.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub edges: Vec<Edge>,
     /// Canvas positions. **Document data**: they persist and travel, and are
@@ -195,13 +173,10 @@ pub struct LayerGraph {
     /// because it changes no pixel.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub groups: Vec<NodeGroup>,
-    /// The notes left on the canvas. Presentation state as the groups are.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notes: Vec<Note>,
-    /// The ties on its wires. Presentation state as the notes are.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ties: Vec<crate::wire_tie::WireTie>,
-    /// Each box's label colour and fold. Presentation state as the groups are.
     #[serde(default, skip_serializing_if = "looks::BoxLooks::is_empty")]
     pub looks: looks::BoxLooks<NodeRef>,
     /// **The Layer out box's image socket is unplugged**: the layer
@@ -240,7 +215,6 @@ pub struct LayerGraph {
 /// edit — dragging a box is still one `layout` write.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NodeGroup {
-    /// What the group is called, drawn as the wash's kicker.
     pub name: String,
     /// Which chip of the label palette tints it. An index, not a colour: no
     /// colour has ever crossed the bridge, and the frontend takes this modulo
@@ -259,11 +233,8 @@ pub struct NodeGroup {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Note {
     pub text: String,
-    /// Which chip of the label palette tints it, as a group's does.
     pub colour: u32,
-    /// Its top-left corner on the canvas.
     pub at: [f64; 2],
-    /// Folded down to its first line.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub collapsed: bool,
 }
@@ -293,16 +264,10 @@ pub enum GraphError {
     /// [`crate::ops::OpError::InvalidGraph`] carries both graph kinds' sentences.
     #[error("a node graph needs an Output box")]
     NoOutput,
-    /// A **node graph** with two Output boxes: the comp would have two
-    /// pictures and no way to say which it shows.
     #[error("a node graph has one Output box")]
     SecondOutput,
-    /// A Repeat end with no one Repeat start nearest it, or a start two ends
-    /// share.
     #[error("a Repeat end needs a Repeat start of its own before it")]
     RepeatUnpaired,
-    /// A wire out of the boxes between a Repeat start and its end, other than
-    /// into the end, or a pair half inside another.
     #[error("a wire leaves a repeat other than through its Repeat end")]
     RepeatLeak,
 }
@@ -409,8 +374,6 @@ fn flows_down_the_stack(edge: &Edge, effects: &[EffectInstance]) -> bool {
 }
 
 impl LayerGraph {
-    /// Whether this layer carries no wiring at all — the overwhelming case, and
-    /// what keeps the field out of the saved file.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.nodes.is_empty()
@@ -437,7 +400,6 @@ impl LayerGraph {
         );
     }
 
-    /// The driver instance named by `id`, if this graph carries one.
     #[must_use]
     pub fn node(&self, id: Uuid) -> Option<&EffectInstance> {
         self.nodes.iter().find(|n| n.id == id)
@@ -484,8 +446,6 @@ impl LayerGraph {
             members(self),
         );
         self.edges.retain(|e| {
-            // The source: a driver or the layer's own alpha is not the stack's
-            // to remove, but an effect is.
             let source_stands = match &e.from {
                 OutputRef::Driver { .. } | OutputRef::SourceMatte => true,
                 OutputRef::EffectData { effect, .. }
@@ -519,18 +479,11 @@ impl LayerGraph {
                 )
     }
 
-    /// The wire feeding `to`, if any.
     #[must_use]
     pub fn wire_into(&self, to: &InputRef) -> Option<&OutputRef> {
         self.edges.iter().find(|e| &e.to == to).map(|e| &e.from)
     }
 
-    /// Wire `consumer`'s first points input, if nothing feeds it, to the
-    /// nearest effect above it that hands a points stream out, and say
-    /// whether a wire was added.
-    ///
-    /// Run when a points effect is added to a stack, so it reads the producer
-    /// above it without a trip to the node graph.
     pub fn wire_points_from_above(&mut self, effects: &[EffectInstance], consumer: Uuid) -> bool {
         let points_ports = |e: &EffectInstance, outputs: bool| {
             let sig = crate::fx::catalogue::BUILTIN_DEFS
@@ -584,8 +537,6 @@ impl LayerGraph {
         added
     }
 
-    /// Whether `effect`'s points reach any of `targets` along the points
-    /// wires, or it is one of them.
     fn feeds_points(&self, effect: Uuid, targets: &[Uuid]) -> bool {
         let mut seen = vec![effect];
         let mut next = 0;
@@ -614,8 +565,6 @@ impl LayerGraph {
         false
     }
 
-    /// Whether the effect named by `effect` takes the layer's own source alpha
-    /// as its matte (§1.4) — the one in-graph feed the Matte row can carry.
     #[must_use]
     pub fn source_matte(&self, effect: Uuid) -> bool {
         self.edges
@@ -623,8 +572,6 @@ impl LayerGraph {
             .any(|e| e.from == OutputRef::SourceMatte && e.to == InputRef::Matte { effect })
     }
 
-    /// The effect above `effect` whose picture is wired into its matte, if one
-    /// is.
     #[must_use]
     pub fn matte_from(&self, effect: Uuid) -> Option<Uuid> {
         self.edges.iter().find_map(|e| match (&e.from, &e.to) {
@@ -637,8 +584,6 @@ impl LayerGraph {
         })
     }
 
-    /// The Correction above `effect` whose key is wired into its matte, if one
-    /// is.
     #[must_use]
     pub fn key_from(&self, effect: Uuid) -> Option<Uuid> {
         self.edges.iter().find_map(|e| match (&e.from, &e.to) {
@@ -651,12 +596,6 @@ impl LayerGraph {
         })
     }
 
-    /// Check every rule `SetLayerGraph` enforces (§1.5), against the effect
-    /// stack the graph sits beside.
-    ///
-    /// Missing node or port, a type mismatch, a doubled input, or a loop among
-    /// the driver nodes — each is refused, because each can only be reached by
-    /// an edit this application made.
     pub fn validate(&self, effects: &[EffectInstance]) -> Result<(), GraphError> {
         for (i, edge) in self.edges.iter().enumerate() {
             // One wire per socket. Comparing against the edges *before* this
@@ -674,7 +613,6 @@ impl LayerGraph {
             }
             let from = self.output_type(&edge.from, effects)?;
             let to = self.input_type(&edge.to, effects)?;
-            // A Matte takes a picture too, read through its Channel row.
             if from != to && !(from == PortType::Image && to == PortType::Matte) {
                 return Err(GraphError::PortTypeMismatch);
             }
@@ -698,7 +636,6 @@ impl LayerGraph {
         self.edges.len() != before
     }
 
-    /// The type a wire's source carries.
     fn output_type(
         &self,
         from: &OutputRef,
@@ -711,7 +648,6 @@ impl LayerGraph {
                 .any(|e| e.id == *effect)
                 .then_some(PortType::Image)
                 .ok_or(GraphError::UnknownNode),
-            // Only a Correction has a key to hand on.
             OutputRef::EffectKey { effect } => {
                 let inst = effects
                     .iter()
@@ -754,7 +690,6 @@ impl LayerGraph {
             .ok_or(GraphError::UnknownNode)
     }
 
-    /// The type a wire's destination accepts.
     fn input_type(
         &self,
         to: &InputRef,
@@ -762,8 +697,6 @@ impl LayerGraph {
     ) -> Result<PortType, GraphError> {
         match to {
             InputRef::Matte { effect } => {
-                // An effect that declares no matte row has no matte socket to
-                // wire, which is the same refusal as a missing port.
                 let inst = effects
                     .iter()
                     .find(|e| e.id == *effect)
@@ -790,9 +723,6 @@ impl LayerGraph {
                 {
                     return Ok(PortType::Number);
                 }
-                // Source and Out otherwise draw ports but hold no parameters,
-                // so naming one of them as a parameter destination names
-                // nothing.
                 let inst = match node {
                     NodeRef::Effect(id) => effects.iter().find(|e| e.id == *id),
                     NodeRef::Driver(id) => self.node(*id),
@@ -800,8 +730,6 @@ impl LayerGraph {
                 }
                 .ok_or(GraphError::UnknownNode)?;
                 let def = Self::def_of(inst)?;
-                // A Custom shader's own rows take a wire the same as its
-                // declared ones.
                 def.schema()
                     .params
                     .iter()
@@ -869,8 +797,6 @@ impl LayerGraph {
                 Some((from, to))
             })
             .collect();
-        // Drivers and effects alike: an effect that hands out data is a node in
-        // this walk, not a fixed point outside it.
         let all: Vec<Uuid> = self.nodes.iter().chain(effects).map(|n| n.id).collect();
         let mut settled: Vec<Uuid> = Vec::with_capacity(all.len());
         loop {

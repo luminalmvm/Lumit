@@ -23,10 +23,8 @@ import 'profile_chip.dart' show SyncRing;
 import 'review_link_parts.dart' show reviewRowMenu;
 import 'sign_in_window.dart' show cloudErrorText;
 
-/// The side of the square the code is drawn in.
 const double _square = 200;
 
-/// Open the Add a phone window. Lumit says which phone it was paired with.
 Future<void> showAddPhone(BuildContext context) async {
   final ui = context.read<LumitUiState>();
   final app = context.read<LumitState>();
@@ -168,7 +166,6 @@ class _AddPhoneState extends State<_AddPhone> {
             ],
           ),
         ),
-        // The same two acts the picture's menu has, where a footer puts them.
         dialogFooter(
           t,
           keyPrefix: 'add-phone',
@@ -194,8 +191,6 @@ class _AddPhoneState extends State<_AddPhone> {
     );
   }
 
-  /// What the square holds while there is no code to scan: one on its way,
-  /// or why there is none. The footer's New code is the way to another.
   Widget _instead(LumitTheme t) {
     if (_asking) {
       return const SizedBox(width: 18, height: 18, child: SyncRing());

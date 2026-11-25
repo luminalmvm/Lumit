@@ -1,6 +1,3 @@
-//! The mixdown an export writes, and the reads and placement every plan
-//! shares.
-
 use lumit_audio::stream::Source;
 use lumit_core::model::{Composition, Document};
 use std::sync::atomic::AtomicBool;
@@ -53,8 +50,6 @@ pub fn mixdown(
     )
 }
 
-/// As [`mixdown`], through the desk, over buffers already in memory: each job
-/// sounds from the buffer paired with a job of the same item and sound.
 pub fn mixdown_prepared(
     doc: &Arc<Document>,
     comp: &Composition,
@@ -82,7 +77,6 @@ pub fn mixdown_prepared(
     )
 }
 
-/// The desk built offline over `source_of`'s sources and played whole.
 #[allow(clippy::too_many_arguments)]
 fn mix_sources(
     doc: &Arc<Document>,
@@ -178,7 +172,6 @@ pub(super) fn read_retimed(
     let frames = usize::try_from((span.1 * r).round() as i64 - start_frame)
         .ok()
         .filter(|f| *f > 0)?;
-    // Where each output frame reads the source, one entry every STEP frames.
     let step = lumit_audio::speed::STEP;
     let mut table: Vec<f64> = (0..=frames / step + 1)
         .map(|c| {
@@ -196,7 +189,6 @@ pub(super) fn read_retimed(
         .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), p| {
             (a.min(*p), b.max(*p))
         });
-    // Only the stretch of source the map reaches, with room for the grains.
     let pad = r / 10.0;
     let first = (lo - pad).floor().max(0.0);
     let first = if first.is_finite() { first as usize } else { 0 };
@@ -232,7 +224,6 @@ pub(super) fn buses(
     offline: bool,
     cancel: &AtomicBool,
 ) -> Vec<(usize, MixRun)> {
-    /// One member of some bus, read and its own racks run.
     struct Member<'a> {
         index: usize,
         job: &'a AudioJob,

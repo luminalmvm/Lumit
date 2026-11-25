@@ -24,7 +24,6 @@ const double _width = 480;
 const double _labelColumn = 130;
 const double _well = 80;
 
-/// The rates the list beside the field offers, as their exact pairs.
 const List<(String, int, int)> _rates = [
   ('23.976', 24000, 1001),
   ('24', 24, 1),
@@ -57,12 +56,10 @@ const List<String> _advanced = ['WWSWW', 'WSWWW', 'SWWWW', 'WWWWS', 'WWWSW'];
 /// Kept for the run of the app, as a clipboard is.
 BridgeInterpretation? rememberedInterpretation;
 
-/// Take [item]'s interpretation, to apply to others.
 Future<void> rememberInterpretation(FootageReference item) async {
   try {
     rememberedInterpretation = (await item.interpretation()).now;
   } catch (_) {
-    // The item went as the menu closed.
   }
 }
 
@@ -156,10 +153,8 @@ class _InterpretBodyState extends State<_InterpretBody> {
   late bool _preserveRgb;
   late String? _pass;
 
-  /// What the draft would make of the file, from the engine.
   late BridgeInterpreted _made;
 
-  /// A guess that came back with nothing, said beside its button.
   bool _noAlphaGuess = false;
   bool _noPulldownGuess = false;
   bool _guessing = false;
@@ -227,7 +222,6 @@ class _InterpretBodyState extends State<_InterpretBody> {
     );
   }
 
-  /// A typed field changed: ask the engine again what the draft makes.
   void _edited() {
     if (!mounted) return;
     setState(() => _made = interpreted(file: _file, to: _draft()));
@@ -320,7 +314,6 @@ class _InterpretBodyState extends State<_InterpretBody> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (_page == _Page.main) ...[
-                // Only a file with passes to choose between: a multi-pass EXR.
                 if (_file.renderPasses.length > 1)
                   _section(t, '', enabled: true, [
                     _row(t, l10n.interpretRenderPass, _passRow(t)),
@@ -385,7 +378,6 @@ class _InterpretBodyState extends State<_InterpretBody> {
     );
   }
 
-  /// The file as the draft reads it: size, rate and length.
   String _summary() {
     if (!_file.hasPicture) return '';
     final size = '${_made.width} × ${_made.height}';
@@ -395,8 +387,6 @@ class _InterpretBodyState extends State<_InterpretBody> {
         timecodeOfRate(_made.frames.toInt(), _made.fpsNum, _made.fpsDen);
     return '$size · $rate ${l10n.unitFps} · $length';
   }
-
-  // ---- the rows ------------------------------------------------------------
 
   Widget _alphaRow(LumitTheme t) => Row(
         children: [
@@ -451,7 +441,6 @@ class _InterpretBodyState extends State<_InterpretBody> {
         ],
       );
 
-  /// What a guess that found nothing says, on one line beside its button.
   Widget _noGuess(LumitTheme t, bool shown) => shown
       ? Text(l10n.interpretNoGuess,
           style: dialogMono(t),
@@ -494,7 +483,6 @@ class _InterpretBodyState extends State<_InterpretBody> {
             padding: const EdgeInsets.symmetric(horizontal: 8),
             fill: t.surface0,
             textAlign: TextAlign.right,
-            // Empty is the file's own rate, which the hint shows.
             hint: _file.isSequence ? null : own,
             onSubmitted: (_) => _confirm(),
           ),
@@ -532,7 +520,6 @@ class _InterpretBodyState extends State<_InterpretBody> {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 8),
               fill: t.surface0,
-              // Empty is the file's own, which the hint shows.
               hint: _file.timecode ?? '00:00:00:00',
               onSubmitted: (_) => _confirm(),
             ),
@@ -552,7 +539,6 @@ class _InterpretBodyState extends State<_InterpretBody> {
             width: 170,
           ),
           const Spacer(),
-          // What the file itself declares, when it declares anything.
           if (_file.fields != BridgeFieldOrder.off)
             Flexible(
               child: Text(
@@ -723,7 +709,6 @@ class _InterpretBodyState extends State<_InterpretBody> {
       disabledReason: (space) => space == null || colour == null
           ? null
           : colourItemProblem(colour, BridgeColourItem.input, space),
-      // Preserved numbers take no colour space at all.
       onChanged:
           _preserveRgb ? null : (space) => _set(() => _colourSpace = space),
     );
@@ -743,7 +728,6 @@ class _InterpretBodyState extends State<_InterpretBody> {
               BridgeLinearLight.on_ => l10n.interpretLinearOn,
               BridgeLinearLight.off => l10n.off,
             },
-            // An assigned colour space says what curve the file has.
             onChanged: _preserveRgb || _colourSpace != null
                 ? null
                 : (mode) => _set(() => _linear = mode),
@@ -752,12 +736,9 @@ class _InterpretBodyState extends State<_InterpretBody> {
         ],
       );
 
-  // ---- the pieces ----------------------------------------------------------
-
   Widget _row(LumitTheme t, String label, Widget control) =>
       dialogRow(t, label, control, labelColumn: _labelColumn, minHeight: 30);
 
-  /// A tick with its words, set under the controls' own column.
   Widget _tick(LumitTheme t, String key, String label, bool value,
           ValueChanged<bool>? onChanged) =>
       Padding(
@@ -808,7 +789,6 @@ class _InterpretBodyState extends State<_InterpretBody> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // A page with one group has its name on the tab already.
                     if (title.isEmpty)
                       const SizedBox(height: 6)
                     else

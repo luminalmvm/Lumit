@@ -119,9 +119,6 @@ fn eased_keys_come_back_as_they_went_out() {
     }
 }
 
-/// One small file with each kind that has to land somewhere particular: a
-/// precomp with a Retime, a mask, a matte, an embedded picture, a parent and
-/// a moved group of shapes, with a key in the old form.
 #[test]
 fn a_small_lottie_lands_where_it_should() {
     let png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
@@ -131,7 +128,6 @@ fn a_small_lottie_lands_where_it_should() {
         {"ty": "tr", "p": {"a": 0, "k": [10, 5]}, "a": {"a": 0, "k": [0, 0]}, "s": {"a": 0, "k": [100, 100]},
          "r": {"a": 0, "k": 0}, "o": {"a": 0, "k": 100}}
     ]});
-    // A hole listed before its outline, wound the other way.
     let square = |half: f64, turn: f64| {
         let v: Vec<[f64; 2]> = [[-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]]
             .iter()
@@ -177,9 +173,7 @@ fn a_small_lottie_lands_where_it_should() {
         panic!("three layers, got {}", comp.layers.len());
     };
 
-    // The matte is drawn only through the layer it mattes.
     assert!(!matte.switches.visible);
-    // Its hole is cut from its outline, not the outline from the hole.
     let LayerKind::Shape { contents } = &matte.kind else {
         panic!("a shape layer");
     };
@@ -199,13 +193,11 @@ fn a_small_lottie_lands_where_it_should() {
         (matte.id, MatteChannel::Alpha, false)
     );
 
-    // The old key form, eased in and out: slow at first, half way at half time.
     let x = pre.transform.position_x.value_at(0.25);
     assert!(x > 0.0 && x < 20.0, "position x {x}");
     assert!((pre.transform.position_x.value_at(0.5) - 50.0).abs() < 1e-6);
     assert!((pre.transform.position_x.value_at(1.0) - 100.0).abs() < 1e-9);
 
-    // A straight Retime from 0 to 2 seconds of the precomp over its first second.
     let retime = pre.retime.as_ref().unwrap();
     assert!((retime.value_at(0.5) - 1.0).abs() < 1e-9);
 
@@ -236,8 +228,6 @@ fn a_small_lottie_lands_where_it_should() {
         .unwrap();
     assert_eq!(footage.media.absolute_path, file.to_string_lossy());
 
-    // The precomp: its own comp, its rectangle moved by its group and painted
-    // half see-through red.
     let LayerKind::Precomp { comp: inner } = pre.kind else {
         panic!("a precomp layer");
     };
@@ -266,7 +256,6 @@ fn a_small_lottie_lands_where_it_should() {
     let fill = item.fill.as_ref().unwrap();
     assert!((fill[0].value_at(0.0) - 1.0).abs() < 1e-6 && fill[1].value_at(0.0).abs() < 1e-6);
 
-    // The folder named after the file holds the precomp and the picture.
     let folder = imported
         .items
         .iter()

@@ -1,8 +1,3 @@
-// A clip's fade curves and where they run (docs/impl/audio-timeline.md §6,
-// plan 1): every shape starts at silence and ends at full level and never turns
-// back, Fast against Fast keeps a crossfade as loud as either clip was, and the
-// power complement of Fast is Fast. Pure, so the maths is checked here rather
-// than by looking at a lane.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/clip_fades.dart';
@@ -11,7 +6,6 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:uuid/uuid.dart';
 
 void main() {
-  /// A clip on the comp's clock, with the fades it carries.
   BridgeClip clip({
     required int start,
     required int end,

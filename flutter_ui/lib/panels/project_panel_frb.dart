@@ -158,15 +158,11 @@ Future<bool> importDroppedPaths(LumitState state, List<String> dropped) async {
     switch (_extensionOf(path)) {
       case 'lum':
         isProject = true;
-      // A zipped style folder is the window's to take in.
       case 'zip' when styleReadPackage(path: path) is BridgeStyleOutcome_Ready:
         break;
       case 'aep':
       case 'zip':
         isAe = true;
-      // An extension package, which the window offers to install, a style,
-      // which it takes in, and a graphics template, which it adds to the
-      // library.
       case 'lfx':
       case 'lumstyle':
       case 'lumt':
@@ -278,8 +274,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
       ..copyClaim = _copyClaim
       ..cutClaim = _cutClaim
       ..pasteClaim = _pasteClaim;
-    // The graphics templates the library has a newer version of, which wear
-    // an Update badge.
     _updates = TemplateUpdates.of(state, _boundUi!)
       ..addListener(_updatesChanged);
   }
@@ -290,14 +284,11 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
     if (mounted) setState(() {});
   }
 
-  /// Bring in the library's newer version of the templates in [comps].
   Future<void> _updateTemplates(Iterable<UuidValue> comps) async {
     await _updates.update(comps);
     if (mounted) _documentChanged();
   }
 
-  /// The compositions inside [folder], all the way down, that the library
-  /// has a newer version of. Read when its menu opens.
   List<UuidValue> _updatesIn(FolderReference folder) {
     final found = <UuidValue>[];
     void walk(ItemReference item) {
@@ -319,12 +310,10 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
 
   bool Function()? _priorDelete, _priorCopy, _priorCut, _priorPaste;
 
-  /// What `Mod+C` took here, for `Mod+V` to duplicate.
   List<ItemReference> _copied = const [];
 
   bool get _keysAreOurs => mounted && _boundUi?.activePanel == Panel.project;
 
-  /// The picked items in the order the panel lists them.
   List<ItemReference> get _picked => [
         for (final id in _visibleIds)
           if (_selectedIds.contains(id)) _itemById[id],
@@ -366,7 +355,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
     return true;
   }
 
-  /// Copies of [items], picked, and filed in [folder] when one is given.
   Future<void> _duplicate(List<ItemReference> items,
       {ItemReference_Folder? folder}) async {
     // Pasting into a folder is one thing to undo, the copy and the filing both.
@@ -389,14 +377,11 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
     if (mounted && item != null) _pick([item]);
   }
 
-  /// Select items something has just made, and open the folders they are
-  /// filed in so the rows are there to see.
   void _pick(List<ItemReference> items) {
     final ids = {for (final item in items) projectItemId(item)};
     bool holds(ItemReference at) {
       if (ids.contains(projectItemId(at))) return true;
       if (at is! ItemReference_Folder) return false;
-      // Every child is asked, so each copy's folder opens.
       final inside =
           at.field0.getChildren().fold(false, (hit, c) => holds(c) || hit);
       if (inside) _closedFolders.remove(projectItemId(at));
@@ -474,8 +459,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
     super.dispose();
   }
 
-  /// The Project panel's keyboard commands: rename, duplicate, the arrows,
-  /// and the three for how the selected footage is interpreted.
   bool _onKey(KeyEvent event) {
     if (event is! KeyDownEvent || !mounted) return false;
     if (lumitModalOpen) return false;
@@ -552,8 +535,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
     return false;
   }
 
-  /// Move the pick one row up or down the list, and scroll that row into
-  /// view. With [extend] the run from the anchor grows or shrinks instead.
   bool _step(int by, {bool extend = false}) {
     if (_visibleIds.isEmpty) return false;
     final at = _visibleIds.indexOf(_cursorId ?? '');
@@ -565,7 +546,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
     return true;
   }
 
-  /// Scroll row [at] of the list into view, if it isn't.
   void _revealRow(int at) {
     if (!_vScroll.hasClients) return;
     final top = at * projectRowHeight;
@@ -598,11 +578,8 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
   /// Timeline's rule for the same problem.
   final ValueNotifier<Set<String>> _rowPicks = ValueNotifier(const {});
 
-  /// The row a `Shift`-click measures its run from — the last one clicked
-  /// without `Shift`.
   String? _anchorId;
 
-  /// The row the arrow keys move from: the last one clicked or stepped to.
   String? _cursorId;
 
   /// Every row id currently drawn, top to bottom, so a `Shift`-click knows what
@@ -613,8 +590,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
   /// without walking the tree again. Rebuilt with the rows.
   final Map<String, FootageReference> _footageById = {};
 
-  /// Every item drawn this build, by id — what the preview card looks the
-  /// anchor up in. Rebuilt with the rows.
   final Map<String, ItemReference> _itemById = {};
 
   /// Decoded media facts per footage id, for the preview card and the Size and
@@ -659,8 +634,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
   /// the rows are rebuilt on every hover.
   final Map<String, bool> _nodeGraphs = {};
 
-  /// Which comps are multicam comps, for the row's glyph. Cached as
-  /// [_nodeGraphs] is, for the same reason.
   final Map<String, bool> _multicams = {};
 
   /// A rebuild is already booked for the end of this frame.
@@ -683,7 +656,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
   /// in a rebuild: the budget test expects a hover to cost nothing.
   final Map<String, BridgeProxy?> _proxies = {};
 
-  /// Which footage items are 3D models, asked once per document change.
   final Map<String, bool> _models = {};
 
   /// The project-wide *use proxies* switch, cached with the rest: it is
@@ -722,15 +694,8 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
   String? _scrubId;
   final Map<int, ui.Image?> _scrubFrames = {};
 
-  /// Which frame of it is being shown, or null for the poster frame.
   int? _scrubAt;
 
-  /// The sound file the preview card started playing, if any.
-  ///
-  /// ponytail: what the panel *asked for*, not what the speakers are doing. A
-  /// file that runs out on its own leaves the button showing a stop until the
-  /// selection moves. Give the card the audio clock if that ever reads wrong,
-  /// which means a ticker in a panel that has done without one.
   String? _soundId;
 
   /// The selected footage, in the order the panel lists it. Anything selected
@@ -741,10 +706,8 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
             _footageById[id]!,
       ];
 
-  /// Apply a click to the selection.
   void _select(String id, SelectMode mode) {
     _cursorId = id;
-    // The card is about to describe something else, so its sound stops with it.
     if (_soundId != null && _soundId != id) _stopSound();
     switch (mode) {
       case SelectMode.replace:
@@ -782,12 +745,10 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
   void _publishPicks() {
     _rowPicks.value = Set<String>.unmodifiable(_selectedIds);
     _followCard();
-    // And the others in a shared project, who see these rows marked.
     Provider.of<LumitUiState>(context, listen: false)
         .setProjectPicks(_selectedIds);
   }
 
-  /// What the preview card is about: the one thing picked, or nothing.
   final ValueNotifier<String?> _cardItem = ValueNotifier(null);
   Timer? _cardTimer;
 
@@ -811,7 +772,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
     if (_itemById[id] case ItemReference_Composition(:final field0)) {
       _askCompStill(field0, id!);
     }
-    // The list has just got shorter, and may have lost the picked row.
     if (arriving) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final at = _visibleIds.indexOf(id);
@@ -840,7 +800,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
           ? ui_.playheadFrame.value
           : comp.durationFrames() ~/ 2;
     } catch (_) {
-      // Deleted a moment ago. The card's still pointing at it until the rebuild.
       return;
     }
     Workspace.compStill(comp, frame, maxEdge: _thumbMaxEdge).then((image) {
@@ -866,7 +825,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
     ui.selectedProjectItems.value = _picked;
   }
 
-  /// The row being renamed in place, by id.
   String? _renamingId;
 
   /// Each column's width. Dragging a header seam changes one of these and
@@ -892,10 +850,8 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
   ProjectColumn? _sortColumn;
   bool _sortAscending = true;
 
-  /// What the walk last counted, for the count's tooltip.
   String _summary = '';
 
-  /// The columns switched off from the headings' menu. Kept as the widths are.
   Set<ProjectColumn> _hiddenColumns = const {};
 
   void _columnMenu(Offset at) => showProjectColumnMenu(
@@ -917,13 +873,11 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
         }),
       );
 
-  /// From a menu: sort by this, smallest first, or the project's own order.
   void _sortTo(ProjectColumn? column) => setState(() {
         _sortColumn = column;
         _sortAscending = true;
       });
 
-  /// A click on a heading: sort by it, or turn the sort round if it already is.
   void _sortBy(ProjectColumn column) => setState(() {
         _sortAscending = _sortColumn != column || !_sortAscending;
         _sortColumn = column;
@@ -940,8 +894,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
   /// The rows in the order the sorted column asks for. A row keeps the rows
   /// under it, so a folder still holds its own items and only siblings swap.
   List<_TreeRow> _sortRows(List<_TreeRow> rows, int from, int to) {
-    // Each sibling, as where it starts and where the rows under it end. A row
-    // whose folder a filter has hidden counts as a sibling where it stands.
     final runs = <(int, int)>[];
     for (var i = from; i < to;) {
       var end = i + 1;
@@ -955,7 +907,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
     final way = _sortAscending ? 1 : -1;
     runs.sort((a, b) {
       final order = Comparable.compare(keys[a.$1]!, keys[b.$1]!) * way;
-      // Rows that tie keep the project's own order.
       return order != 0 ? order : a.$1 - b.$1;
     });
     return [
@@ -966,11 +917,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
     ];
   }
 
-  /// What a row sorts by under the column in force: words for Name and Path,
-  /// a number for the rest, and a row with nothing to state goes first.
-  ///
-  /// ponytail: names compare letter by letter, so "Shot 10" sorts before
-  /// "Shot 2". Compare the runs of digits as numbers if that gets in the way.
   Comparable<dynamic> _sortKey(_TreeRow row) {
     final item = row.item;
     final id = projectItemId(item);
@@ -1011,17 +957,12 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
   /// someone nudged a layer value.
   final Map<String, bool> _missing = {};
 
-  /// Footage the engine found on disk but cannot decode, by id.
   final Set<String> _undecodable = {};
 
-  /// The pictures each 3D model names that are missing or won't read.
   final Map<String, List<String>> _pictures = {};
 
-  /// Where each 3D model's trip through Blender stands, while it isn't done.
   final Map<String, BridgeBlenderState> _blender = {};
 
-  /// The 3D models asked after on a timer: read and still being read, or
-  /// waiting on Blender.
   final Map<String, FootageReference> _watched = {};
   final Set<String> _reading = {};
   Timer? _blenderPoll;
@@ -1035,8 +976,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
     _bookRebuild();
   }
 
-  /// Look at each watched model's Blender state, and stop watching the ones
-  /// with nothing left to happen.
   void _pollBlender() {
     for (final MapEntry(key: id, value: footage) in _watched.entries.toList()) {
       BridgeBlenderState? state;
@@ -1082,7 +1021,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
     try {
       item.field0.stopBlender();
     } catch (_) {
-      // The item has gone, and the conversion was stopped with it.
     }
     _pollBlender();
   }
@@ -1108,8 +1046,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
   /// of v0's `documentEpoch`.
   int _epoch = 0;
 
-  /// True while a drag from the OS file manager is over the panel, so it can
-  /// wear the drop-target treatment (§6.5) the folder rows already wear.
   bool _dropHover = false;
 
   @override
@@ -1151,7 +1087,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
 
   Future<void> _dropped(List<String> paths) async {
     final state = Provider.of<LumitState>(context, listen: false);
-    // A Lottie makes a composition of its own, and the rest are footage.
     final rest = await importLottieFrb(context, state, paths);
     if (!mounted) return;
     final footage = rest.where((path) => !isScriptFile(path)).toList();
@@ -1165,7 +1100,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
     final roots = state.project?.getItems() ?? const <ItemReference>[];
     final cols = ProjectColumns.forWidth(width,
         widths: _columnWidths, hidden: _hiddenColumns);
-    // Listened to, so flipping the switch in Settings redraws the rows.
     _thumbnails = Provider.of<LumitUiState>(context)
         .workspace
         .interface
@@ -1214,8 +1148,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
     _rowById.clear();
     _visibleIds.clear();
     var itemCount = 0;
-    // How many compositions, footage items, solids and folders the walk
-    // meets, for the line the card shows while nothing is picked.
     final kinds = [0, 0, 0, 0];
 
     // A row shows when its own name matches, or an ancestor folder's did —
@@ -1363,8 +1295,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
               Positioned.fill(
                 child: _importOnDoubleTap(child: const SizedBox.expand()),
               ),
-              // A search or a filter that leaves nothing says so, rather than
-              // a blank list.
               if (rows.isEmpty)
                 Center(
                   child: IgnorePointer(
@@ -1396,8 +1326,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
                     padding: const EdgeInsets.only(bottom: projectRowHeight * 2),
                     itemExtent: projectRowHeight,
                     itemCount: rows.length,
-                    // Every other row on screen is shaded, whatever is open,
-                    // filtered or sorted.
                     itemBuilder: (context, i) =>
                         _treeRow(rows[i], cols, shaded: i.isOdd),
                   ),
@@ -1511,8 +1439,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
         : picked();
   }
 
-  /// The search well and its colour chips, with this panel's own controller,
-  /// focus and held filter handed to the chrome that draws them.
   Widget _searchRow(LumitTheme t) => projectSearchRow(
         t,
         controller: _searchController,
@@ -1559,7 +1485,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
   VoidCallback? _pasteAction({ItemReference_Folder? folder}) =>
       _copied.isEmpty ? null : () => _duplicate(_copied, folder: folder);
 
-  /// The menu for [item], from its row or from the card.
   void _itemMenu(ItemReference item, Offset at) {
     final id = projectItemId(item);
     final row = _rowById[id];
@@ -1630,7 +1555,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
     );
   }
 
-  /// The menu on the blank ground under the rows, and on the bottom bar.
   void _groundMenu(Offset at) {
     final state = Provider.of<LumitState>(context, listen: false);
     final project = state.project;
@@ -1691,15 +1615,11 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
     final info = _mediaInfo[id];
     final missing = item is ItemReference_Footage && (_missing[id] ?? false);
     final audio = info != null && info.videoCodec == null;
-    // The scrubbed frame if the pointer is holding one, the poster frame
-    // otherwise. Both come out of RAM, so the card never waits.
     final scrubbed =
         id == _scrubId && _scrubAt != null ? _scrubFrames[_scrubAt] : null;
     final picture = item is ItemReference_Composition
         ? (_compStillId == id ? _compStill : null)
         : scrubbed ?? _thumbs[id];
-    // A file with sound and no picture: the square carries a play button
-    // instead of a picture, which is the one thing there is to do with it.
     final sound = item is ItemReference_Footage &&
         !missing &&
         info != null &&
@@ -1734,7 +1654,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
           nodeGraph ? LumitIcon.nodes : LumitIcon.comp,
         ItemReference_Solid() => LumitIcon.solid,
       },
-      // A folder has no uses of its own. Read once per document change.
       uses: item is ItemReference_Folder
           ? null
           : _uses[id] ??= _usesOf(item),
@@ -1752,11 +1671,8 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
   /// sits where without walking the tree again. Rebuilt with the rows.
   final Map<String, _TreeRow> _rowById = {};
 
-  /// How many places use each item, for the card.
   final Map<String, int> _uses = {};
 
-  /// The card's uses line: the composition that shows [item], or a list to
-  /// pick from when there are several.
   void _revealUses(ItemReference item, Offset at) {
     final ui = Provider.of<LumitUiState>(context, listen: false);
     final comps = compsUsing(item);
@@ -1788,7 +1704,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
     }
   }
 
-  /// What `Ctrl+A` does, from the ground's menu.
   void _selectAll() {
     _selectedIds
       ..clear()
@@ -1861,7 +1776,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
       setState(() => _soundId = null);
       return;
     }
-    // A file with several audio streams is heard as it would be placed.
     final arrival =
         Provider.of<LumitUiState>(context, listen: false).streamsArrival;
     setState(() => _soundId =
@@ -1985,7 +1899,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
         child: child,
       );
 
-  /// Fill in a footage item's media facts, off the build.
   void _refreshMediaInfo(FootageReference footage) {
     final id = footage.internalid.toString();
     if (_mediaInfo.containsKey(id)) return;
@@ -2016,7 +1929,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
     });
   }
 
-  /// An item's name, calm when it was deleted from under the panel.
   String _nameOf(ItemReference item) {
     try {
       return item.name();
@@ -2067,8 +1979,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
     }
   }
 
-  /// Whether this item is a node graph composition. False for every other
-  /// kind, and for a comp that has gone from under the panel.
   bool _isModel(ItemReference item) {
     if (item case ItemReference_Footage(:final field0)) {
       try {
@@ -2108,11 +2018,9 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
   List<ItemReference> _targets(ItemReference item) =>
       _selectedIds.contains(projectItemId(item)) ? _picked : [item];
 
-  /// Tag every selected item, or untag them with 0, as one undo step.
   void _setLabel(ItemReference item, int label) {
     eachInOneUndo(Provider.of<LumitState>(context, listen: false),
         _targets(item), (target) {
-      // The colour it already has makes no undo step.
       if (target.label() != label) target.setLabel(label: label);
     });
     _documentChanged();
@@ -2191,21 +2099,16 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
     }
   }
 
-  /// Ask for the new comp's settings, then make it. `footage` is whatever was
-  /// dropped on the button; empty for a plain click.
   Future<void> _newComposition([
     List<FootageReference> footage = const [],
   ]) async {
     final state = Provider.of<LumitState>(context, listen: false);
     final comp = await state.newComposition(context, footage: footage);
     if (comp == null || !mounted) return;
-    // Fronted because a comp you just made is the one you want to work on.
     Provider.of<LumitUiState>(context, listen: false).setSelectedComp(comp);
     _documentChanged();
   }
 
-  /// Import a folder and every folder inside it, kept as project folders, as
-  /// File ▸ Import folder does.
   Future<void> _importFolder() async {
     final state = Provider.of<LumitState>(context, listen: false);
     final folder = await pickFolder();
@@ -2232,7 +2135,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
   }
 
   void _documentChanged() {
-    // An item deleted, or a project closed, takes its conversion with it.
     if (_watched.isNotEmpty) {
       Provider.of<LumitState>(context, listen: false)
           .project
@@ -2260,7 +2162,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
       _dropScrub();
       _stopSound();
     });
-    // Whatever the card was showing may have just changed.
     if (_itemById[_cardItem.value]
         case ItemReference_Composition(:final field0)) {
       _askCompStill(field0, _cardItem.value!);
@@ -2274,7 +2175,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
     _thumbs.clear();
   }
 
-  /// Decode a footage item's poster frame into the RAM cache, off the build.
   void _refreshThumb(FootageReference footage) {
     final id = footage.internalid.toString();
     if (_thumbs.containsKey(id)) return;

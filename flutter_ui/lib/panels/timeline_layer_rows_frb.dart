@@ -1,8 +1,3 @@
-// The Timeline's fold rows: the drop target over an empty panel, the fold row
-// itself (one twirled-open property or group), and the plain, flow and volume
-// rows it builds.
-//
-// Split out of timeline_panel_frb.dart.
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -82,7 +77,6 @@ class EmptyTimelineDrop extends StatelessWidget {
       onAcceptWithDetails: (details) async {
         switch (details.data) {
           case FootageDragData(:final footage):
-            // As a drop on a comp's Timeline: end to end, Shift stacks.
             final comp = await state.newComposition(context,
                 footage: footage,
                 endToEnd: !HardwareKeyboard.instance.isShiftPressed);
@@ -92,7 +86,6 @@ class EmptyTimelineDrop extends StatelessWidget {
           case CompDragData(comp: final dropped):
             Provider.of<LumitUiState>(context, listen: false)
                 .setSelectedComp(dropped);
-          // A graphics template is brought in and opened, as a comp is.
           case TemplateDragData(:final path):
             await openTemplate(state,
                 Provider.of<LumitUiState>(context, listen: false), path);
@@ -115,7 +108,6 @@ class EmptyTimelineDrop extends StatelessWidget {
   }
 }
 
-/// The effect heading whose name is being edited, by its path.
 final ValueNotifier<String?> foldEffectRenaming = ValueNotifier(null);
 
 /// One row of a layer's fold-out, in the outline.
@@ -256,8 +248,6 @@ class FoldRow extends StatelessWidget {
         ? AbsorbPointer(
             child: Opacity(opacity: 0.5, child: _control(context)),
           )
-        // A property row is held for whoever else in a shared project
-        // is changing its value.
         : picks
             ? HeldFor(
                 names: [path],
@@ -436,7 +426,6 @@ class FoldRow extends StatelessWidget {
     return null;
   }
 
-  /// Audio: its waveform lane, then the Layer menu's own Audio rows.
   void _audioMenu(BuildContext context, Offset at) {
     final app = Provider.of<LumitState>(context, listen: false);
     final ui = _aboutThisLayer(context);
@@ -470,7 +459,6 @@ class FoldRow extends StatelessWidget {
     return ui;
   }
 
-  /// Effects: the rack filled from the Effect menu, or from the clipboard.
   void _effectsMenu(BuildContext context, Offset at) {
     final app = Provider.of<LumitState>(context, listen: false);
     final ui = _aboutThisLayer(context);
@@ -606,7 +594,6 @@ class FoldRow extends StatelessWidget {
     );
   }
 
-  /// The menu of the effect or style this heading names.
   void _effectMenu(BuildContext context, Offset at, String id) {
     final commands = _effectCommands(context, id);
     if (commands == null) return;
@@ -634,8 +621,6 @@ class FoldRow extends StatelessWidget {
     );
   }
 
-  /// Which of this layer's text animators [path] is the heading of, or null
-  /// for any other path.
   int? _animatorIndexOf(String? path) {
     if (path == null) return null;
     final stem = '${animatorsPath(layer.internallayerId.toString())}/';
@@ -847,9 +832,6 @@ class FoldRow extends StatelessWidget {
                 ] else if (!locked &&
                     path ==
                         animatorsPath(layer.internallayerId.toString())) ...[
-                  // A Text layer's Animators heading: Add animator, After
-                  // Effects' Animate, in the place Global add has on a shape
-                  // layer's Contents.
                   Expanded(child: _headingName(context, label, named, lit)),
                   RowButton(
                     key: ValueKey<String>('tl-text-animate-$path'),
@@ -882,8 +864,6 @@ class FoldRow extends StatelessWidget {
                   SizedBox(width: valueColumn.width),
                 ] else if (_animatorIndexOf(locked ? null : path)
                     case final index?) ...[
-                  // An animator's heading: Add ▸ Property or Selector, as
-                  // beside an animator in After Effects.
                   Expanded(child: _headingName(context, label, named, lit)),
                   RowButton(
                     key: ValueKey<String>('tl-text-animator-add-$path'),
@@ -920,8 +900,6 @@ class FoldRow extends StatelessWidget {
                   SizedBox(width: valueColumn.width),
                 ] else if (!locked &&
                     path == contentsPath(layer.internallayerId.toString())) ...[
-                  // A shape layer's Contents heading: Global add, in the
-                  // place the Add on the rows under it has.
                   Expanded(
                     child: Text(t.propertyCase(label),
                         style: t.body.copyWith(
@@ -1052,8 +1030,6 @@ class FoldRow extends StatelessWidget {
             onChanged();
           },
         ),
-      // A muted send reads dimmed, as a muted layer's row does, and its menu
-      // brings it back.
       FoldSendRow(:final send, :final bus) => ParamRowExtras(
         rows: (close) => [
           muteSendRow(layer, send, close: close, onChanged: onChanged),
@@ -1074,7 +1050,6 @@ class FoldRow extends StatelessWidget {
           label: bus,
           rowKey: 'tl-send-${send.bus}',
           write: (v) => writeSend(layer, send.bus, level: v),
-          // Before or after the layer's Volume and Pan.
           trailing: HouseButton(
             key: ValueKey<String>('tl-send-pre-${send.bus}'),
             small: true,
@@ -1339,9 +1314,7 @@ class _TimelineParamRowState extends State<_TimelineParamRow> {
             row.model ||
             row.driver,
       ),
-      // A part's Visible row, which reads as a tick until it is keyed.
       asTick: row.model && row.param.id == 'visible',
-      // A material row goes back to its file's value.
       onReset: row.material ? () => _resetMaterialRow(row) : null,
       effectId: row.info.id,
       param: row.param,
@@ -1350,7 +1323,6 @@ class _TimelineParamRowState extends State<_TimelineParamRow> {
       // padding on top of that clipped the fields.
       rowPadding: EdgeInsets.zero,
       sliderTrack: false,
-      // The staged value while a drag is in flight, the document's otherwise.
       value: _editor.stagedValue(row.info.id, row.param.id) ?? row.value,
       siblings: {for (final v in row.info.values) v.id: v.value},
       // The wire deciding this parameter, read once per revision by the panel:
@@ -1419,8 +1391,6 @@ class _FlowRow extends StatelessWidget {
   final ValueChanged<int> onSeek;
   final VoidCallback onChanged;
 
-  /// Clicking the name selects the property and its keys — the handle every
-  /// other property row has and this one did not.
   final VoidCallback? onLabelTap;
 
   const _FlowRow({

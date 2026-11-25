@@ -1,6 +1,3 @@
-//! What a 3D precomp hands to the effects that read its passes, as the build
-//! and the bridge see it.
-
 use crate::gpufx::{AuxSlot, GpuEffect};
 use lumit_core::fx::effects::scene_pass::{
     parts_of as parts_of_text, PartMatte, PassKind, ScenePass, SceneRead,
@@ -10,7 +7,6 @@ use lumit_core::model::{Composition, Document, EffectInstance, EffectValue, Laye
 use lumit_gpu::fx::FxEngine;
 use lumit_gpu::GpuContext;
 
-/// A Depth row's read: distance from the camera.
 pub(crate) fn depth_read() -> Option<SceneRead> {
     Some(SceneRead {
         pass: PassKind::Depth,
@@ -19,7 +15,6 @@ pub(crate) fn depth_read() -> Option<SceneRead> {
     })
 }
 
-/// A Scene pass's picture is the pass, once there is one to show.
 pub(crate) struct ScenePassFx;
 impl GpuEffect for ScenePassFx {
     fn match_name(&self) -> &'static str {
@@ -40,7 +35,6 @@ impl GpuEffect for ScenePassFx {
     }
 }
 
-/// A Part matte is Set matte with a matte from the scene.
 pub(crate) struct PartMatteFx;
 impl GpuEffect for PartMatteFx {
     fn match_name(&self) -> &'static str {
@@ -74,8 +68,6 @@ impl GpuEffect for PartMatteFx {
     }
 }
 
-/// Whether `l` is a Precomp whose comp has a 3D layer in it, which is what a
-/// row needs to read a distance or a pass from.
 pub(crate) fn is_3d_precomp(doc: &Document, l: &Layer) -> bool {
     match l.kind {
         LayerKind::Precomp { comp } => doc
@@ -104,7 +96,6 @@ pub fn scene_parts(doc: &Document, l: &Layer) -> Option<Vec<(u32, String)>> {
     Some(parts)
 }
 
-/// One 3D layer's parts: a model's, or the layer itself.
 fn parts_of(doc: &Document, l: &Layer, parts: &mut Vec<(u32, String)>) {
     let id = l.id.as_bytes();
     match &l.kind {
@@ -170,7 +161,6 @@ pub fn follow_copy(doc: &Document, old: &Layer, copy: &mut Layer) {
     }
 }
 
-/// What each part of the old layers is numbered on the new ones.
 fn numbers_between<'a>(
     doc: &Document,
     pairs: impl Iterator<Item = (&'a Layer, &'a Layer)>,
@@ -189,7 +179,6 @@ fn numbers_between<'a>(
     numbers
 }
 
-/// A Part matte's picks by the numbers in `numbers`.
 fn renumber(e: &mut EffectInstance, numbers: &std::collections::HashMap<u32, u32>) {
     if e.effect.match_name != "part_matte" {
         return;

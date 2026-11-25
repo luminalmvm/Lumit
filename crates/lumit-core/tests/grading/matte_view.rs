@@ -1,6 +1,3 @@
-//! The Viewer's matte view: the patched document draws the shot alone, its
-//! stack cut after the chosen node, and that node shows its key.
-
 use lumit_core::grade::matte_view::{apply, MatteMode, MatteView, MATTE_VIEW_ROW};
 use lumit_core::grade::Shot;
 use lumit_core::model::{Document, EffectInstance, EffectValue};
@@ -8,7 +5,6 @@ use uuid::Uuid;
 
 use crate::support::{assert_near, at_xy, comp_of, f, flat, fx, linear, rgb, run, stack_of};
 
-/// A window round the middle of a 16 px picture.
 fn windowed(mut rows: Vec<(&'static str, EffectValue)>) -> EffectInstance {
     rows.extend([
         ("win1_shape", EffectValue::Choice(1)),
@@ -21,8 +17,6 @@ fn windowed(mut rows: Vec<(&'static str, EffectValue)>) -> EffectInstance {
     linear(&rows)
 }
 
-/// The patched stack of `view`, drawn over flat grey: the pixel in the
-/// window and one outside it.
 fn drawn(doc: &Document, view: MatteView) -> ([f32; 3], [f32; 3]) {
     let patched = apply(doc, view).unwrap();
     let out = run(
@@ -48,8 +42,6 @@ fn the_matte_view_draws_the_shot_alone_and_cuts_after_the_node() {
     let shot = shots[0];
     let view = |effect: Uuid, mode: MatteMode| MatteView { shot, effect, mode };
 
-    // Key on the first node: only the shot shows, the stack stops at the
-    // node, and the node draws its window in black and white.
     let patched = apply(&doc, view(a.id, MatteMode::Key)).unwrap();
     let layers = &patched.comp(shot.comp).unwrap().layers;
     assert!(layers[0].switches.visible && !layers[1].switches.visible);
@@ -64,11 +56,9 @@ fn the_matte_view_draws_the_shot_alone_and_cuts_after_the_node() {
         ([1.0; 3], [0.0; 3])
     );
 
-    // Highlight: the graded picture in the window, grey elsewhere.
     let (inside, outside) = drawn(&doc, view(a.id, MatteMode::Highlight));
     assert_near(inside, [0.5; 3], 1e-5, "highlight inside");
     assert_near(outside, [0.18; 3], 1e-6, "highlight outside");
-    // Over black, white, or the node's picture in black and white.
     for (mode, back) in [
         (MatteMode::HighlightBlack, 0.0),
         (MatteMode::HighlightWhite, 1.0),
@@ -79,13 +69,10 @@ fn the_matte_view_draws_the_shot_alone_and_cuts_after_the_node() {
         assert_near(outside, [back; 3], 1e-5, "backdrop outside");
     }
 
-    // A Parallel node keeps its run: the view goes over the run's picture,
-    // keyed by the node's own window.
     let (inside, outside) = drawn(&doc, view(b.id, MatteMode::Highlight));
     assert_near(inside, [0.6; 3], 1e-5, "run inside");
     assert_near(outside, [0.18; 3], 1e-6, "run outside");
 
-    // With nothing on above it the node is Serial, and says so.
     let mut lone = doc.clone();
     let layer = &mut lone.comp_mut(shot.comp).unwrap().layers[0];
     layer.effects[0].enabled = false;
@@ -97,7 +84,6 @@ fn the_matte_view_draws_the_shot_alone_and_cuts_after_the_node() {
         ([1.0; 3], [0.0; 3])
     );
 
-    // Nothing to show: a node that isn't a Correction, or a shot that's gone.
     assert!(apply(&doc, view(exposure.id, MatteMode::Key)).is_none());
     let gone = MatteView {
         shot: Shot {

@@ -1,14 +1,9 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-//! Luma fade's kernel against its CPU oracle, on the layer's own picture and
-//! through a matte, and every pattern. Completion 0 and Mix 0 keep the
-//! picture exactly, and 100 leaves nothing.
-
 use lumit_core::fx::effects::luma_fade::{luma_fade, LumaFadeParams};
 use lumit_gpu::fx::common::{readback_linear_f32, upload_linear_f32};
 use lumit_gpu::fx::utility::LumaFadeOp;
 
-/// A premultiplied picture with every brightness in it and a soft alpha edge.
 fn picture(w: u32, h: u32) -> Vec<f32> {
     let mut img = vec![0.0f32; (w * h * 4) as usize];
     for y in 0..h {
@@ -31,7 +26,6 @@ fn params(completion: f32, band: f32, invert: bool, mix: f32) -> LumaFadeParams 
         band,
         invert,
         mix,
-        // The picture, on the 40 by 24 raster below.
         pattern: 0,
         step: 8.0 / 24.0,
         centre: [20.0, 12.0],
@@ -48,7 +42,6 @@ fn wgsl_luma_fade_matches_the_cpu_oracle() {
     let fx = ctx.fx();
     let (w, h) = (40u32, 24u32);
     let img = picture(w, h);
-    // The matte runs the other way, top to bottom.
     let mut matte = vec![0.0f32; img.len()];
     for (i, px) in matte.chunks_exact_mut(4).enumerate() {
         let v = (i as u32 / w) as f32 / (h - 1) as f32;

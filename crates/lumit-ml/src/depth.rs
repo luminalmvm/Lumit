@@ -40,7 +40,6 @@ pub struct Plane {
     pub data: Vec<u16>,
 }
 
-/// An open depth model, ready to read frames.
 #[derive(Debug)]
 pub struct Depth {
     session: Session,
@@ -209,7 +208,6 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
-    /// A manifest for a depth pack of `bytes` bytes sitting in a folder.
     fn a_depth_manifest(bytes: u64) -> String {
         let digest = "afb6a5c28f3b6bf1618c6e43f02073ef9dfdc70e937502d51603e57b0a1df10c";
         format!(
@@ -234,19 +232,16 @@ mod tests {
         let near = quantise(&read, DepthKind::InverseRelative);
         assert_eq!(near, [0, 28086, 9362, 65535]);
 
-        // A metric model measures the other way round and is turned over.
         let far = quantise(&read, DepthKind::Metric);
         assert_eq!(far, [65535, 37449, 56173, 0]);
     }
 
-    /// Where the real Depth Anything file sits on the reference machine.
     fn real_depth() -> Option<PathBuf> {
         let packs = crate::test_support::packs_dir()?;
         let file = packs.join("depth-anything-v2-small.onnx");
         file.is_file().then_some(file)
     }
 
-    /// A dark frame with a bright square in the middle of it.
     fn square(side: usize) -> Vec<u8> {
         let mut rgba = vec![0u8; 4 * side * side];
         for pixel in rgba.chunks_exact_mut(4) {

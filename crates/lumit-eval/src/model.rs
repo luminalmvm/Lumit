@@ -1,5 +1,3 @@
-//! A Model layer's part of a frame's name.
-
 use std::sync::Arc;
 
 use lumit_core::model::{Composition, Document, Layer, LayerKind};
@@ -46,8 +44,6 @@ pub(crate) fn feed(
     )
 }
 
-/// A 3D shape's part of the name: its shape, as its rows go in with the
-/// materials'.
 pub(crate) fn feed_shape(h: &mut blake3::Hasher, shape: lumit_core::mesh_shape::MeshShape) {
     h.update(b"mesh/");
     h.update(shape.options().as_bytes());
@@ -96,8 +92,6 @@ mod tests {
         }
     }
 
-    /// Changing how the model sits in its layer renames the frame, so a cached
-    /// picture with the old Up axis is never shown.
     #[test]
     fn settings_rename_the_frame() {
         let item = Uuid::now_v7();
@@ -114,7 +108,6 @@ mod tests {
         assert_ne!(name(&z), name(&ModelSettings::default()));
     }
 
-    /// What it reads as the stamper tells it, so a take's moment is in the name.
     struct Clock;
     impl SourceStamper for Clock {
         fn stamp(&self, item: Uuid, lt: f64, _native: bool) -> Option<(String, u64)> {
@@ -129,10 +122,6 @@ mod tests {
         }
     }
 
-    /// A cached picture is only shown for the moment and the rows it was drawn
-    /// with. A playing take and a keyed row name each frame, a model at rest with
-    /// nothing keyed has one name for all of them, and a changed row or Offset
-    /// is a new picture. A file nobody can name is never cached.
     #[test]
     fn the_moment_and_the_rows_rename_the_frame() {
         use lumit_core::anim::{Animation, Keyframe, Property, SideInterp};

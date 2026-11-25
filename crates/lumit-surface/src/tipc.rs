@@ -14,7 +14,6 @@
 /// near this is a stream that has lost its place.
 pub(crate) const LARGEST: usize = 64 * 1024;
 
-/// A command from the Hub.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum FromHub {
     /// The Hub is there: its protocol revision and the panels it expects,
@@ -59,7 +58,6 @@ pub(crate) enum FromHub {
     },
 }
 
-/// A command to the Hub.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum ToHub {
     /// Who we are and the folder holding our `controls.xml` and default
@@ -83,7 +81,6 @@ pub(crate) enum ToHub {
     ModeValue {
         id: u32,
     },
-    /// The status lines, top first.
     DisplayText {
         lines: Vec<String>,
     },
@@ -164,7 +161,6 @@ impl Reader<'_> {
     }
 }
 
-/// One message holding `commands`, its byte count first.
 pub(crate) fn encode(commands: &[ToHub]) -> Vec<u8> {
     let mut body = Vec::new();
     for command in commands {
@@ -252,7 +248,6 @@ impl ToHub {
                 put_u32(out, lines.len() as u32);
                 for line in lines {
                     put_text(out, line, 32);
-                    // Single height.
                     put_u32(out, 0);
                 }
             }
@@ -260,7 +255,6 @@ impl ToHub {
     }
 }
 
-/// Bytes off the socket, cut into whole messages.
 #[derive(Default)]
 pub(crate) struct Framer {
     held: Vec<u8>,
@@ -271,7 +265,6 @@ pub(crate) struct Framer {
 pub(crate) struct Garbled;
 
 impl Framer {
-    /// Take `bytes` and hand each whole message's body to `message`.
     pub(crate) fn push(
         &mut self,
         bytes: &[u8],

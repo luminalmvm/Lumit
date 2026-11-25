@@ -77,7 +77,6 @@ void main() {
           reason: 'over the top means tilted to look down');
       expect(up.position.$2, lessThan(pose().position.$2),
           reason: 'the eye is higher up the screen, which is lower y');
-      // And the other way round, so nobody ships an inverted orbit.
       final down = orbitCamera(pose(), 0, 100);
       expect(down.position.$2, greaterThan(pose().position.$2));
     });
@@ -108,8 +107,6 @@ void main() {
 
   group('Easing', () {
     test('keeps an orbited point in the middle all the way', () {
-      // A big turn about a point nearer than the 1:1 plane, as a snap from a
-      // three-quarter view to Top makes.
       final start = pose(rotation: (-20, 35, 0));
       final f = start.axes.forward;
       final p = start.position;

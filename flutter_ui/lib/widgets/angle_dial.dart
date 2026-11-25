@@ -34,11 +34,8 @@ class AngleDial extends StatefulWidget {
   /// Snapping increment in degrees while Shift is held.
   final double step;
 
-  /// Whether the dial responds at all. A greyed row draws its dial faded and
-  /// takes no gesture (docs/08's conditional enablement).
   final bool enabled;
 
-  /// Live during a drag.
   final ValueChanged<double> onChanged;
 
   /// Once, at the end of a drag — the commit. Falls back to [onChanged].
@@ -213,7 +210,6 @@ class _DialPainter extends CustomPainter {
 /// Typing 400 into the degrees box therefore rolls over of its own accord — the
 /// value becomes 400 and redraws as `1x +40°`.
 class TurnsAndDegreesField extends StatefulWidget {
-  /// The whole angle, turns included.
   final double degrees;
 
   /// Mid-drag preview, and the committed value. `onChanged` is null on an
@@ -241,14 +237,12 @@ class TurnsAndDegreesField extends StatefulWidget {
     this.setExpression,
   });
 
-  /// How wide the two boxes stand together, the gap between them included.
   static const double width = 30 + 3 + 54;
 
   /// The whole turns in an angle, toward zero — so −370° reads as −1 turn and
   /// −10°, which is how it is spoken.
   static double turnsOf(double value) => (value / 360).truncateToDouble();
 
-  /// What is left after the turns.
   static double degreesOf(double value) => value - turnsOf(value) * 360;
 
   @override

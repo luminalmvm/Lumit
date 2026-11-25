@@ -79,14 +79,12 @@ EasingCurve fitFadeCurve(double Function(double u) gain) {
   return EasingCurve(1 / 3, 3 * a - 1.5 * b, 2 / 3, 3 * b - 1.5 * a);
 }
 
-/// A shape as the curve the editor draws and drags.
 EasingCurve fadeCurveOf(BridgeClipFadeShape shape) => switch (shape) {
       BridgeClipFadeShape_Custom(:final x1, :final y1, :final x2, :final y2) =>
         EasingCurve(x1, y1, x2, y2),
       _ => fitFadeCurve((u) => clipFadeGain(shape, u)),
     };
 
-/// A drawn curve as the shape that is stored.
 BridgeClipFadeShape customFadeShape(EasingCurve curve) =>
     BridgeClipFadeShape.custom(
         x1: curve.x1, y1: curve.y1, x2: curve.x2, y2: curve.y2);
@@ -112,11 +110,8 @@ typedef ClipFadeRamp = ({
   BridgeClipFadeShape shape,
 });
 
-/// A fade's length while its corner is being dragged, which is what the ramp is
-/// drawn from until the drag is let go.
 typedef ClipFadeDrag = ({String clip, bool into, double seconds});
 
-/// How long one of a clip's fades is, with a drag in flight applied.
 double clipFadeSeconds(BridgeClip clip,
         {required bool into, ClipFadeDrag? live}) =>
     live != null && live.clip == clip.id.toString() && live.into == into
@@ -166,7 +161,6 @@ bool? clipFadeSideAt(
   return null;
 }
 
-/// Every ramp a track's lane draws, the overlaps once per pair.
 List<ClipFadeRamp> clipFadeRamps(List<BridgeClip> clips, double fps,
     {ClipFadeDrag? live}) {
   final out = <ClipFadeRamp>[];

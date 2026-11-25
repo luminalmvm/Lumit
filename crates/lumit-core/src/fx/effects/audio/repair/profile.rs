@@ -25,30 +25,21 @@
 use super::{from_grid, log_grid, to_grid};
 use crate::fx::effects::audio::dsp::stft::{frame_at, frame_count, size_at, sqrt_hann, Fft};
 
-/// The frame size at 48 kHz: 42.7 ms, a hop of a quarter of it.
 pub const FRAME_AT_48K: usize = 2048;
 
-/// What a profile blob starts with.
 const MAGIC: [u8; 4] = *b"LNPF";
 
-/// The blob layout's version.
 const VERSION: u8 = 1;
 
-/// Points on the profile's frequency grid.
 pub const POINTS: usize = 512;
 
-/// The grid's ends, in hertz.
 const LOW_HZ: f64 = 20.0;
 const HIGH_HZ: f64 = 24_000.0;
 
-/// The bytes ahead of the points.
 const HEADER: usize = 8;
 
-/// A frame whose windowed samples hold less energy than this per sample is
-/// digital silence, about -120 dBFS.
 const SILENT: f32 = 1e-12;
 
-/// The percentile of the smoothed power the adaptive floor reads.
 const PERCENTILE: f64 = 0.2;
 
 /// The percentile's bias correction: the 20th percentile of an exponential
@@ -63,18 +54,12 @@ const HIST_BUCKETS: usize = 1_100;
 /// A tonal peak stands at least this far over the floor around it, in dB.
 pub const TONAL_DB: f64 = 3.0;
 
-/// The framing Noise reduction and Reverb reduction use at one rate.
 pub struct Framing {
     pub rate: u32,
-    /// Samples in a frame.
     pub n: usize,
-    /// Samples between frames.
     pub hop: usize,
-    /// The analysis window, a square-root Hann.
     pub window: Vec<f32>,
-    /// Bins in a spectrum.
     pub bins: usize,
-    /// Hertz between bins.
     pub bin_hz: f64,
     /// A bin's expected power for a density of one per hertz: half the rate
     /// times the window's energy.
@@ -82,7 +67,6 @@ pub struct Framing {
 }
 
 impl Framing {
-    /// The framing at `rate`.
     #[must_use]
     pub fn at(rate: u32) -> Self {
         let n = size_at(rate, FRAME_AT_48K);
@@ -99,14 +83,12 @@ impl Framing {
         }
     }
 
-    /// Seconds between frames.
     #[must_use]
     pub fn hop_s(&self) -> f64 {
         self.hop as f64 / f64::from(self.rate.max(1))
     }
 }
 
-/// The profile's frequency points.
 fn grid() -> Vec<f64> {
     log_grid(LOW_HZ, HIGH_HZ, POINTS)
 }
@@ -179,7 +161,6 @@ pub fn learned_points(interleaved: &[f32], channels: usize, rate: u32) -> Vec<f6
     to_grid(&density, framing.bin_hz, &grid())
 }
 
-/// A profile's points as the plugin_state blob.
 #[must_use]
 pub fn encode(points_db: &[f64]) -> Vec<u8> {
     let mut out = Vec::with_capacity(HEADER + POINTS * 2);
@@ -216,7 +197,6 @@ pub fn decode(blob: &[u8]) -> Option<Vec<f64>> {
     )
 }
 
-/// A blob's floor as each bin's expected power at this framing.
 #[must_use]
 pub fn floor_of_blob(blob: &[u8], framing: &Framing) -> Option<Vec<f64>> {
     let points = decode(blob)?;

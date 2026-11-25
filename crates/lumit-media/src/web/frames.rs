@@ -21,7 +21,6 @@ use crate::MediaError;
 /// thirty 1080p ones.
 const BUDGET: usize = 256 << 20;
 
-/// A frame is filed by its file, the file's own frame number and its width.
 type Key = (PathBuf, usize, u32);
 
 #[derive(Default)]
@@ -41,7 +40,6 @@ thread_local! {
 
 #[wasm_bindgen::prelude::wasm_bindgen]
 extern "C" {
-    /// Ask the page for a frame (flutter_ui/web/media.js).
     #[wasm_bindgen(catch, js_namespace = lumitMedia, js_name = want)]
     fn page_want(
         path: &str,
@@ -53,17 +51,14 @@ extern "C" {
     ) -> Result<(), wasm_bindgen::JsValue>;
 }
 
-/// How many frames the page has handed in.
 pub(crate) fn landed() -> u64 {
     LANDED.with(Cell::get)
 }
 
-/// How many times a render has drawn a stand-in.
 pub(crate) fn stand_ins() -> u64 {
     STAND_INS.with(Cell::get)
 }
 
-/// File frame `frame` of `path`, decoded by the page at `width` by `height`.
 pub fn land(path: &Path, frame: usize, width: u32, height: u32, rgba: Vec<u8>) {
     if rgba.len() as u64 != u64::from(width) * u64::from(height) * 4 {
         return;
@@ -104,8 +99,6 @@ fn copy(frame: &DecodedFrame) -> DecodedFrame {
     }
 }
 
-/// One frame as a render wants it: the file's own frame, the size, and the
-/// moment in the file to ask the page for.
 struct Want {
     raw: usize,
     width: u32,
@@ -121,8 +114,6 @@ fn want_of(
     target_width: Option<u32>,
 ) -> Option<Want> {
     let count = index.entries.len();
-    // ponytail: a field or a pulled-down frame is read as the whole frame it
-    // comes from. Weave in the page's frames if interlaced footage needs it.
     let raw = match it.pick(n, count) {
         Pick::Whole(raw) | Pick::Field { frame: raw, .. } | Pick::Weave { first: raw, .. } => raw,
     };
@@ -167,7 +158,6 @@ fn ask(path: &Path, want: &Want, ahead: bool) {
     let _ = page_want(&path, want.raw, want.at, want.width, want.height, ahead);
 }
 
-/// One file's picture, read from the frames the page decodes.
 pub(crate) struct Video {
     path: PathBuf,
     index: FrameIndex,

@@ -35,7 +35,6 @@ import 'audio_timeline_clips_frb.dart'
     show audioClipGainY, audioClipHeader, clipGainWords, clipHolds;
 import 'waveform_frb.dart';
 
-/// The room a box leaves at the top and foot of its track.
 const double cutClipInset = 2;
 
 /// How faint the outline of a clip's whole source is drawn behind its box
@@ -104,13 +103,11 @@ class CutTrackPainter extends CustomPainter {
   /// id. They draw as sound clips do.
   final Set<String> soundOnPicture;
 
-  /// The composition glyph, or null until the panel has made it.
   final CutGlyph? compGlyph;
 
   /// A laid-out name, cached by the panel across every track.
   final TextPainter Function(String name) nameOf;
 
-  /// What each Transition effect is called, by its match name.
   final Map<String, String> transitionNames;
 
   /// Whether the fade handles are drawn: with the Select tool, which is the
@@ -121,11 +118,8 @@ class CutTrackPainter extends CustomPainter {
   /// so it is plain where the drop will land.
   final ValueListenable<String?> dropOn;
 
-  /// A sound clip's level while its gain line is in hand.
   final ValueListenable<({String clip, double db})?> gain;
 
-  /// The engine's blend mode names, for the chip a clip with a mode of its
-  /// own wears.
   final List<String> blendNames;
 
   final CutLaneColours colours;
@@ -601,7 +595,6 @@ class CutTrackPainter extends CustomPainter {
         picked: selected.contains(id),
         seamLeft: seamLeft,
         seamRight: seamRight);
-    // A copy of a graphics template shades its intro and its outro.
     paintCopyEnds(canvas, box, clip.copy,
         pxPerSecond: fps > 0 ? axis.xOf(fps.round()) - axis.xOf(0) : 0,
         ink: colours.edge);
@@ -760,8 +753,6 @@ class CutTrackPainter extends CustomPainter {
           ..color = colours.rising);
   }
 
-  /// The clip's buttons: fx, lit while it has effects that are on, and on a
-  /// picture clip Pan/Crop, drawn as a frame's two corners.
   void _badges(Canvas canvas, BridgeClip clip, List<(CutBadge, Rect)> badges) {
     for (final (kind, at) in badges) {
       canvas.drawRRect(RRect.fromRectAndRadius(at, Radius.circular(radius)),
@@ -824,7 +815,6 @@ class CutTrackPainter extends CustomPainter {
         (nameOf('${past > 0 ? '+' : ''}${past.toStringAsFixed(2)}'), true),
       if (clip.blend case final blend? when blend < blendNames.length)
         (nameOf(blendNames[blend]), true),
-      // Said by the fx button where the clip has room for one.
       if (clip.effects.isNotEmpty && badges.isEmpty) (nameOf('fx'), clip.fx),
     ];
     const pad = 4.0;
@@ -925,7 +915,6 @@ class CutTrackPainter extends CustomPainter {
     return from + side + 3;
   }
 
-  /// The pause mark: two bars.
   static void _bars(Canvas canvas, double side, Paint paint) {
     for (final x in [5.0, 11.0]) {
       final at = side * x / 16;
@@ -934,7 +923,6 @@ class CutTrackPainter extends CustomPainter {
     }
   }
 
-  /// The multicam mark: four squares in a two by two.
   static void _squares(Canvas canvas, double side, Paint paint) {
     final square = side * 5 / 16;
     for (final x in [2.5, 8.5]) {
@@ -965,7 +953,6 @@ class CutTrackPainter extends CustomPainter {
   void _wave(
       Canvas canvas, BridgeClip clip, Rect box, CutDrag? held, Color label,
       {bool header = true}) {
-    // A hold plays silence.
     if (clipHolds(clip)) return;
     final summary = peaks[clip.id.toString()];
     if (summary == null || axis.perFrame <= 0 || fps <= 0) return;

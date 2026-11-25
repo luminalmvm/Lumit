@@ -35,8 +35,6 @@ struct Params {
     position_5: f32,
 };
 
-// ---- The SICELIOT ramp: the same text in every SICELIOT gradient ----
-
 // The first Stops colours, sorted by Position, read at t (0 to 1), after
 // Progression has bent t: Quadratic squares it, Easing eases it in and out.
 // Colours are mixed premultiplied, so a clear stop fades without a fringe.

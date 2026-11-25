@@ -32,12 +32,10 @@ class PreviewThrottle {
   /// means the next tick can go immediately.
   Timer? _timer;
 
-  /// The newest tick that arrived while the interval was running.
   void Function()? _pending;
 
   PreviewThrottle({this.interval = defaultInterval});
 
-  /// True while a tick is held — the drag has asked for something not yet sent.
   bool get holding => _pending != null;
 
   /// Ask for a preview. [send] is called now, or at the end of the interval if
@@ -65,7 +63,6 @@ class PreviewThrottle {
     if (send != null) _send(send);
   }
 
-  /// Send any held tick now rather than waiting out the interval.
   void flush() {
     final send = _pending;
     if (send == null) return;
@@ -74,8 +71,6 @@ class PreviewThrottle {
     _send(send);
   }
 
-  /// Forget a held tick — a cancelled gesture, a commit that supersedes it, or
-  /// a widget going away.
   void cancel() {
     _timer?.cancel();
     _timer = null;

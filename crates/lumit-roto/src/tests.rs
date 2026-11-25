@@ -75,10 +75,6 @@ fn solve_one(w: u32, h: u32, rgb: &[f32], seeds: &Seeds) -> Vec<f32> {
     out
 }
 
-// ---------------------------------------------------------------------------
-// §10.1 — the single-frame solve
-// ---------------------------------------------------------------------------
-
 const DW: u32 = 128;
 const DH: u32 = 128;
 const DR: f32 = 40.0;
@@ -107,7 +103,6 @@ fn disc_shot(cx: f32, cy: f32, r: f32) -> (Vec<f32>, Vec<bool>) {
 #[test]
 fn textured_disc_solves_to_its_analytic_shape() {
     let (rgb, truth) = disc_shot(64.0, 64.0, DR);
-    // One stroke inside, nothing outside: the border ring is the background.
     let seeds = base_seeds(
         DW,
         DH,
@@ -121,8 +116,6 @@ fn textured_disc_solves_to_its_analytic_shape() {
     .unwrap();
     let matte = solve_one(DW, DH, &rgb, &seeds);
     assert!(iou(&matte, &truth) >= 0.98, "IoU {}", iou(&matte, &truth));
-    // Grey only near the edge. Further out the matte is solid or empty, or
-    // the cut shows the plate through it.
     let reach = RotoSettings::default().guide_radius as f32 * 2.0;
     for y in 0..DH {
         for x in 0..DW {
@@ -135,17 +128,12 @@ fn textured_disc_solves_to_its_analytic_shape() {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Propagation: a written-down analytic flow, no lumit-flow anywhere
-// ---------------------------------------------------------------------------
-
 const PW: u32 = 160;
 const PH: u32 = 96;
 const PR: f32 = 18.0;
 const PCY: f32 = 48.0;
 const FRAMES: usize = 31;
 
-/// Two pixels a frame — inside the note's ≤ 8 px/frame test motion.
 fn subject_centre(t: usize) -> (f32, f32) {
     (40.0 + 2.0 * t as f32, PCY)
 }
@@ -161,7 +149,6 @@ fn moving_frame(t: usize) -> Vec<f32> {
     let (cx, cy) = subject_centre(t);
     frame_from(PW, PH, |x, y| {
         if in_subject(t, x, y) {
-            // The subject's texture travels with it, as a real one would.
             let lx = (x as f32 - cx).round() as i32;
             let ly = (y as f32 - cy).round() as i32;
             tint(SUBJECT, lx + 512, ly + 512, 0.06)
@@ -207,8 +194,6 @@ struct Shot<'a> {
     strokes: &'a [RotoStroke],
 }
 
-/// Propagate outward from the base, exactly as §3 has it: warp, seed, stamp
-/// the frame's own strokes over the warped seeds, solve.
 fn propagate<Fr, Fl>(shot: &Shot<'_>, frame_at: Fr, flow_at: Fl) -> Vec<Vec<f32>>
 where
     Fr: Fn(usize) -> Vec<f32>,
@@ -312,10 +297,6 @@ fn two_runs_are_bit_identical() {
     }
 }
 
-// ---------------------------------------------------------------------------
-// §10.3 — an occluder crossing in front
-// ---------------------------------------------------------------------------
-
 const BAR: [f32; 3] = [0.05, 0.05, 0.06];
 
 fn bar_x(t: usize) -> f32 {
@@ -417,7 +398,6 @@ fn an_occluder_crossing_neither_leaks_nor_loses_the_subject() {
     for (t, matte) in mattes.iter().enumerate() {
         let score = iou(matte, &occluded_truth(t));
         assert!(score >= 0.90, "frame {t} scored {score}");
-        // Nothing of the occluder away from the subject may be claimed.
         let mut claimed = 0usize;
         for y in 0..PH {
             for x in 0..PW {
@@ -434,14 +414,9 @@ fn an_occluder_crossing_neither_leaks_nor_loses_the_subject() {
             "frame {t} leaked {claimed} px onto the occluder"
         );
     }
-    // And the subject is whole again once the bar has gone past it.
     let last = iou(&mattes[FRAMES - 1], &occluded_truth(FRAMES - 1));
     assert!(last >= 0.95, "the subject did not recover: {last}");
 }
-
-// ---------------------------------------------------------------------------
-// §10.4 — the correction loop
-// ---------------------------------------------------------------------------
 
 const CORRECTION: usize = 12;
 
@@ -545,12 +520,6 @@ fn a_correction_carries_forward_and_leaves_the_prefix_alone() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// §10.5 — the refine edge
-// ---------------------------------------------------------------------------
-
-/// A hard edge blurred by an explicit normalised Gaussian: the ground-truth
-/// alpha, and the composite the filter has to recover it from.
 fn feathered_edge(w: u32, h: u32, sigma: f32) -> (Vec<f32>, Vec<f32>) {
     let radius = (sigma * 3.0).ceil() as i32;
     let mut kernel = Vec::new();
@@ -662,7 +631,6 @@ fn a_refine_stroke_opens_the_band_where_it_is_painted() {
         ),
     ];
     let plain = solve_one(w, h, &rgb, &base_seeds(w, h, &base).unwrap());
-    // Well inside the foreground, where the band never reaches: the snap holds.
     let probe = (32 * w + 8) as usize;
     assert_eq!(plain[probe], 1.0);
 
@@ -673,14 +641,9 @@ fn a_refine_stroke_opens_the_band_where_it_is_painted() {
         refined[probe] < 1.0,
         "the refine stroke did not open the band"
     );
-    // And only where it was painted.
     let far = (32 * w + 24) as usize;
     assert_eq!(refined[far], plain[far]);
 }
-
-// ---------------------------------------------------------------------------
-// Seeds, erosion and the refusals
-// ---------------------------------------------------------------------------
 
 /// A mask a model made seeds the pixels it is sure about, eroded by the same
 /// two pixels, and seeds nothing at all through the band where it is unsure,
@@ -691,8 +654,6 @@ fn a_refine_stroke_opens_the_band_where_it_is_painted() {
 fn a_masks_confident_interiors_seed_and_its_soft_edge_does_not() {
     let (w, h) = (32u32, 32u32);
     let n = (w * h) as usize;
-    // A square the model is sure about, with a two-pixel band of doubt round
-    // it: the values there sit between the two thresholds.
     let mut mask = vec![0.0f32; n];
     for y in 8..24 {
         for x in 8..24 {
@@ -707,12 +668,9 @@ fn a_masks_confident_interiors_seed_and_its_soft_edge_does_not() {
     let mut seeds = Seeds::new(w, h).unwrap();
     mask_seeds(&mask, w, h, &mut seeds).unwrap();
 
-    // Two pixels in from the sure square's edge is where foreground starts.
     assert_eq!(seeds.at((15 * w + 12) as usize), Seed::Foreground);
     assert_eq!(seeds.at((15 * w + 10) as usize), Seed::None);
-    // The band of doubt seeds neither side.
     assert_eq!(seeds.at((15 * w + 9) as usize), Seed::None);
-    // Well outside it is background, eroded away from the band by the same two.
     assert_eq!(seeds.at(0), Seed::Background);
     assert_eq!(seeds.at((15 * w + 6) as usize), Seed::None);
     let (fg, bg) = seeds.counts();
@@ -721,13 +679,11 @@ fn a_masks_confident_interiors_seed_and_its_soft_edge_does_not() {
         "{fg} foreground and {bg} background seeds"
     );
 
-    // A number that is not one seeds nothing rather than picking a side.
     let mut wild = vec![f32::NAN; n];
     wild[0] = 1.0;
     mask_seeds(&wild, w, h, &mut seeds).unwrap();
     assert_eq!(seeds.counts(), (0, 0), "an eroded lone seed is no seed");
 
-    // The trust boundary: a mask that is not this frame's is refused.
     assert!(matches!(
         mask_seeds(&mask[..n - 1], w, h, &mut seeds),
         Err(RotoError::PlaneSize { .. })
@@ -739,8 +695,6 @@ fn a_masks_confident_interiors_seed_and_its_soft_edge_does_not() {
     ));
 }
 
-/// From 2880 on the long side the distance step runs averaged down, and each
-/// stroke's side must come back up as its own. Below that it runs at full size.
 #[test]
 fn a_large_frame_keeps_each_stroke_on_its_side() {
     for w in [2879u32, 2880] {

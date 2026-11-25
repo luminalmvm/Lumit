@@ -41,7 +41,6 @@ fn oetf1(x: f32) -> f32 {
     return select(v, -v, x < 0.0);
 }
 
-// == space::eotf.
 fn eotf1(x: f32) -> f32 {
     let a = abs(x);
     var v = a / 12.92;
@@ -63,7 +62,6 @@ fn from_ycc(c: vec3<f32>) -> vec3<f32> {
     return vec3<f32>(r, g, b);
 }
 
-// == space::pixel_to_ycc.
 fn pixel_to_ycc(px: vec4<f32>) -> vec4<f32> {
     var k = 1.0;
     if (px.w > 1e-6) {
@@ -73,7 +71,6 @@ fn pixel_to_ycc(px: vec4<f32>) -> vec4<f32> {
     return vec4<f32>(to_ycc(e), px.w);
 }
 
-// == space::tone.
 fn tone_at(y: f32) -> f32 {
     let s = p.tone.x;
     let m = p.tone.y;
@@ -94,13 +91,11 @@ fn pic() -> vec2<i32> {
     return vec2<i32>(i32(p.dims.x), i32(p.dims.y));
 }
 
-// A texel of a picture-sized input, edges held.
 fn ld(t: texture_2d<f32>, x: i32, y: i32) -> vec4<f32> {
     let s = pic();
     return textureLoad(t, vec2<i32>(clamp(x, 0, s.x - 1), clamp(y, 0, s.y - 1)), 0);
 }
 
-// == atrous::mirror.
 fn mirror(i: i32, n: i32) -> i32 {
     let last = max(n - 1, 0);
     var j = abs(i);

@@ -29,8 +29,6 @@ const Duration menuHoverGrace = Duration(milliseconds: 300);
 /// it visible without changing a single decision the guard takes.
 final ValueNotifier<bool> debugShowSafeTriangles = ValueNotifier<bool>(false);
 
-/// The triangle between the pointer ([apex]) and the near edge of the flyout
-/// it is presumed to be travelling to.
 class SafeTriangle {
   final Offset apex;
   final Offset cornerA;

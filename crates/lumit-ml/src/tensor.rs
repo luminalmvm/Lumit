@@ -14,11 +14,8 @@
 
 use crate::manifest::Normalise;
 
-/// How much of the frame Robust Video Matting works at, which is the one
-/// choice the user makes about it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Detail {
-    /// Head and shoulders, most of the frame.
     #[default]
     Portrait,
     /// A whole person at a distance, where the finer ratio loses the limbs.
@@ -48,7 +45,6 @@ pub fn pack_u8(rgba: &[u8], width: usize, height: usize, norm: Option<Normalise>
     out
 }
 
-/// [`pack_u8`], for a frame that is already f32 RGBA in 0..1.
 #[must_use]
 pub fn pack_f32(rgba: &[f32], width: usize, height: usize, norm: Option<Normalise>) -> Vec<f32> {
     let pixels = width * height;
@@ -63,8 +59,6 @@ pub fn pack_f32(rgba: &[f32], width: usize, height: usize, norm: Option<Normalis
     out
 }
 
-/// The inverse of [`pack_u8`]: one `[3, height, width]` plane back to
-/// interleaved RGBA bytes, opaque.
 #[must_use]
 pub fn unpack_u8(planes: &[f32], width: usize, height: usize, norm: Option<Normalise>) -> Vec<u8> {
     let pixels = width * height;
@@ -81,7 +75,6 @@ pub fn unpack_u8(planes: &[f32], width: usize, height: usize, norm: Option<Norma
     out
 }
 
-/// The inverse of [`pack_f32`].
 #[must_use]
 pub fn unpack_f32(
     planes: &[f32],
@@ -144,8 +137,6 @@ pub fn pad(
     (out, grown_width, grown_height)
 }
 
-/// Take the top-left `width` by `height` of every plane back out of a grown
-/// one. The exact inverse of [`pad`] for the frame itself.
 #[must_use]
 pub fn crop(
     planes: &[f32],
@@ -223,9 +214,6 @@ pub fn resample_gray(
     resample(plane, Pixel::GRAY, (width, height), (out_width, out_height))
 }
 
-/// What one pixel of a buffer [`resample`] walks looks like: how many bytes it
-/// takes, how many of them are averaged, and what anything left over is filled
-/// with.
 struct Pixel {
     stride: usize,
     channels: usize,
@@ -233,13 +221,11 @@ struct Pixel {
 }
 
 impl Pixel {
-    /// Interleaved colour, alpha left opaque.
     const RGBA: Pixel = Pixel {
         stride: 4,
         channels: 3,
         fill: 255,
     };
-    /// One byte of coverage, and nothing is none of the subject.
     const GRAY: Pixel = Pixel {
         stride: 1,
         channels: 1,
@@ -247,7 +233,6 @@ impl Pixel {
     };
 }
 
-/// The resample both of the two above are.
 fn resample(src: &[u8], pixel: Pixel, from: (usize, usize), to: (usize, usize)) -> Vec<u8> {
     let Pixel {
         stride,
@@ -309,7 +294,6 @@ pub fn downsample_ratio(width: usize, height: usize, detail: Detail) -> f32 {
     }
 }
 
-/// What to subtract and what to divide by for one channel, or leave it alone.
 fn scale(norm: Option<Normalise>, channel: usize) -> (f32, f32) {
     norm.map_or((0.0, 1.0), |norm| {
         (
@@ -324,8 +308,6 @@ fn scale(norm: Option<Normalise>, channel: usize) -> (f32, f32) {
 mod tests {
     use super::*;
 
-    /// A small frame where every byte is different, so a packing that
-    /// transposes two channels or two rows cannot pass.
     fn frame(width: usize, height: usize) -> Vec<u8> {
         (0..width * height)
             .flat_map(|pixel| {
@@ -335,9 +317,6 @@ mod tests {
             .collect()
     }
 
-    /// **Eight-bit packing and unpacking round trip exactly.** A byte through
-    /// 0..1 and back is the same byte, so nothing a plane carries is lost to
-    /// the trip itself.
     #[test]
     fn eight_bit_packing_round_trips() {
         let (width, height) = (5, 3);
@@ -352,9 +331,6 @@ mod tests {
         assert_eq!(unpack_u8(&planes, width, height, None), rgba);
     }
 
-    /// **The padding to a multiple and the crop back are exact.** RIFE wants
-    /// a multiple of 32 and Depth Anything a multiple of 14; both are grown
-    /// by repeating the edge and cut back to the byte.
     #[test]
     fn padding_to_a_multiple_crops_back_exactly() {
         for multiple in [32usize, 14] {
@@ -372,9 +348,6 @@ mod tests {
         }
     }
 
-    /// **The fit keeps the long side at the size asked for and both sides on
-    /// the tile.** Depth Anything wants 518 on the long side and multiples of
-    /// 14; a frame fitted to anything else is a frame the graph refuses.
     #[test]
     fn the_fit_lands_on_the_long_side_and_the_tile() {
         for (width, height) in [(1920usize, 1080usize), (1080, 1920), (640, 640), (37, 21)] {
@@ -382,8 +355,6 @@ mod tests {
             assert_eq!(out_width % 14, 0, "{width}x{height} width off the tile");
             assert_eq!(out_height % 14, 0, "{width}x{height} height off the tile");
             assert_eq!(out_width.max(out_height), 518, "{width}x{height} long side");
-            // The shape is kept: the short side is within one tile of the
-            // ratio the frame came in at.
             let wanted = 518.0 * (width.min(height) as f64) / (width.max(height) as f64);
             assert!(
                 (out_width.min(out_height) as f64 - wanted).abs() <= 14.0,
@@ -393,10 +364,6 @@ mod tests {
         assert_eq!(fit(0, 0, 518, 14), (14, 14), "nothing still fills one tile");
     }
 
-    /// **Shrinking averages every source pixel, and growing takes the nearest
-    /// one.** A frame of one colour comes back that colour whatever the ratio,
-    /// and a half-and-half frame keeps its halves rather than smearing them
-    /// across the join.
     #[test]
     fn the_resample_averages_down_and_holds_the_edge() {
         let (width, height) = (8usize, 8usize);
@@ -410,7 +377,6 @@ mod tests {
             "one colour shrinks to itself: {small:?}"
         );
 
-        // Left half black, right half white.
         let split: Vec<u8> = (0..width * height)
             .flat_map(|pixel| {
                 let v = if pixel % width < width / 2 { 0u8 } else { 255 };
@@ -421,7 +387,6 @@ mod tests {
         assert_eq!(halves[0], 0, "the left half is still black");
         assert_eq!(halves[4], 255, "and the right half still white");
 
-        // Growing: every destination pixel reads one source pixel.
         let big = resample_u8(&split, width, height, 16, 16);
         assert_eq!(big.len(), 4 * 16 * 16);
         assert_eq!(big[0], 0);

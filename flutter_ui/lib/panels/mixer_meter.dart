@@ -49,7 +49,6 @@ double faderFraction(double db) {
   return 1;
 }
 
-/// The dB a point of the fader's travel reads.
 double faderDb(double fraction) {
   final f = fraction.clamp(0.0, 1.0);
   for (var i = 1; i < _taper.length; i++) {
@@ -60,10 +59,8 @@ double faderDb(double fraction) {
   return _taper.last.$2;
 }
 
-/// How much a drag moves a control while Ctrl is held.
 double dragScale() => HardwareKeyboard.instance.isControlPressed ? 0.1 : 1;
 
-/// How tall the knob is drawn.
 const double _knobHeight = 7;
 
 /// Where [db] stands on a fader or meter [height] tall, so the scale, the
@@ -71,7 +68,6 @@ const double _knobHeight = 7;
 double faderY(double height, double db) =>
     _knobHeight / 2 + (height - _knobHeight) * (1 - faderFraction(db));
 
-/// The meter's own width, and the gain-reduction bar's beside it.
 const double _meterWidth = 11;
 const double _reductionWidth = 2;
 
@@ -143,7 +139,6 @@ class MeterPainter extends CustomPainter {
     _bar(canvas, size, left, levels.rmsLeft, levels.peakLeft, levels.holdLeft);
     _bar(canvas, size, left + barWidth + gap, levels.rmsRight, levels.peakRight,
         levels.holdRight);
-    // Held down by a duck or the limiter: a thin bar growing down from 0 dB.
     final gr = levels.gainReductionDb;
     if (gr > 0) {
       final top = _yOfDb(size, 0);
@@ -168,12 +163,10 @@ class MeterPainter extends CustomPainter {
         ..strokeWidth = 1,
     );
     double yOf(double amplitude) {
-      // Under the meter's floor is silence, and draws nothing.
       final db = amplitudeDb(amplitude);
       return db <= -60 ? size.height : _yOfDb(size, db);
     }
 
-    // Green to -18 dBFS, amber to -6, red above, as the bar climbs.
     final yMid = _yOfDb(size, -18);
     final yHigh = _yOfDb(size, -6);
     void zones(double top, double alpha) {
@@ -190,8 +183,6 @@ class MeterPainter extends CustomPainter {
       band(yHigh, 0, high);
     }
 
-    // Peak behind, dimmer; RMS in front. The bar's body is what it sounds
-    // like, the dim part above it the loudest instant.
     zones(yOf(peak), 0.45);
     zones(yOf(rms), 1);
     final y = yOf(holdValue);
@@ -261,8 +252,6 @@ class MixFader extends StatefulWidget {
   final ValueChanged<double> onCommit;
   final VoidCallback onCancel;
 
-  /// Whether an automation pass is writing this fader, which turns the knob
-  /// to the error colour.
   final bool recording;
 
   const MixFader({
@@ -347,9 +336,6 @@ class _MixFaderState extends State<MixFader> with TickerProviderStateMixin {
                 painter: _FaderPainter(
                   db: widget.db,
                   rail: t.surface3,
-                  // A fader at unity is where it usually rests, so it stays
-                  // quiet, one that has been moved takes the accent, and one
-                  // being written takes the error colour.
                   knob: Color.lerp(
                       widget.recording
                           ? t.error
@@ -385,7 +371,6 @@ class _FaderPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // The rail stands at the right of the box, the scale's words to its left.
     final x = size.width - 7;
     canvas.drawRect(
       Rect.fromLTWH(x - 1.5, 0, 3, size.height),
@@ -396,7 +381,6 @@ class _FaderPainter extends CustomPainter {
     var lastY = double.negativeInfinity;
     for (final (db, text) in _faderScale) {
       final y = faderY(size.height, db);
-      // Unity is the one a hand looks for, so its mark is the longer.
       final unity = db == 0;
       canvas.drawRect(
         Rect.fromLTWH(x - (unity ? 7 : 5), y - 0.5, unity ? 4 : 2, 1),
@@ -418,7 +402,6 @@ class _FaderPainter extends CustomPainter {
       ),
       Paint()..color = knob,
     );
-    // The knob's own line, which is where the level reads.
     canvas.drawRect(
       Rect.fromLTWH(x - 4.5, y - 0.5, 9, 1),
       Paint()..color = rail,
@@ -445,7 +428,6 @@ class PanPot extends StatefulWidget {
   final VoidCallback onCancel;
   final double range;
 
-  /// What hovering it says, the pan reading when null.
   final String? tip;
 
   const PanPot({
@@ -556,8 +538,6 @@ class _PotPainter extends CustomPainter {
       old.fraction != fraction || old.mark != mark || old.ring != ring;
 }
 
-/// The dB well under a fader. It reads the level, and a click turns it into a
-/// field that takes a number.
 class DbWell extends StatefulWidget {
   final double db;
   final ValueChanged<double> onCommit;
@@ -627,7 +607,6 @@ class _DbWellState extends State<DbWell> {
 class SwitchGlyph extends StatelessWidget {
   final String keyName;
 
-  /// One of the set's glyphs, or one of the older marks through [icon].
   final String? mark;
   final LumitIcon? icon;
   final bool on;
@@ -648,8 +627,6 @@ class SwitchGlyph extends StatelessWidget {
   Widget build(BuildContext context) {
     final scope = ThemeScope.of(context);
     final t = scope.theme;
-    // A strip that sounds is the usual case and draws quietly; a muted one is
-    // the one to notice, so it takes the warning colour.
     return LumitTooltip(
       message: tip,
       child: HoverMark(
@@ -674,7 +651,6 @@ class SwitchGlyph extends StatelessWidget {
   }
 }
 
-/// The S switch. A solo safe strip wears a ring round it.
 class SoloChip extends StatelessWidget {
   final String keyName;
   final bool on;
@@ -790,8 +766,6 @@ class MixChip extends StatelessWidget {
                       lit * 0.6),
               borderRadius: BorderRadius.circular(t.tokens.controlRadius),
             ),
-            // A pill is as wide as its word; a well centres it, and a word
-            // cut short there says the whole of itself on hover.
             child: Align(
               widthFactor: well ? null : 1,
               child: FittedText(

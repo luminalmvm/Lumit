@@ -26,7 +26,6 @@ use crate::fit::tolerance;
 use crate::LottieError;
 
 impl Svg<'_> {
-    /// A Text layer's letters.
     pub(super) fn text_layer(
         &mut self,
         scope: &Scope<'_>,
@@ -133,8 +132,6 @@ impl Svg<'_> {
         Ok(())
     }
 
-    /// Letters on a straight line with their animators: each one's own move,
-    /// turn, size, fade and tint, sampled at every frame.
     #[allow(clippy::too_many_arguments)]
     fn animated_glyphs(
         &mut self,
@@ -177,7 +174,6 @@ impl Svg<'_> {
             let ShapeEntry::Group(g) = glyph else {
                 continue;
             };
-            // The letter this group draws: the next character with its name.
             let ch = g.name.chars().next();
             while index < chars.len() && chars.get(index).copied() != ch {
                 index += 1;
@@ -363,7 +359,6 @@ impl Svg<'_> {
     }
 }
 
-/// One unstyled line, which the animators' straight layout covers.
 fn plain(document: &TextDocument) -> bool {
     document.style.is_default()
         && document.paragraph.is_default()

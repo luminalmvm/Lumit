@@ -1,6 +1,3 @@
-// The graph editor against the real engine: the AE-style full-height pane
-// (docs/07 §5) — selected properties as curves, key drags, easing, the F9
-// family, the speed lens, and keyframe copy/paste.
 
 import 'dart:math' as math;
 
@@ -25,8 +22,6 @@ import 'package:lumit_flutter/widgets/controls.dart';
 
 import 'frb_test_support.dart';
 
-/// Presses one of the graph's bottom-bar commands: on the strip where it
-/// stands, or through the overflow mark when the narrow outline has folded it.
 Future<void> pressStrip(WidgetTester tester, String key, String label) async {
   final button = find.byKey(ValueKey<String>(key));
   if (button.hitTestable().evaluate().isNotEmpty) {
@@ -57,7 +52,6 @@ void main() {
       return (state: p.state, uiState: p.uiState, comp: comp, layer: layer);
     }
 
-    /// A ramp on Opacity: `frames[i]` holds the value `frames[i]`.
     void animateOpacity(
       CompositionReference comp,
       LayerReference layer, {
@@ -223,8 +217,6 @@ void main() {
       expect(undone[1].value, before[1].value);
     });
 
-    /// Two keys cannot share a frame: the channel refuses the landing and
-    /// keeps what it had.
     testWidgets('a key dragged onto its neighbour does not land there',
         (tester) async {
       final p = withLayer();
@@ -240,8 +232,6 @@ void main() {
       expect(frames[0], isNot(frames[1]), reason: 'they still differ in time');
     });
 
-    /// The bottom bar's easing buttons act on the selected keys — and F9 does
-    /// the same from the keyboard (docs/07 §5.3).
     testWidgets('the bottom bar buttons and F9 set the selected keys\' easing',
         (tester) async {
       final p = withLayer();
@@ -281,7 +271,6 @@ void main() {
       await tester.tap(find.byKey(ValueKey<String>(opacityKey(p.layer, 0))));
       await tester.pump();
 
-      // Shape the side by hand first: an ease the automatic modes must not eat.
       await pressStrip(tester, 'graph-interp-bezier', l10n.easeEasy);
       await tester.pumpAndSettle();
       final custom = opacityKeys(p.layer)[0].interpOut;
@@ -330,7 +319,6 @@ void main() {
         await tester.pumpAndSettle();
       }
 
-      // A lone key names no travel: applying leaves the document as it was.
       await tester.tap(find.byKey(ValueKey<String>(opacityKey(p.layer, 0))));
       await tester.pump();
       await openEditor();
@@ -352,8 +340,6 @@ void main() {
       await tester.tap(find.text('Close'));
       await tester.pumpAndSettle();
 
-      // Both ends of the first span selected: that span takes the shape, and
-      // the span beyond the selection does not.
       await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
       await tester.tap(find.byKey(ValueKey<String>(opacityKey(p.layer, 1))));
       await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
@@ -395,8 +381,6 @@ void main() {
       animateOpacity(p.comp, p.layer, frames: [0, 50, 100]);
       await mountGraph(tester, p);
 
-      // Easy-ease the middle key so both sides are joined beziers, then select
-      // it to bring its handles out.
       await tester.tap(find.byKey(ValueKey<String>(opacityKey(p.layer, 1))));
       await tester.pump();
       await tester.sendKeyEvent(LogicalKeyboardKey.f9);
@@ -414,7 +398,6 @@ void main() {
       final inBefore = tester.getCenter(inHandle);
       final lengthBefore = (inBefore - keyPoint).distance;
 
-      // Drag the out handle upward, and look *mid-gesture*.
       final gesture = await tester.startGesture(tester.getCenter(outHandle));
       await tester.pump();
       for (var i = 0; i < 6; i++) {
@@ -443,8 +426,6 @@ void main() {
       expect(key.interpOut, isA<BridgeSideInterp_Bezier>());
     });
 
-    /// With Ctrl chosen in Settings, Ctrl breaks the pair and Alt no longer
-    /// does.
     testWidgets('the pair breaks on whichever modifier is set',
         (tester) async {
       final p = withLayer();
@@ -466,8 +447,6 @@ void main() {
       final inHandle = find.byKey(ValueKey<String>('$base-in'));
       final outHandle = find.byKey(ValueKey<String>('$base-out'));
 
-      // How far the in handle travels while the out handle is dragged with
-      // [key] held.
       Future<double> partnerTravel(LogicalKeyboardKey key) async {
         final before = tester.getCenter(inHandle);
         await tester.sendKeyDownEvent(key);
@@ -490,8 +469,6 @@ void main() {
           reason: 'the broken partner did not follow');
     });
 
-    /// The strip's Break handles toggle does the same with no key held, for
-    /// anyone whose desktop keeps Alt for itself.
     testWidgets('Break handles on the strip breaks the pair with no key held',
         (tester) async {
       final p = withLayer();
@@ -526,8 +503,6 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    /// The speed lens: each key is an in dot and an out dot that move
-    /// independently (docs/07 §5.1).
     testWidgets('the speed lens shows independent in and out dots',
         (tester) async {
       final p = withLayer();
@@ -547,8 +522,6 @@ void main() {
       expect(find.byKey(ValueKey<String>('$base-in')), findsOneWidget);
       expect(find.byKey(ValueKey<String>('$base-out')), findsOneWidget);
 
-      // Dragging the out dot down converts that side to a bezier with a
-      // negative-or-lower speed, leaving the in side alone.
       await _drag(tester, find.byKey(ValueKey<String>('$base-out')),
           const Offset(0, 60));
       final key = opacityKeys(p.layer)[1];
@@ -558,9 +531,6 @@ void main() {
           reason: 'the other side did not move');
     });
 
-    /// The three graphs are chosen in the graph's own corner, under the Layers
-    /// / Graph switch: there in Graph, gone in Layers, and no longer on the
-    /// bottom strip.
     testWidgets('the graph switch sits in the graph, not on the strip',
         (tester) async {
       final p = withLayer();
@@ -574,7 +544,6 @@ void main() {
               of: find.byType(KeyCommandStrip),
               matching: find.byKey(const ValueKey('graph-lens-speed'))),
           findsNothing);
-      // Beside the curves: its top is below the ruler, over the graph.
       final graph = tester.getRect(find.byType(GraphEditorFrb));
       expect(graph.contains(tester.getCenter(pill)), isTrue);
 
@@ -590,8 +559,6 @@ void main() {
       expect(pill, findsNothing);
     });
 
-    /// In the speed graph `Shift` holds a dot to one axis: dragged sideways
-    /// the key moves in time and keeps its speed.
     testWidgets('Shift keeps a speed dot level while it moves in time',
         (tester) async {
       final p = withLayer();
@@ -618,7 +585,6 @@ void main() {
           closeTo(speedBefore, 1e-6),
           reason: 'Shift held the speed where it started');
 
-      // Mostly upward, Shift holds the key in time and the speed moves.
       final moved = keys[1];
       await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
       await _drag(tester, find.byKey(ValueKey<String>('$base-out')),
@@ -669,7 +635,6 @@ void main() {
       expect(keys, hasLength(3));
     });
 
-    /// The first key has no in side, so its box types the out side alone.
     testWidgets('the first key\'s acceleration box has its Out field',
         (tester) async {
       final p = withLayer();
@@ -689,9 +654,6 @@ void main() {
       expect(find.byKey(const ValueKey('graph-accel-out')), findsOneWidget);
     });
 
-    /// One key at 0, Gravity: an acceleration and an end value typed into its
-    /// box add a second key where the value gets there, the acceleration the
-    /// same the whole way and the speed growing.
     testWidgets('gravity grows a second key from rest', (tester) async {
       final p = withLayer();
       animateOpacity(p.comp, p.layer, frames: [0]);
@@ -728,9 +690,6 @@ void main() {
           reason: 'the speed grows');
     });
 
-    /// One key at 0, Speed profile: up at 20 a second squared to 20 a second,
-    /// held, down at 20 to rest at 60. Two keys are added where the speeding
-    /// up ends and the slowing down starts, and the end key last.
     testWidgets('a speed profile speeds up, holds, slows down',
         (tester) async {
       final p = withLayer();
@@ -763,36 +722,28 @@ void main() {
       expect(evaluateKeysAcceleration(keys, 2), closeTo(0, 1e-2));
       expect(evaluateKeysAcceleration(keys, 3.5), closeTo(-20, 1e-2));
 
-      // Typed again, it replaces the motion it wrote. Further: 1 s up, 3 s at
-      // the cruise, 1 s down.
       await _type(tester, 'graph-profile-value', '80');
       final further = opacityKeys(p.layer);
       expect(further, hasLength(4));
       expect(rationalSeconds(further[3].time), closeTo(5, 1e-3));
       expect(further[3].value, closeTo(80, 1e-3));
-      // Shorter: no keys are left behind it.
       await _type(tester, 'graph-profile-value', '30');
       final shorter = opacityKeys(p.layer);
       expect(shorter.last.value, closeTo(30, 1e-3));
       expect(rationalSeconds(shorter.last.time), closeTo(2.5, 1e-3));
 
-      // Past the end of the comp, nothing is written and the box says so.
       expect(find.byKey(const ValueKey('graph-box-refused')), findsNothing);
       await _type(tester, 'graph-profile-value', '900000');
       expect(find.byKey(const ValueKey('graph-box-refused')), findsOneWidget);
       expect(opacityKeys(p.layer).last.value, closeTo(30, 1e-3));
     });
 
-    /// The acceleration lens has handles too: a selected key's influence bar,
-    /// dragged sideways, sets that side's influence and leaves its speed and
-    /// the other side alone.
     testWidgets('the acceleration lens drags an influence handle',
         (tester) async {
       final p = withLayer();
       animateOpacity(p.comp, p.layer, frames: [0, 200, 400]);
       await mountGraph(tester, p);
 
-      // Easy-ease the middle key, so both its sides have an influence.
       await tester.tap(find.byKey(ValueKey<String>(opacityKey(p.layer, 1))));
       await tester.pump();
       await tester.sendKeyEvent(LogicalKeyboardKey.f9);
@@ -828,8 +779,6 @@ void main() {
           reason: 'the other side did not move');
     });
 
-    /// Ctrl+C / Ctrl+V: the in-app clipboard carries full easing, and pasting
-    /// lands the earliest key on the playhead.
     testWidgets('copy and paste land keys on the playhead', (tester) async {
       final p = withLayer();
       animateOpacity(p.comp, p.layer, frames: [0, 20]);
@@ -953,10 +902,6 @@ void main() {
           100);
     });
 
-    // --- the Vegas speed envelope ---------------------------------------
-
-    /// Turn the preference on the way Settings does, then open the layer's
-    /// Retime row — which is where the default-lens rule fires.
     Future<void> openRetime(WidgetTester tester, dynamic p,
         {required bool vegas}) async {
       (p.uiState as LumitUiState).workspace.interface.retimeOpensToSpeed =
@@ -984,8 +929,6 @@ void main() {
       await tester.pump();
     }
 
-    /// The Vegas edit: drag a point's speed and the frames after it change,
-    /// while every keyframe time stays exactly where it was.
     testWidgets('dragging an envelope point re-times without moving a key',
         (tester) async {
       final p = withLayer();
@@ -998,7 +941,6 @@ void main() {
       ];
       final lastBefore = retimeKeys().last.value;
 
-      // Drag the first point upwards: faster, so more source is consumed.
       await _drag(
           tester,
           find.byKey(ValueKey<String>(
@@ -1025,8 +967,6 @@ void main() {
     // survives to be asserted on. The unit test fails without the fix; this
     // one could not, so it is not written.
 
-    // --- planting and lifting keys, and Shift-constrained drags -----------
-
     testWidgets('double-clicking the curve plants a key without moving it',
         (tester) async {
       final p = withLayer();
@@ -1037,8 +977,6 @@ void main() {
       expect(before, hasLength(2));
       final atHalf = evaluateKeys(before, 0.5);
 
-      // Halfway between the two keys: on a straight span that is exactly on
-      // the curve, whatever the framing happens to be.
       final base =
           'graph-key-${p.layer.internallayerId}/transform/opacity@opacity';
       final a = tester.getCenter(find.byKey(ValueKey<String>('$base#0')));
@@ -1051,8 +989,6 @@ void main() {
 
       final after = opacityKeys(p.layer);
       expect(after, hasLength(3), reason: 'a key was planted');
-      // The curve is unchanged where it already was: planting a point is a
-      // place to grab, not an edit.
       expect(evaluateKeys(after, 0.5), closeTo(atHalf, 1e-6));
     });
 
@@ -1087,8 +1023,6 @@ void main() {
       expect(opacityKeys(p.layer), hasLength(3), reason: 'no key went');
     });
 
-    /// Shift holds a key drag to one axis, chosen by which way the pointer
-    /// went furthest in pixels.
     testWidgets('Shift holds a key drag to one axis', (tester) async {
       final p = withLayer();
       animateOpacity(p.comp, p.layer, frames: [0, 50, 100]);
@@ -1109,8 +1043,6 @@ void main() {
       final beforeFrames = frames();
 
       await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
-      // Mostly sideways, a little up: the sideways travel wins, so the value
-      // must not move at all.
       await _drag(
           tester, find.byKey(ValueKey<String>(id)), const Offset(40, -12));
       await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
@@ -1121,8 +1053,6 @@ void main() {
             reason: 'and not at all in value');
       }
     });
-
-    // --- the handles, and what a dragged key takes with it (§6.1–6.2) -----
 
     /// Keys spread across the whole composition, so a handle's reach — a third
     /// of the gap to its neighbour — is worth enough pixels to aim at. Keys a
@@ -1135,10 +1065,6 @@ void main() {
           frames: [0, last ~/ 2, last]);
     }
 
-    // --- TI-6: Graph mode's drawn surface (§3.3, §6.3) --------------------
-
-    /// A ramp on Position x, so the pane can be given two curves in unlike
-    /// units — which is what Normalise exists for.
     void animatePositionX(
       CompositionReference comp,
       LayerReference layer, {
@@ -1205,8 +1131,6 @@ void main() {
           greaterThan(20));
     });
 
-    // --- TI-7: the transform box and numeric entry (§6.2) -----------------
-
     /// Put two keys in hand — the first and the last of a ramp spread across
     /// the whole composition ([spreadOpacity]), so the box is worth aiming at
     /// in both axes and the key between them is a witness that only the
@@ -1221,8 +1145,6 @@ void main() {
       await tester.pump();
     }
 
-    /// The box's left and right edges scale **time** about the opposite edge
-    /// (docs/07 §5.3).
     testWidgets("the box's right edge scales time about the left edge",
         (tester) async {
       final p = withLayer();
@@ -1253,8 +1175,6 @@ void main() {
       expect(frames(), before, reason: 'the whole scale is one undo step');
     });
 
-    /// The readout pill rides with the scale and leaves with it (P1), and
-    /// `Escape` abandons the whole gesture (P3, §8's gap 19).
     testWidgets('Escape abandons a box scale and writes nothing',
         (tester) async {
       final p = withLayer();
@@ -1291,8 +1211,6 @@ void main() {
       expect(frames(), before, reason: 'Escape wrote nothing at all');
     });
 
-    /// **Numeric entry** (docs/07 §5.3): double-clicking a key opens its exact
-    /// frame, value and influences.
     testWidgets('double-clicking a key opens its exact fields', (tester) async {
       final p = withLayer();
       spreadOpacity(p);
@@ -1346,10 +1264,6 @@ void main() {
           reason: 'which is still where it was');
     });
 
-    // --- Keyframe speed (docs/07 §5.3) --------------------------------------
-
-    /// The key menu's *Keyframe speed…* opens the dialogue on the key's four
-    /// numbers, and Apply writes the ones typed - and only those.
     testWidgets('the key menu\'s Keyframe speed writes the typed speed',
         (tester) async {
       final p = withLayer();
@@ -1422,14 +1336,12 @@ void main() {
               .startsWith('graph-key-${p.layer.internallayerId}/'));
       expect(keys, findsNWidgets(4), reason: 'both curves, two keys each');
 
-      // The first key, low on the plot: the list of curves sits at the top.
       await tester.tap(find.byKey(ValueKey<String>(opacityKey(p.layer, 0))));
       await tester.pumpAndSettle();
       expect(keys, findsNWidgets(4),
           reason: 'the rotation curve is still there beside the picked key');
     });
 
-    /// The arrow at the top of the list of curves folds it away and back.
     testWidgets('the list of curves folds away on its arrow', (tester) async {
       addTearDown(() => curveListFolded.value = false);
       final p = withLayer();
@@ -1554,7 +1466,6 @@ Future<void> _type(WidgetTester tester, String key, String text) async {
   await tester.pumpAndSettle();
 }
 
-/// Drag from a widget's centre in steps, as a real pointer moves.
 Future<void> _drag(WidgetTester tester, Finder from, Offset by) async {
   final gesture = await tester.startGesture(tester.getCenter(from));
   await tester.pump();

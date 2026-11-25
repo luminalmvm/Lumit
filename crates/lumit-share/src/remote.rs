@@ -44,7 +44,6 @@ const VERSION: u32 = 1;
 /// have lists. Only read from a caller that has shown it holds the key.
 const HELLO_LIMIT: u32 = 64 << 20;
 
-/// How often a thread that waits looks to see whether it has been stopped.
 const BEAT: Duration = Duration::from_millis(50);
 
 /// How long the sender waits after a try that failed, doubled each time
@@ -102,10 +101,8 @@ fn room(key: &[u8; 32]) -> String {
 /// through the relay.
 type Opened = (TcpStream, Sender, Receiver, bool);
 
-/// One way the sender tries to the worker.
 type Dial = Box<dyn FnOnce() -> std::io::Result<TcpStream> + Send>;
 
-/// A caller to the worker still saying hello.
 struct Greeter {
     id: u64,
     /// Where it came from, for one on this machine's own port.
@@ -115,7 +112,6 @@ struct Greeter {
     since: Instant,
 }
 
-/// One end of a job's link, shared by its threads.
 struct End {
     job: Uuid,
     key: [u8; 32],
@@ -138,7 +134,6 @@ struct End {
 /// One end of a job's link. Dropping it stops it.
 pub struct Link {
     end: Arc<End>,
-    /// The port the worker listens on, when it does.
     port: Option<u16>,
 }
 
@@ -181,8 +176,6 @@ impl Link {
         let Some(port) = self.port else {
             return Vec::new();
         };
-        // ponytail: the address the default route leaves from, as a host's
-        // invite has. Every interface's, when std can list them.
         let here: Vec<IpAddr> = if cfg!(test) {
             vec![EVERY]
         } else {
@@ -215,7 +208,6 @@ impl Link {
         self.end.hub.holders(item)
     }
 
-    /// Whether the other end is here now.
     #[must_use]
     pub fn linked(&self) -> bool {
         self.end.current.lock().is_some()
@@ -305,7 +297,6 @@ impl End {
         self.stop.load(Ordering::Relaxed)
     }
 
-    /// Cut the link this end has now, if it has one.
     fn cut(&self) {
         if let Some((_, socket)) = self.current.lock().as_ref() {
             let _ = socket.shutdown(Shutdown::Both);
@@ -343,7 +334,6 @@ impl End {
         }
     }
 
-    /// The worker's accepting thread.
     fn accept(self: &Arc<Self>, listeners: &[TcpListener]) {
         while !self.stopped() {
             let mut quiet = true;
@@ -390,7 +380,6 @@ impl End {
         }
     }
 
-    /// Take the sender from the relay and greet it, on a thread of its own.
     fn take(self: &Arc<Self>, relay: &str, name: &str, token: &str, guest: u64) {
         let end = self.clone();
         let (relay, name, token) = (relay.to_owned(), name.to_owned(), token.to_owned());
@@ -553,8 +542,6 @@ impl End {
         }
     }
 
-    /// On the sender: say hello on a connection to the worker, and hear it
-    /// let this end in.
     fn say_hello(&self, opened: Opened) -> Option<Opened> {
         let (socket, mut sender, mut receiver, relayed) = opened;
         let hello = Hello {

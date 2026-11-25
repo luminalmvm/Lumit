@@ -96,18 +96,12 @@ Widget roomPacedBar(double fraction, {double height = 4}) => Builder(
     );
 
 class StatusLineFrb extends StatefulWidget {
-  /// The poll seam, injected by tests so no engine has to run an export.
   final BridgeExportState Function()? poll;
 
-  /// The same seam for the proxy job.
   final BridgeProxyState Function()? proxyPollFn;
 
-  /// The same seam for what plugins have asked Lumit to say, so a test can
-  /// raise a plugin message without a plugin.
   final List<String> Function()? pluginMessagesFn;
 
-  /// The same seam for the engine's meter tap, so a test can hand the strip a
-  /// level without a device.
   final List<BridgeAudioMeter> Function()? metersFn;
 
   const StatusLineFrb(
@@ -130,9 +124,6 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
   BridgeProxyState _proxy = const BridgeProxyState.idle();
   Timer? _timer;
 
-  /// The exports this computer sent to another that haven't ended, oldest
-  /// first, as the queue runs them. The strip follows them while there are
-  /// any.
   List<BridgeRemoteJob> _sent = const [];
 
   /// One pending repaint for a cache bump that arrived while the tick was
@@ -167,7 +158,6 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
     _sent = _sentUnderWay();
     statusLineExportStarted.addListener(_tick);
     proxyJobChanged.addListener(_tick);
-    // Playback fills the caches, so the meter ticks while it runs.
     _ui.playing.addListener(_tick);
     // A frame banked or delivered outside playback — the idle fill, a scrub —
     // moves the meter too, coalesced to one repaint per half second.
@@ -285,7 +275,6 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
     return null;
   }
 
-  /// A cache bump while the tick is off: one coalesced repaint.
   void _bumped() {
     if (_timer != null || _bump != null || !mounted) return;
     _bump = Timer(const Duration(milliseconds: 500), () {
@@ -306,8 +295,6 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
     if (mounted) unawaited(showShareConflictsFrb(context, _app));
   }
 
-  /// The host has opened a project an older Lumit keeps online. Asked once,
-  /// and on a yes it is moved forward.
   Future<void> _askForward() async {
     final version = _app.share.versionsOf;
     if (!mounted || version == null) return;
@@ -354,7 +341,6 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
       child: _line(
         t,
         (width) => [
-          // Whose settings, and updates. A page has no account and no updates.
           if (!kIsWeb) ...[
             _bubble(
               t,
@@ -371,8 +357,6 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
             _bubble(t, _nightly(t)),
             _divider(t),
           ],
-          // Review links, while there are comments nobody has looked at or a
-          // composition is on its way up.
           ListenableBuilder(
             listenable: _ui.reviews,
             builder: (context, _) => !_ui.reviews.wantsAttention
@@ -383,7 +367,6 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
                   ),
           ),
           _bubble(t, _projectMark(t, state)),
-          // The open project's backup, beside whether it is saved.
           BackupMark(unsaved: _unsaved, wrap: (mark) => _bubble(t, mark)),
           _divider(t),
           // Deliberately NOT const: a const child is skipped by the tick's
@@ -412,14 +395,12 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
           // header, which is where nobody found it.
           _bubble(t, const RenderTimingsToggle()),
           _divider(t),
-          // A laptop on battery or saving power, which slows the card.
           PowerSavingMark(
             wrap: (mark) => Row(
               mainAxisSize: MainAxisSize.min,
               children: [_bubble(t, mark), _divider(t)],
             ),
           ),
-          // A program driving Lumit, for as long as it is connected.
           ValueListenableBuilder<String?>(
             valueListenable: liveProgram,
             builder: (context, name, _) => name == null
@@ -429,7 +410,6 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
                     children: [_bubble(t, _live(t, name)), _divider(t)],
                   ),
           ),
-          // A shared project's button, and nothing when it is not one.
           ListenableBuilder(
             listenable: Listenable.merge([state.share.roster, _ui.following]),
             builder: (context, _) => !state.share.active
@@ -453,8 +433,6 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
                 Flexible(
                     flex: _shownSent == null ? 1 : _noticeShare(t, state),
                     child: _notice(t, state)),
-                // The spacer that stood here is the hint's now ([_line]), so
-                // a job follows the notice across a plain gap.
                 if (!roomed) const SizedBox(width: 8),
                 ..._job(t, _transcriptionSection(t)),
                 ..._job(t, _multicamSection(t)),
@@ -504,8 +482,6 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
         ),
       );
 
-  /// A hairline between readouts on a flush strip; nothing between bubbles,
-  /// which space themselves.
   Widget _divider(LumitTheme t) => t.tokens.roomed
       ? const SizedBox.shrink()
       : Container(
@@ -536,8 +512,6 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
           ),
         );
 
-  /// A background job's parts, which spread along a flush strip and share one
-  /// bubble on the room.
   List<Widget> _job(LumitTheme t, List<Widget> parts) {
     if (parts.isEmpty || !t.tokens.roomed) return parts;
     return [
@@ -564,7 +538,6 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
       dirty = project?.isDirty() ?? false;
       path = project?.path();
     } catch (_) {
-      // Closed already, as one project gives way to the next.
     }
     _unsaved = dirty;
     if (project == null) {
@@ -586,7 +559,6 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
           maxLines: 1,
           overflow: TextOverflow.ellipsis),
     );
-    // The project's right-click: the menu bar's two saves, and its file.
     Widget menu(Widget child) => GestureDetector(
           onSecondaryTapDown: (d) => showMenuAt<void>(
             context: context,
@@ -665,8 +637,6 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
     ));
   }
 
-  /// The mark of a nightly build: one word in an outlined pill, in the
-  /// warning colour because that is what it is, and small enough to forget.
   Widget _nightly(LumitTheme t) => Container(
         key: const ValueKey('status-nightly'),
         padding: const EdgeInsets.symmetric(horizontal: 6),
@@ -712,14 +682,6 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
     );
   }
 
-  /// The button a shared project puts on the strip: its mark and name, a
-  /// dot for each other person with their names on hover, and what wants
-  /// attention, a host out of reach or conflicts waiting. It opens the
-  /// conflicts when there are some and the Shared project window when not.
-  ///
-  /// A project kept online says that it is, and wears the sweep on its mark,
-  /// which is Lumit Pro's, for as long as nothing is in the way. What is in
-  /// the way is a few words here, with the reason on hover.
   Widget _shared(LumitTheme t, LumitState state) {
     final share = state.share;
     final online = share.online != null;
@@ -728,11 +690,7 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
     void open() => share.held > 0
         ? showShareConflictsFrb(context, state)
         : showShareFrb(context, state);
-    // Fainter whenever the window draws these people fainter, and then not
-    // to be followed: where they are is not arriving.
     final stale = share.outOfStep;
-    // This machine can look and not change, which the strip says for as
-    // long as nothing else is in the way.
     final looking = trouble == null && (share.online?.look ?? false);
     final others = share.others.toList();
     final drawn = peopleDrawn(others.length, _peopleMarks);
@@ -771,8 +729,6 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
                 style: t.small),
           ]),
         ),
-        // Each person by their initial. Their name and where they are on
-        // hover, and a press follows them, or stops if it already does.
         for (final person in others.take(drawn))
           Padding(
             padding: const EdgeInsetsDirectional.only(start: 4),
@@ -805,7 +761,6 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
               ),
             ),
           ),
-        // Whoever there is no room for, as a count that opens the window.
         if (drawn < others.length)
           Padding(
             padding: const EdgeInsetsDirectional.only(start: 4),
@@ -855,7 +810,6 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
     );
   }
 
-  /// Who is driving Lumit, and the button that cuts them off.
   Widget _live(LumitTheme t, String name) => Row(
         key: const ValueKey('status-live'),
         mainAxisSize: MainAxisSize.min,
@@ -884,11 +838,8 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
         ],
       );
 
-  /// How many marks the strip gives to the other people before the last of
-  /// them becomes a count.
   static const int _peopleMarks = 5;
 
-  /// The lines extensions keep, while Lumit has no notice of its own here.
   Widget _extensionStatus(LumitTheme t, LumitState state) =>
       ValueListenableBuilder<Map<String, String>>(
         valueListenable: state.extensionStatus,
@@ -907,16 +858,12 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
               ),
       );
 
-  /// The latest notice, with the close button every notice carries. A click
-  /// on its words lists the ones before it.
   Widget _notice(LumitTheme t, LumitState state) {
     return ValueListenableBuilder<LumitNotice?>(
       valueListenable: state.notice,
       builder: (context, notice, _) {
         if (notice == null) return _extensionStatus(t, state);
         final motion = ThemeScope.of(context).motion;
-        // A notice that leads somewhere goes there, and has then been read,
-        // unless it is one that stays.
         final lead = switch (notice.onTap) {
           null => null,
           final onTap => () {
@@ -944,9 +891,6 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
                       child: Text(
                         notice.message,
                         key: const ValueKey('status-notice'),
-                        // One that leads somewhere is news, and is drawn
-                        // brighter than the hints beside it. The others
-                        // light towards it under the pointer.
                         style: t.small.copyWith(
                             color: notice.error
                                 ? Color.lerp(
@@ -986,8 +930,6 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
     );
   }
 
-  /// A multicam sync running with no window of its own showing it, drawn as
-  /// the export is: how far along, and a Cancel.
   List<Widget> _multicamSection(LumitTheme t) {
     final done = _ui.multicam.working.value;
     if (done == null || _ui.multicam.shown) return const [];
@@ -1086,8 +1028,6 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
     if (mounted) setState(() {});
   }
 
-  /// A transcription running, drawn as the proxy job is: what it is hearing,
-  /// how far along, how long is left, and a Cancel that works from anywhere.
   List<Widget> _transcriptionSection(LumitTheme t) {
     final event = _app.transcription.progress.value;
     if (event == null) return const [];
@@ -1126,13 +1066,10 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
           if (job.sent && !remoteEnded(job.stage)) job,
       ];
     } catch (_) {
-      // No engine to ask, as in a widget test.
       return const [];
     }
   }
 
-  /// The export sent to another computer the strip follows: the first that
-  /// is moving or exporting, while nothing exports here.
   BridgeRemoteJob? get _shownSent => _export is BridgeExportState_Running
       ? null
       : _sent
@@ -1142,7 +1079,6 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
               j.stage == BridgeRemoteStage.returning)
           .firstOrNull;
 
-  /// How wide [text] is set in the strip's words, at least one.
   static int _widthOf(LumitTheme t, String text) {
     final painter = TextPainter(
         text: TextSpan(text: text, style: t.small),
@@ -1161,7 +1097,6 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
     final notice = state.notice.value;
     if (notice == null) return 1;
     final action = notice.action;
-    // Each small button is its word and 5 a side, after a gap of 4.
     return _widthOf(t, notice.message) +
         (action == null ? 0 : _widthOf(t, action) + 14) +
         _widthOf(t, '×') +
@@ -1169,9 +1104,6 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
         (t.tokens.roomed ? 28 : 0);
   }
 
-  /// An export sent to another computer, while nothing exports here: where
-  /// it has got to, a bar in Pro's sweep moving at the room's pace, and
-  /// Cancel. Exporting, it counts frames and says how long is left.
   List<Widget> _sentSection(LumitTheme t) {
     final job = _shownSent;
     if (job == null) return const [];
@@ -1200,8 +1132,6 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
     };
     return [
       Flexible(
-        // As wide as its words, with room for the time left once frames
-        // are coming.
         flex: _widthOf(
             t,
             exporting && done > 0
@@ -1270,11 +1200,9 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
               child: Text(l10n.cancel, style: t.small),
             ),
           ],
-        // A file made for a review link went to the server and is gone.
         BridgeExportState_Done(:final path) when isReviewExport(path) =>
           const [],
         BridgeExportState_Done(:final path) => [
-            // The finished file is one click away: the line opens its folder.
             Flexible(
               child: _result(LumitTooltip(
                 message: l10n.projectShowInFolder,
@@ -1308,7 +1236,6 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
           ],
       };
 
-  /// How a finished job's line arrives: as the notice beside it does.
   Widget _result(Widget line) {
     final motion = ThemeScope.of(context).motion;
     return Entrance(spec: motion.reveal, rise: motion.revealRise, child: line);
@@ -1331,7 +1258,6 @@ class _ExportProgress extends StatefulWidget {
 }
 
 class _ExportProgressState extends State<_ExportProgress> {
-  /// Where the export stood when the strip first saw it, and the time since.
   late int _from = widget.frame;
   final Stopwatch _since = Stopwatch()..start();
 
@@ -1428,19 +1354,15 @@ class _ModifierHintState extends State<_ModifierHint> {
         final line = held == null ? null : widget.tools.tool.hintFor(held);
         if (held == null || line == null) return const SizedBox.shrink();
         return LayoutBuilder(
-          // Under a few words' width there is nothing worth cutting short.
           builder: (context, room) => room.maxWidth < 120
               ? const SizedBox.shrink()
               : Align(
                   alignment: AlignmentDirectional.centerEnd,
                   child: Padding(
-                    // Clear of the readout before it on a flush strip.
-                    // Bubbles space themselves.
                     padding: EdgeInsetsDirectional.only(
                         start: t.tokens.roomed ? 0 : 12),
                     child: widget.bubble(
                       t,
-                      // Keyed by the key, so a change of modifier plays in.
                       Entrance(
                         key: ValueKey<ToolModifier>(held),
                         spec: scope.motion.reveal,
@@ -1524,7 +1446,6 @@ class _CacheMeterFrbState extends State<CacheMeterFrb> {
     }
   }
 
-  /// The three tiers as they stand.
   List<_Tier> _read() {
     final ram = cacheStats();
     final vram = vramCacheStats();
@@ -1547,13 +1468,10 @@ class _CacheMeterFrbState extends State<CacheMeterFrb> {
     showLumitPopup<void>(
       context: context,
       position: box.localToGlobal(Offset.zero),
-      // Read fresh for the detail, and the strip follows on its tick.
       builder: (close) => _CacheDetail(tiers: _read),
     );
   }
 
-  /// The meter's right-click: empty every tier, or open the page that sets
-  /// them. The disk tier asks first, as its own Clear does.
   void _menu(Offset at) => showMenuAt<void>(
         context: context,
         position: at,
@@ -1611,7 +1529,6 @@ class _CacheMeterFrbState extends State<CacheMeterFrb> {
                   child: HouseProgressBar(fraction: tier.fraction, height: 3)),
               const SizedBox(width: 3),
             ],
-            // Nothing held is nothing to read.
             if (used > 0) ...[
               const SizedBox(width: 3),
               Text(l10n.cacheMegabytes(_mibText(used)),
@@ -1625,25 +1542,20 @@ class _CacheMeterFrbState extends State<CacheMeterFrb> {
   }
 }
 
-/// One tier of the frame cache as the strip reads it.
 class _Tier {
   final String id;
   final String label;
   final int used;
   final int budget;
 
-  /// Empty the tier. The disk tier's asks first, so it takes its time.
   final FutureOr<void> Function() clear;
   const _Tier(this.id, this.label, this.used, this.budget, this.clear);
 
   double get fraction => budget <= 0 ? 0.0 : (used / budget).clamp(0.0, 1.0);
 
-  /// Used of budget, in megabytes.
   String get words => l10n.cacheUsedOfBudget(_mibText(used), _mibText(budget));
 }
 
-/// The tiers in full, over the strip: a bar each with its numbers, and a
-/// Clear for each. Redrawn after a clear, so the bar empties in front of you.
 class _CacheDetail extends StatefulWidget {
   final List<_Tier> Function() tiers;
   const _CacheDetail({required this.tiers});
@@ -1679,8 +1591,6 @@ class _CacheDetailState extends State<_CacheDetail> {
                   ),
                   Expanded(child: HouseProgressBar(fraction: tier.fraction)),
                   const SizedBox(width: 10),
-                  // One column of figures, right-aligned, so the three
-                  // tiers read down.
                   SizedBox(
                     width: 120,
                     child: Text(tier.words,
@@ -1712,5 +1622,4 @@ class _CacheDetailState extends State<_CacheDetail> {
   }
 }
 
-/// Bytes as whole megabytes, for the meter's readouts and its tooltips.
 String _mibText(int bytes) => (bytes / (1 << 20)).toStringAsFixed(0);

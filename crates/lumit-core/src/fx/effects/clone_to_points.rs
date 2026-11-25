@@ -69,7 +69,6 @@ mod stamps;
 /// producers and Vary points use for theirs.
 const PICTURE_ATTR: u32 = 48;
 
-/// The dice a Random time offset rolls.
 const MOMENT_ATTR: u32 = 49;
 
 /// The most pictures one Clone to points asks the render for: layers times
@@ -99,10 +98,8 @@ const TIME_RANDOM: u32 = 2;
 const TIME_NUMBER: u32 = 3;
 const TIME_POINT_AGE: u32 = 4;
 
-/// How the list of pictures the render hands this effect is laid out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Pictures {
-    /// How many layers are in it.
     pub layers: usize,
     /// How many moments each layer is rendered at. 1 with Time offset off.
     pub moments: usize,
@@ -123,7 +120,6 @@ impl Pictures {
         }
     }
 
-    /// How many pictures the list holds.
     #[must_use]
     pub fn len(self) -> usize {
         if self.renders > 0 {
@@ -133,7 +129,6 @@ impl Pictures {
         }
     }
 
-    /// Whether there is nothing to stamp.
     #[must_use]
     pub fn is_empty(self) -> bool {
         self.len() == 0
@@ -155,8 +150,6 @@ pub struct Stamped {
     pub count: usize,
 }
 
-/// One picture in the list: which layer row it is of, which moment, and which
-/// clone of how many where the copies are rendered one per clone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Picture {
     pub layer: usize,
@@ -164,8 +157,6 @@ pub struct Picture {
     pub clone: Option<(u32, u32)>,
 }
 
-/// One picture as the render is asked for it: the row and the layer it names,
-/// the composition time to render that layer at, and its clone number.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Planned {
     pub row: &'static str,
@@ -174,11 +165,7 @@ pub struct Planned {
     pub clone: Option<(u32, u32)>,
 }
 
-/// The extra layers tucked behind one header, the time rows and the Clone
-/// index rows behind two more, and the cell rows that only the two cell sizes
-/// read.
 pub const CLONE_GROUPS: &[ParamGroup] = &[
-    // Each Distribution's own rows, shown only under it.
     ParamGroup {
         label: "",
         params: &["dist_count"],
@@ -273,7 +260,6 @@ pub const CLONE_GROUPS: &[ParamGroup] = &[
 pub const CLONE_ENABLED_WHEN: &[EnabledWhen] = &[
     APPLY_GROUP_WHEN,
     APPLY_THRESHOLD_WHEN,
-    // Each name is read by the Number option of the row above it.
     EnabledWhen {
         param: "choose_name",
         on: "choose_by",
@@ -312,7 +298,6 @@ pub const POINTS_PORT: &str = "points";
 /// what a 2D reading answers.
 const POINTS_IN: &[Port] = &[Port::new(POINTS_PORT, "Points", PortType::Points)];
 
-/// Clone to points' controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "clone_to_points",
@@ -330,10 +315,6 @@ const POINTS_IN: &[Port] = &[Port::new(POINTS_PORT, "Points", PortType::Points)]
     enabled_when = CLONE_ENABLED_WHEN,
 )]
 pub struct CloneToPoints {
-    /// Where the copies go. Points input stamps the wired stream. Grid, Path
-    /// and Layout make the points here, so no producer has to be wired:
-    /// Grid in rows and columns, Path spread along a layer's path, Layout in
-    /// a line where each copy starts where the one before ends.
     #[choice(
         label = "Distribution",
         options = ["Points input", "Grid", "Path", "Layout"],
@@ -341,7 +322,6 @@ pub struct CloneToPoints {
     )]
     pub distribution: u32,
 
-    /// How many copies Path and Layout make.
     #[counter(
         label = "Count",
         min = 1,
@@ -353,7 +333,6 @@ pub struct CloneToPoints {
     )]
     pub dist_count: i32,
 
-    /// Grid's columns.
     #[counter(
         label = "Columns",
         min = 1,
@@ -365,7 +344,6 @@ pub struct CloneToPoints {
     )]
     pub dist_columns: i32,
 
-    /// Grid's rows.
     #[counter(
         label = "Rows",
         min = 1,
@@ -404,11 +382,9 @@ pub struct CloneToPoints {
     #[layer(label = "Path layer")]
     pub path_layer: bool,
 
-    /// Turns each copy to face the way the path runs.
     #[toggle(label = "Align to path", default = true)]
     pub dist_align: bool,
 
-    /// How much of the path the copies spread over, per cent of its length.
     #[slider(label = "Length", min = 0.0, max = 100.0, default = 100.0, hard_min = 0.0, hard_max = 100.0, unit = Percent)]
     pub dist_length: f32,
 
@@ -424,7 +400,6 @@ pub struct CloneToPoints {
     #[slider(label = "Offset", min = -500.0, max = 500.0, default = 0.0, unit = Px)]
     pub dist_offset: f32,
 
-    /// Which way Layout lines the copies up.
     #[choice(label = "Direction", options = ["Horizontal", "Vertical"], default = 0)]
     pub dist_direction: u32,
 
@@ -447,7 +422,6 @@ pub struct CloneToPoints {
     #[slider(label = "Position y", min = 0.0, max = 2160.0, default = 540.0, unit = Px)]
     pub dist_position_y: f32,
 
-    /// Which points get a stamp.
     #[choice(
         label = "Apply to",
         options = ["All points", "Picked", "Not picked"],
@@ -473,32 +447,24 @@ pub struct CloneToPoints {
     #[layer(label = "Clone layer")]
     pub clone_layer: bool,
 
-    /// A second layer to stamp. With more than one set, each point takes one
-    /// of them, as Choose by says.
     #[layer(label = "Clone layer 2")]
     pub clone_layer_2: bool,
 
-    /// A third. See [`clone_layer_2`](Self::clone_layer_2).
     #[layer(label = "Clone layer 3")]
     pub clone_layer_3: bool,
 
-    /// A fourth. See [`clone_layer_2`](Self::clone_layer_2).
     #[layer(label = "Clone layer 4")]
     pub clone_layer_4: bool,
 
-    /// A fifth. See [`clone_layer_2`](Self::clone_layer_2).
     #[layer(label = "Clone layer 5")]
     pub clone_layer_5: bool,
 
-    /// A sixth. See [`clone_layer_2`](Self::clone_layer_2).
     #[layer(label = "Clone layer 6")]
     pub clone_layer_6: bool,
 
-    /// A seventh. See [`clone_layer_2`](Self::clone_layer_2).
     #[layer(label = "Clone layer 7")]
     pub clone_layer_7: bool,
 
-    /// An eighth. See [`clone_layer_2`](Self::clone_layer_2).
     #[layer(label = "Clone layer 8")]
     pub clone_layer_8: bool,
 
@@ -640,8 +606,6 @@ pub struct CloneToPoints {
     )]
     pub scale_x: f32,
 
-    /// Multiplies each stamp's height, per cent. See
-    /// [`scale_x`](Self::scale_x).
     #[slider(
         label = "Scale y",
         min = 0.0,
@@ -687,7 +651,6 @@ pub struct CloneToPoints {
     )]
     pub corner_radius: f32,
 
-    /// Multiplies every stamp's opacity, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -742,11 +705,9 @@ pub struct CloneToPoints {
     )]
     pub max_clones: i32,
 
-    /// Which dice a Random choice of layer and a Random time offset roll.
     #[seed]
     pub seed: u32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -795,8 +756,6 @@ pub fn smooth_tangent(path: &crate::mask::MaskPolyline, s: f32) -> [f32; 2] {
         0.0
     };
     let own = path.edge_tangent(e);
-    // The edge on the far side of vertex `v` from edge `e`, round the join
-    // of a closed path.
     let beyond = |v: usize| -> Option<[f32; 2]> {
         let other = if v == e {
             e.checked_sub(1).or(path.closed.then_some(n - 2))?
@@ -864,8 +823,6 @@ impl EffectDef for CloneToPointsDef {
         &<CloneToPoints as EffectMetadata>::SCHEMA
     }
 
-    /// A picture in, a picture out, and a **stream in** beside it — the first
-    /// stack effect to declare a data input.
     fn signature(&self) -> Signature {
         Signature::Image {
             inputs: POINTS_IN,

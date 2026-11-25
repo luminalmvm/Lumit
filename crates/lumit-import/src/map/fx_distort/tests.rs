@@ -1,5 +1,3 @@
-//! Per-effect conversion tests for the warps, wipes and stylisers.
-
 #![allow(
     clippy::float_cmp,
     clippy::unwrap_used,
@@ -26,12 +24,9 @@ fn diag() -> f64 {
     (W * W + H * H).sqrt()
 }
 
-/// The two layers the test composition has, by After Effects index.
 fn layer_id(index: u32) -> Uuid {
     Uuid::from_u128(u128::from(index))
 }
-
-// ── building a captured instance ──
 
 fn fx(ae: &str, name: &str, params: Vec<AeProp>) -> AeProp {
     AeProp {
@@ -99,8 +94,6 @@ fn keyed(ae: &str, n: u32, name: &str, keys: &[(f64, f64, f64)]) -> AeProp {
     }
 }
 
-// ── running one ──
-
 struct Run {
     inst: EffectInstance,
     report: ImportReport,
@@ -129,8 +122,6 @@ fn run(node: &AeProp) -> Run {
     };
     Run { inst, report }
 }
-
-// ── reading the answer ──
 
 fn f(r: &Run, id: &str) -> f64 {
     r.inst.float_at(id, 0.0).expect("a float parameter")
@@ -189,8 +180,6 @@ fn approximated(r: &Run, param: &str) -> bool {
     )
 }
 
-// ───────────────────────── the rows ─────────────────────────
-
 #[test]
 fn motion_tile_converts_its_four_sizes_and_carries_the_rest() {
     let ae = "ADBE Tile";
@@ -217,9 +206,6 @@ fn motion_tile_converts_its_four_sizes_and_carries_the_rest() {
         (f(&r, "tile_centre_x"), f(&r, "tile_centre_y")),
         (480.0, 270.0)
     );
-    // AE keeps the four sizes as per cents of the frame and Lumit as
-    // px@comp, so each axis converts against the comp's own extent
-    // — keyframes and their speeds with it.
     assert_eq!(
         keys_of(&r, "tile_width"),
         vec![(0.0, 1.00 * W, 0.0), (2.0, 0.25 * W, -0.50 * W)]
@@ -231,26 +217,15 @@ fn motion_tile_converts_its_four_sizes_and_carries_the_rest() {
     );
     assert!(boolean(&r, "mirror_edges") && boolean(&r, "horizontal_phase_shift"));
     assert_eq!(f(&r, "phase"), 180.0);
-    // The four conversions are the only rows: a number whose base changed
-    // is reported, and everything else here is one for one.
     for name in ["Tile Width", "Tile Height", "Output Width", "Output Height"] {
         assert!(rebased(&r, name), "{name} changed base and must say so");
     }
     assert_eq!(r.report.rows.len(), 4);
 }
 
-/// **Set channels: four After Effects source layers onto one Source row.**
-///
-/// The three cases that actually occur in the reference project, in one
-/// instance each. Every channel that names the chosen source layer, or the
-/// layer the effect is on, converts exactly; a *second* source layer and
-/// After Effects' "None" are both reported and left at the identity, which
-/// is §5's "reported rather than approximated".
 #[test]
 fn set_channels_folds_four_source_layers_onto_one_source_row() {
     let ae = "ADBE Set Channels";
-    // The commonest shape by far: all four channels off one other layer,
-    // the identity assignment. Six of the project's ten instances.
     let r = run(&fx(
         ae,
         "Set Channels",
@@ -271,10 +246,6 @@ fn set_channels_folds_four_source_layers_onto_one_source_row() {
     assert_eq!(choice(&r, "blue_from"), 7, "Source blue");
     assert_eq!(choice(&r, "alpha_from"), 8, "Source alpha");
 
-    // Three channels off another layer, the alpha off **this** one, which
-    // is After Effects' own default for a picker nobody touched. This
-    // layer's channels are the first five options, so it needs no Source
-    // row and no report.
     let r = run(&fx(
         ae,
         "Set Channels",
@@ -297,8 +268,6 @@ fn set_channels_folds_four_source_layers_onto_one_source_row() {
         "naming the layer the effect is on is exact, not an approximation"
     );
 
-    // **An absent picker is the layer the effect is on**, not None: the
-    // file stores only what is not at its default, and that is the default.
     let r = run(&fx(
         ae,
         "Set Channels",
@@ -308,9 +277,6 @@ fn set_channels_folds_four_source_layers_onto_one_source_row() {
     assert_eq!(choice(&r, "alpha_from"), 4, "this layer's own luminance");
     assert!(!approximated(&r, "Source Layer 4"));
 
-    // A second source layer, After Effects' None, and one of the three
-    // channels Lumit does not have. All three are reported; none of them
-    // guesses at a picture.
     let r = run(&fx(
         ae,
         "Set Channels",
@@ -342,8 +308,6 @@ fn set_channels_folds_four_source_layers_onto_one_source_row() {
     assert!(approximated(&r, "Set Alpha To Source 4's"));
 }
 
-/// Wave Speed carries onto Lumit's own Wave speed, and Ripple Phase onto
-/// Evolution, as they are.
 #[test]
 fn ripple_rebases_its_three_lengths_and_carries_wave_speed() {
     let ae = "ADBE Ripple";
@@ -369,10 +333,6 @@ fn ripple_rebases_its_three_lengths_and_carries_wave_speed() {
     assert_eq!(f(&r, "evolution"), 90.0);
 }
 
-/// The five Expression Controls carry their one property, keyframes and
-/// all, and report nothing — there is nothing to convert. The
-/// keyframed slider is the case that matters: a CC-pack rig is an animated
-/// Slider Control and a page of expressions reading it.
 #[test]
 fn the_expression_controls_carry_their_one_property() {
     let r = run(&fx(
@@ -431,8 +391,6 @@ fn the_expression_controls_carry_their_one_property() {
     assert_eq!((f(&r, "point_x"), f(&r, "point_y")), (640.0, 360.0));
 }
 
-/// A conversion cannot rewrite an expression, so a rebased parameter with
-/// one on it is reported rather than quietly wrong.
 #[test]
 fn an_expression_under_a_rebased_parameter_is_reported() {
     let ae = "ADBE Twirl";

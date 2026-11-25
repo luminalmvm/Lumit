@@ -41,13 +41,10 @@ const MAGIC_SHIFT: u32 = INDEX_BITS + 4;
 /// that cannot be confused with an instance on the day it arrives.
 pub const KIND_INSTANCE: u32 = 1;
 
-/// One handle, as it crosses the pipe.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Handle(u32);
 
 impl Handle {
-    /// Build the handle for `kind` at `index`, or `None` when either is past
-    /// the bits it has.
     #[must_use]
     pub const fn encode(kind: u32, index: u32) -> Option<Self> {
         if index > INDEX_MASK || kind > KIND_MASK || kind == 0 {
@@ -58,7 +55,6 @@ impl Handle {
         ))
     }
 
-    /// The bits, which is what the protocol carries.
     #[must_use]
     pub const fn bits(self) -> u32 {
         self.0
@@ -71,8 +67,6 @@ impl Handle {
         Self(bits)
     }
 
-    /// The kind this handle claims to be, or `None` when it is not one of ours
-    /// at all.
     #[must_use]
     pub const fn kind(self) -> Option<u32> {
         if (self.0 >> MAGIC_SHIFT) != HANDLE_MAGIC {
@@ -98,7 +92,6 @@ pub struct Registry<T> {
 }
 
 impl<T> Registry<T> {
-    /// An empty registry for one kind.
     #[must_use]
     pub const fn new(kind: u32) -> Self {
         Self {
@@ -107,27 +100,20 @@ impl<T> Registry<T> {
         }
     }
 
-    /// How many live objects it holds.
     #[must_use]
     pub fn len(&self) -> usize {
         self.live.len()
     }
 
-    /// Whether it holds none.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.live.is_empty()
     }
 
-    /// Whether a handle passes magic and kind. A handle that does not is never
-    /// looked up at all.
     fn valid(&self, handle: Handle) -> bool {
         handle.kind() == Some(self.kind)
     }
 
-    /// Take ownership of `value` under the handle that names it. Answers
-    /// `false` for a handle that is not one of this registry's kind, in which
-    /// case nothing is stored.
     pub fn insert(&mut self, handle: Handle, value: T) -> bool {
         if !self.valid(handle) {
             return false;
@@ -136,8 +122,6 @@ impl<T> Registry<T> {
         true
     }
 
-    /// The object a handle names, or `None` for a forged, stale or wrong-kind
-    /// handle.
     pub fn get(&self, handle: Handle) -> Option<&T> {
         if !self.valid(handle) {
             return None;
@@ -145,7 +129,6 @@ impl<T> Registry<T> {
         self.live.get(&handle.bits())
     }
 
-    /// The object a handle names, for writing.
     pub fn get_mut(&mut self, handle: Handle) -> Option<&mut T> {
         if !self.valid(handle) {
             return None;
@@ -153,7 +136,6 @@ impl<T> Registry<T> {
         self.live.get_mut(&handle.bits())
     }
 
-    /// Destroy the object a handle names.
     pub fn remove(&mut self, handle: Handle) -> Option<T> {
         if !self.valid(handle) {
             return None;
@@ -174,20 +156,15 @@ mod tests {
         assert!(registry.insert(good, 42));
         assert_eq!(registry.get(good), Some(&42));
 
-        // A plain counter, which is what a host that did not do this would
-        // send, fails the magic.
         assert_eq!(Handle::from_bits(7).kind(), None);
         assert_eq!(registry.get(Handle::from_bits(7)), None);
 
-        // The right magic and the wrong kind is the one a second kind of
-        // object would collide on.
         let other = Handle::encode(2, 7).unwrap();
         assert_eq!(other.kind(), Some(2));
         assert_eq!(registry.get(other), None);
         assert!(!registry.insert(other, 9), "and it stores nothing either");
         assert_eq!(registry.len(), 1);
 
-        // A destroyed instance's handle names nothing from then on.
         assert_eq!(registry.remove(good), Some(42));
         assert_eq!(registry.get(good), None);
         assert!(registry.is_empty());

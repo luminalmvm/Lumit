@@ -1,10 +1,3 @@
-//! The languages Whisper knows, in Whisper's own order, each with its code
-//! and its name as its own speakers write it.
-//!
-//! # Thread role and contract
-//!
-//! A constant table. Nothing here runs.
-
 /// Code and endonym, in the order Whisper's language tokens are numbered.
 /// Cantonese is last and only the newest models know it.
 pub const LANGUAGES: [(&str, &str); 100] = [

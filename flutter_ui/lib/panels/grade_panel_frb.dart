@@ -104,14 +104,10 @@ class _GradePanelFrbState extends State<GradePanelFrb>
         _GradeGeneric {
   StreamSubscription<void>? _changes;
 
-  /// From this width Adjust stands beside Wheels and Look beside Match,
-  /// instead of on pages of their own.
   static const double _wideAt = 1000;
 
-  /// Below this width and at twice as tall, the pages stack as twirls.
   static const double _stackBelow = 520;
 
-  /// Which twirls are open while the pages stack.
   final Map<GradePage, bool> _open = {GradePage.wheels: true};
 
   @override
@@ -230,7 +226,6 @@ class _GradePanelFrbState extends State<GradePanelFrb>
         GradePage.look => l10n.fxLook,
       };
 
-  /// The rows a page's reset puts back, none for a page with nothing to.
   List<String> _pageRows(GradePage p) => switch (p) {
         GradePage.wheels => [..._wheelRows, ..._stripRows, ..._hdrRows],
         GradePage.adjust => [..._adjustRows, ..._mixerRows],
@@ -252,7 +247,6 @@ class _GradePanelFrbState extends State<GradePanelFrb>
 
   Widget _page(LumitTheme t, GradePage p, bool enabled, {bool wide = false}) =>
       switch (p) {
-        // The wheels keep their own width and Adjust has the rest.
         GradePage.wheels => _besideWheels(wide)
             ? Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -295,11 +289,8 @@ class _GradePanelFrbState extends State<GradePanelFrb>
         GradePage.look => _lookPage(t, enabled),
       };
 
-  /// How wide the Match or the Look palette is beside the other.
   static const double _paletteWidth = 440;
 
-  /// The page control and the page's reset. The pages as a segmented
-  /// control while their names fit, else a dropdown.
   Widget _pageBar(LumitTheme t, GradePage page, bool enabled,
       {required bool wide}) {
     final pages = [
@@ -385,7 +376,6 @@ class _GradePanelFrbState extends State<GradePanelFrb>
     return painter.width;
   }
 
-  /// Every page as a twirl, one under another, for a tall narrow pane.
   Widget _stacked(LumitTheme t, bool enabled) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -437,8 +427,6 @@ class _GradePanelFrbState extends State<GradePanelFrb>
           ],
         ],
       );
-
-  // --- The header --------------------------------------------------------------
 
   Widget _header(LumitTheme t, bool enabled) {
     final shot = _shot;
@@ -502,9 +490,6 @@ class _GradePanelFrbState extends State<GradePanelFrb>
     );
   }
 
-  /// One chip a node, numbered in stack order, then a plus. The current node
-  /// wears the accent; a bypassed one is dimmed. A right-click offers what the
-  /// node's own menu does.
   Widget _chips(LumitTheme t) {
     final nodes = gradeNumberedOf(_stack);
     final current = _sharedRef ?? _node;
@@ -580,8 +565,6 @@ class _GradePanelFrbState extends State<GradePanelFrb>
     for (final e in listEffects()) e.name: e.label,
   };
   static String _effectLabel(String name) => _effectLabels[name] ?? name;
-
-  // --- Versions ----------------------------------------------------------------
 
   /// The shot's versions, read once per document revision.
   (int?, String, List<BridgeGradeVersion>)? _versionsRead;

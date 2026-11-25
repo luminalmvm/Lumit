@@ -23,11 +23,6 @@ void main() {
   envelopeShapeTests();
   tangentModeTests();
 
-  /// **M19 — a new keyframe takes after its neighbours.** It used to be born
-  /// linear on both sides whatever it landed between, so planting one in the
-  /// middle of a held run quietly turned that run into a ramp.
-  // Reversing an eased curve used to leave its stored speeds pointing the old
-  // way, which bends every frame between the keys: wrong pixels, quietly.
   test('reversed keys draw the same curve backwards', () {
     const ease = BridgeSideInterp.bezier(
         BridgeBezierSide(speed: 30, influence: 0.4));
@@ -61,8 +56,6 @@ void main() {
   });
 
   group('keysWithKeyOnCurve', () {
-    // A key planted on a curve leaves the curve where it was, at every
-    // moment: it used to take a third's influence and bend the span.
     test('an eased span keeps its curve through the new key', () {
       const out =
           BridgeSideInterp.bezier(BridgeBezierSide(speed: 0, influence: 0.9));
@@ -106,14 +99,11 @@ void main() {
 
   group('evaluateKeys', () {
     test('the easy-ease midpoint is the value midpoint', () {
-      // Symmetric flat handles: the curve is odd about the centre, so the
-      // midpoint in time is exactly the midpoint in value (anim.rs test).
       final keys = [
         key(0, 1, 0, interpOut: easyEase),
         key(1, 1, 100, interpIn: easyEase),
       ];
       expect(evaluateKeys(keys, 0.5), closeTo(50, 1e-9));
-      // Eased: barely moving near the ends compared to linear.
       expect(evaluateKeys(keys, 0.1), lessThan(5));
       expect(evaluateKeys(keys, 0.9), greaterThan(95));
     });
@@ -153,7 +143,6 @@ void main() {
       expect(sideAccelerationAtKey(keys, 1, isOut: false),
           closeTo(evaluateKeysAcceleration(keys, 2 - h), 1e-2));
 
-      // Ask the out side for the acceleration it reads at influence 0.45.
       final asked = sideAccelerationAtKey([
         key(0, 1, 0, interpOut: ease(2, 0.45)),
         keys[1],
@@ -198,14 +187,11 @@ void main() {
       ];
       final (lo, hi) = fitValueRange([keys], []);
       expect(lo, lessThanOrEqualTo(0));
-      // The steep out-handle reaches 400 · 0.5 = 200 above the first key.
       expect(hi, greaterThanOrEqualTo(200));
     });
   });
 
   group('keyframe clipboard text', () {
-    /// The whole reason the format is ours: a shaped key must come back
-    /// shaped, not flattened to a straight line.
     test('easing survives the round trip, per column', () {
       const eased = BridgeSideInterp.bezier(
           BridgeBezierSide(speed: 12.5, influence: 0.25));
@@ -245,8 +231,6 @@ void main() {
       expect(row.eases[1].$2, isA<BridgeSideInterp_Bezier>());
     });
 
-    /// A table from another editor has values and no easing columns; it must
-    /// still paste, as linear keys, rather than being refused.
     test('a table with no easing columns still parses', () {
       const text = 'Some Editor 1.0 Keyframe Data\n'
           '\n'
@@ -316,10 +300,6 @@ void main() {
   });
 }
 
-// ---------------------------------------------------------------------------
-// The Vegas speed envelope.
-// ---------------------------------------------------------------------------
-
 /// Tangent modes — Auto / Clamp / Free (docs/impl/keyframe-eval.md §6,
 /// docs/impl/timeline-interaction.md §6.3). The numbers here are the ones
 /// `crates/lumit-core/src/anim.rs`'s own tests assert, so the two ports are
@@ -340,7 +320,6 @@ void tangentModeTests() {
       for (var i = 0; i <= 100; i++) {
         expect(evaluateKeys(clamped, i / 50), lessThanOrEqualTo(10 + 1e-9));
       }
-      // The unclamped aim tilts uphill past the peak, and does overshoot.
       final smooth = peak(auto());
       expect(autoSpeedAt(smooth, 1, clamped: false), closeTo(4.5, 1e-12));
       var high = double.negativeInfinity;
@@ -370,15 +349,10 @@ void envelopeTests() {
   group('the Vegas speed envelope', () {
     test('setting a speed re-integrates the frames after it, start pinned', () {
       final keys = [key(0, 1, 0.0), key(2, 1, 2.0), key(4, 1, 4.0)];
-      // Drag the *first* point to 300%: the span to the second key now runs
-      // at an average of (300 + 100) / 2 = 200%, advancing 4s of source in 2s.
       final out = setEnvelopeSpeed(keys, 0, 300);
       expect(out[0].value, closeTo(0.0, 1e-9), reason: 'the start is pinned');
       expect(out[1].value, closeTo(4.0, 1e-9));
-      // …and everything past it carries the shift, the Vegas feel: the second
-      // span still runs at 100% average, so it still advances 2s.
       expect(out[2].value, closeTo(6.0, 1e-9));
-      // Every keyframe *time* stayed exactly put (the beat-sync covenant).
       expect([for (final k in out) rationalSeconds(k.time)], [0.0, 2.0, 4.0]);
     });
 
@@ -387,13 +361,12 @@ void envelopeTests() {
     // a ramp drawn in one reads wrong in the other.
     test('the curve under a straight envelope has an exactly linear speed', () {
       final keys = [key(0, 1, 0.0), key(4, 1, 4.0)];
-      final ramped = setEnvelopeSpeed(keys, 1, 300); // 100% → 300%
+      final ramped = setEnvelopeSpeed(keys, 1, 300);
       // Strictly inside the span: `evaluateKeysSpeed` is 0 *at* the first and
       // last key by the engine's own outside-the-keys rule, so the endpoints
       // are checked through the points themselves just below.
       for (var i = 1; i < 8; i++) {
         final t = i / 8 * 4.0;
-        // The straight line between the two points, in source units.
         final expected = (100 + (300 - 100) * (t / 4.0)) / 100;
         expect(evaluateKeysSpeed(ramped, t), closeTo(expected, 1e-6),
             reason: 'speed at t=$t should sit on the envelope line');
@@ -414,7 +387,6 @@ void envelopeTests() {
       final ramped = setEnvelopeSpeed(keys, 1, 250);
       final speedsBefore = envelopeSpeeds(ramped);
 
-      // Drag the middle point later, which is what bent it.
       final moved = moveEnvelopePoint(ramped, 1, rat(3, 1));
 
       expect(rationalSeconds(moved[1].time), closeTo(3.0, 1e-9));
@@ -427,8 +399,6 @@ void envelopeTests() {
           ],
           reason: 'the point keeps the speed it had');
 
-      // And every span reads as the straight line between its two points —
-      // sampled inside each one, which is where a bulge would show.
       for (var span = 0; span + 1 < moved.length; span++) {
         final t0 = rationalSeconds(moved[span].time);
         final t1 = rationalSeconds(moved[span + 1].time);
@@ -444,8 +414,6 @@ void envelopeTests() {
       }
     });
 
-    // A span's curve decides which frames play, and it has to survive the
-    // drags that re-integrate the keys around it.
     test('a span keeps its curve through speed and time edits', () {
       final keys = [key(0, 1, 0.0), key(2, 1, 2.0), key(4, 1, 4.0)];
       var out = setEnvelopeCurve(keys, 0, SpeedCurve.fast);
@@ -458,15 +426,11 @@ void envelopeTests() {
         closeTo(300, 1e-6),
         closeTo(100, 1e-6),
       ]);
-      // Fast covers two thirds of its step on average: 1s at 100 → 300.
       expect(out[1].value, closeTo((100 + 200 * 2 / 3) / 100, 1e-9));
-      // Hold plays the whole of the next span at 300%.
       expect(evaluateKeysSpeed(out, 2.5), closeTo(3, 1e-6));
       expect(out[2].value - out[1].value, closeTo(3 * 3, 1e-9));
     });
 
-    // Flip and Thin rewrite every point, so a slip in either changes which
-    // frames the whole clip plays.
     test('Flip mirrors about 100% and Thin drops only points that do nothing',
         () {
       final keys = [
@@ -479,13 +443,10 @@ void envelopeTests() {
       out = setEnvelopeSpeed(out, 1, 200);
       out = setEnvelopeSpeed(out, 2, 100);
       out = setEnvelopeSpeed(out, 3, 150);
-      // 200 at 1s is on the line from 300 to 100, 100 at 2s is a bend.
       final thin = thinEnvelope(out);
       expect(envelopeSpeeds(thin),
           [closeTo(300, 1e-6), closeTo(100, 1e-6), closeTo(150, 1e-6)]);
       expect(thin.last.value, closeTo(out.last.value, 1e-9));
-      // A gentle curve keeps its shape: 1s is near the line to 2s, but not
-      // the line to 3s, so 2s stays.
       final gentle = envelopeToKeys(keys, [100, 100.0135, 100.009, 100]);
       expect(thinEnvelope(gentle), hasLength(3));
     });

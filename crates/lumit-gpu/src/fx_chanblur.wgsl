@@ -18,7 +18,7 @@ struct Params {
     dir: vec2<f32>,      // (1,0) horizontal pass, (0,1) vertical pass
     mix_amt: f32,        // 0..1, blended against `orig` (1 on the h-pass)
     edge: u32,           // 0 transparent, 1 repeat
-    matte_on: f32,     // 1 = the matte drives the control below
+    matte_on: f32,
     _pad0: f32,
     _pad1: f32,
     _pad2: f32,

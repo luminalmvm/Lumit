@@ -1,14 +1,9 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-//! Light leak's kernel against its CPU oracle, across angles, sizes, times
-//! and a strength past 100. Mix 0 keeps the picture exactly.
-
 use lumit_core::fx::effects::light_leak::{light_leak, LightLeakParams};
 use lumit_gpu::fx::common::{readback_linear_f32, upload_linear_f32};
 use lumit_gpu::fx::light_leak::LightLeakOp;
 
-/// A premultiplied picture with dark and bright parts, a value past 1 and a
-/// soft alpha edge.
 fn picture(w: u32, h: u32) -> Vec<f32> {
     let mut img = vec![0.0f32; (w * h * 4) as usize];
     for y in 0..h {

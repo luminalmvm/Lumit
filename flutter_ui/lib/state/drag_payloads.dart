@@ -28,8 +28,6 @@ import 'package:uuid/uuid.dart' show UuidValue;
 class FootageDragData {
   final List<FootageReference> footage;
 
-  /// What the floating label under the pointer reads: the item's name for one,
-  /// a count for several.
   final String label;
   const FootageDragData(this.footage, this.label);
 }
@@ -40,17 +38,13 @@ class FootageDragData {
 class CompDragData {
   final CompositionReference comp;
 
-  /// What the floating label under the pointer reads.
   final String label;
   const CompDragData(this.comp, this.label);
 }
 
-/// A solid dragged from the Project panel onto either timeline, where it
-/// lands as a Solid layer or as a clip.
 class SolidDragData {
   final SolidReference solid;
 
-  /// What the floating label under the pointer reads.
   final String label;
   const SolidDragData(this.solid, this.label);
 }
@@ -59,19 +53,14 @@ class SolidDragData {
 /// brought into the project where it lands, and then placed as a composition
 /// dragged from the Project panel would be.
 class TemplateDragData {
-  /// The template's `.lumt` file in the library.
   final String path;
 
-  /// What the floating label under the pointer reads.
   final String label;
 
-  /// How long it plays, for the Cut timeline to show where it will land.
   final double seconds;
   const TemplateDragData(this.path, this.label, {this.seconds = 0});
 }
 
-/// An effect, or a saved preset, dragged from the Effects & presets panel
-/// onto a layer or a clip.
 class EffectDragData {
   /// The effect last put on a layer by name, by a drop, a menu or a panel:
   /// what Effect ▸ Apply last effect puts on next. Not written down.
@@ -81,7 +70,6 @@ class EffectDragData {
   final String name;
   final String label;
 
-  /// The preset's file, for a saved preset.
   final String? presetPath;
   const EffectDragData(this.name, this.label) : presetPath = null;
   const EffectDragData.preset(String path, this.label)

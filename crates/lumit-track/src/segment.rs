@@ -35,7 +35,6 @@ use crate::geom::{self, sampson_distance};
 use crate::pairs::PairGeometry;
 use crate::{Correspondence, TrackSet, TrackState};
 
-/// The knobs the dynamic-track segmentation takes.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SegmentSettings {
     /// Epipolar (Sampson) residual in source pixels above which a track is
@@ -61,7 +60,6 @@ impl Default for SegmentSettings {
     }
 }
 
-/// Where one track was cut in two.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TrackSplit {
     /// The original track, which keeps its id and its points up to and
@@ -73,7 +71,6 @@ pub struct TrackSplit {
     pub at_frame: i64,
 }
 
-/// What the segmentation did.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Segmentation {
     /// Every track now in state [`crate::TrackState::Moving`], ascending —
@@ -156,9 +153,6 @@ pub fn segment_dynamic_tracks(
     out
 }
 
-// --- The zoom-burst detector ------------------------------------------------
-
-/// The knobs the zoom detector takes (docs/impl/tracking.md §3).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ZoomSettings {
     /// `|log scale|` per frame pair above which the pair's growth is worth
@@ -217,7 +211,6 @@ impl Default for ZoomSettings {
     }
 }
 
-/// What kind of focal change a boundary is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ZoomKind {
     /// Focal leapt between two adjacent frames — the owner's scope-in. Pose is
@@ -229,7 +222,6 @@ pub enum ZoomKind {
     Ramp,
 }
 
-/// One focal-change segment boundary.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ZoomBoundary {
     /// The first pair of the run: the change happens between `frame` and
@@ -268,7 +260,6 @@ pub fn detect_zoom(set: &TrackSet, settings: &ZoomSettings) -> Vec<ZoomBoundary>
     }
     let pairs = usize::try_from(last - first).unwrap_or(0);
 
-    // 1. Every pair's growth, once.
     let m: Vec<Option<f64>> = (0..pairs)
         .map(|i| set.median_log_scale(first + i as i64))
         .collect();
@@ -402,7 +393,6 @@ fn scale_only(set: &TrackSet, frame: i64, log_scale: f64, settings: &ZoomSetting
         && (fit.log_scale - log_scale).abs() <= settings.cross_check
 }
 
-/// What [`scale_only_fit`] measured.
 struct ScaleFit {
     /// `ln s` of the fitted uniform scale.
     log_scale: f64,

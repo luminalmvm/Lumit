@@ -14,14 +14,12 @@ use std::sync::{Arc, OnceLock};
 
 static STOP: OnceLock<Arc<AtomicBool>> = OnceLock::new();
 
-/// The flag Ctrl+C sets, with the handler in place.
 pub fn stop_flag() -> Arc<AtomicBool> {
     let flag = STOP.get_or_init(Arc::default).clone();
     install();
     flag
 }
 
-/// Set the flag, and answer whether it was already set.
 fn stop() -> bool {
     STOP.get()
         .is_none_or(|stop| stop.swap(true, Ordering::SeqCst))
@@ -53,7 +51,6 @@ fn install() {
         fn signal(signum: c_int, handler: usize) -> usize;
         fn _exit(status: c_int) -> !;
     }
-    /// The same number on Linux and macOS.
     const SIGINT: c_int = 2;
     extern "C" fn on_interrupt(_: c_int) {
         if stop() {

@@ -28,25 +28,17 @@ use crate::status::Status;
 /// the process edge).
 const HANDLE_MAGIC: usize = 0x1F0C;
 
-/// Bits reserved for the index.
 const INDEX_BITS: u32 = 40;
 const INDEX_MASK: usize = (1 << INDEX_BITS) - 1;
 const KIND_SHIFT: u32 = INDEX_BITS;
 const MAGIC_SHIFT: u32 = INDEX_BITS + 8;
 
-/// What sort of object a handle names. [`HandleKind::Clip`] has no registry
-/// yet; it is named so that a lookup of the wrong kind is a thing that can be
-/// written, tested, and rejected before the object it names exists.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(u8)]
 pub enum HandleKind {
-    /// An `OfxPropertySetHandle`.
     PropertySet = 1,
-    /// An `OfxImageEffectHandle`.
     ImageEffect = 2,
-    /// An `OfxParamHandle`.
     Param = 3,
-    /// An `OfxImageClipHandle`.
     Clip = 4,
     /// An `OfxParamSetHandle` — the bag of parameters hanging off one effect.
     ///
@@ -57,8 +49,6 @@ pub enum HandleKind {
     /// the effect handle straight back is what stops an effect handle being
     /// accepted where a param set was meant, and the other way round.
     ParamSet = 5,
-    /// An `OfxMutexHandle` — a lock the host holds on a plugin's behalf
-    /// ([`crate::suites::multi_thread`]).
     Mutex = 6,
 }
 
@@ -86,7 +76,6 @@ impl Handle {
         ))
     }
 
-    /// The bits as the C API carries them.
     #[must_use]
     pub const fn as_ptr(self) -> *mut c_void {
         self.0 as *mut c_void
@@ -98,13 +87,11 @@ impl Handle {
         Self(ptr as usize)
     }
 
-    /// The raw bits, for tests that need to forge one.
     #[must_use]
     pub const fn bits(self) -> usize {
         self.0
     }
 
-    /// The kind this handle claims to be, if it is one of ours at all.
     #[must_use]
     pub const fn kind(self) -> Option<HandleKind> {
         if (self.0 >> MAGIC_SHIFT) != HANDLE_MAGIC {
@@ -153,7 +140,6 @@ pub struct HandleRegistry<T> {
 }
 
 impl<T> HandleRegistry<T> {
-    /// An empty registry for one kind of object.
     #[must_use]
     pub const fn new(kind: HandleKind) -> Self {
         Self {
@@ -162,13 +148,11 @@ impl<T> HandleRegistry<T> {
         }
     }
 
-    /// How many live objects it holds.
     #[must_use]
     pub fn len(&self) -> usize {
         self.slots.iter().filter(|slot| slot.is_some()).count()
     }
 
-    /// Whether it holds none.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
@@ -212,11 +196,6 @@ impl<T> HandleRegistry<T> {
             .ok_or(Status::ErrBadHandle)
     }
 
-    /// The object a handle names, for writing.
-    ///
-    /// # Errors
-    ///
-    /// As [`HandleRegistry::get`].
     pub fn get_mut(&mut self, handle: Handle) -> Result<&mut T, Status> {
         let index = self.resolve(handle)?;
         self.slots

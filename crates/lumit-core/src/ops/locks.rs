@@ -1,5 +1,3 @@
-//! Which ops a layer's lock protects it from.
-
 use super::*;
 
 /// Apply `op` to `doc`, returning the exact inverse operation.
@@ -19,7 +17,6 @@ use super::*;
 #[must_use]
 pub(super) fn lock_guards(op: &Op) -> Option<(Uuid, Uuid)> {
     match op {
-        // The three a locked layer still accepts.
         Op::SetLayerLocked { .. } | Op::SetLayerShy { .. } | Op::SetLayerLabel { .. } => None,
 
         Op::RemoveLayer { comp, layer }

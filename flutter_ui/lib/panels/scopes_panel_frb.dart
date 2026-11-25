@@ -33,7 +33,6 @@ import 'scopes_graticule.dart';
 /// The engine's fixed trace size.
 const int _traceEdge = 256;
 
-/// How many instruments the panel shows side by side.
 enum ScopeLayout {
   one,
   two,
@@ -46,15 +45,11 @@ enum ScopeLayout {
       };
 }
 
-/// One slot's instrument and its options.
 class ScopeSlot {
   final ScopeKind kind;
 
-  /// Whether the waveform and the histogram read each channel rather than
-  /// the brightness.
   final bool rgb;
 
-  /// Whether the vectorscope is drawn at twice the size.
   final bool zoom;
 
   const ScopeSlot(this.kind, {this.rgb = false, this.zoom = false});
@@ -108,10 +103,8 @@ class ScopesSetup extends ChangeNotifier {
   bool graticule = true;
   ScopeScale scale = ScopeScale.percent;
 
-  /// The slots the layout shows.
   Iterable<ScopeSlot> get shown => slots.take(layout.slots);
 
-  /// The engine kinds the shown slots need, each once.
   List<int> get kinds => {for (final s in shown) s.engineKind}.toList();
 
   /// Whether the last change is one to keep. A brightness drag is not until
@@ -153,8 +146,6 @@ const double _gutterTenBit = 32;
 const double _margin = 6;
 
 class ScopesPanelFrb extends StatefulWidget {
-  /// Which Scopes panel this is, when there is more than one: each keeps its
-  /// own setup.
   final int instance;
 
   const ScopesPanelFrb({super.key, this.instance = 0});
@@ -292,8 +283,6 @@ class _ScopesPanelFrbState extends State<ScopesPanelFrb> {
     };
   }
 
-  /// One instrument: its header over its plot, and its settings on a
-  /// right-click anywhere on either.
   Widget _slot(LumitTheme t, int i, {required bool themed}) => _ScopeMenu(
         setup: _setup,
         slot: i,
@@ -319,8 +308,6 @@ class _ScopesPanelFrbState extends State<ScopesPanelFrb> {
   Widget _header(LumitTheme t, int i) {
     final slot = _setup.slots[i];
     void set(ScopeSlot s) => _setup.change((x) => x.slots[i] = s);
-    // The layout picker sits in the panel's top-right corner, whichever slot
-    // that is.
     final corner = i == math.min(1, _setup.layout.slots - 1);
     return Container(
       height: 26,
@@ -457,10 +444,10 @@ class _ScopesPanelFrbState extends State<ScopesPanelFrb> {
     double off(double c) => (1 - g) * c * 255;
     return ColorFiltered(
       colorFilter: ColorFilter.matrix([
-        g, 0, 0, 0, off(backdrop.r), //
-        0, g, 0, 0, off(backdrop.g), //
-        0, 0, g, 0, off(backdrop.b), //
-        0, 0, 0, 1, 0, //
+        g, 0, 0, 0, off(backdrop.r),
+        0, g, 0, 0, off(backdrop.g),
+        0, 0, g, 0, off(backdrop.b),
+        0, 0, 0, 1, 0,
       ]),
       child: trace,
     );
@@ -528,7 +515,6 @@ class _ScopesPanelFrbState extends State<ScopesPanelFrb> {
   }
 }
 
-/// What the picker and the menu call each instrument.
 String scopeKindLabel(ScopeKind kind) => switch (kind) {
       ScopeKind.waveform => l10n.foldWaveform,
       ScopeKind.parade => l10n.scopeParade,
@@ -537,14 +523,12 @@ String scopeKindLabel(ScopeKind kind) => switch (kind) {
       ScopeKind.chromaticity => l10n.scopeChromaticity,
     };
 
-/// What the layout picker and the menu call each layout.
 String scopeLayoutLabel(ScopeLayout layout) => switch (layout) {
       ScopeLayout.one => l10n.scopeLayoutOne,
       ScopeLayout.two => l10n.scopeLayoutTwo,
       ScopeLayout.four => l10n.scopeLayoutFour,
     };
 
-/// The layout picker's face: one, two or four boxes, as the panel will be.
 class _LayoutGlyph extends CustomPainter {
   final ScopeLayout layout;
   final Color colour;
@@ -685,7 +669,6 @@ class _BrightnessRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       child: Row(
         children: [
-          // The tick column, so the word lines up with the rows above.
           menuTick(false),
           Text(l10n.scopeBrightness, style: t.bodyPrimary),
           const SizedBox(width: 12),

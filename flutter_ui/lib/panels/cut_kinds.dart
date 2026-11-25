@@ -11,7 +11,6 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 
 final List<BridgeTransitionKind> transitionKinds = cutTransitionKinds();
 
-/// What a kind is called: its one look's name, or the effect's.
 String kindLabel(BridgeTransitionKind kind) =>
     engineLabel(kind.looks.length == 1 ? kind.looks.first : kind.label);
 

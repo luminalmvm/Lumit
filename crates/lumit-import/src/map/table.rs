@@ -37,15 +37,11 @@ use std::sync::OnceLock;
 /// fallback when no override is present or the override cannot be parsed.
 const SHIPPED: &str = include_str!("../../ae-effect-map.toml");
 
-/// The file an override is looked for under, beside the executable.
 const OVERRIDE_FILE: &str = "ae-effect-map.toml";
 
-/// One row: an After Effects effect and what becomes of it.
 #[derive(Debug, Clone, serde::Deserialize)]
 pub(crate) struct Row {
-    /// After Effects' match name — the key.
     pub ae: String,
-    /// After Effects' own name for the effect, as the import report says it.
     pub name: String,
     /// The Lumit effect's match name (docs/08-EFFECTS.md). Absent on a
     /// deliberate-placeholder row.
@@ -85,14 +81,12 @@ pub(crate) struct Row {
     pub pending_audit: bool,
 }
 
-/// The parsed file.
 #[derive(Debug, Default, serde::Deserialize)]
 struct File {
     #[serde(default)]
     effect: Vec<Row>,
 }
 
-/// The table, keyed by After Effects match name.
 #[derive(Debug, Default)]
 pub(crate) struct Table {
     rows: HashMap<String, Row>,
@@ -105,7 +99,6 @@ impl Table {
         self.rows.get(ae)
     }
 
-    /// Every row, for the tests that walk the whole table.
     #[cfg(test)]
     pub(crate) fn rows(&self) -> impl Iterator<Item = &Row> {
         self.rows.values()
@@ -125,7 +118,6 @@ impl Table {
     }
 }
 
-/// The table this process imports through.
 pub(crate) fn table() -> &'static Table {
     static TABLE: OnceLock<Table> = OnceLock::new();
     TABLE.get_or_init(|| {
@@ -178,7 +170,6 @@ pub fn ae_match_name_of(lumit: &str) -> Option<String> {
         .min_by_key(|ae| (!ae.starts_with("ADBE "), ae.clone()))
 }
 
-/// The edited copy beside the executable, if there is one.
 fn override_text() -> Option<String> {
     let path = std::env::current_exe().ok()?.parent()?.join(OVERRIDE_FILE);
     std::fs::read_to_string(path).ok()
@@ -189,8 +180,6 @@ fn override_text() -> Option<String> {
 mod tests {
     use super::*;
 
-    /// **The shipped file parses and every row is whole** — the test that makes
-    /// [`table`]'s fallback unreachable rather than a silent degradation.
     #[test]
     fn the_shipped_table_parses() {
         let table = Table::parse(SHIPPED).expect("the shipped table parses");
@@ -235,9 +224,6 @@ mod tests {
         }
     }
 
-    /// **A broken override is ignored, not obeyed.** Anything that is not valid
-    /// TOML, and anything valid that holds no rows, leaves the shipped table in
-    /// place — the property the fallback exists for.
     #[test]
     fn a_broken_override_falls_back() {
         assert!(Table::parse("this is not toml {{{").is_none());

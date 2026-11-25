@@ -43,7 +43,6 @@ const BridgeTextStyle plainTextStyle = BridgeTextStyle(
   plateLines: false,
 );
 
-/// The paragraph of a layer nobody has styled, held the same way.
 const BridgeParagraphStyle plainParagraphStyle = BridgeParagraphStyle(
   align: BridgeTextAlign.left,
   justify: false,

@@ -11,7 +11,6 @@ extern "C" {
     fn LumitTestPlugSetHostCalls() -> c_int;
 }
 
-/// Asks the DLL beside it something, then says it holds nothing.
 #[no_mangle]
 pub extern "C" fn OfxGetNumberOfPlugins() -> c_int {
     // SAFETY: the side DLL's own export, which takes no arguments.
@@ -19,7 +18,6 @@ pub extern "C" fn OfxGetNumberOfPlugins() -> c_int {
     0
 }
 
-/// Never asked, since there are no plugins.
 #[no_mangle]
 pub extern "C" fn OfxGetPlugin(_index: c_int) -> *const c_void {
     std::ptr::null()

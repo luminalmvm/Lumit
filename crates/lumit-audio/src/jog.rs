@@ -17,7 +17,6 @@ use crate::plan::MixPlan;
 use crate::{put, AudioEngine, Shared, SCRUB_FADE_FRAMES};
 use std::sync::atomic::Ordering;
 
-/// The stored target when no jog is asked for.
 pub(crate) const NO_JOG: u64 = u64::MAX;
 
 /// The jog's buffer, in frames: one chunk read at the fastest speed, and the
@@ -27,10 +26,8 @@ pub(crate) const JOG_FRAMES: usize = FASTEST as usize * SCRATCH_FRAMES + 3;
 /// The fastest the jog plays, either way, as a multiple of the mix's speed.
 const FASTEST: f64 = 4.0;
 
-/// How long the speed takes to follow the drag, in seconds.
 const EASE_S: f64 = 0.03;
 
-/// Slower than this, for [`QUIET_S`], and the jog goes quiet.
 const RESTING: f64 = 0.02;
 const QUIET_S: f64 = 0.06;
 
@@ -48,7 +45,6 @@ impl AudioEngine {
         self.wake();
     }
 
-    /// The drag is over: the jog fades out.
     pub fn jog_end(&self) {
         self.shared.jog.store(NO_JOG, Ordering::Relaxed);
     }
@@ -62,7 +58,6 @@ impl Shared {
     }
 }
 
-/// The jog as the callback keeps it between buffers.
 #[derive(Debug, Default)]
 pub(crate) struct Jog {
     /// Under way: a target has been seen and the sound has not yet faded
@@ -72,14 +67,12 @@ pub(crate) struct Jog {
     position: f64,
     /// Mix frames per frame heard: one is the mix's own speed.
     speed: f64,
-    /// How many frames it has been slower than [`RESTING`].
     still: usize,
     /// How loud it is now, rising and falling over [`SCRUB_FADE_FRAMES`].
     level: f32,
 }
 
 impl Jog {
-    /// Whether there is anything for [`Self::fill`] to do.
     pub(crate) fn wanted(&self, target: Option<f64>) -> bool {
         self.active || target.is_some()
     }
@@ -105,7 +98,6 @@ impl Jog {
         let over = self.level <= 0.0 && (quiet_after..usize::MAX).contains(&self.still);
         match target {
             Some(t) if !self.active || over => {
-                // A new drag starts where it is asked to, at rest and quiet.
                 *self = Self {
                     active: true,
                     position: t.clamp(0.0, total),
@@ -146,9 +138,6 @@ impl Jog {
         missed
     }
 
-    /// Mix the stretch `chunk` crosses into `buffer` and add it into `chunk`
-    /// read at the speed, rising toward full level while `sounding` and
-    /// falling toward nothing otherwise.
     #[allow(clippy::too_many_arguments)]
     fn sound(
         &mut self,
@@ -205,9 +194,6 @@ mod tests {
     use std::sync::atomic::Ordering;
     use std::sync::Arc;
 
-    /// A drag moving at twice the mix's speed plays a tone an octave up,
-    /// with the clock left where it is, and a drag that comes to rest goes
-    /// quiet.
     #[test]
     fn a_jog_at_twice_speed_plays_an_octave_up_and_rests_quiet() {
         let (rate, hz) = (48_000u32, 300.0f32);
@@ -238,7 +224,6 @@ mod tests {
         assert!((pitch - 2.0 * hz).abs() < 0.03 * hz, "heard {pitch} Hz");
         assert_eq!(shared.playhead.load(Ordering::Relaxed), 0);
 
-        // The target stops moving: the jog slows, rests and goes quiet.
         for _ in 0..80 {
             fill(&shared, &mut scrub, &mut work, None, &mut out, 2);
         }

@@ -38,21 +38,15 @@ use std::sync::OnceLock;
 /// come from one pass over the samples.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Band {
-    /// The whole signal — what the single-wave lane draws.
     Full,
-    /// Below `LOW_CROSSOVER_HZ`: kicks, bass, room rumble.
     Low,
-    /// Between the two crossovers: most of a voice, most of a snare's body.
     Mid,
-    /// Above `HIGH_CROSSOVER_HZ`: hats, sibilance, transient edge.
     High,
 }
 
-/// How many summaries one pyramid holds per block — the four of [`Band`].
 const BAND_COUNT: usize = 4;
 
 impl Band {
-    /// Where this band's summaries sit inside a tier's band-major array.
     const fn index(self) -> usize {
         match self {
             Band::Full => 0,
@@ -82,11 +76,8 @@ const HIGH_CROSSOVER_HZ: f32 = 2_000.0;
 /// single pixel column an editor can zoom a waveform to.
 const FINEST_BLOCK: usize = 256;
 
-/// How much coarser each tier is than the one below it.
 const TIER_RATIO: usize = 16;
 
-/// How many tiers a pyramid holds: 256 / 4 096 / 65 536 samples per block,
-/// the three sizes docs/09 §4 names.
 const TIERS: usize = 3;
 
 /// How many of a tier's blocks must fit inside one bucket before that tier is
@@ -164,7 +155,6 @@ fn from_i16(x: i16) -> f32 {
     f32::from(x) / 32_767.0
 }
 
-/// A running summary, kept while a block is being filled.
 #[derive(Clone, Copy)]
 struct Running {
     min: f32,
@@ -173,7 +163,6 @@ struct Running {
     count: usize,
 }
 
-/// A summary of several whole blocks, for folding them into one.
 #[derive(Clone, Copy)]
 struct Folded {
     min: f32,
@@ -278,7 +267,6 @@ impl Biquad {
     }
 }
 
-/// A cascade of two sections: the 24 dB/octave slope each band edge uses.
 #[derive(Clone, Copy)]
 struct Slope([Biquad; 2]);
 
@@ -306,7 +294,6 @@ impl Slope {
     }
 }
 
-/// The three-way split a multiwave stack is made of.
 struct Split {
     low: Slope,
     mid_high: Slope,
@@ -318,7 +305,6 @@ impl Split {
     fn new(sample_rate: f32) -> Split {
         Split {
             low: Slope::low(sample_rate, LOW_CROSSOVER_HZ),
-            // The middle band is what survives both edges.
             mid_high: Slope::high(sample_rate, LOW_CROSSOVER_HZ),
             mid_low: Slope::low(sample_rate, HIGH_CROSSOVER_HZ),
             high: Slope::high(sample_rate, HIGH_CROSSOVER_HZ),
@@ -336,11 +322,8 @@ impl Split {
     }
 }
 
-/// One level of detail: `len` blocks of `block` samples each, per band.
 struct Tier {
-    /// Samples per block.
     block: usize,
-    /// Blocks per band.
     len: usize,
     /// Band-major: band `b`'s block `i` is at `b * len + i`.
     data: Vec<PeakBlock>,
@@ -381,10 +364,7 @@ pub struct PeakPyramid {
     /// samples are decoded from [`Self::source`] the first time a lane zooms
     /// in far enough to ask for them.
     samples: OnceLock<Vec<i16>>,
-    /// Whether a build of this source keeps its samples: it is short enough.
     keeps_samples: bool,
-    /// The file, and the streams of it, the samples can be decoded from
-    /// again.
     source: Option<SoundSource>,
 }
 
@@ -398,14 +378,12 @@ pub struct PyramidBuilder {
     /// Samples per block of the tier being filled, which starts at
     /// [`FINEST_BLOCK`] and is folded up each time the tier fills.
     block: usize,
-    /// The finished blocks, one list per band.
     done: [Vec<Folded>; BAND_COUNT],
     running: [Running; BAND_COUNT],
     filled: usize,
     frames: usize,
     split: Split,
     samples: Vec<i16>,
-    /// How many frames a source may run to and still have its samples kept.
     keep: usize,
 }
 
@@ -425,7 +403,6 @@ impl PyramidBuilder {
         }
     }
 
-    /// The next stretch of interleaved-stereo PCM.
     pub fn push(&mut self, interleaved: &[f32]) {
         for frame in interleaved.chunks_exact(2) {
             let mono = 0.5 * (frame[0] + frame[1]);
@@ -485,7 +462,6 @@ impl PyramidBuilder {
         }
     }
 
-    /// The pyramid of everything pushed.
     #[must_use]
     pub fn finish(mut self) -> PeakPyramid {
         let keeps_samples = self.frames <= self.keep;
@@ -536,7 +512,6 @@ impl PyramidBuilder {
     }
 }
 
-/// The finest tier and the coarser ones folded down from it.
 fn coarser_tiers(finest: Tier) -> Vec<Tier> {
     let mut tiers = vec![finest];
     for _ in 1..TIERS {
@@ -661,8 +636,6 @@ pub fn load_or_build(
 }
 
 impl PeakPyramid {
-    /// Summarise interleaved-stereo PCM that is all in hand:
-    /// [`PyramidBuilder`] handed the lot at once.
     #[must_use]
     pub fn build(interleaved: &[f32], sample_rate: u32) -> PeakPyramid {
         let mut builder = PyramidBuilder::new(sample_rate);
@@ -709,7 +682,6 @@ impl PeakPyramid {
         fingerprint: &lumit_media::Fingerprint,
         sample_rate: u32,
     ) -> Option<PeakPyramid> {
-        /// The next `n` bytes, moving `rest` past them.
         fn take<'a>(rest: &mut &'a [u8], n: usize) -> Option<&'a [u8]> {
             let (head, tail) = rest.split_at_checked(n)?;
             *rest = tail;
@@ -814,7 +786,6 @@ impl PeakPyramid {
         })
     }
 
-    /// How long the summarised audio runs, in seconds.
     #[must_use]
     pub fn duration_seconds(&self) -> f64 {
         if self.sample_rate == 0 {
@@ -823,13 +794,11 @@ impl PeakPyramid {
         self.frames as f64 / f64::from(self.sample_rate)
     }
 
-    /// Whether anything was summarised at all.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.frames == 0 || self.tiers.is_empty()
     }
 
-    /// Roughly how much memory this pyramid holds, for the cache's budget.
     #[must_use]
     pub fn bytes(&self) -> usize {
         self.tiers
@@ -869,7 +838,6 @@ impl PeakPyramid {
         } else {
             (end_seconds, start_seconds)
         };
-        // One bucket of `range` — the span *is* the bucket.
         self.range(band, a, b, 1)
             .first()
             .copied()
@@ -977,7 +945,7 @@ impl PeakPyramid {
                 split.run(x).get(band.index()).copied().unwrap_or_default()
             };
             if i < first {
-                continue; // still settling the filter
+                continue;
             }
             let at = ((i as f64 - origin) / per_bucket).floor();
             if at < 0.0 {
@@ -990,7 +958,6 @@ impl PeakPyramid {
         running.into_iter().map(Running::finish).collect()
     }
 
-    /// Merge every block of `tier` that overlaps `[first, last)` samples.
     fn block_range(&self, tier: &Tier, band: Band, first: usize, last: usize) -> PeakBlock {
         if tier.block == 0 || tier.len == 0 || last <= first {
             return PeakBlock::SILENT;
@@ -1014,12 +981,10 @@ impl PeakPyramid {
 mod tests {
     use super::*;
 
-    /// Interleave a mono signal into the stereo shape the builder takes.
     fn stereo(mono: &[f32]) -> Vec<f32> {
         mono.iter().flat_map(|&s| [s, s]).collect()
     }
 
-    /// A sine at `hz`, `seconds` long, at `rate`.
     fn sine(hz: f32, seconds: f32, rate: u32) -> Vec<f32> {
         let n = (seconds * rate as f32) as usize;
         (0..n)
@@ -1029,7 +994,6 @@ mod tests {
 
     #[test]
     fn the_full_band_keeps_the_signals_extremes() {
-        // Half a second of full-scale square, so every block is ±1.
         let mono: Vec<f32> = (0..24_000)
             .map(|i| if i % 2 == 0 { 1.0 } else { -1.0 })
             .collect();
@@ -1058,15 +1022,11 @@ mod tests {
 
     #[test]
     fn coarse_tiers_agree_with_the_fine_one() {
-        // The whole point of a mip-map: reading a wide window from a coarse
-        // tier must give the same extremes as reading it from the finest.
         let mono: Vec<f32> = (0..48_000)
             .map(|i| (i as f32 / 48_000.0 * 7.0).sin() * (i as f32 / 48_000.0))
             .collect();
         let p = PeakPyramid::build(&stereo(&mono), 48_000);
         let coarse = p.range(Band::Full, 0.0, 1.0, 8);
-        // Ask for the same eight spans one at a time, each narrow enough that
-        // `window` picks the finest tier it can.
         for (i, block) in coarse.iter().enumerate() {
             let a = i as f64 / 8.0;
             let fine = p.window(Band::Full, a, a + 1.0 / 8.0);
@@ -1083,7 +1043,6 @@ mod tests {
         assert_eq!(out[0], PeakBlock::SILENT);
         assert_eq!(out[29], PeakBlock::SILENT);
         assert!(out[10].max > 0.4);
-        // A degenerate span answers silence rather than dividing by zero.
         assert_eq!(p.range(Band::Full, 0.5, 0.5, 3).len(), 3);
         assert!(p.range(Band::Full, 0.0, 1.0, 0).is_empty());
     }
@@ -1103,13 +1062,11 @@ mod tests {
 
         let whole = lumit_media::audio::decode_all(&path, RATE).unwrap();
         let in_memory = PeakPyramid::build(&whole.samples, RATE);
-        // Built from the file a stretch at a time, which writes the peak file.
         let sound = SoundSource::file(&path);
         let built = load_or_build(&sound, RATE, Some(&cache)).unwrap();
         let fingerprint = lumit_media::Fingerprint::of(&path).unwrap();
         let file = peak_path(&cache, &fingerprint, sound.streams(), RATE);
         assert!(file.is_file(), "the build left its peak file");
-        // Read back: nothing is decoded to make this one.
         let read = load_or_build(&sound, RATE, Some(&cache)).unwrap();
         assert!(
             read.samples.get().is_none(),
@@ -1117,11 +1074,11 @@ mod tests {
         );
 
         let views = [
-            (0.0, 9.0, 16),   // the whole source, from the coarsest tier
-            (1.0, 7.5, 300),  // the middle tier
-            (2.0, 4.0, 900),  // the finest tier
-            (3.0, 3.25, 500), // past the summary: four samples a column
-            (8.5, 10.0, 40),  // off the end
+            (0.0, 9.0, 16),
+            (1.0, 7.5, 300),
+            (2.0, 4.0, 900),
+            (3.0, 3.25, 500),
+            (8.5, 10.0, 40),
         ];
         for band in [Band::Full, Band::Low, Band::Mid, Band::High] {
             for (from, to, buckets) in views {
@@ -1140,9 +1097,6 @@ mod tests {
             "samples and all, once asked"
         );
 
-        // The same file with another modification time is another file as far
-        // as the cache can tell, and bytes that are not a peak file are not
-        // one.
         let bytes = std::fs::read(&file).unwrap();
         let mut later = fingerprint.clone();
         later.mtime_unix += 1;

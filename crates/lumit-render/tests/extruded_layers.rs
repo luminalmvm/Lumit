@@ -1,8 +1,3 @@
-//! Text and Shape layers with Geometry options, through the walk the Viewer
-//! and export share. At nought they draw the bytes they always drew. With
-//! depth, the front lands where the flat picture's ink did, and the side shows
-//! when the layer turns.
-
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use lumit_core::anim::Property;
@@ -96,7 +91,6 @@ fn geometry(depth: f64, bevel: f64) -> Vec<Option<EffectInstance>> {
     vec![Some(rows)]
 }
 
-/// A light from up and to the left.
 fn lit(doc: &mut Document, comp: Uuid) {
     let kind = LayerKind::Light {
         light: Box::new(LightDef {
@@ -138,8 +132,6 @@ fn ink(rgba: &[u8]) -> (u32, u32, u32, u32) {
     (a, b, c, d)
 }
 
-/// Rows at nought draw the bytes a layer with none draws, whichever way the
-/// layer came to have them.
 #[test]
 fn nought_is_the_flat_picture() {
     if HeadlessRenderer::shared().is_err() {
@@ -160,9 +152,6 @@ fn nought_is_the_flat_picture() {
     assert_eq!(flat, render(doc, id));
 }
 
-/// With depth, a square facing the camera keeps its outline, and a text keeps
-/// its place. Turned, the same square shows more than its front, shaded
-/// differently from the front, because the side catches the light otherwise.
 #[test]
 fn depth_keeps_the_front_and_shows_a_side() {
     if HeadlessRenderer::shared().is_err() {
@@ -198,15 +187,12 @@ fn depth_keeps_the_front_and_shows_a_side() {
         wide.2 - wide.0 > 160 * 3 / 4,
         "a turned solid shows little: {wide:?}"
     );
-    // The front and the side aren't the same colour under one light.
     let mut shades: Vec<u8> = turned.chunks_exact(4).map(|p| p[0]).collect();
     shades.sort_unstable();
     shades.dedup();
     assert!(shades.len() > 2, "one flat colour: {shades:?}");
 }
 
-/// A title whose outline crosses itself, or has nothing in it at all, draws
-/// what it can. Text with no glyphs draws nothing and doesn't fail the frame.
 #[test]
 fn a_text_draws_and_an_empty_one_is_nothing() {
     if HeadlessRenderer::shared().is_err() {
@@ -240,8 +226,6 @@ fn a_text_draws_and_an_empty_one_is_nothing() {
     }
 }
 
-/// Overlapping art in one Shape layer stacks as it paints when the layer
-/// turns, its later fill in front of its earlier one.
 #[test]
 fn overlapping_fills_keep_their_order_when_turned() {
     if HeadlessRenderer::shared().is_err() {
@@ -278,14 +262,11 @@ fn overlapping_fills_keep_their_order_when_turned() {
     layer.transform.material.geometry = geometry(10.0, 0.0);
     add(&mut doc, id, layer);
     let picture = render(doc, id);
-    // Where the two overlap is the later one's blue, all the way down.
     let at = ((SIZE / 2 * SIZE + SIZE / 2) * 4) as usize;
     let (r, b) = (picture[at], picture[at + 2]);
     assert!(b > r, "red came through blue: r {r}, b {b}");
 }
 
-/// A title with animators keeps its place when it gains depth, with its
-/// letters turned and scaled about the same point.
 #[test]
 fn an_animated_title_stays_put_when_it_gains_depth() {
     if HeadlessRenderer::shared().is_err() {
@@ -333,7 +314,6 @@ fn an_animated_title_stays_put_when_it_gains_depth() {
     }
 }
 
-/// The camera's depth of field blurs a solid off its focus.
 #[test]
 fn the_camera_blurs_a_solid_off_its_focus() {
     if HeadlessRenderer::shared().is_err() {
@@ -367,7 +347,6 @@ fn the_camera_blurs_a_solid_off_its_focus() {
     };
     let (sharp, soft) = (with_camera(false), with_camera(true));
     assert_ne!(sharp, soft, "the camera's blur left a solid as it was");
-    // The fringe has colours neither the ground nor the square has.
     let between = |p: &[u8]| {
         p.chunks_exact(4)
             .filter(|c| c[0] > 40 && c[0] < 160)
@@ -375,8 +354,6 @@ fn the_camera_blurs_a_solid_off_its_focus() {
     };
     assert!(between(&soft) > between(&sharp) * 2, "no soft edge");
 
-    // A solid wider than the frame runs on past its edge, with no fade to the
-    // ground there.
     let (mut doc, id) = comp();
     let wide = vec![ShapeEntry::Item(ShapeItem::filled(
         "Wall",

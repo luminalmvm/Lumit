@@ -19,15 +19,10 @@ use crate::{error::MlError, manifest::deep_filter::DeepFilter};
 
 use super::RATE;
 
-/// How the frames are split into runs of the graphs.
 #[derive(Debug, Clone, Copy)]
 pub(super) struct Chunks {
-    /// Frames each run answers for.
     pub size: usize,
-    /// Frames run before those and thrown away, so the model's recurrent
-    /// layers have settled by the first frame that counts.
     pub warm: usize,
-    /// Frames over which one run's answer fades into the next's.
     pub fade: usize,
 }
 
@@ -43,7 +38,6 @@ pub(super) const CHUNKS: Chunks = Chunks {
     fade: 100,
 };
 
-/// The pack's numbers as the loops want them.
 #[derive(Debug, Clone, Copy)]
 pub(super) struct Shape {
     pub fft: usize,
@@ -52,9 +46,7 @@ pub(super) struct Shape {
     pub nb_erb: usize,
     pub nb_df: usize,
     pub order: usize,
-    /// Frames of the filter's span before the one it makes.
     pub behind: usize,
-    /// Frames ahead the encoder reads.
     pub ahead: usize,
     pub alpha: f32,
 }
@@ -154,7 +146,6 @@ fn bands(sr: u32, fft: usize, count: usize, min_width: usize) -> Vec<usize> {
     widths
 }
 
-/// What one run of the graphs said, for frames from `first` on.
 pub(super) struct Answer {
     pub first: usize,
     pub gains: Vec<f32>,
@@ -174,8 +165,6 @@ impl Answer {
     }
 }
 
-/// The graphs: asked for frames `first..end`, reading their features off the
-/// [`Spectra`], answering with band gains and filter taps for each.
 pub(super) type Graphs<'g> = dyn FnMut(&Spectra, usize, usize) -> Result<Answer, MlError> + 'g;
 
 /// Every channel with the model's answer applied, written over the channel
@@ -238,8 +227,6 @@ pub(super) fn run(
         for t in lo..hi {
             gains.copy_from_slice(answer.gains(t, shape));
             coefs.copy_from_slice(answer.coefs(t, shape));
-            // Within the handover the run before still has a say, fading
-            // out as this one fades in, so no seam is ever a step.
             if let Some(old) = before.as_ref().filter(|_| t < lo + chunks.fade) {
                 let mix = (t - lo + 1) as f32 / (chunks.fade + 1) as f32;
                 blend(&mut gains, old.gains(t, shape), mix);
@@ -258,7 +245,6 @@ pub(super) fn run(
     Ok(())
 }
 
-/// `into` moved `mix` of the way from `old` to itself.
 fn blend(into: &mut [f32], old: &[f32], mix: f32) {
     for (new, old) in into.iter_mut().zip(old) {
         *new = old + (*new - old) * mix;
@@ -274,9 +260,7 @@ pub(super) struct Spectra {
     /// Every frame the input makes, with the window's worth of silence after
     /// it that DeepFilterNet pads with.
     pub frames: usize,
-    /// The first frame still held.
     first: usize,
-    /// Each channel's frames, one after another.
     spectrum: Vec<Vec<Complex<f32>>>,
     erb: Vec<f32>,
     cplx: Vec<f32>,
@@ -290,7 +274,6 @@ pub(super) struct Spectra {
 }
 
 impl Spectra {
-    /// Ready to make the frames of `count` channels of `len` samples.
     fn new(shape: Shape, bands: Vec<usize>, len: usize, count: usize) -> Self {
         let fft = RealFftPlanner::<f32>::new().plan_fft_forward(shape.fft);
         let spread = |count: usize, from: f32, to: f32| -> Vec<f32> {
@@ -314,12 +297,10 @@ impl Spectra {
         }
     }
 
-    /// One past the last frame held.
     fn held(&self) -> usize {
         self.first + self.erb.len() / self.shape.nb_erb
     }
 
-    /// Forget every frame before `first`.
     fn keep_from(&mut self, first: usize) {
         let drop = first
             .saturating_sub(self.first)
@@ -332,8 +313,6 @@ impl Spectra {
         self.first += drop;
     }
 
-    /// Make every frame of `channels` up to `end`, or to the last one there
-    /// is.
     fn fill_to(&mut self, channels: &[Vec<f32>], end: usize) -> Result<(), MlError> {
         let shape = self.shape;
         let mut bins = vec![Complex::new(0.0, 0.0); shape.bins];
@@ -397,13 +376,11 @@ impl Spectra {
         Ok(())
     }
 
-    /// Frame `t`'s spectrum in `channel`, or `None` outside the frames held.
     fn spectrum(&self, channel: usize, t: usize) -> Option<&[Complex<f32>]> {
         let at = t.checked_sub(self.first)? * self.shape.bins;
         self.spectrum.get(channel)?.get(at..at + self.shape.bins)
     }
 
-    /// Frame `t`'s band and bin features, or `None` outside the frames held.
     pub fn features(&self, t: usize) -> Option<(&[f32], &[f32])> {
         let row = t.checked_sub(self.first)?;
         let (e, c) = (self.shape.nb_erb, self.shape.nb_df * 2);
@@ -449,14 +426,12 @@ impl Spectra {
     }
 }
 
-/// The inverse transform and the overlap-add, frame by frame in order.
 struct Overlap {
     shape: Shape,
     window: Vec<f32>,
     ifft: Arc<dyn ComplexToReal<f32>>,
     buffer: Vec<f32>,
     scratch: Vec<Complex<f32>>,
-    /// The second half of the last frame, waiting for the next one's first.
     carried: Vec<f32>,
 }
 
@@ -523,8 +498,6 @@ fn vorbis(size: usize) -> Vec<f32> {
 mod tests {
     use super::*;
 
-    /// The test signal libDF's numbers below were taken from: three sines,
-    /// half a second of them.
     fn three_sines() -> Vec<f32> {
         (0..24_000)
             .map(|i| {
@@ -534,13 +507,6 @@ mod tests {
             .collect()
     }
 
-    /// **The graphs hear what libDF would feed them, and an answer that
-    /// changes nothing gives the input back sample for sample.** Everything
-    /// around the model, checked without one: the band layout, the spectrum,
-    /// both running feature averages and their alignment, against numbers
-    /// libDF 0.5.6 printed for the same signal; then the filter and the
-    /// overlap-add, on every channel, with unit gains and a filter that only
-    /// passes the frame it makes.
     #[test]
     fn the_signal_path_matches_libdf_and_reconstructs_its_input() {
         let names = DeepFilter::default();
@@ -555,8 +521,6 @@ mod tests {
             "libDF's band widths"
         );
 
-        // Frame, band features at bands 0, 13 and 31, bin features at bins
-        // 1, 40 and 95, and the spectrum at bins 2, 100 and 400.
         type Pair = (f64, f64);
         type Row = (usize, [f64; 3], [Pair; 3], [Pair; 3]);
         #[rustfmt::skip]
@@ -609,8 +573,6 @@ mod tests {
             }
         }
 
-        // An answer that changes nothing: every band at one, and the filter
-        // passing only the frame it makes.
         let mut unity = |spectra: &Spectra, first: usize, end: usize| {
             let shape = spectra.shape;
             let n = end - first;
@@ -628,7 +590,6 @@ mod tests {
         };
         let other: Vec<f32> = input.iter().rev().map(|x| x * 0.5).collect();
         let never = AtomicBool::new(false);
-        // Short runs, so the handover between them is in the signal too.
         let short = Chunks {
             size: 7,
             warm: 3,

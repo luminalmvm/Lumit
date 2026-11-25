@@ -41,7 +41,6 @@ fn sx_turn(px: vec2<f32>, centre: vec2<f32>, degrees: f32) -> vec2<f32> {
     return vec2<f32>(d.x * cos(a) - d.y * sin(a), d.x * sin(a) + d.y * cos(a));
 }
 
-// The finished colour, kept inside the layer when Paint asks for it.
 fn sx_paint(c: vec4<f32>, uv: vec2<f32>) -> vec4<f32> {
     if (p.paint == 0u) {
         return c * lumit_sample(uv).a;
@@ -61,7 +60,6 @@ fn rp_drop(r: f32, t: f32) -> f32 {
     if (x < 0.0 || x > depth) {
         return 0.0;
     }
-    // Eased in at the front and out at the tail.
     let env = smoothstep(0.0, l, x) * (1.0 - smoothstep(depth - l, depth, x));
     // Decay: the wave weakens as it spreads, by a third of the screen at 100.
     let fade = exp(-p.decay / 100.0 * (r + x) / 640.0);

@@ -14,8 +14,6 @@ import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 
 import 'frb_test_support.dart';
 
-/// Counts widget rebuilds by name, from the framework's own log — the
-/// rebuild-budget test's counter, at the size this file needs.
 class _Rebuilds {
   final Map<String, int> byName = {};
   bool counting = false;
@@ -85,7 +83,6 @@ void main() {
         reason: 'the Settings multiwave default is the stack');
     expect(find.byKey(ValueKey<String>('tl-wave-$id')), findsOneWidget);
 
-    // --- The toggle: spectral on, and the table untouched by it.
     rebuilds.counting = true;
     await tester.tap(chip);
     await tester.pump();
@@ -103,8 +100,6 @@ void main() {
     expect(rebuilds.byName['Bar'] ?? 0, 0,
         reason: 'and no bar — the toggle is the lane\'s own business');
 
-    // --- The engine's picture is real: the same window fetch the peaks
-    // take, answered in columns of bands with signal in them.
     final grid = await tester.runAsync(() => layer.audioSpectrogram(
           startSeconds: 0,
           endSeconds: 0.4,
@@ -116,7 +111,6 @@ void main() {
     expect(grid.values.any((v) => v > 0), isTrue,
         reason: 'a tone is not silence');
 
-    // --- The cycle carries on: spectral → wave → stack.
     await tester.tap(chip);
     await tester.pump();
     expect(find.text('Wave'), findsOneWidget);
@@ -128,8 +122,6 @@ void main() {
   });
 }
 
-/// A real, probeable WAV: half a second of 8 kHz mono square wave, written
-/// synchronously like every fixture here.
 String _toneWavFile() {
   final dir = Directory.systemTemp.createTempSync('lumit-spectral');
   final file = File('${dir.path}/tone.wav');

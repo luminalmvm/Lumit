@@ -1,5 +1,3 @@
-//! The two folder helpers behind the folder ops: the cycle guard and the next free name.
-
 use super::*;
 
 /// Whether `folder` sits anywhere inside `ancestor` — the cycle guard

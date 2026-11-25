@@ -41,7 +41,6 @@ const CENTRES: [f64; BANDS] = [
 /// faders draw.
 const Q: f64 = SQRT_2;
 
-/// The graphic EQ's controls: ten faders and a trim.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "audio_graphic_eq",
@@ -55,7 +54,6 @@ const Q: f64 = SQRT_2;
     matte = false,
 )]
 pub struct AudioGraphicEq {
-    /// The 31 Hz band, in dB.
     #[bounded(
         min = -12.0,
         max = 12.0,
@@ -64,7 +62,6 @@ pub struct AudioGraphicEq {
         label = "31 Hz"
     )]
     pub gain_31: f32,
-    /// The 63 Hz band, in dB.
     #[bounded(
         min = -12.0,
         max = 12.0,
@@ -73,7 +70,6 @@ pub struct AudioGraphicEq {
         label = "63 Hz"
     )]
     pub gain_63: f32,
-    /// The 125 Hz band, in dB.
     #[bounded(
         min = -12.0,
         max = 12.0,
@@ -82,7 +78,6 @@ pub struct AudioGraphicEq {
         label = "125 Hz"
     )]
     pub gain_125: f32,
-    /// The 250 Hz band, in dB.
     #[bounded(
         min = -12.0,
         max = 12.0,
@@ -91,7 +86,6 @@ pub struct AudioGraphicEq {
         label = "250 Hz"
     )]
     pub gain_250: f32,
-    /// The 500 Hz band, in dB.
     #[bounded(
         min = -12.0,
         max = 12.0,
@@ -100,7 +94,6 @@ pub struct AudioGraphicEq {
         label = "500 Hz"
     )]
     pub gain_500: f32,
-    /// The 1 kHz band, in dB.
     #[bounded(
         min = -12.0,
         max = 12.0,
@@ -109,7 +102,6 @@ pub struct AudioGraphicEq {
         label = "1 kHz"
     )]
     pub gain_1k: f32,
-    /// The 2 kHz band, in dB.
     #[bounded(
         min = -12.0,
         max = 12.0,
@@ -118,7 +110,6 @@ pub struct AudioGraphicEq {
         label = "2 kHz"
     )]
     pub gain_2k: f32,
-    /// The 4 kHz band, in dB.
     #[bounded(
         min = -12.0,
         max = 12.0,
@@ -127,7 +118,6 @@ pub struct AudioGraphicEq {
         label = "4 kHz"
     )]
     pub gain_4k: f32,
-    /// The 8 kHz band, in dB.
     #[bounded(
         min = -12.0,
         max = 12.0,
@@ -136,7 +126,6 @@ pub struct AudioGraphicEq {
         label = "8 kHz"
     )]
     pub gain_8k: f32,
-    /// The 16 kHz band, in dB.
     #[bounded(
         min = -12.0,
         max = 12.0,
@@ -157,7 +146,6 @@ pub struct AudioGraphicEq {
     pub output: f32,
 }
 
-/// Every fader's row, in band order.
 const ROWS: [ParamId; BANDS] = [
     AudioGraphicEq::GAIN_31,
     AudioGraphicEq::GAIN_63,
@@ -171,7 +159,6 @@ const ROWS: [ParamId; BANDS] = [
     AudioGraphicEq::GAIN_16K,
 ];
 
-/// Everything the graphic EQ carries between blocks.
 struct GraphicState {
     gains: [Smoother; BANDS],
     /// The output trim as a multiplier, so the dB is raised to a gain once a
@@ -181,7 +168,6 @@ struct GraphicState {
     right: Cascade<BANDS>,
 }
 
-/// A live graphic EQ: one per bake, built by [`AudioGraphicEqDef::open_audio`].
 struct Graphic {
     rate: f64,
     /// Behind a mutex because [`AudioProcessor::process`] takes `&self`.
@@ -235,7 +221,6 @@ impl AudioProcessor for Graphic {
     }
 }
 
-/// The graphic EQ's behaviour.
 pub struct AudioGraphicEqDef;
 
 impl EffectDef for AudioGraphicEqDef {
@@ -243,7 +228,6 @@ impl EffectDef for AudioGraphicEqDef {
         &<AudioGraphicEq as EffectMetadata>::SCHEMA
     }
 
-    /// It touches sound and no pixel, so the resolve step pushes no op for it.
     fn is_image_op(&self) -> bool {
         false
     }
@@ -282,8 +266,6 @@ mod tests {
     use super::*;
     use crate::fx::effects::audio::modulation::harness;
 
-    /// **Plan 1**: the same input baked twice is bit-identical, and one run is
-    /// its own two halves spliced at a block edge with the state carried.
     #[test]
     fn a_bake_of_the_graphic_eq_is_the_same_bake_twice_and_survives_a_split() {
         let input = harness::tone(6, 220.0);

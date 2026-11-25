@@ -18,7 +18,6 @@
 /// in Background alone.
 const HALF_TAPS: f64 = 32.0;
 
-/// How far under Nyquist the cutoff sits, as a share of it.
 const CUTOFF: f64 = 0.94;
 
 /// The Kaiser window's shape: about 80 dB down outside the pass band.

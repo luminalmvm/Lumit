@@ -1,7 +1,3 @@
-// Sync and Remove across the seam (docs/impl/custom-shader.md CS2), against
-// the real engine: a shader edit offers rows and adopts none, Sync adopts
-// them in one step, a keyframe on an adopted row is an ordinary keyframe, and
-// undo walks back through each of those in turn.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
@@ -13,7 +9,6 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 
 import 'frb_test_support.dart';
 
-/// A shader that compiles and declares one row of its own.
 const String _oneRow = r"""
 struct Params {
     /// @slider(0, 200) @default(25) @unit(px) Ripple radius
@@ -25,7 +20,6 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
 }
 """;
 
-/// The same shader with the row renamed: `radius` is no longer used.
 const String _renamed = r"""
 struct Params {
     /// @slider(0, 200) @default(25) @unit(px) Ripple reach
@@ -80,15 +74,12 @@ void main() {
           .firstWhere((e) => e.id == param)
           .value;
 
-      // Edit: the editor's own commit writes the text and nothing else.
       expect(
           applyShaderSource(
               home: InstanceHome.layer(p.layer), effect: id, source: _oneRow),
           isTrue);
       await refresh();
 
-      // Derive: the row is drawn off the read model, flagged as the
-      // instance's own, and the document does not hold it yet.
       expect(find.text('Ripple radius'), findsOneWidget);
       final derived = p.layer.getInfo().effects.single.derivedParams;
       expect(derived.map((r) => r.id), ['radius']);
@@ -98,7 +89,6 @@ void main() {
       expect(sync().adds, ['radius'], reason: 'offered, not adopted');
       expect(sync().removes, isEmpty);
 
-      // Sync: the adoption is one commit of its own.
       final adopting = p.layer.getEffects();
       expect(adopting.single.syncParameters(), ['radius']);
       p.layer.setEffects(effects: adopting);
@@ -106,8 +96,6 @@ void main() {
       expect(sync().adds, isEmpty, reason: 'the document holds it now');
       expect(find.text('Ripple radius'), findsOneWidget);
 
-      // Keyframe: an adopted row keys through the same staged road as a
-      // declared one.
       BridgeKeyframe key(int seconds, double value) => BridgeKeyframe(
             time: BridgeRational(num: seconds, den: 1),
             value: value,
@@ -128,8 +116,6 @@ void main() {
               .length,
           2);
 
-      // A rename in the source leaves the keyed row where it is, says what
-      // removing it would cost, and offers the new name.
       expect(
           applyShaderSource(
               home: InstanceHome.layer(p.layer), effect: id, source: _renamed),
@@ -144,8 +130,6 @@ void main() {
           reason: 'the source no longer draws it');
       expect(find.text('Ripple reach'), findsOneWidget);
 
-      // Undo walks back one step at a time: the rename, the keys, the
-      // adoption, the text.
       p.state.project!.undo();
       await refresh();
       expect(sync().adds, isEmpty);
@@ -168,7 +152,5 @@ void main() {
           reason: 'and the text was the step before it');
     });
 
-    // Without the built library there is nothing to test against; the harness
-    // throws with the command to run.
   }, skip: !engineAvailable);
 }

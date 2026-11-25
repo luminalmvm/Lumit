@@ -39,7 +39,6 @@ Future<void> normaliseClips(
         levels.add((layer, level));
       }
     } catch (_) {
-      // The layer has gone. The rest still take theirs.
     }
   }
   asOneUndoStep(app.project, () {
@@ -61,7 +60,6 @@ void resetClipGain(
       try {
         layer.setClipGain(clip: clip.id, db: 0);
       } catch (_) {
-        // A locked layer refuses, and the rest still take it.
       }
     }
     then();
@@ -73,7 +71,6 @@ void _writeClips(List<(LayerReference, BridgeClipLevel)> levels) {
     try {
       layer.setClipGain(clip: level.clip, db: level.db);
     } catch (_) {
-      // A locked layer refuses, and the rest still take it.
     }
   }
 }
@@ -104,7 +101,6 @@ Future<void> normaliseLayers(
         gains.add((t, db));
       }
     } catch (_) {
-      // The layer has gone. The rest still take theirs.
     }
   }
   asOneUndoStep(app.project, () {
@@ -113,7 +109,6 @@ Future<void> normaliseLayers(
       try {
         t.layer.setAudioGainDb(db: db);
       } catch (_) {
-        // A locked layer refuses, and the rest still take it.
       }
     }
     then();
@@ -140,7 +135,6 @@ Future<void> normaliseTogether(
   ]) {
     (byLayer[layer] ??= []).add(clip);
   }
-  // What each would move on its own, and how it is written moved by [by].
   final moves = <(double, void Function(double by))>[];
   for (final MapEntry(key: layer, value: picked) in byLayer.entries) {
     final now = {for (final c in picked) c.id: c.gainDb};
@@ -156,7 +150,6 @@ Future<void> normaliseTogether(
         ));
       }
     } catch (_) {
-      // The layer has gone. The rest still take theirs.
     }
   }
   for (final t in layers) {
@@ -167,7 +160,6 @@ Future<void> normaliseTogether(
         moves.add((db - was, (by) => t.layer.setAudioGainDb(db: was + by)));
       }
     } catch (_) {
-      // The layer has gone. The rest still take theirs.
     }
   }
   if (moves.isEmpty) return;
@@ -178,7 +170,6 @@ Future<void> normaliseTogether(
       try {
         write(by);
       } catch (_) {
-        // A locked layer refuses, and the rest still take it.
       }
     }
     then();

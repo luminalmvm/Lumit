@@ -11,7 +11,6 @@ import 'package:lumit_flutter/src/rust/api/assets.dart';
 
 final Map<String, List<BridgeFontAxis>> _axes = {};
 
-/// Ticks each time the axes of another face come in.
 final ValueNotifier<int> fontAxesArrived = ValueNotifier(0);
 
 /// The axes of [family]'s [face], or an empty list until they are in. The
@@ -58,7 +57,6 @@ List<BridgeFontAxis> shownFontAxes(String family, String face) => [
         if (!a.hidden) a
     ];
 
-/// What [tag] is called in [family]'s [face], or the tag itself.
 String fontAxisName(String family, String face, String tag) {
   for (final a in fontAxesOf(family, face)) {
     if (a.tag == tag) return a.name;

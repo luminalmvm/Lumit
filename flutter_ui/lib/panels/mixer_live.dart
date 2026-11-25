@@ -9,7 +9,6 @@ import 'package:lumit_flutter/src/rust/api/mixer.dart';
 import '../state/comp_time.dart';
 import '../state/ui_state.dart';
 
-/// [entry]'s fader, pot and the send to [bus].
 BridgeMixTarget volumeOf(BridgeLayerEntry entry) =>
     BridgeMixTarget.volume(layer: entry.layer.internallayerId);
 BridgeMixTarget panOf(BridgeLayerEntry entry) =>
@@ -22,7 +21,6 @@ void mixerTouch(
   try {
     comp.mixerTouch(target: target, value: value);
   } catch (_) {
-    // A comp that has gone answers nothing.
   }
 }
 
@@ -37,11 +35,9 @@ void mixerRelease(
         playheadSeconds:
             ui.playing.value || at.den == 0 ? null : at.num / at.den);
   } catch (_) {
-    // A locked layer refuses, and quietly.
   }
 }
 
-/// A held [target] put back at [old]: touched there, then let go.
 void mixerCancel(CompositionReference comp, BridgeMixTarget target,
     double old, LumitUiState ui) {
   mixerTouch(comp, target, old);

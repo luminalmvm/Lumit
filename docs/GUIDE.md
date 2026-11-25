@@ -95,6 +95,9 @@ flutter analyze
 5. If the change adds or alters something a user can do, see or set, update the manual in
    `web-docs/` in the same pull request. The manual covers every feature. One that's hard
    to work out from its page also gets a walkthrough under `tutorials/`.
+6. Don't add comments. `python scripts/comments.py check` holds every file to its count in
+   `scripts/comment-baseline.json`. After deleting some, `python scripts/comments.py baseline`
+   lowers it.
 
 ### Testing notes
 
@@ -133,6 +136,7 @@ everything else. Bug fixes go to `main`, which merges itself into `nightly`. New
 | `codegen-fresh` | regenerates the bridge and fails on any diff |
 | `coverage` | engine line coverage, `--fail-under-lines 80`, only ever rises |
 | `no-hex-outside-theme` | colour literals outside `flutter_ui/lib/theme/` |
+| `comment-ratchet` | any file with more or fewer comment lines than its baseline |
 | `cargo-deny` | licences, advisories, sources |
 | `no-panics-in-frb-api` | `unwrap`, `expect`, `panic!` and friends in `lumit-bridge/src/api` |
 | `ofx-conformance`, `ofx-handle-fuzz` | the OFX host against real plugins, and under ASan |

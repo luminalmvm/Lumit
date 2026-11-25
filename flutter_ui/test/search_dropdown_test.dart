@@ -27,7 +27,6 @@ void main() {
         ),
       );
 
-  // A library-shaped option list: many makers, many models.
   final options = [
     for (var maker = 0; maker < 40; maker++)
       for (var model = 0; model < 10; model++)
@@ -59,14 +58,12 @@ void main() {
     final rows = tester.widgetList(find.byType(MenuRow)).length;
     expect(rows, lessThan(80), reason: 'the picker must build lazily');
 
-    // Typing narrows to the matching maker's models.
     await tester.enterText(find.byType(HouseTextField), 'maker7 special');
     await tester.pumpAndSettle();
     final narrowed = tester.widgetList(find.byType(MenuRow)).length;
     expect(narrowed, lessThan(rows));
     expect(narrowed, greaterThan(0));
 
-    // A query matching nothing says so rather than showing a blank sheet.
     await tester.enterText(find.byType(HouseTextField), 'qqqzzz');
     await tester.pumpAndSettle();
     expect(find.text('No matches'), findsOneWidget);

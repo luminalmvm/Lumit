@@ -1,6 +1,3 @@
-//! Where one project's cache goes, for the location the user chose, and the
-//! simulation bakes that live there.
-
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
@@ -31,7 +28,6 @@ pub(crate) fn root(project: &LumitBridgeState, location: &Location) -> Option<Pa
         Location::AppData => lumit_project::frame_cache_dir(doc_id),
         Location::BesideProject => match path.as_deref() {
             Some(path) => lumit_cache::disk::sidecar_root(path),
-            // Nowhere to sit beside yet.
             None => lumit_project::frame_cache_dir(doc_id),
         },
         Location::Custom(root) => match path.as_deref() {
@@ -41,7 +37,6 @@ pub(crate) fn root(project: &LumitBridgeState, location: &Location) -> Option<Pa
     }
 }
 
-/// Bakes go to and come from `project`'s cache folder from now on.
 pub(crate) fn point_bakes_at(project: &LumitBridgeState) {
     let (_, location) = crate::framecache::disk::location();
     lumit_render::sim::bake::set_root(root(project, &location));
@@ -66,7 +61,6 @@ pub(crate) fn project_changed(id: Uuid, solves: Vec<lumit_render::track::Job>) {
     lumit_render::track::warm(solves);
 }
 
-/// Bake pressed on `effect`, into wherever the project caches right now.
 pub(crate) fn press(
     project: &Arc<RwLock<LumitBridgeState>>,
     doc: Arc<Document>,
@@ -80,7 +74,6 @@ pub(crate) fn press(
     lumit_render::sim::bake::press(doc, comp, layer, effect)
 }
 
-/// A bake `inst` may read: its frames and its span.
 pub(crate) fn reading(
     layer: &LayerReference,
     item: &lumit_core::model::Layer,

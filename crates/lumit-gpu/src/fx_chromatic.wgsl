@@ -14,7 +14,7 @@ struct Params {
     tints: array<vec4<f32>, 3>,  // per tap: rgb tint, w unused
     amount: f32,   // raster px: peak offset, reached at the corner distance
     mix_amt: f32,  // 0..1, blended against the unprocessed input
-    matte_on: f32, // 1 = the matte scales Amount
+    matte_on: f32,
     _pad1: f32,
 };
 
@@ -73,7 +73,6 @@ fn chromatic_aberration(@builtin(global_invocation_id) gid: vec3<u32>) {
     let k = p.amount / (0.5 * diag);
     let pos = vec2<f32>(xy) + vec2<f32>(0.5);
     var off = (pos - fsize * 0.5) * k;
-    // The matte scales Amount per pixel (== cpu::chromatic_aberration_matted).
     if (p.matte_on != 0.0) {
         off = off * matte_k(xy);
     }

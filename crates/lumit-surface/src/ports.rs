@@ -19,23 +19,18 @@ use midir::{Ignore, MidiInput, MidiInputConnection, MidiInputPort};
 use crate::midi::{Midi, MidiMapping};
 use crate::Shared;
 
-/// How often the port list is read.
 const POLL: Duration = Duration::from_secs(1);
 /// Messages waiting for the thread. A controller sends a few hundred a
 /// second at most.
 const QUEUE: usize = 1024;
-/// What the system's MIDI lists call Lumit.
 const CLIENT: &str = "Lumit";
 
-/// What the thread is told.
 pub(crate) enum Msg {
-    /// A message from the port called `port`.
     Raw {
         port: Arc<str>,
         bytes: [u8; 3],
         len: usize,
     },
-    /// Keep these ports open, by name.
     Want(Vec<String>),
     Mappings(Vec<MidiMapping>),
     Learn(bool),
@@ -107,7 +102,6 @@ fn run(shared: &Shared, rx: &Receiver<Msg>, tx: &SyncSender<Msg>) {
     }
 }
 
-/// Open `port`. Its messages go to the thread through `tx`.
 fn connect(
     port: &MidiInputPort,
     name: &str,

@@ -1,16 +1,3 @@
-//! Masks: bezier paths that gate a layer's alpha (docs/03-DATA-MODEL.md §7),
-//! plus the scanline rasteriser that turns a path into pixel coverage.
-//!
-//! In plain terms: a mask is a drawn shape; inside the shape the layer shows,
-//! outside it doesn't (or the reverse when inverted). The rasteriser walks
-//! the shape row by row, finding where each row enters and leaves the shape —
-//! with fractional edges and two vertical subsamples so boundaries render
-//! smooth, not stair-stepped. Several masks combine top to bottom by their
-//! mode (add, subtract, intersect, difference), and each can be softened
-//! (feather) or grown/shrunk (expansion) before it joins the stack. The path
-//! can be **keyframed** (see [`PathKeyframe`]), and the feather can be given a
-//! width **per vertex** rather than one width all the way round.
-
 use std::borrow::Cow;
 
 use serde::{Deserialize, Serialize};
@@ -49,13 +36,10 @@ pub struct BezierPath {
 pub struct PathKeyframe {
     pub time: Rational,
     pub path: BezierPath,
-    /// Approaching this key.
     pub interp_in: SideInterp,
-    /// Leaving this key.
     pub interp_out: SideInterp,
 }
 
-/// How a mask joins the stack above it (docs/06-RENDER-PIPELINE.md §2, step 3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum MaskMode {
     /// Geometry only: the path is drawn and editable but gates nothing.
@@ -64,9 +48,7 @@ pub enum MaskMode {
     Add,
     Subtract,
     Intersect,
-    /// The greater of this mask and what the stack holds.
     Lighten,
-    /// The lesser of the two.
     Darken,
     Difference,
 }
@@ -273,8 +255,6 @@ impl Mask {
         }
     }
 
-    /// A fresh, default-switched mask around `path`: Add mode, full opacity,
-    /// hard-edged, unanimated.
     fn from_path(name: &str, path: BezierPath) -> Self {
         Self {
             id: Uuid::now_v7(),
@@ -318,7 +298,6 @@ impl Mask {
         let mut vertices = Vec::with_capacity(n * 2);
         for i in 0..n * 2 {
             let r = if i % 2 == 0 { outer } else { inner };
-            // -PI/2 puts the first outer point at the top.
             let a = std::f64::consts::PI * f64::from(i as u32) / f64::from(n as u32)
                 - std::f64::consts::FRAC_PI_2;
             vertices.push(Vertex {
@@ -370,7 +349,6 @@ impl Mask {
         path_at(&self.path_keys, &self.path, t)
     }
 
-    /// Whether this mask's shape is keyframed.
     pub fn path_is_animated(&self) -> bool {
         !self.path_keys.is_empty()
     }
@@ -479,7 +457,6 @@ pub fn resample(path: &BezierPath, target: usize) -> BezierPath {
     }
     let extra = target - n;
 
-    // Every segment of the resampled path, as raw control points.
     let mut pieces: Vec<([f64; 4], [f64; 4])> = Vec::with_capacity(segs + extra);
     for i in 0..segs {
         let (Some(a), Some(b)) = (path.vertices.get(i), path.vertices.get((i + 1) % n.max(1)))
@@ -500,7 +477,6 @@ pub fn resample(path: &BezierPath, target: usize) -> BezierPath {
                 b.pos.1,
             ],
         );
-        // extra / segs each, and the remainder to the earliest segments.
         let k = extra / segs + usize::from(i < extra % segs);
         let mut done = 0.0f64;
         for j in 1..=k {
@@ -585,8 +561,6 @@ pub fn rasterise_paths(
 ) -> Vec<u8> {
     let mut coverage = vec![0u8; (w * h) as usize];
 
-    // Flatten cubics to polyline edges (fixed subdivision — paths are UI-drawn
-    // and small; adaptive flattening arrives with the pen tool if needed).
     const SEGS: usize = 24;
     let mut contours: Vec<Vec<(f64, f64)>> = Vec::with_capacity(paths.len());
     for path in paths {
@@ -641,7 +615,6 @@ pub fn rasterise_paths(
     let mut next = 0;
     let mut active: Vec<usize> = Vec::new();
 
-    // Scanline with two vertical subsamples per row.
     let mut xs: Vec<(f64, i32)> = Vec::with_capacity(16);
     let mut row_cov = vec![0.0f32; w as usize];
     for row in 0..h {
@@ -666,9 +639,6 @@ pub fn rasterise_paths(
             xs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
             let mut winding = 0;
             for (k, pair) in xs.windows(2).enumerate() {
-                // Even-odd fills from every odd crossing to the next. Non-zero
-                // fills wherever the path has gone round more one way than the
-                // other.
                 winding += pair[0].1;
                 let inside = if nonzero { winding != 0 } else { k % 2 == 0 };
                 if !inside {
@@ -1141,8 +1111,6 @@ pub fn combined_coverage(
                 MaskMode::Add => (*t + c).min(255),
                 MaskMode::Subtract => t.saturating_sub(c),
                 MaskMode::Intersect => (*t).min(c),
-                // Max and min against what the stack holds, which is what
-                // After Effects means by these two.
                 MaskMode::Lighten => (*t).max(c),
                 MaskMode::Darken => (*t).min(c),
                 MaskMode::Difference => t.abs_diff(c),
@@ -1159,13 +1127,6 @@ pub fn combined_coverage(
     total
 }
 
-/// How many rasterised stacks the memo holds — a bound, not a target
-/// (docs/14: budgeted allocations). Eight comp-sized coverages is ~12 MB at
-/// 1080p-class sizes; a comp showing more distinct masked stacks per frame
-/// than that simply recomputes, as before.
-// ponytail: whole-stack granularity and a tiny LRU; per-mask caching (so one
-// animated mask in a stack does not evict its still siblings) if a project
-// with many simultaneously animated masks measures over budget.
 const COVERAGE_MEMO_SLOTS: usize = 8;
 static COVERAGE_MEMO: std::sync::Mutex<Vec<(u128, Vec<u8>)>> = std::sync::Mutex::new(Vec::new());
 
@@ -1222,10 +1183,6 @@ fn coverage_key(masks: &[Mask], w: u32, h: u32, sx: f64, sy: f64, t: f64) -> u12
     k.copy_from_slice(&bytes.as_bytes()[..16]);
     u128::from_le_bytes(k)
 }
-
-// ---------------------------------------------------------------------------
-// The mask-path carriage: a mask's geometry, on its way to an effect.
-// ---------------------------------------------------------------------------
 
 /// How closely a flattened mask path follows the curve it came from, in
 /// **pixels at composition scale** (docs/08 §2.3's unit).
@@ -1303,7 +1260,6 @@ pub struct MaskPolyline {
 }
 
 impl MaskPolyline {
-    /// Nothing to walk — the effect's no-op.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.points.len() < 2
@@ -1425,12 +1381,10 @@ pub fn flatten_path(path: &BezierPath, tolerance_px: f64) -> MaskPolyline {
     } else {
         MASK_PATH_TOLERANCE_PX
     };
-    // An open path has n-1 segments; a closed one has n, the last joining back.
     let segments = if path.closed { n } else { n - 1 };
     let mut points: Vec<[f32; 2]> = Vec::with_capacity(segments * 8);
     let mut corners: Vec<usize> = Vec::with_capacity(n);
     for i in 0..segments {
-        // Each segment starts on one of the path's own vertices.
         corners.push(points.len());
         let a = &path.vertices[i];
         let b = &path.vertices[(i + 1) % n];
@@ -1597,17 +1551,10 @@ pub fn effect_path_at(
 mod tests {
     use super::*;
 
-    /// **The same document at the same frame flattens to the same bytes**. The
-    /// whole reason the tolerance is a constant: the polyline is part of what
-    /// an effect draws, so a flattening that could vary — with the preview
-    /// raster, with a run, with the order the masks happen to be walked in —
-    /// would let one frame key name two pictures.
     #[test]
     fn a_mask_path_flattens_deterministically() {
         let mut layer_a = vec![Mask::ellipse(60.0, 40.0, 30.0, 18.0)];
         layer_a[0].name = "Ellipse 1".into();
-        // A second layer with the same shape drawn independently: different
-        // ids, same geometry. Identity must not reach the vertices.
         let mut layer_b = vec![Mask::ellipse(60.0, 40.0, 30.0, 18.0)];
         layer_b[0].name = "somebody else's name".into();
         assert_ne!(layer_a[0].id, layer_b[0].id, "two masks, two ids");
@@ -1619,8 +1566,6 @@ mod tests {
         assert_eq!(one, other, "the mask's id reached its vertices");
         assert!(!one.is_empty(), "an ellipse flattens to something");
 
-        // Arc length is monotone, starts at zero, and its last entry is the
-        // perimeter — the contract every consumer walks by.
         assert_eq!(one.arc.len(), one.points.len());
         assert_eq!(one.arc.first().copied(), Some(0.0));
         assert!(
@@ -1635,8 +1580,6 @@ mod tests {
             "perimeter {} vs ~{want}",
             one.length()
         );
-        // A closed path ends where it started, so a consumer walking to
-        // `length()` needs no special case for the join.
         assert!(one.closed);
         let (first, last) = (one.points[0], one.points[one.points.len() - 1]);
         assert!((first[0] - last[0]).abs() < 1e-4 && (first[1] - last[1]).abs() < 1e-4);
@@ -1656,7 +1599,7 @@ mod tests {
 
     #[test]
     fn apply_masks_gates_alpha_with_invert_and_opacity() {
-        let m = Mask::rectangle(0.0, 0.0, 2.0, 4.0); // left half of 4×4
+        let m = Mask::rectangle(0.0, 0.0, 2.0, 4.0);
         let mut rgba = vec![255u8; 4 * 4 * 4];
         apply_masks(&mut rgba, 4, 4, 4.0, 4.0, std::slice::from_ref(&m), 0.0);
         assert_eq!(rgba[4 * 4 + 3], 255, "left opaque");
@@ -1672,19 +1615,12 @@ mod tests {
         assert!((i16::from(right) - 127).abs() <= 2, "half opacity {right}");
     }
 
-    /// The coverage memo answers repeats with the same bytes and answers a
-    /// changed input — a feather, an animated path's time — with fresh ones.
-    /// Without the memo the whole stack re-rasterised (fill plus a feather's
-    /// distance transform) on every frame build, ~55 ms a frame at comp size
-    /// on the project that found it, none of it owned by any layer's number.
     #[test]
     fn coverage_is_memoised_by_evaluated_content() {
         let mut m = Mask::rectangle(2.0, 2.0, 20.0, 20.0);
         m.feather = Property::fixed(6.0);
         let masks = [m];
         let first = combined_coverage(&masks, 32, 32, 32.0, 32.0, 0.0);
-        // A different `t` on a still mask evaluates to the same content: the
-        // memo must serve it, and serve it right.
         let second = combined_coverage(&masks, 32, 32, 32.0, 32.0, 5.0);
         assert_eq!(first, second, "a still mask reads the same at any time");
 
@@ -1706,8 +1642,6 @@ mod tests {
         assert!(whole.iter().all(|&c| c == 255), "an open mask cuts nothing");
     }
 
-    /// Two 16-wide-tall rectangles: A covers x 0..10, B covers x 6..16, so
-    /// x=2 is A only, x=8 is both, x=12 is B only.
     fn overlapping(mode: MaskMode) -> Vec<u8> {
         let a = Mask::rectangle(0.0, 0.0, 10.0, 16.0);
         let mut b = Mask::rectangle(6.0, 0.0, 10.0, 16.0);
@@ -1734,11 +1668,6 @@ mod tests {
         assert_eq!((at(&dif, 2), at(&dif, 8), at(&dif, 12)), (255, 0, 255));
     }
 
-    /// **A mask that is switched off leaves the layer whole.** Both switches —
-    /// mode `None` and opacity zero — used to hide the layer completely when
-    /// the mask was the only one on it: the fold started from nothing and then
-    /// skipped the very mask it had started from, so the layer ended up masked
-    /// by an empty shape. The opposite of doing nothing.
     #[test]
     fn a_switched_off_mask_leaves_the_layer_whole() {
         for off in [
@@ -1753,7 +1682,6 @@ mod tests {
                 m
             },
             {
-                // Off by opacity while asking to subtract: still off.
                 let mut m = Mask::rectangle(0.0, 0.0, 8.0, 8.0);
                 m.mode = MaskMode::Subtract;
                 m.opacity = Property::zero();
@@ -1782,17 +1710,12 @@ mod tests {
             m.expansion = Property::fixed(e);
             area(&mask_coverage(&m, 100, 100, 1.0, 1.0, 0.0))
         };
-        // Growing a square by r gives a square with rounded corners:
-        // (40+2r)² minus the four corner squares, plus the quarter-discs.
         let grown = 50.0 * 50.0 - 4.0 * 25.0 + std::f64::consts::PI * 25.0;
         assert!(
             (with(5.0) - grown).abs() / grown < 0.05,
             "grown {} vs {grown}",
             with(5.0)
         );
-        // Shrinking gives the inset square, its corners a little rounded off
-        // (distance is measured to the nearest point of the path, so corners
-        // round both ways — as they do in After Effects).
         assert!(
             (with(-5.0) - 900.0).abs() / 900.0 < 0.08,
             "shrunk {}",
@@ -1803,7 +1726,7 @@ mod tests {
 
     #[test]
     fn feather_ramps_monotonically_across_the_edge() {
-        let mut m = Mask::rectangle(0.0, 0.0, 50.0, 100.0); // left half
+        let mut m = Mask::rectangle(0.0, 0.0, 50.0, 100.0);
         m.feather = Property::fixed(12.0);
         let cov = mask_coverage(&m, 100, 100, 1.0, 1.0, 0.0);
         let row: Vec<u8> = (0..100).map(|x| cov[50 * 100 + x]).collect();
@@ -1819,13 +1742,8 @@ mod tests {
         );
     }
 
-    /// **Lighten and Darken are max and min against what the stack holds**.
-    /// Read at half opacity, where they are visibly not Add and not Subtract:
-    /// Add would saturate the overlap and Lighten must not.
     #[test]
     fn lighten_and_darken_take_the_greater_and_the_lesser() {
-        // A at 50 %, B at 80 %, overlapping down the middle as `overlapping`
-        // lays them out: x=2 is A only, x=8 is both, x=12 is B only.
         let combine = |mode: MaskMode| {
             let mut a = Mask::rectangle(0.0, 0.0, 10.0, 16.0);
             a.opacity = Property::fixed(50.0);
@@ -1855,21 +1773,12 @@ mod tests {
         );
         assert_eq!(at(&dark, 12), 0, "outside A, the lesser is nothing");
 
-        // Add saturates the overlap; Lighten is the mode that does not, which
-        // is the whole reason it exists beside Add.
         let added = combine(MaskMode::Add);
         assert!(at(&added, 8) > at(&light, 8), "Add did not add");
     }
 
-    /// **The soft edge is as wide as the vertices near it say**: a
-    /// rectangle sharp along its left edge and soft along its right one.
-    ///
-    /// Measured as the count of partly covered pixels on a row, which is what
-    /// "how wide is the ramp here" means in a raster.
     #[test]
     fn feather_varies_along_the_path() {
-        // 100 tall, x from 20 to 80. Vertices run (20,20) (80,20) (80,80)
-        // (20,80), so 1 and 2 are the right-hand edge.
         let mut m = Mask::rectangle(20.0, 20.0, 60.0, 60.0);
         m.vertex_feather = vec![
             Property::fixed(0.0),
@@ -1896,7 +1805,6 @@ mod tests {
         );
         assert!(right > left * 4, "{right} vs {left}");
 
-        // And it is still a ramp, not a staircase: monotone out of the shape.
         assert!(
             row[50..].windows(2).all(|w| w[0] >= w[1]),
             "the soft edge goes back up: {:?}",
@@ -1904,9 +1812,6 @@ mod tests {
         );
     }
 
-    /// The list is absent from the file until somebody uses it, so every mask
-    /// ever saved writes the bytes it always did — which is what keeps the
-    /// frame cache's banked frames.
     #[test]
     fn an_unvaried_mask_serialises_as_it_always_did() {
         let m = Mask::rectangle(0.0, 0.0, 8.0, 8.0);
@@ -1929,7 +1834,6 @@ mod tests {
         let mut m = Mask::rectangle(25.0, 25.0, 50.0, 50.0);
         m.feather = Property::fixed(10.0);
         m.expansion = Property::fixed(4.0);
-        // Path coordinates are natural 100×100 in both cases.
         let full = area(&mask_coverage(&m, 100, 100, 1.0, 1.0, 0.0)) / (100.0 * 100.0);
         let half = area(&mask_coverage(&m, 50, 50, 0.5, 0.5, 0.0)) / (50.0 * 50.0);
         assert!(
@@ -1947,21 +1851,12 @@ mod tests {
         assert_eq!(m.feather, Property::zero());
         assert_eq!(m.expansion, Property::zero());
         assert_eq!(m.opacity, Property::fixed(100.0));
-        // …and an untouched mask serialises exactly as it did before, so the
-        // frame cache keeps the frames it already banked.
         let round = serde_json::to_string(&m).unwrap();
         assert!(!round.contains("mode"), "{round}");
         assert!(!round.contains("feather"), "{round}");
         assert!(round.contains(r#""opacity":100.0"#), "{round}");
     }
 
-    /// **A still mask still writes bare numbers; only a keyed one grows.**
-    ///
-    /// The three values became animatable, and animatable normally
-    /// means an object in the file. That would have retired every frame every
-    /// project has banked, because the frame key names a mask by the bytes it
-    /// serialises to — so the encoding stays a bare number until somebody
-    /// actually keys the property.
     #[test]
     fn a_still_mask_writes_bare_numbers_and_a_keyed_one_does_not() {
         let mut m = Mask::rectangle(0.0, 0.0, 8.0, 8.0);
@@ -1983,11 +1878,8 @@ mod tests {
         };
         let keyed = serde_json::to_string(&m).unwrap();
         assert!(keyed.contains("animation"), "{keyed}");
-        // And it comes back as what it was, so a keyed mask survives a save.
         assert_eq!(serde_json::from_str::<Mask>(&keyed).unwrap(), m);
     }
-
-    // ---- Animated paths -------------------------------------------------
 
     fn rat(n: i64, d: i64) -> Rational {
         Rational::new(n, d).unwrap()
@@ -2002,7 +1894,6 @@ mod tests {
         }
     }
 
-    /// Move every vertex of a path by (dx, dy), tangents untouched.
     fn shifted(path: &BezierPath, dx: f64, dy: f64) -> BezierPath {
         BezierPath {
             vertices: path
@@ -2017,7 +1908,6 @@ mod tests {
         }
     }
 
-    /// Points along the curve itself, `per_seg` per segment.
     fn curve_points(p: &BezierPath, per_seg: usize) -> Vec<(f64, f64)> {
         let n = p.vertices.len();
         let segs = if p.closed { n } else { n.saturating_sub(1) };
@@ -2045,8 +1935,6 @@ mod tests {
         out
     }
 
-    /// The furthest any point of `a` sits from the nearest point of `b` — a
-    /// one-sided Hausdorff distance, which is how "the same curve" is checked.
     fn deviation(a: &[(f64, f64)], b: &[(f64, f64)]) -> f64 {
         a.iter()
             .map(|p| {
@@ -2059,19 +1947,15 @@ mod tests {
 
     #[test]
     fn mismatched_vertex_counts_still_land_on_each_key() {
-        let sparse = Mask::ellipse(20.0, 20.0, 10.0, 10.0).path; // 4 vertices
-        let dense = resample(&shifted(&sparse, 40.0, 0.0), 7); // 7 vertices
+        let sparse = Mask::ellipse(20.0, 20.0, 10.0, 10.0).path;
+        let dense = resample(&shifted(&sparse, 40.0, 0.0), 7);
         let mut m = Mask::rectangle(0.0, 0.0, 1.0, 1.0);
         m.path_keys = vec![
             pkey((0, 1), &sparse, SideInterp::Linear),
             pkey((1, 1), &dense, SideInterp::Linear),
         ];
 
-        // At each key the shape is that key's own curve, exactly — a key's own
-        // time never goes near the blend.
         assert_eq!(*m.path_at(0.0), sparse);
-        // Just inside the span the counts are reconciled upward, and the shape
-        // is still the sparse key's curve.
         let just_after = m.path_at(1e-9);
         assert_eq!(just_after.vertices.len(), 7, "reconciled upward");
         let d = deviation(
@@ -2082,7 +1966,6 @@ mod tests {
         let at_end = m.path_at(1.0);
         assert_eq!(*at_end, dense, "the denser key is used as it stands");
 
-        // And halfway across, halfway along.
         let mid = m.path_at(0.5);
         assert_eq!(mid.vertices.len(), 7);
         assert!((mid.vertices[0].pos.0 - (sparse.vertices[0].pos.0 + 20.0)).abs() < 1e-9);
@@ -2090,7 +1973,6 @@ mod tests {
 
     #[test]
     fn an_animated_mask_gates_different_pixels_at_different_times() {
-        // The end-to-end proof: a 4-wide square crossing a 16-wide frame.
         let left = Mask::rectangle(0.0, 0.0, 4.0, 16.0).path;
         let right = shifted(&left, 12.0, 0.0);
         let mut m = Mask::rectangle(0.0, 0.0, 1.0, 1.0);

@@ -26,7 +26,6 @@ fn sgnpow(x: f32, e: f32) -> f32 {
     return -pow(-x, e);
 }
 
-// == correction::maths::encode and decode.
 fn encode(x: f32, space: i32) -> f32 {
     if (space == 0) {
         return sgnpow(x, 1.0 / 2.4);
@@ -65,7 +64,6 @@ fn v_in(o: vec4<f32>, space: i32) -> vec3<f32> {
     return vec3<f32>(encode(u.r, space), encode(u.g, space), encode(u.b, space));
 }
 
-// == CdlPacked::pixel.
 @compute @workgroup_size(8, 8)
 fn cdl(@builtin(global_invocation_id) gid: vec3<u32>) {
     let size = vec2<i32>(textureDimensions(src));
@@ -113,7 +111,6 @@ fn hue_of(cb: f32, cr: f32) -> f32 {
     return t - floor(t);
 }
 
-// Mesh point i's move.
 fn mesh(i: i32) -> vec2<f32> {
     let w = p.w[1 + i / 2];
     if (i % 2 == 0) {
@@ -131,7 +128,6 @@ fn spline(a: vec2<f32>, b: vec2<f32>, c: vec2<f32>, d: vec2<f32>, t: f32) -> vec
         + (3.0 * b - a - 3.0 * c + d) * t3);
 }
 
-// == WarpPacked::ring.
 fn ring(r: i32, theta: f32) -> vec2<f32> {
     if (r == 0) {
         return mesh(0);
@@ -158,7 +154,6 @@ fn ring_ext(r: i32, theta: f32) -> vec2<f32> {
     return ring(r, theta);
 }
 
-// == WarpPacked::pixel.
 @compute @workgroup_size(8, 8)
 fn colour_warper(@builtin(global_invocation_id) gid: vec3<u32>) {
     let size = vec2<i32>(textureDimensions(src));

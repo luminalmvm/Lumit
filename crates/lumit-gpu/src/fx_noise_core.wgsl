@@ -21,7 +21,6 @@ struct FractalField {
     cycle: i32,         // depth loop length in cells; 0 = no loop
 };
 
-// == lumit_core::fx::splitmix32.
 fn nc_splitmix32(xin: u32) -> u32 {
     var x = xin;
     x = x + 0x9e3779b9u;
@@ -33,7 +32,6 @@ fn nc_splitmix32(xin: u32) -> u32 {
     return x;
 }
 
-// == lumit_core::fx::maths::lattice_hash.
 fn nc_lattice_hash(seed: u32, channel: u32, x: i32, y: i32, z: i32) -> u32 {
     var h = seed;
     h = nc_splitmix32(h ^ channel);
@@ -43,7 +41,6 @@ fn nc_lattice_hash(seed: u32, channel: u32, x: i32, y: i32, z: i32) -> u32 {
     return h;
 }
 
-// == lumit_core::fx::noise::hash01.
 fn nc_hash01(seed: u32, channel: u32, x: i32, y: i32, z: i32) -> f32 {
     return f32(nc_lattice_hash(seed, channel, x, y, z) >> 8u) / 16777216.0;
 }
@@ -87,7 +84,6 @@ fn nc_grad_dot(idx: u32, dx: f32, dy: f32, dz: f32) -> f32 {
     return s0 * dy + s1 * dz;
 }
 
-// == lumit_core::fx::noise::value3.
 fn nc_value3(seed: u32, channel: u32, x: f32, y: f32, z: f32, cycle: i32) -> f32 {
     let xf = floor(x);
     let yf = floor(y);
@@ -289,7 +285,6 @@ fn nc_linear_value(seed: u32, channel: u32, x: f32, y: f32, z: f32, cycle: i32) 
     return nc_lerp1(y0, y1, w) * 2.0 - 1.0;
 }
 
-// ── The shaped bases: the twins of lumit_core::fx::noise's shaped_octave ────
 const NC_NOISE_CHIPS: u32 = 5u;
 const NC_NOISE_CIRCULAR: u32 = 6u;
 const NC_NOISE_BOX: u32 = 7u;
@@ -314,7 +309,6 @@ const NC_NOISE_WAVY: u32 = 25u;
 const NC_NOISE_DISPLACED_VORONOI: u32 = 26u;
 const NC_SLOPE_STEP: f32 = 0.25;
 
-// == noise::wave.
 fn nc_wave(t: f32) -> f32 {
     let f = t - floor(t);
     let g = 1.0 - 4.0 * abs(f - 0.5);
@@ -335,7 +329,6 @@ struct NcCells {
     near: u32,
 };
 
-// == noise::cells.
 fn nc_cells(seed: u32, channel: u32, x: f32, y: f32, z: f32, cycle: i32) -> NcCells {
     let zf = floor(z);
     let zw = f32(nc_wrap_z(i32(zf), cycle)) + (z - zf);
@@ -720,7 +713,6 @@ fn nc_octave(base: u32, seed: u32, channel: u32, x: f32, y: f32, z: f32,
     return vec3<f32>(n, 2.0 * du * ex, 2.0 * dv * ey);
 }
 
-// == lumit_core::fx::noise::fractal_typed.
 fn nc_fractal_typed(f: FractalField, base: u32, kind: u32, x: f32, y: f32, z: f32) -> f32 {
     var amp = 1.0;
     var freq = 1.0;

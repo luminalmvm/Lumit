@@ -3,8 +3,6 @@ use lumit_gpu::test_support::{lease, Lease};
 use lumit_gpu::SharedGpu;
 use std::ops::{Deref, DerefMut};
 
-/// A [`HeadlessRenderer`] on borrowed engines. Derefs to the renderer;
-/// returns the engines on drop.
 pub struct TestRenderer {
     /// `Some` for the whole of the test; taken in `drop`.
     renderer: Option<HeadlessRenderer>,
@@ -12,9 +10,6 @@ pub struct TestRenderer {
 }
 
 impl HeadlessRenderer {
-    /// A renderer around the shared device and engines, or `Err` on a
-    /// machine with no adapter — the same shape as [`Self::new`], so a
-    /// test's skip site does not change.
     pub fn shared() -> Result<TestRenderer, String> {
         let mut lease = lease().ok_or_else(|| "no GPU adapter".to_string())?;
         let shared = lease

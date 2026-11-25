@@ -89,13 +89,10 @@ fn preset_params(name: &str) -> Option<PresetParams> {
             target_bps: 16_000_000,
             peak_bps: 24_000_000,
         }),
-        // "custom" and any unknown name stamp nothing.
         _ => None,
     }
 }
 
-/// A preset's own default file name (`ExportPreset::default_file_name`), the
-/// byte-for-byte fallback when no filename template is set.
 fn preset_default_file_name(name: &str) -> &'static str {
     match name {
         "youtube_1080p60" => "youtube-1080p60.mp4",
@@ -105,13 +102,6 @@ fn preset_default_file_name(name: &str) -> &'static str {
         _ => "export.mp4",
     }
 }
-
-// ---------------------------------------------------------------------------
-// The seam's own half of the export spec: `BridgeExportSpec` in, the
-// engine's `ExportSpec` out, and the dialogue's four questions — what can this
-// format carry, is this spec exportable, what does the crop leave, what bitrate
-// will it run at — answered by the engine rather than re-derived in Dart.
-// ---------------------------------------------------------------------------
 
 use crate::api::export::{
     BridgeCaptionsOut, BridgeCrop, BridgeExportDefaults, BridgeExportPresetEntry, BridgeExportSpec,
@@ -150,7 +140,6 @@ fn spec_crop(spec: &BridgeExportSpec, comp_w: u32, comp_h: u32) -> lumit_render:
     )
 }
 
-/// The crop and the frame that survives it, as the dialogue's Crop row reads it.
 pub(crate) fn crop_for(spec: &BridgeExportSpec, comp_w: u32, comp_h: u32) -> BridgeCrop {
     let crop = spec_crop(spec, comp_w, comp_h);
     let (width, height) = crop.output_size(comp_w, comp_h);
@@ -198,7 +187,6 @@ pub(crate) fn preset_list() -> Vec<BridgeExportPresetEntry> {
         .collect()
 }
 
-/// The settings behind a preset name.
 pub(crate) fn preset_get(name: &str) -> Option<BridgeExportSpec> {
     let spec = lumit_render::export_presets::PresetLibrary::load_default().get(name)?;
     let mut bridged = from_export_spec(&spec)?;
@@ -235,7 +223,6 @@ pub(crate) fn defaults_get() -> BridgeExportDefaults {
     }
 }
 
-/// Remember these as what the dialogue opens on.
 pub(crate) fn defaults_set(defaults: &BridgeExportDefaults) -> Result<(), String> {
     lumit_render::export_defaults::ExportDefaults {
         preset: defaults.preset.clone(),
@@ -247,15 +234,12 @@ pub(crate) fn defaults_set(defaults: &BridgeExportDefaults) -> Result<(), String
     .save_default()
 }
 
-/// Forget a preset of one's own.
 pub(crate) fn preset_delete(name: &str) -> Result<(), String> {
     let mut library = lumit_render::export_presets::PresetLibrary::load_default();
     library.delete(name)?;
     library.save_default()
 }
 
-/// The format key an [`ExportFormat`](lumit_render::export::format::ExportFormat) is
-/// named by over the seam, and back again.
 #[cfg(feature = "media")]
 fn export_format(codec: &str) -> Result<lumit_render::export::format::ExportFormat, String> {
     use lumit_media::encode::{ImageFormat, VideoCodec};
@@ -675,10 +659,6 @@ pub(crate) fn export_preset(preset_name: &str, comp_name: &str, template: &str) 
     .to_string()
 }
 
-// ---------------------------------------------------------------------------
-// Driving the export (render feature): start / poll / cancel over the seam.
-// ---------------------------------------------------------------------------
-
 /// Start an export of `comp` in `doc` — the frb entry, which brings its own
 /// document rather than reading the process-wide v0 bridge.
 pub(crate) fn start_export_with_document(
@@ -697,8 +677,6 @@ pub(crate) fn export_poll() -> String {
     driving::poll()
 }
 
-/// Whether an export is rendering now, for the power throttling decision
-/// ([`crate::turns::follow_power`]).
 pub(crate) fn export_running() -> bool {
     driving::running()
 }
@@ -717,10 +695,8 @@ pub(crate) fn export_cancel() -> String {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct QueueRow {
     pub id: u32,
-    /// The run of rows it was queued with, and what the run is called.
     pub group: Option<u32>,
     pub group_name: String,
-    /// The composition it was made from, so its settings can be opened again.
     pub comp: uuid::Uuid,
     pub comp_name: String,
     pub out_path: String,
@@ -731,13 +707,10 @@ pub(crate) struct QueueRow {
     /// queue time, else the whole comp.
     pub range: Option<(u64, u64)>,
     pub state: QueueRowState,
-    /// The remote export this item does for another computer, if it is one.
     pub job: Option<uuid::Uuid>,
-    /// The files written beside `out_path`.
     pub also: Vec<String>,
 }
 
-/// Where one queued item has got to.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum QueueRowState {
     /// Waiting its turn. Nothing starts until the queue is told to run.
@@ -746,7 +719,6 @@ pub(crate) enum QueueRowState {
         frame: u64,
         total: u64,
         encoder: String,
-        /// Held between two frames.
         paused: bool,
     },
     /// How long it took in seconds, and the file's size, zero for a sequence.
@@ -772,7 +744,6 @@ pub(crate) fn queue_add(
     driving::queue_add(doc, comp, comp_name, spec, out_path, start)
 }
 
-/// A number for a run of a template's rows queued together, called `name`.
 pub(crate) fn queue_group(name: String) -> u32 {
     driving::queue_group(name)
 }
@@ -800,12 +771,10 @@ pub(crate) fn queue_add_version(
     )
 }
 
-/// Queue an item that has run, or failed, again as it was.
 pub(crate) fn queue_again(id: u32) -> Option<u32> {
     driving::queue_again(id)
 }
 
-/// Today's date, as the `{date}` token writes it.
 pub(crate) fn today() -> String {
     names::today()
 }
@@ -850,26 +819,18 @@ pub(crate) fn queue_list() -> Vec<QueueRow> {
     driving::queue_list()
 }
 
-/// Let the queue run: the next waiting item starts, and each one after it
-/// follows as the one before finishes.
 pub(crate) fn queue_start() {
     driving::queue_start();
 }
 
-/// Let the export in flight finish and start nothing after it, until the
-/// queue is told to run again.
 pub(crate) fn queue_stop_after() {
     driving::queue_stop_after();
 }
 
-/// Whether the queue starts the next waiting item when the one in flight
-/// lands.
 pub(crate) fn queue_goes_on() -> bool {
     driving::queue_goes_on()
 }
 
-/// Cancel one item — the running export stops at its next frame, a waiting one
-/// simply never starts.
 pub(crate) fn queue_cancel(id: u32) {
     driving::queue_cancel(id);
 }
@@ -880,8 +841,6 @@ pub(crate) fn queue_pause(id: u32, paused: bool) {
     driving::queue_pause(id, paused);
 }
 
-/// Add the remote export `job`, whose files are gathered in `folder`, as an
-/// item passed over until [`queue_job_ready`]. Returns the item's id.
 pub(crate) fn queue_add_job(
     job: uuid::Uuid,
     folder: std::path::PathBuf,
@@ -893,12 +852,10 @@ pub(crate) fn queue_add_job(
     driving::queue_add_job(job, folder, comp, comp_name, spec, out_path)
 }
 
-/// The job item `id` has all its files, and runs when its turn comes.
 pub(crate) fn queue_job_ready(id: u32) {
     driving::job_ready(id);
 }
 
-/// Whether remote export `job` was done when its row was removed.
 pub(crate) fn queue_job_landed(job: uuid::Uuid) -> bool {
     driving::job_landed(job)
 }
@@ -924,7 +881,6 @@ pub(crate) fn queue_move(id: u32, index: usize) -> Result<(), String> {
     driving::queue_move(id, index)
 }
 
-/// The settings one item was queued with, or `None` once it has gone.
 pub(crate) fn queue_spec(id: u32) -> Option<BridgeExportSpec> {
     driving::queue_spec(id)
 }
@@ -946,7 +902,6 @@ pub(crate) fn first_file(path: &str, codec: &str) -> std::path::PathBuf {
     std::path::PathBuf::from(path)
 }
 
-/// The engine's answer for what an export does with caption layers.
 fn captions_out(captions: BridgeCaptionsOut) -> CaptionsOut {
     match captions {
         BridgeCaptionsOut::Burn => CaptionsOut::Burn,

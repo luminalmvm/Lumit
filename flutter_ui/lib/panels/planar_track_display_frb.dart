@@ -51,8 +51,6 @@ String planarStatusSentence(BridgePlanarStatus? status) => switch (status?.stage
           : l10n.planarTracked(status.frames),
     };
 
-/// The sentence for one reading of a Bake points bake. It is filed and
-/// reported like a planar track, and worded as a bake.
 String bakeStatusSentence(BridgePlanarStatus? status) => switch (status?.stage) {
       null || BridgeTrackStage.idle => l10n.bakeNotBaked,
       BridgeTrackStage.queued => l10n.trackWaiting,
@@ -66,16 +64,13 @@ String bakeStatusSentence(BridgePlanarStatus? status) => switch (status?.stage) 
       BridgeTrackStage.done => l10n.bakeBaked(status!.frames),
     };
 
-/// The line under the Planar track's buttons.
 class PlanarTrackDisplayFrb extends StatefulWidget {
-  /// The layer the effect sits on — what a press is fired against.
   final LayerReference layer;
 
   /// Which instance on that layer: a planar track is filed under the effect,
   /// not the media, because what was tracked is the quad this instance holds.
   final UuidValue effectId;
 
-  /// Something changed that the rest of the interface should re-read.
   final VoidCallback onChanged;
 
   /// Bumped by the panel every time one of the effect's Action buttons is
@@ -100,7 +95,6 @@ class PlanarTrackDisplayFrb extends StatefulWidget {
     this.bake = false,
   });
 
-  /// Whether this is Bake points' line, which reads as a bake.
   final bool bake;
 
   @override
@@ -121,7 +115,6 @@ class _PlanarTrackDisplayFrbState extends State<PlanarTrackDisplayFrb>
   bool shouldResample(PlanarTrackDisplayFrb old) =>
       old.pressed != widget.pressed;
 
-  /// The document revision the line was last read at.
   int? _readAt;
 
   // An edit can leave an analysis or a bake behind, and the line must stop
@@ -153,7 +146,6 @@ class _PlanarTrackDisplayFrbState extends State<PlanarTrackDisplayFrb>
       was?.stage != BridgeTrackStage.done &&
       next.stage == BridgeTrackStage.done;
 
-  /// Tell a Cancel beside Bake whether there is anything to stop.
   void _sayIfRunning(bool running) {
     final effect = widget.effectId;
     final was = bakesRunning.value;

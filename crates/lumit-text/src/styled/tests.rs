@@ -23,7 +23,6 @@ fn block<'a>(text: &'a str, style: &'a TextStyle, paragraph: &'a ParagraphStyle)
     }
 }
 
-/// The width of the first line's letters.
 fn line_width(text: &str, style: &TextStyle) -> f32 {
     let paragraph = ParagraphStyle::default();
     let l = layout(&block(text, style, &paragraph), false);
@@ -82,7 +81,6 @@ fn empty_styled_text_is_one_transparent_pixel_with_a_caret() {
     assert!(l.lines[0].baseline > 0.0);
 }
 
-/// Inter kerns "AV" together, and switching kerning off gives the room back.
 #[test]
 fn kerning_pulls_a_pair_together() {
     let off = TextStyle {
@@ -96,8 +94,6 @@ fn kerning_pulls_a_pair_together() {
     assert!(line_width("AV", &on) < line_width("AV", &off) - 1.0);
 }
 
-/// 100 thousandths of 72 px is 7.2 px between each pair, and nothing after
-/// the last letter.
 #[test]
 fn tracking_adds_room_between_letters_only() {
     let tracked = TextStyle {
@@ -132,8 +128,6 @@ fn all_caps_sets_the_capitals() {
     assert!(line_width("lumit", &small) < line_width("LUMIT", &kerned()) * 0.8);
 }
 
-/// A break starts a new line one leading further down, and each line knows
-/// which character it starts at, whichever line ending the text uses.
 #[test]
 fn a_break_starts_a_new_line_one_leading_down() {
     let paragraph = ParagraphStyle::default();
@@ -178,7 +172,6 @@ fn alignment_moves_the_short_line() {
         start(TextAlign::Centre),
         start(TextAlign::Right),
     );
-    // The longest line fills the block, so it never moves.
     assert!((left.0 - centre.0).abs() < 0.01 && (left.0 - right.0).abs() < 0.01);
     assert!((left.1 - left.0).abs() < 0.01);
     assert!(right.1 > centre.1 && centre.1 > left.1);
@@ -193,8 +186,6 @@ fn alignment_moves_the_short_line() {
     assert!((l.lines[0].carets[0] - left.0 - 40.0).abs() < 0.01);
 }
 
-/// A box wraps the words at its spaces, and justifying stretches every
-/// line but the last to the box.
 #[test]
 fn a_box_wraps_and_justifies() {
     let text = "one two three four five six";
@@ -206,7 +197,6 @@ fn a_box_wraps_and_justifies() {
     let ragged = layout(&block(text, &kerned(), &boxed(false)), false);
     assert!(ragged.lines.len() > 1);
     assert!((ragged.right - ragged.left - 400.0).abs() < 0.01);
-    // The space a line broke at belongs to neither line.
     let first = &ragged.lines[0];
     assert_eq!(ragged.lines[1].start, first.start + first.carets.len());
     assert!(first.carets.last().unwrap() - ragged.left < 400.0);
@@ -218,8 +208,6 @@ fn a_box_wraps_and_justifies() {
     assert!(last.carets.last().unwrap() < &(full.right - 1.0));
 }
 
-/// Shrink to fit sets a long line smaller until it fits the box. Off, the
-/// same line wraps.
 #[test]
 fn shrink_to_fit_keeps_a_long_line_inside_the_box() {
     let text = "one two three four five six";
@@ -251,13 +239,10 @@ fn an_outline_adds_ink_and_room_for_it() {
     let stroked = rasterise(&block("Lumit", &outlined, &paragraph), &[]);
     assert!(ink(&stroked) > ink(&plain));
     assert_eq!(stroked.width, plain.width + 8);
-    // Some pixel is the outline's red, not the fill's white.
     assert!(stroked
         .rgba
         .chunks_exact(4)
         .any(|p| p[3] == 255 && p[0] == 255 && p[1] == 0));
-    // Letter by letter, a wide outline covers the next letter's fill. All
-    // fills over all strokes leaves every fill whole.
     let white = |r: &RasterText| r.rgba.chunks_exact(4).filter(|p| p == &[255; 4]).count();
     let [apart, together] = [false, true].map(|strokes_together| {
         let wide = TextStyle {
@@ -295,8 +280,6 @@ fn faux_bold_and_superscript_change_the_ink() {
     assert!(ink(&rasterise(&block("Lumit", &raised, &paragraph), &[])) < regular / 2);
 }
 
-/// A font this machine doesn't have draws in the built-in face, the same
-/// as a layer that never named one.
 #[test]
 fn a_missing_font_falls_back_to_the_built_in_face() {
     let paragraph = ParagraphStyle::default();
@@ -347,7 +330,6 @@ fn styled_text_runs_along_a_path_and_converts_to_outlines() {
     let r = rasterise_on_path(&b, &path, 0.0, 420, 200, &[], 1.0);
     assert_eq!((r.width, r.height), (420, 200));
     assert!(ink(&r) > 10_000);
-    // The ink sits on the path's baseline, not at the top of the box.
     let top: u64 = r.rgba[..420 * 40 * 4]
         .chunks_exact(4)
         .map(|p| u64::from(p[3]))
@@ -362,8 +344,6 @@ fn styled_text_runs_along_a_path_and_converts_to_outlines() {
         .all(|i| i.stroke.is_some() && i.stroke_width.value_at(0.0) == 3.0));
 }
 
-/// A plate goes down behind the letters, and the raster grows to hold its
-/// padding.
 #[test]
 fn a_plate_draws_behind_the_words_and_the_raster_holds_it() {
     let paragraph = ParagraphStyle::default();
@@ -390,8 +370,6 @@ fn a_plate_draws_behind_the_words_and_the_raster_holds_it() {
     );
 }
 
-/// A bottom-aligned box of fixed height keeps its size and its last line
-/// where it was as a line is added, so the words grow upwards.
 #[test]
 fn a_bottom_aligned_box_keeps_the_last_baseline_still() {
     let style = kerned();
@@ -418,8 +396,6 @@ fn bahnschrift() -> Option<TextStyle> {
     })
 }
 
-/// The animators' answer for every letter of `text`: set on `tag` at `value`,
-/// all of them.
 fn axis_everywhere(text: &str, tag: [u8; 4], value: f32) -> Vec<GlyphXform> {
     let mut x = vec![GlyphXform::default(); text.chars().count()];
     for g in &mut x {
@@ -428,7 +404,6 @@ fn axis_everywhere(text: &str, tag: [u8; 4], value: f32) -> Vec<GlyphXform> {
     x
 }
 
-/// The left and right edges of a raster's ink.
 fn ink_span(r: &RasterText) -> (u32, u32) {
     let (mut lo, mut hi) = (u32::MAX, 0);
     for y in 0..r.height {
@@ -442,7 +417,6 @@ fn ink_span(r: &RasterText) -> (u32, u32) {
     (lo, hi)
 }
 
-/// **A variable font lists its axes**, with the face's own place on each.
 #[test]
 fn a_variable_font_lists_its_axes() {
     let Some(_) = bahnschrift() else { return };
@@ -462,7 +436,6 @@ fn a_variable_font_lists_its_axes() {
     );
 }
 
-/// **The layer's own axes change the letters**: a heavier weight inks more.
 #[test]
 fn the_layers_axes_set_the_letters() {
     let Some(light) = bahnschrift() else { return };
@@ -484,8 +457,6 @@ fn the_layers_axes_set_the_letters() {
     );
 }
 
-/// **An animator's axis sets each letter at its own place**: a heavier
-/// weight inks more, letter by letter.
 #[test]
 fn an_animators_weight_sets_the_letters() {
     let Some(style) = bahnschrift() else { return };
@@ -502,9 +473,6 @@ fn an_animators_weight_sets_the_letters() {
     assert!(ink(&heavy) > ink(&light) * 11 / 10);
 }
 
-/// **Variable font spacing decides the room** a narrower letter leaves:
-/// Per character keeps every letter's middle where it was, Default closes the
-/// line up from its start.
 #[test]
 fn the_spacing_decides_the_room_a_narrower_letter_leaves() {
     let Some(style) = bahnschrift() else { return };
@@ -535,7 +503,6 @@ fn the_spacing_decides_the_room_a_narrower_letter_leaves() {
     );
 }
 
-/// The middle of a raster's ink, in its own pixels.
 fn ink_middle(r: &RasterText) -> [f64; 2] {
     let (mut sx, mut sy, mut n) = (0.0, 0.0, 0.0);
     for y in 0..r.height {
@@ -549,8 +516,6 @@ fn ink_middle(r: &RasterText) -> [f64; 2] {
     [sx / n, sy / n]
 }
 
-/// **Text shown larger is drawn larger**: four times as many pixels a side,
-/// the same letters in the same place of the layer, plain line or styled.
 #[test]
 fn text_shown_larger_is_drawn_larger_in_the_same_place() {
     let paragraph = ParagraphStyle::default();

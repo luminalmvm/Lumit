@@ -57,9 +57,6 @@ pub const DOF_GROUPS: &[ParamGroup] = &[
         // round it runs, and how hard the blur answers to it. Where focus *is*
         // lives above, beside the rows that set it.
         label: "Depth map",
-        // `depth_invert` used to sit here. It moved up beside the picker, where
-        // every effect's Invert now lives; the group is a contiguous run of
-        // declared rows, so it leaves the list as well as the struct.
         params: &[
             "depth_channel",
             "gamma",
@@ -72,8 +69,6 @@ pub const DOF_GROUPS: &[ParamGroup] = &[
     },
 ];
 
-/// The greyed rows: which of two controls is in charge, said in the panel rather
-/// than left for the owner to discover by dragging something inert.
 pub const DOF_ENABLED_WHEN: &[EnabledWhen] = &[
     // Focus point takes over from Focus distance. While it is ticked, focus is
     // whatever depth sits under the point and the distance number decides
@@ -118,7 +113,6 @@ pub const DOF_ENABLED_WHEN: &[EnabledWhen] = &[
     },
 ];
 
-/// Depth of field's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "dof",
@@ -219,7 +213,6 @@ pub struct Dof {
     #[slider(min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
     pub focus_point_x: f32,
 
-    /// See [`focus_point_x`](Self::focus_point_x).
     #[slider(min = 0.0, max = 2160.0, default = 540.0, unit = Px)]
     pub focus_point_y: f32,
 
@@ -433,7 +426,6 @@ pub struct Dof {
     #[slider(min = 0.0, max = 1.0, default = 0.0, hard_min = 0.0, hard_max = 1.0, unit = Raw)]
     pub remove_edge_leak: f32,
 
-    /// How big a depth jump counts as an edge for the row above.
     #[slider(min = 0.0, max = 1.0, default = 0.10, hard_min = 0.0, hard_max = 1.0, unit = Raw)]
     pub detect_edge_threshold: f32,
 
@@ -463,7 +455,6 @@ pub struct Dof {
     #[toggle(default = false)]
     pub zebra: bool,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -499,8 +490,6 @@ impl Dof {
     /// apertures (≤ the 40 px slider) sit far below it.
     pub const MAX_APERTURE_PX: f32 = 128.0;
 
-    /// The floored blade count out of a resolved bag: [`Dof::packed`]'s other
-    /// missing argument, so no caller has to know the id.
     pub fn blades_of(p: Params<'_>) -> u32 {
         p.int(Self::DERIVED_BLADES, 6).clamp(3, MAX_BLADES as i32) as u32
     }
@@ -535,7 +524,7 @@ impl Dof {
         let deform = self.aspect.clamp(-1.0, 1.0);
         let squeeze = 1.0 / (1.0 - deform.abs().min(0.95));
         let aspect_scale = if deform > 0.0 {
-            [1.0, squeeze] // a wide oval: pull y in
+            [1.0, squeeze]
         } else if deform < 0.0 {
             [squeeze, 1.0]
         } else {

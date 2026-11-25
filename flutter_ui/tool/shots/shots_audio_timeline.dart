@@ -35,7 +35,6 @@ void say(Object? what) {
   print('AUDIO TIMELINE SWEEP: $what');
 }
 
-/// Right-click a point in window coordinates.
 Future<void> rightTapAt(Offset at, {double settle = 1}) async {
   const id = 9001;
   GestureBinding.instance.handlePointerEvent(
@@ -81,8 +80,6 @@ Future<void> main() async {
   );
   final music = project.importFootage(path: '$fixtures/Music.wav');
   final talk = project.importFootage(path: '$fixtures/Talk.mp4');
-  // Top to bottom: the video with its sound, a music row, another music row
-  // that becomes a track of two clips.
   comp.addFootageLayer(footage: music, asSequence: false);
   comp.addFootageLayer(footage: music, asSequence: false);
   comp.addFootageLayer(footage: talk, asSequence: false);
@@ -92,9 +89,6 @@ Future<void> main() async {
 
   final layers = comp.getLayers();
   say('${layers.length} layers');
-  // The bottom music row is the track of two clips: converted, its clip
-  // given a fade out, and a second clip laid across that end so the overlap
-  // is a crossfade with a fade in of its own at the far end.
   final track = layers.last;
   track.convertToSequenced();
   var clips = track.getClips();
@@ -128,7 +122,6 @@ Future<void> main() async {
     fadeOut:
         const BridgeClipFade(seconds: 2.0, shape: BridgeClipFadeShape.slow()),
   );
-  // The middle music row keeps its own single-file lane, with a volume ride.
   final plain = layers[1];
   plain.setVolumeDb(value: const BridgeScalar.static_(-6));
   ui.setSelection([plain]);
@@ -142,14 +135,12 @@ Future<void> main() async {
   await captureUi('audio-timeline-workspace.png');
   await captureUi('audio-timeline.png', crop: panelCrop(AudioTimelinePanelFrb));
 
-  // The twirl on the plain music row: straight on to Volume.
   final plainId = plain.internallayerId.toString();
   await tapKey('atl-twirl-$plainId', settle: 1.5);
   await captureUi('audio-timeline-twirl.png',
       crop: panelCrop(AudioTimelinePanelFrb));
   await tapKey('atl-twirl-$plainId', settle: 1);
 
-  // The fade menu on the first clip's fade in, then the custom editor.
   clips = track.getClips();
   final clipA = clips.first;
   final boxA = boxOf('atl-clip-${clipA.id}');
@@ -164,14 +155,12 @@ Future<void> main() async {
     await pause(1);
   }
 
-  // The overlap's own menu: the crossfade shapes.
   final boxB = boxOf('atl-clip-${clips.last.id}');
   if (boxA != null && boxB != null) {
     final x = (boxB.left + boxA.right) / 2;
     await rightTapAt(Offset(x, boxA.bottom - 6), settle: 1.5);
     await captureUi('audio-timeline-crossfade-menu.png',
         crop: panelCrop(AudioTimelinePanelFrb));
-    // Custom on an overlap opens the editor with both curves and Keep level.
     final pair = await tapKey('atl-fade-custom-${clips.last.id}', settle: 2) ||
         await tapKey('atl-fade-custom-${clipA.id}', settle: 2);
     say('crossfade editor $pair');
@@ -197,19 +186,16 @@ Future<void> main() async {
   await captureUi('audio-timeline-clip-open-workspace.png');
   await tapKey('atl-clip-twirl-${clipA.id}', settle: 1);
 
-  // The track in spectral mode.
   final trackId = track.internallayerId.toString();
   await tapKey('atl-lane-mode-$trackId', settle: 6);
   await captureUi('audio-timeline-spectral.png',
       crop: panelCrop(AudioTimelinePanelFrb));
   await tapKey('atl-lane-mode-$trackId', settle: 2);
 
-  // Back to Edit: the layer Timeline folds the tracks behind the Sound mix row.
   ui.workspace.applyWorkspacePreset(WorkspacePreset.edit);
   await pause(5);
   await captureUi('edit-sound-mix.png', crop: panelCrop(TimelinePanelFrb));
   await captureUi('edit-sound-mix-workspace.png');
-  // The row's own menu: open the workspace, or convert the mix to a precomp.
   say('mix menu ${await rightTapKey('tl-sound-mix-row', settle: 1.5)}');
   // Whole window: the row is at the foot, so the menu drops past the panel.
   await captureUi('edit-sound-mix-menu.png');

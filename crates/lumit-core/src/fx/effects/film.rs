@@ -1,7 +1,3 @@
-//! Film: the picture shot on a film stock and printed, with halation, bloom,
-//! grain, gate weave and flicker each its own part to turn on or off. The
-//! model is in [`crate::fx::film`].
-
 use crate::fx::{
     film, film::tables, film::Spread, film::Stage, params::ParamId, params::Params, params::Value,
     registry::EffectDef, registry::EffectMetadata, registry::ResolveCx, schema::EffectSchema,
@@ -90,7 +86,6 @@ pub const FILM_ENABLED_WHEN: &[EnabledWhen] = &[
     on("flicker_amount", "flicker"),
 ];
 
-/// Film's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "film",
@@ -293,24 +288,20 @@ pub struct FilmFrame {
     pub tables: Vec<f32>,
 }
 
-/// How the developed film reaches the screen.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Shown {
     Print = 0,
     /// The negative scanned and inverted.
     Scan = 1,
-    /// A slide, as it is.
     Slide = 2,
     /// Film colour off: the picture's own.
     Own = 3,
 }
 
-/// The per-pixel numbers.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FilmKernel {
     /// Linear Rec. 709 to the layers' exposure, with the exposure in it.
     pub camera: [[f32; 3]; 3],
-    /// Stops the clipped highlights are lifted by.
     pub boost: f32,
     /// The layers' exposure back to linear Rec. 709, for a scan.
     pub inverse: [[f32; 3]; 3],
@@ -544,7 +535,6 @@ fn invert(m: &[[f32; 3]; 3]) -> [[f32; 3]; 3] {
     ]
 }
 
-/// Film's behaviour.
 pub struct FilmDef;
 
 impl EffectDef for FilmDef {

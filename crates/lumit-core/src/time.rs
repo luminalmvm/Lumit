@@ -16,7 +16,6 @@ pub enum TimeError {
     NotRepresentable,
 }
 
-/// Exact rational number of seconds. See module docs for invariants.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Rational {
     num: i64,
@@ -45,7 +44,6 @@ impl Rational {
         Self::from_i128(i128::from(num), i128::from(den))
     }
 
-    /// Reduce in i128, then require the result to fit i64.
     pub fn from_i128(num: i128, den: i128) -> Result<Self, TimeError> {
         if den == 0 {
             return Err(TimeError::ZeroDenominator);
@@ -229,7 +227,6 @@ macro_rules! timebase {
             pub fn sub_dur(self, d: Duration) -> Result<Self, TimeError> {
                 Ok(Self(self.0.checked_sub(d.0)?))
             }
-            /// self − earlier, as a span.
             pub fn delta(self, earlier: Self) -> Result<Duration, TimeError> {
                 Ok(Duration(self.0.checked_sub(earlier.0)?))
             }
@@ -307,7 +304,6 @@ impl FrameRate {
         self.num
     }
 
-    /// See [`FrameRate::num`].
     pub fn den(self) -> u32 {
         self.den
     }
@@ -348,7 +344,6 @@ impl FrameRate {
         )?))
     }
 
-    /// Comp time of frame n (exact).
     pub fn time_of_frame(self, n: i64) -> Result<CompTime, TimeError> {
         Ok(CompTime(Rational::from_i128(
             i128::from(n) * i128::from(self.den),
@@ -403,33 +398,24 @@ mod tests {
         assert!(Rational::new(1, 0).is_err());
     }
 
-    /// The playhead's arithmetic when a comp's rate changes under it:
-    /// the same moment, on the nearest frame of the new grid.
     #[test]
     fn the_nearest_frame_rounds_rather_than_floors() {
         let at_60 = FrameRate::new(60, 1).unwrap();
         let at_24 = FrameRate::new(24, 1).unwrap();
-        // One second is one second at any rate, and lands exactly.
         let one = at_60.time_of_frame(60).unwrap();
         assert_eq!(at_24.nearest_frame_at(one), 24);
-        // Frame 61 of 60 fps is 61/60 s — 24.4 frames at 24, so frame 24 …
         assert_eq!(at_24.nearest_frame_at(at_60.time_of_frame(61).unwrap()), 24);
-        // … while frame 62 is 24.8, which rounds up where a floor would not.
         assert_eq!(at_24.nearest_frame_at(at_60.time_of_frame(62).unwrap()), 25);
         assert_eq!(at_24.frame_at(at_60.time_of_frame(62).unwrap()), 24);
-        // Exactly half a frame rounds up, and does so on an NTSC grid too.
         let ntsc = FrameRate::new(30000, 1001).unwrap();
         let half = CompTime(rat(1001, 60000));
         assert_eq!(ntsc.nearest_frame_at(half), 1);
-        // Time before zero is real (a layer may start early) and rounds the
-        // same way rather than clamping.
         assert_eq!(at_24.nearest_frame_at(CompTime(rat(-1, 24))), -1);
         assert_eq!(at_24.nearest_frame_at(CompTime(rat(-1, 240))), 0);
     }
 
     #[test]
     fn overflow_chain_stays_tame() {
-        // 90000-den pts plus flicks, chained: denominators must stay bounded.
         let mut acc = Rational::ZERO;
         let pts = rat(1, 90000);
         let flick = rat(1, Rational::FLICK_DEN);
@@ -470,7 +456,6 @@ mod tests {
 
         #[test]
         fn grid_round_trips_frames(n in 0i64..1_000_000) {
-            // every frame index at 59.94 over ~4.6 h survives f64 → grid quantisation
             let fr = FrameRate::new(60000, 1001).unwrap();
             let t = fr.time_of_frame(n).unwrap();
             let q = Rational::from_f64_on_grid(t.0.to_f64(), Rational::FLICK_DEN).unwrap();
@@ -480,12 +465,9 @@ mod tests {
 
     #[test]
     fn layer_time_is_exact_and_preserves_on_grid_times() {
-        // The motivating case: 10/30 − 3/30 is not 7/30 in f64, but it is here.
         let t = rat(10, 30).to_f64();
         assert_ne!(t - rat(3, 30).to_f64(), rat(7, 30).to_f64());
         assert_eq!(layer_time(t, rat(3, 30)), rat(7, 30).to_f64());
-        // With no offset, every on-grid frame time at every common rate comes
-        // back bit-identical to the old `t − 0.0`, so banked keys survive.
         for (num, den) in [
             (24, 1),
             (25, 1),
@@ -507,7 +489,6 @@ mod tests {
                 }
             }
         }
-        // Shifting by whole frames lands exactly on the unshifted local time.
         let fr = FrameRate::new(30000, 1001).unwrap();
         let off = fr.time_of_frame(3).unwrap().0;
         for f in 0..2_000 {
@@ -515,7 +496,6 @@ mod tests {
             let after = layer_time(fr.time_of_frame(f + 3).unwrap().0.to_f64(), off);
             assert_eq!(before.to_bits(), after.to_bits());
         }
-        // Off the grid, it is the plain subtraction.
         assert!(layer_time(f64::NAN, rat(1, 2)).is_nan());
     }
 }

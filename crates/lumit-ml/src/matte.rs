@@ -51,14 +51,11 @@ pub struct Coverage {
 /// Matting's answer under BiRefNet's name (§2's no-surprises rule).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum MatteArch {
-    /// Robust Video Matting: a sequence, its state carried frame to frame.
     #[default]
     Rvm,
-    /// BiRefNet: one frame on its own, at a square of its own.
     Birefnet,
 }
 
-/// What the pack's manifest calls the tensors, per family.
 #[derive(Debug)]
 enum Names {
     /// Boxed because it is three times the other's size and this enum is
@@ -77,7 +74,6 @@ fn first_state() -> State {
     std::array::from_fn(|_| (vec![1, 1, 1, 1], vec![0.0]))
 }
 
-/// An open matte model, ready to read frames.
 #[derive(Debug)]
 pub struct Matte {
     session: Session,
@@ -174,8 +170,6 @@ impl Matte {
         }
     }
 
-    /// Robust Video Matting: the frame at its own size, the state of the frame
-    /// before it, and how far the model may downsample internally.
     fn run_sequence(&mut self, rgba: &[u8], w: usize, h: usize) -> Result<Coverage, MlError> {
         let Names::Rvm(names) = &self.names else {
             return Err(MlError::PackUnreadable);
@@ -226,9 +220,6 @@ impl Matte {
         })
     }
 
-    /// BiRefNet: the frame squashed into the model's square, normalised, and
-    /// the numbers that come back put through a sigmoid and stretched to the
-    /// frame's own shape.
     fn run_still(&mut self, rgba: &[u8], w: usize, h: usize) -> Result<Coverage, MlError> {
         let Names::Birefnet(names) = &self.names else {
             return Err(MlError::PackUnreadable);
@@ -303,8 +294,6 @@ fn installed_pack(arch: MatteArch) -> Option<store::Installed> {
         .cloned()
 }
 
-/// Which family a pack's model block is, or `None` for a pack that does
-/// something else entirely.
 fn family(model: Option<&crate::manifest::Model>) -> Option<MatteArch> {
     match model?.arch {
         Arch::Rvm(_) => Some(MatteArch::Rvm),
@@ -323,13 +312,11 @@ fn plane_of(shape: &[usize]) -> Result<(usize, usize), MlError> {
     }
 }
 
-/// Four filled slots, or `None` if any of them is empty.
 fn four(slots: [Option<(Vec<usize>, Vec<f32>)>; 4]) -> Option<State> {
     let [a, b, c, d] = slots;
     Some([a?, b?, c?, d?])
 }
 
-/// One coverage number as the byte a matte is kept as.
 fn byte(value: f32) -> u8 {
     if value.is_finite() {
         (value.clamp(0.0, 1.0) * 255.0 + 0.5) as u8
@@ -338,12 +325,10 @@ fn byte(value: f32) -> u8 {
     }
 }
 
-/// Coverage bytes for a whole plane.
 fn coverage_bytes(read: &[f32]) -> Vec<u8> {
     read.iter().copied().map(byte).collect()
 }
 
-/// The logistic curve, which is what turns BiRefNet's numbers into coverage.
 fn sigmoid(value: f32) -> f32 {
     1.0 / (1.0 + (-value).exp())
 }
@@ -354,7 +339,6 @@ mod tests {
     use super::*;
     use std::path::{Path, PathBuf};
 
-    /// A manifest for a pack of `bytes` bytes sitting in a folder of its own.
     fn a_manifest(arch: MatteArch, bytes: u64) -> String {
         let digest = "88d4531297118f595bf2fd60f6f566aec2e559393802d1f436c380f0cbbd2828";
         let (id, name, model) = match arch {
@@ -383,7 +367,6 @@ mod tests {
         )
     }
 
-    /// Where the real files sit on the reference machine.
     fn real_pack(arch: MatteArch) -> Option<PathBuf> {
         let packs = crate::test_support::packs_dir()?;
         let file = packs.join(match arch {
@@ -393,7 +376,6 @@ mod tests {
         file.is_file().then_some(file)
     }
 
-    /// Write one pack into `root` as the store expects to find it.
     fn a_pack(root: &Path, arch: MatteArch, model: &Path) {
         let id = match arch {
             MatteArch::Rvm => "rvm",
@@ -407,7 +389,6 @@ mod tests {
         store::with_dir(Some(root.to_path_buf()));
     }
 
-    /// A frame with a bright blob in the middle of a dark ground.
     fn blob(width: usize, height: usize) -> Vec<u8> {
         let mut rgba = vec![0u8; 4 * width * height];
         for pixel in rgba.chunks_exact_mut(4) {
@@ -511,8 +492,6 @@ mod tests {
         assert_eq!((coverage.width, coverage.height), (w, h));
         assert_eq!(coverage.data.len(), (w as usize) * (h as usize));
 
-        // Asking for the other family with only this one installed is a
-        // refusal, never the pack that happens to be there.
         assert_eq!(
             Matte::open(MatteArch::Rvm, Detail::Portrait).unwrap_err(),
             MlError::PackMissing(Task::Matte),

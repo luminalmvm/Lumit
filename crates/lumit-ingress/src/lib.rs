@@ -69,10 +69,6 @@ pub mod files;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-// ---------------------------------------------------------------------------
-// Refusals
-// ---------------------------------------------------------------------------
-
 /// Why a bounded read stopped. Never a panic (docs/14 §4).
 ///
 /// Every variant names the ceiling it hit and the number that hit it, because
@@ -80,11 +76,9 @@ use std::path::{Path, PathBuf};
 /// media index claims 9,000,000 entries, and the limit is 1,000,000" is.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum IngressError {
-    /// The aggregate allocation ceiling.
     #[error("this file would need {needed} bytes of memory, and the limit is {limit}")]
     Bytes { needed: u64, limit: u64 },
 
-    /// The aggregate count ceiling — entries, records, nodes, channels.
     #[error("this file holds more items than Lumit reads ({needed}, limit {limit})")]
     Items { needed: u64, limit: u64 },
 
@@ -98,7 +92,6 @@ pub enum IngressError {
     #[error("this file nests deeper than Lumit reads (limit {limit})")]
     Depth { limit: u32 },
 
-    /// The work ceiling — iterations, decode steps, expansions.
     #[error("reading this file would take more work than Lumit allows (limit {limit})")]
     Work { limit: u64 },
 
@@ -108,7 +101,6 @@ pub enum IngressError {
     #[error("the sizes in this file do not make sense together")]
     Overflow,
 
-    /// A file longer than its reader's ceiling, refused without reading it all.
     #[error("{path} is larger than Lumit reads ({size} bytes, limit {limit})")]
     FileTooLarge {
         path: PathBuf,
@@ -144,12 +136,7 @@ impl IngressError {
     }
 }
 
-/// The shorthand this crate returns.
 pub type Result<T> = std::result::Result<T, IngressError>;
-
-// ---------------------------------------------------------------------------
-// Limits
-// ---------------------------------------------------------------------------
 
 /// The four ceilings a [`Budget`] enforces.
 ///
@@ -159,13 +146,9 @@ pub type Result<T> = std::result::Result<T, IngressError>;
 /// justify is a limit somebody will raise the first time it fires.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Limits {
-    /// Aggregate bytes the read may allocate.
     pub bytes: u64,
-    /// Aggregate items — entries, records, nodes — the read may materialise.
     pub items: u64,
-    /// How deep the read may nest.
     pub depth: u32,
-    /// Aggregate abstract work units the read may spend.
     pub work: u64,
 }
 
@@ -221,8 +204,6 @@ impl Limits {
         work: 1 << 32,
     };
 
-    /// A sidecar or cache file written beside a project — roto mattes, media
-    /// indexes, thumbnails.
     pub const SIDECAR: Limits = Limits {
         bytes: 1 << 30,
         items: 1_000_000,
@@ -240,10 +221,6 @@ impl Limits {
     };
 }
 
-// ---------------------------------------------------------------------------
-// The budget
-// ---------------------------------------------------------------------------
-
 /// A running tally of what one read has spent, and what it has left.
 ///
 /// Threaded by `&mut` through a reader's call tree. Spending is monotonic:
@@ -259,7 +236,6 @@ pub struct Budget {
 }
 
 impl Budget {
-    /// A fresh budget with nothing spent.
     #[must_use]
     pub fn new(limits: Limits) -> Self {
         Budget {
@@ -271,38 +247,31 @@ impl Budget {
         }
     }
 
-    /// A budget that refuses nothing. For tests, and for reading back bytes
-    /// this application itself just wrote.
     #[must_use]
     pub fn unlimited() -> Self {
         Budget::new(Limits::UNLIMITED)
     }
 
-    /// The ceilings this budget was built with.
     #[must_use]
     pub fn limits(&self) -> Limits {
         self.limits
     }
 
-    /// Bytes spent so far.
     #[must_use]
     pub fn spent_bytes(&self) -> u64 {
         self.bytes
     }
 
-    /// Items spent so far.
     #[must_use]
     pub fn spent_items(&self) -> u64 {
         self.items
     }
 
-    /// Work spent so far.
     #[must_use]
     pub fn spent_work(&self) -> u64 {
         self.work
     }
 
-    /// How many [`Budget::nested`] scopes are open right now.
     #[must_use]
     pub fn depth(&self) -> u32 {
         self.depth
@@ -326,8 +295,6 @@ impl Budget {
         Ok(())
     }
 
-    /// Bytes still available, for a reader that wants to size a buffer to
-    /// whatever is left rather than ask for a number and be refused.
     #[must_use]
     pub fn bytes_remaining(&self) -> u64 {
         self.limits.bytes.saturating_sub(self.bytes)
@@ -348,7 +315,6 @@ impl Budget {
         Ok(())
     }
 
-    /// Charge `n` items — entries, records, nodes, channels.
     pub fn take_items(&mut self, n: u64) -> Result<()> {
         let next = self.items.checked_add(n).ok_or(IngressError::Overflow)?;
         if next > self.limits.items {
@@ -361,7 +327,6 @@ impl Budget {
         Ok(())
     }
 
-    /// Charge `n` units of abstract work.
     pub fn take_work(&mut self, n: u64) -> Result<()> {
         let next = self.work.checked_add(n).ok_or(IngressError::Overflow)?;
         if next > self.limits.work {
@@ -429,10 +394,6 @@ impl Budget {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Checked arithmetic on sizes that came out of a file
-// ---------------------------------------------------------------------------
-
 /// `width × height`, refusing rather than wrapping.
 ///
 /// The one multiplication every image reader does, and the one every image
@@ -465,10 +426,6 @@ pub fn checked_raster_bytes(
 pub fn checked_usize(n: u64) -> Result<usize> {
     usize::try_from(n).map_err(|_| IngressError::Overflow)
 }
-
-// ---------------------------------------------------------------------------
-// Capped file reading
-// ---------------------------------------------------------------------------
 
 /// Read a whole file, refusing one longer than `limit` without reading it all.
 ///
@@ -541,8 +498,6 @@ mod tests {
                 limit: 100
             }
         );
-        // A refused charge is not spent: the reader may still do something
-        // smaller with what is left.
         assert_eq!(b.spent_bytes(), 60);
         assert_eq!(b.bytes_remaining(), 40);
     }
@@ -557,7 +512,6 @@ mod tests {
             b.nested(|b| b.nested(|b| b.nested(|_| Ok::<_, IngressError>(()))))
                 .unwrap();
         }
-        // Ten round trips through three levels never leaked a level.
         let too_deep =
             b.nested(|b| b.nested(|b| b.nested(|b| b.nested(|_| Ok::<_, IngressError>(())))));
         assert!(matches!(too_deep, Err(IngressError::Depth { limit: 3 })));
@@ -565,7 +519,6 @@ mod tests {
 
     #[test]
     fn nesting_costs_an_item_so_a_wide_shallow_bomb_is_caught_too() {
-        // Depth alone does not stop `[[],[],[],[],…]` a million entries wide.
         let mut b = Budget::new(Limits {
             items: 4,
             ..Limits::UNLIMITED
@@ -583,7 +536,6 @@ mod tests {
     fn raster_arithmetic_refuses_instead_of_wrapping() {
         assert_eq!(checked_area(1920, 1080).unwrap(), 2_073_600);
         assert_eq!(checked_raster_bytes(1920, 1080, 4, 4).unwrap(), 33_177_600);
-        // The shape a crafted header takes: each number plausible, the product not.
         assert_eq!(
             checked_raster_bytes(u64::MAX, 2, 4, 4).unwrap_err(),
             IngressError::Overflow
@@ -600,7 +552,6 @@ mod tests {
             bytes: 64,
             ..Limits::UNLIMITED
         });
-        // 16 f32s is 64 bytes, exactly the ceiling.
         let v = b.vec_with_capacity::<f32>(16).unwrap();
         assert!(v.capacity() >= 16);
         assert_eq!(b.spent_bytes(), 64);
@@ -623,7 +574,6 @@ mod tests {
             })
         ));
         assert_eq!(read_capped(&path, 4096).unwrap().len(), 4096);
-        // Exactly at the ceiling is allowed; one byte under is not.
         assert!(matches!(
             read_capped(&path, 4095),
             Err(IngressError::FileTooLarge { .. })

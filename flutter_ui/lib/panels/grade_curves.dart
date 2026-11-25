@@ -1,5 +1,3 @@
-// The Grade panel's Curves page: the custom curves (luma, red, green, blue)
-// with soft clip, and the six hue curves.
 
 part of 'grade_panel_frb.dart';
 
@@ -27,13 +25,10 @@ mixin _GradeCurves on _GradeModel, _GradePrimaries {
 
   static const double _plotMax = 300;
 
-  /// The soft clip rows' width beside a curve.
   static const double _softWidth = 280;
 
-  /// The row a curve mode control takes, its padding included.
   static const double _modeRow = Segment.height + 12;
 
-  /// The swatches and the picker under a hue curve.
   static const double _swatchRow = 30;
 
   String _curveModeLabel(String? mode) =>
@@ -101,7 +96,6 @@ mixin _GradeCurves on _GradeModel, _GradePrimaries {
                     padding: const EdgeInsetsDirectional.only(start: gradeInset),
                     child: _customCurve(t, enabled, labels, plot),
                   );
-                  // The soft clip beside the curve where it fits, else under.
                   if (inner >= plot + column + 16 + _softWidth) {
                     return Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -129,8 +123,6 @@ mixin _GradeCurves on _GradeModel, _GradePrimaries {
         },
       );
 
-  /// The curve modes as a segmented control while their names fit, else a
-  /// dropdown.
   Widget _modeBar(LumitTheme t, List<String?> modes, String? mode) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 6),
         child: LayoutBuilder(builder: (context, box) {
@@ -188,7 +180,6 @@ mixin _GradeCurves on _GradeModel, _GradePrimaries {
         _ => 'master',
       };
 
-  /// The custom curve [plot] square, with its channel buttons beside it.
   Widget _customCurve(
       LumitTheme t, bool enabled, List<String> labels, double plot) {
     final channel = _curveChannel.clamp(0, _toneCurves.length - 1);
@@ -344,11 +335,8 @@ mixin _GradeCurves on _GradeModel, _GradePrimaries {
     _hueCurve.currentState?.dropThree(found.$1, found.$2);
   }
 
-  /// The sample in the node's grading space, read on the curve's input.
   (double, double) _pickedLocally(String id, DropperSample s) {
     double encode(double x) => switch (_choice('space')) {
-          // Linear keeps the value; Log is close enough to video for a place
-          // along a curve.
           2 => x,
           _ => x <= 0 ? 0 : math.pow(x, 1 / 2.4).toDouble(),
         };

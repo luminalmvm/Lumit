@@ -1,15 +1,9 @@
-// The graph editor's numeric-entry popover (docs/07 §5.3). Split out of
-// graph_editor_frb.dart, which re-exports it.
 
 import 'package:flutter/widgets.dart';
 
 import '../l10n/strings.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
-
-// ---------------------------------------------------------------------------
-// Numeric entry (docs/07 §5.3).
-// ---------------------------------------------------------------------------
 
 /// The popover's width and its label column — the Ease popover's own two
 /// measures, so the two small boxes the graph opens read as one family.

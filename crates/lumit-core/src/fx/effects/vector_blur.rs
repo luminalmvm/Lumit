@@ -17,14 +17,10 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Where the vectors come from.
 pub const VECTORS_FROM_OPTIONS: &[&str] = &["Map slope", "Map channels"];
 
-/// Which way a streak runs from its pixel.
 pub const STREAK_OPTIONS: &[&str] = &["Both ways", "Forwards", "Backwards"];
 
-/// Each source's own rows grey out under the other, and the placement only
-/// means something once a map is picked.
 pub const VECTOR_BLUR_ENABLED_WHEN: &[EnabledWhen] = &[
     EnabledWhen {
         param: "slope_channel",
@@ -48,14 +44,12 @@ pub const VECTOR_BLUR_ENABLED_WHEN: &[EnabledWhen] = &[
     },
 ];
 
-/// Vector blur's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "vector_blur",
     label = "Vector blur",
     version = 1,
     category = BlurSharpen,
-    // Up to 256 steps a pixel, each re-reading the map when the streaks follow it.
     cost = Heavy,
     // Length is open above, so it can't be padded statically.
     roi = FullFrame,
@@ -65,17 +59,13 @@ pub const VECTOR_BLUR_ENABLED_WHEN: &[EnabledWhen] = &[
         "is the vector map: its slope or its channels say which way each pixel \
          streaks and how far, and with none picked the layer's own picture is used",
     ),
-    // The effect picks the map's channels itself.
     matte_channel = false,
     enabled_when = VECTOR_BLUR_ENABLED_WHEN,
 )]
 pub struct VectorBlur {
-    /// Map slope streaks along the contours of one channel. Map channels reads
-    /// a push on each axis from two.
     #[choice(label = "Vectors from", options = *VECTORS_FROM_OPTIONS, default = 0)]
     pub vectors_from: u32,
 
-    /// The channel whose contours the streaks follow.
     #[choice(label = "Slope channel", options = *CHANNEL_OPTIONS, default = 0)]
     pub slope_channel: u32,
 
@@ -84,7 +74,6 @@ pub struct VectorBlur {
     #[choice(label = "Horizontal channel", options = *CHANNEL_OPTIONS, default = 2)]
     pub horizontal_channel: u32,
 
-    /// The channel that pushes up and down. Green.
     #[choice(label = "Vertical channel", options = *CHANNEL_OPTIONS, default = 3)]
     pub vertical_channel: u32,
 
@@ -106,7 +95,6 @@ pub struct VectorBlur {
     )]
     pub angle_offset: f32,
 
-    /// On gives every streak the full Length, however gentle the map is there.
     #[toggle(label = "Constant length", default = false)]
     pub constant_length: bool,
 
@@ -144,15 +132,12 @@ pub struct VectorBlur {
     )]
     pub map_softness: f32,
 
-    /// Where the Matte layer's picture sits on this one.
     #[choice(label = "Map placement", options = *MAP_PLACEMENT_OPTIONS, default = 0)]
     pub matte_placement: u32,
 
-    /// What a streak reaching past the frame reads.
     #[choice(label = "Edges", options = *EDGE_OPTIONS, default = 1)]
     pub edge: u32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -193,8 +178,6 @@ impl VectorBlur {
     }
 }
 
-/// Vector blur's behaviour: no CPU reference through the single-image
-/// dispatcher, so `apply_cpu` keeps its identity default.
 pub struct VectorBlurDef;
 
 impl EffectDef for VectorBlurDef {

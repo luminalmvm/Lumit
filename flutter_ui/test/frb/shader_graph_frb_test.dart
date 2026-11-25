@@ -72,10 +72,8 @@ void main() {
       expect(find.byKey(const ValueKey<String>('shader-breadcrumb')),
           findsOneWidget,
           reason: 'double-clicking the box opens the inside');
-      // A shader that has never held a graph starts from a staged Result box.
       expect(find.byKey(const ValueKey<String>('shader-node-1')),
           findsOneWidget);
-      // Nothing was committed by merely entering: the document has no graph.
       expect(
           p.layer
               .getEffects()
@@ -92,7 +90,6 @@ void main() {
       expect(find.byKey(const ValueKey<String>('graph-toolbar')),
           findsOneWidget);
 
-      // The breadcrumb's crumbs are the other way back.
       await enter(tester, p.layer);
       await tester
           .tap(find.byKey(const ValueKey<String>('shader-crumb-layer')));
@@ -101,10 +98,6 @@ void main() {
           findsNothing);
     });
 
-    /// **Ctrl+Space adds inside a shader** (the owner's "can't add
-    /// options in the custom shader view"): with the inner graph the panel's
-    /// face, the console lists the shader vocabulary and picking a row drops
-    /// that box — committed as one undo step.
     testWidgets('the console adds a box, committed as one undo step',
         (tester) async {
       final p = withShader();
@@ -117,7 +110,6 @@ void main() {
       await tester.pump();
       expect(find.byKey(const ValueKey<String>('fx-console-bar')),
           findsOneWidget);
-      // The Parameter box is in the vocabulary — the row the fix is for.
       expect(find.byKey(const ValueKey<String>('fx-console-item-Parameter')),
           findsOneWidget);
 

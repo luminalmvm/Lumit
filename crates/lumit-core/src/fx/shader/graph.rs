@@ -56,7 +56,6 @@ pub struct ShaderEdge {
     pub to_port: u32,
 }
 
-/// Where one box sits on the canvas.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ShaderNodePos {
     pub node: u32,
@@ -89,7 +88,6 @@ impl GraphTy {
         }
     }
 
-    /// The WGSL spelling of a value of this width.
     #[must_use]
     pub const fn wgsl(self) -> &'static str {
         match self {
@@ -129,7 +127,6 @@ use GraphTy::{Picture, Vec2, Vec4, F32};
 /// The whole v1 vocabulary (§4.3), in the order the add-search lists it.
 /// Every node is a pure function of its inputs and compiles to one WGSL `let`.
 pub const NODE_SPECS: &[NodeSpec] = &[
-    // -- Input --------------------------------------------------------------
     NodeSpec {
         kind: "picture",
         category: "input",
@@ -172,7 +169,6 @@ pub const NODE_SPECS: &[NodeSpec] = &[
         inputs: &[],
         outputs: &[("value", F32)],
     },
-    // -- Maths --------------------------------------------------------------
     NodeSpec {
         kind: "add",
         category: "maths",
@@ -329,7 +325,6 @@ pub const NODE_SPECS: &[NodeSpec] = &[
         inputs: &[("x", F32)],
         outputs: &[("value", F32)],
     },
-    // -- Vector -------------------------------------------------------------
     NodeSpec {
         kind: "split",
         category: "vector",
@@ -360,14 +355,12 @@ pub const NODE_SPECS: &[NodeSpec] = &[
         inputs: &[("vector", Vec4)],
         outputs: &[("value", F32)],
     },
-    // -- Texture ------------------------------------------------------------
     NodeSpec {
         kind: "sample",
         category: "texture",
         inputs: &[("picture", Picture), ("uv", Vec2)],
         outputs: &[("colour", Vec4)],
     },
-    // -- Colour -------------------------------------------------------------
     NodeSpec {
         kind: "luminance",
         category: "colour",
@@ -398,7 +391,6 @@ pub const NODE_SPECS: &[NodeSpec] = &[
         inputs: &[("base", Vec4), ("blend", Vec4), ("amount", F32)],
         outputs: &[("colour", Vec4)],
     },
-    // -- Output -------------------------------------------------------------
     NodeSpec {
         kind: "result",
         category: "output",
@@ -407,13 +399,11 @@ pub const NODE_SPECS: &[NodeSpec] = &[
     },
 ];
 
-/// The spec for one kind, or `None` for a kind this build has never heard of.
 #[must_use]
 pub fn spec_of(kind: &str) -> Option<&'static NodeSpec> {
     NODE_SPECS.iter().find(|s| s.kind == kind)
 }
 
-/// A node's ports as the canvas draws them: names and nominal types.
 pub type Ports = Vec<(&'static str, GraphTy)>;
 
 /// The ports one node actually shows, settings applied: a Parameter's output

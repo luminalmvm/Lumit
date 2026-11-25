@@ -12,10 +12,8 @@ use lumit_scene::vdb::DenseVolume;
 
 use super::with_store;
 
-/// The most bytes frames hold between them in memory.
 const KEPT_BYTES: usize = 1 << 30;
 
-/// How many frames stay on the card.
 const ON_CARD: usize = 4;
 
 struct Frame(Arc<DenseVolume>);
@@ -30,10 +28,8 @@ static KEPT: Mutex<Option<lumit_cache::ByteLru<PathBuf, Frame>>> = Mutex::new(No
 /// A file's frames, and what its heat is multiplied by.
 type FrameList = Arc<(Vec<PathBuf>, f32)>;
 
-/// Each file's list, made once.
 static LISTS: Mutex<Option<HashMap<PathBuf, FrameList>>> = Mutex::new(None);
 
-/// A frame's field on the card, and what the ledger has granted for it.
 pub(super) struct OnCard {
     file: PathBuf,
     field: wgpu::Texture,
@@ -41,7 +37,6 @@ pub(super) struct OnCard {
     _held: Option<Reservation>,
 }
 
-/// The file `layer` draws through the marcher, if it is a volume.
 pub(crate) fn path_of(doc: &Document, layer: &Layer) -> Option<PathBuf> {
     let LayerKind::Model { item, .. } = &layer.kind else {
         return None;

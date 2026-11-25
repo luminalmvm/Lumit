@@ -1,4 +1,3 @@
-//! One-shot Windows menu setup. Resolve itself is accessed only by its Lua script.
 use serde_json::{json, Value};
 use std::{
     collections::BTreeMap,

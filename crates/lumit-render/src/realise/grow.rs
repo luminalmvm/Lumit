@@ -1,5 +1,3 @@
-//! Where a grown picture goes: its new size and how far its anchor slides.
-
 /// The quad a grown picture needs (docs/08 §3.39).
 ///
 /// **In plain terms.** Tile with Output width or height above 100 % hands back a

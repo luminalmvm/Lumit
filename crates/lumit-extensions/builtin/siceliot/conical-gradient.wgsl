@@ -83,7 +83,6 @@ fn cg_cone(q: vec2<f32>) -> vec2<f32> {
     return vec2<f32>(0.0, 0.0);
 }
 
-// Pad holds the end colours, Repeat starts again, Mirror runs back.
 fn sc_spread(t: f32) -> f32 {
     if (p.spread == 1u) {
         return fract(t);
@@ -95,7 +94,6 @@ fn sc_spread(t: f32) -> f32 {
     return clamp(t, 0.0, 1.0);
 }
 
-// Inside layer paints only where the layer draws, as a Cavalry fill shader.
 fn sc_paint(uv: vec2<f32>, c: vec4<f32>) -> vec4<f32> {
     if (p.paint == 0u) {
         return c * lumit_sample(uv).a;
@@ -120,8 +118,6 @@ fn sc_scatter(t: f32, q: vec2<f32>) -> f32 {
     let r = f32(h >> 8u) / 16777216.0;
     return t + (r - 0.5) * p.scatter / 100.0;
 }
-
-// ---- The SICELIOT ramp: the same text in every SICELIOT gradient ----
 
 // The first Stops colours, sorted by Position, read at t (0 to 1), after
 // Progression has bent t: Quadratic squares it, Easing eases it in and out.

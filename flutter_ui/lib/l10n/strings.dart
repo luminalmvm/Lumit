@@ -57,8 +57,6 @@ Locale resolveLocale(Locale wanted) {
   return const Locale('en');
 }
 
-/// The language tag Lumit would use with no setting saved — what the machine
-/// itself is set to, narrowed to something Lumit has strings for.
 Locale systemLocale() => resolveLocale(PlatformDispatcher.instance.locale);
 
 /// The BCP-47 tag for [locale], as the settings file stores it (`en`, `de`,

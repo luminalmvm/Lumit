@@ -14,7 +14,6 @@
 //! effect that wants a band pass usually wants the low as well. This is
 //! Simper's zero-delay-feedback form of Zavalishin's filter.
 
-/// One sample's three answers.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct SvfOut {
     pub low: f32,
@@ -27,7 +26,6 @@ pub struct SvfOut {
 const Q_MIN: f64 = 0.05;
 const Q_MAX: f64 = 100.0;
 
-/// Two integrators, their coefficients, and nothing else.
 #[derive(Clone, Copy, Debug)]
 pub struct Svf {
     a1: f64,
@@ -39,7 +37,6 @@ pub struct Svf {
 }
 
 impl Svf {
-    /// A filter at this cutoff and resonance, starting from silence.
     #[must_use]
     pub fn new(cutoff_hz: f64, q: f64, rate: f64) -> Self {
         let mut svf = Self {
@@ -68,13 +65,11 @@ impl Svf {
         self.a3 = g * self.a2;
     }
 
-    /// Forget the state. The next sample starts from silence.
     pub fn reset(&mut self) {
         self.ic1 = 0.0;
         self.ic2 = 0.0;
     }
 
-    /// One sample in, three out.
     pub fn process(&mut self, sample: f32) -> SvfOut {
         let v0 = f64::from(sample);
         let v3 = v0 - self.ic2;
@@ -100,7 +95,6 @@ mod tests {
     fn a_sweep_across_the_whole_range_stays_finite() {
         let mut svf = Svf::new(1_000.0, 8.0, RATE);
         for n in 0..48_000 {
-            // Straight from below zero to past Nyquist and back, every sample.
             let t = (n as f64 / 24_000.0 - 1.0).abs();
             svf.set(-50.0 + t * 40_000.0, 8.0, RATE);
             let out = svf.process(((n % 31) as f32 - 15.0) / 15.0);

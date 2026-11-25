@@ -12,9 +12,6 @@ import 'package:flutter/widgets.dart';
 
 import 'controls.dart';
 
-/// How strongly the box washes what it is about to catch — the drawings' 12%,
-/// faint enough that the keys under it stay readable while it is drawn over
-/// them.
 const double marqueeWashAlpha = 0.12;
 
 /// The box's painted face, on its own.
@@ -48,8 +45,6 @@ class MarqueeBox extends StatelessWidget {
   }
 }
 
-/// A box handed out through [MarqueeSelect.box], drawn where its owner puts
-/// this: a `Stack` child above whatever the gesture layer sits behind.
 class MarqueeOverlay extends StatelessWidget {
   final ValueListenable<Rect?> box;
 
@@ -80,7 +75,6 @@ class MarqueeSelect extends StatefulWidget {
   /// pressing it.
   final void Function(Rect rect, bool additive) onSelect;
 
-  /// A plain click on the background: clear the owner's selection.
   final VoidCallback onClear;
 
   /// When set, a click reports *where* it landed instead of calling
@@ -120,14 +114,10 @@ class _MarqueeSelectState extends State<MarqueeSelect> {
   Offset? _from;
   Offset? _to;
 
-  /// Whether the modifier that adds to the standing selection was down when
-  /// this drag began.
   bool _additive = false;
 
-  /// Whether [MarqueeSelect.claim] took the drag in flight.
   bool _claimed = false;
 
-  /// The box's moving corner, or null to put the box away.
   void _show(Offset? to) {
     setState(() {
       _to = to;

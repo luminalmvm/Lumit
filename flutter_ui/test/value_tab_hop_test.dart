@@ -13,8 +13,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
 
-/// Two rows of two wells, which is what a Position row above a Scale row is:
-/// the shape the hop has to cross.
 Widget _harness() => MaterialApp(
       home: ThemeScope(
         theme: LumitTheme.dark(),
@@ -48,7 +46,6 @@ Widget _harness() => MaterialApp(
       ),
     );
 
-/// The well whose editor is open, by its key — null while none is.
 String? _editing(WidgetTester tester) {
   final open = find.byType(EditableText).evaluate();
   if (open.isEmpty) return null;
@@ -87,8 +84,6 @@ void main() {
     await _tab(tester);
     expect(_editing(tester), 'r0c1');
 
-    // The hop that matters: past the end of the row rather than out of the
-    // panel.
     await _tab(tester);
     expect(_editing(tester), 'r1c0');
   });

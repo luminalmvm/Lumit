@@ -41,8 +41,6 @@ use serde::{Deserialize, Serialize};
 use crate::status::Status;
 use crate::suites::memory::Block;
 
-/// Channels in a pixel. RGBA, always: it is the only component set this host
-/// advertises.
 pub const CHANNELS: usize = 4;
 
 /// A rectangle in pixels, OFX's way round: `y` increases **upwards**, `x2`/`y2`
@@ -56,7 +54,6 @@ pub struct RectI {
 }
 
 impl RectI {
-    /// A rectangle at the origin, `width` by `height`.
     #[must_use]
     pub const fn sized(width: i32, height: i32) -> Self {
         Self {
@@ -79,7 +76,6 @@ impl RectI {
         usize::try_from(self.y2.saturating_sub(self.y1)).unwrap_or(0)
     }
 
-    /// The four numbers as OFX carries them.
     #[must_use]
     pub const fn as_array(self) -> [i32; 4] {
         [self.x1, self.y1, self.x2, self.y2]
@@ -144,11 +140,6 @@ impl Frame16 {
         })
     }
 
-    /// A frame from floats, narrowed on the way in.
-    ///
-    /// # Errors
-    ///
-    /// As [`Frame16::from_pixels`].
     pub fn from_f32(width: usize, height: usize, pixels: &[f32]) -> Result<Self, Status> {
         // The whole plane in one call. `half` narrows eight values an
         // instruction where the CPU has F16C, and rounds to nearest even
@@ -194,7 +185,6 @@ impl Frame16 {
     }
 }
 
-/// How many half floats a frame of this size holds.
 fn pixel_count(width: usize, height: usize) -> Result<usize, Status> {
     if width == 0 || height == 0 {
         return Err(Status::ErrValue);
@@ -205,8 +195,6 @@ fn pixel_count(width: usize, height: usize) -> Result<usize, Status> {
         .ok_or(Status::ErrMemory)
 }
 
-/// One image as a plugin sees it: a block of fp32 RGBA the host owns, plus the
-/// bounds and the row order that say how to read it.
 pub struct Image {
     bounds: RectI,
     order: RowOrder,
@@ -298,13 +286,11 @@ impl Image {
         Frame16::from_pixels(width, height, pixels)
     }
 
-    /// The rectangle this image covers.
     #[must_use]
     pub const fn bounds(&self) -> RectI {
         self.bounds
     }
 
-    /// The row order, and therefore the sign below.
     #[must_use]
     pub const fn order(&self) -> RowOrder {
         self.order
@@ -338,13 +324,11 @@ impl Image {
         }
     }
 
-    /// The address on the card, when the picture is on one.
     #[must_use]
     pub const fn device(&self) -> Option<usize> {
         self.device
     }
 
-    /// See [`Image::device`].
     pub(crate) fn set_device(&mut self, device: Option<usize>) {
         self.device = device;
     }
@@ -356,7 +340,6 @@ impl Image {
         unsafe { std::slice::from_raw_parts(self.block.as_mut_ptr(), len) }
     }
 
-    /// As [`Image::bytes`], for writing.
     pub(crate) fn bytes_mut(&mut self) -> &mut [u8] {
         let len = self.floats_len() * size_of::<f32>();
         // SAFETY: as `floats_mut`.
@@ -371,14 +354,12 @@ impl Image {
             .get(start..start + self.bounds.width() * CHANNELS)
     }
 
-    /// As [`Image::row`], for writing.
     pub fn row_mut(&mut self, y: usize) -> Option<&mut [f32]> {
         let start = self.row_start(y)?;
         let end = start + self.bounds.width() * CHANNELS;
         self.floats_mut().get_mut(start..end)
     }
 
-    /// Where a row starts, as an index into the block's floats.
     fn row_start(&self, y: usize) -> Option<usize> {
         let height = self.bounds.height();
         if y >= height {
@@ -394,7 +375,6 @@ impl Image {
         Some(memory_row * self.bounds.width() * CHANNELS)
     }
 
-    /// The whole block as floats.
     fn floats(&self) -> &[f32] {
         // SAFETY: the block was allocated as `stride * height` bytes with
         // sixteen-byte alignment, which is enough for `f32`, and zeroed — so
@@ -407,7 +387,6 @@ impl Image {
         }
     }
 
-    /// As [`Image::floats`], for writing. `&mut self` is what keeps it unique.
     fn floats_mut(&mut self) -> &mut [f32] {
         let len = self.floats_len();
         // SAFETY: as `floats`, plus the unique borrow of `self`.
@@ -424,8 +403,6 @@ impl Image {
 mod tests {
     use super::*;
 
-    /// A small frame whose every pixel says where it is, so an upside-down
-    /// picture is obvious rather than plausible.
     fn a_frame() -> Frame16 {
         let (width, height) = (4, 3);
         let mut pixels = Vec::new();
@@ -440,24 +417,18 @@ mod tests {
         Frame16::from_pixels(width, height, pixels).unwrap()
     }
 
-    /// The same picture, whichever way the block runs: OFX row nought is the
-    /// bottom row in both, and the frame's row nought is the top in both.
     #[test]
     fn ofx_row_nought_is_the_bottom_of_the_picture() {
         let frame = a_frame();
         for order in [RowOrder::BottomUp, RowOrder::TopDown] {
             let image = Image::from_frame(&frame, order).unwrap();
             let bottom = image.row(0).unwrap();
-            // The frame's bottom row is its last: y = height - 1 = 2.
             assert_eq!(bottom[1], 2.0, "{order:?}");
             let top = image.row(2).unwrap();
             assert_eq!(top[1], 0.0, "{order:?}");
         }
     }
 
-    /// The plane narrowing and the per-value narrowing are the same answer,
-    /// bit for bit, over a few thousand values that include the ends of the
-    /// half range and floats too small to be halves at all.
     #[test]
     fn narrowing_a_plane_matches_the_per_value_answer() {
         let (width, height) = (64, 17);

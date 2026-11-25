@@ -29,7 +29,6 @@ bool guidesRead(GraphChannel channel, List<BridgeKeyframe> keys,
     channel.scalar is! BridgeScalar_Expression &&
     keys.length >= 2;
 
-/// The reading at [seconds] under [lens]: speed, or acceleration.
 double guideValueAt(List<BridgeKeyframe> keys, GraphLens lens, double seconds) =>
     lens == GraphLens.acceleration
         ? evaluateKeysAcceleration(keys, seconds)
@@ -94,7 +93,6 @@ double _spread(double Function(double) at, double t0, double t1, int n) {
 
 const double _ringRadius = 3.5;
 
-/// The turning points, painted as hollow rings over one pane's curves.
 class GraphLensGuidesPainter extends CustomPainter {
   final List<GraphChannel> channels;
   final List<List<BridgeKeyframe>> shownKeys;
@@ -143,7 +141,6 @@ class GraphLensGuidesPainter extends CustomPainter {
       if (!guidesRead(channel, keys, envelope: envelope[c])) continue;
       final colour = palette[channel.colourIndex % palette.length];
 
-      // The turning points, as hollow rings on the curve.
       final ring = Paint()
         ..color = colour
         ..style = PaintingStyle.stroke
@@ -170,8 +167,6 @@ class GraphLensGuidesPainter extends CustomPainter {
       !identical(old.shownKeys, shownKeys);
 }
 
-/// The acceleration graph's corner: each curve's acceleration at the playhead,
-/// in its own colour.
 class GraphLensReadout extends StatelessWidget {
   final List<GraphChannel> channels;
   final List<List<BridgeKeyframe>> shownKeys;
@@ -182,7 +177,6 @@ class GraphLensReadout extends StatelessWidget {
   final TextStyle style;
   final Color ground;
 
-  /// At most this many curves are read out; the rest are on the graph.
   static const int most = 6;
 
   const GraphLensReadout({
@@ -232,9 +226,6 @@ class GraphLensReadout extends StatelessWidget {
   }
 }
 
-/// Which graph the pane draws — Value, Speed or Acceleration — as a pill in
-/// the graph's top right corner, under the Layers / Graph switch. One click,
-/// one graph.
 class GraphLensSwitch extends StatelessWidget {
   final GraphLens lens;
   final ValueChanged<GraphLens> onLens;
@@ -267,7 +258,6 @@ class GraphLensSwitch extends StatelessWidget {
         GraphLens.acceleration => l10n.tipAccelerationGraph,
       };
 
-  /// The three graphs, the one in force ticked.
   void _menu(BuildContext context, Offset at) => showMenuAt<void>(
         context: context,
         position: at,
@@ -414,10 +404,8 @@ typedef KeyBoxReading = ({
   double maxFrame
 });
 
-/// The two motions the box writes from a key.
 enum _Motion { profile, gravity }
 
-/// Which end a motion was last given: where it stops, or when.
 enum _End { value, frame }
 
 class _KeyAccelerationPopover extends StatefulWidget {
@@ -468,10 +456,8 @@ class _KeyAccelerationPopoverState extends State<_KeyAccelerationPopover> {
   late double? _out = widget.accelerationOut;
   late double _maxFrame = widget.maxFrame;
 
-  /// Whether the last thing typed could not be written.
   bool _refused = false;
 
-  /// Take in what a write hands back, and whether anything was written.
   bool _wrote(KeyBoxReading? now) {
     _refused = now == null;
     if (now == null) return false;
@@ -530,7 +516,6 @@ class _KeyAccelerationPopoverState extends State<_KeyAccelerationPopover> {
           deceleration: _fall.abs(),
           seconds: (_profileFrame - _frame) / fps);
     }
-    // Not all typed yet, which is not a refusal.
     if (p == null) {
       _refused = false;
       return;

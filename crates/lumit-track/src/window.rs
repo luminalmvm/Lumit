@@ -36,26 +36,18 @@ pub struct WindowBox {
     pub angle: f64,
 }
 
-/// The region the tracker is kept to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WindowOutline {
-    /// The box itself.
     Box,
-    /// The ellipse inside the box.
     Ellipse,
 }
 
-/// What a window follow takes.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct WindowSettings {
     /// How far in from the window's edge a speck must sit, as a share of each
     /// half side.
     pub margin: f64,
-    /// Agreeing specks a frame's move must stand on. Below this the window is
-    /// lost.
     pub min_inliers: usize,
-    /// Below this many agreeing specks against the anchor, the frame before
-    /// becomes the anchor.
     pub reanchor_below: usize,
     /// The robust fit's inlier threshold, raster pixels.
     pub threshold_px: f64,
@@ -72,7 +64,6 @@ impl Default for WindowSettings {
     }
 }
 
-/// Follows one window through frames pushed one at a time.
 pub struct WindowFollower {
     tracker: Tracker,
     settings: WindowSettings,
@@ -80,7 +71,6 @@ pub struct WindowFollower {
     /// The step about to be pushed. Steps are the tracker's frame numbers, so
     /// a run backwards through a shot counts up like any other.
     step: i64,
-    /// The frame everything is measured against, and the box on it.
     anchor: (i64, WindowBox),
     /// The last two boxes, newest last, for the guess at where the window is
     /// on the next frame.
@@ -89,7 +79,6 @@ pub struct WindowFollower {
 }
 
 impl WindowFollower {
-    /// Start following `start` on a raster of `size` pixels.
     #[must_use]
     pub fn new(
         start: WindowBox,
@@ -172,8 +161,6 @@ impl WindowFollower {
         Ok(Some(now))
     }
 
-    /// Where the window probably is on the next frame: the last box carried on
-    /// by the last frame's move.
     fn guess(&self) -> WindowBox {
         match self.recent {
             [Some((_, a)), Some((_, b))] => {
@@ -198,8 +185,6 @@ impl WindowFollower {
         }
     }
 
-    /// The window pulled in by the margin, as the one region the tracker may
-    /// work inside.
     fn region(&self, w: WindowBox) -> ExclusionMask {
         let k = (1.0 - self.settings.margin).clamp(0.05, 1.0);
         let (hw, hh) = (0.5 * w.size[0].abs() * k, 0.5 * w.size[1].abs() * k);
@@ -321,7 +306,6 @@ fn moved(m: &Mat3, w: &WindowBox, near: f64) -> Option<WindowBox> {
 mod tests {
     use super::*;
 
-    /// A smooth random texture: hashed values on an 8 px lattice, blended.
     fn texture(u: f64, v: f64) -> f32 {
         let hash = |i: i64, j: i64| -> f64 {
             let h = mix((i as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ (j as u64));
@@ -336,7 +320,6 @@ mod tests {
         (top * (1.0 - fy) + bottom * fy) as f32
     }
 
-    /// A 120 px textured square on grey, at `w`.
     fn frame(w: &WindowBox, size: (usize, usize)) -> Vec<f32> {
         let grow = w.size[0] / 120.0;
         let (s, c) = w.angle.to_radians().sin_cos();
@@ -344,7 +327,6 @@ mod tests {
         for y in 0..size.1 {
             for x in 0..size.0 {
                 let (dx, dy) = (x as f64 + 0.5 - w.centre[0], y as f64 + 0.5 - w.centre[1]);
-                // Back into the square's own pixels: undo the turn, then the growth.
                 let (u, v) = ((c * dx + s * dy) / grow, (c * dy - s * dx) / grow);
                 if u.abs() < 60.0 && v.abs() < 60.0 {
                     out[y * size.0 + x] = 0.2 + 0.6 * texture(u + 60.0, v + 60.0);
@@ -354,9 +336,6 @@ mod tests {
         out
     }
 
-    /// The square slides, grows by a fifth and turns fifteen degrees over
-    /// thirty frames, and the window tracked forwards from its first frame
-    /// stays within a pixel and a degree of it all the way.
     #[test]
     fn a_window_follows_a_square_that_slides_grows_and_turns() {
         let size = (400, 300);

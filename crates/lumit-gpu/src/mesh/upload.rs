@@ -1,7 +1,3 @@
-//! A model put on the card: its vertices and indices in one buffer each, its
-//! pictures, their smaller levels made on the card, and a bind group per
-//! material.
-
 use super::{look::Kept, GpuModel, MeshError, MeshFx, Part, Vertex, COLOUR};
 use crate::GpuContext;
 use glam::Vec3;
@@ -10,7 +6,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use wgpu::util::DeviceExt;
 
-/// One level of a picture: its width, its height and its pixels.
 type Level = (u32, u32, Vec<u8>);
 
 /// `image`, halved until it fits in `limit` on each side, which only a picture
@@ -69,7 +64,6 @@ fn fitted(image: &Image, srgb: bool, limit: u32) -> Level {
     out.pop().unwrap_or_default()
 }
 
-/// How many levels a picture `w` by `h` has, down to a pixel.
 pub(super) fn level_count(w: u32, h: u32) -> u32 {
     32 - w.max(h).max(1).leading_zeros()
 }
@@ -107,7 +101,6 @@ impl GpuModel {
         scene: &Arc<ModelScene>,
     ) -> Result<Self, MeshError> {
         let too_large = |_| MeshError::TooLarge;
-        // Every primitive of every mesh once, whichever nodes draw it.
         type Range = (u32, u32, i32, Vec3, Option<usize>);
         let mut vertices: Vec<Vertex> = Vec::new();
         let mut indices: Vec<u32> = Vec::new();
@@ -319,7 +312,6 @@ impl GpuModel {
     }
 }
 
-/// A picture on the card, its smaller levels made there from it.
 fn upload_levels(ctx: &GpuContext, fx: &MeshFx, top: &Level, srgb: bool) -> wgpu::TextureView {
     let (w, h, px) = top;
     let format = if srgb {

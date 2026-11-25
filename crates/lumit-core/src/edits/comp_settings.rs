@@ -1,10 +1,6 @@
-//! What a composition gets when nobody chose.
-
 use super::*;
 
 impl Default for CompSettings {
-    /// What a comp gets when nobody chose: 1920×1080, 60 fps, 30 seconds,
-    /// black, and the model's own shutter. One place decides what a comp is.
     fn default() -> Self {
         use lumit_core::time::{Duration, FrameRate};
         let blur = lumit_core::model::MotionBlur::default();

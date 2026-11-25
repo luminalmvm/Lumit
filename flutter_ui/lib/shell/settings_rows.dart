@@ -26,25 +26,17 @@ import '../state/files.dart' if (dart.library.js_interop) '../state/files_web.da
 import 'dialog_frame.dart' show FittedText;
 import 'settings_account.dart' show askBefore;
 
-/// A row's height, and the numbers that make it up. A row carrying a live
-/// readout under it is taller by that line; nothing else grows.
 const double settingsRowHeight = 34;
 
-/// The inset every row and section header takes from the page's edges.
 const double settingsRowPadding = 16;
 
-/// The least a row's name keeps, the gap beside it, and what a row sets aside
-/// for each button after its control.
 const double settingsLabelMin = 130;
 const double settingsRowGap = 12;
 const double settingsActionAllowance = 80;
 
-/// The air between a page's edge and its cards, and between one card and the
-/// next section's heading.
 const double settingsPagePadding = 16;
 const double settingsSectionGap = 22;
 
-/// The room above and below the rows inside a card.
 const double settingsCardPadding = 6;
 
 /// A dropdown's closed face and a value well **in a dialog**: 22, the one
@@ -52,7 +44,6 @@ const double settingsCardPadding = 6;
 /// is roomier because it is read once rather than lived in.
 const double settingsControlHeight = 22;
 
-/// The dot beside a row's name when its setting differs from a new install's.
 const double settingsChangedMark = 4;
 
 /// Where a row's setting stands against a new install's: whether it differs,
@@ -65,8 +56,6 @@ class SettingState {
   final String? copy;
 }
 
-/// A row's control, carrying where its setting stands, so [settingsRow] can
-/// offer Reset and mark a change without each row wiring both.
 class SettingControl extends StatelessWidget {
   const SettingControl({super.key, required this.setting, required this.child});
   final SettingState setting;
@@ -76,13 +65,7 @@ class SettingControl extends StatelessWidget {
   Widget build(BuildContext context) => child;
 }
 
-/// A named group of rows: a quiet heading, then the rows on a card.
 ///
-/// The card takes its corner from the theme's section radius, never below 8
-/// unless the theme is square. [first] leaves off the air above the heading,
-/// which the page's opening section has nothing to be separated from.
-/// [onResetPage] puts the page it is on back, from the heading's right-click,
-/// greyed unless [pageChanged].
 Widget settingsSection(
   LumitTheme t,
   String title,
@@ -156,7 +139,6 @@ Widget _rightClick(
       ),
     );
 
-/// The Reset page row every page heading's menu carries.
 Widget resetPageRow(VoidCallback reset, VoidCallback close,
         {bool enabled = true}) =>
     MenuRow(
@@ -169,8 +151,6 @@ Widget resetPageRow(VoidCallback reset, VoidCallback close,
       child: MenuLabel(l10n.settingsResetPage, enabled: enabled),
     );
 
-/// A row's right-click: Reset, greyed while it stands at the default, then
-/// Copy value where there is one worth copying.
 List<Widget> _settingMenu(SettingState setting, VoidCallback close) => [
       if (setting.reset case final reset?)
         MenuRow(
@@ -262,7 +242,6 @@ Widget settingsRow(
       ),
     ));
 
-/// [row] with its setting's menu and mark, when [control] carries one.
 Widget _withSetting(LumitTheme t, Widget control, Widget row) {
   if (control is! SettingControl) return row;
   final setting = control.setting;
@@ -298,8 +277,6 @@ String byteSize(int bytes) {
   return '${(b / (1 << 20)).toStringAsFixed(0)} ${l10n.unitMb}';
 }
 
-/// How much the browser keeps for Lumit, once it has said, and a Clear that
-/// forgets the files no recent project uses.
 Widget storageKept(LumitTheme t) => StatefulBuilder(
       builder: (context, setState) => Row(
         mainAxisSize: MainAxisSize.min,

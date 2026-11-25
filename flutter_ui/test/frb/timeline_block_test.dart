@@ -1,14 +1,3 @@
-// The block feel (docs/impl/timeline-interaction.md §4.1–4.3, TI-2).
-//
-// A block of keyframes is two or more selected keys: a box, a stretch handle
-// at each end and a badge. Every sentence of the note's §4.3 is a claim here —
-// the keys travel with the stretch while it runs, the dragged end lands on the
-// shared snap targets, `Escape` abandons any drag in flight and writes
-// nothing, a click on a handle falls through to the key it stands over, and
-// the readouts a gesture summons are gone the moment it ends (P1).
-//
-// Against the real engine like every other frb panel test: a stretch that does
-// not reach the document is not a stretch.
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
@@ -50,8 +39,6 @@ void main() {
       await tester.pump();
     }
 
-    /// A solid whose opacity is keyed at [frames], each key's value its own
-    /// frame number so a test can tell one from another.
     LayerReference keyedLayer(dynamic p,
         {List<int> frames = const [300, 1500]}) {
       final comp = p.comp as CompositionReference;
@@ -81,8 +68,6 @@ void main() {
     List<BridgeKeyframe> opacityKeys(LayerReference layer) =>
         (layer.getTransform().opacity as BridgeScalar_Keyframed).field0;
 
-    /// Where the lane **draws** its diamonds this frame — the painter's own
-    /// answer, which is what a person watching a stretch actually sees.
     List<double> drawnFrames(WidgetTester tester, Key laneKey) {
       final paint = find.descendant(
         of: find.byKey(laneKey),
@@ -112,8 +97,6 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    /// Take the whole property in hand: clicking a property's name selects it
-    /// and all of its keys, which is the shortest way to a block.
     Future<void> selectTheBlock(WidgetTester tester) async {
       await tester.tap(find.text('Opacity'));
       await tester.pumpAndSettle();
@@ -137,18 +120,6 @@ void main() {
       await tester.pump();
       return gesture;
     }
-
-    // ---------------------------------------------------------------------
-    // §4.3 — the keys travel with the stretch.
-    // ---------------------------------------------------------------------
-
-    // ---------------------------------------------------------------------
-    // §4.3, §4.5 — the stretched end snaps to the shared targets.
-    // ---------------------------------------------------------------------
-
-    // ---------------------------------------------------------------------
-    // P3 — Escape reverts any drag in flight, and writes nothing.
-    // ---------------------------------------------------------------------
 
     testWidgets('Escape abandons a bar drag', (tester) async {
       final p = withComp();
@@ -177,19 +148,6 @@ void main() {
           reason: 'the bar went back and the release wrote nothing');
     });
 
-    // ---------------------------------------------------------------------
-    // §2.1 — a handle's click falls through to the key beneath it.
-    // ---------------------------------------------------------------------
-
-    // ---------------------------------------------------------------------
-    // 6.24 — a drag on one of several selected keys moves them all.
-    // ---------------------------------------------------------------------
-
-    /// The lane had one rule for one key and no rule at all for several: a
-    /// diamond dragged out of a selection of three moved alone and quietly
-    /// narrowed the catch to itself, which is not what any other surface in the
-    /// panel does with a multiple selection. The graph has always applied the
-    /// travel of the key in hand to the whole of it (`_editsFor`).
     testWidgets('dragging one of several selected keys carries them all',
         (tester) async {
       final p = withComp();
@@ -251,10 +209,6 @@ void main() {
       ], reason: 'one Ctrl-Z puts the whole drag back');
     });
 
-    // ---------------------------------------------------------------------
-    // 6.6 — Delete takes the selected lane keys.
-    // ---------------------------------------------------------------------
-
     /// The lane key selection selected and eased and did nothing else: `Delete`
     /// fell straight past it to the shell, which deleted the *layer* the keys
     /// sat on. The panel claims the key first now in the ladder, above the
@@ -287,8 +241,6 @@ void main() {
           reason: 'the layer the keys sat on is untouched');
     });
 
-    /// A 3D arrow keys one axis, so a row's axes can be keyed apart. The row
-    /// shows that key, and its diamond is that key and no other axis's.
     testWidgets('a key on one axis of a row shows, and moves and goes alone',
         (tester) async {
       final p = withComp();
@@ -348,7 +300,6 @@ void main() {
       await tester.pumpAndSettle();
       expectFrames([300, 1500], [300, 1500], [300, 1500]);
 
-      // Back in step, a diamond stands for every axis again.
       await tester.tap(diamond(1));
       await tester.pumpAndSettle();
       expect(p.uiState.deleteClaim?.call(), isTrue);

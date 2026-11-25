@@ -21,8 +21,6 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     final p = freshProject();
-    // Signed in, with nothing to ask the server with: what is set here is
-    // what the page draws.
     p.uiState.account.account = const CloudAccount(
         id: '1', email: 'a@example.com', name: 'Ana', username: 'ana');
     p.uiState.account.friends = const Friends(
@@ -66,7 +64,6 @@ void main() {
       expect(find.byKey(ValueKey('settings-friend-remove-$name')),
           findsOneWidget);
     }
-    // Two to a line: the second sits beside the first, the third under it.
     final jo = tester.getTopLeft(find.byKey(const ValueKey('settings-friend-jo')));
     final sam =
         tester.getTopLeft(find.byKey(const ValueKey('settings-friend-sam')));

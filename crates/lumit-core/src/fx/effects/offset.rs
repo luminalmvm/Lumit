@@ -1,16 +1,8 @@
-//! Offset (docs/08 §3.40): the frame slid, wrapping round.
-//!
-//! **In plain terms.** Push the picture sideways or up and down; whatever leaves
-//! one side arrives at the other. Nothing is ever revealed, so there is no edge
-//! policy to choose. It is how a seamless texture is repositioned without a
-//! seam, and how a scrolling background is made out of one still.
-
 use crate::fx::{
     cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
 };
 use lumit_fx_macros::Effect;
 
-/// Offset's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "offset",
@@ -18,7 +10,6 @@ use lumit_fx_macros::Effect;
     version = 1,
     category = Distortion,
     cost = Cheap,
-    // The wrap means any output pixel can come from any input pixel.
     roi = FullFrame,
     premultiplied = true,
     // The matte scales the displacement, inside the kernel (the owner's rule
@@ -36,12 +27,9 @@ pub struct Offset {
     #[slider(label = "Shift x", min = -3840.0, max = 3840.0, default = 0.0, unit = Px)]
     pub shift_x: f32,
 
-    /// px@comp: how far the picture moves down; see
-    /// [`shift_x`](Self::shift_x).
     #[slider(label = "Shift y", min = -2160.0, max = 2160.0, default = 0.0, unit = Px)]
     pub shift_y: f32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -66,7 +54,6 @@ impl Offset {
     }
 }
 
-/// Offset's behaviour.
 pub struct OffsetDef;
 
 impl EffectDef for OffsetDef {

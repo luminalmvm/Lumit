@@ -32,9 +32,6 @@ use lumit_aplug::{
 };
 use lumit_aplug_testplug::{Kind, CRASH_ON_BLOCK_ENV, HANG_ENV, PARAM_GAIN};
 
-// ------------------------------------------------------------ the scaffold --
-
-/// The test plugin's file name on this platform.
 fn cdylib_name() -> &'static str {
     if cfg!(target_os = "windows") {
         "lumit_aplug_testplug.dll"
@@ -45,7 +42,6 @@ fn cdylib_name() -> &'static str {
     }
 }
 
-/// Where Cargo put the test plugin, if it built it.
 fn built_cdylib() -> Option<PathBuf> {
     let name = cdylib_name();
     let exe = std::env::current_exe().ok()?;
@@ -99,15 +95,12 @@ fn a_vst3_bundle_in(root: &Path) -> Option<PathBuf> {
     Some(bundle)
 }
 
-/// The name a person would see, as the fixture spells it.
 fn name_of(kind: Kind) -> String {
     String::from_utf8_lossy(kind.name())
         .trim_end_matches('\0')
         .to_string()
 }
 
-/// A broker over the test **bundle**, with whatever environment the case wants
-/// the plugin to misbehave under.
 fn a_vst3_broker(root: &Path, env: &[(&str, &str)]) -> Option<Broker> {
     let bundle = a_vst3_bundle_in(root)?;
     let mut config = BrokerConfig::new(bundle);
@@ -124,7 +117,6 @@ fn a_vst3_broker(root: &Path, env: &[(&str, &str)]) -> Option<Broker> {
     Some(broker)
 }
 
-/// Say why a test did nothing, by name, so a skip is never silent.
 fn skipped(test: &str) {
     eprintln!(
         "{test}: skipped — {} was not found in the target directory. \
@@ -133,15 +125,12 @@ fn skipped(test: &str) {
     );
 }
 
-/// One of the eight, by kind.
 fn plugin_id(kind: Kind) -> String {
     String::from_utf8_lossy(kind.id())
         .trim_end_matches('\0')
         .to_string()
 }
 
-/// A broker over the test module, with whatever environment the case wants the
-/// plugin to misbehave under.
 fn a_broker(root: &Path, env: &[(&str, &str)], disabled: &DisableList) -> Option<Broker> {
     let module = a_module_in(root)?;
     let mut config = BrokerConfig::new(module);
@@ -163,7 +152,6 @@ fn a_broker(root: &Path, env: &[(&str, &str)], disabled: &DisableList) -> Option
     Some(broker)
 }
 
-/// The gain plugin, brought up in a broker, with its multiplier set.
 fn a_gain_host(broker: Arc<Mutex<Broker>>, gain: f64) -> BrokerHost {
     let setup = InstanceSetup {
         plugin_id: plugin_id(Kind::Gain),
@@ -173,13 +161,10 @@ fn a_gain_host(broker: Arc<Mutex<Broker>>, gain: f64) -> BrokerHost {
     BrokerHost::open(broker, &setup).expect("an instance")
 }
 
-/// A block every sample of which is the same value, so a test can say what came
-/// back in one number.
 fn a_flat_block(value: f32) -> Vec<f32> {
     vec![value; INTERLEAVED_LEN]
 }
 
-/// One batch of `count` identical blocks, and the answers to it.
 fn a_batch(host: &BrokerHost, count: usize, value: f32) -> (Vec<f32>, Vec<Option<String>>) {
     let input = a_flat_block(value);
     let jobs: Vec<BlockJob<'_>> = (0..count)
@@ -194,12 +179,9 @@ fn a_batch(host: &BrokerHost, count: usize, value: f32) -> (Vec<f32>, Vec<Option
     (outputs, failures)
 }
 
-/// The first sample of block `index` in a batch's output.
 fn first_of(outputs: &[f32], index: usize) -> f32 {
     outputs[index * INTERLEAVED_LEN]
 }
-
-// ---------------------------------------------------------------- the tests --
 
 #[test]
 fn a_brokered_scan_offers_the_effects_without_opening_a_module_here() {
@@ -258,7 +240,6 @@ fn a_verified_module_is_offered_from_the_cache_without_a_broker() {
         &mut |_, _, _| {},
     );
 
-    // A broker that cannot start: only the cache can answer now.
     let nowhere = root.path().join("no-broker-here");
     let outcome = scan_brokered_reporting(
         &paths,
@@ -276,7 +257,6 @@ fn a_verified_module_is_offered_from_the_cache_without_a_broker() {
         outcome.skipped
     );
 
-    // An update in place is a different file, so the cache no longer answers.
     let later = std::time::SystemTime::now() + Duration::from_secs(60);
     let touched = std::fs::File::options()
         .write(true)
@@ -317,9 +297,6 @@ fn a_crash_costs_exactly_one_block_and_the_blocks_after_it_flow() {
     let Ok(root) = tempfile::tempdir() else {
         return;
     };
-    // Block nought plays, block one aborts the process. After the restart the
-    // plugin is a fresh copy counting from nought again, so block two is its
-    // block nought and plays.
     let Some(broker) = a_broker(
         root.path(),
         &[(CRASH_ON_BLOCK_ENV, "1")],
@@ -372,8 +349,6 @@ fn a_hang_trips_the_deadline_and_the_third_strike_disables_the_plugin() {
     };
     let host = BrokerHost::open(Arc::clone(&broker), &setup).expect("an instance");
 
-    // Three blocks, none of which ever comes back: the deadline fires each
-    // time and each is a strike.
     let (_, failures) = a_batch(&host, 3, 0.75);
     assert!(
         failures.iter().all(Option::is_some),
@@ -390,7 +365,6 @@ fn a_hang_trips_the_deadline_and_the_third_strike_disables_the_plugin() {
         held.restarts()
     };
 
-    // And it stays away: the next batch does not start another process.
     let (_, again) = a_batch(&host, 2, 0.75);
     assert!(again.iter().all(Option::is_some));
     assert_eq!(
@@ -416,7 +390,6 @@ fn a_plugin_switched_off_mid_session_is_skipped_on_the_next_batch() {
     assert!(failures.iter().all(Option::is_none), "{failures:?}");
     assert!((first_of(&outputs, 0) - 0.5).abs() < 1e-6);
 
-    // The user unticks it while the mix is playing.
     disabled
         .lock()
         .expect("the list")
@@ -444,14 +417,6 @@ fn a_plugin_switched_off_mid_session_is_skipped_on_the_next_batch() {
     );
 }
 
-/// **The mix seam over a VST3 broker that really dies** (the CLAP twin of
-/// this test is above, and the assertions are deliberately identical).
-///
-/// A dying plugin costs one block, shipped dry, whichever standard it spoke.
-/// That is the whole claim AP4 makes about isolation, and it is a claim about
-/// code that was written once: the broker, the ring, the deadline, the strike
-/// count and `run_chain` are all AP2's and AP3's, and none of them changed to
-/// let a VST3 plugin die in them.
 #[test]
 fn a_dying_vst3_broker_costs_the_chain_one_dry_block_and_no_hole() {
     let Ok(root) = tempfile::tempdir() else {
@@ -482,7 +447,6 @@ fn a_dying_vst3_broker_costs_the_chain_one_dry_block_and_no_hole() {
         values: Vec::new(),
     };
 
-    // Three blocks of a steady tone; the plugin aborts during the second.
     let frames = 3 * lumit_core::fx::audio_chain::AUDIO_BLOCK_FRAMES;
     let input = vec![0.25f32; frames * lumit_core::fx::audio_chain::AUDIO_CHANNELS];
     let out = lumit_core::fx::audio_chain::run_chain(&[link], &input);
@@ -551,7 +515,6 @@ fn sound_and_state_cross_the_boundary_intact() {
     let expected: Vec<f32> = input.iter().map(|sample| sample * 0.5).collect();
     assert_eq!(output, expected);
 
-    // A blob handed over comes back byte for byte, having crossed twice.
     let blob: Vec<u8> = (0u8..=255).cycle().take(4096).collect();
     let echo = InstanceSetup {
         plugin_id: plugin_id(Kind::StateEcho),
@@ -570,9 +533,6 @@ fn a_handle_the_broker_never_minted_is_answered_rather_than_followed() {
     let Some(mut broker) = a_broker(root.path(), &[], &nothing_disabled()) else {
         return skipped("a_handle_the_broker_never_minted_is_answered_rather_than_followed");
     };
-    // A plain counter — which is what a host that did not mint handles would
-    // send — names nothing, and saying so costs the plugin a strike rather than
-    // the session.
     match broker.save(7) {
         Err(BrokerError::Refused(why)) => assert!(why.contains("no such plugin instance"), "{why}"),
         other => panic!("a forged handle must be refused: {other:?}"),
@@ -580,8 +540,6 @@ fn a_handle_the_broker_never_minted_is_answered_rather_than_followed() {
     assert_eq!(broker.strikes(), 1);
     assert!(!broker.is_disabled());
 
-    // And the broker is still there afterwards: a bad handle is an answer, not
-    // a fault in the process.
     let created = broker
         .create_instance(Bring {
             plugin_id: plugin_id(Kind::Gain),

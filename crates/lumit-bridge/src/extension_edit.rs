@@ -32,8 +32,6 @@ fn refused(command: &str) -> bool {
     REFUSED.contains(&command) || command.starts_with("export.")
 }
 
-/// The commands an extension that may edit can run. `import` is whether it
-/// may import as well.
 pub(crate) fn commands(import: bool) -> Vec<BridgeExtensionCommand> {
     COMMANDS
         .iter()
@@ -53,8 +51,6 @@ fn refusal(code: &str, message: impl Into<String>) -> BridgeExtensionEdit {
     }
 }
 
-/// Run `command` with `args`, JSON text, on `project` for the extension
-/// called `extension`. `import` is whether it may import files.
 pub(crate) fn run(
     project: &ProjectReference,
     extension: &str,
@@ -123,8 +119,6 @@ pub(crate) fn run(
     }
 }
 
-/// Whether answer field `key` holds a file's path, such as a footage item's
-/// `path`.
 fn names_a_file(key: &str) -> bool {
     key.ends_with("path") || key.ends_with("paths") || key == "file" || key == "out"
 }
@@ -166,7 +160,6 @@ fn scrub(answer: &mut Value) {
     }
 }
 
-/// Lumit's host as an extension has it: the project and nothing around it.
 struct EditHost<'a> {
     app: AppHost<'a>,
     import: bool,
@@ -229,8 +222,6 @@ mod tests {
     use super::*;
     use crate::api::state::LumitBridgeState;
 
-    // An extension never saves the project or exports it, by the command's
-    // name or through the host behind it, and never learns where a file is.
     #[test]
     #[allow(clippy::expect_used, clippy::panic)]
     fn an_extension_cannot_save_export_or_see_paths() {

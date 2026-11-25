@@ -1,12 +1,5 @@
-//! Tests for an expression the engine refuses.
-
 use super::*;
 
-/// A refused expression pushes nothing, and the parameter it is wired to
-/// resolves to its own stored value — the same calm the walk gives a
-/// bypassed driver or a spent budget. Every kind of refusal: a runtime
-/// error, a syntax error, a name not in scope, a result of the wrong
-/// shape, an infinity, and no text at all.
 #[test]
 fn a_refused_expression_pushes_nothing_and_the_wired_parameter_keeps_its_keyframes() {
     let mut blur = inst("blur");

@@ -45,7 +45,6 @@
 use lumit_core::retime::VectorDetail;
 use lumit_flow::FlowSettings;
 
-/// Peak signal-to-noise ratio over RGB bytes, in decibels.
 fn psnr(a: &[u8], b: &[u8]) -> f64 {
     let mut sum = 0f64;
     let mut n = 0usize;
@@ -130,7 +129,6 @@ fn ssim_blocks(a: &[u8], b: &[u8], w: usize, h: usize) -> (f64, f64) {
     (total / count as f64, p5)
 }
 
-/// Crossfade, the Blend baseline.
 fn blend(a: &[u8], b: &[u8]) -> Vec<u8> {
     a.iter()
         .zip(b)

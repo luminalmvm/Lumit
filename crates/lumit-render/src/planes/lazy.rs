@@ -34,7 +34,6 @@ impl PlaneModel for Lazy {
         }
     }
 
-    // A model that won't open has made nothing, and `run` says why.
     fn made_with(&self) -> String {
         self.open()
             .as_ref()

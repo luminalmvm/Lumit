@@ -11,7 +11,6 @@ use std::sync::Arc;
 
 use super::{Onsets, FPS, HOP, RATE};
 
-/// 32 ms at 8 kHz.
 const WINDOW: usize = 256;
 const BANDS: usize = 16;
 const LOW_HZ: f32 = 100.0;
@@ -29,9 +28,7 @@ const SILENCE: f32 = 1e-5;
 pub(crate) struct Builder {
     fft: Arc<dyn RealToComplex<f32>>,
     hann: Vec<f32>,
-    /// Which band each FFT bin adds to.
     band: Vec<Option<usize>>,
-    /// Sound not yet stepped past.
     pending: Vec<f32>,
     input: Vec<f32>,
     spectrum: Vec<Complex<f32>>,
@@ -72,7 +69,6 @@ impl Builder {
         }
     }
 
-    /// Add the next stretch of sound.
     pub(crate) fn push(&mut self, mono: &[f32]) {
         self.samples += mono.len() as u64;
         let mut pending = std::mem::take(&mut self.pending);
@@ -115,7 +111,6 @@ impl Builder {
         self.level.push(total);
     }
 
-    /// The finished [`Onsets`].
     pub(crate) fn finish(self) -> Onsets {
         // Take out the slow part, so a sound getting louder overall is not
         // read as one long onset, then scale to a unit spread over 10 s.
@@ -172,7 +167,6 @@ fn moving(x: &[f32], half: usize) -> Vec<f64> {
         .collect()
 }
 
-/// The file's 95th percentile frame energy: its loud part.
 fn loud(level: &[f32]) -> f32 {
     if level.is_empty() {
         return 0.0;

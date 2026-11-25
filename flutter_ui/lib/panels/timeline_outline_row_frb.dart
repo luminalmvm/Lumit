@@ -1,8 +1,3 @@
-// One row of the Timeline's outline: the number, the label dot, the name, the
-// switches, the blend mode and the parent picker.
-//
-// Split out of timeline_panel_frb.dart. It is one class doing one job — a row
-// — and stayed whole.
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
@@ -51,8 +46,6 @@ const double _labelDotSize = 6;
 /// crosses takes too.
 typedef _SwitchPaint = ({String cell, UuidValue from, bool to});
 
-/// The bar at a row's leading edge that says someone else in a shared project
-/// has the layer selected.
 const double _othersBarWidth = 2;
 
 /// The inline rename a row turns into while it is being named: `Enter`
@@ -92,8 +85,6 @@ class OutlineRow extends StatefulWidget {
   /// a caption layer's captions. Null on a layer with no such view.
   final VoidCallback? onOpenSequence;
 
-  /// Every layer in the comp, for the parent picker's menu — from the same
-  /// read model, so offering them costs nothing.
   final List<BridgeLayerEntry> layers;
 
   /// Every layer in the comp, hidden rows included, which is what the parent
@@ -104,8 +95,6 @@ class OutlineRow extends StatefulWidget {
   /// isn't [index], which is only the row's slot among the rows on screen.
   final int number;
 
-  /// The column groups in their current order, and their current widths
-  /// (docs/07 §4.2).
   final List<TimelineGroup> groupOrder;
   final Map<TimelineGroup, double> widths;
 
@@ -121,8 +110,6 @@ class OutlineRow extends StatefulWidget {
   /// selection, so the two states read apart at a glance.
   final bool highlighted;
 
-  /// The colour of each other person in a shared project who has this layer
-  /// selected, drawn as a bar at the row's leading edge.
   final List<int> others;
   final bool open;
 
@@ -226,7 +213,6 @@ VoidCallback? layerRowRename(UuidValue layer) {
 }
 
 class _OutlineRowState extends State<OutlineRow> {
-  /// The inline rename, entered with `Enter` on the selected layer.
   TextEditingController? _rename;
 
   /// How far this row has been dragged since the lift, in pixels down.
@@ -330,8 +316,6 @@ class _OutlineRowState extends State<OutlineRow> {
         () => _rename = TextEditingController(text: widget.entry.info.name));
   }
 
-  /// Escape: shut the editor and rename nothing. Shares the closing
-  /// half of [_commitRename] — the write is the only difference between them.
   void _cancelRename() {
     if (!mounted || _rename == null) return;
     setState(() {
@@ -458,7 +442,6 @@ class _OutlineRowState extends State<OutlineRow> {
     });
   }
 
-  /// Mark [child]'s clicks as the control's own, not the row's.
   Widget _ownClick(Widget child) =>
       Listener(onPointerDown: (_) => _claimed = true, child: child);
 
@@ -497,9 +480,6 @@ class _OutlineRowState extends State<OutlineRow> {
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Row(
               children: [
-                // The cells come in the four column groups, in whatever order
-                // the header's drag has put them and at whatever width its seams
-                // have been dragged to (docs/07 §4.2).
                 for (var i = 0; i < widget.groupOrder.length; i++) ...[
                   if (i > 0) rowSeam,
                   SizedBox(
@@ -636,8 +616,6 @@ class _OutlineRowState extends State<OutlineRow> {
     );
   }
 
-  /// Group 2: twirl · layer number · label dot · name (the mockup's own order;
-  /// the dot and the number used to stand the other way round).
   Widget _identityCells(
       BuildContext context, LumitTheme t, BridgeLayerInfo info) {
     final id = layer.internallayerId.toString();
@@ -721,8 +699,6 @@ class _OutlineRowState extends State<OutlineRow> {
                     widget.layerDrag.lift(index,
                         carries: ThemeScope.of(context).motion.carries);
                   },
-                  // The row in hand follows the pointer, and the slot it is
-                  // aiming at is worked out from the same travel.
                   onVerticalDragUpdate: (d) {
                     _dragTravel += d.delta.dy;
                     widget.layerDrag.carry(widget.blockHeights, _dragTravel);
@@ -990,7 +966,6 @@ class _OutlineRowState extends State<OutlineRow> {
                   textAlign: TextAlign.left,
                   overflow: TextOverflow.ellipsis),
             ),
-            // Marked while its visibility, words or footage is a control.
             ControlMark.layer(layer.internallayerId),
             // Its eye does nothing, as a light reads it whether it's on or off.
             if (feedsEnvironment(widget.stack, layer.internallayerId)) ...[
@@ -1004,8 +979,6 @@ class _OutlineRowState extends State<OutlineRow> {
     );
   }
 
-  /// The layer's label colour (TL2): a chip that opens the eight-colour
-  /// picker. The palette is the theme's own, so no colour literal lives here.
   Widget _labelSwatch(
       BuildContext context, LumitTheme t, String id, int label) {
     return GestureDetector(
@@ -1086,11 +1059,6 @@ class _OutlineRowState extends State<OutlineRow> {
     bool on,
     BridgeLayerSwitch? which, {
     LumitIcon? offIcon,
-    // Lumit's own set, where the caller passes a glyph directly:
-    // [mark]/[offMark] take the place of [icon]/[offIcon] and are drawn from
-    // lumit_icons.dart. The [LumitIcon] pair stays for the cells not yet
-    // ported — it resolves to the same set, so this is which name the
-    // caller uses, not which family draws.
     String? mark,
     String? offMark,
     String? tip,
@@ -1217,8 +1185,6 @@ class _OutlineRowState extends State<OutlineRow> {
       },
       builder: (context, _, __) => Draggable<_SwitchPaint>(
         data: (cell: name, from: me, to: !on),
-        // Nothing rides under the pointer: this drag paints, it carries
-        // nothing anywhere.
         feedback: const SizedBox.shrink(),
         // The undo group is what makes the whole stroke one step. No cell
         // accepts the drop, so the drag always ends as cancelled, and that
@@ -1276,7 +1242,6 @@ class _OutlineRowState extends State<OutlineRow> {
       width: width,
       child: BareDropdown<int>(
         key: ValueKey<String>('tl-blend-${layer.internallayerId}'),
-        // In an outline row, so the mockup's 16/10 face (§12A.6).
         dense: true,
         value: value,
         options: [for (var i = 0; i < modes.length; i++) i],

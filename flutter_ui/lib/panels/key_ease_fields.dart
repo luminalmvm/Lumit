@@ -56,8 +56,6 @@ class KeyEaseClaim {
   int get hashCode => Object.hash(channelId, index, frame, unit, ease);
 }
 
-/// Open the ease fields on one key as a small box beside [position], writing
-/// each change through [onApply] as it is made - the readout pill's box.
 Future<void> showKeyEasePopover({
   required BuildContext context,
   required Offset position,
@@ -167,7 +165,6 @@ class _KeyEaseFieldsState extends State<KeyEaseFields> {
         : KeyEase(inInfluence: percent / 100));
   }
 
-  /// A speed or influence moving in its well, before it is written.
   void _showSpeed(bool isOut, double v) {
     if (isOut) {
       _outSpeed = v;
@@ -259,5 +256,4 @@ class _KeyEaseFieldsState extends State<KeyEaseFields> {
   }
 }
 
-/// Room for "Influence out" in the body face.
 const double _labelWidth = 78;

@@ -34,7 +34,6 @@ use crate::fx::{
 use crate::model::EffectInstance;
 use lumit_fx_macros::Effect;
 
-/// The `extra` key the shader block lives under (§1.2).
 pub const EXTRA_KEY: &str = "shader";
 
 /// What a fresh Custom shader opens with (owner, 2026-09-01, relaying a
@@ -78,14 +77,12 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
 /// [`crate::fx::shader::program_by_hash`]).
 pub const HASH_HI: ParamId = ParamId::new("derived.shader_hash_hi");
 
-/// The bottom half of it.
 pub const HASH_LO: ParamId = ParamId::new("derived.shader_hash_lo");
 
 /// Raster pixels per px@comp at this frame — the header's `comp_scale`, which
 /// nothing downstream of the resolve otherwise knows.
 pub const COMP_SCALE: ParamId = ParamId::new("derived.shader_comp_scale");
 
-/// The Custom shader's declared controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "custom_shader",
@@ -146,8 +143,6 @@ pub fn source_of(inst: &EffectInstance) -> Option<&str> {
     inst.extra.get(EXTRA_KEY)?.get("source")?.as_str()
 }
 
-/// The stored inner graph, or `None` for a hand-written (or empty) shader
-/// (§4.1, CS4).
 #[must_use]
 pub fn graph_of(inst: &EffectInstance) -> Option<&serde_json::Value> {
     inst.extra.get(EXTRA_KEY)?.get("graph")
@@ -218,7 +213,6 @@ impl EffectDef for CustomShaderDef {
     }
 }
 
-/// The source hash a resolved bag carries, or `None` for an op with no shader.
 #[must_use]
 pub fn hash_in(p: crate::fx::params::Params<'_>) -> Option<u64> {
     let hi = p.int(HASH_HI, 0) as u32;

@@ -16,7 +16,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Broadcast safe's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "broadcast_safe",
@@ -64,7 +63,6 @@ pub struct BroadcastSafe {
     )]
     pub maximum_signal: f32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -101,7 +99,6 @@ impl BroadcastSafe {
     }
 }
 
-/// Broadcast safe's behaviour.
 pub struct BroadcastSafeDef;
 
 impl EffectDef for BroadcastSafeDef {

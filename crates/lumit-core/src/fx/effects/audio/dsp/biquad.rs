@@ -94,7 +94,6 @@ impl Coeffs {
         )
     }
 
-    /// The low pass turned over: the EQ's first band by default.
     #[must_use]
     pub fn high_pass(freq_hz: f64, q: f64, rate: f64) -> Self {
         let (cos_w0, _, alpha) = shape(freq_hz, q, rate);
@@ -117,8 +116,6 @@ impl Coeffs {
         Self::normalised(alpha, 0.0, -alpha, 1.0 + alpha, -2.0 * cos_w0, 1.0 - alpha)
     }
 
-    /// A hole at the centre: mains hum, and the one band an EQ needs that a
-    /// bell cannot make.
     #[must_use]
     pub fn notch(freq_hz: f64, q: f64, rate: f64) -> Self {
         let (cos_w0, _, alpha) = shape(freq_hz, q, rate);
@@ -204,7 +201,6 @@ pub struct Biquad {
 }
 
 impl Biquad {
-    /// A section holding these coefficients, starting from silence.
     #[must_use]
     pub fn new(coeffs: Coeffs) -> Self {
         Self {
@@ -220,13 +216,11 @@ impl Biquad {
         self.coeffs = coeffs;
     }
 
-    /// Forget the state. The next sample starts from silence.
     pub fn reset(&mut self) {
         self.s1 = 0.0;
         self.s2 = 0.0;
     }
 
-    /// One sample.
     pub fn process(&mut self, sample: f32) -> f32 {
         let x = f64::from(sample);
         let y = self.coeffs.b0 * x + self.s1;
@@ -236,8 +230,6 @@ impl Biquad {
     }
 }
 
-/// `N` sections in series, one channel's worth: the parametric EQ's five
-/// bands, the graphic EQ's ten, the phaser's all-passes.
 #[derive(Clone, Copy, Debug)]
 pub struct Cascade<const N: usize> {
     sections: [Biquad; N],
@@ -250,7 +242,6 @@ impl<const N: usize> Default for Cascade<N> {
 }
 
 impl<const N: usize> Cascade<N> {
-    /// A cascade passing sound through unchanged.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -266,14 +257,12 @@ impl<const N: usize> Cascade<N> {
         }
     }
 
-    /// Forget every section's state.
     pub fn reset(&mut self) {
         for section in &mut self.sections {
             section.reset();
         }
     }
 
-    /// One sample through all `N` sections in order.
     pub fn process(&mut self, sample: f32) -> f32 {
         let mut y = sample;
         for section in &mut self.sections {
@@ -317,21 +306,17 @@ mod tests {
 
     #[test]
     fn the_other_shapes_land_where_the_cookbook_says() {
-        // A band pass is unity at its centre, whatever the Q.
         let db = measured_db(Coeffs::band_pass(1_000.0, 3.0, RATE), 1_000.0);
         assert!(db.abs() < 0.1, "band pass centre measured {db}");
 
-        // A notch is a hole.
         let gain = measured_gain(Coeffs::notch(1_000.0, 1.0, RATE), 1_000.0);
         assert!(gain < 1e-3, "notch centre measured {gain}");
 
-        // An all-pass moves phase and nothing else.
         for freq in [200.0, 1_000.0, 6_000.0] {
             let db = measured_db(Coeffs::all_pass(1_000.0, 1.0, RATE), freq);
             assert!(db.abs() < 0.1, "all-pass at {freq} measured {db}");
         }
 
-        // The shelves reach their gain well past the corner.
         let db = measured_db(Coeffs::low_shelf(2_000.0, FRAC_1_SQRT_2, 6.0, RATE), 100.0);
         assert!((db - 6.0).abs() < 0.2, "low shelf measured {db}");
         let db = measured_db(

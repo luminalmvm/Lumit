@@ -66,31 +66,20 @@ use clap_sys::process::{clap_process, clap_process_status, CLAP_PROCESS_CONTINUE
 use clap_sys::stream::{clap_istream, clap_ostream};
 use clap_sys::version::CLAP_VERSION;
 
-// ------------------------------------------------------------- the eight --
-
 /// Which of the eight this plugin is. The order is the factory's order, so an
 /// index and a kind are the same fact.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
-    /// Multiplies both channels by its Gain parameter. The sample-exact one.
     Gain,
-    /// Writes every call the host made into [`LumitTestPlugLog`]'s log.
     Reporter,
-    /// Reports [`latency`] samples of latency and nothing else.
     Latency,
-    /// Aborts the process during block [`CRASH_ON_BLOCK_ENV`], if it is set.
     Crash,
-    /// Never returns from `process`, if [`HANG_ENV`] is set.
     Hang,
-    /// Hands back, byte for byte, whatever state it was loaded with.
     StateEcho,
-    /// Writes every parameter event it was sent into the parameter log.
     ParamEcho,
-    /// An instrument: no audio input at all, which the host must refuse.
     Instrument,
 }
 
-/// The eight, in factory order.
 pub const KINDS: [Kind; 8] = [
     Kind::Gain,
     Kind::Reporter,
@@ -118,7 +107,6 @@ impl Kind {
         }
     }
 
-    /// The name a person would see.
     #[must_use]
     pub const fn name(self) -> &'static [u8] {
         match self {
@@ -187,7 +175,6 @@ impl Kind {
         }
     }
 
-    /// Whether this kind has an audio input. Only the instrument has none.
     #[must_use]
     pub(crate) const fn has_input(self) -> bool {
         !matches!(self, Kind::Instrument)
@@ -204,10 +191,7 @@ pub(crate) struct ParamDecl {
     pub(crate) flags: u32,
 }
 
-/// [`Kind::Gain`]'s only parameter — the multiplier.
 pub const PARAM_GAIN: clap_id = 1;
-/// [`Kind::Reporter`]'s only parameter, so a `params.flush` has something to
-/// flush.
 pub const PARAM_KNOB: clap_id = 5;
 /// [`Kind::ParamEcho`]'s automatable parameter — the one that gets a row.
 pub const PARAM_SWEEP: clap_id = 7;
@@ -216,27 +200,18 @@ pub const PARAM_SECRET: clap_id = 8;
 /// [`Kind::ParamEcho`]'s read-only parameter, which must get **no** row.
 pub const PARAM_FIXED: clap_id = 9;
 
-/// How many samples of latency [`Kind::Latency`] claims, unless
-/// [`LATENCY_ENV`] says otherwise.
 pub const LATENCY_DEFAULT: u32 = 64;
 
-/// Overrides [`LATENCY_DEFAULT`].
 pub const LATENCY_ENV: &str = "LUMIT_APLUG_LATENCY";
 
 /// Abort the process partway through this block index (nought-based). Unset
 /// leaves [`Kind::Crash`] a passthrough.
 pub const CRASH_ON_BLOCK_ENV: &str = "LUMIT_APLUG_CRASH_ON_BLOCK";
 
-/// Any value makes [`Kind::Hang`] never return from `process`. Unset leaves it
-/// a passthrough.
 pub const HANG_ENV: &str = "LUMIT_APLUG_HANG";
 
-/// What [`Kind::StateEcho`] saves when it has never been loaded.
 pub const STATE_ECHO_DEFAULT: &[u8] = b"lumit-aplug-testplug/state";
 
-// -------------------------------------------------------------- the logs --
-
-/// Every call the host made to [`Kind::Reporter`], in order.
 static LOG: Mutex<Vec<&'static str>> = Mutex::new(Vec::new());
 
 /// Every parameter event [`Kind::ParamEcho`] was sent, as
@@ -253,14 +228,12 @@ pub(crate) fn note(kind: Kind, what: &'static str) {
     }
 }
 
-/// Record one parameter event the echo personality was sent.
 pub(crate) fn param_log(line: String) {
     if let Ok(mut log) = PARAM_LOG.lock() {
         log.push(line);
     }
 }
 
-/// Empty both logs. Call before the run whose calls are being counted.
 #[no_mangle]
 pub extern "C" fn LumitTestPlugResetLog() {
     if let Ok(mut log) = LOG.lock() {
@@ -314,9 +287,6 @@ unsafe fn copy_out(text: &str, buf: *mut c_char, cap: u32) -> u32 {
     wanted
 }
 
-// -------------------------------------------------------------- the entry --
-
-/// The one symbol a `.clap` file must export.
 #[no_mangle]
 pub static clap_entry: clap_plugin_entry = clap_plugin_entry {
     clap_version: CLAP_VERSION,
@@ -433,9 +403,6 @@ unsafe extern "C" fn factory_create(
     unsafe { std::ptr::addr_of!((*raw).vtable) }
 }
 
-// ------------------------------------------------------------- the plugin --
-
-/// One live copy of one of the eight.
 struct Plug {
     /// What the host holds. Its `plugin_data` points back at this struct.
     vtable: clap_plugin,
@@ -443,13 +410,9 @@ struct Plug {
     /// The host, kept so a plugin *could* call back. None of the eight does.
     #[allow(dead_code)]
     host: *const clap_host,
-    /// [`Kind::Gain`]'s multiplier, and every other kind's ignored number.
     gain: f64,
-    /// What [`Kind::StateEcho`] was handed, byte for byte.
     state: Vec<u8>,
-    /// Whether `state` came from a load rather than from nothing.
     loaded: bool,
-    /// How many blocks have been processed since activation.
     block: u32,
     activated: bool,
 }
@@ -647,7 +610,6 @@ impl Plug {
         }
     }
 
-    /// One parameter, set.
     fn apply(&mut self, id: clap_id, value: f64) {
         if id == PARAM_GAIN {
             self.gain = value;
@@ -706,8 +668,6 @@ impl Plug {
         }
     }
 }
-
-// --------------------------------------------------------- the extensions --
 
 unsafe extern "C" fn plugin_get_extension(
     plugin: *const clap_plugin,
@@ -991,7 +951,6 @@ unsafe extern "C" fn render_set(
     true
 }
 
-/// Copy `text` into a fixed C char array, nul-terminated and never overrun.
 fn fill(dst: &mut [c_char], text: &[u8]) {
     for (slot, byte) in dst.iter_mut().zip(text.iter()) {
         *slot = *byte as c_char;

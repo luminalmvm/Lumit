@@ -12,7 +12,6 @@ import 'package:lumit_flutter/panels/timeline_metrics_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:uuid/uuid.dart';
 
-/// Four stand-in layer ids, in stack order.
 final _layers = [
   for (var i = 1; i <= 4; i++)
     UuidValue.fromString('0000000$i-0000-4000-8000-000000000000'),

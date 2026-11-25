@@ -36,8 +36,6 @@ class _RecordingCanvas implements Canvas {
   void noSuchMethod(Invocation invocation) {}
 }
 
-/// The composition's own placement: the picture sits at 100,50 on screen and is
-/// drawn at half size, so a comp pixel is half a screen pixel.
 ShapeSpace compSpace() => ShapeSpace(
       toScreen: (x, y) => Offset(100 + x * 0.5, 50 + y * 0.5),
       ofScreen: (at) => ((at.dx - 100) / 0.5, (at.dy - 50) / 0.5),
@@ -74,9 +72,6 @@ void main() {
       painter(from: const Offset(120, 70), to: const Offset(200, 150))
           .paint(canvas, const Size(400, 300));
 
-      // The drag ran 120,70 → 200,150 on screen. The space above puts the
-      // picture at 100,50 at half size, so the shape must come back to the
-      // same screen rectangle it was dragged out in.
       final box = canvas.paths.first.path.getBounds();
       expect(box.left, closeTo(120, 1));
       expect(box.top, closeTo(70, 1));

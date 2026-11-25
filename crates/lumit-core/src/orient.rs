@@ -33,7 +33,6 @@ impl Orient {
     }
 }
 
-/// Set a layer's Orient, handing back the op that puts it back.
 pub(crate) fn set(
     doc: &mut Document,
     comp: Uuid,
@@ -127,8 +126,6 @@ fn is_eye(layer: &Layer) -> bool {
     )
 }
 
-/// `layer`'s own placement at layer time `lt` with Along path in it, each
-/// property read by `read`.
 #[must_use]
 pub fn placed_at(layer: &Layer, lt: f64, flat: bool, read: &dyn Fn(&Property) -> f64) -> Placement {
     let tr = &layer.transform;
@@ -188,7 +185,6 @@ fn facing(
     ))
 }
 
-/// Turn `p` to face the camera, for a layer set to Towards camera.
 pub fn face_camera(
     comp: &Composition,
     layer: &Layer,
@@ -227,7 +223,6 @@ pub enum Turn {
     Rows(Mat3),
 }
 
-/// See [`Turn`]. `None` when there is no turn.
 #[must_use]
 pub fn turn_at(
     comp: &Composition,
@@ -284,8 +279,6 @@ mod tests {
         assert!((a - b).abs() < 1e-6, "{a} is not {b}");
     }
 
-    /// The file a layer is written to is the same bytes with Orient off, and
-    /// one from before it reads as off, so an old project draws as it did.
     #[test]
     fn off_is_what_every_old_file_was() {
         let tr = TransformGroup::default();
@@ -300,8 +293,6 @@ mod tests {
         assert_eq!(p.rotation_deg, (0.0, 0.0, 0.0));
     }
 
-    /// The tangent of a path, with the layer's own Rotation on top, at the
-    /// frame asked for, and parked ends pointing the way the layer went.
     #[test]
     fn a_flat_layer_turns_along_its_path() {
         let mut tr = TransformGroup {
@@ -319,8 +310,6 @@ mod tests {
         close(flat_turn(&tr, 1.0).abs(), 180.0);
     }
 
-    /// Moving in the flat, a 3D layer turns as a 2D one does, and moving along
-    /// z its x axis lies along z.
     #[test]
     fn a_3d_layer_lays_its_x_axis_along_its_path() {
         let turned = |d| camera::rotation(camera::oriented(along(d), (0.0, 0.0, 0.0), false));

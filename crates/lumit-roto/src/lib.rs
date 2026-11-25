@@ -103,12 +103,8 @@ pub mod warp;
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests;
 
-/// Everything this crate refuses, each a named error and never a fault
-/// (14-ENGINEERING-RULES §4).
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum RotoError {
-    /// A frame size that cannot describe a picture, or one whose pixel count
-    /// does not fit in a `usize`.
     #[error("frame size {width}×{height} is not a picture")]
     BadSize { width: u32, height: u32 },
     /// A borrowed plane whose length disagrees with the frame size it was
@@ -120,7 +116,6 @@ pub enum RotoError {
         want: usize,
         got: usize,
     },
-    /// Two planes handed to the same call describe different pictures.
     #[error("planes disagree: {a_width}×{a_height} against {b_width}×{b_height}")]
     SizeMismatch {
         a_width: u32,
@@ -182,7 +177,6 @@ pub struct FrameRgb<'a> {
 }
 
 impl<'a> FrameRgb<'a> {
-    /// Borrow a plane, checking it against the size it claims.
     pub fn new(rgb: &'a [f32], width: u32, height: u32) -> Result<Self, RotoError> {
         let want = pixel_count(width, height)?
             .checked_mul(3)
@@ -218,8 +212,6 @@ impl<'a> FrameRgb<'a> {
     }
 }
 
-/// `width × height` as a `usize`, or a typed error — the one place this crate
-/// multiplies a frame size.
 pub(crate) fn pixel_count(width: u32, height: u32) -> Result<usize, RotoError> {
     if width == 0 || height == 0 {
         return Err(RotoError::BadSize { width, height });
@@ -229,7 +221,6 @@ pub(crate) fn pixel_count(width: u32, height: u32) -> Result<usize, RotoError> {
         .ok_or(RotoError::BadSize { width, height })
 }
 
-/// Check a borrowed plane of `per_pixel` values against a frame size.
 pub(crate) fn check_plane(
     len: usize,
     per_pixel: usize,

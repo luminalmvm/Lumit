@@ -56,7 +56,6 @@ const LOOKAHEAD_MS: f64 = 5.0;
 const RELEASE_MS: f64 = 100.0;
 const TRUE_PEAK_OFF: f64 = 0.0;
 
-/// The Limiter's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "audio_limiter",
@@ -97,7 +96,6 @@ impl EffectDef for AudioLimiterDef {
         &<AudioLimiter as EffectMetadata>::SCHEMA
     }
 
-    /// It processes sound and touches no pixel, so the render path skips it.
     fn is_image_op(&self) -> bool {
         false
     }
@@ -113,7 +111,6 @@ impl EffectDef for AudioLimiterDef {
     }
 }
 
-/// One open limiter.
 struct Limiter {
     /// Frames of lookahead: how long the gain has to arrive, and how long it
     /// is barred from rising after any reduction.
@@ -127,18 +124,15 @@ struct Limiter {
     state: Mutex<State>,
 }
 
-/// Everything the block loop carries from one block to the next.
 struct State {
     rate: f64,
     left: DelayLine,
     right: DelayLine,
-    /// One oversampler a channel, present only when true peak is on.
     up: Option<[Oversample4x; 2]>,
     drive: Smoother,
     /// The gain the release is climbing back from. It never rises while the
     /// hold runs, which is what makes the ceiling a promise.
     floor: f64,
-    /// The gain applied to the sample going out now.
     gain: f64,
     /// Frames left of the bar on rising.
     hold: u32,
@@ -266,7 +260,6 @@ mod tests {
 
     const RATE: u32 = 48_000;
 
-    /// A stereo tone, the right channel a little quieter than the left.
     fn tone(frames: usize, freq: f64, amp: f32) -> Vec<f32> {
         (0..frames)
             .flat_map(|n| {
@@ -282,7 +275,6 @@ mod tests {
             .unwrap()
     }
 
-    /// Every whole block of `input`, from block `first`, through `p`.
     fn run(
         p: &dyn AudioProcessor,
         input: &[f32],
@@ -332,7 +324,6 @@ mod tests {
         assert_eq!(bits(&whole), bits(&halves));
     }
 
-    /// **Plan 3**: nothing comes out above the ceiling, true peak on or off.
     #[test]
     fn nothing_comes_out_above_the_ceiling() {
         let ceiling = gain_of_db(-6.0);

@@ -26,35 +26,25 @@ use crate::{error::MlError, session::Held};
 
 /// How loosely each attempt is written. Zero is always the most likely piece.
 const TEMPERATURES: [f32; 6] = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0];
-/// More squashable than this and the text is a loop.
 const COMPRESSION_LIMIT: f32 = 2.4;
-/// Less sure than this on average and the text is doubtful.
 const LOGPROB_LIMIT: f32 = -1.0;
-/// Surer than this that there is no speech, and doubtful, and the window is
-/// silence.
 const NO_SPEECH_LIMIT: f32 = 0.6;
 /// The most pieces one window may write: half the decoder's reach.
 const MOST: usize = 224;
 
-/// One window's words, as pieces.
 #[derive(Debug, Clone)]
 pub struct Decoded {
     /// The text pieces, without the ending.
     pub tokens: Vec<u32>,
-    /// How likely the model thought each piece was.
     pub probabilities: Vec<f32>,
     /// The mean log probability, the ending included.
     pub logprob: f32,
-    /// How sure the model was that the window holds no speech.
     pub no_speech: f32,
-    /// How well the text squashes.
     pub compression: f32,
-    /// Whether the guard had to stop a repeating run.
     pub looped: bool,
 }
 
 impl Decoded {
-    /// Whether openai's rules would write this window again.
     fn doubtful(&self) -> bool {
         self.looped || self.compression > COMPRESSION_LIMIT || self.logprob < LOGPROB_LIMIT
     }
@@ -115,7 +105,6 @@ pub fn decode(
     Ok(best)
 }
 
-/// One attempt at one temperature.
 fn once(
     model: &mut Whisper,
     hidden: &Held,
@@ -209,7 +198,6 @@ fn probability(scores: &[f32], id: usize) -> f32 {
         .map_or(0.0, |s| (s - top).exp() / spread.max(f32::MIN_POSITIVE))
 }
 
-/// One draw from the allowed pieces at `temperature`.
 fn sample(
     scores: &[f32],
     temperature: f32,

@@ -6,10 +6,8 @@
 //! the three colour lanes and whatever rides in the fourth go through together,
 //! as they do on the card.
 
-/// The B3-spline taps, `[1, 4, 6, 4, 1] / 16`.
 pub const TAPS: [f32; 5] = [1.0 / 16.0, 4.0 / 16.0, 6.0 / 16.0, 4.0 / 16.0, 1.0 / 16.0];
 
-/// How many bands the transform splits a picture into.
 pub const LEVELS: usize = 4;
 
 /// An index reflected back inside `0..n` at either edge, as the kernels read.
@@ -53,20 +51,16 @@ pub fn smooth<const LANES: usize>(src: &[f32], w: u32, h: u32, dil: i32, across:
     out
 }
 
-/// The next level down from `src` (four lanes): across, then down, at
-/// dilation `dil`.
 #[must_use]
 pub fn level(src: &[f32], w: u32, h: u32, dil: i32) -> Vec<f32> {
     level_of::<4>(src, w, h, dil)
 }
 
-/// [`level`] over `LANES` lanes a pixel.
 #[must_use]
 pub fn level_of<const LANES: usize>(src: &[f32], w: u32, h: u32, dil: i32) -> Vec<f32> {
     smooth::<LANES>(&smooth::<LANES>(src, w, h, dil, true), w, h, dil, false)
 }
 
-/// The dilation of band `b` (0 for the finest).
 #[must_use]
 pub fn dilation(b: usize) -> i32 {
     1 << b

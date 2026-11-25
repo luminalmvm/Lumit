@@ -31,16 +31,11 @@ use std::sync::Arc;
 /// [`crate::export::ExportEvent`] has, since the interface waits on both the
 /// same way.
 pub enum ProxyEvent {
-    Progress {
-        frame: usize,
-        total: usize,
-    },
-    /// The finished file, ready to be attached to the item.
+    Progress { frame: usize, total: usize },
     Done(PathBuf),
     Failed(String),
 }
 
-/// A running MAKE-PROXY job.
 pub struct ProxyHandle {
     pub events: Receiver<ProxyEvent>,
     cancel: Arc<AtomicBool>,
@@ -288,8 +283,6 @@ mod tests {
         );
     }
 
-    /// Cancelling stops the transcode where it stands, and reports no error —
-    /// a job that was asked to stop did not fail.
     #[test]
     fn a_cancelled_transcode_stops_and_is_not_an_error() {
         let dir = tempfile::tempdir().unwrap();

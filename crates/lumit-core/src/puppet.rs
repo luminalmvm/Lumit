@@ -64,18 +64,14 @@ const SIMPLIFY_TOLERANCE: f64 = 1.25;
 /// cap is its budget.
 pub const VERTEX_CAP: usize = 1500;
 
-/// How many times the area bound may double before a build is refused.
 const MAX_COARSEN_STEPS: u32 = 5;
 
-/// Soft weight of a pin's own position constraint (docs/impl/puppet.md §2.2).
 const PIN_WEIGHT: f64 = 1000.0;
 
 /// Soft weight of a bend pin's rotation targets, before falloff. Below
 /// [`PIN_WEIGHT`] on purpose: a position pin inside a bend region must win the
 /// argument.
 const BEND_WEIGHT: f64 = 100.0;
-
-// --- The mesh ---------------------------------------------------------------
 
 /// A puppet mesh: vertices in layer pixels at natural size, and the triangles
 /// over them. Never stored in a project file — it is rebuilt from the layer's
@@ -90,16 +86,15 @@ pub struct PuppetMesh {
     pub hash: [u8; 32],
 }
 
-/// Why a mesh could not be built. Every one of these is a value, not a panic
-/// (docs/14 §4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MeshError {
-    /// Nothing at or above [`COVERAGE_ALPHA`] anywhere in the layer.
     Empty,
     /// Even at the coarsest auto-coarsened density the mesh is over
     /// [`VERTEX_CAP`]. Carries the vertex count that lost, so the refusal can
     /// name a density.
-    TooDense { vertices: usize },
+    TooDense {
+        vertices: usize,
+    },
     /// The simplified contours still intersect at Douglas–Peucker tolerance 0,
     /// which should be impossible for level-set contours. Kept as a value so a
     /// surprise is a refusal rather than a crash.
@@ -304,9 +299,6 @@ fn expanded_coverage(alpha: &[u8], w: usize, h: usize, expansion: f64) -> Option
     })
 }
 
-// --- Marching squares -------------------------------------------------------
-
-/// Which of a cell's four edges a segment end sits on.
 #[derive(Clone, Copy)]
 enum Side {
     Top,
@@ -388,7 +380,6 @@ fn contours(cov: &Coverage) -> Vec<Vec<[f64; 2]>> {
         }
     }
 
-    // Where each edge's crossing sits, interpolated along the edge.
     let point = |e: usize| -> [f64; 2] {
         let cross = |a: f64, b: f64| {
             let d = b - a;
@@ -462,8 +453,6 @@ fn contours(cov: &Coverage) -> Vec<Vec<[f64; 2]>> {
     out
 }
 
-// --- Simplification ---------------------------------------------------------
-
 fn simplify_all(raw: &[Vec<[f64; 2]>], tolerance: f64, density: f64) -> Vec<Vec<[f64; 2]>> {
     raw.iter()
         .filter_map(|c| {
@@ -500,7 +489,6 @@ fn simplify_closed(pts: &[[f64; 2]], tolerance: f64) -> Vec<[f64; 2]> {
     if let Some(k) = keep.get_mut(split) {
         *k = true;
     }
-    // Two chains: 0..=split, and split..=len (wrapping back to 0).
     dp(pts, 0, split, tolerance, &mut keep);
     dp(pts, split, pts.len(), tolerance, &mut keep);
     pts.iter()
@@ -580,12 +568,8 @@ fn collapse(pts: &[[f64; 2]], min: f64) -> Vec<[f64; 2]> {
     out
 }
 
-// --- Triangulation ----------------------------------------------------------
-
 type Cdt = ConstrainedDelaunayTriangulation<Point2<f64>>;
 
-/// What a triangulation pass hands back: the kept vertices and the triangles
-/// over them, already densely re-indexed.
 type Meshed = (Vec<[f64; 2]>, Vec<[u32; 3]>);
 
 /// Constrained Delaunay plus quality refinement, then the outside thrown away
@@ -757,15 +741,6 @@ fn barycentric(a: [f64; 2], b: [f64; 2], c: [f64; 2], p: [f64; 2]) -> Option<[f6
     Some([l0, l1, 1.0 - l0 - l1])
 }
 
-// ponytail: dense Cholesky, O((2n)³) at (re)factorisation — a sparse
-// factorisation (the matrices are mesh-Laplacian sparse) is the upgrade when
-// capped-out meshes make pin placement feel sticky. Observable trigger:
-// factorisation time > 250 ms in the PU1 bench at default density, or users
-// hitting the 1500-vertex cap in anger.
-
-// --- The deformer -----------------------------------------------------------
-
-/// The four pin kinds (docs/07-UI-SPEC.md §1.7).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PuppetPinKind {
     Position,
@@ -797,7 +772,6 @@ pub struct SolvePin {
 }
 
 impl SolvePin {
-    /// A plain position pin at `p`, at rest.
     pub fn position(id: Uuid, p: [f64; 2]) -> SolvePin {
         SolvePin {
             id,
@@ -811,8 +785,6 @@ impl SolvePin {
         }
     }
 }
-
-// --- What the document stores (docs/impl/puppet.md §4) ----------------------
 
 /// Default target triangle edge, px at natural size.
 pub const DEFAULT_DENSITY: f64 = 24.0;
@@ -856,13 +828,11 @@ pub struct PuppetBlock {
     pub expansion: f64,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pins: Vec<PuppetPin>,
-    /// Unknown fields from newer Lumit versions (docs/10 §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 impl PuppetBlock {
-    /// An empty block whose mesh will be taken at `reference_time`.
     #[must_use]
     pub fn new(reference_time: Rational) -> PuppetBlock {
         PuppetBlock {
@@ -896,8 +866,6 @@ impl PuppetBlock {
     }
 }
 
-/// One pin. Every animatable field is an ordinary [`Property`] — the same
-/// stopwatch, lanes and diamonds as everything else.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PuppetPin {
     pub id: Uuid,
@@ -940,8 +908,6 @@ pub struct PuppetPin {
 }
 
 impl PuppetPin {
-    /// A pin of `kind` at `(x, y)` layer px, with every other value at its
-    /// default.
     #[must_use]
     pub fn new(kind: PuppetPinKind, name: impl Into<String>, x: f64, y: f64) -> PuppetPin {
         PuppetPin {
@@ -959,7 +925,6 @@ impl PuppetPin {
     }
 }
 
-/// What the solve produced.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PuppetSolution {
     /// Deformed vertex positions, layer px, one per mesh vertex.
@@ -973,7 +938,6 @@ pub struct PuppetSolution {
     pub identity: bool,
 }
 
-/// One soft constraint row: a barycentric point pulled towards a target.
 #[derive(Clone)]
 struct Row {
     verts: [u32; 3],
@@ -984,10 +948,12 @@ struct Row {
 
 #[derive(Clone, Copy)]
 enum Target {
-    /// The pin's own animated position.
     Pin(usize),
     /// A bend pin's rotation target: `now + s·R(θ)·offset`.
-    Bend { pin: usize, offset: [f64; 2] },
+    Bend {
+        pin: usize,
+        offset: [f64; 2],
+    },
 }
 
 /// The factored systems for one (mesh, pin structure) pair. Everything here
@@ -998,7 +964,6 @@ pub struct Factorisation {
     /// Mesh vertex → index into the solved systems, or `usize::MAX` for a
     /// vertex whose component has too few constraints to solve.
     slot: Vec<usize>,
-    /// System index → mesh vertex.
     back: Vec<usize>,
     /// Mesh vertex → the component's single pin delta source, when that
     /// component carries exactly one constrained point.
@@ -1011,7 +976,6 @@ pub struct Factorisation {
     key: [u8; 32],
 }
 
-/// Connected components of the mesh, by union-find over triangle edges.
 fn components(n: usize, triangles: &[[u32; 3]]) -> Vec<usize> {
     let mut parent: Vec<usize> = (0..n).collect();
     fn find(parent: &mut [usize], mut i: usize) -> usize {
@@ -1097,13 +1061,11 @@ fn factor_key(mesh: &PuppetMesh, pins: &[SolvePin]) -> [u8; 32] {
     *hasher.finalize().as_bytes()
 }
 
-/// Assemble and factor the two systems for this mesh and pin structure.
 pub fn factorise(mesh: &PuppetMesh, pins: &[SolvePin]) -> Factorisation {
     let n = mesh.vertices.len();
     let key = factor_key(mesh, pins);
     let weights = starch_weights(mesh, pins);
 
-    // Bind every constraining pin, and collect its rows.
     let mut rows: Vec<Row> = Vec::new();
     let mut inert: Vec<Uuid> = Vec::new();
     for (i, pin) in pins.iter().enumerate() {
@@ -1191,9 +1153,7 @@ pub fn factorise(mesh: &PuppetMesh, pins: &[SolvePin]) -> Factorisation {
         };
     }
 
-    // Step 1 — the similarity system, over 2m coordinates.
     let mut g = Dense::zero(2 * m);
-    // Step 2 — the two decoupled m×m systems share one matrix.
     let mut a = Dense::zero(m);
     for (t, tri) in mesh.triangles.iter().enumerate() {
         let Some(rest) = tri_positions(mesh, tri) else {
@@ -1245,8 +1205,6 @@ pub fn factorise(mesh: &PuppetMesh, pins: &[SolvePin]) -> Factorisation {
                     (2 * i2 + 1, 1.0),
                 ],
             );
-            // Step 2's edge row: one per triangle edge, the same matrix for
-            // both coordinates.
             accumulate(&mut a, wt, &[(i0, -1.0), (i1, 1.0)]);
         }
     }
@@ -1279,7 +1237,6 @@ pub fn factorise(mesh: &PuppetMesh, pins: &[SolvePin]) -> Factorisation {
     }
 }
 
-/// `M += w · cᵀc` for a sparse row `c`.
 fn accumulate(m: &mut Dense, w: f64, c: &[(usize, f64)]) {
     for &(i, ci) in c {
         for &(j, cj) in c {
@@ -1288,8 +1245,6 @@ fn accumulate(m: &mut Dense, w: f64, c: &[(usize, f64)]) {
     }
 }
 
-/// A constraint row's three system columns, or `None` when any of its vertices
-/// is not in the solved set.
 fn row_slots(slot: &[usize], row: &Row) -> Option<[usize; 3]> {
     let mut out = [0usize; 3];
     for (o, v) in out.iter_mut().zip(row.verts) {
@@ -1338,7 +1293,6 @@ fn overlap_depth(mesh: &PuppetMesh, pins: &[SolvePin]) -> Vec<f64> {
         .collect()
 }
 
-/// Is every constraining pin exactly where it started, with no bend?
 fn all_at_rest(pins: &[SolvePin]) -> bool {
     pins.iter().all(|p| match p.kind {
         PuppetPinKind::Position => p.now == p.rest,
@@ -1347,8 +1301,6 @@ fn all_at_rest(pins: &[SolvePin]) -> bool {
     })
 }
 
-/// Deform the mesh so the pins land where they are asked to, using the
-/// factorisation for this mesh and pin structure.
 pub fn solve(mesh: &PuppetMesh, pins: &[SolvePin], f: &Factorisation) -> PuppetSolution {
     let rest = mesh.vertices.clone();
     let depth = overlap_depth(mesh, pins);
@@ -1412,8 +1364,6 @@ pub fn solve(mesh: &PuppetMesh, pins: &[SolvePin], f: &Factorisation) -> PuppetS
     }
     let v1 = cholesky_solve(l1, &b1);
 
-    // Step 2 — divide the scale back out of each triangle and re-solve, x and
-    // y decoupled. This is what stops limbs inflating as they bend.
     let mut bx = vec![0.0f64; m];
     let mut by = vec![0.0f64; m];
     for (t, tri) in mesh.triangles.iter().enumerate() {
@@ -1497,7 +1447,6 @@ pub fn solve(mesh: &PuppetMesh, pins: &[SolvePin], f: &Factorisation) -> PuppetS
     }
 }
 
-/// The rest position of a constraint row's point.
 fn point_of(verts: &[[f64; 2]], row: &Row) -> [f64; 2] {
     let mut p = [0.0f64; 2];
     for (k, &v) in row.verts.iter().enumerate() {
@@ -1569,8 +1518,6 @@ fn fallback(
     }
 }
 
-// --- The warp ---------------------------------------------------------------
-
 /// Redraw `rgba` through the deformed mesh: each triangle carries its patch of
 /// pixels to wherever the solve put it (docs/impl/puppet.md §3).
 ///
@@ -1589,8 +1536,6 @@ pub fn apply_puppet(
     apply_puppet_as::<Rgba8>(rgba, w, h, natural_w, natural_h, mesh, solution);
 }
 
-/// [`apply_puppet`] for a scene-linear float raster
-/// (`lumit_media::decode::PixelFormat::LinearF32`), sixteen bytes a pixel.
 pub fn apply_puppet_f32(
     rgba: &mut [u8],
     w: u32,
@@ -1603,7 +1548,6 @@ pub fn apply_puppet_f32(
     apply_puppet_as::<LinearF32>(rgba, w, h, natural_w, natural_h, mesh, solution);
 }
 
-/// The warp itself, over whichever raster [`Raster`] describes.
 fn apply_puppet_as<R: Raster>(
     rgba: &mut [u8],
     w: u32,
@@ -1726,14 +1670,10 @@ fn apply_puppet_as<R: Raster>(
 /// only part that does, so the warp is written once and this says whether it
 /// is moving bytes or floats about.
 pub trait Raster {
-    /// Bytes one pixel occupies.
     const BYTES: usize;
-    /// Bilinearly sample `src` at continuous `(x, y)` and write the texel into
-    /// `out`, which is [`Self::BYTES`] long.
     fn sample_into(src: &[u8], w: usize, h: usize, x: f64, y: f64, out: &mut [u8]);
 }
 
-/// The eight-bit raster every layer but a float source carries.
 pub struct Rgba8;
 
 impl Raster for Rgba8 {
@@ -1782,8 +1722,6 @@ fn sample_rgba(src: &[u8], w: usize, h: usize, x: f64, y: f64) -> [u8; 4] {
     let (x0, y0) = (fx.floor() as usize, fy.floor() as usize);
     let (x1, y1) = ((x0 + 1).min(w - 1), (y0 + 1).min(h - 1));
     let (tx, ty) = (fx - x0 as f64, fy - y0 as f64);
-    // The four texels' offsets, once for all four channels: the same sixteen
-    // multiplies a channel used to redo.
     let (i00, i10) = ((y0 * w + x0) * 4, (y0 * w + x1) * 4);
     let (i01, i11) = ((y1 * w + x0) * 4, (y1 * w + x1) * 4);
     let mut out = [0u8; 4];
@@ -1795,8 +1733,6 @@ fn sample_rgba(src: &[u8], w: usize, h: usize, x: f64, y: f64) -> [u8; 4] {
     }
     out
 }
-
-// --- Caches -----------------------------------------------------------------
 
 /// How many meshes and factorisations are held. Small on purpose: the cost of a
 /// miss is a rebuild, and the cost of a hit that never comes is memory.
@@ -1816,8 +1752,6 @@ impl PuppetCache {
         PuppetCache::default()
     }
 
-    /// The mesh for this alpha, density and expansion — built on the first ask
-    /// and remembered after.
     pub fn mesh(
         &self,
         alpha: &[u8],
@@ -1842,7 +1776,6 @@ impl PuppetCache {
         Ok(built)
     }
 
-    /// The factored systems for this mesh and pin structure.
     pub fn factorisation(&self, mesh: &PuppetMesh, pins: &[SolvePin]) -> Arc<Factorisation> {
         let key = factor_key(mesh, pins);
         {
@@ -1866,7 +1799,6 @@ impl PuppetCache {
 mod tests {
     use super::*;
 
-    /// A filled axis-aligned rectangle of alpha in a `w`×`h` bitmap.
     fn rect(w: usize, h: usize, x0: usize, y0: usize, x1: usize, y1: usize) -> Vec<u8> {
         let mut a = vec![0u8; w * h];
         for y in y0..y1 {
@@ -1887,9 +1819,6 @@ mod tests {
         solve(mesh, pins, &f)
     }
 
-    /// **3 — the weld test.** Two blobs with a gap between them must come out
-    /// as two mesh components, and a drag in one must not move the other by so
-    /// much as a bit.
     #[test]
     fn disjoint_blobs_are_never_welded() {
         let mut alpha = rect(160, 60, 10, 15, 60, 45);
@@ -1950,7 +1879,6 @@ mod tests {
         );
     }
 
-    /// **6 — a quarter turn comes out a quarter turn**, not a shear.
     #[test]
     fn a_rotated_pin_rotates_the_mesh() {
         let mesh = bar_mesh();
@@ -1975,8 +1903,6 @@ mod tests {
         }
     }
 
-    /// How far a triangle's deformation is from any similarity — the number
-    /// starch is supposed to push down.
     fn deviation(mesh: &PuppetMesh, out: &[[f64; 2]], mid: (f64, f64)) -> f64 {
         let mut total = 0.0;
         for tri in &mesh.triangles {
@@ -1990,7 +1916,6 @@ mod tests {
                 .map(|&v| out.get(v as usize).copied().unwrap_or([0.0; 2]))
                 .collect();
             let (cos, sin) = fitted_rotation(&rest, &now);
-            // Best uniform scale for that rotation, then the residual.
             let (mut num, mut den) = (0.0f64, 0.0f64);
             for k in 0..3 {
                 let (ex, ey) = (
@@ -2022,8 +1947,6 @@ mod tests {
         total
     }
 
-    /// **7 — starch stiffens.** The same bend, with a starch pin mid-bar, must
-    /// leave the middle measurably closer to rigid.
     #[test]
     fn starch_reduces_deformation_in_its_region() {
         let mesh = bar_mesh();
@@ -2053,16 +1976,12 @@ mod tests {
         assert!(b < a, "starch should stiffen the middle: {b} vs {a}");
     }
 
-    /// **8 — overlap decides the fold.** With the bar folded back over itself,
-    /// the pixel at the overlap belongs to whichever half is in front, and
-    /// swapping the amounts swaps the pixel.
     #[test]
     fn overlap_amount_decides_which_half_draws_in_front() {
         let (w, h) = (160usize, 40usize);
         let alpha = rect(w, h, 10, 12, 150, 28);
         let mesh = build_mesh(&alpha, w as u32, h as u32, 12.0, 0.0).unwrap();
 
-        // Left half red, right half blue, so the winning half is legible.
         let mut src = vec![0u8; w * h * 4];
         for y in 12..28 {
             for x in 10..150 {
@@ -2200,9 +2119,6 @@ mod tests {
         );
     }
 
-    /// **11 — the refusals are values.** A transparent layer, a click outside
-    /// the mesh, and a density no coarsening can afford each come back as an
-    /// answer rather than a crash.
     #[test]
     fn refusals_are_values_not_panics() {
         let empty = vec![0u8; 40 * 40];
@@ -2225,8 +2141,6 @@ mod tests {
         }
     }
 
-    /// The block survives a trip through the file, writes only what differs
-    /// from the defaults, and keeps a newer version's unknown fields.
     #[test]
     fn the_block_round_trips_and_keeps_what_it_does_not_understand() {
         let mut block = PuppetBlock::new(Rational::new(3, 2).unwrap());
@@ -2242,8 +2156,6 @@ mod tests {
         let back: PuppetBlock = serde_json::from_str(&text).unwrap();
         assert_eq!(back, block, "a puppet block is what it was written as");
 
-        // A still pin is a bare number, and the values nobody moved are absent
-        // altogether — the file-format rule every other animatable field keeps.
         let v: serde_json::Value = serde_json::from_str(&text).unwrap();
         assert_eq!(v["pins"][0]["x"], serde_json::json!(12.5));
         assert!(
@@ -2251,8 +2163,6 @@ mod tests {
             "an unmoved position pin writes no bend values: {text}"
         );
 
-        // A newer Lumit's field rides through untouched, and the defaults fill
-        // in for a block written before they existed.
         let older: PuppetBlock =
             serde_json::from_str(r#"{"reference_time":[0,1],"pins":[],"wobble":7}"#).unwrap();
         assert_eq!(older.density, DEFAULT_DENSITY);
@@ -2262,8 +2172,6 @@ mod tests {
         assert_eq!(again["wobble"], serde_json::json!(7));
     }
 
-    /// A pin's rest position is read at the reference time and its live one at
-    /// the frame — which is what makes a keyframed pin move at all.
     #[test]
     fn pins_rest_at_the_reference_time_and_move_at_the_frame() {
         let key = |t: i64, value: f64| crate::anim::Keyframe {
@@ -2290,7 +2198,6 @@ mod tests {
 mod float_raster_tests {
     use super::*;
 
-    /// A 2×2 float raster: `v` in every colour channel, `a` in alpha.
     fn plate(v: f32, a: f32) -> Vec<u8> {
         let mut out = Vec::new();
         for _ in 0..4 {

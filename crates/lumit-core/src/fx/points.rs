@@ -108,7 +108,6 @@ impl Default for Projection {
 }
 
 impl Projection {
-    /// The layer's own plane, unlooked-at: `z` changes nothing.
     pub const FLAT: Projection = Projection {
         m: [
             [1.0, 0.0, 0.0, 0.0],
@@ -117,7 +116,6 @@ impl Projection {
         ],
     };
 
-    /// Whether this is the identity: a 2D layer.
     #[must_use]
     pub fn is_flat(&self) -> bool {
         *self == Projection::FLAT
@@ -191,7 +189,6 @@ pub enum RenderMode {
 }
 
 impl RenderMode {
-    /// The Choice option labels, in code order.
     pub const OPTIONS: &'static [&'static str] = &["Disc", "Sprite", "Streak"];
 
     /// The mode for a stored Choice index; anything unknown is a Disc, the
@@ -206,13 +203,10 @@ impl RenderMode {
     }
 }
 
-/// When particles burst out beside the steady Emit rate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Burst {
-    /// The steady flow only.
     #[default]
     Off,
-    /// One burst on the layer's first frame.
     Once,
     /// One burst every Burst interval frames, counted from the first frame.
     Every,
@@ -221,7 +215,6 @@ pub enum Burst {
 }
 
 impl Burst {
-    /// The Choice option labels, in code order.
     pub const OPTIONS: &'static [&'static str] =
         &["Off", "Once at start", "Every N frames", "On trigger"];
 
@@ -237,21 +230,17 @@ impl Burst {
     }
 }
 
-/// What a particle does at the edge of the frame.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Edge {
-    /// Nothing: it carries on out of sight.
     #[default]
     None,
     /// It dies the first time it leaves the frame and its margin, and stays
     /// dead even if it would come back.
     Kill,
-    /// It comes back in on the opposite side.
     Wrap,
 }
 
 impl Edge {
-    /// The Choice option labels, in code order.
     pub const OPTIONS: &'static [&'static str] = &["None", "Kill", "Wrap"];
 
     /// The rule for a stored Choice index; anything unknown is None.
@@ -265,22 +254,18 @@ impl Edge {
     }
 }
 
-/// What a particle does when it hits a Collide with layer's shapes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Contact {
     /// It comes off the other way, keeping Bounciness of its speed.
     #[default]
     Bounce,
-    /// It carries on along the surface.
     Slide,
     /// It stays where it hit, and moves with the layer it hit.
     Stick,
-    /// It dies.
     Kill,
 }
 
 impl Contact {
-    /// The Choice option labels, in code order.
     pub const OPTIONS: &'static [&'static str] = &["Bounce", "Slide", "Stick", "Kill"];
 
     /// The response for a stored Choice index; anything unknown is Bounce.
@@ -307,19 +292,16 @@ const EDGE_SAMPLES: f32 = 64.0;
 /// went off on, from the layer's first frame, and the particle's place in it.
 pub const BURST_ID: u64 = 1 << 62;
 
-/// How many bits of a burst particle's index count its place in the burst.
 const BURST_SHIFT: u32 = 24;
 
 /// The most particles one burst may hold, so its places fit below the frame.
 pub const BURST_MAX: u32 = (1 << BURST_SHIFT) - 1;
 
-/// The birth index of the first particle of the burst on frame `f`.
 #[must_use]
 pub fn burst_base(f: i64) -> u64 {
     BURST_ID | ((f.max(0) as u64) << BURST_SHIFT)
 }
 
-/// How the stream is drawn: the Render group, reduced (particulate.md §2).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DrawStyle {
     pub mode: RenderMode,
@@ -333,11 +315,8 @@ pub struct DrawStyle {
     pub mix: f32,
 }
 
-/// What moves a particle along its Size, Opacity or Colour change: its age,
-/// its speed, or a number of its own.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Drive {
-    /// Normalised age, birth to death.
     #[default]
     Age,
     /// Speed, from the speed range's low end to its high end.
@@ -347,7 +326,6 @@ pub enum Drive {
 }
 
 impl Drive {
-    /// The Choice option labels, in code order.
     pub const OPTIONS: &'static [&'static str] = &["Age", "Speed", "Random"];
 
     /// The drive for a stored Choice index; anything unknown is Age.
@@ -384,7 +362,6 @@ pub struct ParticleLook {
     pub colour: [f32; 4],
     /// Scene-linear RGBA at death, blended to over normalised age.
     pub end_colour: [f32; 4],
-    /// Rotation, degrees.
     pub rotation_deg: f32,
     /// The per-particle spread of `rotation_deg`, **degrees**: each particle
     /// takes a uniform draw of `±rotation_jitter_deg/2` about it, from the seed
@@ -425,8 +402,6 @@ pub struct Forces {
     pub turbulence_speed: f32,
 }
 
-/// Everything the closed forms read, already reduced to plain numbers — the
-/// `packed` shape the registry's §2.4 convention asks of every effect.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PointsParams {
     pub emitter: Emitter,
@@ -443,7 +418,6 @@ pub struct PointsParams {
     /// with. The renderer and the driver walk fill it in with
     /// [`projected`](Self::projected).
     pub projection: Projection,
-    /// What a particle does at the edge of the frame.
     pub edge: Edge,
     /// How far past the frame's edge a particle may go before [`Edge`]
     /// acts, px.
@@ -456,14 +430,12 @@ pub struct PointsParams {
 }
 
 impl PointsParams {
-    /// The same parameters, seen through `projection`.
     #[must_use]
     pub fn projected(mut self, projection: Projection) -> Self {
         self.projection = projection;
         self
     }
 
-    /// The same parameters, with a frame of `w` × `h` px for the edge.
     #[must_use]
     pub fn framed(mut self, w: f32, h: f32) -> Self {
         self.frame = [w, h];
@@ -539,7 +511,6 @@ pub struct PointsStream {
     pub px_scale: f32,
 }
 
-/// One named column: a name, and one, two or four numbers for each point.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Named {
     pub name: String,
@@ -562,7 +533,6 @@ pub const NAMED_MAX: usize = 64;
 pub enum Column {
     /// The number each point carries, which is what an empty name means.
     Number,
-    /// A named column, by its place in the stream's list.
     Named(usize),
     /// The names starting with `@`, worked out from the point itself.
     Index,
@@ -576,7 +546,6 @@ pub enum Column {
     Size,
     Age,
     Picked,
-    /// A name nothing wrote.
     Nothing,
 }
 
@@ -674,7 +643,6 @@ impl PointsStream {
         }
     }
 
-    /// How many of this stream's pixels make one px@comp.
     #[must_use]
     pub fn units(&self) -> f32 {
         if self.px_scale > 0.0 {
@@ -732,8 +700,6 @@ impl PointsStream {
         Some((value, named.width))
     }
 
-    /// [`read`](Self::read) for one point by name. A walk over the points
-    /// finds the [`column`](Self::column) once instead.
     #[must_use]
     pub fn value(&self, name: &str, i: usize) -> Option<f32> {
         self.read(self.column(name), i)
@@ -768,8 +734,6 @@ impl PointsStream {
         }
     }
 
-    /// Every named column made as long as the stream, so the helpers that
-    /// drop or reorder points can treat it like any other.
     fn fill_named(&mut self) {
         let n = self.len();
         for column in &mut self.named {
@@ -796,21 +760,18 @@ impl PointsStream {
         self.index.get(i).copied().unwrap_or(i as f32)
     }
 
-    /// The stretch column, filled in for every point so it can be written.
     pub fn stretch_mut(&mut self) -> &mut Vec<[f32; 2]> {
         let n = self.len();
         self.stretch.resize(n, [1.0; 2]);
         &mut self.stretch
     }
 
-    /// The pick column, filled in for every point so it can be written.
     pub fn pick_mut(&mut self) -> &mut Vec<f32> {
         let n = self.len();
         self.pick.resize(n, 1.0);
         &mut self.pick
     }
 
-    /// The index column, filled in for every point so it can be written.
     pub fn index_mut(&mut self) -> &mut Vec<f32> {
         let n = self.len();
         for i in self.index.len()..n {
@@ -886,7 +847,6 @@ impl PointsStream {
         self.id.extend_from_slice(&other.id);
     }
 
-    /// How many particles are live this frame.
     #[must_use]
     pub fn len(&self) -> usize {
         self.id.len()
@@ -916,7 +876,6 @@ impl PointsStream {
             .map_or(0.0, |p| self.projection.apply(*p).1)
     }
 
-    /// Whether nothing is alive — an unwired or unborn stream.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.id.is_empty()
@@ -1024,8 +983,6 @@ impl PointsStream {
         }
     }
 
-    /// Keep the points `keep` answers true for, by index, in the order they
-    /// are in.
     pub fn retain(&mut self, keep: impl FnMut(usize) -> bool) {
         let flags: Vec<bool> = (0..self.len()).map(keep).collect();
         fn sift<T>(v: &mut Vec<T>, flags: &[bool]) {
@@ -1152,11 +1109,8 @@ pub struct Schedule {
     dt: f64,
     /// The first frame `counts` describes, counted from the layer's in point.
     first_frame: i64,
-    /// The birth index of the first particle born in that frame.
     first_birth: u64,
-    /// Births per frame, oldest first.
     counts: Vec<u32>,
-    /// Births in total, from the in point to the end of the last frame here.
     total: u64,
     /// Whether the walk reached the layer's in point, or started late because
     /// the layer's time was carried past [`MAX_SCAN_FRAMES`].
@@ -1231,14 +1185,11 @@ impl Schedule {
         sched
     }
 
-    /// Births from the layer's in point to the end of the scanned range — the
-    /// next birth index that would be handed out.
     #[must_use]
     pub fn total(&self) -> u64 {
         self.total
     }
 
-    /// The comp frame's length in seconds, as the scan was given it.
     #[must_use]
     pub fn dt(&self) -> f64 {
         self.dt
@@ -1279,8 +1230,6 @@ impl Schedule {
     /// number somebody can type into a control. It is a quadratic hiding behind
     /// two innocent-looking lines, which is where they usually are.
     pub fn trim_to_newest(&mut self, max: u64) {
-        // Walk forward once, adding up what would be dropped, and stop at the
-        // first frame that leaves the rest under the ceiling.
         let mut live = self.candidates();
         if live <= max {
             return;
@@ -1312,7 +1261,6 @@ impl Schedule {
         if drop_frames == 0 {
             return;
         }
-        // One shift for all of them rather than one per frame.
         self.counts.drain(..drop_frames);
         self.first_frame = self
             .first_frame
@@ -1380,21 +1328,16 @@ impl Schedule {
         }
     }
 
-    /// The bursts inside the recorded frames, oldest first: the frame each
-    /// went off on, from the layer's first frame, and how many it threw.
     #[must_use]
     pub fn bursts(&self) -> &[(i64, u32)] {
         &self.bursts
     }
 
-    /// The first frame [`counts`](Self::counts) describes, from the in point.
     #[must_use]
     pub fn first_frame(&self) -> i64 {
         self.first_frame
     }
 
-    /// The birth index of the first particle born in that frame — candidate
-    /// zero of this window.
     #[must_use]
     pub fn first_birth(&self) -> u64 {
         self.first_birth
@@ -1413,7 +1356,6 @@ impl Schedule {
         &self.counts
     }
 
-    /// How many births this window records: the candidate set's size.
     #[must_use]
     pub fn candidates(&self) -> u64 {
         self.counts
@@ -1442,10 +1384,7 @@ impl Schedule {
         bursts.chain(self.steady_newest_first())
     }
 
-    /// The steady flow's births, newest first.
     fn steady_newest_first(&self) -> impl Iterator<Item = (u64, f64)> + '_ {
-        // The running birth index of each recorded frame, so the reverse walk
-        // does not have to sum the prefix per frame.
         let mut starts: Vec<u64> = Vec::with_capacity(self.counts.len());
         let mut b = self.first_birth;
         for n in &self.counts {
@@ -1466,10 +1405,6 @@ impl Schedule {
     }
 }
 
-/// Where the points of a stream are, binned so a driver can ask
-/// whether a place is near one of them. Made once per per-point driver step
-/// ([`crate::fx::drivers::per_copy::drive_rows`]); Ring wave reads it
-/// to start its rings away from the points.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Cloud {
     cell: f32,
@@ -1503,7 +1438,6 @@ impl Cloud {
         )
     }
 
-    /// Whether any point is closer to `at` than `within` px.
     #[must_use]
     #[allow(clippy::cast_possible_truncation)]
     pub fn near(&self, at: [f32; 2], within: f32) -> bool {
@@ -1556,7 +1490,6 @@ impl PartialEq for LateDrive {
 /// passes its picture through, exactly as an empty polyline does.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct PointsSchedule {
-    /// The births this frame can still see.
     pub schedule: Schedule,
     /// Layer time in seconds, the moment the stream is evaluated at. The
     /// *sample* time for a sub-frame re-render, so accumulation motion blur
@@ -1568,21 +1501,6 @@ pub struct PointsSchedule {
     /// placement are not controls on this effect. `None` is a 2D layer, and is
     /// what every project saved before the axis existed answers.
     pub projection: Option<Projection>,
-    /// **The stream a wire brings in** (points-stream.md §3.3), in
-    /// px@comp, newest first: entry 0 is this frame, and entry *k* is the same
-    /// producer evaluated `k` steps into the past — which is how Trail looks
-    /// backwards without remembering anything. Empty for a producer,
-    /// and empty for a consumer with **nothing wired**, which is the documented
-    /// calm: the effect draws nothing and passes its picture on.
-    ///
-    /// It is filled on the host rather than on the card because that is the
-    /// shape the generators already established: the points a consumer
-    /// stamps are bit for bit the ones the closed forms evaluated, and the
-    /// driver walk reads the very same function. (ponytail: one host evaluation
-    /// per sample per frame, memoised per producer. points-stream.md §3.3
-    /// designs a GPU arena carriage for when a profile shows a real comp
-    /// spending it.) A producer whose points depend on a picture leaves this
-    /// empty and the walk fills it, see [`late`](Self::late).
     pub input: Vec<PointsStream>,
     /// Which effect in the layer's stack the wire came from, by index — folded
     /// into the frame key, and read for nothing else.
@@ -1630,15 +1548,11 @@ pub struct PointsSchedule {
     /// ([`stepped`]). The card draws these instead of working its own
     /// out from `schedule`. `None` everywhere else.
     pub stepped: Option<PointsStream>,
-    /// What a Particulate with Trails on draws its kept picture from. `None`
-    /// everywhere else.
     pub trails: Option<trails::Trails>,
     /// For a Clone deformer: the copies the Clone to points above stamped, as
     /// outlines, px@comp. Only the first Vector deformer under a Clone to
     /// points of Shape layers has them. Folded into the frame key.
     pub clone_shapes: Option<std::sync::Arc<crate::fx::effects::clone_deformer::CloneShapes>>,
-    /// For a Clone deformer: its Boolean layer's outline. Folded into the
-    /// frame key.
     pub boolean_shape: Option<std::sync::Arc<crate::fx::effects::clone_deformer::BooleanShape>>,
 }
 
@@ -1646,9 +1560,7 @@ pub struct PointsSchedule {
 /// line break is not one, and a space only when the effect asks for spaces.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TextGlyph {
-    /// Where its pen starts, on the baseline.
     pub origin: [f32; 2],
-    /// Where its pen ends, on the baseline.
     pub end: [f32; 2],
     /// From the baseline to the middle of the line's height. Straight up for
     /// a straight line, and turned with the curve for text on a path.
@@ -1673,7 +1585,6 @@ pub struct ScheduleCache {
 }
 
 impl ScheduleCache {
-    /// The schedule for `key`, scanning only when the key has changed.
     pub fn get_or_scan(&mut self, key: u64, scan: impl FnOnce() -> Schedule) -> &Schedule {
         if self.key != Some(key) {
             self.schedule = scan();
@@ -1698,7 +1609,6 @@ pub mod attr {
     /// rather than a reuse: every earlier draw keeps the number it always drew,
     /// so a project made before the axis existed is untouched.
     pub const EMIT_W: u32 = 8;
-    /// The elevation draw, out of the layer's plane.
     pub const DIRECTION_Z: u32 = 9;
     /// The stable draws a Random [`Drive`](super::Drive) reads, one each for
     /// size, opacity and colour so the three do not move together.
@@ -1712,8 +1622,6 @@ pub mod attr {
     pub const DENSITY_TRIES_BASE: u32 = 128;
 }
 
-/// How many places a particle is offered in the emitter before a dark
-/// Density layer leaves it unborn.
 pub const DENSITY_TRIES: u32 = 16;
 
 /// A picture births are weighted by: the brightness under a birth point is
@@ -1748,7 +1656,6 @@ impl Density<'_> {
 /// lattice, not a second one (particulate.md §3.2).
 const TURB_CHANNEL_X: u32 = 64;
 const TURB_CHANNEL_Y: u32 = 65;
-/// Turbulence's third lattice — a jitter that had x and y gains z.
 const TURB_CHANNEL_Z: u32 = 66;
 
 /// One per-particle draw in `[0, 1)`: `hash(seed, birth index, attribute)`.
@@ -1790,7 +1697,6 @@ pub fn jitter(base: f32, amount: f32, u: f32) -> f32 {
 /// `the_closed_forms_match_the_analytic_solutions` pins it.
 fn drag_terms(x: f32) -> (f32, f32) {
     if x < 0.1 {
-        // r = 1 − x/2 + x²/6 − x³/24, and s = (1 − r)/x term by term.
         let r = 1.0 - x * 0.5 + x * x / 6.0 - x * x * x / 24.0;
         let s = 0.5 - x / 6.0 + x * x / 24.0 - x * x * x / 120.0;
         (r, s)
@@ -1924,7 +1830,6 @@ fn drive_speed(speed: f32, range: [f32; 2]) -> f32 {
     }
 }
 
-/// Which way and how fast particle `b` leaves the emitter.
 pub fn launch(p: &PointsParams, b: u64) -> [f32; 3] {
     let e = &p.emitter;
     let dir = e.direction_deg.to_radians()
@@ -1941,8 +1846,6 @@ pub fn launch(p: &PointsParams, b: u64) -> [f32; 3] {
     [speed * cd * cz, speed * sd * cz, speed * sz]
 }
 
-/// How particle `b` looks `age` seconds into a life of `life`, going at
-/// `speed`: its size, its premultiplied colour and its rotation.
 fn look_of(p: &PointsParams, b: u64, age: f32, life: f32, speed: [f32; 3]) -> (f32, [f32; 4], f32) {
     let look = &p.particle;
     let u = (age / life).clamp(0.0, 1.0);
@@ -2086,7 +1989,6 @@ pub fn evaluate_dense(
         let p0 = match &density {
             None => p0,
             Some(d) => {
-                // The first try is the place it would have had anyway.
                 let mut kept = (draw(p.seed, b, attr::DENSITY) < d.at(p0[0], p0[1])).then_some(p0);
                 for k in 1..DENSITY_TRIES {
                     if kept.is_some() {
@@ -2298,8 +2200,6 @@ pub fn wants_schedule(sig: crate::fx::registry::Signature) -> bool {
         .any(|p| p.ty == crate::fx::schema::PortType::Points)
 }
 
-/// Whether an entry **reads** a points stream off a wire: the other
-/// half of the family, and the other reason to want a carriage.
 #[must_use]
 pub fn consumes_points(sig: crate::fx::registry::Signature) -> bool {
     sig.inputs()
@@ -2372,7 +2272,6 @@ pub fn layer_path(
     if target.id == owner.id || line.is_empty() {
         return line;
     }
-    // Where both layers sit in the comp's space, as Collide with reads it.
     let read = crate::expression::space::reader(context, comp.id, t);
     let world = |l: &crate::model::Layer| {
         crate::expression::space::space(&context.document, comp, l, t, &read).world
@@ -2496,8 +2395,6 @@ pub fn draw_stream_fit(
     fit: &SpriteFit,
 ) {
     stamp(rgba, w, h, s, tails, style, sprite, fit, &|dst, src| {
-        // Premultiplied `over`: the particle's own colour, and what was
-        // there kept by however much of the pixel it did not cover.
         let keep = 1.0 - src[3];
         for c in 0..4 {
             dst[c] = src[c] + dst[c] * keep;
@@ -2524,8 +2421,6 @@ pub fn draw_stream_blended(
     draw_stream_fit_blended(rgba, w, h, s, tails, style, sprite, &fit, blend);
 }
 
-/// [`draw_stream_blended`], with a say in how a sprite sits on its point.
-/// Clone to points' reference draw for Copy blend.
 #[allow(clippy::too_many_arguments)]
 pub fn draw_stream_fit_blended(
     rgba: &mut [f32],
@@ -2542,8 +2437,6 @@ pub fn draw_stream_fit_blended(
         draw_stream_fit(rgba, w, h, s, tails, style, sprite, fit);
         return;
     }
-    // ponytail: a frame-sized layer from the heap. This is the CPU oracle,
-    // which only the tests draw with; the card's pass takes its own.
     let mut layer = vec![0.0f32; rgba.len()];
     stamp(
         &mut layer,
@@ -2590,8 +2483,6 @@ pub fn blend_over(mode: u32, b: [f32; 4], s: [f32; 4]) -> [f32; 4] {
     o
 }
 
-/// The stamping behind both draws: each particle's coverage, oldest first,
-/// handed to `combine` pixel by pixel with what is there.
 #[allow(clippy::too_many_arguments)]
 fn stamp(
     rgba: &mut [f32],
@@ -2640,12 +2531,8 @@ fn stamp(
         let tail = tails.get(i).map_or(head, |t| s.projection.apply(*t).0);
         let (rot_s, rot_c) = s.rotation.get(i).copied().unwrap_or(0.0).sin_cos();
         let stretch = s.stretch_of(i);
-        // A stretched dot is an ellipse in the point's own turned frame. A
-        // capsule keeps its round ends.
         let oval = (stretch != [1.0; 2] && tail == head).then_some(stretch);
         let widest = stretch[0].max(stretch[1]);
-        // A turned stamp reaches as far as its furthest corner from the
-        // point, a capsule its radius past either end.
         let far = |k: usize| size * stretch[k] * fit.unit[k] * (0.5 + (fit.anchor[k] - 0.5).abs());
         let reach = if sprite.is_some() {
             far(0).hypot(far(1))
@@ -2671,8 +2558,6 @@ fn stamp(
                 let contrib = match &sprite {
                     Some(sp) => {
                         let (dx, dy) = (p[0] - head[0], p[1] - head[1]);
-                        // Into the sprite's own frame: undo the particle's turn,
-                        // then measure across a square of its size.
                         let lx = dx * rot_c + dy * rot_s;
                         let ly = -dx * rot_s + dy * rot_c;
                         let (u, v) = (
@@ -2693,13 +2578,10 @@ fn stamp(
                                 (v - 0.5).abs() * 100.0 * fit.unit[1] - (b[1] - r),
                             ];
                             if d[0] > 0.0 && d[1] > 0.0 {
-                                // Half a pixel of ramp, as a disc's edge has.
                                 let px = size * stretch[0].min(stretch[1]) / 100.0;
                                 cover = ((r - d[0].hypot(d[1])) * px + 0.5).clamp(0.0, 1.0);
                             }
                         }
-                        // More or less of the picture across the stamp. Past
-                        // the picture's own edge the stamp is empty.
                         let (tu, tv) = (
                             u + (u - 0.5) * (fit.uv[0] - 1.0),
                             v + (v - 0.5) * (fit.uv[1] - 1.0),
@@ -2708,9 +2590,6 @@ fn stamp(
                             continue;
                         }
                         let t = sprite_tap(sp, tu, tv);
-                        // Both are premultiplied, so the tint is the plain
-                        // product: the sprite's own colour times the
-                        // particle's, its alpha times the particle's.
                         [
                             t[0] * src[0] * cover,
                             t[1] * src[1] * cover,
@@ -2726,7 +2605,6 @@ fn stamp(
                                 let ly = (-dx * rot_s + dy * rot_c) / st[1];
                                 (radius - lx.hypot(ly)) * st[0].min(st[1]) / edge
                             }
-                            // A dot keeps its soft edge whatever its size.
                             None if tail == head => (radius - seg_distance(p, tail, head)) / edge,
                             None => capsule_cover(radius, edge, seg_distance(p, tail, head)),
                         }

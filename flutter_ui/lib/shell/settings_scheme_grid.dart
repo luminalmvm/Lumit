@@ -1,9 +1,3 @@
-// The colour schemes as a grid of small pictures, in three groups.
-//
-// A dropdown of thirty-odd names showed no scheme and asked for a choice by
-// name alone. Each tile here is the window drawn in that scheme under the
-// style in force, with the name under it, so a scheme can be picked by how it
-// looks. Dark, Light and the user's own each have a heading.
 
 import 'package:flutter/widgets.dart';
 
@@ -13,20 +7,15 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'first_run_frb.dart' show windowThumbnail;
 
-/// One tile's width, and the gap between tiles. Six fit across the window as it
-/// opens.
 const double _tileWidth = 96;
 const double _tileGap = 8;
 const double _tilePadding = 5;
 
-/// Built-in schemes already drawn under a style, so a rebuild of the page does
-/// not build thirty themes again.
 final Map<(LumitColorScheme, ThemeShape), LumitTheme> _built = {};
 
 LumitTheme _themeOf(LumitColorScheme scheme, ThemeShape shape) => _built
     .putIfAbsent((scheme, shape), () => LumitTheme.forScheme(scheme, shape));
 
-/// The grid. [workspace] is read for the schemes and the choice in force.
 class SchemeGrid extends StatelessWidget {
   final Workspace workspace;
   final ValueChanged<ThemeChoice> onChoose;
@@ -94,8 +83,6 @@ class SchemeGrid extends StatelessWidget {
   }
 }
 
-/// One scheme: its picture and its name. The one in force is edged in the
-/// accent.
 class _SchemeTile extends StatelessWidget {
   final String id;
   final String name;
