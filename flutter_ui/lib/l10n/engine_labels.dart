@@ -2685,7 +2685,8 @@ Map<String, String> get _built => {
       "Set the mask's feather": l10n.keySetTheMaskSFeather,
       "Invert the mask": l10n.keyInvertTheMask,
       "Show or hide the layer controls": l10n.keyShowOrHideTheLayerControls,
-      "Turn the picked path points": l10n.keyTurnThePickedPathPoints,
+      "Transform the picked path points":
+          l10n.keyTransformThePickedPathPoints,
       "Turn snapping to the grid on or off":
           l10n.keyTurnSnappingToTheGridOnOrOff,
       "Show or hide the Project panel": l10n.keyShowOrHideTheProjectPanel,

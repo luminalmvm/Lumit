@@ -657,4 +657,134 @@ void main() {
           isNull);
     });
   });
+
+  /// **The Ctrl+Shift+T box scales and moves the picked points too**: tight
+  /// round them in their layer's terms, a corner handle scales both ways about
+  /// the opposite corner, an edge only its own way, Alt about the middle and
+  /// Shift in proportion; two masks written in one go.
+  group('pointsScaled', () {
+    Set<String> keysOf(LayerBox b) => {
+          for (final m in b.masks)
+            for (var i = 0; i < m.vertices.length; i++)
+              maskPointKey(b.id, m.id, i),
+        };
+
+    test('the box sits tight round the points, turned with its layer', () {
+      final b = box(rotation: 30, scale: 50, masks: [squareMask()]);
+      final frame = pickedPointsFrame([b], keysOf(b), b, 0)!;
+      final at = [for (final p in pathPointsOf(b)) p.at];
+      for (var i = 0; i < 4; i++) {
+        expect((frame.corners[i] - at[i]).distance, lessThan(1e-6));
+      }
+      // Half scale: one layer unit is half a screen pixel, along the turn.
+      expect(frame.across.distance, closeTo(0.5, 1e-9));
+      expect(frame.across.direction, closeTo(math.pi / 6, 1e-9));
+      expect(frame.mirrored, isFalse);
+    });
+
+    test('a corner doubles the square about the opposite corner', () {
+      final b = box(masks: [squareMask()]);
+      final mask = b.masks.single;
+      final frame = pickedPointsFrame([b], keysOf(b), b, 0)!;
+      final before = [for (final p in pathPointsOf(b)) p.at];
+      // The bottom right corner (handle 2), pulled out by the square's side.
+      final map = pointsScaled(
+          frame, 2, before[2], before[2] + const Offset(60, 60));
+      final after = pathPointsOf(
+          box(masks: [maskEdited(b, mask, pointsMapped(b, keysOf(b), map))!]));
+      expect((after[0].at - before[0]).distance, lessThan(1e-6),
+          reason: 'the opposite corner stays');
+      expect((after[2].at - (before[2] + const Offset(60, 60))).distance,
+          lessThan(1e-6));
+      expect((after[1].at - (before[1] + const Offset(60, 0))).distance,
+          lessThan(1e-6));
+    });
+
+    test('an edge scales only its own way, Alt from the middle', () {
+      final b = box(masks: [squareMask()]);
+      final frame = pickedPointsFrame([b], keysOf(b), b, 0)!;
+      final c = frame.centre;
+      // The right edge (handle 5), 30 px further right, from the middle.
+      final map = pointsScaled(
+          frame, 5, frame.handles[5], frame.handles[5] + const Offset(30, 0),
+          fromCentre: true);
+      final p = frame.corners[2];
+      final q = map(p);
+      expect(q.dy, closeTo(p.dy, 1e-9), reason: 'height kept');
+      final grabbed = frame.handles[5].dx - c.dx;
+      expect(q.dx - c.dx, closeTo((p.dx - c.dx) * (grabbed + 30) / grabbed, 1e-9));
+      expect(map(c), c, reason: 'the middle stays');
+    });
+
+    test('Shift keeps the proportions from a corner', () {
+      final b = box(masks: [squareMask()]);
+      final frame = pickedPointsFrame([b], keysOf(b), b, 0)!;
+      final p = frame.corners[2];
+      final map =
+          pointsScaled(frame, 2, p, p + const Offset(60, 10), uniform: true);
+      final q = map(p) - frame.corners[0];
+      expect(q.dx, closeTo(q.dy, 1e-9));
+    });
+
+    test('points in a line still get a box and scale along it', () {
+      final m = squareMask();
+      // Two points on one horizontal line: no height to the box.
+      final b = box(masks: [m]);
+      final keys = {maskPointKey(b.id, m.id, 0), maskPointKey(b.id, m.id, 1)};
+      final frame = pickedPointsFrame([b], keys, b, 0)!;
+      expect(frame.outline[0].dy, lessThan(frame.outline[3].dy),
+          reason: 'the box stands off above and below');
+      final p = frame.corners[1];
+      final map = pointsScaled(frame, 1, frame.handles[1],
+          frame.handles[1] + const Offset(10, -20));
+      expect(map(p).dy, closeTo(p.dy, 1e-9));
+      expect(map(p).dx, greaterThan(p.dx));
+    });
+
+    test('a turned box scales along its own sides', () {
+      final b = box(masks: [squareMask()]);
+      final frame = pickedPointsFrame([b], keysOf(b), b, math.pi / 4)!;
+      // A square turned 45° in its box: the box is the diamond round it.
+      final side = (frame.corners[1] - frame.corners[0]).distance;
+      expect(side, closeTo(60 * math.sqrt2, 1e-6));
+      expect(frame.across.direction, closeTo(math.pi / 4, 1e-9));
+    });
+
+    test('a mirrored layer turns the other way in the layer', () {
+      final b = box(masks: [squareMask()]);
+      final flipped = LayerBox(
+        layer: b.layer,
+        id: b.id,
+        map: ViewerLayerMap.of(
+          positionX: 300,
+          positionY: 200,
+          anchorX: 100,
+          anchorY: 50,
+          scaleXPercent: -100,
+          scaleYPercent: 100,
+          rotationDegrees: 0,
+          origin: Offset.zero,
+          viewScale: 1,
+        ),
+        bounds: b.bounds,
+        draggable: true,
+        scalable: true,
+        rotationDegrees: 0,
+        masks: b.masks,
+        shapeContents: const [],
+        artOrigin: Offset.zero,
+      );
+      final frame = pickedPointsFrame([flipped], keysOf(flipped), flipped, 0)!;
+      expect(frame.mirrored, isTrue);
+    });
+
+    test('inside, on a handle and outside the box', () {
+      final b = box(masks: [squareMask()]);
+      final frame = pickedPointsFrame([b], keysOf(b), b, 0)!;
+      expect(frame.contains(frame.centre), isTrue);
+      expect(frame.handleAt(frame.handles[6] + const Offset(3, 3), 16), 6);
+      expect(frame.handleAt(frame.centre, 16), isNull);
+      expect(frame.contains(frame.outline[2] + const Offset(20, 20)), isFalse);
+    });
+  });
 }
