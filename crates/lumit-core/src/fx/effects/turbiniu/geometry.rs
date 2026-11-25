@@ -651,8 +651,21 @@ impl Turbiniu {
                         (((2.0 * between - 1.0).abs() - (1.0 - depth)) / depth).clamp(0.0, 1.0)
                     };
                     let k = rough * edge;
+                    let x = u * path_px / self.edge_roughness_scale.max(0.5);
+                    if count > 1 {
+                        // The family's own outline torn: one tear pattern per
+                        // side, shared by every stroke on it, eats in from the
+                        // outer strokes, so neighbours cannot cover the tear.
+                        let side = if between < 0.5 { 0.0 } else { 13.0 };
+                        let inward = 2.0 * between.min(1.0 - between);
+                        let tear =
+                            rough * depth * 1.6 * grain(&look.rough_field, x, 0, 40.0 + side);
+                        // Each stroke a little ahead or behind, for fibres.
+                        let fibre = (grain(&look.rough_field, x * 3.0, line, 70.0) - 0.5) * 0.08;
+                        let w = (1.0 / count as f32).max(0.01);
+                        alpha *= smoothstep(tear - w, tear + w, inward + fibre + w);
+                    }
                     if k > 0.0 {
-                        let x = u * path_px / self.edge_roughness_scale.max(0.5);
                         let low = half * (1.0 - k * grain(&look.rough_field, x, line, 0.0));
                         let high = half * (1.0 - k * grain(&look.rough_field, x, line, 17.0));
                         half = (low + high) * 0.5;

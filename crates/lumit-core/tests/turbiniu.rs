@@ -554,3 +554,27 @@ fn density_colour_follows_how_much_paint_there_is() {
         "{thin:?}"
     );
 }
+
+#[test]
+fn edge_roughness_tears_a_familys_outline_from_the_outside() {
+    let (guide, fx) = brush();
+    let lower = path(&[[0.0, 90.0], [400.0, 90.0]], false);
+    let family = Turbiniu {
+        iterations: 41,
+        edge_roughness: 100.0,
+        ..fx
+    };
+    let vertices = family.geometry(&guide, &lower, 1.0, [400, 100]);
+    let per_stroke = vertices.len() / 41;
+    let stroke = |i: usize| coverages(&vertices[i * per_stroke..(i + 1) * per_stroke]);
+    assert!(
+        stroke(20).iter().all(|&a| a > 0.99),
+        "the middle stays whole"
+    );
+    assert!(
+        stroke(0).iter().any(|&a| a < 0.1),
+        "the outer stroke is torn"
+    );
+    assert!(stroke(40).iter().any(|&a| a < 0.1), "on both sides");
+    assert!(stroke(0).iter().any(|&a| a > 0.9), "but not all away");
+}
