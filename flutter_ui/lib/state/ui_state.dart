@@ -34,6 +34,7 @@ import 'package:lumit_flutter/panels/viewer_picture.dart'
     if (dart.library.js_interop) 'package:lumit_flutter/panels/viewer_picture_web.dart';
 import 'package:lumit_flutter/panels/viewer_texture_controller.dart';
 import 'package:lumit_flutter/shell/about_window_frb.dart';
+import 'usage_data.dart';
 import 'package:lumit_flutter/shell/live_endpoint_frb.dart';
 import 'package:lumit_flutter/shell/pop_out.dart'
     show NativeDisplay, NativeWindows, displaySetupOf, windowsQuitting;
@@ -60,7 +61,8 @@ import 'package:lumit_flutter/src/rust/api/model.dart'
     show BridgeModelDisplay, BridgeModelLook;
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
-import 'package:lumit_flutter/src/rust/api/system.dart' show setWindowInFront;
+import 'package:lumit_flutter/src/rust/api/system.dart'
+    show gpuKind, setWindowInFront, systemMemoryBytes, videoMemoryBytes;
 import 'package:lumit_flutter/src/rust/api/shell.dart'
     show
         setAutosave,
@@ -519,6 +521,20 @@ class LumitUiState extends ChangeNotifier {
       currentVersion: () => versionFromBootLine(lumitVersion()),
       nightly: () => workspace.nightlyUpdates);
 
+  late final UsageData usage = UsageData(
+      workspace: workspace,
+      version: () => versionFromBootLine(lumitVersion()),
+      machine: () {
+        final gpu = gpuKind();
+        return (
+          ram: systemMemoryBytes(),
+          vram: videoMemoryBytes(),
+          vendor: gpu.vendor,
+          gpu: gpu.kind,
+        );
+      })
+    ..listenTo(activePane);
+
   /// The catalogue of addons, what is installed, and one install at a time.
   ///
   /// Here for the same reason the updater is: Settings draws it and anything
@@ -854,6 +870,11 @@ class LumitUiState extends ChangeNotifier {
     if (!updates.dueForCheck(workspace.lastUpdateCheckMs)) return;
     await updates.check();
     workspace.rememberUpdateCheck(DateTime.now().millisecondsSinceEpoch);
+  }
+
+  Future<void> maybeSendUsage() {
+    usage.start();
+    return usage.sendKept();
   }
 
   /// Follow nightly builds or stable releases, and look at once at what the
@@ -2689,6 +2710,7 @@ class LumitUiState extends ChangeNotifier {
       return false;
     }
     EffectDragData.last = name;
+    usage.effect(name);
     model.refresh();
     final added = model
         .byId(layer.internallayerId)

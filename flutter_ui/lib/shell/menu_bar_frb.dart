@@ -89,6 +89,7 @@ import '../state/dock.dart';
 import '../state/external_links.dart';
 import '../state/file_dialogs.dart';
 import '../state/keymap.dart';
+import '../state/usage_data.dart' show UsageData;
 import '../state/settings.dart' show ScriptEvent, ToolBarPosition;
 import '../state/viewer_view.dart';
 import '../state/workspace.dart' show UserWorkspace, Workspace;
@@ -812,7 +813,12 @@ class LumitMenuBarFrb extends StatelessWidget {
           ticked: row.checked ?? false,
           disabled: row.enabled ? null : (chord ?? ''),
           needsPro: row.needsPro,
-          run: row.onPressed ?? () {},
+          run: () {
+            if (row.action case final action? when row.onPressed != null) {
+              ui.usage.count('command', action);
+            }
+            row.onPressed?.call();
+          },
         ));
       }
     }
@@ -3390,10 +3396,11 @@ List<PlatformMenuItem> platformMenusFor(
   // The system's bar stays clickable under the busy card, so a row does
   // nothing while the card is up, as a key does.
   final app = context.read<LumitState>();
-  VoidCallback? guarded(VoidCallback? run) => run == null
+  VoidCallback? guarded(VoidCallback? run, [String? action]) => run == null
       ? null
       : () {
           if (app.opening.value || app.busy.value != null) return;
+          if (action != null) UsageData.note('command', action);
           run();
         };
 
@@ -3432,7 +3439,7 @@ List<PlatformMenuItem> platformMenusFor(
       group.add(PlatformMenuItem(
         label: label,
         // A null callback is how the platform menu draws a row disabled.
-        onSelected: guarded(item.onPressed),
+        onSelected: guarded(item.onPressed, item.action),
         shortcut: chord == null ? null : activatorForChord(chord),
       ));
     }
@@ -3887,6 +3894,9 @@ class _MenuListState extends State<_MenuList> {
   /// [item] is run: the palette leads with it next time it opens empty, by
   /// the label the palette gives it.
   void _noteRun(MenuEntry item) {
+    if (item.action case final action?) {
+      context.read<LumitUiState>().usage.count('command', action);
+    }
     final path = widget.path;
     if (path == null) return;
     context.read<LumitUiState>().workspace.noteCommandRun(

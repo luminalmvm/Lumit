@@ -706,6 +706,8 @@ pub(crate) struct QueueRow {
     /// The range this item exports, end exclusive; `None` = the work area at
     /// queue time, else the whole comp.
     pub range: Option<(u64, u64)>,
+    pub height: u32,
+    pub fps: f64,
     pub state: QueueRowState,
     pub job: Option<uuid::Uuid>,
     pub also: Vec<String>,

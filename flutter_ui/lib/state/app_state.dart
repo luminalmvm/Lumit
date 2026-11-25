@@ -24,6 +24,7 @@ import 'package:lumit_flutter/state/settings.dart';
 import 'package:lumit_flutter/state/share.dart';
 import 'package:lumit_flutter/state/transcription.dart';
 import 'package:lumit_flutter/state/ui_state.dart';
+import 'package:lumit_flutter/state/usage_data.dart' show UsageData;
 import 'package:lumit_flutter/state/workspace.dart';
 import 'package:provider/provider.dart';
 
@@ -1011,6 +1012,7 @@ class LumitState extends ChangeNotifier {
     if (opening.value) return;
     opening.value = true;
     openIsImport = false;
+    final clock = Stopwatch()..start();
     final offer = _offerOpenCancel();
     // Determinate from the first frame, before the engine has had a turn to
     // say so: the card must not flip from a sweeping bar to a filling one a
@@ -1062,6 +1064,7 @@ class LumitState extends ChangeNotifier {
     final opened = outcome.project;
     // Deliberately still `opening`: the document is in, the picture is not.
     _adopt(opened);
+    UsageData.took('open', clock.elapsed);
     // A guest's own copy, closed while its host was away, opens still a guest
     // and still looking. What it has found since comes down the events. A
     // copy of a project kept online opens a member of it however it was
@@ -1355,6 +1358,9 @@ class LumitState extends ChangeNotifier {
         after: const Duration(milliseconds: 300),
       );
       if (imported.cancelled) return false;
+      for (final path in paths) {
+        UsageData.note('import', UsageData.extensionOf(path));
+      }
       if (imported.leftOut > 0) {
         postNotice(l10n.importLayersLeftOut(imported.leftOut));
       }

@@ -39,6 +39,7 @@ import 'cache_dir.dart';
 import 'download.dart';
 import 'install_site.dart';
 import 'release_signature.dart';
+import 'usage_data.dart' show UsageData;
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/state/platform.dart'
     if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
@@ -712,6 +713,7 @@ class UpdateService extends ChangeNotifier {
               : compareVersions(found.version, current) > 0);
       if (wanted) {
         _stage = UpdateStage.available;
+        UsageData.note('update', 'available');
         _release = found;
         // GitHub starts a pre-release's list at the last stable release, so
         // a nightly repeats every nightly before it. Oldest first, each build
@@ -829,6 +831,7 @@ class UpdateService extends ChangeNotifier {
       _downloaded = file;
       _progress = 1;
       _stage = UpdateStage.ready;
+      UsageData.note('update', 'downloaded');
     } catch (_) {
       if (file != null) _discard(file);
       _fail(_cancelRequested
@@ -1034,6 +1037,7 @@ class UpdateService extends ChangeNotifier {
       _fail(l10n.updateInstallerFailed);
       return;
     }
+    _installed();
     if (delivery == UpdateDelivery.installer) _quit();
   }
 
@@ -1109,7 +1113,13 @@ class UpdateService extends ChangeNotifier {
       _fail(l10n.updateRestartFailed);
       return;
     }
+    _installed();
     _quit();
+  }
+
+  void _installed() {
+    UsageData.note('update', 'installed');
+    UsageData.flushNow();
   }
 
   void _sweep(Directory dir) {
@@ -1130,6 +1140,10 @@ class UpdateService extends ChangeNotifier {
   }
 
   void _fail(String message) {
+    if ((_stage == UpdateStage.downloading || _stage == UpdateStage.ready) &&
+        !_cancelRequested) {
+      UsageData.note('update', 'failed');
+    }
     _stage = UpdateStage.failed;
     _failure = message;
     _progress = 0;

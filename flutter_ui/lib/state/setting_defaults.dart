@@ -20,6 +20,7 @@ final Map<String, Object?> shippedSettings = () {
     'settings-open-at-sign-in': w.openAtSignIn,
     'settings-project-template': w.projectTemplate,
     'settings-auto-update': w.autoUpdate,
+    'settings-share-usage': w.shareUsage,
     'settings-nightly-icon': w.nightlyIcon,
     'settings-share-up-limit': w.shareUpLimit,
     'settings-share-down-limit': w.shareDownLimit,

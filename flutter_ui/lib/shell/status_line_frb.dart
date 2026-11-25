@@ -118,8 +118,8 @@ class StatusLineFrb extends StatefulWidget {
 class _StatusLineFrbState extends State<StatusLineFrb> {
   BridgeExportState _export = const BridgeExportState.idle();
 
-  /// The queue's finished exports as last seen, so the export-finished
-  /// script runs once for each. Null while no such script is set.
+  /// The queue's ended exports as last seen, so the export-finished script
+  /// runs, and telemetry counts, once for each. Null while neither wants them.
   Set<int>? _landed;
   BridgeProxyState _proxy = const BridgeProxyState.idle();
   Timer? _timer;
@@ -194,25 +194,38 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
   /// Run the export-finished script for each export the queue has finished
   /// since the last look. A script's own exports are not in the queue.
   void _exportsLanded() {
-    if (_ui.workspace.eventScripts[ScriptEvent.export] == null) {
+    final script = _ui.workspace.eventScripts[ScriptEvent.export] != null;
+    if (!script && !_ui.usage.active) {
       _landed = null;
       return;
     }
-    final Map<int, String> done;
+    final Map<int, BridgeExportQueueItem> ended;
     try {
-      done = {
+      ended = {
         for (final item in exportQueueList())
-          if (item.state is BridgeExportQueueState_Done) item.id: item.path,
+          if (item.state is BridgeExportQueueState_Done ||
+              item.state is BridgeExportQueueState_Failed)
+            item.id: item,
       };
     } catch (_) {
       return;
     }
     final seen = _landed;
-    _landed = done.keys.toSet();
+    _landed = ended.keys.toSet();
     if (seen == null) return;
-    for (final MapEntry(:key, :value) in done.entries) {
-      if (!seen.contains(key) && !isReviewExport(value)) {
-        _app.runEventScript?.call(ScriptEvent.export, value);
+    for (final item in ended.values) {
+      if (seen.contains(item.id)) continue;
+      final failed = item.state;
+      _ui.usage.exported(
+          path: item.path,
+          codec: item.codec,
+          height: item.height,
+          fps: item.fps,
+          error: failed is BridgeExportQueueState_Failed ? failed.error : null);
+      if (script &&
+          item.state is BridgeExportQueueState_Done &&
+          !isReviewExport(item.path)) {
+        _app.runEventScript?.call(ScriptEvent.export, item.path);
       }
     }
   }
