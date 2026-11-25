@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
@@ -11,7 +12,7 @@ import 'dialog_frame.dart';
 
 Future<void> maybeShowUsageNotice(
     BuildContext context, Workspace workspace) async {
-  if (workspace.usageNoticeSeen || !workspace.firstRunDone) return;
+  if (kIsWeb || workspace.usageNoticeSeen || !workspace.firstRunDone) return;
   await showLumitModal<void>(
     context: context,
     id: 'usage-notice',

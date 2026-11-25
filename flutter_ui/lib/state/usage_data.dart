@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ffi' show Abi;
 import 'dart:io';
 import 'dart:math';
 
@@ -10,6 +9,8 @@ import '../src/rust/api/keymap.dart' show BridgeKeymapPreset;
 import 'account.dart' show cloudUrl;
 import 'dock.dart' show PaneId, WorkspacePreset;
 import 'updates.dart' show isNightlyVersion;
+import 'win32.dart' if (dart.library.js_interop) 'win32_web.dart'
+    show abiName;
 import 'workspace.dart';
 
 const bool usageCollectorLive = true;
@@ -246,7 +247,7 @@ class UsageData {
   Map<String, Object?> payload() {
     _load();
     final current = version() ?? '';
-    final abi = Abi.current().toString().split('_');
+    final abi = abiName().split('_');
     final counts = {
       for (final e in _counts.entries)
         if (e.value.isNotEmpty) e.key: e.value,

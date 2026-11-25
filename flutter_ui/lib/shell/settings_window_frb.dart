@@ -1324,26 +1324,27 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             ),
           ],
         ),
-        (
-          l10n.settingsGroupPrivacy,
-          [
-            _flag(t, 'settings-share-usage', l10n.usageShare,
-                value: ui.workspace.shareUsage, set: (on) {
-              if (!on) ui.usage.forget();
-              ui.workspace.setShareUsage(on);
-            }),
-            _row(
-              t,
-              l10n.usageSentTitle,
-              HouseButton(
-                key: const ValueKey('settings-usage-sent'),
-                small: true,
-                onPressed: () => showUsageSent(context, ui.usage),
-                child: Text(l10n.usageWhatIsSent, style: t.small),
+        if (!kIsWeb)
+          (
+            l10n.settingsGroupPrivacy,
+            [
+              _flag(t, 'settings-share-usage', l10n.usageShare,
+                  value: ui.workspace.shareUsage, set: (on) {
+                if (!on) ui.usage.forget();
+                ui.workspace.setShareUsage(on);
+              }),
+              _row(
+                t,
+                l10n.usageSentTitle,
+                HouseButton(
+                  key: const ValueKey('settings-usage-sent'),
+                  small: true,
+                  onPressed: () => showUsageSent(context, ui.usage),
+                  child: Text(l10n.usageWhatIsSent, style: t.small),
+                ),
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
         // The same updater the Help menu drives, seen from the other side: one
         // service, two views, so they can never disagree about whether a check
         // is running or an update is waiting.
