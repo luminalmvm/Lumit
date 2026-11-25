@@ -3,16 +3,16 @@ layout: ../layouts/Prose.astro
 title: Privacy
 kicker: The small print
 description: What information Lumit stores.
-updated: 25 October 2026
+updated: 25 November 2026
 ---
 
-This page covers the items that interact with our system: a Lumit account, Lumit Pro,
-previews, and the iPhone app.
+This page covers the items that interact with our system: anonymous telemetry, a Lumit
+account, Lumit Pro, previews, and the iPhone app.
 
-If you never sign in and never open a preview, no information about you is ever stored, and
-you can use Lumit as normal. Lumit is largely maintained by Mack Reed, who is responsible
-for what is stored (the data controller), and can be reached at
-[hello@lumitlab.com](mailto:hello@lumitlab.com).
+If you never sign in and never open a preview, nothing is stored but anonymous telemetry,
+which you can turn off, and you can use Lumit as normal. Lumit is largely maintained by
+Mack Reed, who is responsible for what is stored (the data controller), and can be reached
+at [hello@lumitlab.com](mailto:hello@lumitlab.com).
 
 ## What we store
 
@@ -36,6 +36,18 @@ for what is stored (the data controller), and can be reached at
 - **Projects kept online.** Encrypted before they leave your computer. We can't read them.
 - **Your IP address.** Only to slow down abuse, such as someone guessing passwords. It is
   kept for about a day.
+- **Anonymous telemetry.** Unless you turn it off: the Lumit version, your operating
+  system and its version, processor type and language, some settings (such as the style
+  and shortcut preset), and the rough size of your computer's processor, memory and
+  screen, with the make and memory of its graphics card. Also how often each effect, panel
+  and command is used, which file types you import, how each export ends, with its format,
+  size and frame rate in bands, how long start-up and opening a project take, how often
+  and how long Lumit is open, whether work was recovered after a crash, and whether
+  updates install or fail. A random ID made on your computer goes with it, and is
+  forgotten when you turn it off. It helps decide what to improve. Never your projects,
+  files, names or paths, and we don't store your IP address with it (Cloudflare's own
+  logs are covered under Keeping and deleting). **Settings ▸ General ▸ Privacy** in Lumit
+  has the switch and shows exactly what is sent.
 
 ## If you open someone's preview
 
@@ -48,6 +60,7 @@ whoever sent the preview, or us.
 
 - To run the account and the features you asked for, which is our contract with you.
 - To keep the servers safe from abuse, which is a legitimate interest of ours.
+- To decide what to improve in Lumit, from the anonymous telemetry above.
 
 Nothing is sold, used for adverts, or used to track you. This website has no analytics.
 An account is for people aged 13 or over, or 16 in the EU. We ask for your date of birth when
@@ -95,6 +108,7 @@ cancelled in your iPhone's settings. Paddle and Apple keep their own record of a
 - An account whose email was never confirmed is removed after 2 days.
 - A preview is removed when it expires or when you delete it.
 - If Pro ends, a project kept online is cleared after 90 days unopened.
+- Anonymous telemetry is kept for 400 days.
 - Cloudflare's own logs of requests, which include IP addresses, are kept for 7 days.
 - What you delete stays in the database's backups for up to 30 days.
 
