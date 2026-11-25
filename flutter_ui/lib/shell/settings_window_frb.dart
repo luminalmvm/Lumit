@@ -84,7 +84,6 @@ import '../theme/theme_file.dart';
 import '../widgets/controls.dart';
 import '../widgets/edge_fade.dart';
 import '../widgets/escape_ladder.dart';
-import '../widgets/theme_swatches.dart';
 import 'about_window_frb.dart';
 import 'cache_confirm_frb.dart';
 import 'dialog_frame.dart' show dialogFooter, dialogSurface;
@@ -101,6 +100,7 @@ import 'menu_bar_frb.dart';
 import 'run_script_frb.dart' show scriptsFolderIn;
 import 'settings_account.dart';
 import 'settings_rows.dart';
+import 'settings_scheme_grid.dart';
 import 'style_import.dart';
 import 'theme_editor_frb.dart';
 import 'theme_name_dialog.dart';
@@ -157,9 +157,6 @@ const double settingsCloseGlyph = 12;
 /// narrow one for a single word.
 const double _ddWide = 180;
 const double _ddNarrow = 120;
-
-/// How much room the scheme row needs before its swatch strip joins it.
-const double _schemeWithStrip = 340;
 
 /// The scale row's track and its well.
 const double _scaleTrack = 160;
@@ -539,6 +536,21 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   /// Whether the page being built whole is itself named by the query, which
   /// keeps all of it.
   bool _pageNamed = false;
+
+  /// A row that takes the whole width of the card, for a control too big for
+  /// the column beside a name. Found by search under [title] like any row.
+  /// [setting] only notes where the setting stands, for the page's Reset.
+  Widget? _wide(String title, Widget child, [SettingState? setting]) {
+    if (!_matches(title)) return null;
+    final row = _keyed(
+        title,
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: settingsRowPadding),
+          child: child,
+        ));
+    if (_keepEveryRow && _saysQuery(title)) _matched.add(row);
+    return row;
+  }
 
   /// A row, or nothing when the search has hidden it.
   Widget? _row(LumitTheme t, String title, Widget control,
@@ -1558,74 +1570,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     final settings = ui.workspace.interface;
     return _sections(t, [
       (
-        l10n.settingsGroupTheme,
+        l10n.settingsStyle,
         [
-          _row(
-            t,
-            l10n.settingsColourScheme,
-            // The strip goes first when the window is narrow: the name is the
-            // setting, and the strip only shows it.
-            _carry(_setting('settings-scheme', ui.workspace.themeChoice,
-                ui.workspace.choose), LayoutBuilder(builder: (context, box) => Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _dropdown<ThemeChoice>(
-                  key: 'settings-scheme',
-                  value: ui.workspace.themeChoice,
-                  options: ui.workspace.themeChoices,
-                  width: _ddWide,
-                  label: (c) => c.label,
-                  // Dark, Light, then the user's own: thirty-one built-ins and
-                  // a growing list of custom themes is a long flat menu, and
-                  // light/dark is the first thing anyone is choosing by.
-                  group: (c) => c.group,
-                  onChanged: (c) => setState(() => ui.workspace.choose(c)),
-                  // Hovering a row previews that scheme without picking it.
-                  onPreview: ui.workspace.previewChoice,
-                  onPreviewEnd: () => ui.workspace.previewChoice(null),
-                ),
-                if (box.maxWidth >= _schemeWithStrip) ...[
-                  const SizedBox(width: 8),
-                  // What the selection actually looks like, beside its name.
-                  ThemeSwatchStrip(
-                    key: const ValueKey('settings-theme-swatches'),
-                    theme: ui.workspace.theme,
-                  ),
-                ],
-              ],
-            ))),
-          ),
-          // Scheme, then the two rows about *your* theme, then the two dials
-          // that tune whichever one is in force. The order is the order the
-          // work happens in: pick a scheme, make it yours, then adjust it —
-          // accent and shape used to sit above the rows that create the thing
-          // they adjust.
-          _row(
-            t,
-            l10n.settingsCustomColours,
-            HouseButton(
-              key: const ValueKey('settings-customise'),
-              small: true,
-              onPressed: () async {
-                await showThemeEditorFrb(context, ui);
-                if (mounted) setState(() {});
-              },
-              child: Text(l10n.customiseEllipsis, style: t.small),
-            ),
-          ),
-          _row(t, l10n.settingsYourThemes, _themeShelf(t, ui),
-              description: _themeMessage ?? ''),
-          _row(
-              t,
-              l10n.settingsAccent,
-              _carry(
-                  _setting('settings-accent', ui.workspace.accentOverride,
-                      ui.workspace.setAccent,
-                      copy: _hex(t.accent)),
-                  _accentSwatches(t, ui))),
-          _flag(t, 'settings-themed-splash', l10n.settingsSplashUsesThemeColour,
-              value: ui.workspace.themedSplash,
-              set: ui.workspace.setThemedSplash),
           // The three built in, then the person's own from the styles folder.
           _row(
             t,
@@ -1756,6 +1702,49 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                 }),
               ),
             ),
+        ],
+      ),
+      (
+        l10n.settingsGroupTheme,
+        [
+          // Accent, then the scheme it sits on, then the rows that make a
+          // scheme your own.
+          _row(
+              t,
+              l10n.settingsAccent,
+              _carry(
+                  _setting('settings-accent', ui.workspace.accentOverride,
+                      ui.workspace.setAccent,
+                      copy: _hex(t.accent)),
+                  _accentSwatches(t, ui))),
+          _wide(
+            l10n.settingsColourScheme,
+            SchemeGrid(
+              key: const ValueKey('settings-scheme'),
+              workspace: ui.workspace,
+              onChoose: (c) => setState(() => ui.workspace.choose(c)),
+            ),
+            _setting('settings-scheme', ui.workspace.themeChoice,
+                ui.workspace.choose),
+          ),
+          _row(
+            t,
+            l10n.settingsCustomColours,
+            HouseButton(
+              key: const ValueKey('settings-customise'),
+              small: true,
+              onPressed: () async {
+                await showThemeEditorFrb(context, ui);
+                if (mounted) setState(() {});
+              },
+              child: Text(l10n.customiseEllipsis, style: t.small),
+            ),
+          ),
+          _row(t, l10n.settingsYourThemes, _themeShelf(t, ui),
+              description: _themeMessage ?? ''),
+          _flag(t, 'settings-themed-splash', l10n.settingsSplashUsesThemeColour,
+              value: ui.workspace.themedSplash,
+              set: ui.workspace.setThemedSplash),
         ],
       ),
       (

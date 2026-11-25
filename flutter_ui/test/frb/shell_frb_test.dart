@@ -219,7 +219,6 @@ void main() {
         ],
         'appearance': [
           'settings-scheme',
-          'settings-theme-swatches',
           'settings-shape',
           'settings-lantern-room',
           'settings-customise',
@@ -365,15 +364,18 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('settings-page-appearance')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('settings-scheme')));
+      final light = find.byKey(const ValueKey('settings-scheme-light'));
+      await tester.ensureVisible(light);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Light').last);
+      await tester.tap(light);
       await tester.pumpAndSettle();
 
       expect(p.uiState.scheme, LumitColorScheme.light);
       expect(p.uiState.theme.mode, isNot(ThemeMode2.dark),
           reason: 'the derived theme follows the choice');
 
+      await tester.ensureVisible(find.byKey(const ValueKey('settings-shape')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('settings-shape')));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Desk').last);

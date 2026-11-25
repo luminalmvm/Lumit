@@ -453,6 +453,16 @@ class _WorkspaceChoice extends StatelessWidget {
 /// The size the workspace drawings are made at, then scaled to the card.
 const Size _drawing = Size(160, 100);
 
+/// The window in outline, drawn in [theme] as the Edit workspace arranges it.
+/// Settings draws one per colour scheme.
+Widget windowThumbnail(LumitTheme theme) => AspectRatio(
+      aspectRatio: _drawing.aspectRatio,
+      child: CustomPaint(
+        painter: _WorkspacePainter(WorkspacePreset.edit, theme,
+            (theme.tokens.sectionRadius - 8).clamp(0.0, 8.0).toDouble()),
+      ),
+    );
+
 /// The window in outline, as one workspace arranges it and one style draws it.
 ///
 /// The panes come from the workspace's own factory layout, so the drawing can
