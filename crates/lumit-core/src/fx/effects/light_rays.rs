@@ -671,6 +671,39 @@ impl LightRays {
         (far * len.exp_m1()).min(diag)
     }
 
+    /// [`reach`](Self::reach) for the picture the rays are actually drawn
+    /// from, `[left, top, right, bottom]` in the raster pixels the source is
+    /// placed in: never more, and usually far less.
+    ///
+    /// A pixel gathers its light along the line to the source, from as far
+    /// back as `e^-len` of its distance. So a pixel `D` from the source lit by
+    /// the picture has `D ≤ far · e^len`, where `far` is the picture's corner
+    /// farthest from the source, and the stretch of line it gathers along is
+    /// `D (1 - e^-len)` long; to reach back into the picture from a distance
+    /// `δ` past its edge that stretch has to be at least `δ`. Every lit pixel
+    /// is therefore within `far (e^len - 1)` of the picture, and the room
+    /// past that only ever held nothing. `reach` measured `far` from the
+    /// raster's corner plus a whole diagonal, which on a big layer is several
+    /// times the room the rays can fill, and all of it held in memory.
+    #[must_use]
+    pub fn reach_within(self, diag: f32, picture: [f32; 4]) -> f32 {
+        let loose = self.reach(diag);
+        if loose <= 0.0 {
+            return 0.0;
+        }
+        let shimmer = 1.0 + self.shimmer_amount.max(0.0) / 100.0;
+        let len = (1.0 + self.ray_length.max(0.0)).ln() * shimmer;
+        let [left, top, right, bottom] = picture;
+        let far = [(left, top), (right, top), (right, bottom), (left, bottom)]
+            .iter()
+            .map(|&(x, y)| (x - self.source_x).hypot(y - self.source_y))
+            .fold(0.0f32, f32::max);
+        // A pixel more for each pass and one over: the gather reads its samples
+        // bilinearly, so every pass can carry a trace of light up to a texel
+        // past the last one that had any.
+        ((far * len.exp_m1()).ceil() + PASSES as f32 + 1.0).min(loose)
+    }
+
     /// The numbers both render paths read, on a `w` by `h` raster. Positions
     /// and sizes arrive already scaled to it.
     #[must_use]
@@ -1101,6 +1134,11 @@ impl EffectDef for LightRaysDef {
         [reach, reach]
     }
 
+    fn spread_px_within(&self, p: Params<'_>, picture: [f32; 4]) -> [f32; 2] {
+        let reach = LightRays::read(p).reach_within(p.float(LightRays::DERIVED_DIAG, 0.0), picture);
+        [reach, reach]
+    }
+
     fn settle(&self, before: Option<&EffectInstance>, after: &EffectInstance) -> Option<Pressed> {
         settle(before, after)
     }
@@ -1240,6 +1278,118 @@ mod tests {
         );
         fx.ray_length = 0.0;
         assert_eq!(fx.reach(2203.0), 0.0, "no rays: no room");
+    }
+
+    /// **Light rays is given only the room its rays can fill.** The rays are
+    /// drawn by the CPU oracle on a picture with the old, loose room round
+    /// it; every pixel they light past the picture has to sit inside the
+    /// tight room `reach_within` gives, for a source inside and outside the
+    /// picture, short and long rays, with and without shimmer. The tight room
+    /// is never more than the loose one, and on a source in the middle of a
+    /// wide picture it is a fraction of it.
+    #[test]
+    fn the_rays_never_light_past_the_room_reach_within_gives() {
+        let (w, h) = (40u32, 24u32);
+        let diag = (w as f32).hypot(h as f32);
+        let picture = [0.0, 0.0, w as f32, h as f32];
+        for (sx, sy) in [(20.0, 12.0), (3.0, 20.0), (-15.0, 8.0), (60.0, -10.0)] {
+            for (length, shimmer) in [(0.3, 0.0), (0.3, 100.0), (2.0, 0.0), (0.05, 50.0)] {
+                let mut fx = LightRays::read(Params::EMPTY);
+                fx.extend_beyond_layer = true;
+                fx.threshold = 0.0;
+                fx.ray_length = length;
+                fx.shimmer_amount = shimmer;
+                fx.source_x = sx;
+                fx.source_y = sy;
+                let loose = fx.reach(diag);
+                let tight = fx.reach_within(diag, picture);
+                let case = format!("source ({sx}, {sy}), length {length}, shimmer {shimmer}");
+                assert!(tight <= loose, "{case}: {tight} > {loose}");
+                assert!(tight > 0.0, "{case}: rays with no room");
+                // The picture, lit all over, with the loose room round it.
+                let pad = loose.ceil() as u32;
+                let (pw, ph) = (w + 2 * pad, h + 2 * pad);
+                let mut rgba = vec![0.0f32; (pw * ph * 4) as usize];
+                for y in pad..pad + h {
+                    for x in pad..pad + w {
+                        let i = ((y * pw + x) * 4) as usize;
+                        rgba[i..i + 4].copy_from_slice(&[3.0, 3.0, 3.0, 1.0]);
+                    }
+                }
+                let mut moved = fx;
+                moved.source_x += pad as f32;
+                moved.source_y += pad as f32;
+                light_rays(&mut rgba, pw, ph, &moved.packed(pw, ph));
+                let room = tight.ceil();
+                let (mut lit_outside, mut past) = (0, Vec::new());
+                for y in 0..ph {
+                    for x in 0..pw {
+                        let i = ((y * pw + x) * 4) as usize;
+                        if rgba[i..i + 4].iter().all(|v| *v <= 1e-6) {
+                            continue;
+                        }
+                        // Distance past the picture, in texels, each way.
+                        let (px, py) = (x as f32 - pad as f32, y as f32 - pad as f32);
+                        let dx = (-px).max(px + 1.0 - w as f32).max(0.0);
+                        let dy = (-py).max(py + 1.0 - h as f32).max(0.0);
+                        if dx > 0.0 || dy > 0.0 {
+                            lit_outside += 1;
+                        }
+                        if dx > room || dy > room {
+                            past.push((x, y));
+                        }
+                    }
+                }
+                assert!(lit_outside > 0, "{case}: the rays should leave the picture");
+                assert!(
+                    past.is_empty(),
+                    "{case}: {} lit past the room of {room}, first {:?}",
+                    past.len(),
+                    past.first()
+                );
+                // The same picture drawn with the tight room is the loose
+                // one's middle: only the source's place on the raster moved,
+                // which shifts the bilinear reads by float rounding alone.
+                let small = room as u32;
+                let (sw, sh) = (w + 2 * small, h + 2 * small);
+                let mut tight_rgba = vec![0.0f32; (sw * sh * 4) as usize];
+                for y in small..small + h {
+                    for x in small..small + w {
+                        let i = ((y * sw + x) * 4) as usize;
+                        tight_rgba[i..i + 4].copy_from_slice(&[3.0, 3.0, 3.0, 1.0]);
+                    }
+                }
+                let mut placed = fx;
+                placed.source_x += small as f32;
+                placed.source_y += small as f32;
+                light_rays(&mut tight_rgba, sw, sh, &placed.packed(sw, sh));
+                let mut worst = 0.0f32;
+                for y in 0..sh {
+                    for x in 0..sw {
+                        let i = ((y * sw + x) * 4) as usize;
+                        let j = (((y + pad - small) * pw + x + pad - small) * 4) as usize;
+                        for c in 0..4 {
+                            worst = worst.max((tight_rgba[i + c] - rgba[j + c]).abs());
+                        }
+                    }
+                }
+                assert!(
+                    worst < 2e-3,
+                    "{case}: the tight room changed a pixel by {worst}"
+                );
+            }
+        }
+        // The arcs' case: a source in the middle of a wide picture.
+        let mut fx = LightRays::read(Params::EMPTY);
+        fx.extend_beyond_layer = true;
+        fx.ray_length = 0.3;
+        fx.source_x = 1700.0;
+        fx.source_y = 1050.0;
+        let (loose, tight) = (
+            fx.reach(4061.0),
+            fx.reach_within(4061.0, [0.0, 0.0, 3478.0, 2096.0]),
+        );
+        assert!(tight < loose * 0.4, "{tight} against {loose}");
     }
 
     #[test]

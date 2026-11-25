@@ -751,13 +751,20 @@ pub fn take_watched_points() -> Option<lumit_core::fx::points::PointsStream> {
 /// list passes its picture through, exactly as a missing LUT does.
 /// The room an op that spreads past its picture is given, in texels on each
 /// side across and down, kept inside the widest texture there is.
+///
+/// The picture is `w` by `h` and reaches `moved` texels left of and above the
+/// layer's own frame, where the op's places are measured from: ops before it
+/// grew it by that much on every side.
 fn spread_room(
     def: &dyn lumit_core::fx::registry::EffectDef,
     p: lumit_core::fx::params::Params<'_>,
     w: u32,
     h: u32,
+    moved: [u32; 2],
 ) -> [u32; 2] {
-    let [across, down] = def.spread_px(p);
+    let (left, top) = (-(moved[0] as f32), -(moved[1] as f32));
+    let picture = [left, top, left + w as f32, top + h as f32];
+    let [across, down] = def.spread_px_within(p, picture);
     let texels = |px: f32, n: u32| lumit_core::largest_picture::room(px.ceil() as u32, n);
     [texels(across, w), texels(down, h)]
 }
@@ -1174,7 +1181,8 @@ pub fn run_ops(
                 into.push(0.0);
             }
             // What a held op spread or grew into is in its picture; later ops are that far in.
-            let [across, down] = spread_room(resolved.def, resolved.params, spread_w, spread_h);
+            let [across, down] =
+                spread_room(resolved.def, resolved.params, spread_w, spread_h, moved);
             let slid = places_moved(resolved.def.schema(), resolved.params, moved);
             let [gw, gh] = resolved.def.grows(
                 lumit_core::fx::params::Params::new(&slid),
@@ -1217,7 +1225,7 @@ pub fn run_ops(
         // is grown the way Tile grows it, so the ops after it run on the wider
         // one and the composite places it by its centre. Zero for every other
         // op, and nothing happens.
-        let [across, down] = spread_room(resolved.def, resolved.params, w, h);
+        let [across, down] = spread_room(resolved.def, resolved.params, w, h, moved);
         if [across, down] != [0, 0] {
             w += across * 2;
             h += down * 2;
