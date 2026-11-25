@@ -1,20 +1,12 @@
 // The Settings window, on the flutter_rust_bridge API.
 //
-// **The shape.** The approved drawing frames it as a window 760×520: a kicker
-// title strip carrying a search field and a close mark, a 160px sidebar of
-// pages down the left, the page itself on the right, and a footer saying that
-// changes apply immediately with Reset page and Close at its far end. A page
-// is a stack of *sections* — a kicker, a rule above it, and rows under it —
-// and a row is a label in a fixed 190px column with its control beside it.
-// There are no cards and no help sentences: the drawing has room for neither,
-// and what a setting does is said by its name.
-//
-// **The pages are the drawing's, and they are all here now.** General,
-// Appearance, Timeline, Viewer, Audio, Autosave, Export, Preview and cache,
-// Shortcuts. Each of the last three the drawing named arrived with the settings
-// it would hold rather than as an empty promise — Audio, Autosave and Export,
-// which waited for the engine to have somewhere to keep an export default
-// between sessions.
+// **The shape.** A window 880×600: a 200px sidebar down the left, with the
+// search well at its top and the pages under it, and the page itself on the
+// right under a header carrying its name, Reset page and a close mark. A page
+// is a stack of *sections*, each a heading over a rounded card of rows, and a
+// row is a name with its control at the far edge. Every setting takes effect as it
+// is changed, so there is no footer and nothing to confirm. The sidebar, the
+// header and the card are drawn differently under each style.
 //
 // **What lives where.** Appearance is Dart's own: the theme is the frontend's
 // and the engine has no opinion about it. Timeline and Viewer are working
@@ -27,7 +19,6 @@
 // every shortcut, grouped by where it is live, with the action on the left and
 // its chord on the right — click a chord and press the keys you want.
 // It edits the engine's keymap, not a copy, so what the table shows is what the
-// keyboard does. The title strip's search is its search too: on every other
 // page the field finds rows by name across all the pages and lists them under
 // their page names, and on this one it asks the engine the same question.
 
@@ -84,10 +75,9 @@ import '../theme/theme_file.dart';
 import '../widgets/controls.dart';
 import '../widgets/edge_fade.dart';
 import '../widgets/escape_ladder.dart';
-import '../widgets/theme_swatches.dart';
 import 'about_window_frb.dart';
 import 'cache_confirm_frb.dart';
-import 'dialog_frame.dart' show dialogFooter, dialogSurface;
+import 'dialog_frame.dart' show dialogSurface;
 import 'extension_install_frb.dart';
 import 'export_dialog_frb.dart'
     show
@@ -101,6 +91,7 @@ import 'menu_bar_frb.dart';
 import 'run_script_frb.dart' show scriptsFolderIn;
 import 'settings_account.dart';
 import 'settings_rows.dart';
+import 'settings_scheme_grid.dart';
 import 'style_import.dart';
 import 'theme_editor_frb.dart';
 import 'theme_name_dialog.dart';
@@ -116,35 +107,30 @@ const double _minBudgetMib = 64;
 /// what it can actually allocate either way.
 const double _unknownMemoryMib = 16384;
 
-/// The size the window opens at: the drawing's own frame. The corner grip
-/// takes it from here, and where it is left is remembered.
-const Size settingsWindowSize = Size(760, 520);
+
+const Size settingsWindowSize = Size(880, 600);
 
 /// Below this the sidebar and the widest setting row stop fitting side by side.
-const Size settingsMinSize = Size(560, 380);
+const Size settingsMinSize = Size(700, 440);
 
-const double settingsTitleStrip = 30;
+const double settingsHeaderHeight = 56;
 
 /// As wide as a page's rows go. A window pulled wider than this keeps its rows
 /// together in the middle rather than leaving a name a long way from its
 /// control.
 const double settingsPageMeasure = 720;
 
-const double settingsSidebarWidth = 160;
-const double settingsNavRow = 24;
+const double settingsSidebarWidth = 200;
+const double settingsNavRow = 30;
 const double settingsNavGroupGap = 12;
+const double settingsNavInset = 10;
 
-const double settingsNavTick = 2;
+const double settingsSearchHeight = 30;
 
-const double settingsSearchWidth = 174;
-const double settingsSearchHeight = 20;
-
-const double settingsCloseGlyph = 12;
+const double settingsCloseGlyph = 14;
 
 const double _ddWide = 180;
 const double _ddNarrow = 120;
-
-const double _schemeWithStrip = 340;
 
 const double _scaleTrack = 160;
 const double _scaleWell = 70;
@@ -513,6 +499,18 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   /// keeps all of it.
   bool _pageNamed = false;
 
+  Widget? _wide(String title, Widget child, [SettingState? setting]) {
+    if (!_matches(title)) return null;
+    final row = _keyed(
+        title,
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: settingsRowPadding),
+          child: child,
+        ));
+    if (_keepEveryRow && _saysQuery(title)) _matched.add(row);
+    return row;
+  }
+
   Widget? _row(LumitTheme t, String title, Widget control,
       {String description = ''}) {
     if (!_matches(title)) return null;
@@ -705,175 +703,296 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     final t = ThemeScope.of(context).theme;
     final ui = Provider.of<LumitUiState>(context);
     _wantedKeyed = false;
+    final lantern = t.shape == ThemeShape.lantern;
+
+    final page = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Builder(
+          builder: (context) => GestureDetector(
+            onSecondaryTapUp: (d) => showWindowMenu(context, d.globalPosition,
+                onClose: widget.onClose),
+            child: _header(t, ui),
+          ),
+        ),
+        Expanded(child: _pageBody(t, ui)),
+      ],
+    );
 
     // No width or height of its own: the window frame around it is what has the
     // size, so the corner grip can change it.
     //
-    // Not a `FloatSurface`: that is the *menu* surface — `surface3` with 6px of
-    // padding round its rows — and the drawing gives this window the page's own
-    // `surface1` right out to a hairline edge. The edge is a foreground
-    // decoration so that it is painted *over* the outermost pixel rather than
-    // insetting everything by one: the drawing's 760 is the room inside the
-    // frame, not the room inside the frame less its border.
     return dialogSurface(
       context,
       t,
       Entrance.content(
-          spec: ThemeScope.of(context).motion.content,
-          rise: ThemeScope.of(context).motion.contentRise,
-          blur: ThemeScope.of(context).motion.contentBlur,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Builder(
-                builder: (context) => GestureDetector(
-                  onSecondaryTapUp: (d) => showWindowMenu(
-                      context, d.globalPosition,
-                      onClose: widget.onClose),
-                  child: _titleStrip(t),
+        spec: ThemeScope.of(context).motion.content,
+        rise: ThemeScope.of(context).motion.contentRise,
+        blur: ThemeScope.of(context).motion.contentBlur,
+        child: lantern
+            ? ColoredBox(
+                color: t.room,
+                child: Padding(
+                  padding: EdgeInsets.all(t.tokens.tileGap),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SizedBox(
+                          width: _sidebarWidth(t),
+                          child: _card(t, _sidebar(t))),
+                      SizedBox(width: t.tokens.tileGap),
+                      Expanded(child: _card(t, page)),
+                    ],
+                  ),
                 ),
-              ),
-              Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    SizedBox(
-                      width: settingsSidebarWidth,
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Expanded(child: _sidebar(t)),
-                          Container(width: 1, color: t.hairline),
-                        ],
-                      ),
+              )
+            : Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(
+                    width: _sidebarWidth(t),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(child: _sidebar(t)),
+                        Container(width: 1, color: t.hairline),
+                      ],
                     ),
-                    Expanded(child: _pageBody(t, ui)),
-                  ],
-                ),
+                  ),
+                  Expanded(child: page),
+                ],
               ),
-              _footer(t, ui),
-            ],
-          ),
-        ),
+      ),
     );
   }
 
-  Widget _titleStrip(LumitTheme t) => Container(
-        key: const ValueKey('settings-title-strip'),
-        height: settingsTitleStrip + 1,
+  Widget _card(LumitTheme t, Widget child) => Container(
         decoration: BoxDecoration(
-          color: t.surface2,
+          color: t.surface1,
+          borderRadius: BorderRadius.circular(t.tokens.cardRadius),
+          boxShadow: t.tokens.cardShadow,
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(t.tokens.cardRadius),
+          child: child,
+        ),
+      );
+
+  double _sidebarWidth(LumitTheme t) => switch (t.shape) {
+        ThemeShape.studio => settingsSidebarWidth,
+        ThemeShape.desk => settingsSidebarWidth - 28,
+        ThemeShape.lantern => settingsSidebarWidth + 8,
+      };
+
+
+  Widget _header(LumitTheme t, LumitUiState ui) => Container(
+        key: const ValueKey('settings-title-strip'),
+        height: settingsHeaderHeight,
+        decoration: BoxDecoration(
           border: Border(bottom: BorderSide(color: t.hairline)),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 14),
+        padding: const EdgeInsetsDirectional.only(
+            start: settingsPagePadding + 2, end: settingsNavInset + 4),
         child: Row(
           children: [
-            Text(t.kickerCase(l10n.settingsTitle), style: t.kickerOn),
-            const Spacer(),
-            SizedBox(
-              width: settingsSearchWidth,
-              height: settingsSearchHeight,
-              child: HouseTextField(
-                key: const ValueKey('settings-search'),
-                controller: _searchController(),
-                width: double.infinity,
-                // The well fills the row rather than floating in it: the
-                // drawing renders it exactly 20 tall, and the default 3px above
-                // and below would burst that.
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                // `surface2`, the strip's own ground: this well sits on the
-                // title strip rather than in a panel, and the drawing computes
-                // it the same shade rather than a recess.
-                fill: t.surface2,
-                hint: l10n.searchSettings,
+            Expanded(
+              child: Text(
+                _everywhere ? l10n.settingsTitle : _page.label,
+                key: const ValueKey('settings-page-title'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: t.heading.copyWith(fontSize: 18),
               ),
             ),
-            const SizedBox(width: 12),
-            _closeMark(t),
+            if (_resettable(_page)) ...[
+              _headerMark(
+                t,
+                key: 'settings-reset-page',
+                glyphName: LumitIcons.reset,
+                tooltip: l10n.settingsResetPage,
+                onTap: _everywhere || !_changedOn(_page)
+                    ? null
+                    : () => _resetPage(_page),
+              ),
+              const SizedBox(width: 2),
+            ],
+            _headerMark(
+              t,
+              key: 'settings-close',
+              glyphName: LumitIcons.close,
+              tooltip: l10n.close,
+              onTap: widget.onClose,
+            ),
           ],
         ),
       );
 
-  Widget _closeMark(LumitTheme t) => LumitTooltip(
-        message: l10n.close,
-        child: HoverMark(
-          swells: true,
-          builder: (context, lit) => GestureDetector(
-            key: const ValueKey('settings-close'),
+  Widget _headerMark(
+    LumitTheme t, {
+    required String key,
+    required String glyphName,
+    required String tooltip,
+    required VoidCallback? onTap,
+  }) =>
+      LumitTooltip(
+        message: tooltip,
+        child: HoverFill(
+          cursor: onTap == null
+              ? SystemMouseCursors.basic
+              : SystemMouseCursors.click,
+          radius: BorderRadius.circular(_navCorner(t)),
+          child: GestureDetector(
+            key: ValueKey<String>(key),
             behavior: HitTestBehavior.opaque,
-            onTap: widget.onClose,
+            onTap: onTap,
             child: SizedBox(
-              width: settingsCloseGlyph + 8,
-              height: settingsTitleStrip,
+              width: 30,
+              height: 30,
               child: Center(
                 child: glyph.LumitIcon(
-                  LumitIcons.close,
+                  glyphName,
                   size: settingsCloseGlyph,
-                  colour: Color.lerp(t.textMuted, t.textPrimary, lit),
-                  semanticLabel: l10n.close,
+                  colour: onTap == null
+                      ? t.textMuted.withValues(alpha: 0.4)
+                      : t.textSecondary,
+                  semanticLabel: tooltip,
                 ),
               ),
             ),
           ),
         ),
       );
+
+  double _navCorner(LumitTheme t) => t.tokens.controlRadius <= 0
+      ? 0
+      : (t.tokens.controlRadius < 6 ? 6 : t.tokens.controlRadius);
 
   /// Whether [page] is the one marked in the sidebar. None is while a search
   /// lists rows from all of them.
   bool _marked(SettingsPage page) => _page == page && !_everywhere;
 
-  Widget _sidebar(LumitTheme t) => SingleChildScrollView(
-        padding: const EdgeInsets.only(top: 8, bottom: 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (final page in SettingsPage.shown) ...[
-              if (page.startsGroup) const SizedBox(height: settingsNavGroupGap),
-              pageMenu(_resettable(page) ? () => _resetPage(page) : null,
-                  changed: () => _pageChanged(page), HoverFill(
-                child: GestureDetector(
-                  key: ValueKey<String>('settings-page-${page.name}'),
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => _openPage(page),
-                  // The tick and the fill behind it move from the page left to
-                  // the page chosen. The padding gives up exactly what the
-                  // tick takes at every step, so the name does not move.
-                  child: _changedDot(t, page, AnimatedContainer(
-                    duration: ThemeScope.of(context).motion.mark.duration,
-                    curve: ThemeScope.of(context).motion.mark.curve,
-                    height: settingsNavRow,
-                    alignment: AlignmentDirectional.centerStart,
-                    padding: EdgeInsetsDirectional.only(
-                        start: _marked(page) ? 14 - settingsNavTick : 14,
-                        end: 14),
-                    decoration: BoxDecoration(
-                      color: _marked(page) ? t.surface2 : null,
-                      // The tick, not a fill: the page in force is marked by
-                      // an accent edge down its left, which is the one job
-                      // §3.1 leaves the accent on a list of names.
-                      border: _marked(page)
-                          ? Border(
-                              left: BorderSide(
-                                  color: t.accent, width: settingsNavTick))
-                          : null,
-                    ),
-                    child: Text(page.label,
-                        style: _marked(page) ? t.bodyPrimary : t.body),
-                  )),
-                ),
-              )),
-            ],
-          ],
+  Widget _sidebar(LumitTheme t) {
+    final shape = t.shape;
+    final desk = shape == ThemeShape.desk;
+    final searchEdge = shape == ThemeShape.lantern ? 12.0 : settingsNavInset + 2;
+    final body = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding:
+              EdgeInsets.fromLTRB(searchEdge, desk ? 10 : 14, searchEdge, 8),
+          child: SizedBox(
+            height: desk ? 26 : settingsSearchHeight,
+            child: HouseTextField(
+              key: const ValueKey('settings-search'),
+              controller: _searchController(),
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              fill: t.surface2,
+              hint: l10n.searchSettings,
+            ),
+          ),
         ),
-      );
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final page in SettingsPage.shown) ...[
+                  if (page.startsGroup)
+                    const SizedBox(height: settingsNavGroupGap),
+                  _navEntry(t, page),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+    return shape == ThemeShape.lantern
+        ? body
+        : ColoredBox(color: t.surface0, child: body);
+  }
 
-  Widget _changedDot(LumitTheme t, SettingsPage page, Widget row) =>
+  Widget _navEntry(LumitTheme t, SettingsPage page) {
+    final shape = t.shape;
+    final marked = _marked(page);
+    final lantern = shape == ThemeShape.lantern;
+    final desk = shape == ThemeShape.desk;
+    final corner = lantern
+        ? BorderRadius.circular(20)
+        : (desk ? BorderRadius.zero : BorderRadius.circular(_navCorner(t)));
+    final height = switch (shape) {
+      ThemeShape.studio => settingsNavRow,
+      ThemeShape.desk => settingsNavRow - 4,
+      ThemeShape.lantern => settingsNavRow + 4,
+    };
+    final Color? fill = marked
+        ? (lantern ? t.accent.withValues(alpha: 0.18) : t.surface3)
+        : null;
+    return Padding(
+      padding: EdgeInsets.symmetric(
+          horizontal: desk ? 0 : (lantern ? 8 : settingsNavInset),
+          vertical: lantern ? 2 : (desk ? 0 : 1)),
+      child: pageMenu(
+        _resettable(page) ? () => _resetPage(page) : null,
+        changed: () => _pageChanged(page),
+        HoverFill(
+          radius: corner,
+          child: GestureDetector(
+            key: ValueKey<String>('settings-page-${page.name}'),
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _openPage(page),
+            child: _changedDot(
+              t,
+              page,
+              height,
+              AnimatedContainer(
+                duration: ThemeScope.of(context).motion.mark.duration,
+                curve: ThemeScope.of(context).motion.mark.curve,
+                height: height,
+                alignment: AlignmentDirectional.centerStart,
+                padding: EdgeInsetsDirectional.only(
+                    start: lantern ? 18 : (desk ? 16 : 14), end: 10),
+                decoration: BoxDecoration(color: fill, borderRadius: corner),
+                child: Row(
+                  children: [
+                    if (desk) ...[
+                      Container(
+                        width: 4,
+                        height: 4,
+                        color: marked ? t.accent : const Color(0x00000000),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    Expanded(
+                      child: Text(page.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: marked
+                              ? t.bodyPrimary
+                                  .copyWith(fontWeight: FontWeight.w500)
+                              : t.body),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _changedDot(
+          LumitTheme t, SettingsPage page, double height, Widget row) =>
       Stack(children: [
         row,
         if (_changedPages.contains(page))
           PositionedDirectional(
             start: 6,
-            top: (settingsNavRow - settingsChangedMark) / 2,
+            top: (height - settingsChangedMark) / 2,
             child: Container(
               key: ValueKey<String>('settings-page-changed-${page.name}'),
               width: settingsChangedMark,
@@ -883,33 +1002,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             ),
           ),
       ]);
-
-  /// Everything here applies as it is changed, so the footer's only act on the
-  /// settings is to put a page back, kept apart from the way out. A search has
-  /// no one page to reset, and two pages have nothing that ships with a value.
-  Widget _footer(LumitTheme t, LumitUiState ui) => dialogFooter(
-        t,
-        keyPrefix: 'settings',
-        leading: _everywhere ||
-                _page == SettingsPage.account ||
-                _page == SettingsPage.addons
-            ? null
-            : HouseButton(
-                key: const ValueKey('settings-reset-page'),
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                // The page was built above, so what its rows said is fresh.
-                onPressed: _changedOn(_page) ? () => _resetPage(_page) : null,
-                child: Text(l10n.settingsResetPage),
-              ),
-        actions: [
-          HouseButton(
-            key: const ValueKey('settings-close-button'),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            onPressed: widget.onClose,
-            child: Text(l10n.close),
-          ),
-        ],
-      );
 
   List<Widget> _sectionsOf(SettingsPage page, LumitTheme t, LumitUiState ui) {
     final was = _building;
@@ -969,26 +1061,32 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           if (page != SettingsPage.shortcuts)
             if (_foundOn(page, t, ui) case final sections
                 when sections.isNotEmpty) ...[
-              pageMenu(_resettable(page) ? () => _resetPage(page) : null,
-                  changed: () => _changedOn(page), ColoredBox(
-                color: t.surface2,
-                child: HoverFill(
-                  child: GestureDetector(
-                    key: ValueKey<String>('settings-found-${page.name}'),
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => _openPage(page),
-                    child: Container(
-                      height: settingsNavRow,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: settingsRowPadding),
+              pageMenu(
+                  _resettable(page) ? () => _resetPage(page) : null,
+                  changed: () => _changedOn(page),
+                  Padding(
+                    padding: const EdgeInsetsDirectional.fromSTEB(
+                        settingsPagePadding - 6, settingsSectionGap, 0, 0),
+                    child: Align(
                       alignment: AlignmentDirectional.centerStart,
-                      child: Text(page.label, style: t.bodyPrimary),
+                      child: HoverFill(
+                        radius: BorderRadius.circular(_navCorner(t)),
+                        child: GestureDetector(
+                          key: ValueKey<String>('settings-found-${page.name}'),
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => _openPage(page),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 4),
+                            child: Text(page.label,
+                                style: t.bodyPrimary
+                                    .copyWith(fontWeight: FontWeight.w500)),
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              )),
+                  )),
               ...sections,
-              const SizedBox(height: 8),
             ],
       ];
 
@@ -1038,7 +1136,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                               key: const ValueKey('settings-no-matches'),
                               style: t.small.copyWith(color: t.textMuted)),
                         ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: settingsPagePadding + 4),
                     ],
                   ),
                 ),
@@ -1506,72 +1604,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     final settings = ui.workspace.interface;
     return _sections(t, [
       (
-        l10n.settingsGroupTheme,
+        l10n.settingsStyle,
         [
-          _row(
-            t,
-            l10n.settingsColourScheme,
-            // The strip goes first when the window is narrow: the name is the
-            // setting, and the strip only shows it.
-            _carry(_setting('settings-scheme', ui.workspace.themeChoice,
-                ui.workspace.choose), LayoutBuilder(builder: (context, box) => Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _dropdown<ThemeChoice>(
-                  key: 'settings-scheme',
-                  value: ui.workspace.themeChoice,
-                  options: ui.workspace.themeChoices,
-                  width: _ddWide,
-                  label: (c) => c.label,
-                  // Dark, Light, then the user's own: thirty-one built-ins and
-                  // a growing list of custom themes is a long flat menu, and
-                  // light/dark is the first thing anyone is choosing by.
-                  group: (c) => c.group,
-                  onChanged: (c) => setState(() => ui.workspace.choose(c)),
-                  onPreview: ui.workspace.previewChoice,
-                  onPreviewEnd: () => ui.workspace.previewChoice(null),
-                ),
-                if (box.maxWidth >= _schemeWithStrip) ...[
-                  const SizedBox(width: 8),
-                  ThemeSwatchStrip(
-                    key: const ValueKey('settings-theme-swatches'),
-                    theme: ui.workspace.theme,
-                  ),
-                ],
-              ],
-            ))),
-          ),
-          // Scheme, then the two rows about *your* theme, then the two dials
-          // that tune whichever one is in force. The order is the order the
-          // work happens in: pick a scheme, make it yours, then adjust it —
-          // accent and shape used to sit above the rows that create the thing
-          // they adjust.
-          _row(
-            t,
-            l10n.settingsCustomColours,
-            HouseButton(
-              key: const ValueKey('settings-customise'),
-              small: true,
-              onPressed: () async {
-                await showThemeEditorFrb(context, ui);
-                if (mounted) setState(() {});
-              },
-              child: Text(l10n.customiseEllipsis, style: t.small),
-            ),
-          ),
-          _row(t, l10n.settingsYourThemes, _themeShelf(t, ui),
-              description: _themeMessage ?? ''),
-          _row(
-              t,
-              l10n.settingsAccent,
-              _carry(
-                  _setting('settings-accent', ui.workspace.accentOverride,
-                      ui.workspace.setAccent,
-                      copy: _hex(t.accent)),
-                  _accentSwatches(t, ui))),
-          _flag(t, 'settings-themed-splash', l10n.settingsSplashUsesThemeColour,
-              value: ui.workspace.themedSplash,
-              set: ui.workspace.setThemedSplash),
           _row(
             t,
             l10n.settingsShape,
@@ -1700,6 +1734,47 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                 }),
               ),
             ),
+        ],
+      ),
+      (
+        l10n.settingsGroupTheme,
+        [
+          _row(
+              t,
+              l10n.settingsAccent,
+              _carry(
+                  _setting('settings-accent', ui.workspace.accentOverride,
+                      ui.workspace.setAccent,
+                      copy: _hex(t.accent)),
+                  _accentSwatches(t, ui))),
+          _wide(
+            l10n.settingsColourScheme,
+            SchemeGrid(
+              key: const ValueKey('settings-scheme'),
+              workspace: ui.workspace,
+              onChoose: (c) => setState(() => ui.workspace.choose(c)),
+            ),
+            _setting('settings-scheme', ui.workspace.themeChoice,
+                ui.workspace.choose),
+          ),
+          _row(
+            t,
+            l10n.settingsCustomColours,
+            HouseButton(
+              key: const ValueKey('settings-customise'),
+              small: true,
+              onPressed: () async {
+                await showThemeEditorFrb(context, ui);
+                if (mounted) setState(() {});
+              },
+              child: Text(l10n.customiseEllipsis, style: t.small),
+            ),
+          ),
+          _row(t, l10n.settingsYourThemes, _themeShelf(t, ui),
+              description: _themeMessage ?? ''),
+          _flag(t, 'settings-themed-splash', l10n.settingsSplashUsesThemeColour,
+              value: ui.workspace.themedSplash,
+              set: ui.workspace.setThemedSplash),
         ],
       ),
       (

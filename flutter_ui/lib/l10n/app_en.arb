@@ -16296,7 +16296,7 @@
   },
   "settingsStyle": "Style",
   "@settingsStyle": {
-    "description": "Settings window, Appearance: the name of the row choosing how an audio waveform is drawn."
+    "description": "Settings window, Appearance: the heading over the interface style rows, and the name of the Waveforms row choosing how an audio waveform is drawn."
   },
   "settingsSurround": "Surround",
   "@settingsSurround": {

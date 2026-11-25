@@ -46,18 +46,21 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const ValueKey('settings-scheme')));
-      await tester.pumpAndSettle();
-
       expect(find.text('Dark'), findsWidgets);
       expect(find.text('Light'), findsWidgets);
       expect(find.text('Custom'), findsOneWidget,
           reason: 'the heading appears once a theme is saved under it');
-      // Twice: the picker's row, and the button behind it already showing the
-      // selection (saving a theme selects it).
-      expect(find.text('Mine'), findsWidgets);
 
-      await tester.tap(find.text('Mine').last);
+      // Choosing another scheme leaves the custom theme, and its own tile
+      // brings it back.
+      final light = find.byKey(const ValueKey('settings-scheme-light'));
+      final mine = find.byKey(const ValueKey('settings-scheme-custom-Mine'));
+      await tester.ensureVisible(light);
+      await tester.tap(light);
+      await tester.pumpAndSettle();
+      expect(p.uiState.workspace.customThemeName, isNull);
+      await tester.ensureVisible(mine);
+      await tester.tap(mine);
       await tester.pumpAndSettle();
       expect(p.uiState.workspace.customThemeName, 'Mine');
     });
@@ -65,6 +68,7 @@ void main() {
     testWidgets('the first save names the theme, later ones update it',
         (tester) async {
       final p = await openAppearance(tester);
+      await tester.ensureVisible(find.byKey(const ValueKey('settings-customise')));
       await tester.tap(find.byKey(const ValueKey('settings-customise')));
       await tester.pumpAndSettle();
 
