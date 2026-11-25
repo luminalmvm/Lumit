@@ -33,6 +33,7 @@ import 'package:lumit_flutter/src/rust/api/import.dart' show cancelImport;
 import 'package:lumit_flutter/src/rust/api/shell.dart';
 
 import '../l10n/strings.dart';
+import '../state/usage_data.dart' show UsageData;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'dialog_frame.dart';
@@ -111,11 +112,13 @@ Future<RecoveryChoice?> showRecoveryDialogFrb({
             crashed: crashed);
       }
       state.sharingLetGo();
+      UsageData.note('stability', 'recovered');
     case RecoveryChoice.autosave:
       // Before the autosave opens: the edits are the saved file's, and the
       // project in hand stops being that file the moment another opens.
       if (crashed) state.project?.discardJournal();
       await state.openProject(autosaves.first.path, recover: false);
+      UsageData.note('stability', 'recovered');
     case RecoveryChoice.discard:
       if (crashed) state.project?.discardJournal();
   }

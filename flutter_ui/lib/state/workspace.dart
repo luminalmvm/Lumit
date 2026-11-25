@@ -1109,6 +1109,12 @@ class Workspace extends ChangeNotifier {
   /// anybody a surprise few hundred megabytes.
   bool autoUpdate = true;
 
+  bool shareUsage = true;
+
+  bool usageNoticeSeen = true;
+
+  String usageId = '';
+
   /// Whether updates follow nightly builds rather than stable releases. Null
   /// until the user chooses, which the updater reads as "whatever is running"
   /// (`UpdateService.followsNightly`).
@@ -1809,6 +1815,17 @@ class Workspace extends ChangeNotifier {
     settingsChanged();
   }
 
+  void setShareUsage(bool on) {
+    shareUsage = on;
+    usageNoticeSeen = true;
+    settingsChanged();
+  }
+
+  void setUsageId(String id) {
+    usageId = id;
+    save();
+  }
+
   void setNightlyUpdates(bool on) {
     nightlyUpdates = on;
     settingsChanged();
@@ -2429,6 +2446,9 @@ class Workspace extends ChangeNotifier {
         'first_run_done': firstRunDone,
         'tour_done': tourDone,
         'auto_update': autoUpdate,
+        'share_usage': shareUsage,
+        'usage_notice_seen': usageNoticeSeen,
+        'usage_id': usageId,
         'nightly_updates': nightlyUpdates,
         'nightly_icon': nightlyIcon,
         'discord_status': discordStatus.name,
@@ -2576,6 +2596,9 @@ class Workspace extends ChangeNotifier {
     // for; the default is on, and an existing user gets the same offer a new
     // one does.
     autoUpdate = j['auto_update'] as bool? ?? true;
+    shareUsage = j['share_usage'] as bool? ?? true;
+    usageNoticeSeen = j['usage_notice_seen'] as bool? ?? false;
+    usageId = j['usage_id'] as String? ?? '';
     nightlyUpdates = j['nightly_updates'] as bool?;
     nightlyIcon = j['nightly_icon'] as bool? ?? true;
     // By name. Absent, or a name no build wrote, is the shipped default.
@@ -2852,6 +2875,7 @@ class Workspace extends ChangeNotifier {
         // without being asked to introduce themselves again.
         firstRunDone = false;
         tourDone = false;
+        usageNoticeSeen = false;
         return;
       }
       final j = jsonDecode(f.readAsStringSync());

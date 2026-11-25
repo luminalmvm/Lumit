@@ -81,6 +81,7 @@ import 'package:lumit_flutter/state/template_library.dart'
     show TemplateUpdates;
 import 'package:lumit_flutter/state/tools.dart' show ToolGroup;
 import 'package:lumit_flutter/state/ui_state.dart';
+import 'package:lumit_flutter/state/usage_data.dart' show UsageData;
 import 'package:lumit_flutter/state/viewer_views.dart';
 import 'package:lumit_flutter/state/window_backdrop.dart';
 import 'package:lumit_flutter/theme/motion.dart';
@@ -385,6 +386,7 @@ class _LumitAppViewState extends State<LumitAppView> {
     // The first-run questions, after the first frame so there is an
     // Overlay to put them in. They ask nothing on any later launch.
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      UsageData.launch.stop();
       if (!mounted) return;
       final ui = context.read<LumitUiState>();
       maybeShowFirstRunFrb(context, ui.workspace, keymap: ui.keymap)
@@ -396,6 +398,7 @@ class _LumitAppViewState extends State<LumitAppView> {
         // picture a pinned shortcut had before an update changed the icon,
         // until it is told to look again.
         ui.applyAppIcon();
+        ui.maybeSendUsage();
         // And the tour follows them too, in the look just chosen. Like the
         // questions it opens by itself once.
         if (!mounted) return;
@@ -788,6 +791,7 @@ class _LumitAppViewState extends State<LumitAppView> {
       // else — without either binding having to know about the other.
       final tool = ui.keymap.actionFor(BridgeKeyContext.tools, event);
       if (tool != null && ui.tools.handleAction(tool)) {
+        if (event is KeyDownEvent) ui.usage.count('command', tool);
         return KeyEventResult.handled;
       }
       // **Panels** is the other one, and for the same reason: its three
@@ -801,7 +805,10 @@ class _LumitAppViewState extends State<LumitAppView> {
     }
     // A tool action can also arrive from the primary lookup, if someone rebinds
     // one into a context a panel is. Same handler either way.
-    if (ui.tools.handleAction(action)) return KeyEventResult.handled;
+    if (ui.tools.handleAction(action)) {
+      if (event is KeyDownEvent) ui.usage.count('command', action);
+      return KeyEventResult.handled;
+    }
     if (event is KeyRepeatEvent && _pressedOnce(action)) {
       return KeyEventResult.handled;
     }
@@ -1557,6 +1564,7 @@ class _LumitAppViewState extends State<LumitAppView> {
       default:
         handled = runGradeAction(state, ui, action);
     }
+    if (handled && event is KeyDownEvent) ui.usage.count('command', action);
     return handled ? KeyEventResult.handled : KeyEventResult.ignored;
   }
 }

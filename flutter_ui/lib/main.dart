@@ -29,6 +29,7 @@ import 'package:lumit_flutter/state/files.dart'
     if (dart.library.js_interop) 'package:lumit_flutter/state/files_web.dart';
 import 'package:lumit_flutter/state/ui_state.dart';
 import 'package:lumit_flutter/state/updates.dart' show versionFromBootLine;
+import 'package:lumit_flutter/state/usage_data.dart' show UsageData;
 
 // main.dart is the entry point and nothing else; the shell's parts live beside
 // it and are re-exported here so every existing `main.dart` import still finds
@@ -39,6 +40,7 @@ export 'package:lumit_flutter/state/bridge_trace.dart';
 export 'package:lumit_flutter/state/ui_state.dart';
 
 Future<void> main(List<String> args) async {
+  UsageData.launch.start();
   enablePopOut();
   WidgetsFlutterBinding.ensureInitialized();
 
