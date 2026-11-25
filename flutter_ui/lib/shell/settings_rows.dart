@@ -8,8 +8,7 @@
 //
 // A row is its name at one edge and its control at the other, so a page's
 // controls stand in one column down the far edge and the row uses the width it
-// has. A section is a kicker over its rows with a rule and a little air above
-// it, and no card around them.
+// has. A section is a kicker over a rounded card that holds its rows.
 
 import 'dart:math' as math;
 
@@ -27,10 +26,9 @@ import '../state/files.dart' if (dart.library.js_interop) '../state/files_web.da
 import 'dialog_frame.dart' show FittedText;
 import 'settings_account.dart' show askBefore;
 
-/// A row's height, and the numbers that make it up (docs/15 §12A.4/§12A.6: a
-/// dialog row is 30 under both densities). A row carrying a live readout under
-/// it is taller by that line; nothing else grows.
-const double settingsRowHeight = 30;
+/// A row's height, and the numbers that make it up. A row carrying a live
+/// readout under it is taller by that line; nothing else grows.
+const double settingsRowHeight = 34;
 
 /// The inset every row and section header takes from the page's edges.
 const double settingsRowPadding = 16;
@@ -41,11 +39,13 @@ const double settingsLabelMin = 130;
 const double settingsRowGap = 12;
 const double settingsActionAllowance = 80;
 
-/// A section's kicker band: 12 above the label, its 14px line, 4 below.
-const double settingsSectionHeaderHeight = 30;
+/// The air between a page's edge and its cards, and between one card and the
+/// next section's heading.
+const double settingsPagePadding = 16;
+const double settingsSectionGap = 22;
 
-/// The air above a section's rule — every section but the page's first.
-const double settingsSectionGap = 6;
+/// The room above and below the rows inside a card.
+const double settingsCardPadding = 6;
 
 /// A dropdown's closed face and a value well **in a dialog**: 22, the one
 /// height §12A.6 gives them under both densities. Panel wells are 20; a dialog
@@ -76,11 +76,13 @@ class SettingControl extends StatelessWidget {
   Widget build(BuildContext context) => child;
 }
 
-/// A named group of rows: a quiet kicker, then the rows themselves.
+/// A named group of rows: a quiet heading, then the rows on a card.
 ///
-/// [first] leaves off the rule and the air above it, which the page's opening
-/// section has nothing to be separated from. [onResetPage] puts the page it
-/// is on back, from the kicker's right-click, greyed unless [pageChanged].
+/// The card takes its corner from the theme's section radius, never below 8
+/// unless the theme is square. [first] leaves off the air above the heading,
+/// which the page's opening section has nothing to be separated from.
+/// [onResetPage] puts the page it is on back, from the heading's right-click,
+/// greyed unless [pageChanged].
 Widget settingsSection(
   LumitTheme t,
   String title,
@@ -88,28 +90,43 @@ Widget settingsSection(
   bool first = false,
   VoidCallback? onResetPage,
   bool pageChanged = true,
-}) =>
-    Column(
+}) {
+  final corner = t.tokens.sectionRadius <= 0
+      ? 0.0
+      : (t.tokens.sectionRadius < 8 ? 8.0 : t.tokens.sectionRadius);
+  return Padding(
+    padding: EdgeInsets.fromLTRB(settingsPagePadding,
+        first ? settingsPagePadding : settingsSectionGap, settingsPagePadding, 0),
+    child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (!first) ...[
-          const SizedBox(height: settingsSectionGap),
-          Container(height: 1, color: t.hairline),
-        ],
-        pageMenu(onResetPage, SizedBox(
-          height: settingsSectionHeaderHeight,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(
-                settingsRowPadding, 12, settingsRowPadding, 4),
-            child: Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: Text(t.kickerCase(title), style: t.kicker),
+        pageMenu(
+            onResetPage,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(2, 0, 2, 8),
+              child: Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: Text(t.kickerCase(title), style: t.kicker),
+              ),
             ),
+            changed: () => pageChanged),
+        Container(
+          clipBehavior: Clip.antiAlias,
+          padding: const EdgeInsets.symmetric(vertical: settingsCardPadding),
+          decoration: BoxDecoration(
+            color: t.surface2,
+            borderRadius: BorderRadius.circular(corner),
+            border: Border.all(color: t.hairline),
           ),
-        ), changed: () => pageChanged),
-        ...rows,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: rows,
+          ),
+        ),
       ],
-    );
+    ),
+  );
+}
 
 /// [heading] with a right-click holding Reset page, when [reset] is given.
 /// [changed] is asked as the menu opens, and greys the row when it says no.
