@@ -6857,6 +6857,8 @@ fn every_parameter_declares_a_unit() {
             ("turbiniu", "distortion_amplitude"),
             ("turbiniu", "arrow_length_begin"),
             ("turbiniu", "arrow_length_end"),
+            ("turbiniu", "dry_brush_scale"),
+            ("turbiniu", "edge_roughness_scale"),
             ("turbiniu", "mask_1_feather"),
             ("turbiniu", "mask_1_thickness"),
             ("turbiniu", "mask_1_sine_1_amplitude"),

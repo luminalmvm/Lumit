@@ -120,6 +120,17 @@ The guides follow the masks' keys, so the strokes move as the masks do.
 | **Across-stroke palette shift** | Slider | -100 to 100; any value by typing | 0 | Per cent |
 | **Across-stroke palette span** | Slider | -100 to 100; any value by typing | 100 | Per cent |
 | **Repeat across-stroke palette** | Checkbox | On or off | Off | - |
+| **Dry brush** | Slider | 0 to 100 | 0 | Per cent |
+| **Dry brush profile** | Curve | 2 to 32 points in the unit square | The identity diagonal | - |
+| **Dry brush grain** | Slider | 1 to 200; down to 0.5 and up to 10000 | 40 | Pixels at composition size |
+| **Edge roughness** | Slider | 0 to 100 | 0 | Per cent |
+| **Rough edge depth** | Slider | 0 to 100 | 35 | Per cent |
+| **Rough edge grain** | Slider | 1 to 100; down to 0.5 and up to 10000 | 12 | Pixels at composition size |
+| **Coverage hardness** | Slider | 0 to 100 | 0 | Per cent |
+| **Density colour** | Slider | 0 to 100 | 0 | Per cent |
+| **Thin paint colour** | Colour | Each channel 0 to 4, scene-linear | 0.15, 0.15, 0.15, 1 | - |
+| **Mid paint colour** | Colour | Each channel 0 to 4, scene-linear | 0.5, 0.5, 0.5, 1 | - |
+| **Dense paint colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
 | **First path** | Masks | This layer's masks | First mask | - |
 | **First guide › Edge softness** | Slider | 0 to 10; up to 1000 | 1 | Pixels at composition size |
 | **First guide › Sample spacing profile** | Curve | 2 to 32 points in the unit square | The identity diagonal | - |
@@ -197,6 +208,8 @@ In the Effect Controls panel:
 - **Stroke tips** groups **Leading tip**, **Leading tip reach**, **Leading tip spread**, **Trailing tip**, **Trailing tip reach**, **Trailing tip spread**, and starts closed.
 - **Stroke variation** groups **Spacing jitter**, **Travel jitter**, **Palette jitter**, **Width jitter**, **Coverage jitter**, **Variation seed**, and starts closed.
 - **Across-stroke colour** groups **Palette combine**, **Palette size**, **Palette swatch 1**, **Palette swatch 2**, **Palette swatch 3**, **Palette swatch 4**, **Palette swatch 5**, **Across-stroke colour profile**, **Across-stroke palette shift**, **Across-stroke palette span**, **Repeat across-stroke palette**, and starts closed.
+- **Brush texture** groups **Dry brush**, **Dry brush profile**, **Dry brush grain**, **Edge roughness**, **Rough edge depth**, **Rough edge grain**, **Coverage hardness**, and starts closed.
+- **Paint density colour** groups **Density colour**, **Thin paint colour**, **Mid paint colour**, **Dense paint colour**, and starts closed.
 - **First guide** groups **First path**, **Edge softness**, **Sample spacing profile**, **Stroke width**, **Width profile**, **Width profile shift**, **Width profile span**, **Repeat width profile**, **Reverse guide**, **Base coverage**, **Coverage profile**, **Coverage profile shift**, **Coverage profile span**, **Repeat coverage profile**, **Palette size**, **Palette swatch 1**, **Palette swatch 2**, **Palette swatch 3**, **Palette swatch 4**, **Palette swatch 5**, **Along-path colour profile**, **Along-path palette shift**, **Palette shift jitter**, **Repeat along-path palette**, **Wave combine**, **Wave 1 depth**, **Wave 1 rate**, **Wave 1 phase**, **Wave 2 depth**, **Wave 2 rate**, **Wave 2 phase**.
 - **Second guide** groups **Second path**, **Inherit first guide style**, **Edge softness**, **Sample spacing profile**, **Stroke width**, **Width profile**, **Width profile shift**, **Width profile span**, **Repeat width profile**, **Reverse guide**, **Base coverage**, **Coverage profile**, **Coverage profile shift**, **Coverage profile span**, **Repeat coverage profile**, **Palette size**, **Palette swatch 1**, **Palette swatch 2**, **Palette swatch 3**, **Palette swatch 4**, **Palette swatch 5**, **Along-path colour profile**, **Along-path palette shift**, **Palette shift jitter**, **Repeat along-path palette**, **Wave combine**, **Wave 1 depth**, **Wave 1 rate**, **Wave 1 phase**, **Wave 2 depth**, **Wave 2 rate**, **Wave 2 phase**.
 - **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
@@ -256,6 +269,28 @@ In the Effect Controls panel:
   little different.
 - Coverage only goes down from **Base coverage**, which starts at full: lower it, to 0.5 say,
   to see the texture or the wave at low values.
+
+### Brush texture
+
+These make the strokes look painted with a real brush. All of them start at 0, which leaves
+the strokes as they were.
+
+- **Dry brush** is paint running out: gaps open in each stroke, as the paper shows through a
+  dry brush. **Dry brush profile** says where along the stroke it runs dry, from none at the
+  start to the full amount at the end by default, and **Dry brush grain** is how long the gaps
+  are. With many strokes, each runs dry in its own places, like the bristles of a brush.
+- **Edge roughness** tears the strokes' sides, each side by its own pattern, as Roughen Edges
+  does. A single stroke is torn whole; with several, **Rough edge depth** is how far in from
+  the outer strokes the tearing reaches. **Rough edge grain** is how long each tear is.
+- **Coverage hardness** goes from soft, wet coverage to crisp, dry coverage: the coverage
+  from the texture, the wave and **Dry brush** is pressed towards fully on or off, as Levels
+  squeezes a matte.
+- **Density colour** recolours the strokes by how much paint they carry: thin paint takes
+  **Thin paint colour**, middling paint **Mid paint colour** and full paint **Dense paint
+  colour**, a three-tone colour map read from the coverage.
+
+The patterns are laid along the stroke in pixels, so they stay where they are as **Trim out**
+draws the stroke on, and **Variation seed** gives other ones.
 
 ### Trim and tips
 

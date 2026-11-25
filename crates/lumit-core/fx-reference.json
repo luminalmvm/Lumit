@@ -15001,6 +15001,141 @@
           "default": false
         },
         {
+          "id": "dry_brush",
+          "label": "Dry brush",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "dry_brush_ramp",
+          "label": "Dry brush profile",
+          "kind": "curve",
+          "unit": "raw",
+          "default": [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        {
+          "id": "dry_brush_scale",
+          "label": "Dry brush grain",
+          "kind": "float",
+          "unit": "px",
+          "default": 40.0,
+          "slider_min": 1.0,
+          "slider_max": 200.0,
+          "hard_min": 0.5,
+          "hard_max": 10000.0
+        },
+        {
+          "id": "edge_roughness",
+          "label": "Edge roughness",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "edge_roughness_depth",
+          "label": "Rough edge depth",
+          "kind": "float",
+          "unit": "percent",
+          "default": 35.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "edge_roughness_scale",
+          "label": "Rough edge grain",
+          "kind": "float",
+          "unit": "px",
+          "default": 12.0,
+          "slider_min": 1.0,
+          "slider_max": 100.0,
+          "hard_min": 0.5,
+          "hard_max": 10000.0
+        },
+        {
+          "id": "coverage_hardness",
+          "label": "Coverage hardness",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "density_colour",
+          "label": "Density colour",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "density_colour_thin",
+          "label": "Thin paint colour",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.15,
+            0.15,
+            0.15,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "density_colour_mid",
+          "label": "Mid paint colour",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.5,
+            0.5,
+            0.5,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "density_colour_dense",
+          "label": "Dense paint colour",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
           "id": "mask_1",
           "label": "First path",
           "kind": "mask_path",
@@ -15898,6 +16033,29 @@
             "cross_gradient_offset",
             "cross_gradient_scale",
             "cross_gradient_loop"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Brush texture",
+          "params": [
+            "dry_brush",
+            "dry_brush_ramp",
+            "dry_brush_scale",
+            "edge_roughness",
+            "edge_roughness_depth",
+            "edge_roughness_scale",
+            "coverage_hardness"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Paint density colour",
+          "params": [
+            "density_colour",
+            "density_colour_thin",
+            "density_colour_mid",
+            "density_colour_dense"
           ],
           "collapsed": true
         },

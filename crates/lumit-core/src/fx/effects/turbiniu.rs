@@ -161,6 +161,29 @@ const GROUPS: &[ParamGroup] = &[
         true,
     ),
     group(
+        "Brush texture",
+        &[
+            "dry_brush",
+            "dry_brush_ramp",
+            "dry_brush_scale",
+            "edge_roughness",
+            "edge_roughness_depth",
+            "edge_roughness_scale",
+            "coverage_hardness",
+        ],
+        true,
+    ),
+    group(
+        "Paint density colour",
+        &[
+            "density_colour",
+            "density_colour_thin",
+            "density_colour_mid",
+            "density_colour_dense",
+        ],
+        true,
+    ),
+    group(
         "First guide",
         &[
             "mask_1",
@@ -512,6 +535,51 @@ pub struct Turbiniu {
 
     #[toggle(label = "Repeat across-stroke palette", default = false)]
     pub cross_gradient_loop: bool,
+
+    /// Paint running out: gaps open in each stroke, more where the profile
+    /// is higher, as a dry brush leaves the paper showing through.
+    #[slider(label = "Dry brush", min = 0.0, max = 100.0, default = 0.0, unit = Percent, hard_min = 0.0, hard_max = 100.0)]
+    pub dry_brush: f32,
+
+    #[curve(label = "Dry brush profile", default = [[0.0, 0.0], [1.0, 1.0]])]
+    pub dry_brush_ramp: CurvePoints,
+
+    /// How long the dry gaps are, in pixels along the stroke.
+    #[slider(label = "Dry brush grain", min = 1.0, max = 200.0, default = 40.0, unit = Px, hard_min = 0.5, hard_max = 10000.0)]
+    pub dry_brush_scale: f32,
+
+    /// The strokes' sides torn, as Roughen Edges tears a layer's: each side
+    /// of a stroke is eaten in by its own pattern.
+    #[slider(label = "Edge roughness", min = 0.0, max = 100.0, default = 0.0, unit = Percent, hard_min = 0.0, hard_max = 100.0)]
+    pub edge_roughness: f32,
+
+    /// With several strokes, how far in from the family's outer strokes the
+    /// tearing reaches; a single stroke is torn whole.
+    #[slider(label = "Rough edge depth", min = 0.0, max = 100.0, default = 35.0, unit = Percent, hard_min = 0.0, hard_max = 100.0)]
+    pub edge_roughness_depth: f32,
+
+    /// How long each tear is, in pixels along the stroke.
+    #[slider(label = "Rough edge grain", min = 1.0, max = 100.0, default = 12.0, unit = Px, hard_min = 0.5, hard_max = 10000.0)]
+    pub edge_roughness_scale: f32,
+
+    /// From soft, wet coverage to crisp, dry coverage: the textured coverage
+    /// pressed towards fully on or off, as Levels squeezes a matte.
+    #[slider(label = "Coverage hardness", min = 0.0, max = 100.0, default = 0.0, unit = Percent, hard_min = 0.0, hard_max = 100.0)]
+    pub coverage_hardness: f32,
+
+    /// The strokes recoloured by how much paint they carry: thin paint takes
+    /// the first colour, dense paint the last.
+    #[slider(label = "Density colour", min = 0.0, max = 100.0, default = 0.0, unit = Percent, hard_min = 0.0, hard_max = 100.0)]
+    pub density_colour: f32,
+
+    #[colour(label = "Thin paint colour", default = [0.15, 0.15, 0.15, 1.0], max = 4.0)]
+    pub density_colour_thin: [f32; 4],
+
+    #[colour(label = "Mid paint colour", default = [0.5, 0.5, 0.5, 1.0], max = 4.0)]
+    pub density_colour_mid: [f32; 4],
+
+    #[colour(label = "Dense paint colour", default = [1.0, 1.0, 1.0, 1.0], max = 4.0)]
+    pub density_colour_dense: [f32; 4],
 
     #[mask_path(label = "First path")]
     pub mask_1: bool,

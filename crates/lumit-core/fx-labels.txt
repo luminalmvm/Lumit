@@ -235,6 +235,7 @@ Broadband, green
 Broadcast safe
 Brush hardness
 Brush size
+Brush texture
 Brushed
 Brushed metal
 Bulge
@@ -410,6 +411,7 @@ Cover left
 Cover right
 Coverage
 Coverage bias
+Coverage hardness
 Coverage jitter
 Coverage profile
 Coverage profile shift
@@ -472,7 +474,9 @@ Deformer
 Delay
 Denoise
 Denominator
+Dense paint colour
 Density
+Density colour
 Density layer
 Depth
 Depth (nm)
@@ -540,6 +544,9 @@ Drop shadow
 Drop the rest
 Droplets
 Dry
+Dry brush
+Dry brush grain
+Dry brush profile
 Duration
 Dust
 Each path
@@ -556,6 +563,7 @@ Edge colour
 Edge fade
 Edge margin
 Edge repeat
+Edge roughness
 Edge sampling
 Edge sharpness
 Edge softness
@@ -1158,6 +1166,7 @@ Mesh warp
 Metallic
 Method
 Micro Four Thirds
+Mid paint colour
 Middle
 Middle colour
 Midtone
@@ -1299,6 +1308,7 @@ PAL
 Padding x
 Padding y
 Paint
+Paint density colour
 Paint style
 Palette combine
 Palette jitter
@@ -1595,6 +1605,8 @@ Rotation x
 Rotation y
 Rotation z
 Roto brush
+Rough edge depth
+Rough edge grain
 Roughen
 Roughen edges
 Roughness
@@ -1943,6 +1955,7 @@ The stock's own
 Thickness
 Thickness max
 Thickness min
+Thin paint colour
 This comp
 Three
 Threshold

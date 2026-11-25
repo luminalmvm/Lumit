@@ -444,3 +444,113 @@ fn a_wrapped_marker_keeps_its_chance_on_every_lap() {
         );
     }
 }
+
+/// One straight stroke 400 px long, cut into 200 pieces.
+fn brush() -> (MaskPolyline, Turbiniu) {
+    (
+        path(&[[0.0, 50.0], [400.0, 50.0]], false),
+        Turbiniu {
+            curve_segments: 200,
+            ..controls()
+        },
+    )
+}
+
+/// The coverage at each cut along a stroke: the inner band's first corner,
+/// 18 vertices to a piece.
+fn coverages(vertices: &[[f32; 6]]) -> Vec<f32> {
+    vertices.chunks(18).map(|piece| piece[6][5]).collect()
+}
+
+#[test]
+fn a_dry_brush_opens_gaps_that_grow_with_its_profile() {
+    let (guide, fx) = brush();
+    let at = |fx: Turbiniu| coverages(&fx.geometry(&guide, &guide, 1.0, [400, 100]));
+    // Nothing changes until Dry brush is raised.
+    assert!(at(fx).iter().all(|&a| (a - 1.0).abs() < 1e-6));
+    let flat = CurvePoints::sanitised(&[[0.0, 1.0], [1.0, 1.0]]);
+    let all = at(Turbiniu {
+        dry_brush: 100.0,
+        dry_brush_ramp: flat,
+        ..fx
+    });
+    assert!(all.iter().all(|&a| a < 1e-6), "fully dry leaves nothing");
+    let half = at(Turbiniu {
+        dry_brush: 50.0,
+        dry_brush_ramp: flat,
+        ..fx
+    });
+    assert!(half.iter().any(|&a| a > 0.9) && half.iter().any(|&a| a < 0.1));
+    // The default profile dries towards the end.
+    let ramped = at(Turbiniu {
+        dry_brush: 100.0,
+        ..fx
+    });
+    let mean = |s: &[f32]| s.iter().sum::<f32>() / s.len() as f32;
+    let quarter = ramped.len() / 4;
+    assert!(mean(&ramped[..quarter]) > mean(&ramped[ramped.len() - quarter..]) + 0.3);
+}
+
+#[test]
+fn edge_roughness_eats_each_side_on_its_own() {
+    let (guide, fx) = brush();
+    let rough = Turbiniu {
+        edge_roughness: 100.0,
+        ..fx
+    }
+    .geometry(&guide, &guide, 1.0, [400, 100]);
+    let smooth = fx.geometry(&guide, &guide, 1.0, [400, 100]);
+    let width = |piece: &[[f32; 6]]| (piece[7][1] - piece[6][1]).abs();
+    let middle = |piece: &[[f32; 6]]| (piece[7][1] + piece[6][1]) * 0.5;
+    let full = width(&smooth[..18]);
+    let pieces: Vec<_> = rough.chunks(18).collect();
+    assert!(pieces.iter().all(|p| width(p) <= full + 1e-4));
+    assert!(pieces.iter().any(|p| width(p) < full * 0.7));
+    assert!(pieces.iter().any(|p| (middle(p) - 50.0).abs() > 0.3));
+}
+
+#[test]
+fn hardness_presses_coverage_to_on_or_off() {
+    let (guide, fx) = brush();
+    let at = |base: f32, hardness: f32| {
+        coverages(
+            &Turbiniu {
+                alpha_noise_brightness: base,
+                coverage_hardness: hardness,
+                ..fx
+            }
+            .geometry(&guide, &guide, 1.0, [400, 100]),
+        )[10]
+    };
+    assert!((at(0.4, 0.0) - 0.4).abs() < 1e-5);
+    assert!(at(0.4, 100.0) < 1e-5);
+    assert!(at(0.6, 100.0) > 1.0 - 1e-5);
+    assert!(at(0.4, 50.0) < 0.4 && at(0.6, 50.0) > 0.6);
+}
+
+#[test]
+fn density_colour_follows_how_much_paint_there_is() {
+    let (guide, fx) = brush();
+    let colour = |base: f32| {
+        let v = Turbiniu {
+            alpha_noise_brightness: base,
+            density_colour: 100.0,
+            density_colour_thin: [1.0, 0.0, 0.0, 1.0],
+            density_colour_mid: [0.0, 1.0, 0.0, 1.0],
+            density_colour_dense: [0.0, 0.0, 1.0, 1.0],
+            ..fx
+        }
+        .geometry(&guide, &guide, 1.0, [400, 100])[6 + 18 * 10];
+        [v[2] / v[5], v[3] / v[5], v[4] / v[5]]
+    };
+    let dense = colour(1.0);
+    assert!(
+        dense[2] > 0.99 && dense[0] < 0.01 && dense[1] < 0.01,
+        "{dense:?}"
+    );
+    let thin = colour(0.25);
+    assert!(
+        (thin[0] - 0.5).abs() < 0.01 && (thin[1] - 0.5).abs() < 0.01,
+        "{thin:?}"
+    );
+}

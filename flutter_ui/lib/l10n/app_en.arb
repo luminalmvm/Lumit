@@ -33900,6 +33900,58 @@
   "@fxCoverageBias": {
     "description": "Effect controls: a control on Turbiniu, how much coverage is added to the wave, so less or more of each stroke shows."
   },
+  "fxBrushTexture": "Brush texture",
+  "@fxBrushTexture": {
+    "description": "Effect controls: a group on Turbiniu holding the controls that make the strokes look painted with a dry, torn brush."
+  },
+  "fxDryBrush": "Dry brush",
+  "@fxDryBrush": {
+    "description": "Effect controls: a control on Turbiniu, how much the paint runs out, opening gaps in each stroke."
+  },
+  "fxDryBrushProfile": "Dry brush profile",
+  "@fxDryBrushProfile": {
+    "description": "Effect controls: a curve on Turbiniu, where along the stroke the brush runs dry."
+  },
+  "fxDryBrushGrain": "Dry brush grain",
+  "@fxDryBrushGrain": {
+    "description": "Effect controls: a control on Turbiniu, how long the dry gaps are, in pixels along the stroke."
+  },
+  "fxEdgeRoughness": "Edge roughness",
+  "@fxEdgeRoughness": {
+    "description": "Effect controls: a control on Turbiniu, how much the strokes' sides are torn."
+  },
+  "fxRoughEdgeDepth": "Rough edge depth",
+  "@fxRoughEdgeDepth": {
+    "description": "Effect controls: a control on Turbiniu, how far in from the outer strokes the tearing reaches."
+  },
+  "fxRoughEdgeGrain": "Rough edge grain",
+  "@fxRoughEdgeGrain": {
+    "description": "Effect controls: a control on Turbiniu, how long each tear is, in pixels along the stroke."
+  },
+  "fxCoverageHardness": "Coverage hardness",
+  "@fxCoverageHardness": {
+    "description": "Effect controls: a control on Turbiniu, from soft, wet coverage to crisp, dry coverage."
+  },
+  "fxPaintDensityColour": "Paint density colour",
+  "@fxPaintDensityColour": {
+    "description": "Effect controls: a group on Turbiniu that recolours the strokes by how much paint they carry."
+  },
+  "fxDensityColour": "Density colour",
+  "@fxDensityColour": {
+    "description": "Effect controls: a control on Turbiniu, how strongly the strokes are recoloured by how much paint they carry."
+  },
+  "fxThinPaintColour": "Thin paint colour",
+  "@fxThinPaintColour": {
+    "description": "Effect controls: a colour on Turbiniu, given to thin paint."
+  },
+  "fxMidPaintColour": "Mid paint colour",
+  "@fxMidPaintColour": {
+    "description": "Effect controls: a colour on Turbiniu, given to paint of middle thickness."
+  },
+  "fxDensePaintColour": "Dense paint colour",
+  "@fxDensePaintColour": {
+    "description": "Effect controls: a colour on Turbiniu, given to dense paint."
+  },
   "fxPathTrim": "Path trim",
   "@fxPathTrim": {
     "description": "Effect controls: a group heading on Turbiniu, the controls that draw only part of each path."

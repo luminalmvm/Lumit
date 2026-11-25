@@ -238,9 +238,24 @@ impl Guide {
     }
 }
 
+fn smoothstep(lo: f32, hi: f32, x: f32) -> f32 {
+    let t = ((x - lo) / (hi - lo)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+/// The brush texture's own patterns, read along a stroke in 0..1: `x` in
+/// grains along it, each stroke (and each `salt`) on a row of its own.
+fn grain(field: &Perlin, x: f32, line: usize, salt: f32) -> f32 {
+    let y = line as f32 * 3.71 + salt;
+    (field.sample(x.clamp(-1e6, 1e6), y, salt * 0.5, 0.0) * 2.0 + 0.5).clamp(0.0, 1.0)
+}
+
 #[derive(Clone, Copy)]
 struct Station {
     xy: Vec2,
+    /// How far the stroke's middle sits off `xy` along its normal: Edge
+    /// roughness eats its two sides by different amounts.
+    shift: f32,
     half: f32,
     feather: f32,
     color: Color,
@@ -261,11 +276,12 @@ fn row(s: Station, n: Vec2) -> [TurbiniuVertex; 4] {
     let inner = (s.half - band * 0.5).max(0.0);
     let outer = s.half + band * 0.5;
     let coverage = s.opacity * (s.half * 2.0 / band).clamp(0.0, 1.0);
+    let centre = add(s.xy, scale(n, s.shift));
     [
-        vertex(add(s.xy, scale(n, -outer)), s.color, 0.0),
-        vertex(add(s.xy, scale(n, -inner)), s.color, coverage),
-        vertex(add(s.xy, scale(n, inner)), s.color, coverage),
-        vertex(add(s.xy, scale(n, outer)), s.color, 0.0),
+        vertex(add(centre, scale(n, -outer)), s.color, 0.0),
+        vertex(add(centre, scale(n, -inner)), s.color, coverage),
+        vertex(add(centre, scale(n, inner)), s.color, coverage),
+        vertex(add(centre, scale(n, outer)), s.color, 0.0),
     ]
 }
 
@@ -361,9 +377,21 @@ impl Mesh {
                 } else {
                     self.strip(
                         &[
-                            Station { xy: arms[0], ..s },
-                            Station { xy: tip, ..s },
-                            Station { xy: arms[1], ..s },
+                            Station {
+                                xy: arms[0],
+                                shift: 0.0,
+                                ..s
+                            },
+                            Station {
+                                xy: tip,
+                                shift: 0.0,
+                                ..s
+                            },
+                            Station {
+                                xy: arms[1],
+                                shift: 0.0,
+                                ..s
+                            },
                         ],
                         None,
                         None,
@@ -512,6 +540,9 @@ impl Turbiniu {
         };
         let mut stations = Vec::with_capacity(steps + 1);
         let size = dimensions.map(|x| x.max(1) as f32);
+        // The guides' length on the raster, which the brush texture's grains
+        // are counted along.
+        let path_px = ((first.length() + second.length()) * 0.5 * raster_scale).max(1.0);
         for plan in plans {
             let line = plan.line;
             let random = |i| random(line, i);
@@ -584,18 +615,75 @@ impl Turbiniu {
                         + line as f32 * self.alpha_sinus_line_offset)
                         * TAU)
                         .sin();
-                let alpha = (self.alpha_noise_brightness
+                let mut alpha = (self.alpha_noise_brightness
                     + look.alpha.at(sample)
                     + sinus
                     + self.alpha_sinus_constant)
                     .clamp(0.0, 1.0);
+                // Brush texture. Its patterns are laid along the stroke in
+                // pixels, so they stay put on the paper as a trim reveals
+                // them, and every control at 0 leaves the stroke as it was.
+                let hardness = (self.coverage_hardness / 100.0).clamp(0.0, 1.0);
+                let dry = (self.dry_brush / 100.0).clamp(0.0, 1.0) * look.dry_ramp.at(u);
+                if dry > 0.0 {
+                    let soft = mix(0.15, 0.01, hardness);
+                    let n = grain(
+                        &look.dry_field,
+                        u * path_px / self.dry_brush_scale.max(0.5),
+                        line,
+                        0.0,
+                    );
+                    // 0 keeps every grain, 1 none.
+                    let level = dry * (1.0 + 2.0 * soft) - soft;
+                    alpha *= smoothstep(level - soft, level + soft, n);
+                }
+                if hardness > 0.0 {
+                    alpha = ((alpha - 0.5) / (1.0 - 0.98 * hardness) + 0.5).clamp(0.0, 1.0);
+                }
+                let mut half = mix(half_a, half_b, between) * width_gain;
+                let mut shift = 0.0;
+                let rough = (self.edge_roughness / 100.0).clamp(0.0, 1.0);
+                if rough > 0.0 && !points {
+                    let depth = (self.edge_roughness_depth / 100.0).clamp(0.01, 1.0);
+                    let edge = if count == 1 {
+                        1.0
+                    } else {
+                        (((2.0 * between - 1.0).abs() - (1.0 - depth)) / depth).clamp(0.0, 1.0)
+                    };
+                    let k = rough * edge;
+                    if k > 0.0 {
+                        let x = u * path_px / self.edge_roughness_scale.max(0.5);
+                        let low = half * (1.0 - k * grain(&look.rough_field, x, line, 0.0));
+                        let high = half * (1.0 - k * grain(&look.rough_field, x, line, 17.0));
+                        half = (low + high) * 0.5;
+                        shift = (high - low) * 0.5;
+                    }
+                }
+                let opacity = mix(opacity_a, opacity_b, between) * opacity_gain * alpha;
+                let tint = (self.density_colour / 100.0).clamp(0.0, 1.0);
+                if tint > 0.0 {
+                    let p = opacity.clamp(0.0, 1.0);
+                    let tone = if p < 0.5 {
+                        blend(self.density_colour_thin, self.density_colour_mid, p * 2.0)
+                    } else {
+                        blend(
+                            self.density_colour_mid,
+                            self.density_colour_dense,
+                            p * 2.0 - 1.0,
+                        )
+                    };
+                    for channel in 0..3 {
+                        color[channel] = mix(color[channel], tone[channel], tint);
+                    }
+                }
                 (
                     Station {
                         xy: sample.point,
+                        shift,
                         color,
-                        half: mix(half_a, half_b, between) * width_gain,
+                        half,
                         feather: mix(look.guides[0].feather, second_look.feather, between).max(0.0),
-                        opacity: mix(opacity_a, opacity_b, between) * opacity_gain * alpha,
+                        opacity,
                     },
                     sample,
                 )
@@ -801,6 +889,9 @@ struct Look {
     density: [Ramp; 2],
     guides: [Guide; 2],
     cross: Gradient,
+    dry_ramp: Ramp,
+    dry_field: Perlin,
+    rough_field: Perlin,
 }
 
 impl Turbiniu {
@@ -977,6 +1068,11 @@ impl Turbiniu {
                 ],
                 count: self.cross_colours_count.clamp(1, 5) as usize,
             },
+            dry_ramp: Ramp::new(self.dry_brush_ramp, 0.0, 100.0, false),
+            // Variation seed moves the brush texture too; the two patterns
+            // are fields of their own so the tears do not follow the gaps.
+            dry_field: Perlin::new(self.random_seed.clamp(0, 32768) as u32 ^ 0x0d12),
+            rough_field: Perlin::new(self.random_seed.clamp(0, 32768) as u32 ^ 0x7a3e),
         }
     }
 }
