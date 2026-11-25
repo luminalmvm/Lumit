@@ -78,6 +78,7 @@ import '../widgets/escape_ladder.dart';
 import 'about_window_frb.dart';
 import 'cache_confirm_frb.dart';
 import 'dialog_frame.dart' show dialogSurface;
+import 'usage_notice.dart' show showUsageSent;
 import 'extension_install_frb.dart';
 import 'export_dialog_frb.dart'
     show
@@ -1319,6 +1320,26 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                 small: true,
                 onPressed: () => setState(ui.resetLayout),
                 child: Text(l10n.menuResetWorkspace, style: t.small),
+              ),
+            ),
+          ],
+        ),
+        (
+          l10n.settingsGroupPrivacy,
+          [
+            _flag(t, 'settings-share-usage', l10n.usageShare,
+                value: ui.workspace.shareUsage, set: (on) {
+              if (!on) ui.usage.forget();
+              ui.workspace.setShareUsage(on);
+            }),
+            _row(
+              t,
+              l10n.usageSentTitle,
+              HouseButton(
+                key: const ValueKey('settings-usage-sent'),
+                small: true,
+                onPressed: () => showUsageSent(context, ui.usage),
+                child: Text(l10n.usageWhatIsSent, style: t.small),
               ),
             ),
           ],

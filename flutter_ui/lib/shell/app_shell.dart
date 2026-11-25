@@ -81,6 +81,7 @@ import 'package:lumit_flutter/state/template_library.dart'
     show TemplateUpdates;
 import 'package:lumit_flutter/state/tools.dart' show ToolGroup;
 import 'package:lumit_flutter/state/ui_state.dart';
+import 'package:lumit_flutter/shell/usage_notice.dart';
 import 'package:lumit_flutter/state/usage_data.dart' show UsageData;
 import 'package:lumit_flutter/state/viewer_views.dart';
 import 'package:lumit_flutter/state/window_backdrop.dart';
@@ -389,8 +390,9 @@ class _LumitAppViewState extends State<LumitAppView> {
       UsageData.launch.stop();
       if (!mounted) return;
       final ui = context.read<LumitUiState>();
-      maybeShowFirstRunFrb(context, ui.workspace, keymap: ui.keymap)
-          .then((_) {
+      maybeShowFirstRunFrb(context, ui.workspace,
+              keymap: ui.keymap, usage: ui.usage)
+          .then((_) async {
         // The update check follows the questions rather than racing them:
         // the setup screen is where somebody may have just switched it off.
         ui.maybeCheckForUpdates();
@@ -398,6 +400,8 @@ class _LumitAppViewState extends State<LumitAppView> {
         // picture a pinned shortcut had before an update changed the icon,
         // until it is told to look again.
         ui.applyAppIcon();
+        if (!mounted) return;
+        await maybeShowUsageNotice(context, ui.workspace);
         ui.maybeSendUsage();
         // And the tour follows them too, in the look just chosen. Like the
         // questions it opens by itself once.

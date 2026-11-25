@@ -556,6 +556,34 @@
   "@settingsOwnTitleBar": {
     "description": "Settings window, Linux only: the switch that replaces the system's title bar with Lumit's menu bar carrying the minimise, maximise and close buttons."
   },
+  "settingsGroupPrivacy": "Privacy",
+  "@settingsGroupPrivacy": {
+    "description": "Settings window: heading over a group of rows."
+  },
+  "usageNotice": "Lumit now collects anonymous telemetry to help improve your experience. This can be disabled in settings.",
+  "@usageNotice": {
+    "description": "Popup shown once after an update, telling the person that anonymous telemetry is collected and where to turn it off."
+  },
+  "usageOk": "OK",
+  "@usageOk": {
+    "description": "Popup button: dismiss the telemetry notice."
+  },
+  "usageSentNever": "Never your projects, files, names or paths.",
+  "@usageSentNever": {
+    "description": "Telemetry window: one line under the data, saying what is never sent."
+  },
+  "usageSentTitle": "Telemetry",
+  "@usageSentTitle": {
+    "description": "Title of the window that shows the telemetry exactly as it would be sent, of the notice popup, and the name of the Settings row that opens the window."
+  },
+  "usageShare": "Share anonymous telemetry",
+  "@usageShare": {
+    "description": "Name of the switch and the first-run tick that turn anonymous telemetry on or off."
+  },
+  "usageWhatIsSent": "What is sent",
+  "@usageWhatIsSent": {
+    "description": "Button or link that opens the window showing exactly what telemetry is sent."
+  },
   "windowMinimise": "Minimise",
   "@windowMinimise": {
     "description": "Screen reader name of the button at the top right of Lumit's window that minimises the window. Use the operating system's own word for it."

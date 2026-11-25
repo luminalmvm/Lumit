@@ -18,11 +18,13 @@ import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import '../l10n/strings.dart';
 import '../state/dock.dart';
 import '../state/keymap.dart';
+import '../state/usage_data.dart';
 import '../state/workspace.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/theme_swatches.dart';
 import 'dialog_frame.dart';
+import 'usage_notice.dart';
 
 const _workspaces = [
   WorkspacePreset.edit,
@@ -35,6 +37,7 @@ typedef FirstRunAnswer = ({
   WorkspacePreset? workspace,
   BridgeKeymapPreset keys,
   bool autoUpdate,
+  bool shareUsage,
 });
 
 /// Show the screen if this machine has never answered it, and record the
@@ -43,7 +46,7 @@ typedef FirstRunAnswer = ({
 ///
 /// [keymap] is what the After Effects or Vegas shortcuts load into.
 Future<void> maybeShowFirstRunFrb(BuildContext context, Workspace workspace,
-    {KeymapState? keymap}) async {
+    {KeymapState? keymap, UsageData? usage}) async {
   if (workspace.firstRunDone) return;
   // The look as it stood, which is what Skip goes back to.
   final shape = workspace.themeShape;
@@ -53,13 +56,15 @@ Future<void> maybeShowFirstRunFrb(BuildContext context, Workspace workspace,
     context: context,
     // An id, so a stray click beside the window doesn't skip the questions.
     id: 'first-run',
-    initialSize: const Size(640, 440),
+    initialSize: const Size(640, 480),
     minSize: const Size(520, 380),
-    builder: (close) => _FirstRun(workspace: workspace, onChoose: close),
+    builder: (close) =>
+        _FirstRun(workspace: workspace, usage: usage, onChoose: close),
   );
   // Escape is the same as Skip: the questions have been put, so they are not
   // put again, and Lumit's defaults stand.
   workspace.setAutoUpdate(answer?.autoUpdate ?? true);
+  workspace.setShareUsage(answer?.shareUsage ?? true);
   final preset = answer?.workspace;
   if (answer == null || preset == null) {
     workspace.setShape(shape);
@@ -88,8 +93,10 @@ Future<void> maybeShowFirstRunFrb(BuildContext context, Workspace workspace,
 
 class _FirstRun extends StatefulWidget {
   final Workspace workspace;
+  final UsageData? usage;
   final ValueChanged<FirstRunAnswer?> onChoose;
-  const _FirstRun({required this.workspace, required this.onChoose});
+  const _FirstRun(
+      {required this.workspace, required this.usage, required this.onChoose});
 
   @override
   State<_FirstRun> createState() => _FirstRunState();
@@ -104,10 +111,13 @@ class _FirstRunState extends State<_FirstRun> {
   /// Permission to look for new versions, not to fetch them.
   bool _autoUpdate = true;
 
+  bool _shareUsage = true;
+
   void _answer(WorkspacePreset? workspace) => widget.onChoose((
         workspace: workspace,
         keys: _keys,
         autoUpdate: _autoUpdate,
+        shareUsage: _shareUsage,
       ));
 
   @override
@@ -244,6 +254,46 @@ class _FirstRunState extends State<_FirstRun> {
                             ),
                           ),
                         ),
+                        if (!kIsWeb)
+                          _row(
+                            t,
+                            l10n.settingsGroupPrivacy,
+                            Wrap(
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              spacing: 8,
+                              children: [
+                                GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: () => setState(
+                                      () => _shareUsage = !_shareUsage),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      HouseCheckbox(
+                                        key: const ValueKey('first-run-usage'),
+                                        value: _shareUsage,
+                                        onChanged: (on) =>
+                                            setState(() => _shareUsage = on),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(l10n.usageShare, style: t.body),
+                                    ],
+                                  ),
+                                ),
+                                if (widget.usage case final usage?)
+                                  HouseButton(
+                                    key: const ValueKey(
+                                        'first-run-usage-sent'),
+                                    small: true,
+                                    frameless: true,
+                                    onPressed: () =>
+                                        showUsageSent(context, usage),
+                                    child: Text(l10n.usageWhatIsSent,
+                                        style: t.small),
+                                  ),
+                              ],
+                            ),
+                          ),
                       ],
                     ),
                   ),
