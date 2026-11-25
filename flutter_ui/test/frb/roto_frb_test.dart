@@ -20,7 +20,6 @@ void main() {
   setUpAll(initEngineForTests);
 
   group('Roto brush (frb)', () {
-    /// A comp with one footage layer carrying an enabled Roto brush.
     ({LayerReference layer, BridgeEffectInstance brush}) withBrush() {
       final p = freshProject();
       final comp = p.state.project!.newComposition(name: 'Scene');

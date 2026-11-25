@@ -27,7 +27,6 @@ const LIGHTING: &str = include_str!("../src/fx_lighting.wgsl");
 const LIGHT_CORE: &str = include_str!("../src/light_core.wgsl");
 /// What the casters let through, prepended to everything that reads it.
 const SHADOW_CORE: &str = include_str!("../src/shadow_core.wgsl");
-/// An Environment light as the passes it lights read it.
 const ENVIRONMENT_CORE: &str = include_str!("../src/environment_core.wgsl");
 
 #[test]
@@ -68,13 +67,11 @@ fn every_wgsl_kernel_parses_and_validates() {
         {
             continue;
         }
-        // Denoise's three modules each start with its common part.
         let source = if name.starts_with("fx_denoise") {
             format!("{}{source}", include_str!("../src/fx_denoise_common.wgsl"))
         } else {
             source
         };
-        // Appended to Particulate's kernel, as the engine compiles it.
         let source = if name == "fx_particulate_scene.wgsl" || name == "fx_particulate_sim.wgsl" {
             format!("{}{source}", include_str!("../src/fx_particulate.wgsl"))
         } else {
@@ -94,7 +91,6 @@ fn every_wgsl_kernel_parses_and_validates() {
         } else {
             source
         };
-        // The blend modes' maths, prepended to the two kernels that call it.
         let source = if source.contains("blend_pixel(") {
             format!("{BLEND_CORE}{source}")
         } else {
@@ -115,8 +111,6 @@ fn every_wgsl_kernel_parses_and_validates() {
         } else {
             source
         };
-        // The OCIO sampler is the second shared module, prepended to the
-        // colour pipeline and to the OCIO effects' kernel the same way.
         let source = if source.contains("ocio_apply(") {
             format!("{OCIO_SAMPLE}{source}")
         } else {

@@ -1,6 +1,3 @@
-//! After Effects' parametric meshes as 3D shapes: the shape by the group its
-//! rows sit in, and the rows with their keys.
-
 use lumit_core::anim::Property as LumProperty;
 use lumit_core::mesh_shape::MeshShape;
 use lumit_core::model::{EffectInstance, EffectValue};
@@ -12,8 +9,6 @@ use crate::report::ItemPath;
 
 type Rows = &'static [(&'static str, &'static str, f64)];
 
-/// Each shape's group, and its rows: Lumit's id, After Effects' row and what
-/// a missing row means.
 const SHAPES: [(MeshShape, &str, Rows); 6] = [
     (
         MeshShape::Cube,
@@ -88,7 +83,6 @@ const SHAPES: [(MeshShape, &str, Rows); 6] = [
     ),
 ];
 
-/// The shape a layer's rows say it is, if it is a parametric mesh.
 pub(crate) fn shape_of(props: &[Property]) -> Option<MeshShape> {
     SHAPES
         .iter()

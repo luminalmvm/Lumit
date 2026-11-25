@@ -57,7 +57,6 @@ pub fn spread(analysis: &Analysis, steps: &[Step], picked: &[u32]) -> Vec<u32> {
     let own_floor = OWN_MOTION_PX * analysis.scale;
     let agree = AGREE_PX * analysis.scale;
     let near2 = (NEAR * diag).powi(2);
-    // Which runs are alive in each stretch of frames.
     let mut alive: Vec<Vec<usize>> = vec![Vec::new(); (analysis.frames / BUCKET + 1) as usize];
     for (i, r) in analysis.runs.iter().enumerate() {
         for b in (r.first / BUCKET)..=(r.last() / BUCKET) {
@@ -89,7 +88,6 @@ pub fn spread(analysis: &Analysis, steps: &[Step], picked: &[u32]) -> Vec<u32> {
             continue;
         };
         let dm = motion(d);
-        // A point moving with the picture spreads to nothing.
         let own: Vec<f64> = dm.iter().flatten().map(|m| m[0].hypot(m[1])).collect();
         if own.is_empty() || own.iter().sum::<f64>() / (own.len() as f64) < own_floor {
             continue;
@@ -159,8 +157,6 @@ mod tests {
 
     #[test]
     fn a_drop_takes_the_points_moving_with_it_and_leaves_the_picture() {
-        // A still picture, and something crossing it 5 px a frame. Points 0
-        // and 1 ride the mover at different times; 2 sits on the picture.
         let still = Step {
             similarity: [1.0, 0.0, 0.0, 0.0],
             homography: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
@@ -193,7 +189,6 @@ mod tests {
             readout: [0.0; 2],
         };
         assert_eq!(spread(&analysis, &steps, &[0]), vec![0, 1]);
-        // Dropping a point that moves with the picture takes only itself.
         assert_eq!(spread(&analysis, &steps, &[2]), vec![2]);
     }
 }

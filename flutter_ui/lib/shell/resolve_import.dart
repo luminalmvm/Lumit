@@ -1,4 +1,3 @@
-// One-shot selection import. Uses Lumit's existing composition import and save.
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/widgets.dart';

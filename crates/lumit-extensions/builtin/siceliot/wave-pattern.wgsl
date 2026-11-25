@@ -66,7 +66,6 @@ fn sx_turn(px: vec2<f32>, centre: vec2<f32>, degrees: f32) -> vec2<f32> {
     return vec2<f32>(d.x * cos(a) - d.y * sin(a), d.x * sin(a) + d.y * cos(a));
 }
 
-// The finished colour, kept inside the layer when Paint asks for it.
 fn sx_paint(c: vec4<f32>, uv: vec2<f32>) -> vec4<f32> {
     if (p.paint == 0u) {
         return c * lumit_sample(uv).a;
@@ -192,7 +191,6 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
     var t = 0.5 - 0.5 * cos(6.2831853 * n);
     switch p.profile {
         case 1u: {
-            // The ramp up, and the drop back smoothed over a pixel.
             t = f * clamp((1.0 - f) / aa, 0.0, 1.0);
         }
         case 2u: {

@@ -24,7 +24,6 @@ import '../widgets/controls.dart';
 import '../widgets/theme_swatches.dart';
 import 'dialog_frame.dart';
 
-/// The workspaces offered, in the strip's order.
 const _workspaces = [
   WorkspacePreset.edit,
   WorkspacePreset.cut,
@@ -79,7 +78,6 @@ Future<void> maybeShowFirstRunFrb(BuildContext context, Workspace workspace,
     await keymap?.loadPreset(answer.keys);
   }
   if (vegas) {
-    // Vegas's mouse too, and a clip dropped over another crossfades into it.
     workspace.interface
       ..cutVegasDrags = true
       ..cutAutoCrossfade = true;
@@ -119,7 +117,6 @@ class _FirstRunState extends State<_FirstRun> {
     return DialogFrame(
       children: [
         Expanded(
-          // The look is the workspace's, and each choice here changes it.
           child: ListenableBuilder(
             listenable: workspace,
             builder: (context, _) => Column(
@@ -129,8 +126,6 @@ class _FirstRunState extends State<_FirstRun> {
                     title: l10n.firstRunSetup,
                     onClose: () => _answer(null),
                     keyPrefix: 'first-run'),
-                // Scrolls when the window is too short for all of it, so no
-                // question is ever out of reach.
                 Expanded(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.fromLTRB(
@@ -217,8 +212,6 @@ class _FirstRunState extends State<_FirstRun> {
                                   label: (c) => c.label,
                                   group: (c) => c.group,
                                   onChanged: workspace.choose,
-                                  // Hovering a row previews that scheme, on the
-                                  // window behind too.
                                   onPreview: workspace.previewChoice,
                                   onPreviewEnd: () =>
                                       workspace.previewChoice(null),
@@ -303,7 +296,6 @@ class _FirstRunState extends State<_FirstRun> {
     );
   }
 
-  /// A question that is one line: its name, then its control.
   Widget _row(LumitTheme t, String label, Widget control) => Padding(
         padding: const EdgeInsets.only(bottom: 10),
         child: Row(
@@ -315,7 +307,6 @@ class _FirstRunState extends State<_FirstRun> {
       );
 }
 
-/// How tall a one-line question's control stands.
 const double _rowControl = 22;
 
 /// A big button: one of the answers that has a picture to show.
@@ -401,8 +392,6 @@ class _CardState extends State<_Card> {
   }
 }
 
-/// One workspace: a drawing of the window as it arranges it, in the style in
-/// force, then its name and what it is for.
 class _WorkspaceChoice extends StatelessWidget {
   final WorkspacePreset preset;
   final bool chosen;
@@ -417,13 +406,11 @@ class _WorkspaceChoice extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    // The drawing's corner sits inside the card's, the padding between them.
     final inner = (t.tokens.sectionRadius - 8).clamp(0.0, 8.0);
     return _Card(
       id: 'first-run-workspace-${preset.name}',
       chosen: chosen,
       onTap: onTap,
-      // The drawing and the name are the card. What it is for is the tip.
       child: LumitTooltip(
         message: switch (preset) {
           WorkspacePreset.cut => l10n.firstRunWorkspaceCut,
@@ -450,7 +437,6 @@ class _WorkspaceChoice extends StatelessWidget {
   }
 }
 
-/// The size the workspace drawings are made at, then scaled to the card.
 const Size _drawing = Size(160, 100);
 
 /// The window in outline, as one workspace arranges it and one style draws it.
@@ -485,7 +471,6 @@ class _WorkspacePainter extends CustomPainter {
     final mark = Paint()..color = t.textMuted;
     final lit = Paint()..color = t.accent;
 
-    // The menu line, the same in all three.
     const menu = 7.0;
     if (!lantern) {
       canvas.drawRect(Rect.fromLTWH(0, 0, full.width, menu), pane);
@@ -494,7 +479,6 @@ class _WorkspacePainter extends CustomPainter {
       canvas.drawRect(Rect.fromLTWH(4 + i * 9.0, 3, 6, 1.5), mark);
     }
 
-    // The tools: a strip, a rail, or a pill.
     var top = menu;
     var left = 0.0;
     if (desk) {
@@ -555,7 +539,6 @@ class _WorkspacePainter extends CustomPainter {
     );
   }
 
-  /// Hand each pane of [node] its rectangle in [r], tabs as their front pane.
   void _lay(DockNode node, Rect r, double gap,
       void Function(Panel panel, Rect rect) pane) {
     switch (node) {
@@ -582,7 +565,6 @@ class _WorkspacePainter extends CustomPainter {
     }
   }
 
-  /// What a pane holds, drawn small.
   void _content(Canvas canvas, Panel panel, Rect r, bool lantern) {
     final t = theme;
     final mark = Paint()..color = t.textMuted;
@@ -597,7 +579,6 @@ class _WorkspacePainter extends CustomPainter {
                 r.deflate(lantern ? 3 : 4), Radius.circular(lantern ? 3 : 0)),
             Paint()..color = t.surface0);
       case Panel.timeline:
-        // Layer names, and a bar each; the first one lit.
         for (var i = 0; i < 6; i++) {
           final y = r.top + 5 + i * 5.5;
           if (y + 3 > r.bottom - 2) break;
@@ -610,8 +591,6 @@ class _WorkspacePainter extends CustomPainter {
               i == 0 ? lit : seam);
         }
       case Panel.cutTimeline:
-        // Two rows of picture over two of sound, cut into clips, with one
-        // picture clip and its sound lit together.
         final row = (r.height - 6) / 4;
         final lanes =
             Rect.fromLTRB(r.left + 14, r.top + 3, r.right - 3, r.bottom - 3);
@@ -637,7 +616,6 @@ class _WorkspacePainter extends CustomPainter {
                     ? (Paint()..color = t.accent.withValues(alpha: 0.35))
                     : clip);
             if (i >= 2) {
-              // A sound clip's wave, flat at this size.
               canvas.drawRect(
                   Rect.fromLTRB(box.left + 2, box.outerRect.center.dy - 0.4,
                       box.right - 2, box.outerRect.center.dy + 0.4),
@@ -646,7 +624,6 @@ class _WorkspacePainter extends CustomPainter {
           }
         }
       case Panel.graph:
-        // Three nodes wired into a fourth, which is lit.
         final w = 16.0, h = 7.0;
         final inputs = [
           Offset(r.left + r.width * 0.16, r.top + r.height * 0.22),
@@ -681,7 +658,6 @@ class _WorkspacePainter extends CustomPainter {
                 const Radius.circular(1.5)),
             lit);
       case Panel.mixer:
-        // Two faders.
         for (var i = 0; i < 2; i++) {
           final x = r.left + r.width * (i + 1) / 3;
           canvas.drawRect(

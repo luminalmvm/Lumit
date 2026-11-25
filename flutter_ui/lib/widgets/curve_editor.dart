@@ -36,13 +36,11 @@ import 'controls.dart';
 /// the tail past this on read; the editor simply stops adding.
 const int curveMaxPoints = 32;
 
-/// The identity diagonal — a fresh curve, and what Reset restores.
 const List<List<double>> curveIdentity = [
   [0.0, 0.0],
   [1.0, 1.0]
 ];
 
-/// Whether [a] and [b] are the same points.
 bool curveIs(List<List<double>> a, List<List<double>> b) =>
     a.length == b.length &&
     [
@@ -74,7 +72,6 @@ double curveSample(List<List<double>> points, double x) {
   final n = points.length;
   if (n < 2) return x;
   final m = _slopes(points);
-  // Which segment x falls in, walking forward: thirty-two points at most.
   var i = 0;
   while (i < n - 2 && x > points[i + 1][0]) {
     i++;
@@ -85,7 +82,6 @@ double curveSample(List<List<double>> points, double x) {
   if (h <= 0) return y0.clamp(0.0, 1.0);
   final t = (x - x0) / h;
   final t2 = t * t, t3 = t2 * t;
-  // Hermite form.
   final y = (2 * t3 - 3 * t2 + 1) * y0 +
       (t3 - 2 * t2 + t) * h * m[i] +
       (-2 * t3 + 3 * t2) * y1 +
@@ -149,13 +145,10 @@ List<double> _slopes(List<List<double>> p) {
 class CurveEditor extends StatefulWidget {
   final List<List<double>> points;
 
-  /// A drag tick — preview it, do not commit it.
   final ValueChanged<List<List<double>>> onLive;
 
-  /// The end of a gesture: commit this as one edit.
   final ValueChanged<List<List<double>>> onCommit;
 
-  /// The plot's side, in logical pixels.
   final double size;
 
   /// What the curve itself is drawn in. Null is the theme's primary text
@@ -168,10 +161,8 @@ class CurveEditor extends StatefulWidget {
   /// shape that comes out, in the accent colour, over the curve's own.
   final double Function(double x)? warp;
 
-  /// Rows the panel adds to the right-click menu, under the curve's own.
   final List<Widget> Function(VoidCallback close)? moreRows;
 
-  /// What Reset goes back to.
   final List<List<double>> rest;
 
   const CurveEditor({
@@ -236,8 +227,6 @@ class _CurveEditorState extends State<CurveEditor> {
 
   void _onTapUp(TapUpDetails d) => _addAt(d.localPosition);
 
-  /// The plot's right-click menu: the point under the pointer or a new one
-  /// there, then the curve as a whole.
   void _menu(Offset local, Offset global) {
     final near = _nearest(local);
     final points = _points;
@@ -307,7 +296,6 @@ class _CurveEditorState extends State<CurveEditor> {
                   onPressed: () async {
                     done();
                     final data = await Clipboard.getData(Clipboard.kTextPlain);
-                    // The curve it already has makes no undo step.
                     if (data?.text == asText) return;
                     final parsed = _pointsIn(data?.text ?? '');
                     if (parsed != null && mounted) widget.onCommit(parsed);
@@ -345,14 +333,13 @@ class _CurveEditorState extends State<CurveEditor> {
   }
 
   void _addAt(Offset local) {
-    if (_nearest(local) >= 0) return; // a tap on a point is not a new point
+    if (_nearest(local) >= 0) return;
     final points = _points;
     if (points.length >= curveMaxPoints) return;
     final at = _toCurve(local);
     final next = [
       for (final p in points) [p[0], p[1]]
     ];
-    // In x order, and never on top of a neighbour.
     var i = 0;
     while (i < next.length && next[i][0] < at[0]) {
       i++;
@@ -503,7 +490,6 @@ class _CurvePainter extends CustomPainter {
       canvas.drawLine(Offset(0, size.height * f),
           Offset(size.width, size.height * f), hair);
     }
-    // The identity, so a bent curve reads as bent away from something.
     canvas.drawLine(
       Offset(0, size.height),
       Offset(size.width, 0),
@@ -512,7 +498,6 @@ class _CurvePainter extends CustomPainter {
         ..strokeWidth = 1,
     );
 
-    // The spline, sampled a pixel at a time across the plot.
     final path = Path();
     final steps = math.max(size.width.round(), 2);
     for (var i = 0; i <= steps; i++) {
@@ -529,7 +514,6 @@ class _CurvePainter extends CustomPainter {
         ..strokeWidth = 1.5,
     );
 
-    // The shape the eases make of it, the one the copies follow.
     final warp = this.warp;
     if (warp != null) {
       final eased = Path();
@@ -578,12 +562,8 @@ class _CurvePainter extends CustomPainter {
 /// added later without a migration.
 const List<double> curvePlotSizes = [110, 150, 210];
 
-/// The step the workspace starts on, and what a caller that does not persist
-/// the choice gets.
 const double curvePlotSizeDefault = 150;
 
-/// The side of a channel button beside the plot — one icon square (docs/15
-/// §3.1), because the letter is the whole label.
 const double _channelButton = 16;
 
 /// How wide the column gets when the labels are not single words and the
@@ -591,15 +571,11 @@ const double _channelButton = 16;
 /// over-life curves, which fold into this editor as well.
 const double _channelPhrase = 84;
 
-/// The gap between a graph and its channel column.
 const double channelColumnGap = 4;
 
-/// Whether every label is one word, which is what decides the column's width.
 bool _letters(List<String> labels) =>
     labels.every((l) => !l.trim().contains(' '));
 
-/// How wide [ChannelButtons] comes out for these labels, so a caller can lay
-/// its graph out beside the column.
 double channelColumnWidth(List<String> labels) =>
     _letters(labels) ? _channelButton : _channelPhrase;
 
@@ -619,13 +595,10 @@ double channelColumnWidth(List<String> labels) =>
 class ChannelButtons extends StatelessWidget {
   final List<String> labels;
 
-  /// Which one the graph is showing.
   final int channel;
 
-  /// The user picked another.
   final ValueChanged<int> onChannel;
 
-  /// A stable prefix for the button keys, so a test can point at one.
   final String keyPrefix;
 
   /// What each channel draws in while it is the one showing, parallel to
@@ -707,13 +680,10 @@ class CurveChannelEditor extends StatefulWidget {
   final List<String> labels;
   final List<List<List<double>>> curves;
 
-  /// A drag tick on the channel at this index.
   final void Function(int channel, List<List<double>> points) onLive;
 
-  /// A committed edit on the channel at this index.
   final void Function(int channel, List<List<double>> points) onCommit;
 
-  /// A stable prefix for the channel and plot keys, so a test can point at one.
   final String keyPrefix;
 
   /// The plot's side in logical pixels — one of [curvePlotSizes], read back
@@ -725,7 +695,6 @@ class CurveChannelEditor extends StatefulWidget {
   /// with nowhere to write it gets.
   final ValueChanged<double>? onPlotSize;
 
-  /// The tooltip on the per-channel reset.
   final String resetTip;
 
   /// What each channel's curve draws in, parallel to [labels]. A null entry —
@@ -805,7 +774,6 @@ class _CurveChannelEditorState extends State<CurveChannelEditor> {
           ),
       ];
 
-  /// The channel's own colour, or null for the ones drawn in the theme's.
   Color? _colourOf(int channel) {
     final colours = widget.channelColours;
     if (colours == null) return null;
@@ -822,8 +790,6 @@ class _CurveChannelEditorState extends State<CurveChannelEditor> {
         ? rests[channel]
         : curveIdentity;
     final columnWidth = channelColumnWidth(widget.labels);
-    // The channel buttons, and under them the one way back: only while this
-    // channel's curve has somewhere to come back from.
     final channels = Column(
       mainAxisSize: MainAxisSize.min,
       children: [

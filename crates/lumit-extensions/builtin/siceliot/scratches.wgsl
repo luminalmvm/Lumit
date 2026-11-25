@@ -31,8 +31,6 @@ struct Params {
     paint: u32,
 };
 
-// ---- The SICELIOT texture helpers: the same text in every SICELIOT texture ----
-
 // A point in layer pixels turned by -angle about centre: the pattern turns.
 fn sx_turn(px: vec2<f32>, centre: vec2<f32>, degrees: f32) -> vec2<f32> {
     let d = px - centre;
@@ -40,14 +38,12 @@ fn sx_turn(px: vec2<f32>, centre: vec2<f32>, degrees: f32) -> vec2<f32> {
     return vec2<f32>(d.x * cos(a) - d.y * sin(a), d.x * sin(a) + d.y * cos(a));
 }
 
-// The finished colour, kept inside the layer when Paint asks for it.
 fn sx_paint(c: vec4<f32>, uv: vec2<f32>) -> vec4<f32> {
     if (p.paint == 0u) {
         return c * lumit_sample(uv).a;
     }
     return c;
 }
-// ---- The SICELIOT texture noise: the same text in every SICELIOT texture ----
 
 // A hash of a lattice cell and a salt, 0 to 1, seeded by Seed and the layer.
 fn sx_hash(c: vec2<i32>, salt: u32) -> f32 {
@@ -93,7 +89,6 @@ fn sx_fbm(q: vec2<f32>, octaves: i32, rough: f32, salt: u32) -> f32 {
 }
 
 
-// How much of the scratch of cell c covers q, at one layer's scale.
 fn sc_one(q: vec2<f32>, c: vec2<i32>, cell: f32, len: f32, salt: u32) -> f32 {
     if (sx_hash(c, salt) > p.density / 100.0) {
         return 0.0;
@@ -110,7 +105,6 @@ fn sc_one(q: vec2<f32>, c: vec2<i32>, cell: f32, len: f32, salt: u32) -> f32 {
     // Bent into a parabola Curl of a length deep, each its own way.
     let bend = p.curl / 100.0 * (sx_hash(c, salt + 4u) * 2.0 - 1.0) * 0.5;
     let y = dot(d, vec2<f32>(-dir.y, dir.x)) - bend * (x * x / half - half * 0.5);
-    // Thinner and fainter toward the ends.
     let taper = 1.0 - pow(abs(x) / half, 4.0);
     let w = max(p.width * taper, 0.05) * 0.5;
     let px = 1.0 / max(lumit.comp_scale, 1e-3);

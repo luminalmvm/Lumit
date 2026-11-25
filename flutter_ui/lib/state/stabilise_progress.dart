@@ -51,7 +51,6 @@ class StabiliseProgress extends ChangeNotifier {
   /// A read put off until a [statusPoll] has passed since the last.
   Timer? _due;
 
-  /// Each instance's stage at the last read, to see an analysis land.
   final Map<UuidValue, BridgeTrackStage> _stages = {};
 
   /// The analyses the bar counts: every instance seen queued or running since
@@ -62,16 +61,13 @@ class StabiliseProgress extends ChangeNotifier {
   double _fraction = 0;
   String _label = '';
 
-  /// True while an analysis is queued or running.
   bool get visible => _visible;
 
   /// Frames analysed over frames asked for, 0..1.
   double get fraction => _fraction;
 
-  /// What the analyses are doing, in words.
   String get label => _label;
 
-  /// The enabled Stabilise instances taking the shake out, from the read model.
   List<({LayerReference layer, UuidValue effect})> _instances() => [
         for (final entry in _ui.model.heldLayers)
           for (final fx in entry.info.effects)
@@ -145,7 +141,6 @@ class StabiliseProgress extends ChangeNotifier {
       try {
         status = stabiliseStatus(layer: i.layer, effect: i.effect);
       } catch (_) {
-        // The layer went away under the read; it simply stops counting.
         continue;
       }
       seen.add(i.effect);

@@ -65,7 +65,6 @@ pub struct Curves {
     #[curve(label = "Alpha")]
     pub alpha: CurvePoints,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -104,7 +103,6 @@ impl Curves {
     }
 }
 
-/// Curves' behaviour.
 pub struct CurvesDef;
 
 impl EffectDef for CurvesDef {

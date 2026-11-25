@@ -31,7 +31,6 @@ pub(super) struct Draw {
 }
 
 impl Svg<'_> {
-    /// `o` as its outermost group and everything inside it.
     pub(super) fn layer(
         &mut self,
         scope: &Scope<'_>,
@@ -81,8 +80,6 @@ impl Svg<'_> {
         Ok(())
     }
 
-    /// The opacity and the in and out of `layer`'s outermost group: the
-    /// attributes go on `tag`, the animations come back.
     fn outer(
         &mut self,
         scope: &Scope<'_>,
@@ -115,8 +112,6 @@ impl Svg<'_> {
         animations
     }
 
-    /// Everything inside a layer's outermost group: its parents' transforms
-    /// and its own, its effects, its masks and what it draws.
     pub(super) fn body(
         &mut self,
         scope: &Scope<'_>,
@@ -185,7 +180,6 @@ impl Svg<'_> {
         }
     }
 
-    /// What the check says about `layer` as a whole.
     fn notes(&mut self, scope: &Scope<'_>, layer: &Layer, place: &Place) {
         if layer.switches.three_d {
             self.report.changed(
@@ -221,7 +215,6 @@ impl Svg<'_> {
         }
     }
 
-    /// The CSS name of `layer`'s blend, when it has one a browser draws.
     fn blend(&mut self, layer: &Layer, place: &Place) -> Option<&'static str> {
         let mode = match layer.blend {
             BlendMode::Normal => return None,
@@ -296,7 +289,6 @@ impl Svg<'_> {
             open += self.factor(out, "translate", &p, &[px, px], &pair);
         }
 
-        // Rotation, with the turn Along path adds sampled in.
         let rotation = if tr.orient == Orient::AlongPath && !layer.switches.three_d {
             // The heading kept continuous, so it never spins the long way
             // round between two frames.
@@ -391,7 +383,6 @@ impl Svg<'_> {
         })
     }
 
-    /// One transform factor as a group, or nothing for the identity.
     pub(super) fn factor(
         &self,
         out: &mut String,
@@ -418,7 +409,6 @@ impl Svg<'_> {
         1
     }
 
-    /// A mask of the matte copy `copy`'s drawing, for the layer below it.
     fn matte(
         &mut self,
         scope: &Scope<'_>,
@@ -471,7 +461,6 @@ impl Svg<'_> {
         Ok(id)
     }
 
-    /// What `layer` draws, in its own coordinates.
     pub(super) fn content(
         &mut self,
         scope: &Scope<'_>,
@@ -664,7 +653,6 @@ fn unwrapped(r: f64, last: &mut f64) -> f64 {
     r
 }
 
-/// Two numbers as `x,y`.
 pub(super) fn pair(s: &Svg<'_>, v: &[f64]) -> String {
     format!(
         "{},{}",

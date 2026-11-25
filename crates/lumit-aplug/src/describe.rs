@@ -45,29 +45,21 @@ use thiserror::Error;
 use crate::abi::{Abi, AnyModule};
 use crate::instance::HostError;
 
-/// Channels a v1 main port must have.
 pub const STEREO: u32 = 2;
 
-/// One audio port a plugin declared.
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct PortInfo {
-    /// The plugin's own id for the port.
     pub id: u32,
-    /// The name it gave the port.
     pub name: String,
     /// Whether this is the **main** port — the one a layer's sound goes
     /// through. Anything else is an aux or sidechain, left inactive in v1.
     pub main: bool,
-    /// How many channels it carries.
     pub channels: u32,
 }
 
-/// A plugin's audio ports, both directions.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
 pub struct Ports {
-    /// Inputs, in the plugin's own order.
     pub inputs: Vec<PortInfo>,
-    /// Outputs, in the plugin's own order.
     pub outputs: Vec<PortInfo>,
 }
 
@@ -78,7 +70,6 @@ impl Ports {
         main_of(&self.inputs)
     }
 
-    /// The main output, likewise.
     #[must_use]
     pub fn main_output(&self) -> Option<&PortInfo> {
         main_of(&self.outputs)
@@ -95,47 +86,37 @@ fn main_of(ports: &[PortInfo]) -> Option<&PortInfo> {
         .or_else(|| ports.first())
 }
 
-/// One parameter a plugin declared.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct ParamDescription {
     /// The plugin's own **stable** id. The persistent key, never the index:
     /// plugins reorder and insert parameters across versions (§4).
     pub id: u32,
-    /// The name a person sees.
     pub name: String,
     /// The plugin's own grouping path, `/` separated. Empty for a top-level
     /// parameter.
     pub module: String,
-    /// The lowest legal value.
     pub min: f64,
-    /// The highest legal value.
     pub max: f64,
-    /// What the plugin starts it at.
     pub default: f64,
-    /// CLAP's own flag word.
     pub flags: u32,
 }
 
 impl ParamDescription {
-    /// Whether the plugin hides this parameter from the host's own surfaces.
     #[must_use]
     pub const fn hidden(&self) -> bool {
         self.flags & CLAP_PARAM_IS_HIDDEN != 0
     }
 
-    /// Whether an automation event may set it.
     #[must_use]
     pub const fn automatable(&self) -> bool {
         self.flags & CLAP_PARAM_IS_AUTOMATABLE != 0
     }
 
-    /// Whether it takes whole numbers only.
     #[must_use]
     pub const fn stepped(&self) -> bool {
         self.flags & CLAP_PARAM_IS_STEPPED != 0
     }
 
-    /// Whether the plugin refuses to let anything set it.
     #[must_use]
     pub const fn read_only(&self) -> bool {
         self.flags & CLAP_PARAM_IS_READONLY != 0
@@ -160,7 +141,6 @@ impl ParamDescription {
     }
 }
 
-/// Everything one plugin said about itself.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct PluginDescriptor {
     /// Which standard it speaks. The one fact about a plugin's
@@ -171,17 +151,11 @@ pub struct PluginDescriptor {
     /// The plugin's own stable identifier. A CLAP plugin's own id string; a
     /// VST3 class id, as the 32 hex digits that name it.
     pub id: String,
-    /// The name a person sees.
     pub label: String,
-    /// Who wrote it.
     pub vendor: String,
-    /// Its own version string, verbatim.
     pub version: String,
-    /// The feature words it declares.
     pub features: Vec<String>,
-    /// Its audio ports.
     pub ports: Ports,
-    /// Its parameters, in its own order.
     pub params: Vec<ParamDescription>,
     /// Whether it implements the `latency` extension at all.
     ///
@@ -194,66 +168,42 @@ pub struct PluginDescriptor {
 }
 
 impl PluginDescriptor {
-    /// The parameters that become rows, in declaration order.
     pub fn rows(&self) -> impl Iterator<Item = &ParamDescription> {
         self.params.iter().filter(|param| param.row_worthy())
     }
 
-    /// The value every row starts at — the plugin's own defaults, which is
-    /// what a fresh instance of the effect holds.
     #[must_use]
     pub fn defaults(&self) -> Vec<(u32, f64)> {
         self.rows().map(|param| (param.id, param.default)).collect()
     }
 }
 
-/// Why a plugin was not offered as an effect.
 #[derive(Debug, Error)]
 pub enum Rejection {
-    /// It could not be created or initialised.
     #[error("it could not be created ({0})")]
     NotCreated(#[from] HostError),
-    /// It has no audio input: an instrument, not an effect (§4).
     #[error("it is an instrument — it has no audio input")]
     Instrument,
-    /// It declares no audio ports at all, so it cannot say what it wants.
     #[error("it declares no audio ports")]
     NoAudioPorts,
-    /// Its main ports are not stereo.
     #[error("its main ports are {inputs} in and {outputs} out, and this host is stereo")]
-    NotStereo {
-        /// Channels on the main input.
-        inputs: u32,
-        /// Channels on the main output.
-        outputs: u32,
-    },
+    NotStereo { inputs: u32, outputs: u32 },
     /// Two rows would land on the same schema id — the silent collision
     /// docs/impl/effect-registry.md §5 warns about, made loud because a
     /// plugin's parameter ids are not ours to choose.
     #[error("two parameters share the row id {first:?} (the second is {second:?})")]
-    DuplicateParamId {
-        /// The row that got there first.
-        first: String,
-        /// The one that collided with it.
-        second: String,
-    },
+    DuplicateParamId { first: String, second: String },
 }
 
-/// One plugin turned away, and why. A line in a report, never a dialogue.
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct Refusal {
-    /// The plugin's own id.
     pub id: String,
-    /// The reason, as a sentence.
     pub reason: String,
 }
 
-/// What describing one module found.
 #[derive(Debug, Default)]
 pub struct ScanReport {
-    /// The plugins that can be hosted.
     pub described: Vec<PluginDescriptor>,
-    /// The ones that cannot, each with its reason.
     pub rejected: Vec<Refusal>,
 }
 
@@ -291,11 +241,6 @@ pub fn describe_module_except(module: &AnyModule, disabled: &BTreeSet<String>) -
     report
 }
 
-/// Describe one plugin: create it, ask, throw it away.
-///
-/// # Errors
-///
-/// A [`Rejection`], which is a report line rather than a failure.
 pub fn describe(module: &AnyModule, plugin_id: &str) -> Result<PluginDescriptor, Rejection> {
     let entry = module
         .entries()

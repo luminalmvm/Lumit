@@ -61,7 +61,6 @@ Future<void> showMulticamDialogFrb({
     builder: (close) => _MulticamBody(
       ui: ui,
       items: items,
-      // Named for the first file, without its extension.
       name: l10n.multicamDefaultName(first.lastIndexOf('.') > 0
           ? first.substring(0, first.lastIndexOf('.'))
           : first),
@@ -137,7 +136,6 @@ class _MulticamBodyState extends State<_MulticamBody> {
     if (!started) _release();
   }
 
-  /// Hand the controller back as it was found.
   void _release() {
     final mc = widget.ui.multicam;
     if (!mc.shown) return;
@@ -292,7 +290,6 @@ class _MulticamBodyState extends State<_MulticamBody> {
       dialogRow(t, label, control,
           labelColumn: _labelColumn, dimmed: dimmed);
 
-  /// The house pill, one option in force.
   Widget _segment<T>(LumitTheme t, String key, T current,
           Map<T, String> options, ValueChanged<T> onPick) =>
       Align(

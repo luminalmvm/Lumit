@@ -36,12 +36,8 @@ import 'package:uuid/uuid.dart';
 /// mask drawn here would not be the mask the engine would have made.
 const double kappa = 0.5522847498307934;
 
-/// How round a rounded rectangle's corners are: a quarter of its shorter side,
-/// which is Lumit's default and is what makes the tool visibly different from
-/// the plain rectangle at any size.
 const double roundedCornerFraction = 0.25;
 
-/// How many points a star has, and how deep its notches go.
 const int starPoints = 5;
 const double starInnerFraction = 0.4;
 
@@ -49,7 +45,6 @@ const double starInnerFraction = 0.4;
 /// as the star's points so the two tools read as a pair.
 const int polygonSides = 5;
 
-/// A corner vertex — no curvature either side.
 BridgeVertex shapeCorner(double x, double y) => BridgeVertex(
       x: x,
       y: y,
@@ -94,8 +89,6 @@ List<BridgeVertex> shapePath({
     dx = e.dx;
     dy = e.dy;
   }
-  // Normalised: left/top are the smaller coordinates whichever way the drag
-  // went, so every shape below can be written the easy way round.
   final left = math.min(from.$1, from.$1 + dx);
   final top = math.min(from.$2, from.$2 + dy);
   final w = dx.abs();
@@ -113,8 +106,6 @@ List<BridgeVertex> shapePath({
       ];
 
     case ToolMode.shapeRoundedRectangle:
-      // Two vertices per corner, with handles pulling towards the corner
-      // itself: the standard way to round a rectangle with cubics.
       final r = math.min(w, h) * roundedCornerFraction;
       final k = r * kappa;
       return [
@@ -229,7 +220,6 @@ List<BridgeVertex> shapePath({
           }(),
       ];
 
-    // Not a shape tool: the Pen builds its path point by point (see [PathDraft]).
     case _:
       return const [];
   }
@@ -348,7 +338,6 @@ List<double>? stillHalfFeather(BridgeMask mask) {
   return half.any((w) => w > 0) ? half : null;
 }
 
-/// A mask ready to send, from a path and a name.
 BridgeMask shapeMask({
   required List<BridgeVertex> vertices,
   required String name,
@@ -419,16 +408,11 @@ class PathDraft {
 
   bool get isEmpty => vertices.isEmpty;
 
-  /// A path can only close once it is a shape: two points and a line back is
-  /// not one.
   bool get canClose => vertices.length >= 3;
 
-  /// The first vertex's position, which is the point a click must land on to
-  /// close the path.
   (double, double)? get first =>
       vertices.isEmpty ? null : (vertices.first.x, vertices.first.y);
 
-  /// With a corner placed at [at].
   PathDraft withCorner((double, double) at) => PathDraft(
         vertices: [...vertices, shapeCorner(at.$1, at.$2)],
       );
@@ -457,7 +441,6 @@ class PathDraft {
     return PathDraft(vertices: [...vertices, vertex]);
   }
 
-  /// Without its last vertex — the undo inside the gesture.
   PathDraft withoutLast() => vertices.isEmpty
       ? this
       : PathDraft(vertices: vertices.sublist(0, vertices.length - 1));

@@ -10,17 +10,14 @@ import 'dialog_frame.dart';
 class QuestionWindow extends StatelessWidget {
   final String title;
 
-  /// What can't be told from the question.
   final String? body;
 
-  /// A fact for the footer: a size, a count.
   final String summary;
   final String keyPrefix;
   final VoidCallback onClose;
   final List<Widget> actions;
   final double width;
 
-  /// Anything longer than a line of words, in the body's place.
   final Widget? content;
 
   /// The answers in a column, for ones too long to sit in a row in every
@@ -66,7 +63,6 @@ class QuestionWindow extends StatelessWidget {
   }
 }
 
-/// A footer's plain answer.
 Widget questionPlain(String key, String label, VoidCallback? onPressed) =>
     HouseButton(
       key: ValueKey<String>(key),
@@ -75,7 +71,6 @@ Widget questionPlain(String key, String label, VoidCallback? onPressed) =>
       child: Text(label),
     );
 
-/// A footer's filled answer, which Enter presses.
 Widget questionFilled(String key, String label, VoidCallback? onPressed) =>
     HouseButton(
       key: ValueKey<String>(key),

@@ -1,5 +1,3 @@
-//! Tests of the solve link.
-
 use super::*;
 use crate::anim::Property;
 use crate::model::{
@@ -10,12 +8,6 @@ use crate::ops::apply;
 
 use crate::time::{CompTime, Duration, FrameRate};
 
-/// A written-down solve standing in for a real one: sixty frames at 30 fps,
-/// with the pose a plain function of the frame so a test can say what it
-/// expects without carrying a table.
-///
-/// The point of stage 1 is that this is *all* the model needs, and it
-/// arrives through the same trait the sidecar will.
 struct Synthetic {
     media: Uuid,
 }
@@ -57,7 +49,6 @@ impl CameraSolveStore for Synthetic {
     }
 }
 
-/// A store with nothing in it — never analysed, or the media offline.
 struct Empty;
 
 impl CameraSolveStore for Empty {
@@ -77,7 +68,6 @@ fn rat(n: i64, d: i64) -> Rational {
     Rational::new(n, d).unwrap()
 }
 
-/// A Retime map from `(layer time, source time)` pairs, linear between them.
 fn retime(points: &[(i64, f64)]) -> Property {
     Property {
         animation: Animation::Keyframed(
@@ -130,8 +120,6 @@ fn layer(name: &str, kind: LayerKind, out_s: i64) -> Layer {
     }
 }
 
-/// A tracked layer is one carrying the Camera track effect — that is the
-/// whole of what marks it.
 fn tracked(mut l: Layer) -> Layer {
     l.effects
         .push(crate::fx::builtins::instantiate(CAMERA_TRACK).expect("the effect is registered"));
@@ -185,27 +173,19 @@ fn document(comps: Vec<Composition>) -> Document {
     doc
 }
 
-/// A retimed clip, freeze included. The mapping is the layer's own Retime —
-/// the same one the renderer decodes through — so the camera sees exactly
-/// the frame the picture shows.
 #[test]
 fn a_link_through_a_retimed_clip_follows_the_retime() {
     let media = Uuid::now_v7();
     let mut footage = tracked(layer("shot", LayerKind::Footage { item: media }, 2));
-    // Half speed for the first second, then frozen on source 0.5 s.
     footage.retime = Some(retime(&[(0, 0.0), (30, 0.5), (60, 0.5)]));
     let c = comp("main", vec![camera(Some(footage.id)), footage]);
     let doc = document(vec![c.clone()]);
     let store = Synthetic::new(media);
 
-    // Half speed: comp frame 10 is 1/3 s, source 1/6 s, solved frame 5.
     let got = camera_pose_at(&Arc::new(doc.clone()), &c, 10.0 / 30.0, &store).unwrap();
     assert_eq!(got.state, LinkState::Derived);
     assert_eq!(got.pose, Synthetic::pose(5));
 
-    // The freeze: every moment of the second half reads source 0.5 s,
-    // solved frame 15 — and it is a *derived* read, not a held one. The
-    // solve has that frame; the retime simply keeps asking for it.
     for n in [31, 40, 59] {
         let got = camera_pose_at(&Arc::new(doc.clone()), &c, f64::from(n) / 30.0, &store).unwrap();
         assert_eq!(got.state, LinkState::Derived, "frame {n}");
@@ -213,9 +193,6 @@ fn a_link_through_a_retimed_clip_follows_the_retime() {
     }
 }
 
-/// The parent-comp rule: a linked camera in the parent comp names the
-/// **precomp layer**, and the chain resolves through it to the tracked layer
-/// inside — the precomp layer's own Retime included.
 #[test]
 fn a_link_resolves_through_a_precomp_to_the_tracked_layer_inside() {
     let media = Uuid::now_v7();
@@ -229,8 +206,6 @@ fn a_link_resolves_through_a_precomp_to_the_tracked_layer_inside() {
     );
 
     let mut nested = layer("inner", LayerKind::Precomp { comp: inner.id }, 2);
-    // The precomp layer plays at half speed, so comp frame 20 shows the
-    // nested comp's 1/3 s, which is the tracked layer's solved frame 10.
     nested.retime = Some(retime(&[(0, 0.0), (60, 1.0)]));
     let outer = comp("outer", vec![camera(Some(nested.id)), nested]);
     let doc = document(vec![inner, outer.clone()]);
@@ -240,8 +215,6 @@ fn a_link_resolves_through_a_precomp_to_the_tracked_layer_inside() {
     assert_eq!(got.state, LinkState::Derived);
     assert_eq!(got.pose, Synthetic::pose(10));
 
-    // A precomp with no tracked layer in it has nothing to resolve to, and
-    // says so rather than guessing at the first footage it finds.
     let bare = comp(
         "bare",
         vec![layer("plain", LayerKind::Footage { item: media }, 2)],
@@ -257,9 +230,6 @@ fn a_link_resolves_through_a_precomp_to_the_tracked_layer_inside() {
     );
 }
 
-/// The two honest failures, and neither is silent: past the end of the solve
-/// the last derived motion **holds**, and a link that cannot be followed at
-/// all falls back to the camera's own properties and says which it is.
 #[test]
 fn an_unresolvable_link_holds_and_says_which_kind_of_unresolvable() {
     let media = Uuid::now_v7();
@@ -268,17 +238,14 @@ fn an_unresolvable_link_holds_and_says_which_kind_of_unresolvable() {
     let c = comp("main", vec![camera(Some(footage_id)), footage]);
     let doc = document(vec![c.clone()]);
 
-    // Three seconds in is past the sixty solved frames: the last one holds.
     let got = camera_pose_at(&Arc::new(doc.clone()), &c, 3.0, &Synthetic::new(media)).unwrap();
     assert_eq!(got.state, LinkState::Held);
     assert_eq!(got.pose, Synthetic::pose(59));
 
-    // Nothing solved at all: the document's own numbers, flagged.
     let got = camera_pose_at(&Arc::new(doc.clone()), &c, 0.0, &Empty).unwrap();
     assert_eq!(got.state, LinkState::Unresolved);
     assert_eq!(got.pose.zoom, 777.0);
 
-    // The linked layer deleted: the same answer, for the same reason.
     let mut orphan = c.clone();
     orphan.layers.retain(|l| l.id != footage_id);
     let doc = document(vec![orphan.clone()]);
@@ -289,7 +256,6 @@ fn an_unresolvable_link_holds_and_says_which_kind_of_unresolvable() {
         LinkState::Unresolved
     );
 
-    // A camera with no link is none of those.
     let plain = comp("plain", vec![camera(None)]);
     assert_eq!(
         camera_pose_at(
@@ -304,9 +270,6 @@ fn an_unresolvable_link_holds_and_says_which_kind_of_unresolvable() {
     );
 }
 
-/// **Track once, then nudge**: a linked camera takes a transform
-/// edit, and what it takes is a *correction* — added to the solved pose,
-/// channel by channel, wherever the link resolves.
 #[test]
 fn a_correction_rides_on_top_of_the_solve() {
     let media = Uuid::now_v7();
@@ -316,9 +279,6 @@ fn a_correction_rides_on_top_of_the_solve() {
     let mut doc = document(vec![c]);
     let store = Synthetic::new(media);
 
-    // The camera was built already linked, so the base it would have been
-    // given by `SetCameraSolveLink` is written here the same way the bridge
-    // writes it for a camera that arrives linked.
     set_base(&mut doc, comp_id, cam_id);
     let base = base_of(&doc, comp_id, cam_id);
     assert!(
@@ -326,16 +286,12 @@ fn a_correction_rides_on_top_of_the_solve() {
         "a camera nobody has touched carries no correction"
     );
 
-    // Uncorrected, the derived pose is the solve exactly.
     let at = |doc: &Document, n: i64| {
         let c = doc.comp(comp_id).unwrap();
         camera_pose_at(&Arc::new(doc.clone()), c, n as f64 / 30.0, &store).unwrap()
     };
     assert_eq!(at(&doc, 10).pose, Synthetic::pose(10));
 
-    // Two nudges, in the two shapes an edit arrives in: a plain drag, and a
-    // keyed one. The zoom is corrected too, because a solved focal is as
-    // capable of being a little wrong as a solved position.
     for (prop, value) in [
         (TransformProp::PositionX, base.position.0 + 40.0),
         (TransformProp::RotationY, base.rotation_deg.1 - 2.5),
@@ -362,7 +318,6 @@ fn a_correction_rides_on_top_of_the_solve() {
     .expect("and a zoom edit");
     assert!(has_correction(layer_of(&doc, comp_id, cam_id)));
 
-    // Derived: the solve, plus the difference, and nothing else moved.
     for n in [0, 10, 59] {
         let got = at(&doc, n);
         assert_eq!(got.state, LinkState::Derived, "frame {n}");
@@ -383,14 +338,10 @@ fn a_correction_rides_on_top_of_the_solve() {
         );
     }
 
-    // Held: past the solved range the correction rides on the held pose,
-    // not on nothing — the last derived motion, corrected.
     let held = at(&doc, 90);
     assert_eq!(held.state, LinkState::Held);
     assert_eq!(held.pose.position.0, Synthetic::pose(59).position.0 + 40.0);
 
-    // Unresolved: nothing is being corrected, so the numbers are read as a
-    // pose. The camera keeps drawing from where it was put.
     let c = doc.comp(comp_id).unwrap();
     let lost = camera_pose_at(&Arc::new(doc.clone()), c, 0.0, &Empty).unwrap();
     assert_eq!(lost.state, LinkState::Unresolved);
@@ -398,8 +349,6 @@ fn a_correction_rides_on_top_of_the_solve() {
     assert_eq!(lost.pose.zoom, base.zoom + 7.0);
 }
 
-/// **Clear corrections** takes the nudge back and leaves the track alone,
-/// in one undo step — and the dot goes out with it.
 #[test]
 fn clearing_corrections_keeps_the_link_and_undoes_in_one_step() {
     let media = Uuid::now_v7();
@@ -445,8 +394,6 @@ fn clearing_corrections_keeps_the_link_and_undoes_in_one_step() {
     );
 }
 
-/// The base is captured when the link is made, kept when it is re-pointed,
-/// dropped when it is cleared — and undo puts back the one that was there.
 #[test]
 fn the_correction_base_follows_the_link() {
     let media = Uuid::now_v7();
@@ -474,7 +421,6 @@ fn the_correction_base_follows_the_link() {
     assert_eq!(base.position.0, 960.0, "the pose it was linked at");
     assert!(!has_correction(layer_of(&doc, comp_id, cam_id)));
 
-    // Nudge, then re-point: the nudge is the user's and rides on.
     apply(
         &mut doc,
         &Op::SetTransformProperty {
@@ -493,13 +439,10 @@ fn the_correction_base_follows_the_link() {
     );
     assert!(has_correction(layer_of(&doc, comp_id, cam_id)));
 
-    // Clearing the link ends the lane.
     apply(&mut doc, &link(None)).expect("unlinked");
     assert!(base_opt(&doc, comp_id, cam_id).is_none());
     assert!(!has_correction(layer_of(&doc, comp_id, cam_id)));
 
-    // And undoing the very first link, from the document it was made in,
-    // leaves no lane behind either.
     let mut fresh = doc.clone();
     apply(&mut fresh, &link(Some(footage_id))).expect("relinked");
     apply(&mut fresh, &undo).expect("undone");
@@ -528,8 +471,6 @@ fn base_of(doc: &Document, comp: Uuid, layer: Uuid) -> CameraPose {
     base_opt(doc, comp, layer).expect("a linked camera has a base")
 }
 
-/// What `Op::SetCameraSolveLink` does for a camera that is linked by an
-/// edit, done by hand for the fixtures that are built linked.
 fn set_base(doc: &mut Document, comp: Uuid, layer: Uuid) {
     let l = doc
         .comp_mut(comp)
@@ -547,9 +488,6 @@ fn set_base(doc: &mut Document, comp: Uuid, layer: Uuid) {
     }
 }
 
-/// **Convert to keyframes**: the baked keys reproduce the derived path
-/// exactly, at every comp frame of the layer's span, and the link is gone.
-/// One undo step puts both back.
 #[test]
 fn the_bake_reproduces_the_derived_path_and_undo_restores_the_link() {
     let media = Uuid::now_v7();
@@ -561,9 +499,6 @@ fn the_bake_reproduces_the_derived_path_and_undo_restores_the_link() {
     let store = Synthetic::new(media);
     let before = doc.comp(comp_id).unwrap().layers[0].clone();
 
-    // What the link says, frame by frame, before anything is baked. The
-    // camera's span is 0..4 s at 30 fps, so 120 frames — sixty derived and
-    // sixty held, which means the bake is checked on both readings.
     let want: Vec<CameraPose> = (0..120)
         .map(|n| {
             let c = doc.comp(comp_id).unwrap();
@@ -585,7 +520,6 @@ fn the_bake_reproduces_the_derived_path_and_undo_restores_the_link() {
         matches!(&bake, Op::Batch { ops } if ops.len() == 8),
         "one batch: the link, six transform tracks and the zoom"
     );
-    // One undo step, not a hundred and twenty.
     let undo = apply(&mut doc, &bake).expect("the bake applies");
 
     let baked = doc.comp(comp_id).unwrap();
@@ -606,9 +540,6 @@ fn the_bake_reproduces_the_derived_path_and_undo_restores_the_link() {
             "baked frame {n} does not match the derived path"
         );
     }
-    // Undo restores the link — and restores it *last*, after the transforms
-    // are home, so the read-only refusal does not trip on the way out
-    // either. One step, and the layer is byte-for-byte what it was.
     apply(&mut doc, &undo).expect("the undo applies");
     assert_eq!(
         doc.comp(comp_id).unwrap().layers[0],
@@ -616,10 +547,6 @@ fn the_bake_reproduces_the_derived_path_and_undo_restores_the_link() {
         "undo puts the link and the properties back exactly"
     );
 }
-
-// -----------------------------------------------------------------------
-// The planar track's corner pin
-// -----------------------------------------------------------------------
 
 /// A written-down planar track: sixty frames at 30 fps, the quad a plain
 /// function of the frame so a test can say what it expects without carrying
@@ -660,15 +587,12 @@ impl PlanarTrackStore for SyntheticPlane {
     }
 }
 
-/// A layer wearing the Planar track effect — the handle, exactly as the
-/// Camera track is one.
 fn planar(mut l: Layer) -> Layer {
     l.effects
         .push(crate::fx::builtins::instantiate(PLANAR_TRACK).expect("the effect is registered"));
     l
 }
 
-/// The keyframed value of one Corner pin parameter, at a layer time.
 fn pin_value(effects: &[crate::model::EffectInstance], id: &str, t: f64) -> f64 {
     let pin = effects
         .iter()
@@ -686,8 +610,6 @@ fn pin_value(effects: &[crate::model::EffectInstance], id: &str, t: f64) -> f64 
     }
 }
 
-/// The plain case: comp frame `n` is source frame `n`, so the pin's eight
-/// numbers are the tracked quad's eight, frame for frame.
 #[test]
 fn a_corner_pin_from_a_track_lands_the_quad_frame_for_frame() {
     let media = Uuid::now_v7();
@@ -727,8 +649,6 @@ fn a_corner_pin_from_a_track_lands_the_quad_frame_for_frame() {
         }
     }
 
-    // One undo step, and it takes the whole pin back — the stack is
-    // committed whole, as every effect edit is.
     apply(&mut doc, &inverse).unwrap();
     assert!(doc
         .comp(comp_id)
@@ -740,10 +660,6 @@ fn a_corner_pin_from_a_track_lands_the_quad_frame_for_frame() {
         .effects
         .is_empty());
 }
-
-// -----------------------------------------------------------------------
-// The planar track's transform keys
-// -----------------------------------------------------------------------
 
 /// A written-down planar track of a **rigid** rectangle, so the pose the
 /// bake is supposed to recover is an exact formula rather than a
@@ -761,7 +677,6 @@ impl MovingPlane {
     const FPS: f64 = 30.0;
     const FIRST: i64 = 0;
     const LAST: i64 = 59;
-    /// Half the reference rectangle's width and height.
     const HALF: (f64, f64) = (100.0, 50.0);
 
     fn centre(n: i64) -> [f64; 2] {
@@ -784,8 +699,6 @@ impl MovingPlane {
         );
         let (sin, cos) = a.sin_cos();
         let (hw, hh) = Self::HALF;
-        // Corner pin order: upper left, upper right, lower left, lower
-        // right.
         let mut out = [[0.0f64; 2]; 4];
         for (slot, (x, y)) in out
             .iter_mut()
@@ -815,7 +728,6 @@ impl PlanarTrackStore for MovingPlane {
     }
 }
 
-/// One transform property of a layer, at a layer time.
 fn tr_value(
     doc: &Document,
     comp: Uuid,
@@ -830,7 +742,6 @@ fn tr_value(
         .value_at(t)
 }
 
-/// Whether a transform property was left as the constant it was.
 fn is_static(doc: &Document, comp: Uuid, layer: Uuid, prop: crate::model::TransformProp) -> bool {
     matches!(
         layer_of(doc, comp, layer)
@@ -842,10 +753,6 @@ fn is_static(doc: &Document, comp: Uuid, layer: Uuid, prop: crate::model::Transf
     )
 }
 
-/// The whole movement, added to what the layer already held: the quad's
-/// slide becomes Position, its turn becomes Rotation past a full circle, and
-/// its growth becomes Scale — with the reference frame's keys landing on the
-/// layer's own untouched numbers, which is what "added, not stamped" means.
 #[test]
 fn transform_keys_add_the_tracks_movement_to_what_the_layer_had() {
     use crate::model::TransformProp as P;
@@ -901,14 +808,12 @@ fn transform_keys_add_the_tracks_movement_to_what_the_layer_had() {
             );
         }
     }
-    // The claim the unwrap exists for, said on its own: 413°, not −53°.
     let far = tr_value(&doc, comp_id, target_id, P::Rotation, 59.0 / 30.0) - base[2];
     assert!(
         (far - 413.0).abs() < 1e-6,
         "the turn should carry past a full circle, got {far}"
     );
 
-    // One undo step, and every property goes back to the constant it was.
     apply(&mut doc, &inverse).unwrap();
     for prop in [
         P::PositionX,
@@ -921,10 +826,6 @@ fn transform_keys_add_the_tracks_movement_to_what_the_layer_had() {
     }
 }
 
-/// *Position* alone writes two properties and touches nothing else. The
-/// point of the row: a small, plain patch gives a position worth having long
-/// before it gives a rotation worth having, and a rotation of nought written
-/// over one the user animated would be the button deleting their work.
 #[test]
 fn position_alone_leaves_rotation_and_scale_as_they_were() {
     use crate::model::TransformProp as P;

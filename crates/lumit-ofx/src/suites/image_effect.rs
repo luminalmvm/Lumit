@@ -42,7 +42,6 @@ use crate::props::{PropValue, PropertySet};
 use crate::status::Status;
 use crate::suites::{cstr, guard, out_handle};
 
-/// The table handed out by `fetchSuite`.
 pub static SUITE: OfxImageEffectSuiteV1 = OfxImageEffectSuiteV1 {
     get_property_set,
     get_param_set,
@@ -59,7 +58,6 @@ pub static SUITE: OfxImageEffectSuiteV1 = OfxImageEffectSuiteV1 {
     image_memory_unlock,
 };
 
-/// The descriptor a handle names, for reading.
 fn read<R>(
     handle: OfxImageEffectHandle,
     body: impl FnOnce(&EffectDescriptor) -> Result<R, Status>,
@@ -209,8 +207,6 @@ unsafe extern "C" fn clip_get_property_set(
     })
 }
 
-/// The clip a handle names: which instance it belongs to, and which of its
-/// clips it is.
 fn clip_binding(clip: OfxImageClipHandle) -> Result<(Handle, String), Status> {
     let handle = Handle::from_ptr(clip);
     if handle.kind() != Some(HandleKind::Clip) {
@@ -261,7 +257,6 @@ unsafe extern "C" fn clip_get_image(
     })
 }
 
-/// The property set that *is* an image, as far as OFX is concerned.
 fn image_property_set(image: &Image, time: OfxTime) -> PropertySet {
     let mut set = PropertySet::new();
     let seed_string = |set: &mut PropertySet, key: &str, value: &str| {

@@ -14,7 +14,6 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 
-/// What a release calls the blockmap of [assetName].
 String blockmapNameFor(String assetName) => '$assetName.blockmap';
 
 /// The most a blockmap may weigh. A 100 MB file maps to about 60 KB.
@@ -87,7 +86,6 @@ List<Piece> piecesOf(File file) {
 Future<List<Piece>> piecesInBackground(String path) =>
     Isolate.run(() => piecesOf(File(path)));
 
-/// A blockmap as the release attaches it.
 String encodeBlockmap(List<Piece> pieces) => jsonEncode({
       'pieces': [
         for (final p in pieces) [p.size, p.hash]
@@ -139,7 +137,6 @@ List<Run> patchPlan(List<Piece> wanted, List<Piece> have) {
   return runs;
 }
 
-/// How many bytes [plan] fetches.
 int bytesToFetch(List<Run> plan) => [
       for (final r in plan)
         if (r.fetch) r.size

@@ -18,15 +18,11 @@ import 'package:flutter/widgets.dart';
 import 'controls/base.dart' show ThemeScope;
 import 'controls/popups.dart' show lumitPopupUp;
 
-/// The bar down a row's leading edge, one band for each person who has the
-/// row in hand, and with [tint] a wash of the first person's colour over the
-/// whole row.
 class TheirBar extends Decoration {
   const TheirBar(this.colours, {this.tint = 0, this.width = 2});
 
   final List<Color> colours;
 
-  /// How strong the wash over the row is, 0 for none.
   final double tint;
   final double width;
 
@@ -90,8 +86,6 @@ class ShareRows extends InheritedWidget {
   /// By row name, the colour of each other person who has that row in hand.
   final Map<String, List<int>> marks;
 
-  /// Told when this person presses on a row. Null while the project is not
-  /// shared.
   final ValueChanged<String>? onTouch;
 
   bool get active => onTouch != null;
@@ -140,8 +134,6 @@ class ShareRows extends InheritedWidget {
       active != old.active || !identical(marks, old.marks);
 }
 
-/// One named row of a panel in a shared project. Only made while it is
-/// shared ([ShareRows.row]).
 class SharedRow extends StatelessWidget {
   const SharedRow({
     super.key,
@@ -154,7 +146,6 @@ class SharedRow extends StatelessWidget {
 
   final String name;
 
-  /// A second name the row answers to, when it shows two properties.
   final String? also;
   final List<int> colours;
   final ValueChanged<String> onTouch;
@@ -164,7 +155,6 @@ class SharedRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     return Listener(
-      // Watches the press and takes nothing from the row's own controls.
       behavior: HitTestBehavior.translucent,
       onPointerDown: (_) => onTouch(name),
       // The same box whether or not anyone has the row, so a mark arriving
@@ -221,12 +211,8 @@ void sayInHand(Object by, List<String> names) {
   return null;
 }
 
-/// Whether someone else is changing any of [names], so that nothing here
-/// should start changing them too.
 bool heldByOthers(Iterable<String> names) => names.any((n) => heldBy(n) != null);
 
-/// How long a row stays in this person's hand with nothing done to it, as
-/// with an editor left open.
 const Duration heldQuiet = Duration(seconds: 30);
 
 /// A row's controls in a shared project, under the [names] the row goes by.
@@ -251,7 +237,6 @@ class HeldFor extends StatefulWidget {
   final List<String> names;
   final Widget child;
 
-  /// The name goes at the head of the row, and otherwise at its end.
   final bool leading;
 
   @override
@@ -259,13 +244,10 @@ class HeldFor extends StatefulWidget {
 }
 
 class _HeldForState extends State<HeldFor> {
-  /// Why the row is in this person's hand.
   bool _drag = false, _keys = false, _menu = false;
 
-  /// Until nothing has been done for [heldQuiet].
   Timer? _quiet;
 
-  /// Hears the keyboard come to anything in the row, and go.
   final FocusNode _within =
       FocusNode(canRequestFocus: false, skipTraversal: true);
 
@@ -287,14 +269,11 @@ class _HeldForState extends State<HeldFor> {
     super.dispose();
   }
 
-  /// Who holds what has changed, or sharing has begun or ended.
   void _told() {
     if (valuesHeld.value == null) _let(() => _drag = _keys = _menu = false);
     setState(() {});
   }
 
-  /// Change why the row is in hand, and tell the others. While it is,
-  /// anything this person presses or types keeps it.
   void _let(VoidCallback change) {
     final was = _mine;
     change();
@@ -313,7 +292,6 @@ class _HeldForState extends State<HeldFor> {
     // who hear keys, this row among them.
     if (!_mine) return;
     _quiet?.cancel();
-    // A drag still under way is never quiet.
     _quiet = Timer(heldQuiet, () => _drag ? _stir() : _rest());
     sayInHand(this, widget.names);
   }
@@ -407,7 +385,6 @@ class _HeldForState extends State<HeldFor> {
   }
 }
 
-/// The name of whoever is changing something, on their colour.
 class _HeldName extends StatelessWidget {
   const _HeldName(this.by);
 
@@ -536,8 +513,6 @@ class PersonDisc extends StatelessWidget {
   }
 }
 
-/// How big a person's disc is, and what stands for the people a run of
-/// discs has no room for: how many more there are, in the discs' shape.
 const double personDiscSize = 14;
 
 class MorePeople extends StatelessWidget {
@@ -568,8 +543,4 @@ class MorePeople extends StatelessWidget {
   }
 }
 
-/// A run of [people] is drawn whole up to this many marks. Past it the last
-/// mark is how many more there are.
-// ponytail: a fixed count, not what the place has room for. Measure the room
-// if a strip or a row is ever found with space going spare.
 int peopleDrawn(int people, int marks) => people <= marks ? people : marks - 1;

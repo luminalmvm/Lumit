@@ -1,5 +1,3 @@
-//! Files the bridge's tests make and clear away.
-
 use std::path::Path;
 use std::time::Duration;
 

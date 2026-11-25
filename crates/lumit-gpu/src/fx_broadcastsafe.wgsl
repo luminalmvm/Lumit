@@ -39,7 +39,6 @@ fn unpremult(c: vec4<f32>) -> vec3<f32> {
     return vec3<f32>(0.0);
 }
 
-// == cpu::broadcast_chroma.
 fn chroma(v: vec3<f32>, y: f32) -> f32 {
     let cu = 0.493 * (v.b - y);
     let cv = 0.877 * (v.r - y);

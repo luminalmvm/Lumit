@@ -1,6 +1,3 @@
-//! Picks on the picture: Set, Add and Subtract on the qualifier in each of
-//! its modes key what was picked, and a hue curve pick lands on the samples.
-
 use lumit_core::fx::effects::correction::{maths, Correction};
 use lumit_core::fx::registry::EffectMetadata;
 use lumit_core::grade_solve::pick::{
@@ -14,7 +11,6 @@ use crate::support::{f, fx, resolve, rgb};
 const W: u32 = 32;
 const H: u32 = 16;
 
-/// Orange on the left, teal on the right, both brighter down the picture.
 fn picture() -> Vec<f32> {
     let mut img = Vec::new();
     for y in 0..H {
@@ -31,7 +27,6 @@ fn picture() -> Vec<f32> {
     img
 }
 
-/// `node` with a solver's rows written over it, by id.
 fn written(mut node: EffectInstance, rows: &Rows) -> EffectInstance {
     for (id, value) in rows {
         let value = match value {
@@ -52,7 +47,6 @@ fn read(node: &EffectInstance) -> Correction {
     Correction::read(ops.get(0).unwrap().params)
 }
 
-/// A pick under a circle at `(x, y)`.
 fn pick(
     img: &[f32],
     node: &EffectInstance,
@@ -65,7 +59,6 @@ fn pick(
     written(node.clone(), &rows)
 }
 
-/// The node's qualifier key at pixel `(x, y)`.
 fn key(img: &[f32], node: &EffectInstance, x: u32, y: u32) -> f32 {
     let q = read(node).packed(1.0).qual;
     let k = ((y * W + x) * 4) as usize;
@@ -76,14 +69,12 @@ fn key(img: &[f32], node: &EffectInstance, x: u32, y: u32) -> f32 {
 fn picks_key_what_was_picked_in_each_mode() {
     let img = picture();
 
-    // RGB: Set on the orange, then Add the teal.
     let rgb_node = fx("correction", &[("qual_mode", EffectValue::Choice(2))]);
     let set = pick(&img, &rgb_node, PickMode::Set, [8.0, 8.0], 4.0);
     assert!(key(&img, &set, 8, 8) > 0.99 && key(&img, &set, 24, 8) < 0.01);
     let both = pick(&img, &set, PickMode::Add, [24.0, 8.0], 4.0);
     assert!(key(&img, &both, 8, 8) > 0.99 && key(&img, &both, 24, 8) > 0.99);
 
-    // Luma: Set on the dark rows, Add the bright ones, then Subtract them.
     let luma_node = fx("correction", &[("qual_mode", EffectValue::Choice(3))]);
     let dark = pick(&img, &luma_node, PickMode::Set, [8.0, 3.0], 2.0);
     assert!(key(&img, &dark, 8, 3) > 0.99 && key(&img, &dark, 8, 14) < 0.01);
@@ -92,8 +83,6 @@ fn picks_key_what_was_picked_in_each_mode() {
     let cut = pick(&img, &wide, PickMode::Subtract, [8.0, 14.0], 1.0);
     assert!(key(&img, &cut, 8, 14) < 0.01 && key(&img, &cut, 8, 3) > 0.99);
 
-    // HSL from Off: Set on the orange turns the qualifier on, Add takes in
-    // the teal's hue too.
     let off = fx("correction", &[]);
     let orange = pick(&img, &off, PickMode::Set, [8.0, 8.0], 4.0);
     assert_eq!(read(&orange).qual_mode, 1);
@@ -101,7 +90,6 @@ fn picks_key_what_was_picked_in_each_mode() {
     let both = pick(&img, &orange, PickMode::Add, [24.0, 8.0], 4.0);
     assert!(key(&img, &both, 8, 8) > 0.99 && key(&img, &both, 24, 8) > 0.99);
 
-    // Nothing to cut into, and nothing picked.
     let picked = circle_samples(&img, W, H, [8.0, 8.0], 2.0);
     let rows = qualifier_pick(&picked, PickMode::Subtract, &read(&off)).unwrap();
     assert!(rows.is_empty());
@@ -109,8 +97,6 @@ fn picks_key_what_was_picked_in_each_mode() {
         qualifier_pick(&[], PickMode::Set, &read(&off)),
         Err(SolveError::Empty)
     );
-    // A circle off the picture still reads the nearest pixel; no picture
-    // reads nothing.
     assert_eq!(circle_samples(&img, W, H, [-9.0, 40.0], f32::NAN).len(), 1);
     assert!(circle_samples(&[], 0, 0, [1.0, 1.0], 1.0).is_empty());
 }

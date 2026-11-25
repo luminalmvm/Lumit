@@ -29,8 +29,6 @@ import 'param_row_menu.dart';
 import 'layer_fold_frb.dart';
 import 'timeline_mask_rows_frb.dart' show ItemOpacityRow;
 
-/// The icon each kind of pin wears in the Timeline, so a list of pins can be
-/// read at a glance — the same glyphs the four tools carry on the strip.
 LumitIcon puppetPinIcon(BridgePuppetPinKind kind) => switch (kind) {
       BridgePuppetPinKind.position => LumitIcon.puppetPin,
       BridgePuppetPinKind.starch => LumitIcon.puppetStarch,
@@ -38,7 +36,6 @@ LumitIcon puppetPinIcon(BridgePuppetPinKind kind) => switch (kind) {
       BridgePuppetPinKind.bend => LumitIcon.puppetBend,
     };
 
-/// One pin's own row: its name, and how far it reaches.
 class PuppetPinRow extends StatelessWidget {
   final LayerReference layer;
   final BridgePuppetPin pin;
@@ -58,7 +55,6 @@ class PuppetPinRow extends StatelessWidget {
       layer.setPuppetPin(pin: next);
       onChanged();
     } catch (_) {
-      // The pin or its layer went away between the draw and the click.
     }
   }
 
@@ -79,7 +75,6 @@ class PuppetPinRow extends StatelessWidget {
             layer.deletePuppetPin(id: pin.id);
             onChanged();
           } catch (_) {
-            // Already gone, which is what was asked for.
           }
         },
         deleteLabel: l10n.deletePuppetPin,
@@ -199,7 +194,6 @@ class _PuppetPinValueRowState extends State<PuppetPinValueRow> {
       );
       widget.onChanged();
     } catch (_) {
-      // The pin or its layer went away mid-drag.
     }
   }
 
@@ -265,8 +259,6 @@ class _PuppetPinValueRowState extends State<PuppetPinValueRow> {
         onDragCancel: () => setState(() => _staged = null),
       );
     }
-    // Animated: the field shows what the curve reads at the playhead, and an
-    // edit writes the key there.
     return PlayheadKeyedField(
       fieldKey: key,
       scalar: scalar,

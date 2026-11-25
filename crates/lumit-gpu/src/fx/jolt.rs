@@ -5,7 +5,6 @@ use crate::GpuContext;
 
 use super::{blur::BlurParams, work_texture, FxEngine};
 
-/// One frame of Jolt. Mirrors `lumit_core::fx::effects::jolt::JoltParams`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct JoltOp {
     /// The blur's radius across and down, raster pixels.
@@ -18,7 +17,6 @@ pub struct JoltOp {
     pub split: [f32; 2],
     /// The colour mixed in, scene-linear, and how far.
     pub tint: [f32; 4],
-    /// The light, multiplied in.
     pub gain: f32,
     /// The whole pixel, multiplied in.
     pub opacity: f32,

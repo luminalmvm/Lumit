@@ -1,7 +1,3 @@
-// The Timeline's lane area: the ruler, the playhead and one bar per layer,
-// with the selected-key model the block tools work in.
-//
-// Split out of timeline_panel_frb.dart.
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
@@ -156,7 +152,6 @@ List<SnapTarget> timelineSnapTargets({
       fps: fps,
     );
 
-/// The right column: the ruler, the playhead, and one bar per layer.
 class LayerArea extends StatelessWidget {
   final CompositionReference comp;
 
@@ -172,10 +167,8 @@ class LayerArea extends StatelessWidget {
   /// click that lights a bar must not rebuild the fifty-six it did not touch.
   final ValueListenable<TimelineSelection> selection;
 
-  /// Open or close a Sequence layer's view, or a caption layer's captions.
   final void Function(BridgeLayerEntry entry)? onOpenSequence;
 
-  /// Every caption layer's captions, for its open row and its bar's marks.
   final CaptionTracks? captions;
 
   /// What a group's combined bar can be asked to do — the panel's own
@@ -183,11 +176,8 @@ class LayerArea extends StatelessWidget {
   /// act on one answer.
   final GroupActions groupActions;
 
-  /// The graph half of a sequence view has been dragged to a new height.
   final void Function(BridgeLayerEntry entry, double height)? onGraphHeight;
 
-  /// A clip's envelope is being dragged: show it under the map it has not
-  /// been given yet.
   final void Function(
           BridgeLayerEntry entry, BridgeClip clip, List<BridgeKeyframe> keys)?
       onClipPreview;
@@ -196,7 +186,6 @@ class LayerArea extends StatelessWidget {
   /// the window's edge rather than at the start of time.
   final ScrollController? hScroll;
 
-  /// Where the open sequence views sit, so the row seams skip them.
   final List<(double, double)> sequenceBlanks;
 
   /// Every open lane's peaks and spectrograms, listened to by the lanes
@@ -216,15 +205,12 @@ class LayerArea extends StatelessWidget {
   final ValueListenable<int> playhead;
   final bool razor;
 
-  /// A razor click on a bar: which layer, and the frame under the pointer.
   final void Function(BridgeLayerEntry entry, int frame) onRazor;
   final ValueChanged<int> onSeek;
 
-  /// Clicking a bar is clicking the layer: the lane side selects too.
   final ValueChanged<LayerReference> onSelect;
   final VoidCallback onChanged;
 
-  /// Expand all and Collapse all, asked as the ground's menu opens.
   final TimelineFoldRows Function()? foldRows;
 
   /// Fires when something may have changed which frames are held — a frame
@@ -288,15 +274,11 @@ class LayerArea extends StatelessWidget {
   /// selection, and the badge is the only part of the box that is a control.
   final ValueChanged<Offset> onEase;
 
-  /// A click on empty lane space — no bar, no diamond, no drag. Everything
-  /// lets go.
   final VoidCallback onDeselectAll;
 
   /// The work area in frames, read once by the panel.
   final ({int start, int end, bool whole}) work;
 
-  /// The ruler's mid-drag span, handed straight up to the panel — see
-  /// `_workPreview` there.
   final ValueChanged<({int start, int end, bool whole})?> onWorkPreview;
 
   /// And the same span coming back down, as something to listen to: the
@@ -319,7 +301,6 @@ class LayerArea extends StatelessWidget {
   final int fpsNum;
   final int fpsDen;
 
-  /// Whether a dragged keyframe sticks to whole frames (docs/07 §4.5).
   final bool magnet;
 
   /// A wheel over the lanes, with the pointer's position in *content* space
@@ -327,7 +308,6 @@ class LayerArea extends StatelessWidget {
   /// are left alone, so they still reach the scrollable.
   final void Function(PointerScrollEvent event, double contentX) onWheel;
 
-  /// Whether a modifier the lanes use with the wheel is held right now.
   final bool Function() wheelClaimed;
 
   /// A middle-button drag over the lanes, in screen pixels.
@@ -338,16 +318,11 @@ class LayerArea extends StatelessWidget {
   /// bar's own build.
   final bool barNames;
 
-  /// Whether a moved Audio layer lands on a whole frame, handed to its bar.
   final bool quantiseSound;
 
-  /// Puts items in the order the Stagger panel sets, [layerOf] saying which
-  /// layer each is on: what a stagger drag on keys follows.
   final List<T> Function<T>(List<T> stack, UuidValue? Function(T) layerOf)
       staggerOrdered;
 
-  /// What a move drag on a selected bar carries — the panel's answer,
-  /// asked at drag start. See [Bar.selectionMove].
   final SelectionMove Function() selectionMove;
 
   const LayerArea({
@@ -415,7 +390,7 @@ class LayerArea extends StatelessWidget {
     var y = 0.0;
     for (final layer in rows) {
       final step = layer.rowHeight;
-      y += step; // the layer's own bar row
+      y += step;
       // **And the room an open Sequence view took** (§4.4). The view
       // sits between the layer's own row and its fold-out, so a walk that
       // stepped only by row heights put every row below one adrift by the
@@ -448,7 +423,7 @@ class LayerArea extends StatelessWidget {
     var top = 0.0;
     for (final layer in rows) {
       final step = layer.rowHeight;
-      top += step; // the layer's own bar row
+      top += step;
       top += layer.sequenceExtra ?? 0;
       for (final row in layer.drawnRows) {
         if (y >= top && y < top + step) {
@@ -564,8 +539,6 @@ class LayerArea extends StatelessWidget {
     ];
   }
 
-  /// Every key [held] answers for, with where it sits. The selection's walk,
-  /// and the one the keyframes someone else has selected are found by.
   List<SelectedKey> _keyPlaces(bool Function(String id) held) {
     final out = <SelectedKey>[];
     var y = 0.0;
@@ -593,7 +566,7 @@ class LayerArea extends StatelessWidget {
       // lanes first, then — only while the fold shows a body — the
       // bar, the view's room, and the fold-out.
       if (layer.groupHeader != null) {
-        y += step; // the header row
+        y += step;
         for (final row in layer.drawnGroupRows) {
           final rowTop = y;
           y += step;
@@ -601,8 +574,8 @@ class LayerArea extends StatelessWidget {
         }
       }
       if (!layer.bodyDrawn) continue;
-      y += step; // the layer's own bar row
-      y += layer.sequenceExtra ?? 0; // and an open Sequence view's room (§4.4)
+      y += step;
+      y += layer.sequenceExtra ?? 0;
       for (final row in layer.drawnRows) {
         final rowTop = y;
         y += step;
@@ -676,12 +649,8 @@ class LayerArea extends StatelessWidget {
                   onWorkPreview: onWorkPreview,
                   onMarkersChanged: onChanged,
                   onMarkerPreview: (staged) => markerPreview.value = staged,
-                  // The work-area edges and the markers snap to the same
-                  // shared list the keys and the bars do (docs/07 §4.5).
                   snapTargets: snap,
                   magnet: magnet,
-                  // On the ruler's floor, over the work-area band, which is
-                  // where the interface spec puts it (docs/07 §3.2, §12A.1).
                   cache: TimelineCacheBar(
                       comp: comp, axis: axis, revision: cacheRevision),
                 ),
@@ -723,8 +692,6 @@ class LayerArea extends StatelessWidget {
                       // wheel zooms or pans instead of scrolling, and a
                       // plain one is left alone.
                       child: Listener(
-                        // The middle button drags the view about, as it does in
-                        // After Effects, Blender and Resolve.
                         onPointerMove: (event) {
                           if (event.buttons == kMiddleMouseButton) {
                             onPan(event.delta);
@@ -808,8 +775,6 @@ class LayerArea extends StatelessWidget {
                                 onTapAt: _tapGround,
                               ),
                             ),
-                            // The ground inside the block box moves the block.
-                            // Behind the bars and keys, like the marquee.
                             Positioned.fill(
                               child: ValueListenableBuilder<Set<String>>(
                                 valueListenable: selectedKeys,
@@ -846,8 +811,6 @@ class LayerArea extends StatelessWidget {
                                 drag: layerDrag,
                                 heights: blockHeights,
                                 index: i,
-                                // The right end of the card the outline's
-                                // block starts.
                                 side: LiftSide.trailing,
                                 child: Container(
                                   // One outline around the layer's own
@@ -989,8 +952,6 @@ class LayerArea extends StatelessWidget {
                                                 ? () => onOpenSequence
                                                     ?.call(rows[i].entry)
                                                 : null,
-                                            // Shut, a caption layer's bar
-                                            // marks where its captions are.
                                             captions: rows[i].captions &&
                                                     rows[i].sequenceExtra ==
                                                         null
@@ -1122,9 +1083,6 @@ class LayerArea extends StatelessWidget {
                               preview: workPreview,
                               committed: work,
                               axis: axis,
-                              // Transparent inside, so this draws the two
-                              // outside strips and nothing else — and nothing
-                              // at all where the span is the whole comp.
                               inside: t.surface1.withValues(alpha: 0),
                               outside:
                                   t.timelineOutOfRange.withValues(alpha: 0.55),
@@ -1179,8 +1137,6 @@ class LayerArea extends StatelessWidget {
                                       null => null,
                                     },
                                     painter: RowDividerPainter(
-                                      // No rows, no rules: an empty
-                                      // composition is a clear ground.
                                       step: rows.isEmpty
                                           ? 0
                                           : t.density.laneRow,
@@ -1193,8 +1149,6 @@ class LayerArea extends StatelessWidget {
                                           -((positionOf(vScroll)?.pixels ?? 0) %
                                               1.0),
                                       blanks: sequenceBlanks,
-                                      // The rows a layer drag has slid take
-                                      // their seams with them.
                                       moves: layerDrag.seamMoves(blockHeights),
                                       lifted: layerDrag.band.value?.blank,
                                     ),
@@ -1259,12 +1213,8 @@ class LayerArea extends StatelessWidget {
                 )))),
               ],
             ),
-            // Each marker's line, from the ruler down through every row.
             MarkerLinesGround(comp: comp, axis: axis, hScroll: hScroll),
-            // Where the others in a shared project have their playheads,
-            // under this person's own.
             if (sharing) SharePlayheads(comp: comp, xOf: axis.xOf),
-            // And the notes left in this composition, each at its frame.
             if (sharing) ShareNotes(comp: comp, xOf: axis.xOf),
             // The playhead rides above every bar so it is never hidden behind
             // one, and it is the only thing here that redraws when it moves —
@@ -1338,7 +1288,6 @@ class LayerArea extends StatelessWidget {
                       secondsPerPixel: secondsPerPixel,
                       left: axis.xOf(inFrame),
                       right: axis.xOf(outFrame),
-                      // Both rows, the same bargain the waveform lane strikes.
                       height: t.density.laneRow * 2,
                     ),
                   ),

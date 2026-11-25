@@ -32,10 +32,8 @@ import 'theme_tokens.dart';
 import 'package:lumit_flutter/state/platform.dart'
     if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
-/// The extension a style file is written under.
 const String styleFileExtension = 'lumstyle';
 
-/// One part of a selector: `timeline`, `button.primary:hover`.
 class _Compound {
   final String? name;
   final Set<String> classes;
@@ -66,7 +64,6 @@ class PartStyle {
   final List<BoxShadow>? insetShadows;
   final Color? colour;
 
-  /// How far what is behind the part is blurred, so it shows through frosted.
   final double? blur;
 
   const PartStyle({
@@ -82,8 +79,6 @@ class PartStyle {
 
   static const none = PartStyle();
 
-  /// The same without its edge, for a box whose edge is drawn over its
-  /// content instead.
   PartStyle get fill => PartStyle(
         background: background,
         radius: radius,
@@ -93,8 +88,6 @@ class PartStyle {
         blur: blur,
       );
 
-  /// The same without its drop shadows, for a surface that must not darken
-  /// the screen around it.
   PartStyle withoutShadows() => PartStyle(
         background: background,
         borderColour: borderColour,
@@ -120,8 +113,6 @@ class PartStyle {
             );
 }
 
-/// Names the part a subtree belongs to, so a rule like `timeline button` can
-/// tell a Timeline button from any other.
 class StylePart extends InheritedWidget {
   final String name;
   const StylePart({super.key, required this.name, required super.child});
@@ -147,23 +138,18 @@ const _properties = {
 };
 
 class StyleSheet {
-  /// What it is called in Settings: the file's name without its extension.
   final String name;
 
-  /// The style it starts from.
   final ThemeShape base;
 
   /// What `@base` said, as written: a style for a style file, a colour
   /// scheme for a colour file.
   final String? baseName;
 
-  /// What `@name` said, if anything.
   final String? title;
 
-  /// The folder the file is in.
   final String folder;
 
-  /// The lines that were skipped, and why, for the Settings row.
   final List<String> problems;
 
   /// The file's text, to tell whether it changed when it is read again.
@@ -178,7 +164,6 @@ class StyleSheet {
   /// line that named each.
   final Map<String, List<({String path, int line})>> _fonts;
 
-  /// The name each of its own families was loaded under, once loaded.
   final Map<String, String> _families = {};
 
   StyleSheet._(this.name, this.base, this.baseName, this.title, this.folder,
@@ -196,7 +181,6 @@ class StyleSheet {
   /// Relative to the style's own folder.
   String? get roomPicture => _url('room');
 
-  /// The style's own icons, from `--icons: url("icons")`, as a folder path.
   String? get iconFolder => _url('icons');
 
   /// A `url(...)` variable as a path, relative to the style's own folder.
@@ -284,7 +268,6 @@ class StyleSheet {
         tag == 0x74746366; // ttcf
   }
 
-  /// How far the room picture is blurred, from `--room-blur`.
   double get roomBlur => _number(_vars['roomblur'], null) ?? 0;
 
   /// What shows through the window where the room is clear, from
@@ -292,7 +275,6 @@ class StyleSheet {
   Backdrop get backdrop =>
       Backdrop.values.asNameMap()[_vars['backdrop']?.trim()] ?? Backdrop.none;
 
-  /// Read a style file's text.
   factory StyleSheet.parse(String text,
       {required String name, String folder = ''}) {
     final problems = <String>[];
@@ -412,8 +394,6 @@ class StyleSheet {
           if (_colour(_vars[_key(token.key)], t) case final c?) token.key: c,
       };
 
-  /// The style's own shape: the base's numbers with its `:root` variables
-  /// over them.
   ShapeTokens tokens() {
     final b = ShapeTokens.of(base);
     double num(String k, double fallback) =>
@@ -671,7 +651,6 @@ String _hex(Color c) {
   return '#${two(c.r)}${two(c.g)}${two(c.b)}${two(c.a)}';
 }
 
-/// How the style in force dresses [part], or nothing when there is none.
 PartStyle partStyle(
   BuildContext context,
   LumitTheme t,
@@ -684,8 +663,6 @@ PartStyle partStyle(
         states: states, classes: classes, inside: inside) ??
     PartStyle.none;
 
-/// [d] with the style's say over it: the fill, the edge, the corner and the
-/// shadow, each only where the style sets one.
 BoxDecoration dress(BoxDecoration d, PartStyle s) {
   if (identical(s, PartStyle.none)) return d;
   if (StyleSheet.solid) {
@@ -768,7 +745,6 @@ class _OuterShadowPainter extends CustomPainter {
       old.shadows != shadows || old.radius != radius;
 }
 
-/// [child] with the style's inset shadows painted over it, inside [radius].
 Widget insetShadows(PartStyle s, BorderRadius? radius, Widget child) {
   final shadows = s.insetShadows;
   if (shadows == null || shadows.isEmpty) return child;

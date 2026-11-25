@@ -32,7 +32,6 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
     let q = ht_turn(px, -p.angle);
     let cell = floor(q / size);
     let local = q - (cell + 0.5) * size;
-    // The picture at the cell's middle, turned back into the frame.
     let mid_px = ht_turn((cell + 0.5) * size, p.angle);
     let mid_uv = mid_px / max(lumit_size() / max(lumit.comp_scale, 1e-6), vec2<f32>(1.0));
     let here = lumit_sample(clamp(mid_uv, vec2<f32>(0.0), vec2<f32>(1.0)));

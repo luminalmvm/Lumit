@@ -92,11 +92,9 @@ pub const DOF_PRO_ENABLED_WHEN: &[EnabledWhen] = &[
     },
 ];
 
-/// The Method row's options.
 pub const METHOD_SHAPES: u32 = 0;
 pub const METHOD_RAYS: u32 = 1;
 
-/// Depth of field pro's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "dof_pro",
@@ -143,7 +141,6 @@ pub struct DofPro {
     )]
     pub lens_model: u32,
 
-    /// Opens the lens window.
     #[action(label = "Edit lens…")]
     pub edit_lens: (),
 
@@ -170,7 +167,6 @@ pub struct DofPro {
     )]
     pub focus_m: f32,
 
-    /// Focus on whatever sits under the point instead.
     #[toggle(default = false)]
     pub use_focus_point: bool,
 
@@ -217,7 +213,6 @@ pub struct DofPro {
     #[slider(min = 0.0, max = 1.0, default = 0.0, hard_min = 0.0, hard_max = 1.0, unit = Raw)]
     pub glass_dirt: f32,
 
-    // ---- Iris ----
     #[counter(min = 3, max = 16, default = 9, hard_min = 3, hard_max = 16, unit = Raw)]
     pub blades: i32,
 
@@ -304,7 +299,6 @@ pub const LENS_OUT: &[Port] = &[
 ];
 
 impl DofPro {
-    /// The bake's inputs for a frame of `w` by `h`.
     pub fn bake_inputs(&self, w: u32, h: u32) -> lens_blur::BokehLens {
         lens_blur::BokehLens {
             lens: self.lens_model,
@@ -361,9 +355,6 @@ impl EffectDef for DofProDef {
         }
     }
 
-    /// ponytail: with Use focus point on, focus is read off the depth on the
-    /// card, after this has run, so this hands out the Focus distance row.
-    /// Read the depth back here if following a focus point matters.
     fn eval_driver(&self, cx: &DriverCx<'_>, push: &mut dyn FnMut(&'static str, Value)) {
         let e = DofPro::read(cx.params);
         push("focus_out", Value::Float(e.focus_m));

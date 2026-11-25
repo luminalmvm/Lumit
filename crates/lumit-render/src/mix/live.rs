@@ -1,6 +1,3 @@
-//! The jobs placed as clips on their nodes, and the rack bakes kept between
-//! builds.
-
 use lumit_audio::plan::PlacedClip;
 use lumit_audio::stream::Source;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -58,8 +55,6 @@ struct BakeKey {
     retime: Option<Arc<Retimed>>,
 }
 
-/// What a whole-input node rack heard: its chain, where its input starts and
-/// the input's own fingerprint.
 #[derive(PartialEq)]
 pub(super) struct WholeKey {
     pub chain: Arc<AudioChain>,
@@ -80,7 +75,6 @@ impl RackBakes {
         }
     }
 
-    /// How many bytes of processed sound the bakes hold.
     #[must_use]
     pub fn bytes(&self) -> usize {
         self.held
@@ -120,7 +114,6 @@ pub(super) fn place_clips(
         .filter_map(|job| Some((source_of(job).filter(|s| s.rate() == rate)?, job)))
         .collect();
     let mut kept: Vec<(BakeKey, Baked)> = Vec::new();
-    // Stopped part way: what was taken goes back, and nothing new is kept.
     let give_back = |bakes: &mut RackBakes, kept: Vec<(BakeKey, Baked)>| {
         bakes.held.extend(kept);
         Err(Cancelled)

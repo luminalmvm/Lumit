@@ -1,23 +1,3 @@
-//! Walking skeleton for the pixel pass (docs/05-ARCHITECTURE.md §1.1,
-//! docs/06-RENDER-PIPELINE.md §1.1): `lumit-eval`'s demand-pull executor
-//! driving `lumit-gpu`'s real compositor through the `FrameSource` /
-//! `KernelExecutor` / `CacheStore` trait seams, with pixels read back and
-//! checked. This is the first end-to-end proof that graph-driven rendering
-//! produces the same linear-light results the compositor produces directly —
-//! the seam the full preview/export migration will widen.
-//!
-//! In plain terms: the executor walks the wiring diagram and asks these
-//! little adapters to do each step; the adapters call the same GPU kernels
-//! the shipped renderer uses. If the colours that come back are right, the
-//! sockets fit.
-//!
-//! Scope: Source (solids), Transform (identity passthrough — placement
-//! resolution stays with the adapter's owner), Composite (all blend modes via
-//! the adapter's `BlendMode` → `Blend` map, per-layer opacity, and layer-mask
-//! coverage), Masks (coverage applied at Composite), CompOutput (over the comp
-//! background). Adjust and Retime are the remaining slices. Skips cleanly when no GPU
-//! adapter is present, like every other lumit-gpu test.
-
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::cell::RefCell;
@@ -34,8 +14,6 @@ use lumit_gpu::composite::{Blend, CompositeLayer, Compositor};
 use lumit_gpu::{ColourEngine, GpuContext};
 use uuid::Uuid;
 
-/// The frame store handles index into. Shared by the two adapters via
-/// `Rc<RefCell<…>>` — single-threaded test plumbing, nothing more.
 struct Frames {
     textures: Vec<wgpu::Texture>,
 }
@@ -88,12 +66,8 @@ impl FrameSource for SolidSource {
     }
 }
 
-/// One layer's resolved placement — the values the real adapter will read
-/// out of the document snapshot at time `t` (Property::value_at); the test
-/// pins them in a table instead.
 #[derive(Clone, Copy)]
 struct Placement {
-    /// Layer-pixel size the transform applies to (the source's size).
     size: (f32, f32),
     position: (f32, f32),
     anchor: (f32, f32),
@@ -103,7 +77,6 @@ struct Placement {
 }
 
 impl Placement {
-    /// Identity: a `(w, h)` frame drawn 1:1 at full opacity.
     fn full_frame(w: f32, h: f32) -> Self {
         Self {
             size: (w, h),
@@ -125,7 +98,6 @@ struct GpuKernels {
     frames: Rc<RefCell<Frames>>,
     size: (u32, u32),
     background: [f64; 4],
-    /// layer id → resolved placement (defaults to full-frame identity).
     layers: HashMap<Uuid, Placement>,
     /// layer id → its rasterised mask coverage (alpha), applied at Composite
     /// via `CompositeLayer::layer_mask`. The production adapter rasterises the
@@ -156,7 +128,6 @@ impl GpuKernels {
         }
     }
 
-    /// A comp-sized frame drawn 1:1 (accumulator hand-off).
     fn full_frame<'a>(&self, tex: &'a wgpu::Texture, opacity: f32) -> CompositeLayer<'a> {
         let mut p = Placement::full_frame(self.size.0 as f32, self.size.1 as f32);
         p.opacity = opacity;
@@ -176,7 +147,6 @@ impl KernelExecutor for GpuKernels {
         let err = |message: String| ExecError::Node { node, message };
         let (w, h) = self.size;
         match kind {
-            // Identity placement in this slice: the frame passes through.
             NodeKind::Transform { .. } => inputs
                 .first()
                 .copied()
@@ -295,8 +265,6 @@ fn blend_of(m: lumit_core::model::BlendMode) -> Blend {
     }
 }
 
-/// A real (if tiny) cache: hits return the stored handle, so a repeated
-/// render does zero GPU work.
 #[derive(Default)]
 struct MapCache {
     entries: HashMap<u128, FrameHandle>,
@@ -380,7 +348,6 @@ impl Rig {
         })
     }
 
-    /// Solids at comp size (the common case; sized solids pass a map directly).
     fn source(&self, solids: HashMap<Uuid, [u8; 4]>) -> SolidSource {
         let sized = solids
             .into_iter()
@@ -432,7 +399,6 @@ fn two_layers_blend_in_linear_light_through_the_seams() {
         (red, [255, 0, 0, 255]),
         (green, [0, 255, 0, 255]),
     ]));
-    // Top layer red at 50% opacity over the opaque green bottom layer.
     let mut half_red = Placement::full_frame(8.0, 8.0);
     half_red.opacity = 50.0;
     let mut kernels = rig.kernels([0.0, 0.0, 0.0, 1.0], HashMap::from([(l_top, half_red)]));

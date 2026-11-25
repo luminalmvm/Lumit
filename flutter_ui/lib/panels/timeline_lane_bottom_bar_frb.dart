@@ -1,7 +1,3 @@
-// The Timeline lanes' bottom bar: the zoom slider, the magnet, and the
-// horizontal scrollbar.
-//
-// Split out of timeline_panel_frb.dart.
 
 import 'package:flutter/widgets.dart';
 import '../icons/icons.dart';
@@ -41,8 +37,6 @@ class LaneBottomBar extends StatelessWidget {
   /// animation by a flight's length.
   final double zoom;
 
-  /// The far end of the slider: the zoom at which the lanes show
-  /// `_TimelinePanelFrbState._framesAtFullZoom` frames.
   final double maxZoom;
   final ScrollController hScroll;
 
@@ -53,7 +47,6 @@ class LaneBottomBar extends StatelessWidget {
   /// the motion, so this one arrives at once.
   final ValueChanged<double> onZoomLive;
 
-  /// The drag's ends, so the panel can anchor once per gesture.
   final VoidCallback? onZoomDragStart;
   final VoidCallback? onZoomDragEnd;
 
@@ -90,8 +83,6 @@ class LaneBottomBar extends StatelessWidget {
     this.viewButtons = const [],
   });
 
-  /// Desk's zoom: the dial and, beside it, what one tick of the engraved
-  /// ruler is worth in frames.
   List<Widget> _dial(LumitTheme t) {
     final seconds =
         engravedTickSeconds(pixelsPerSecond: perFrame * fps, fps: fps);
@@ -165,7 +156,6 @@ class LaneBottomBar extends StatelessWidget {
     );
   }
 
-  /// What the bar's own controls do, by name and with their chords.
   void _menu(BuildContext context, Offset at) {
     void nudge(bool inward) =>
         onZoom(zoomNudged(zoom, inward: inward, maxZoom: maxZoom));
@@ -239,7 +229,6 @@ class LaneBottomBar extends StatelessWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Desk turns the zoom on a dial; the other shapes slide it.
                       if (t.shape == ThemeShape.desk)
                         ..._dial(t)
                       else ...[
@@ -290,8 +279,6 @@ class LaneBottomBar extends StatelessWidget {
                       padding: const EdgeInsets.only(left: 6),
                       child: LumitTooltip(
                         message: on ? l10n.tipSnapOn : l10n.tipSnapOff,
-                        // Lantern's magnet is a circle: the stadium radius on a
-                        // square button.
                         child: SizedBox(
                           width: t.shape == ThemeShape.lantern ? 18 : null,
                           height: t.shape == ThemeShape.lantern ? 18 : null,

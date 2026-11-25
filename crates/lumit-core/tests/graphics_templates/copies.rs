@@ -1,7 +1,3 @@
-//! A placed copy: the values it keeps as its own, fed or following the
-//! template, the rows it shows, the document it plays, its clock, and what an
-//! expression reads from it by a control's name.
-
 use std::sync::Arc;
 
 use lumit_core::anim::{Animation, Keyframe, Property, SideInterp};
@@ -119,7 +115,6 @@ fn a_copy_keeps_its_own_values_and_its_data_rows_apart() {
     assert_eq!(values::value_of(&inst, c("radius"), 0.0, None), None);
     assert!(!values::is_bare(&inst));
 
-    // A text control's further rows reach the same layer.
     values::set_row(&mut inst, "title_size", fixed(90.0));
     values::set_row(
         &mut inst,
@@ -166,7 +161,6 @@ fn a_copy_keeps_its_own_values_and_its_data_rows_apart() {
         }
     );
 
-    // A data row feeds what the copy has not set itself.
     assert!(values::feed_value(
         &mut inst,
         c("opacity"),
@@ -249,7 +243,6 @@ fn a_copy_shown_offers_the_template_and_stores_only_what_moved() {
         "a fed row shows its feed"
     );
 
-    // Each row's default is the template's own, so a reset follows it.
     let derived = def.derived(&shown);
     let default_of = |id: &str| derived.iter().find(|r| r.id == id).unwrap().kind;
     assert!(matches!(default_of("opacity"), ParamKind::Float { default, .. } if default == 100.0));
@@ -274,7 +267,6 @@ fn a_copy_shown_offers_the_template_and_stores_only_what_moved() {
         matches!(default_of("logo_fit"), ParamKind::Choice { options, .. } if options.len() == 3)
     );
 
-    // Stored as it was shown: only the copy's own and its fed rows stay.
     let mut same = shown.clone();
     values::settle(&mut same, Some(&stored));
     let kept = values::held(&same);
@@ -286,9 +278,6 @@ fn a_copy_shown_offers_the_template_and_stores_only_what_moved() {
     let ids: Vec<String> = same.params.iter().map(|p| p.id.clone()).collect();
     assert_eq!(sorted(ids), ["radius", "title"]);
 
-    // One axis moved makes the whole point the copy's own, a fed row moved
-    // is now the copy's own, and a row put back at the template's value
-    // follows the template again.
     let mut edited = shown.clone();
     for p in &mut edited.params {
         match p.id.as_str() {
@@ -311,13 +300,11 @@ fn a_copy_shown_offers_the_template_and_stores_only_what_moved() {
         Some(Value::Point(vec![10.0, 540.0]))
     );
 
-    // Never handed out, an instance keeps the marks it has.
     let mut plain = stored.clone();
     values::settle(&mut plain, None);
     assert_eq!(values::held(&plain).own, ["title"]);
     assert_eq!(values::held(&plain).fed, ["radius"]);
 
-    // A copy of something that is not a template is offered nothing.
     let mut stray = values::instance_for(kit.logo_comp, &template);
     values::offer(&mut stray, &kit.doc);
     assert!(stray.params.is_empty());
@@ -434,7 +421,6 @@ fn a_copy_plays_its_own_document_and_the_project_is_left_alone() {
     let mut on_layer = values::instance_for(kit.tpl, &template);
     values::set_value(&mut on_layer, c("opacity"), &Value::Number(25.0));
     values::set_value(&mut on_layer, c("title"), &Value::Text("Copy one".into()));
-    // The clip's opacity runs from nothing to full over its first second.
     let mut on_clip = values::instance_for(kit.tpl, &template);
     values::set_value(&mut on_clip, c("opacity"), &Value::Number(0.0));
     let key = |s: i64, value: f64| Keyframe {
@@ -478,7 +464,6 @@ fn a_copy_plays_its_own_document_and_the_project_is_left_alone() {
         "a still copy makes one document"
     );
 
-    // A clip's values run on the clip's own clock, from where it is placed.
     let cut = kit::layer_named(owner, "Cut");
     let LayerKind::Sequence { clips } = &cut.kind else {
         panic!("the cut is a Sequence layer");
@@ -490,7 +475,6 @@ fn a_copy_plays_its_own_document_and_the_project_is_left_alone() {
     };
     assert!((half - 50.0).abs() < 1e-9, "{half}");
 
-    // Nothing to write is the project itself.
     let other = kit::layer_named(owner, "Other");
     assert!(placed::for_layer(&doc, owner, other, 0.0, 0.0, None).is_none());
     assert!(placed::document(&doc, kit.tpl, None, 0.0, None, None).is_none());
@@ -501,7 +485,6 @@ fn a_copy_plays_its_own_document_and_the_project_is_left_alone() {
     assert!(placed::document(&doc, kit.logo_comp, Some(&elsewhere), 0.0, None, None).is_none());
     assert!(placed::with(&doc, kit.tpl, &[]).is_none());
 
-    // A copy's own picture is fitted into the frame of the one it replaces.
     let mut pictured = values::instance_for(kit.tpl, &template);
     let badge = Picture {
         item: kit.badge,
@@ -542,17 +525,13 @@ fn a_copys_clock_keeps_the_intro_and_outro_at_their_speed() {
             .collect::<Vec<_>>(),
         other => panic!("a map is keyframed, not {other:?}"),
     };
-    // Ten seconds from two: the intro's second, a stretched middle, the
-    // outro's second.
     let map = copy_map(timing, Ends::BOTH, 2.0, 10.0).unwrap();
     assert_eq!(
         keys(map),
         [(2.0, 0.0), (3.0, 1.0), (11.0, 4.0), (12.0, 5.0)]
     );
-    // Too short for both ends: heard straight through.
     let map = copy_map(timing, Ends::BOTH, 0.0, 1.5).unwrap();
     assert_eq!(keys(map), [(0.0, 0.0), (1.5, 5.0)]);
-    // Neither end played: the middle alone, over the whole copy.
     let neither = Ends {
         intro: false,
         outro: false,
@@ -638,7 +617,6 @@ fn template_data_is_linked_and_unlinked_through_its_op() {
     let undo = ops::apply(&mut kit.doc, &link).unwrap();
     assert_eq!(kit.comp().template_data(), Some(data));
     assert!(matches!(undo, Op::SetCompTemplateData { data: None, .. }));
-    // The data lives beside the template, which reads as it did.
     assert_eq!(kit.template().controls.len(), 10);
     ops::apply(&mut kit.doc, &undo).unwrap();
     assert_eq!(kit.comp().template_data(), None);

@@ -19,7 +19,6 @@ use lumit_core::fx::registry::EffectDef;
 use lumit_ofx::bundle::BUNDLE_ARCH_DIR;
 use lumit_ofx::discover::{self, Hosting, ScanOptions};
 
-/// The test plugin's file name on this platform.
 fn test_plugin_file_name() -> &'static str {
     if cfg!(target_os = "windows") {
         "lumit_ofx_testplug.dll"
@@ -30,7 +29,6 @@ fn test_plugin_file_name() -> &'static str {
     }
 }
 
-/// Where Cargo put the test plugin, if it built it.
 fn test_plugin() -> Option<PathBuf> {
     let name = test_plugin_file_name();
     let exe = std::env::current_exe().ok()?;
@@ -49,7 +47,6 @@ fn test_plugin() -> Option<PathBuf> {
     None
 }
 
-/// Lay the test plugin out as a real bundle called `name` inside `root`.
 fn a_bundle_in(root: &Path, name: &str) -> Option<PathBuf> {
     let source = test_plugin()?;
     let dir = root
@@ -62,7 +59,6 @@ fn a_bundle_in(root: &Path, name: &str) -> Option<PathBuf> {
     Some(binary)
 }
 
-/// A bundle whose binary is not a library at all — the broken installer.
 fn an_unloadable_bundle_in(root: &Path, name: &str) -> Option<PathBuf> {
     let dir = root
         .join(format!("{name}.ofx.bundle"))
@@ -135,8 +131,6 @@ fn a_folder_of_bundles_becomes_exactly_the_effects_it_should() {
     let mut catalogue = Recorder::default();
     let first = discover::scan(&options, &mut |def| catalogue.take(def));
 
-    // Exactly the plugins that describe, minus the switched-off one, and one
-    // entry for the identifier the bundle declares twice at two versions.
     let registered: Vec<&str> = first
         .registered
         .iter()
@@ -154,7 +148,6 @@ fn a_folder_of_bundles_becomes_exactly_the_effects_it_should() {
          colliding parameter ids are all absent"
     );
 
-    // The plugin's own facts came with it, so the browser can place it.
     let full = first
         .registered
         .iter()
@@ -163,7 +156,6 @@ fn a_folder_of_bundles_becomes_exactly_the_effects_it_should() {
     assert_eq!(full.label, "Test plug");
     assert_eq!(full.grouping, "Lumit/Test");
 
-    // **Every refusal is a line, and none of them is a dialogue.**
     let report = first.skipped.join("\n");
     assert!(
         report.contains("Broken.ofx") && report.contains("switched off in preferences"),
@@ -181,8 +173,6 @@ fn a_folder_of_bundles_becomes_exactly_the_effects_it_should() {
         "a plugin that registered is not also reported as skipped"
     );
 
-    // **A second scan registers nothing again** — it is a rescan, not a second
-    // catalogue.
     let second = discover::scan(&options, &mut |def| catalogue.take(def));
     assert!(
         second.registered.is_empty(),
@@ -195,7 +185,6 @@ fn a_folder_of_bundles_becomes_exactly_the_effects_it_should() {
         "the catalogue took each name exactly once"
     );
 
-    // And the session's own table agrees with what the scans said.
     let names: Vec<String> = discover::discovered()
         .into_iter()
         .map(|found| found.match_name)
@@ -211,8 +200,6 @@ fn a_folder_of_bundles_becomes_exactly_the_effects_it_should() {
     );
     assert!(discover::plugin_of("ofx:nothing.of.the.sort").is_none());
 
-    // Switching one off at run time is answered immediately, which is what the
-    // badge is drawn from.
     assert!(!discover::is_disabled("com.lumitlab.testplug"));
     discover::set_enabled("com.lumitlab.testplug", false);
     assert!(discover::is_disabled("com.lumitlab.testplug"));

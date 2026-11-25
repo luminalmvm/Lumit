@@ -25,7 +25,6 @@ use crate::{error::MlError, store};
 /// The addon id the runtime is always installed under. Exactly one may be.
 pub const RUNTIME_ID: &str = "runtime";
 
-/// The shared library this platform's runtime addon carries.
 pub const LIBRARY: &str = if cfg!(windows) {
     "onnxruntime.dll"
 } else if cfg!(target_os = "macos") {
@@ -45,7 +44,6 @@ pub const PROVIDER: &str = if cfg!(windows) {
     "CPU"
 };
 
-/// What the CPU provider is called wherever a session lands on it.
 pub const CPU: &str = "CPU";
 
 /// Which provider a run made now is made by: the one a session really took,
@@ -71,34 +69,26 @@ pub(crate) fn took(provider: &'static str) {
     let _ = TAKEN.set(provider);
 }
 
-/// The first answer [`took`] was given.
 static TAKEN: OnceLock<&'static str> = OnceLock::new();
 
 /// The environment variable that turns "no model runtime" from a skip into a
 /// failure. Set it on any machine that is *supposed* to have one.
 pub const REQUIRE_RUNTIME_ENV: &str = "LUMIT_REQUIRE_ML";
 
-/// The loaded library, as the badge reports it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Loaded {
-    /// The provider a session will try first on this platform.
     pub provider: &'static str,
-    /// The version the library itself reports.
     pub version: String,
 }
 
-/// What the Addons page says about the runtime row.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RuntimeStatus {
-    /// Nothing is installed.
     Missing,
     /// The folder is there and nothing has asked for it yet.
     Present,
     /// [`load`] returned `Ok` since Lumit started.
     Loaded {
-        /// Which provider a session tries first.
         provider: String,
-        /// What the library reports itself as.
         version: String,
     },
     /// [`load`] was asked and refused. Carries the library's own sentence.
@@ -133,18 +123,11 @@ pub fn load(dir: &Path) -> Result<&'static Loaded, MlError> {
     }
 }
 
-/// [`load`], pointed at the runtime addon the user installed.
-///
-/// # Errors
-///
-/// [`MlError::RuntimeMissing`] when no runtime addon is installed, and
-/// whatever [`load`] answers otherwise.
 pub fn load_installed() -> Result<&'static Loaded, MlError> {
     let installed = store::pack(RUNTIME_ID).ok_or(MlError::RuntimeMissing)?;
     load(&installed.path)
 }
 
-/// Where the runtime addon is, if it is installed.
 #[must_use]
 pub fn dir() -> Option<PathBuf> {
     store::pack(RUNTIME_ID).map(|installed| installed.path)
@@ -182,7 +165,6 @@ pub fn status() -> RuntimeStatus {
     }
 }
 
-/// The load itself, run once.
 #[cfg(not(target_arch = "wasm32"))]
 fn open(library: &Path) -> Result<Loaded, String> {
     #[cfg(windows)]
@@ -201,8 +183,6 @@ fn open(library: &Path) -> Result<Loaded, String> {
     })
 }
 
-/// What the browser build says when asked for the runtime, which it has not
-/// got.
 #[cfg(target_arch = "wasm32")]
 pub(crate) const NOT_HERE: &str = "ONNX Runtime is not in the browser build";
 

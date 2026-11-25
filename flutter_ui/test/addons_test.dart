@@ -24,8 +24,6 @@ void main() {
     if (scratch.existsSync()) scratch.deleteSync(recursive: true);
   });
 
-  /// The bytes one download carries, and the digest the catalogue publishes
-  /// for them.
   final body = List<int>.generate(2048, (i) => i % 251);
   final digest = crypto.sha256.convert(body).toString();
 
@@ -96,8 +94,6 @@ void main() {
         ],
       });
 
-  /// A downloader that writes [body] in four pieces, asking to be stopped
-  /// between each, and runs [between] after every one.
   AssetDownloader chunked({void Function()? between}) => (
         Uri url,
         File into, {
@@ -122,8 +118,6 @@ void main() {
         }
       };
 
-  /// The engine, as far as this file is concerned: what it has been told, and
-  /// what it would answer.
   final installs = <({String manifest, List<String> files})>[];
   final removed = <String>[];
   var scan = <Addon>[];
@@ -160,7 +154,6 @@ void main() {
         platformKey: 'windows-x86_64',
       );
 
-  /// Every stage the service passed through, in order.
   List<AddonStage> stagesOf(AddonService service) {
     final seen = <AddonStage>[];
     service.addListener(() {

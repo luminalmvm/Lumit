@@ -102,7 +102,6 @@ pub(super) fn neighbour_fields(
         let field = match want {
             FlowWant::Still if repeated => continue,
             FlowWant::Measured if repeated => continue,
-            // No motion, fully trusted: the frame is usable where it is.
             FlowWant::Still => Arc::new(Leg::from_planes(&[0.0], &[0.0], &[1.0], 1, 1)),
             FlowWant::Full => full(flow_engine, flow_cache, gpu, job, px, other, nb),
             FlowWant::Measured => {
@@ -242,7 +241,6 @@ fn full(
     let (fwd, bwd) = match flow_cache.get(&key) {
         Some(hit) => (hit.fwd.clone(), hit.bwd.clone()),
         None => {
-            // Read as the samples are, as Denoise's pairs are.
             let (ga, gb, _) = if px.format == lumit_media::decode::PixelFormat::LinearF32 {
                 lumit_flow::flow_grays_f32(&px.rgba, other, w, h, &set)
             } else {

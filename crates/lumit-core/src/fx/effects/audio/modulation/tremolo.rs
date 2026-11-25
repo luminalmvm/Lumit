@@ -30,10 +30,8 @@ use crate::fx::{
     registry::EffectMetadata, schema::EffectSchema,
 };
 
-/// How long a moved row takes to arrive.
 const SMOOTH_MS: f64 = 10.0;
 
-/// The Tremolo effect's rows.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "audio_tremolo",
@@ -62,7 +60,6 @@ pub struct AudioTremolo {
     pub stereo_phase: f32,
 }
 
-/// The Tremolo effect's behaviour.
 pub struct AudioTremoloDef;
 
 impl EffectDef for AudioTremoloDef {
@@ -105,7 +102,6 @@ struct TremoloState {
     phase: Phase,
 }
 
-/// One open Tremolo.
 struct TremoloAudio {
     rate: f64,
     state: Mutex<TremoloState>,
@@ -135,7 +131,6 @@ impl AudioProcessor for TremoloAudio {
         {
             let depth = state.depth.step();
             let phase = state.phase;
-            // The cycle's top is unity and its bottom is 1 - depth.
             let gain = |lfo: &Lfo| 1.0 - depth * (1.0 - lfo.value(phase, self.rate)) * 0.5;
             let (l, r) = frame(i);
             put(
@@ -168,13 +163,11 @@ mod tests {
 
     #[test]
     fn the_cycle_tops_out_at_unity_and_bottoms_at_the_depth_asked() {
-        // A constant input reads the gain back directly.
         let frames = 96 * crate::fx::audio_chain::AUDIO_BLOCK_FRAMES;
         let input = vec![1.0f32; frames * AUDIO_CHANNELS];
         let values = harness::values(&AudioTremoloDef, &[("rate", 2.0), ("depth", 60.0)]);
         let out = harness::run(&*harness::open(&AudioTremoloDef, &values), &input, &values);
 
-        // Past the smoothing, which is ten milliseconds.
         let settled = &out[frames / 2 * AUDIO_CHANNELS..];
         let top = settled.iter().fold(f32::MIN, |a, s| a.max(*s));
         let bottom = settled.iter().fold(f32::MAX, |a, s| a.min(*s));

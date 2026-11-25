@@ -77,8 +77,6 @@ struct Params {
     composite: u32,
 };
 
-// ---- Display values: the sRGB curve, both ways ----
-
 fn cr_encode1(v: f32) -> f32 {
     let x = clamp(v, 0.0, 1.0);
     if (x <= 0.0031308) {
@@ -101,8 +99,6 @@ fn cr_encode(c: vec3<f32>) -> vec3<f32> {
 fn cr_decode(c: vec3<f32>) -> vec3<f32> {
     return vec3<f32>(cr_decode1(c.r), cr_decode1(c.g), cr_decode1(c.b));
 }
-
-// ---- HSL ----
 
 fn cr_hsl(c: vec3<f32>) -> vec3<f32> {
     let hi = max(c.r, max(c.g, c.b));
@@ -147,8 +143,6 @@ fn cr_phase(channel: u32, c: vec3<f32>, a: f32) -> f32 {
         default: { return dot(c, vec3<f32>(0.299, 0.587, 0.114)); }
     }
 }
-
-// ---- The output cycle ----
 
 fn cr_o(r: f32, g: f32, b: f32) -> vec4<f32> {
     return vec4<f32>(r, g, b, 1.0);
@@ -232,7 +226,6 @@ fn cr_palette(x: f32) -> vec4<f32> {
                 array<vec4<f32>, 8>(k, cr_o(1.0, 0.0, 0.0), k, k, k, k, k, k), 3, x);
         }
         case 8u: {
-            // Caribbean: four blues, round the wheel four times.
             return cr_wheel(array<f32, 8>(0.0, 0.25, 0.5, 0.75, 1.0, 1.0, 1.0, 1.0),
                 array<vec4<f32>, 8>(cr_o(0.45, 0.85, 0.95), cr_o(0.15, 0.6, 0.88),
                     cr_o(0.08, 0.38, 0.72), cr_o(0.2, 0.68, 0.9), k, k, k, k), 4, fract(x * 4.0));
@@ -243,7 +236,6 @@ fn cr_palette(x: f32) -> vec4<f32> {
                     cr_o(0.66, 0.34, 0.14), cr_o(0.68, 0.36, 0.15), cr_o(0.55, 0.42, 0.2), k, k), 6, x);
         }
         case 10u: {
-            // Copper: light and dark, eight times round.
             return cr_wheel(array<f32, 8>(0.0, 0.5, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0),
                 array<vec4<f32>, 8>(cr_o(0.93, 0.62, 0.5), cr_o(0.55, 0.3, 0.2), k, k, k, k, k, k),
                 2, fract(x * 8.0));
@@ -323,7 +315,6 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
     }
     let c = cr_encode(lumit_unpremult(here).rgb);
 
-    // Input phase.
     var phase = cr_phase(p.get_phase_from, c, here.a);
     if (lumit.input2_on > 0.5) {
         let other = lumit_sample2(uv);
@@ -339,7 +330,6 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
     // The phase runs round the wheel anticlockwise.
     let x = fract(1.0 - fract(t));
 
-    // Output cycle, then Modify.
     let pal = cr_palette(x);
     let hsl = cr_hsl(c);
     let ph = cr_hsl(pal.rgb);

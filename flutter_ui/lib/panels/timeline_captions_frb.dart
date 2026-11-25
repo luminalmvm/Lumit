@@ -41,9 +41,6 @@ bool typeCaptionAtPlayhead(LumitUiState ui, LayerReference layer,
   return true;
 }
 
-/// Faint marks on a shut caption layer's bar: the stretches no caption
-/// covers are shaded, as a Sequence bar shades its gaps, and a hairline
-/// stands where one caption runs into the next.
 class CaptionMarksPainter extends CustomPainter {
   final CaptionTrack track;
   final TimelineAxis axis;
@@ -76,8 +73,6 @@ class CaptionMarksPainter extends CustomPainter {
       if (start > x + 0.5) {
         canvas.drawRect(Rect.fromLTRB(x, 0, start, size.height), gap);
       } else if (start - before >= captionSeamRoom) {
-        // Captions that touch: a hairline between them, while each is wide
-        // enough for one to read as a mark rather than as stripes.
         canvas.drawRect(Rect.fromLTWH(start, 0, 1, size.height), seam);
       }
       before = start;
@@ -99,5 +94,4 @@ class CaptionMarksPainter extends CustomPainter {
   bool? hitTest(Offset position) => false;
 }
 
-/// How wide a caption must be for the seam at its start to be drawn.
 const double captionSeamRoom = 6;

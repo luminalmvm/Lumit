@@ -23,8 +23,6 @@ pub struct Leg {
 }
 
 impl Leg {
-    /// `f` with its [`crate::confidence`] against `g`, the field measured the
-    /// other way between the same two frames.
     #[must_use]
     pub fn measured(f: &FlowField, g: &FlowField) -> Self {
         Self::from_planes(&f.u, &f.v, &crate::confidence(f, g), f.w, f.h)
@@ -47,7 +45,6 @@ impl Leg {
         Self { w, h, texels }
     }
 
-    /// What it holds, for a cache's accounting.
     #[must_use]
     pub fn bytes(&self) -> usize {
         self.texels.len() * 4 + 32

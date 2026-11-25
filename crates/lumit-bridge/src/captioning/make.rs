@@ -1,5 +1,3 @@
-//! Making caption layers: from a layer's speech, or from a subtitle file.
-
 use super::*;
 
 /// The words a layer plays, per footage item, in source time: each item's
@@ -84,14 +82,13 @@ fn placed_look(comp: &Composition, mut document: TextDocument, lines: u32) -> Te
     }
     paragraph.align = lumit_core::text::TextAlign::Centre;
     let leading = document.style.leading.unwrap_or(document.size * 1.2);
-    #[allow(clippy::cast_possible_truncation)] // a box in pixels
+    #[allow(clippy::cast_possible_truncation)]
     let height = (leading * f64::from(lines.max(1))) as f32;
     document.paragraph.box_height = height;
     document.paragraph.vertical = lumit_core::text::VerticalAlign::Bottom;
     document
 }
 
-/// A Text layer showing `captions`, styled as `look`, at the top of the stack.
 fn caption_layer(
     comp_ref: &CompositionReference,
     comp: &Composition,
@@ -201,7 +198,6 @@ pub(crate) fn create(
     caption_layer(comp_ref, comp, options.name, look, captions)
 }
 
-/// Whether a word is a filler: a sound like "um" more than a word.
 fn is_filler(text: &str) -> bool {
     let bare: String = text
         .chars()

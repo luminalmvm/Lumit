@@ -79,16 +79,12 @@ void main() {
       await addBlank(tester);
       await tester.pump();
       expect(text.getText()!.animators.length, 1);
-      // A fresh animator changes nothing until a number is moved, and its
-      // range covers the whole of the words.
       final fresh = text.getText()!.animators.first;
       expect(fresh.selector.start, const BridgeScalar.static_(0));
       expect(fresh.selector.end, const BridgeScalar.static_(100));
       expect(fresh.opacity, const BridgeScalar.static_(100));
       expect(fresh.basisIsCharacters, isTrue);
 
-      // Its rows are there and they write: the range's end, and the choice of
-      // what the range counts.
       await tester.tap(find.byKey(const ValueKey('range-end-0-0')));
       await tester.pump();
       await tester.enterText(find.byType(EditableText).last, '25');
@@ -123,7 +119,6 @@ void main() {
       expect(entry.info.textAnimators.length, 1,
           reason: 'the read model carries the animators');
 
-      // The fold: a heading, the animator's own twirl, and a row per number.
       final rows = layerFoldRows(
         entry: entry,
         open: everyFoldPath,
@@ -140,8 +135,6 @@ void main() {
         reason: 'every number an animator has needs a row to key it on',
       );
 
-      // The graph editor resolves one of those rows to a curve, with no bridge
-      // call and no second model.
       final path = '${animatorPath(id, 0)}/${TextAnimatorValue.rangeOffset.name}';
       expect(foldRowPath(id, rows.whereType<FoldAnimatorValueRow>().firstWhere(
           (r) => r.value == TextAnimatorValue.rangeOffset)), path);
@@ -150,7 +143,6 @@ void main() {
       expect(channels.single.scalar, const BridgeScalar.static_(0));
       expect(channels.single.label, contains('Range offset'));
 
-      // And a graph edit on it lands on the document.
       commitChannelEdits({channels.single: const BridgeScalar.static_(40)});
       expect(text.getText()!.animators.first.selector.offset,
           const BridgeScalar.static_(40));
@@ -171,7 +163,6 @@ void main() {
           find.byKey(const ValueKey('text-animator-kind-0')), findsOneWidget);
       expect(find.byKey(const ValueKey('range-start-0-0')), findsOneWidget);
 
-      // Switched to Proximity, aimed at the null.
       final fresh = text.getText()!.animators.single;
       writeTextAnimatorDocument(
         text,
@@ -194,7 +185,6 @@ void main() {
       expect(selector.target, target.internallayerId);
       expect(selector.kind, BridgeSelectorKind.proximity);
 
-      // The fold lists the radius instead of the range.
       final entry = p.comp
           .getModel()
           .layers
@@ -224,7 +214,6 @@ void main() {
       await tester.pump();
       expect(find.byKey(const ValueKey('anim-axis-wght-0-0')), findsOneWidget);
 
-      // The fold and the graph see it as one more number.
       final animator = text.getText()!.animators.single;
       expect(textAnimatorValuesOf(animator, solid: false),
           contains(TextAnimatorValue.axis0));
@@ -248,8 +237,6 @@ void main() {
   });
 }
 
-/// Write [animator] as [layer]'s only animator, the rest of its document as
-/// it is.
 void writeTextAnimatorDocument(
     LayerReference layer, BridgeTextAnimator animator) {
   final document = layer.getText()!;

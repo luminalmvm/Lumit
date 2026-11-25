@@ -9,12 +9,9 @@ use crate::time::Rational;
 
 use super::cues::{Cue, CueWord};
 
-/// Which way a time stamp is written.
 #[derive(Clone, Copy)]
 pub(super) enum Stamp {
-    /// `00:01:02,500`
     Srt,
-    /// `00:01:02.500`
     Vtt,
 }
 
@@ -34,7 +31,6 @@ pub(super) fn stamp(at: Rational, how: Stamp) -> String {
     format!("{hours:02}:{minutes:02}:{seconds:02}{mark}{ms:03}")
 }
 
-/// A time stamp of either format, hours optional, as an exact time.
 pub(super) fn parse_stamp(text: &str) -> Option<Rational> {
     let text = text.trim();
     let (clock, fraction) = match text.rfind([',', '.']) {
@@ -113,7 +109,6 @@ pub(super) fn text_of(bytes: &[u8]) -> String {
     }
 }
 
-/// The entities subtitle files use, written out.
 pub(super) fn decode_entities(text: &str) -> String {
     if !text.contains('&') {
         return text.to_owned();
@@ -164,8 +159,6 @@ pub(super) fn decode_entities(text: &str) -> String {
     out
 }
 
-/// A caption line without its markup: tags in angle brackets, override blocks
-/// in braces, entities written out, and runs of space made one.
 pub(super) fn clean(line: &str) -> String {
     let mut plain = String::with_capacity(line.len());
     let mut depth_angle = false;
@@ -186,7 +179,6 @@ pub(super) fn clean(line: &str) -> String {
         .join(" ")
 }
 
-/// Whether `c` is punctuation that leans on the word before it.
 fn leans(c: char) -> bool {
     !c.is_alphanumeric() && !c.is_whitespace()
 }
@@ -308,10 +300,6 @@ pub(super) fn cue_of_lines<S: AsRef<str>>(
 mod tests {
     use super::super::{srt, vtt};
 
-    /// **A file written and read back says the same thing at the same
-    /// times**, word times included for WebVTT. A subtitle file is what
-    /// somebody sends on with the video, and one that lost or moved words on
-    /// the way would be sent on wrong.
     #[test]
     fn a_file_written_and_read_back_says_the_same_at_the_same_times() {
         let srt_text =
@@ -335,7 +323,6 @@ mod tests {
             let times = |c: &super::super::cues::Cue| -> Vec<_> {
                 c.words.iter().map(|w| w.start).collect()
             };
-            // Written to the millisecond, so read back to it.
             let ms = |c: &super::super::cues::Cue| -> Vec<i64> {
                 times(c)
                     .iter()
@@ -363,9 +350,6 @@ mod tests {
         assert_eq!(read[0].lines(), vec!["Well, hello", "there"]);
         assert_eq!(read[0].start, crate::time::Rational::new(3, 2).unwrap());
 
-        // Numbered entities and stray ampersands, a line in a script written
-        // without spaces, cut into a word a character with its punctuation
-        // leaning on the word before, and a timing that is not one.
         let odd = "1\n00:00:01,000 --> 00:00:02,000\n&#x41;&#66; &bogus; R&D\n\n\
                    2\n00:00:02,000 --> 00:00:03,000\n今日は、晴れ。\n";
         let read = super::super::read_file("Odd.srt", odd).unwrap();
@@ -380,8 +364,6 @@ mod tests {
             Err(super::super::CaptionsError::Unreadable { line: 2 })
         );
 
-        // The same file written as UTF-16 with its mark, and an older one in
-        // Windows-1252, read as the words they hold.
         let plain = "1\n00:00:01,000 --> 00:00:02,000\nCafé “open”\n";
         let mut wide = vec![0xFF, 0xFE];
         wide.extend(plain.encode_utf16().flat_map(u16::to_le_bytes));

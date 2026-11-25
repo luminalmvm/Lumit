@@ -31,7 +31,6 @@ fn layer<'a>(doc: &'a Document, name: &str) -> &'a Layer {
 fn shape_contents_arrive_where_after_effects_draws_them() {
     let doc = imported();
 
-    // A 400 × 200 rectangle with rounded corners, filled and outlined.
     let LayerKind::Shape { contents } = &layer(&doc, "Rect").kind else {
         panic!("a shape layer");
     };
@@ -102,7 +101,6 @@ fn gradients_and_merged_paths_come_across() {
         panic!("a shape layer");
     };
 
-    // Red, a half clear green half way, blue.
     let art = items(contents);
     let ramp = art
         .iter()
@@ -116,7 +114,6 @@ fn gradients_and_merged_paths_come_across() {
     assert_eq!(ramp.gradient_stops[0].position.value_at(0.0), 50.0);
     assert_eq!(ramp.gradient_stops[0].opacity.value_at(0.0), 50.0);
 
-    // Merge Paths' subtract: the second square cut out of the first.
     let LayerKind::Shape { contents } = &layer(&doc, "Ops").kind else {
         panic!("a shape layer");
     };

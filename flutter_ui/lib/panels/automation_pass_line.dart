@@ -19,7 +19,6 @@ import 'mixer_live.dart' show StripPosition, mixerPositions;
 import 'timeline_extras_frb.dart' show TimelineAxis;
 import 'volume_band_frb.dart' show BandScale;
 
-/// What the running pass has written, by lane id, kept fresh while it runs.
 class AutomationPassFeed {
   final ValueListenable<bool> _playing;
   final ValueNotifier<Map<String, List<PassPoint>>> points =
@@ -34,15 +33,11 @@ class AutomationPassFeed {
   int _lanes = 0;
   Ticker? _ticker;
 
-  /// The pass heard last and the next point to ask it from, what it has
-  /// drawn so far, and each lane's control.
   int _pass = 0;
   int _from = 0;
   Map<String, List<PassPoint>> _drawn = {};
   final Map<String, BridgeMixTarget> _targets = {};
 
-  /// The playhead, and where it stood at the last poll: a lane's stretch is
-  /// carried on to it, at [live], the lane's control as heard now.
   final ValueListenable<int> _playhead;
   int frame = 0;
   Map<String, double> live = const {};
@@ -51,14 +46,12 @@ class AutomationPassFeed {
     _playing.addListener(_sync);
   }
 
-  /// A lane on [comp] came on screen.
   void attach(CompositionReference comp) {
     _comp = comp;
     _lanes += 1;
     _sync();
   }
 
-  /// A lane left the screen.
   void detach() {
     _lanes -= 1;
     _sync();
@@ -83,7 +76,6 @@ class AutomationPassFeed {
     try {
       positions.value = mixerPositions();
     } catch (_) {
-      // Nothing loaded to ask.
     }
     final since = passPointsSince(comp, pass: _pass, from: _from);
     if (since != null) {
@@ -124,7 +116,6 @@ class AutomationPassFeed {
   }
 }
 
-/// One lane's stretch of the pass, over its curve.
 class AutomationPassLine extends StatefulWidget {
   final AutomationPassFeed feed;
   final CompositionReference comp;
@@ -190,7 +181,6 @@ class _AutomationPassLineState extends State<AutomationPassLine> {
 class _PassPainter extends CustomPainter {
   final List<PassPoint> points;
 
-  /// The playhead's x and the control's value there, where it is known.
   final ({double x, double? value}) tail;
   final BandScale scale;
   final TimelineAxis axis;

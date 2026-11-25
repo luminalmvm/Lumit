@@ -49,9 +49,6 @@ fn video(fps: f64, width: u32, height: u32, frames: usize) -> SourceProbe {
     }
 }
 
-/// One footage layer in one 64×64 comp, with the item's original probed as a
-/// 1920×1080, 30 fps, 120-frame clip. The proxy — when the caller attaches one
-/// — is half that size.
 fn scene() -> (Arc<Document>, Uuid, Uuid) {
     let mut doc = Document::new();
     let item = Uuid::now_v7();
@@ -130,7 +127,6 @@ fn scene() -> (Arc<Document>, Uuid, Uuid) {
     (Arc::new(doc), comp_id, item)
 }
 
-/// Attach a proxy to `item` and switch it on.
 fn attach(doc: &Arc<Document>, item: Uuid) -> Arc<Document> {
     let mut d = Document::clone(doc);
     d.proxies.insert(
@@ -144,8 +140,6 @@ fn attach(doc: &Arc<Document>, item: Uuid) -> Arc<Document> {
     Arc::new(d)
 }
 
-/// The probe pair: the original always a healthy clip, the proxy whatever the
-/// case under test wants it to be.
 fn probes(
     item: Uuid,
     proxy: Option<SourceProbe>,
@@ -159,8 +153,6 @@ fn probes(
     (originals, proxies)
 }
 
-/// The one decode job the scene's single footage layer plans, and the name its
-/// frame is banked under: `(path, natural size, decode width, key)`.
 fn plan_and_key(
     doc: &Arc<Document>,
     comp: Uuid,
@@ -180,9 +172,6 @@ fn plan_and_key(
     )
 }
 
-/// The whole point, in one test: with the proxy on, the plan opens the proxy
-/// and the frame gets a different name; with it off, both go back to exactly
-/// what they were before proxies existed.
 #[test]
 fn the_plan_and_the_key_switch_together() {
     let (plain, comp, item) = scene();
@@ -219,7 +208,6 @@ fn the_plan_and_the_key_switch_together() {
         (base_path.clone(), base_size, base_w, base_key)
     );
 
-    // And so is the project-wide master switch, which overrules every item.
     let mut master_off = Document::clone(&with_proxy);
     master_off.use_proxies = false;
     let master_off = Arc::new(master_off);
@@ -242,15 +230,10 @@ fn a_proxy_that_disagrees_about_the_footage_is_not_used() {
     let baseline = plan_and_key(&plain, comp, &good, q);
 
     let bad = [
-        // One frame short: every source frame after the first cut would land
-        // somewhere else.
         ("a different frame count", video(30.0, 960, 540, 119)),
-        // Same count, different rate — which is a different duration.
         ("a different frame rate", video(25.0, 960, 540, 120)),
-        // Present but unreadable, and simply not on disk.
         ("an unreadable file", SourceProbe::Failed),
         ("a file that is not there", SourceProbe::Missing),
-        // A sound file named as a proxy has no picture to stand in with.
         ("no video stream", SourceProbe::AudioOnly),
     ];
     for (why, proxy) in bad {
@@ -300,16 +283,12 @@ fn an_export_delivers_full_resolution_however_the_viewer_is_working() {
         .expect("a project on proxies is changed by a delivery that is not");
     assert!(!snapshot.use_proxies);
 
-    // The delivered frame is byte-for-byte the frame a project with no proxy at
-    // all delivers — same file, same name.
     assert_eq!(
         plan_and_key(&snapshot, comp, &probes, q),
         plan_and_key(&plain, comp, &probes, q),
         "export reads the originals"
     );
 
-    // The one export that wants a proxy — a draft for review — asks for it,
-    // and then gets exactly the picture the Viewer is showing.
     let draft = lumit_render::export::RenderOptions {
         use_proxies: true,
         ..lumit_render::export::RenderOptions::default()

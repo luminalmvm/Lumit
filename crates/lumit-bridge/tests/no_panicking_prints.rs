@@ -24,7 +24,6 @@
 
 use std::path::{Path, PathBuf};
 
-/// Crates whose console output is the product, not a diagnostic.
 const EXEMPT_CRATES: [&str; 4] = [
     "lumit-bench",
     "lumit-ofx-broker",
@@ -32,7 +31,6 @@ const EXEMPT_CRATES: [&str; 4] = [
     "lumit-media-broker",
 ];
 
-/// The macros that panic on a failed write.
 const BANNED: [&str; 4] = ["println!(", "eprintln!(", "print!(", "eprint!("];
 
 #[test]
@@ -75,7 +73,6 @@ fn shipping_engine_code_never_uses_a_panicking_print() {
     );
 }
 
-/// Every crate directory in the workspace bar the exempt command-line ones.
 fn workspace_crates() -> Vec<PathBuf> {
     let Some(root) = Path::new(env!("CARGO_MANIFEST_DIR")).ancestors().nth(2) else {
         return Vec::new();
@@ -98,8 +95,6 @@ fn workspace_crates() -> Vec<PathBuf> {
         .collect()
 }
 
-/// Every `.rs` file under a crate's `src`, bar whole-file test modules and the
-/// small command-line programs some crates carry in `src/bin`.
 fn rust_sources(dir: &Path) -> Vec<PathBuf> {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return Vec::new();

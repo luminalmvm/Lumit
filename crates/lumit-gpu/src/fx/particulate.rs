@@ -63,7 +63,6 @@ pub const MAX_CANDIDATES: u64 = (MAX_WORKGROUPS_PER_DIM as u64) * (EVAL_WORKGROU
 /// reads — every distance in **raster** pixels, as the resolve step left them.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ParticulateOp<'a> {
-    /// The emitter's centre, three axes.
     pub emitter_pos: [f32; 3],
     /// The Line/Ellipse/Rectangle extents.
     pub emitter_wh: [f32; 2],
@@ -117,7 +116,6 @@ pub struct ParticulateOp<'a> {
     /// then the bursts'. The subtraction is the host's, in `f64`, so the small
     /// age never has to be recovered from inside a large clock.
     pub frames: &'a [[u32; 4]],
-    /// How many births the window records — the candidate count.
     pub candidates: u32,
     /// The two baked over-life curves, size then opacity, 257 entries each.
     pub curves: &'a [f32],
@@ -165,7 +163,6 @@ pub struct ParticulateOp<'a> {
 /// blending draws exactly.
 pub(super) const BLEND_ADD: u32 = 6;
 
-/// One render pass drawing into `view`, the picture kept or cleared.
 pub(super) fn draw_pass<'e>(
     enc: &'e mut wgpu::CommandEncoder,
     view: &wgpu::TextureView,
@@ -204,7 +201,6 @@ pub(super) fn pair_max(cap: u32) -> u32 {
         .next_multiple_of(SCAN_BLOCK)
 }
 
-/// The words at the head of the tiles' `scan` buffer, before its numbers.
 pub(super) const SCAN_HEAD: u32 = 16;
 
 /// How many 16 px steps a tile's side is, so a frame has fewer tiles than
@@ -379,10 +375,6 @@ impl FxEngine {
         base: Option<&wgpu::Texture>,
     ) -> wgpu::Texture {
         let blend = &self.particulate_blend;
-        // ponytail: the layer and the sort's scratch are made fresh each
-        // frame, and a new buffer reads as nought, which the counts at the
-        // head of `scan` rely on. Pool them, cleared, if a profile shows the
-        // allocation.
         let tiles = ctx.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("fx-particulate-tiles"),
             size: wgpu::Extent3d {
@@ -749,11 +741,9 @@ impl FxEngine {
     }
 }
 
-/// One pass's bound resources, alive until the encoder is done with them.
 pub(super) struct ParticulatePass {
     bind: wgpu::BindGroup,
     pub(super) draw_bind: wgpu::BindGroup,
-    /// What makes the stream from a simulation, in place of the closed forms.
     sim: Option<wgpu::BindGroup>,
     cap: u32,
     pub(super) empty: wgpu::BindGroup,
@@ -789,7 +779,6 @@ impl ParticulatePass {
     }
 }
 
-/// The five pipelines and three layouts, built once per device.
 pub(super) struct ParticulatePipelines {
     pub layout: wgpu::BindGroupLayout,
     pub draw_layout: wgpu::BindGroupLayout,
@@ -855,8 +844,6 @@ impl ParticulatePipelines {
             .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("fx-particulate-draw-layout"),
                 entries: &[
-                    // The tiles' two compute passes read the first three as
-                    // the draw does.
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
                         visibility: wgpu::ShaderStages::VERTEX_FRAGMENT
@@ -993,8 +980,6 @@ impl ParticulatePipelines {
     }
 }
 
-/// Particle blend's own passes: Add's draw, the tiles', and the one that
-/// lays either layer over the picture.
 pub(super) struct ParticulateBlendPipelines {
     pub tiles_layout: wgpu::BindGroupLayout,
     pub finish_layout: wgpu::BindGroupLayout,
@@ -1003,7 +988,6 @@ pub(super) struct ParticulateBlendPipelines {
     pub finish: wgpu::RenderPipeline,
 }
 
-/// The tiles' compute passes, in the order a frame runs them.
 pub(super) struct TilePipelines {
     pub prep: wgpu::ComputePipeline,
     pub scan_block: wgpu::ComputePipeline,

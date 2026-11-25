@@ -55,7 +55,6 @@ void main() {
     expect(dir.listSync(), hasLength(1),
         reason: 'and nothing half-written is left beside it');
 
-    // The version asked for, whole, does take its place.
     await writeChecked(Stream.value(sent), hash, file.path);
     expect(file.readAsBytesSync(), sent);
 
@@ -89,7 +88,6 @@ void main() {
     await saveProjectFrb(app, ui, forcePicker: true, picker: () async => path);
     expect(ui.backup.id, isNotNull, reason: 'the save gave it a backup id');
 
-    // Work that is in the open project and nowhere else.
     app.project!.newComposition(name: 'Not saved yet');
     expect(app.project!.isDirty(), isTrue);
 
@@ -106,7 +104,6 @@ void main() {
     expect(app.notice.value?.message, l10n.backupPutBackUnsent);
     expect(app.notice.value?.error, isTrue);
 
-    // The same once Pro has ended, when nothing can be sent at all.
     ui.account.account =
         const CloudAccount(id: 'a', email: 'a@example.com', name: 'A');
     // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member

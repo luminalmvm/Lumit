@@ -1,5 +1,3 @@
-// Menus: the rows, the floating surface they sit on with its safe-triangle
-// hover intent, and the right-click holder.
 
 import 'dart:async';
 import 'dart:math' as math;
@@ -41,10 +39,8 @@ Widget menuTick(bool on, {Color? colour}) => SizedBox(
 /// surface's corner less this, so the two curves run parallel.
 const double menuInset = 6;
 
-/// The most room a row's chord may take, so the name keeps the rest.
 const double menuChordWidth = 150;
 
-/// The line between two groups of rows in a menu.
 class MenuDivider extends StatelessWidget {
   const MenuDivider({super.key});
 
@@ -93,7 +89,6 @@ class MenuLabel extends StatelessWidget {
         if (chord != null)
           Padding(
             padding: const EdgeInsetsDirectional.only(start: 16),
-            // Capped, so a long chord can never push the row past its menu.
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: menuChordWidth),
               child: Text(chord,
@@ -108,7 +103,6 @@ class MenuLabel extends StatelessWidget {
   }
 }
 
-/// One row in a dropdown/menu popup.
 class MenuRow extends StatefulWidget {
   final Widget child;
   final VoidCallback onPressed;
@@ -151,7 +145,6 @@ class MenuRow extends StatefulWidget {
     this.onEnter,
   }) : option = false;
 
-  /// A row that picks one of several and leaves the menu up — see [option].
   const MenuRow.option({
     super.key,
     required this.child,
@@ -338,8 +331,6 @@ class FloatSurface extends StatefulWidget {
   static ValueNotifier<Object?>? litRow(BuildContext context) =>
       _of(context)?._lit;
 
-  /// The surface state itself — the rows and [SubmenuRow] talk to it for the
-  /// hover-intent gating.
   static _FloatSurfaceState? _of(BuildContext context) =>
       context.getInheritedWidgetOfExactType<_MenuHoverScope>()?.state;
 
@@ -360,7 +351,6 @@ class _FloatSurfaceState extends State<FloatSurface> {
   // Left are heard on the hardware keyboard, and only by the innermost menu
   // that is up. They move the same highlight the pointer does.
 
-  /// The rows on this surface, for the arrow keys to walk.
   final Set<_MenuRowState> _rows = {};
 
   /// The surfaces up in a popup, innermost last. A surface drawn inside a
@@ -441,7 +431,6 @@ class _FloatSurfaceState extends State<FloatSurface> {
             key == LogicalKeyboardKey.enter ||
             key == LogicalKeyboardKey.numpadEnter)) {
       sub._open();
-      // Its first row lit once it is up, so Down is not needed to get in.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final inner = _up.lastOrNull;
         if (inner != null && inner != this && inner._lit.value == null) {
@@ -469,13 +458,10 @@ class _FloatSurfaceState extends State<FloatSurface> {
   // report lands when the pointer leaves the triangle, or when it has sat
   // still over the other row for [menuHoverGrace].
 
-  /// The submenu row whose flyout is out, or null when none is.
   Object? _guardOwner;
 
-  /// That flyout's rectangle in global coordinates, once measured.
   Rect? _guardRect;
 
-  /// Where the pointer last was over the owner row — the triangle's apex.
   Offset? _guardApex;
 
   /// The pointer's last reported position over any of this surface's rows —
@@ -500,7 +486,6 @@ class _FloatSurfaceState extends State<FloatSurface> {
       return;
     }
     if (row == _guardOwner) {
-      // Back on the owner row: the flyout is safe, and the apex follows.
       _guardApex = globalPos;
       _cancelPending();
       _hovered.value = row;
@@ -508,7 +493,6 @@ class _FloatSurfaceState extends State<FloatSurface> {
     }
     final triangle = _triangle;
     if (triangle != null && triangle.contains(globalPos)) {
-      // On another row, but travelling towards the flyout: hold the switch.
       _pendingRow = row;
       _pendingSwitch?.cancel();
       _pendingSwitch = Timer(menuHoverGrace, () {
@@ -606,8 +590,6 @@ class _FloatSurfaceState extends State<FloatSurface> {
     _syncDebugOverlay();
   }
 
-  /// The pointer reached the flyout: whatever switch was pending on the way
-  /// is void, and the owner row stays the surface's hovered row.
   void _flyoutEntered(Object owner) {
     if (_guardOwner != owner) return;
     _cancelPending();
@@ -619,7 +601,6 @@ class _FloatSurfaceState extends State<FloatSurface> {
   bool _leaveArmed = false;
   void _optionPicked() => _leaveArmed = true;
 
-  /// The flyout has gone; the guard goes with it.
   void _disarmFlyoutGuard(Object owner) {
     if (_guardOwner != owner) return;
     _guardOwner = null;
@@ -754,7 +735,6 @@ class _MenuHoverScope extends InheritedWidget {
 class SubmenuRow extends StatefulWidget {
   final Widget child;
 
-  /// Closes the menu this row belongs to.
   final VoidCallback closeParent;
 
   /// Builds the submenu's surface. `dismiss` closes the submenu *and* the
@@ -829,8 +809,6 @@ class _SubmenuRowState extends State<SubmenuRow> {
     }
   }
 
-  /// Hand the flyout's measured rectangle to the parent surface, so its
-  /// hover-intent guard knows what the pointer is travelling towards.
   void _armGuard() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_out) return;
@@ -845,8 +823,6 @@ class _SubmenuRowState extends State<SubmenuRow> {
     if (_out) return;
     final box = context.findRenderObject();
     if (box is! RenderBox) return;
-    // Beside the row, overlapping it slightly, the way a flyout sits. Right
-    // to left it flies out of the row's left edge.
     final rtl = Directionality.of(context) == TextDirection.rtl;
     final at = box.localToGlobal(Offset(rtl ? 6 : box.size.width - 6, -4));
     _out = true;
@@ -894,8 +870,6 @@ class _SubmenuRowState extends State<SubmenuRow> {
   }
 }
 
-/// A right-click menu holder: wraps [child] and floats [itemBuilder]'s rows
-/// at the pointer on a secondary tap.
 class HouseContextMenu extends StatelessWidget {
   const HouseContextMenu({this.child, this.itemBuilder, super.key});
   final Widget? child;

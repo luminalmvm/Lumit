@@ -21,8 +21,6 @@ import 'frb_test_support.dart';
 void main() {
   setUpAll(initEngineForTests);
 
-  /// Open the dialogue over a comp with `layers` selected, and hand back
-  /// everything the assertions need.
   Future<
       ({
         CompositionReference comp,
@@ -63,7 +61,6 @@ void main() {
     return (comp: comp, layers: layers, workspace: p.uiState.workspace);
   }
 
-  /// The composition a Precomp layer draws from.
   CompositionReference sourceComp(LayerReference layer) {
     final item = layer.getSourceItem();
     if (item case ItemReference_Composition(:final field0)) return field0;

@@ -49,9 +49,7 @@ use super::props::{self, Ctx};
 use super::rifx::{bit, text_of, u32_at, u8_at, Chunk};
 use crate::capture::{Comp, Controller, Essential, Item, Property, Step, Unreadable};
 
-/// The match name a layer's Essential Properties sit under.
 pub(super) const OVERRIDES: &str = "ADBE Layer Overrides";
-/// The match name of a replaceable media property.
 const ALTERNATE: &str = "ADBE Layer Source Alternate";
 /// What a path step's index holds when its parent is not a list.
 const NO_INDEX: u64 = 0xFFFF_FFFF;
@@ -78,7 +76,6 @@ pub(super) fn read(inside: &[Chunk<'_>], layers: &HashMap<u32, u32>) -> Option<E
     })
 }
 
-/// The name in a `LIST CpS2`.
 fn caption(within: &[Chunk<'_>]) -> Option<String> {
     within
         .iter()
@@ -89,7 +86,6 @@ fn caption(within: &[Chunk<'_>]) -> Option<String> {
         .map(|chunk| chunk.text())
 }
 
-/// One `LIST CCtl`, and the controllers inside it when it is a group.
 fn controller(
     chunk: &Chunk<'_>,
     group: Option<&str>,
@@ -152,8 +148,6 @@ fn controller(
     });
 }
 
-/// A controller's kind by the name the capture uses, or the file's number
-/// written out for one this reader has not met.
 fn kind_of(code: u32) -> String {
     match code {
         1 => "checkbox",
@@ -173,8 +167,6 @@ fn kind_of(code: u32) -> String {
     .to_string()
 }
 
-/// A `LIST CPrp`: the source's composition, its layer's id, and the path from
-/// the layer down.
 fn source_of(chunk: &Chunk<'_>) -> (Option<i64>, Option<u32>, Vec<Step>) {
     let within: Vec<Chunk<'_>> = chunk.children().ok().collect();
     let word = |id: &[u8; 4]| {
@@ -287,8 +279,6 @@ fn set_by_layer(chunks: &[Chunk<'_>]) -> bool {
 /// controller's source is on. That layer is in the composition being placed,
 /// so its size is only known once every composition has been read.
 pub(super) fn resolve(comps: &mut [Comp], items: &[Item]) {
-    // Each composition's controllers by id, with the size their values are a
-    // share of, where they are one.
     let mut sizes: HashMap<(i64, String), (f64, f64)> = HashMap::new();
     for comp in comps.iter() {
         let (Some(comp_id), Some(essential)) = (comp.id, comp.essential.as_ref()) else {
@@ -348,7 +338,6 @@ pub(super) fn resolve(comps: &mut [Comp], items: &[Item]) {
     }
 }
 
-/// The size of the item a layer draws from.
 fn size_of(source: i64, comps: &[Comp], items: &[Item]) -> Option<(f64, f64)> {
     let (width, height) = match comps.iter().find(|comp| comp.id == Some(source)) {
         Some(comp) => (comp.width?, comp.height?),
@@ -360,9 +349,6 @@ fn size_of(source: i64, comps: &[Comp], items: &[Item]) -> Option<(f64, f64)> {
     Some((f64::from(width), f64::from(height)))
 }
 
-/// Scale a point's value and its keys across and down.
-// ponytail: a keyed point's ease speeds and tangents stay in shares of the
-// layer. Scale them here when a keyed effect point on a copy is met.
 fn sized(leaf: &mut Property, (width, height): (f64, f64)) {
     let scale = |value: &mut serde_json::Value| {
         if let Some(axes) = value.as_array_mut() {

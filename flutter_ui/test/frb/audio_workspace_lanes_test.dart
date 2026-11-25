@@ -1,9 +1,3 @@
-// The Audio workspace opens the sound lanes (the approved
-// AudioWorkspace board): applying the preset twirls the Audio group and the
-// Waveform lane open on every layer that carries sound, so the Timeline shows
-// the board's own picture — waves, rubber bands and lane chips — rather than
-// a stack of shut rows. A layer with no sound is left alone, and pressing the
-// strip's word again re-opens a lane a hand has shut.
 
 import 'dart:io';
 import 'dart:typed_data';
@@ -54,7 +48,6 @@ void main() {
     expect(find.text('Audio'), findsWidgets,
         reason: 'the Audio group heading is on the outline');
 
-    // A hand shuts the lane; pressing the strip's word again re-opens it.
     await tester.tap(find.text('Waveform'));
     await tester.pump();
     expect(band, findsNothing, reason: 'the lane is still a twirl');
@@ -63,7 +56,6 @@ void main() {
     expect(band, findsOneWidget,
         reason: 're-applying the preset opens the lane again');
 
-    // The Edit preset opens nothing: only Audio's board draws lanes open.
     await tester.tap(find.text('Waveform'));
     await tester.pump();
     p.uiState.workspace.applyWorkspacePreset(WorkspacePreset.edit);

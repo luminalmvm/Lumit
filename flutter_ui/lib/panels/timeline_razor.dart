@@ -25,7 +25,6 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart' show ProjectReference;
 
-/// How big the scissors pointer is drawn, in screen pixels.
 const double razorCursorSize = 16;
 
 /// The layers a razor click at [frame] should cut.
@@ -92,7 +91,6 @@ List<BridgeLayerEntry> razorTargets(
       }
       cut = true;
     } catch (_) {
-      // Nothing cuttable there. The next layer still gets its turn.
     }
   }
   return (cut: cut, halves: halves);
@@ -104,7 +102,6 @@ List<BridgeLayerEntry> razorTargets(
 /// has to span every row, and the pointer must not be clipped to one bar.
 /// Neither takes a gesture — the bars keep their own clicks and drags.
 class RazorOverlay extends StatefulWidget {
-  /// Whether the Razor tool is armed.
   final bool active;
 
   /// Where a cut at screen x would actually land, in this overlay's own pixels.
@@ -119,8 +116,6 @@ class RazorOverlay extends StatefulWidget {
   /// axis to quantise against should get.
   final double Function(double x)? snapX;
 
-  /// The pointer's colours: the mark, and the outline that keeps it legible
-  /// over a bar of any label colour.
   final Color mark;
   final Color outline;
 
@@ -217,8 +212,6 @@ class _RazorOverlayState extends State<RazorOverlay> {
 class _RazorCutLinePainter extends CustomPainter {
   final Offset? at;
 
-  /// Where the line goes: the pointer's x put through the caller's snap, so it
-  /// stands where the cut will actually land.
   final double? lineX;
   final Color mark;
 

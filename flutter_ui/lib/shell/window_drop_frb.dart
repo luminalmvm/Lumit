@@ -37,13 +37,11 @@ class WindowDropFrb extends StatelessWidget {
           final paths = await droppedPaths(details.files);
           if (!context.mounted) return;
           final ui = context.read<LumitUiState>();
-          // Wherever it lands, since no other target takes a package.
           final package = packagePathFromArgs(paths);
           if (package != null) {
             unawaited(installExtensionPackage(
                 context, context.read<LumitState>(), ui.extensions, package));
           }
-          // A style too, and a zipped folder that holds one.
           final style = stylePathFromArgs(paths) ??
               paths
                   .where((path) => path.toLowerCase().endsWith('.zip'))
@@ -54,7 +52,6 @@ class WindowDropFrb extends StatelessWidget {
             unawaited(
                 importStyle(context, context.read<LumitState>(), ui, style));
           }
-          // And graphics templates, which join the library.
           final templates = paths
               .where((path) => path.toLowerCase().endsWith('.lumt'))
               .toList();
@@ -63,13 +60,11 @@ class WindowDropFrb extends StatelessWidget {
                 context, context.read<LumitState>(), ui, templates));
           }
           if (_inAnotherTarget(context, details.globalPosition)) return;
-          // A Lottie makes a composition of its own; the rest are footage.
           final rest = await importLottieFrb(
               context, context.read<LumitState>(), paths);
           if (!context.mounted) return;
           final imported = await importDroppedPaths(context.read<LumitState>(),
               rest.where((path) => !isScriptFile(path)).toList());
-          // Nothing lit up under the drop, so show where the files went.
           if (imported) ui.frontPanel(Panel.project);
           if (context.mounted) await runDroppedScripts(context, paths);
         },

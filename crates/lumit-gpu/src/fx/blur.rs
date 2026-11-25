@@ -1,7 +1,3 @@
-//! Blur family kernels (docs/08 §3.3, §3.8, §3.9): box/gaussian blur,
-//! directional and radial blur, unsharp-mask sharpen, and the glow bloom that
-//! reuses the shared gaussian.
-
 use crate::GpuContext;
 
 use super::{split::RgbSplitOp, split::SpectralSplitOp, work_texture, FxEngine};
@@ -28,7 +24,6 @@ pub struct DirBlurOp {
     pub dy: f32,
     /// Full streak length, raster pixels.
     pub length_px: f32,
-    /// Evenly spaced bilinear taps across the streak.
     pub taps: i32,
     /// 0 = Transparent, 1 = Repeat, 2 = Mirror.
     pub edge: u32,
@@ -240,9 +235,7 @@ struct LightWrapParams {
 // notices.
 #[allow(clippy::large_enum_variant)]
 pub enum GlowFringe {
-    /// Three tinted taps along one direction.
     Classic(RgbSplitOp),
-    /// Wavelength's tier: a gradient of taps between the three colours.
     Spectral(SpectralSplitOp),
 }
 
@@ -252,7 +245,6 @@ pub enum GlowFringe {
 /// (bit-exact passthrough, matching the CPU reference's short-circuit).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GlowOp {
-    /// How the halo is built from the bright pass.
     pub shape: GlowShape,
     /// The fringe left on the finished halo, or None for no pass at all.
     pub fringe: Option<GlowFringe>,
@@ -260,7 +252,6 @@ pub struct GlowOp {
     pub threshold: f32,
     /// Soft-knee width around the threshold, 0..1.
     pub knee: f32,
-    /// Gain on the added halo.
     pub intensity: f32,
     /// Scene-linear RGBA halo tint (alpha unused).
     pub tint: [f32; 4],
@@ -303,7 +294,6 @@ pub struct GlowGaussianOp {
     pub grid: [u32; 2],
     /// σ, grid texels.
     pub sigma: f32,
-    /// How many texels out each pass reads.
     pub reach: f32,
 }
 
@@ -322,7 +312,6 @@ pub struct GlowOctaveOp {
     pub reach: f32,
     /// How many texels out the convolution reads.
     pub taps: i32,
-    /// Its share of the halo's light.
     pub weight: f32,
 }
 
@@ -379,7 +368,6 @@ impl FxEngine {
                 field: [[0.0; 4]; 3],
             },
         );
-        // Vertical into out, blending against the original input.
         self.gaussian_pass(
             ctx,
             &tmp,
@@ -669,7 +657,7 @@ impl FxEngine {
                     dir,
                     radius: op.radius_px,
                     sigma,
-                    edge: 1, // Repeat, always (see the schema comment)
+                    edge: 1,
                     mix_amt: 1.0,
                     matte_on: 0.0,
                     _pad0: 0.0,
@@ -850,7 +838,6 @@ impl FxEngine {
             GlowShape::Gaussian(g) => self.glow_gaussian(ctx, &bright, w, h, g),
             GlowShape::Exponential(octaves) => self.glow_exponential(ctx, &bright, w, h, octaves),
         };
-        // The fringe rides on the halo alone, before the recombine.
         let halo = match &op.fringe {
             Some(GlowFringe::Classic(f)) => self.rgb_split(ctx, &halo, w, h, None, f),
             Some(GlowFringe::Spectral(f)) => self.spectral_split(ctx, &halo, w, h, None, f),
@@ -885,7 +872,7 @@ impl FxEngine {
             dir,
             radius: g.reach,
             sigma: g.sigma,
-            edge: 1, // Repeat, always (see the CPU reference)
+            edge: 1,
             mix_amt: 1.0,
             matte_on: 0.0,
             _pad0: 0.0,
@@ -1078,13 +1065,11 @@ pub struct DropShadowOp {
     pub offset: [f32; 2],
     /// The gaussian half-width the shape is softened by, raster pixels.
     pub softness_px: f32,
-    /// Draw the shadow alone, without the layer that cast it.
     pub shadow_only: bool,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
     /// Spread's threshold-remap slope; 1.0 is no spread and no branch.
     pub spread_scale: f32,
-    /// The layer's own shape knocks the shadow out before the composite.
     pub knockout: bool,
     /// Read the coverage from the **inverted** alpha — Inner shadow's
     /// geometry, and the Edge source of Inner glow.

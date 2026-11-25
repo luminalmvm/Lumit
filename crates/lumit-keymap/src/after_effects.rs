@@ -14,15 +14,12 @@ use crate::defaults::after_effects_preset;
 use crate::KeyContext::{Effects, Global, Graph, Panels, Project, Timeline, Tools, Viewer};
 use crate::{ActionId, Chord, KeyContext, Keymap, Modifiers};
 
-/// A keymap read from an After Effects shortcut file.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AfterEffectsImport {
     pub keymap: Keymap,
-    /// How many of Lumit's actions took their keys from the file.
     pub actions: usize,
 }
 
-/// The text had no After Effects command Lumit knows, so nothing was read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NotAfterEffects;
 
@@ -37,7 +34,6 @@ impl std::error::Error for NotAfterEffects {}
 /// An After Effects section and command, and the Lumit action it stands for.
 /// A command can feed two actions, and an action can take two commands.
 const COMMANDS: &[(&str, &str, KeyContext, &str)] = &[
-    // Transport and navigation.
     ("CCompTime", "TimeSpacebarPlay", Global, "playback.toggle"),
     (
         "CCompTime",
@@ -129,7 +125,6 @@ const COMMANDS: &[(&str, &str, KeyContext, &str)] = &[
         "keyframe.speed",
     ),
     ("CSwitchboard", "ToggleExpression", Global, "expression.add"),
-    // Editing and files.
     ("CCompCmd", "Clear", Global, "edit.delete.selection"),
     ("CSwitchboard", "Cut", Global, "edit.cut"),
     ("CSwitchboard", "Copy", Global, "edit.copy"),
@@ -260,7 +255,6 @@ const COMMANDS: &[(&str, &str, KeyContext, &str)] = &[
     ("CEggAppTool", "ToolPin", Tools, "tool.puppet"),
     ("CEggAppTool", "ToolCamera", Tools, "tool.camera"),
     ("CEggAppTool", "ToolParametricMesh", Tools, "tool.shape3d"),
-    // Timeline.
     (
         "CCompCompCmd",
         "CompTwirlPosition",
@@ -341,7 +335,6 @@ const COMMANDS: &[(&str, &str, KeyContext, &str)] = &[
     ("COutline", "Rename", Timeline, "layer.rename"),
     ("COutline", "Rename", Project, "item.rename"),
     ("COutline", "Rename", Effects, "effect.rename"),
-    // Graph editor.
     ("CSwitchboard", "EasyEase", Graph, "graph.ease"),
     ("CSwitchboard", "EasyEaseIn", Graph, "graph.ease.in"),
     ("CSwitchboard", "EasyEaseOut", Graph, "graph.ease.out"),
@@ -456,7 +449,6 @@ const COMMANDS: &[(&str, &str, KeyContext, &str)] = &[
     ),
 ];
 
-/// Every action `command` stands for.
 fn targets(section: &str, command: &str) -> Vec<(KeyContext, ActionId)> {
     let mut out: Vec<(KeyContext, ActionId)> = COMMANDS
         .iter()
@@ -477,7 +469,6 @@ fn targets(section: &str, command: &str) -> Vec<(KeyContext, ActionId)> {
     out
 }
 
-/// Lumit's name for an After Effects key, or `None` for a key it has no name for.
 fn key_name(name: &str) -> Option<String> {
     let named = match name {
         "Comma" => ",",
@@ -521,8 +512,6 @@ fn key_name(name: &str) -> Option<String> {
     function_key.then(|| name.to_string())
 }
 
-/// One `Ctrl+Alt+HOME` from the file as a chord, or `None` when Lumit can't
-/// spell it.
 fn chord(text: &str) -> Option<Chord> {
     let mut parts: Vec<&str> = text.split('+').map(str::trim).collect();
     let key = key_name(parts.pop()?)?;
@@ -540,12 +529,10 @@ fn chord(text: &str) -> Option<Chord> {
     Some(Chord { mods, key })
 }
 
-/// What the file says about one action.
 struct Slot {
     context: KeyContext,
     action: ActionId,
     chords: Vec<Chord>,
-    /// The file gave it a chord Lumit can't spell.
     unreadable: bool,
 }
 
@@ -558,14 +545,12 @@ struct Slot {
 pub fn import_after_effects_shortcuts(text: &str) -> Result<AfterEffectsImport, NotAfterEffects> {
     let mut slots: Vec<Slot> = Vec::new();
     let mut section = String::new();
-    // A command whose value runs on to the next line.
     let mut open: Option<(String, String)> = None;
     for line in text.lines() {
         let line = line.trim();
         if line.starts_with('#') {
             continue;
         }
-        // Everything that matters on a line is inside double quotes.
         let mut quoted = line.split('"').skip(1).step_by(2);
         if line.starts_with('[') {
             section = quoted.next().unwrap_or_default().to_string();
@@ -655,8 +640,6 @@ mod tests {
         s.parse().unwrap()
     }
 
-    /// A cut-down file in After Effects' own layout: the comment header, a
-    /// section per panel, two chords on a line, and a value that runs on.
     const SAMPLE: &str = r#"# Text File Version 1.1
 # After Effects Shortcut Preferences (modify at your own risk)
 #  #
@@ -712,7 +695,6 @@ mod tests {
             None,
             "the chord the preset gave it stopped working"
         );
-        // The numbered markers are matched by shape.
         assert_eq!(
             km.lookup(KeyContext::Global, &chord("Alt+3")),
             Some(&"marker.goto.3".into())
@@ -740,7 +722,6 @@ mod tests {
                 "{text}"
             );
         }
-        // After Effects' Delete is Backspace, and its FwdDel is Delete.
         for text in ["Backspace", "Delete"] {
             assert_eq!(
                 km.lookup(KeyContext::Global, &chord(text)),
@@ -786,7 +767,6 @@ mod tests {
         let hand = ActionId::from("tool.hand");
         assert_eq!(km.binding_for(KeyContext::Tools, &hand), None);
         assert!(km.unbound.contains(&(KeyContext::Tools, hand)));
-        // And it stays that way through the stored file.
         let restored = crate::defaults::with_new_defaults(km);
         assert_eq!(restored.lookup(KeyContext::Tools, &chord("H")), None);
     }
@@ -794,12 +774,10 @@ mod tests {
     #[test]
     fn a_chord_lumit_cannot_spell_is_left_out() {
         let km = import_after_effects_shortcuts(SAMPLE).unwrap().keymap;
-        // The Mac-only Control chord goes and the numpad one stays.
         assert_eq!(
             km.binding_for(KeyContext::Global, &"marker.add".into()),
             Some(&chord("*"))
         );
-        // Nothing readable at all, so the preset's chord stands.
         assert_eq!(
             km.lookup(KeyContext::Timeline, &chord("[")),
             Some(&"layer.move.in".into())
@@ -818,15 +796,12 @@ mod tests {
             km.lookup(KeyContext::Global, &chord("Mod+Shift+P")),
             Some(&"palette.open".into())
         );
-        // TimeSetIn had nothing readable, so it isn't counted.
         assert_eq!(import.actions, 13);
-        // A section Lumit has no commands in is skipped whole.
         assert_eq!(km.lookup(KeyContext::Global, &chord("Mod+Enter")), None);
     }
 
     #[test]
     fn taking_another_actions_key_leaves_no_clash_now_or_after_a_restart() {
-        // The file puts the brush on Shift+C, which the preset gave the razor.
         let km = import_after_effects_shortcuts(SAMPLE).unwrap().keymap;
         assert_eq!(
             km.lookup(KeyContext::Tools, &chord("Shift+C")),

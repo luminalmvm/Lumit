@@ -306,7 +306,6 @@ fn keyed(e: &EffectInstance, id: &str) -> bool {
     }
 }
 
-/// What picking a look, or editing one, writes back.
 pub fn settle(before: Option<&EffectInstance>, after: &EffectInstance) -> Option<Pressed> {
     let chosen = preset_of(after);
     if before.map(preset_of) != Some(chosen) {

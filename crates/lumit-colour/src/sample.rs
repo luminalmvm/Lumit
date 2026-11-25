@@ -21,7 +21,6 @@ use crate::error::{ColourError, Result};
 /// Adobe's cap, and the one `lumit-core::lut` already enforces: at three `f32`
 /// per point a 256³ cube is already ~200 MB (docs/14 §5, budgeted allocations).
 pub const MAX_CUBE_SIZE: usize = 256;
-/// The matching cap for a curve.
 pub const MAX_CURVE_SIZE: usize = 65536;
 
 /// A 3D colour cube: `size³` samples, red changing fastest, so the sample for
@@ -36,7 +35,6 @@ pub struct Cube {
 }
 
 impl Cube {
-    /// Build a cube, checking the size and the data length.
     pub fn new(
         what: &str,
         size: usize,
@@ -80,7 +78,6 @@ impl Cube {
         self.data.get(i).copied().unwrap_or([0.0; 3])
     }
 
-    /// Sample the cube tetrahedrally (docs/impl/ocio.md §4.3 — binding).
     #[must_use]
     pub fn sample(&self, rgb: [f32; 3]) -> [f32; 3] {
         let last = self.size - 1;
@@ -199,7 +196,6 @@ pub struct Curve {
 }
 
 impl Curve {
-    /// Build a curve, checking the length.
     pub fn new(what: &str, domain: [f32; 2], data: Vec<[f32; 3]>) -> Result<Self> {
         if data.len() < 2 {
             return Err(ColourError::Parse {
@@ -276,7 +272,6 @@ impl Curve {
         (0..3).all(|c| self.slope(c) != Slope::Mixed)
     }
 
-    /// Refuse a curve that cannot be inverted, naming the file it came from.
     pub fn check_invertible(&self, path: &str) -> Result<()> {
         if self.is_monotone() {
             Ok(())
@@ -382,18 +377,17 @@ mod tests {
         // sample point. Corner values chosen non-separable so a wrong wedge or
         // a transposed fetch shows up.
         let corners: [[f32; 3]; 8] = [
-            [0.10, 0.20, 0.30], // 000
-            [0.90, 0.15, 0.05], // 100
-            [0.40, 0.80, 0.10], // 010
-            [0.55, 0.35, 0.95], // 110
-            [0.05, 0.60, 0.70], // 001
-            [0.25, 0.45, 0.85], // 101
-            [0.65, 0.05, 0.15], // 011
-            [1.00, 0.90, 0.20], // 111
+            [0.10, 0.20, 0.30],
+            [0.90, 0.15, 0.05],
+            [0.40, 0.80, 0.10],
+            [0.55, 0.35, 0.95],
+            [0.05, 0.60, 0.70],
+            [0.25, 0.45, 0.85],
+            [0.65, 0.05, 0.15],
+            [1.00, 0.90, 0.20],
         ];
         let cube =
             Cube::new("wedge", 2, [0.0; 3], [1.0; 3], corners.to_vec()).expect("well-formed");
-        // fr ≥ fg ≥ fb — the first branch.
         let (fr, fg, fb) = (0.8_f32, 0.5_f32, 0.2_f32);
         let (c000, c100, c110, c111) = (corners[0], corners[1], corners[3], corners[7]);
         let mut want = [0.0_f32; 3];

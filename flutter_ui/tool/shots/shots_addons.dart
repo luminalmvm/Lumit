@@ -31,8 +31,6 @@ import 'shots_common.dart';
 import 'package:lumit_flutter/state/platform.dart'
     if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
-/// A plain 1920 by 1080 comp at 25 fps, so the shell has something to show
-/// behind the window. Every field is required by the constructor.
 BridgeCompSettings _settings(String name) => BridgeCompSettings(
       name: name,
       width: 1920,
@@ -46,11 +44,8 @@ BridgeCompSettings _settings(String name) => BridgeCompSettings(
       motionBlurLimit: 128,
     );
 
-/// A context out of the live tree: the Project panel's Import button sits under
-/// the Overlay the settings window needs.
 BuildContext get _context => elementByKey('project-import')!;
 
-/// The settings window with a margin, clipped to the screen.
 Rect _window() {
   final root = shotRootKey.currentContext!.findRenderObject()! as RenderBox;
   final screen = Offset.zero & root.size;

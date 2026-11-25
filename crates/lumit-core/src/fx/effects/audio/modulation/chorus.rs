@@ -42,14 +42,11 @@ use crate::fx::{
 /// moves and a delay dragged quickly is a pitch bend.
 const SMOOTH_MS: f64 = 40.0;
 
-/// The longest the Delay row goes.
 const MAX_DELAY_MS: f64 = 40.0;
 
-/// How far the sweep travels at full depth, one for each mode.
 const CHORUS_SWEEP_MS: f64 = 10.0;
 const FLANGER_SWEEP_MS: f64 = 2.25;
 
-/// The most reads of the line one channel makes.
 const MAX_VOICES: i64 = 4;
 
 /// How far the right channel's cycle sits behind the left's. Fixed rather
@@ -57,7 +54,6 @@ const MAX_VOICES: i64 = 4;
 /// chorus that is the same on both sides is not a chorus.
 const STEREO_DEG: f64 = 90.0;
 
-/// The Chorus effect's rows.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "audio_chorus",
@@ -66,8 +62,6 @@ const STEREO_DEG: f64 = 90.0;
     category = Audio,
     cost = Trivial,
     roi = Exact,
-    // Sound, so no matte and no picture: the Audio family's rule
-    // (docs/impl/audio-effects.md §2).
     matte = false,
 )]
 pub struct AudioChorus {
@@ -100,7 +94,6 @@ pub struct AudioChorus {
     pub wet: f32,
 }
 
-/// The Chorus effect's behaviour.
 pub struct AudioChorusDef;
 
 impl EffectDef for AudioChorusDef {
@@ -137,7 +130,6 @@ impl EffectDef for AudioChorusDef {
     }
 }
 
-/// Whether the rows ask for the flanger's shorter travel.
 fn flanging(values: &[(ParamId, f64)]) -> bool {
     row(values, AudioChorus::MODE, 0.0) >= 0.5
 }
@@ -162,7 +154,6 @@ fn feedback_of(values: &[(ParamId, f64)]) -> f64 {
     row(values, AudioChorus::FEEDBACK, 0.0).clamp(-95.0, 95.0) / 100.0
 }
 
-/// The wet row as a share of the output.
 fn wet_of(values: &[(ParamId, f64)]) -> f64 {
     row(values, AudioChorus::WET, 50.0).clamp(0.0, 100.0) / 100.0
 }
@@ -178,7 +169,6 @@ struct ChorusState {
     phase: Phase,
 }
 
-/// One open Chorus.
 struct ChorusAudio {
     rate: f64,
     /// Behind a mutex because `process` takes `&self`; uncontended by

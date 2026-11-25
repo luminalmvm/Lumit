@@ -22,7 +22,6 @@ import '../widgets/edge_fade.dart';
 import '../widgets/escape_ladder.dart';
 import 'profile_chip.dart' show ProBadge;
 
-/// One thing the palette can run.
 class PaletteCommand {
   final String label;
 
@@ -35,11 +34,8 @@ class PaletteCommand {
   /// palette teaches.
   final String? shortcut;
 
-  /// Whether the row wears a tick: a menu toggle or option that is on now.
   final bool ticked;
 
-  /// Why the row cannot be run just now, shown greyed in the shortcut's place.
-  /// Null for a row that can.
   final String? disabled;
 
   /// The mark before the name, drawn by the caller, for what has one: a
@@ -47,7 +43,6 @@ class PaletteCommand {
   /// has no slot for one.
   final Widget? icon;
 
-  /// A row for Lumit Pro, to an account without it, wears the menu's badge.
   final bool needsPro;
 
   /// Other names it is found by, as an effect is by its name in other apps.
@@ -68,11 +63,8 @@ class PaletteCommand {
   });
 }
 
-/// How many of the recently run lead the list before anything is typed.
 const int paletteRecentShown = 8;
 
-/// What stands between the steps of a path in a label, as in
-/// "Layer › New › Solid".
 const String palettePathSeparator = ' › ';
 
 /// Open the palette over [context].
@@ -140,8 +132,6 @@ int? paletteScore(String needle, String haystack) {
 
 final RegExp _wordChar = RegExp(r'[\p{L}\p{N}]', unicode: true);
 
-/// [text] in lower case with its hyphens taken out, and where each of its
-/// words starts in that, a hyphen still counting as a break.
 (String, Set<int>) _words(String text) {
   final source = text.toLowerCase();
   final out = StringBuffer();
@@ -154,8 +144,6 @@ final RegExp _wordChar = RegExp(r'[\p{L}\p{N}]', unicode: true);
   return (out.toString(), starts);
 }
 
-/// Where [want], lower case and without hyphens, sits whole in [text] from
-/// the start of a word, or null.
 int? _wholeAtWord(String want, String text) {
   final (lower, starts) = _words(text);
   for (var at = lower.indexOf(want);
@@ -192,7 +180,6 @@ class _PaletteState extends State<_Palette> {
   void initState() {
     super.initState();
     _query.addListener(() {
-      // A new list starts from its top, highlight and all.
       if (_scroll.hasClients) _scroll.jumpTo(0);
       setState(() => _highlighted = 0);
     });
@@ -207,7 +194,6 @@ class _PaletteState extends State<_Palette> {
     });
   }
 
-  /// How to stand down from the ladder.
   VoidCallback? _escapeRelease;
 
   @override
@@ -238,7 +224,6 @@ class _PaletteState extends State<_Palette> {
       if (score == null) continue;
       final recency = widget.recent.indexOf(label);
       scored.add((
-        // What can't run now comes after everything that can.
         (widget.commands[i].disabled == null ? 0 : 2) + (leaf == null ? 1 : 0),
         score,
         recency < 0 ? widget.recent.length : recency,
@@ -322,7 +307,6 @@ class _PaletteState extends State<_Palette> {
     final position = _scroll.position;
     final row = (position.maxScrollExtent + position.viewportDimension) /
         entries.length;
-    // With its heading, when it is the first under one.
     final top = (at > 0 && entries[at - 1] is String ? at - 1 : at) * row;
     final bottom = at * row + row - position.viewportDimension;
     if (position.pixels > top) _scroll.jumpTo(top);
@@ -359,18 +343,15 @@ class _PaletteState extends State<_Palette> {
               style: off ? t.body.copyWith(color: t.textDisabled) : null,
             ),
           ),
-          // On the right, before the tick and the chord, as in the menus.
           if (command.needsPro)
             const Padding(
               padding: EdgeInsetsDirectional.only(start: 16, end: 8),
               child: Opacity(opacity: 0.6, child: ProBadge()),
             ),
-          // After the name, so ticked and unticked names start in line.
           if (command.ticked) ...[
             menuTick(true, colour: t.textMuted),
             const SizedBox(width: 8),
           ],
-          // Drawn as the menus draw a chord, greyed row or not.
           if (command.disabled ?? command.shortcut case final note?)
             Text(note, style: t.small.copyWith(color: t.textMuted)),
         ],
@@ -382,7 +363,6 @@ class _PaletteState extends State<_Palette> {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final entries = _entries(_matches);
-    // In the order drawn, which is what the arrow keys walk.
     final matches = [for (final e in entries) if (e is PaletteCommand) e];
 
     return Focus(

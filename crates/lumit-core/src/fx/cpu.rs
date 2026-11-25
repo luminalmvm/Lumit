@@ -314,7 +314,6 @@ pub fn glow_shaped(
 /// two passes would otherwise stop in.
 pub const GLOW_GAUSS_REACH: f32 = 6.0;
 
-/// A glow's gaussian at Falloff 0, as both render paths run it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GlowGaussian {
     /// The grid it is blurred on, in full-size pixels a texel: a quarter of σ,
@@ -322,7 +321,6 @@ pub struct GlowGaussian {
     pub step: f32,
     /// σ in texels of that grid, less the little the tent already blurred.
     pub sigma: f32,
-    /// How many texels out each pass reads.
     pub reach: f32,
 }
 
@@ -417,7 +415,6 @@ pub const GLOW_CORE: f32 = 0.285_287;
 /// over the last third so even a very bright halo never shows where it stops.
 pub const GLOW_REACH: f32 = 16.0;
 
-/// One exponential of a halo with Falloff, as both render paths run it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GlowOctave {
     /// The grid it is worked out on, in full-size pixels a texel. One decay
@@ -425,7 +422,6 @@ pub struct GlowOctave {
     pub step: f32,
     /// The decay length in texels of that grid.
     pub lambda: f32,
-    /// How many texels out the convolution reads.
     pub taps: i32,
     /// Its share of the halo's light. The five add up to one.
     pub weight: f32,
@@ -469,7 +465,6 @@ pub fn glow_octaves(radius_px: f32, falloff: f32, w: u32, h: u32) -> [GlowOctave
     out
 }
 
-/// How many texels a side of `n` pixels makes at `step`.
 pub fn glow_grid(n: u32, step: f32) -> u32 {
     ((n as f32 / step).ceil() as u32).max(1)
 }
@@ -912,7 +907,6 @@ pub fn vibrance_matted(rgba: &mut [f32], amount: f32, mix: f32, matte: &[f32]) {
         } else {
             0.0
         };
-        // More boost where sat is low; none where already saturated.
         let factor = 1.0 + amount * (1.0 - sat);
         for c in 0..3 {
             let v = (luma + (u[c] - luma) * factor).max(0.0);
@@ -928,11 +922,11 @@ pub fn vibrance_matted(rgba: &mut [f32], amount: f32, mix: f32, matte: &[f32]) {
 /// `key`, so both pick the same axis for a given screen colour.
 fn matte_key_axis(key: [f32; 3]) -> (usize, usize, usize) {
     if key[1] >= key[0] && key[1] >= key[2] {
-        (1, 0, 2) // green primary
+        (1, 0, 2)
     } else if key[0] >= key[1] && key[0] >= key[2] {
-        (0, 1, 2) // red primary
+        (0, 1, 2)
     } else {
-        (2, 0, 1) // blue primary
+        (2, 0, 1)
     }
 }
 
@@ -991,7 +985,6 @@ pub fn matte_key(rgba: &mut [f32], p: &MatteKeyParams) {
 /// the slow path cannot answer differently for the same settings — which is
 /// exactly what "the defaults are byte-identical to before" rests on.
 struct MatteKeyConst {
-    /// Primary (screen) channel index, and its two secondaries.
     pi: usize,
     si: usize,
     sj: usize,
@@ -1034,11 +1027,9 @@ impl MatteKeyConst {
 /// The screen matte of one straight colour, clips and rollback included: 1 on
 /// the neutral, 0 on the screen colour (docs/08 §3.21).
 fn matte_key_matte(u: [f32; 3], k: &MatteKeyConst, p: &MatteKeyParams) -> f32 {
-    // Screen matte, before clips: 1 on the neutral, 0 on the screen colour.
     let pd = (u[k.pi] - matte_key_secref(u, k.si, k.sj, k.bal)) - k.ab_off;
     let raw = pd / k.sd;
     let m0 = (1.0 - p.gain * raw).clamp(0.0, 1.0);
-    // Clip black/white, then rollback recovers detail toward the pre-clip matte.
     let mc = ((m0 - p.clip_black) / k.den).clamp(0.0, 1.0);
     mc + p.clip_rollback * (m0 - mc)
 }
@@ -1055,14 +1046,12 @@ fn matte_key_shade(px: &mut [f32], u: [f32; 3], m: f32, k: &MatteKeyConst, p: &M
         p.replace_colour[2],
     ];
 
-    // Unspill: pull the primary down toward the (bias-shifted) reference.
     let target = matte_key_secref(u, k.si, k.sj, k.bal) + k.db_off;
     let removed = (u[k.pi] - target).max(0.0);
     let despill = p.spill * removed;
     let mut despilled = u;
     despilled[k.pi] = u[k.pi] - despill;
 
-    // Replace method: recolour where spill was removed (`t_repl` = how much).
     let t_repl = (despill / k.sd).clamp(0.0, 1.0);
     let dl = despilled[0] * LUMA[0] + despilled[1] * LUMA[1] + despilled[2] * LUMA[2];
     // The blends use the `a·(1−t) + b·t` form so they match WGSL `mix`
@@ -1075,19 +1064,19 @@ fn matte_key_shade(px: &mut [f32], u: [f32; 3], m: f32, k: &MatteKeyConst, p: &M
         ]
     };
     let rgb = match p.replace_method {
-        0 => u,                              // Source: the original straight colour
-        1 => lerp3(despilled, repl, t_repl), // Hard colour
+        0 => u,
+        1 => lerp3(despilled, repl, t_repl),
         2 => lerp3(
             despilled,
             [repl[0] * dl, repl[1] * dl, repl[2] * dl],
             t_repl,
-        ), // Soft colour
-        _ => despilled,                      // None
+        ),
+        _ => despilled,
     };
 
     // View select (all continuous in `m`, so the oracle holds).
     let (proc_rgb, proc_a) = match p.view {
-        1 => ([m, m, m], 1.0), // Screen matte
+        1 => ([m, m, m], 1.0),
         2 => {
             // Status: greyscale matte tinted where the matte is uncertain
             // (peaks at m = 0.5, zero at the fully-keyed/kept ends).
@@ -1102,13 +1091,11 @@ fn matte_key_shade(px: &mut [f32], u: [f32; 3], m: f32, k: &MatteKeyConst, p: &M
             )
         }
         _ => {
-            // Final: re-premultiply the keyed colour by the new alpha.
             let out_a = a * m;
             ([rgb[0] * out_a, rgb[1] * out_a, rgb[2] * out_a], out_a)
         }
     };
 
-    // Mix against the untouched premultiplied input; Mix 0 is the identity.
     for c in 0..3 {
         px[c] = px[c] * (1.0 - p.mix) + proc_rgb[c] * p.mix;
     }
@@ -1414,7 +1401,6 @@ pub fn matte_key_spatial(
         return;
     }
 
-    // 1. The picture the key is judged from — the original unless pre-blurred.
     let mut src = rgba.to_vec();
     if p.pre_blur > 0.0 {
         blur_gaussian(&mut src, w, h, p.pre_blur, 1, 1.0);
@@ -1430,7 +1416,6 @@ pub fn matte_key_spatial(
         m[i * 4..i * 4 + 4].copy_from_slice(&[v; 4]);
     }
 
-    // 3..5. Tidy the matte as a picture.
     if p.shrink_grow != 0.0 {
         matte_morph(&mut m, w, h, p.shrink_grow);
     }
@@ -1460,7 +1445,6 @@ pub fn matte_key_spatial(
         }
     }
 
-    // 7. Spend the matte on the original colour.
     for (i, px) in rgba.chunks_exact_mut(4).take(n).enumerate() {
         let u = unpremult(px);
         matte_key_shade(px, u, m[i * 4], &k, p);
@@ -1583,7 +1567,6 @@ pub fn hue_shift_matted(
     }
 }
 
-/// The mid-grey pivot contrast expands or compresses about (docs/08 §3.18).
 pub const CONTRAST_PIVOT: f32 = 0.5;
 
 /// Contrast (docs/08 §3.18): the affine grade `(u − pivot) × k + pivot` per
@@ -1797,7 +1780,6 @@ pub struct CurveTables {
     pub mix: f32,
 }
 
-/// The identity table: `t[i] == i / 256`, what a fresh channel bakes to.
 #[must_use]
 pub fn curve_identity_table() -> [f32; CURVE_TABLE] {
     let mut t = [0.0f32; CURVE_TABLE];
@@ -1847,7 +1829,6 @@ pub fn curve_table(points: &crate::fx::params::CurvePoints) -> [f32; CURVE_TABLE
         y[i] = f64::from(p[i][1]);
     }
 
-    // Interval widths and secant slopes.
     let mut h = [0.0f64; MAX];
     let mut d = [0.0f64; MAX];
     for i in 0..n - 1 {
@@ -1883,7 +1864,6 @@ pub fn curve_table(points: &crate::fx::params::CurvePoints) -> [f32; CURVE_TABLE
             upper[r] = h[i - 1];
             rhs[r] = 3.0 * (h[i] * d[i - 1] + h[i - 1] * d[i]);
         }
-        // The known end slopes move to the right-hand side.
         rhs[0] -= lower[0] * m[0];
         lower[0] = 0.0;
         rhs[rows - 1] -= upper[rows - 1] * m[n - 1];
@@ -2011,7 +1991,6 @@ pub fn level_at(x: f32, r: &[[f32; 4]; 5], c: usize) -> f32 {
     r[3][c] + r[4][c] * n
 }
 
-/// Whether a Levels row set is the identity on all four channels.
 fn levels_neutral(r: &[[f32; 4]; 5]) -> bool {
     r[0] == [0.0; 4] && r[1] == [1.0; 4] && r[2] == [1.0; 4] && r[3] == [0.0; 4] && r[4] == [1.0; 4]
 }
@@ -2214,7 +2193,6 @@ pub fn fill(rgba: &mut [f32], colour: [f32; 3], mix: f32) {
 /// dividing by zero (docs/14 §4) and neither path divides per pixel.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GradientParams {
-    /// Radial rather than linear.
     pub radial: bool,
     /// The start point in raster pixels (the §2.3 preview factor already applied).
     pub start: [f32; 2],
@@ -2365,7 +2343,6 @@ fn noise_draw(seed: u32, channel: u32, x: i32, y: i32, tick: i32, gaussian: bool
 /// reciprocal, so the kernel runs no trigonometry and no division (§1.6).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FractalNoiseParams {
-    /// The field's own shape: seed, octaves, gain, lacunarity, type, cycle.
     pub field: FractalField,
     /// Noise type: one of `noise::NOISE_*`. `field.perlin` is not read here.
     pub base: u32,
@@ -3068,9 +3045,7 @@ pub struct VectorBlurParams {
     pub length: f32,
     /// The Angle offset's cos and sin.
     pub turn: (f32, f32),
-    /// Every streak the full length, whatever the map's strength.
     pub constant_length: bool,
-    /// Streaks bend along the map rather than run straight.
     pub follow: bool,
     /// 0 both ways, 1 forwards, 2 backwards.
     pub direction: u32,
@@ -3086,10 +3061,6 @@ pub struct VectorBlurParams {
     pub taps: i32,
 }
 
-/// Vector blur's tap count. A straight streak takes one a pixel, as
-/// Directional blur's does. A curved one reads the map again at every tap, so
-/// it takes one every two pixels.
-// ponytail: 256 caps a curved streak's cost, so a very long one steps further apart.
 pub fn vector_blur_taps(length_px: f32, follow: bool) -> i32 {
     if follow {
         ((length_px * 0.5).ceil() as i32).clamp(1, 256)
@@ -3359,7 +3330,6 @@ pub fn twirl_matted(rgba: &mut [f32], w: u32, h: u32, p: &TwirlParams, matte: &[
     }
 }
 
-/// One resolved Spherize (docs/08 §3.52).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SpherizeParams {
     /// The ball's middle, raster pixels.
@@ -3650,7 +3620,6 @@ pub fn wave_warp_matted(rgba: &mut [f32], w: u32, h: u32, p: &WaveWarpParams, ma
     }
 }
 
-/// One resolved Bezier warp (docs/08 §3.55).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BezierWarpParams {
     /// The twelve points in AE's clockwise walk from the upper left — corner,
@@ -3684,7 +3653,6 @@ const BEZ_MAX_RESIDUAL_PX: f32 = 1.0;
 /// bit-exact rather than softened.
 const BEZ_SNAP_PX: f32 = 1e-3;
 
-/// One cubic Bezier and its derivative at `t`.
 fn bez(a: [f32; 2], b: [f32; 2], c: [f32; 2], d: [f32; 2], t: f32) -> ([f32; 2], [f32; 2]) {
     let s = 1.0 - t;
     let (w0, w1, w2, w3) = (s * s * s, 3.0 * s * s * t, 3.0 * s * t * t, t * t * t);
@@ -3778,7 +3746,6 @@ pub fn bezier_warp_matted(rgba: &mut [f32], w: u32, h: u32, p: &BezierWarpParams
                 u -= (fx * dv[1] - fy * dv[0]) * inv;
                 v -= (du[0] * fy - du[1] * fx) * inv;
             }
-            // The solve, verified: in range *and* actually solving.
             let (back, _, _) = coons(&p.pts, u, v);
             let miss = (back[0] - px).abs().max((back[1] - py).abs());
             let v4 = if !(0.0..=1.0).contains(&u)
@@ -3810,10 +3777,8 @@ pub fn bezier_warp_matted(rgba: &mut [f32], w: u32, h: u32, p: &BezierWarpParams
     }
 }
 
-/// One resolved Warp (docs/08 §3.56).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct WarpParams {
-    /// Which of the thirteen bends, in §3.56's table order.
     pub style: u32,
     /// Bend ÷ 100, −1..1. 0 is the exact identity for every style.
     pub bend: f32,
@@ -3843,7 +3808,6 @@ pub fn warp_style(style: u32, u: f32, v: f32, a: f32, ar: f32) -> [f32; 2] {
     let d = 1.0 - u * u;
     let e = 1.0 - v * v;
     match style {
-        // Arc upper / Arc lower: the same bow weighted to one edge.
         1 => [u, v + a * d * (1.0 - v) * 0.5],
         2 => [u, v + a * d * (1.0 + v) * 0.5],
         // Arch: top and bottom bow apart. The coefficient is SUBTRACTED here and
@@ -3851,17 +3815,11 @@ pub fn warp_style(style: u32, u: f32, v: f32, a: f32, ar: f32) -> [f32; 2] {
         // *inward* is what makes the picture swell outward, and a positive Bend
         // has to do what the style's name promises.
         3 => [u, v * (1.0 - a * d)],
-        // Bulge: the middle swells on both axes.
         4 => [u * (1.0 - a * e * 0.5), v * (1.0 - a * d * 0.5)],
-        // Flag: one wave across the width, every row in step.
         5 => [u, v + a * 0.35 * (PI * u).sin()],
-        // Wave: the same wave with the two edges out of phase.
         6 => [u, v - a * 0.35 * v * (PI * u).sin()],
-        // Fish: the sides bow out and the ends taper.
         7 => [u * (1.0 - a * e * 0.5), v],
-        // Rise: a diagonal lift.
         8 => [u, v + a * (u + 1.0) * 0.5],
-        // Fisheye and Inflate: radial swells differing only in their falloff.
         9 => {
             let rho = (u * u + v * v).sqrt().min(1.0);
             let k = 1.0 - a * (1.0 - rho * rho) * 0.6;
@@ -3872,7 +3830,6 @@ pub fn warp_style(style: u32, u: f32, v: f32, a: f32, ar: f32) -> [f32; 2] {
             let k = 1.0 - a * (1.0 - rho) * 0.6;
             [u * k, v * k]
         }
-        // Squeeze: rows crowded toward the middle.
         11 => [u, v * (1.0 + a * e)],
         // Twist: the top turns one way and the bottom the other. R(−φ) applied
         // to the point, as §3.51's rotation is, in the isotropic space `ar`
@@ -3884,7 +3841,6 @@ pub fn warp_style(style: u32, u: f32, v: f32, a: f32, ar: f32) -> [f32; 2] {
             let rx = x * cos + v * sin;
             [u + (rx - x) / ar, -x * sin + v * cos]
         }
-        // Arc: the whole picture bows one way.
         _ => [u, v + a * d],
     }
 }
@@ -4101,20 +4057,17 @@ fn echo_blend(mode: u32, a: [f32; 4], n: [f32; 4]) -> [f32; 4] {
     let mut o = [0.0f32; 4];
     match mode {
         0 => {
-            // Behind: the accumulator composited over the echo (ghosting).
             let k = 1.0 - a[3];
             for c in 0..4 {
                 o[c] = a[c] + n[c] * k;
             }
         }
         1 => {
-            // In front: the echo composited over the accumulator.
             let k = 1.0 - n[3];
             for c in 0..4 {
                 o[c] = n[c] + a[c] * k;
             }
         }
-        // 2..=13: the shared light-combine table, accumulator as backdrop.
         m => o = light_blend(m - 2, a, n),
     }
     o
@@ -4132,19 +4085,16 @@ fn echo_blend(mode: u32, a: [f32; 4], n: [f32; 4]) -> [f32; 4] {
 pub(crate) fn light_blend(mode: u32, d: [f32; 4], s: [f32; 4]) -> [f32; 4] {
     let mut o = [0.0f32; 4];
     match mode {
-        // Add: light sums.
         0 => {
             for c in 0..4 {
                 o[c] = d[c] + s[c];
             }
         }
-        // Screen.
         1 => {
             for c in 0..4 {
                 o[c] = d[c] + s[c] - d[c] * s[c];
             }
         }
-        // Multiply.
         2 => {
             for c in 0..4 {
                 o[c] = d[c] * s[c];
@@ -4185,25 +4135,21 @@ pub(crate) fn light_blend(mode: u32, d: [f32; 4], s: [f32; 4]) -> [f32; 4] {
                 };
             }
         }
-        // Lighten (per-channel max).
         6 => {
             for c in 0..4 {
                 o[c] = d[c].max(s[c]);
             }
         }
-        // Darken (per-channel min).
         7 => {
             for c in 0..4 {
                 o[c] = d[c].min(s[c]);
             }
         }
-        // Difference.
         8 => {
             for c in 0..4 {
                 o[c] = (d[c] - s[c]).abs();
             }
         }
-        // Exclusion.
         9 => {
             for c in 0..4 {
                 o[c] = d[c] + s[c] - 2.0 * d[c] * s[c];
@@ -4897,17 +4843,12 @@ fn blend_separable(mode: u32, s: f32, d: f32) -> f32 {
         }
     };
     match mode {
-        // Colour burn.
         3 => colour_burn(s, d),
-        // Linear burn.
         4 => (s + d - 1.0).clamp(0.0, 1.0),
-        // Screen.
         8 => s + d - s * d,
-        // Colour dodge.
         9 => colour_dodge(s, d),
         // Overlay: hard light with the backdrop as the switch.
         11 => hard_light(d, s),
-        // Soft light (W3C).
         12 => {
             let dd = if d <= 0.25 {
                 ((16.0 * d - 12.0) * d + 4.0) * d
@@ -4920,13 +4861,9 @@ fn blend_separable(mode: u32, s: f32, d: f32) -> f32 {
                 d + (2.0 * s - 1.0) * (dd - d)
             }
         }
-        // Hard light.
         13 => hard_light(s, d),
-        // Linear light.
         14 => (d + 2.0 * s - 1.0).clamp(0.0, 1.0),
-        // Vivid light.
         15 => vivid(s, d),
-        // Pin light.
         16 => {
             if s <= 0.5 {
                 d.min(2.0 * s)
@@ -4934,7 +4871,6 @@ fn blend_separable(mode: u32, s: f32, d: f32) -> f32 {
                 d.max(2.0 * s - 1.0)
             }
         }
-        // Hard mix.
         17 => {
             if vivid(s, d) >= 0.5 {
                 1.0
@@ -4942,11 +4878,8 @@ fn blend_separable(mode: u32, s: f32, d: f32) -> f32 {
                 0.0
             }
         }
-        // Difference.
         18 => (s - d).abs(),
-        // Exclusion.
         19 => s + d - 2.0 * s * d,
-        // Divide.
         21 => (d / s.max(1e-6)).clamp(0.0, 1.0),
         _ => s,
     }
@@ -5039,7 +4972,6 @@ pub fn blend_pixel(mode: u32, d: [f32; 4], s: [f32; 4]) -> [f32; 4] {
                 o[c] = (d[c] - s[c]).max(0.0);
             }
         }
-        // The encoded (perceptual) set.
         m => {
             let se = [
                 blend_encode(s[0].clamp(0.0, 1.0)),
@@ -5052,7 +4984,6 @@ pub fn blend_pixel(mode: u32, d: [f32; 4], s: [f32; 4]) -> [f32; 4] {
                 blend_encode(d[2].clamp(0.0, 1.0)),
             ];
             let b = match m {
-                // Darker colour / Lighter colour: whole-pixel picks by luma.
                 5 => {
                     if blend_lum(se) < blend_lum(de) {
                         se
@@ -5067,7 +4998,6 @@ pub fn blend_pixel(mode: u32, d: [f32; 4], s: [f32; 4]) -> [f32; 4] {
                         de
                     }
                 }
-                // Hue, Saturation, Colour, Luminosity.
                 22 => blend_set_lum(blend_set_sat(se, blend_sat(de)), blend_lum(de)),
                 23 => blend_set_lum(blend_set_sat(de, blend_sat(se)), blend_lum(de)),
                 24 => blend_set_lum(se, blend_lum(de)),
@@ -5447,7 +5377,6 @@ pub fn sharpen_matted(
     matte: &[f32],
 ) {
     let original = rgba.to_vec();
-    // Unpremultiplied colour buffer, alpha carried along for the ride.
     let mut blurred = vec![0.0f32; rgba.len()];
     for (dst, src) in blurred.chunks_exact_mut(4).zip(original.chunks_exact(4)) {
         dst[..3].copy_from_slice(&unpremult(src));
@@ -5511,14 +5440,13 @@ pub fn sharpen_simple_matted(
     matte: &[f32],
 ) {
     if amount == 0.0 {
-        return; // neutral: bit-exact identity (the WGSL twin matches)
+        return;
     }
     // Neighbour distance in pixels (T15): 1 = a 3×3 kernel, larger reads a
     // coarser neighbourhood. Host-rounded so CPU and GPU sample the same taps.
     let r = radius.round().max(1.0) as i64;
     let original = rgba.to_vec();
     let (wi, hi) = (w as i64, h as i64);
-    // Unpremultiplied colour at a clamp-addressed integer pixel.
     let at = |x: i64, y: i64| -> [f32; 3] {
         let s = ((y.clamp(0, hi - 1) * wi + x.clamp(0, wi - 1)) * 4) as usize;
         unpremult(&original[s..s + 4])
@@ -5661,7 +5589,6 @@ pub fn dof(rgba: &mut [f32], depth: Option<&[f32]>, w: u32, h: u32, p: &DofParam
     let original = rgba.to_vec();
     let bound = depth.is_some();
 
-    // The depth at one pixel, post-channel-pick and post-invert.
     let depth_at = |dm: &[f32], i: usize| {
         let d = channel_of(&dm[i * 4..i * 4 + 4], p.depth_channel);
         if p.depth_invert {
@@ -5797,7 +5724,6 @@ pub fn dof(rgba: &mut [f32], depth: Option<&[f32]>, w: u32, h: u32, p: &DofParam
                 }
             }
 
-            // Pass two: the gather proper.
             let mut acc_lo = [0.0f32; 4];
             let mut acc_hi = [0.0f32; 4];
             let mut n = 0.0f32;
@@ -6016,13 +5942,13 @@ pub fn edge_index(i: i64, len: i64, edge: u32) -> Option<i64> {
         return Some(i);
     }
     match edge {
-        1 => Some(i.clamp(0, len - 1)), // repeat edge pixel
+        1 => Some(i.clamp(0, len - 1)),
         2 => {
             // mirror: reflect without repeating the edge sample
             let m = if i < 0 { -i } else { 2 * (len - 1) - i };
             Some(m.clamp(0, len - 1))
         }
-        _ => None, // transparent
+        _ => None,
     }
 }
 
@@ -6121,7 +6047,7 @@ pub fn blur_directional_matted(
     matte: &[f32],
 ) {
     let original = rgba.to_vec();
-    let (dx, dy) = super::maths::rgb_split_offset(1.0, angle_deg); // unit vector
+    let (dx, dy) = super::maths::rgb_split_offset(1.0, angle_deg);
     let n = dir_blur_taps(length_px);
     let nf = n as f32;
     for y in 0..h {
@@ -6323,7 +6249,6 @@ pub fn blur_gaussian(rgba: &mut [f32], w: u32, h: u32, radius_px: f32, edge: u32
     }
     let original = rgba.to_vec();
     let mut pass = vec![0.0f32; rgba.len()];
-    // Horizontal.
     for y in 0..h {
         for x in 0..w {
             let mut acc = [0.0f32; 4];
@@ -6339,7 +6264,6 @@ pub fn blur_gaussian(rgba: &mut [f32], w: u32, h: u32, radius_px: f32, edge: u32
             pass[d..d + 4].copy_from_slice(&acc);
         }
     }
-    // Vertical, blending the host Mix against the untouched input.
     for y in 0..h {
         for x in 0..w {
             let mut acc = [0.0f32; 4];
@@ -6409,7 +6333,6 @@ pub fn blur_gaussian_matted(
         let rad = radius_px * matte_strength(matte, d);
         (rad.ceil() as i64, (rad * 0.5).max(1e-3))
     };
-    // Horizontal.
     for y in 0..hi {
         for x in 0..wi {
             let d = ((y * wi + x) * 4) as usize;
@@ -6437,7 +6360,6 @@ pub fn blur_gaussian_matted(
             pass[d..d + 4].copy_from_slice(&acc);
         }
     }
-    // Vertical, blending the host Mix against the untouched input.
     for y in 0..hi {
         for x in 0..wi {
             let d = ((y * wi + x) * 4) as usize;
@@ -6609,7 +6531,6 @@ pub fn channel_blur_matted(
         let rad = radii[c] * matte_strength(matte, d);
         (rad.ceil() as i64, (rad * 0.5).max(1e-3))
     };
-    // Horizontal, then vertical: the same loop over a different axis.
     for y in 0..hi {
         for x in 0..wi {
             let d = ((y * wi + x) * 4) as usize;
@@ -6670,7 +6591,6 @@ pub struct DropShadowParams {
     pub offset: [f32; 2],
     /// The gaussian half-width the shape is softened by, raster pixels.
     pub softness_px: f32,
-    /// Draw the shadow alone, without the layer that cast it.
     pub shadow_only: bool,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
@@ -6886,8 +6806,6 @@ pub fn stroke_contour(rgba: &mut [f32], w: u32, h: u32, p: &StrokeContourParams)
         let band = (grown[i * 4] - shrunk[i * 4]).clamp(0.0, 1.0);
         let k = band * p.opacity;
         for c in 0..3 {
-            // The band OVER the layer, premultiplied: `colour · k` is the
-            // premultiplied stroke and the layer shows through what is left.
             let over = p.colour[c] * k + o[c] * (1.0 - k);
             px[c] = o[c] * (1.0 - p.mix) + over * p.mix;
         }
@@ -6896,10 +6814,8 @@ pub fn stroke_contour(rgba: &mut [f32], w: u32, h: u32, p: &StrokeContourParams)
     }
 }
 
-/// One resolved Roughen edges (docs/08 §3.57), reduced to what both paths read.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RoughenEdgesParams {
-    /// The noise field's shape, seed and loop — §3.37's core, shared.
     pub field: FractalField,
     /// `1 ÷ Scale`, raster pixels.
     pub inv_scale: f32,
@@ -7003,7 +6919,6 @@ pub fn roughen_edges_matted(
                 let sa = soft[i + 3].max(1e-4);
                 [soft[i] / sa, soft[i + 1] / sa, soft[i + 2] / sa]
             };
-            // The same band paints the chewed border, and nothing else.
             let paint = band * p.colour_on;
             for (c, edge) in col.iter_mut().zip(p.colour) {
                 *c += (edge - *c) * paint;
@@ -7200,7 +7115,6 @@ pub fn linear_wipe_matted(rgba: &mut [f32], w: u32, h: u32, p: &LinearWipeParams
     }
 }
 
-/// One resolved Radial wipe (docs/08 §3.47), reduced to what both paths read.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RadialWipeParams {
     /// Where the hand pivots, raster pixels.
@@ -7249,7 +7163,6 @@ pub fn radial_wipe_keep(px: f32, py: f32, completion: f32, p: &RadialWipeParams)
     (0.5 - (hw - delta.abs()) / band).clamp(0.0, 1.0)
 }
 
-/// Radial wipe (docs/08 §3.47) — the CPU reference and §1.6 oracle.
 pub fn radial_wipe(rgba: &mut [f32], w: u32, h: u32, p: &RadialWipeParams) {
     radial_wipe_matted(rgba, w, h, p, &[]);
 }
@@ -7263,7 +7176,6 @@ pub fn radial_wipe_matted(rgba: &mut [f32], w: u32, h: u32, p: &RadialWipeParams
             let d = ((y * w + x) * 4) as usize;
             let completion = matte_toward(p.completion, 0.0, matte_strength(matte, d));
             let keep = radial_wipe_keep(x as f32 + 0.5, y as f32 + 0.5, completion, p);
-            // See [`linear_wipe`] for why this form and not the other.
             let f = 1.0 - p.mix * (1.0 - keep);
             for c in 0..4 {
                 rgba[d + c] *= f;
@@ -7342,7 +7254,6 @@ pub fn venetian_blinds_matted(
             let d = ((y * w + x) * 4) as usize;
             let completion = matte_toward(p.completion, 0.0, matte_strength(matte, d));
             let keep = venetian_blinds_keep(x as f32 + 0.5, y as f32 + 0.5, fw, fh, completion, p);
-            // See [`linear_wipe`] for why this form and not the other.
             let f = 1.0 - p.mix * (1.0 - keep);
             for c in 0..4 {
                 rgba[d + c] *= f;
@@ -7412,7 +7323,6 @@ pub fn iris_wipe_keep(px: f32, py: f32, k: f32, p: &IrisWipeParams) -> f32 {
     (dist / p.band + 0.5).clamp(0.0, 1.0)
 }
 
-/// Iris wipe (docs/08 §3.71) — the CPU reference and §1.6 oracle.
 pub fn iris_wipe(rgba: &mut [f32], w: u32, h: u32, p: &IrisWipeParams) {
     iris_wipe_matted(rgba, w, h, p, &[]);
 }
@@ -7428,7 +7338,6 @@ pub fn iris_wipe_matted(rgba: &mut [f32], w: u32, h: u32, p: &IrisWipeParams, ma
         for x in 0..w {
             let d = ((y * w + x) * 4) as usize;
             let keep = iris_wipe_keep(x as f32 + 0.5, y as f32 + 0.5, matte_strength(matte, d), p);
-            // See [`linear_wipe`] for why this form and not the other.
             let f = 1.0 - p.mix * (1.0 - keep);
             for c in 0..4 {
                 rgba[d + c] *= f;
@@ -7444,7 +7353,6 @@ pub fn iris_wipe_matted(rgba: &mut [f32], w: u32, h: u32, p: &IrisWipeParams, ma
 /// the identical number; `fx_cardwipe.wgsl` spells the same literal.
 pub const CARD_VIEW_DISTANCE: f32 = 3.0;
 
-/// One resolved Card wipe (docs/08 §3.72), reduced to what both paths read.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CardWipeParams {
     /// Columns then rows.
@@ -7467,7 +7375,6 @@ pub struct CardWipeParams {
     pub direction: u32,
     /// Randomness ÷ 100.
     pub randomness: f32,
-    /// Which shuffle this instance gets (§2.4).
     pub seed: u32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
@@ -7575,8 +7482,6 @@ pub fn card_wipe_matted(rgba: &mut [f32], w: u32, h: u32, p: &CardWipeParams, ma
                     }
                     _ => 1.0,
                 };
-                // The flip coordinate and the one across it, with the card's
-                // half-extent on each.
                 let (f, g, hf, hg) = if axis == 0 {
                     (ly, lx, hy, hx)
                 } else {
@@ -7695,7 +7600,7 @@ pub fn block_glitch_matted(
     matte: &[f32],
 ) {
     if intensity == 0.0 {
-        return; // neutral: bit-exact identity (the WGSL twin matches)
+        return;
     }
     let original = rgba.to_vec();
     let bw = block_size_px.max(1.0);
@@ -7710,9 +7615,6 @@ pub fn block_glitch_matted(
             let h01 = |ch: u32, bxx: f32, byy: f32| {
                 super::maths::block_hash01(seed, ch, bxx as i32, byy as i32, tick)
             };
-            // Grid jitter (status note): a hashed offset of the
-            // *nominal* block, scaled by Intensity, decides which
-            // block a pixel actually reads from.
             let jx = (h01(0, bx0, by0) - 0.5) * 2.0 * jitter_frac * bw * intensity;
             let jy = (h01(1, bx0, by0) - 0.5) * 2.0 * jitter_frac * bw * intensity;
             let jpos = (pos.0 + jx, pos.1 + jy);
@@ -7725,8 +7627,6 @@ pub fn block_glitch_matted(
             let slice_u = h01(5, bx, by);
             let slice_h_u = h01(6, bx, by);
 
-            // Slice repeat: fold the block's own local Y to a short
-            // hashed repeat height instead of a plain read.
             let mut eff_y = jpos.1;
             if slice_u < slice_frac * intensity {
                 let local_y = jpos.1 - by * bw;
@@ -7736,8 +7636,6 @@ pub fn block_glitch_matted(
             }
             let (sx, sy) = (jpos.0 + dx, eff_y + dy);
 
-            // R/B split from the block hash (alpha follows green, like
-            // rgb_split).
             let r = bilinear(&original, w, h, sx - chan, sy)[0];
             let g = bilinear(&original, w, h, sx, sy);
             let b = bilinear(&original, w, h, sx + chan, sy)[2];
@@ -7809,7 +7707,7 @@ pub fn scanlines_matted(
     matte: &[f32],
 ) {
     if intensity == 0.0 {
-        return; // neutral: bit-exact identity (the WGSL twin matches)
+        return;
     }
     let original = rgba.to_vec();
     let period = period_px.max(1.0);
@@ -7941,11 +7839,8 @@ pub fn threshold_matted(rgba: &mut [f32], level: f32, hw: f32, mix: f32, matte: 
 /// scene-linear RGB, and the mix.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TritoneParams {
-    /// The colour the darkest pixels take.
     pub shadows: [f32; 3],
-    /// The colour mid-grey takes.
     pub midtones: [f32; 3],
-    /// The colour the brightest pixels take.
     pub highlights: [f32; 3],
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
@@ -8014,7 +7909,7 @@ pub fn photo_filter(rgba: &mut [f32], p: &PhotoFilterParams) {
 /// faded back. An empty matte is the unmatted path to the byte.
 pub fn photo_filter_matted(rgba: &mut [f32], p: &PhotoFilterParams, matte: &[f32]) {
     if p.density == 0.0 {
-        return; // no glass: bit-exact identity (the WGSL twin matches)
+        return;
     }
     for (i, px) in rgba.chunks_exact_mut(4).enumerate() {
         let density = p.density * matte_strength(matte, i * 4);
@@ -8068,17 +7963,17 @@ pub fn bw_grey(u: [f32; 3], w: &[f32; 6]) -> f32 {
     let (r, g, b) = (u[0], u[1], u[2]);
     // (grey, secondary amount, secondary weight, primary amount, primary weight)
     let (base, sec, sw, pri, pw) = if r >= g && g >= b {
-        (b, g - b, w[1], r - g, w[0]) // yellow, red
+        (b, g - b, w[1], r - g, w[0])
     } else if g >= r && r >= b {
-        (b, r - b, w[1], g - r, w[2]) // yellow, green
+        (b, r - b, w[1], g - r, w[2])
     } else if g >= b && b >= r {
-        (r, b - r, w[3], g - b, w[2]) // cyan, green
+        (r, b - r, w[3], g - b, w[2])
     } else if b >= g && g >= r {
-        (r, g - r, w[3], b - g, w[4]) // cyan, blue
+        (r, g - r, w[3], b - g, w[4])
     } else if b >= r && r >= g {
-        (g, r - g, w[5], b - r, w[4]) // magenta, blue
+        (g, r - g, w[5], b - r, w[4])
     } else {
-        (g, b - g, w[5], r - b, w[0]) // magenta, red
+        (g, b - g, w[5], r - b, w[0])
     };
     base + sec * sw + pri * pw
 }
@@ -8104,7 +7999,6 @@ pub fn black_and_white(rgba: &mut [f32], p: &BlackAndWhiteParams) {
     }
 }
 
-/// One resolved Shadow highlight (docs/08 §3.63).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ShadowHighlightParams {
     /// Shadow amount ÷ 100 × 2: 100 trebles a fully-masked shadow.
@@ -8181,7 +8075,6 @@ pub fn shadow_highlight_matted(
         // A multiply, not a gamma (§3.63): monotone, no clamp, no inverse.
         let m = matte_strength(matte, d);
         let lifted = l * (1.0 + ms * (p.shadow * m)) / (1.0 + mh * (p.highlight * m));
-        // Midtone contrast about the perceptual middle.
         let q = ((perceptual(lifted) - 0.5) * p.contrast + 0.5).max(0.0);
         let out_l = q * q;
         // A black pixel has no colour to scale and no ratio to take.
@@ -8285,7 +8178,7 @@ pub fn median_matted(rgba: &mut [f32], w: u32, h: u32, p: &MedianParams, matte: 
             let scaled = matte_toward(radius as f32, 0.0, matte_strength(matte, d));
             let r = ((scaled + 0.5).floor() as i32).clamp(0, MEDIAN_MAX_RADIUS);
             if r == 0 {
-                continue; // no window: the pixel as it arrived, to the bit
+                continue;
             }
             let n = (2 * r + 1) * (2 * r + 1);
             // The 1-based rank of the median among `n` samples, and therefore how
@@ -8299,8 +8192,6 @@ pub fn median_matted(rgba: &mut [f32], w: u32, h: u32, p: &MedianParams, matte: 
                     let s = ((sy * wi + sx) * 4) as usize;
                     let u = unpremult(&src[s..s + 4]);
                     let mut v = [u[0], u[1], u[2], src[s + 3]];
-                    // The bubble: each rung keeps the smaller of what it held
-                    // and what is passing through, and hands the larger on.
                     for slot in sorted.iter_mut().take(keep) {
                         for c in 0..4 {
                             let lo = slot[c].min(v[c]);
@@ -8321,8 +8212,6 @@ pub fn median_matted(rgba: &mut [f32], w: u32, h: u32, p: &MedianParams, matte: 
     }
 }
 
-/// One resolved Mosaic (docs/08 §3.65): the grid, the sharp-colour switch and
-/// the mix.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MosaicParams {
     /// Blocks across and blocks down, each `1..=2000`.
@@ -8416,7 +8305,6 @@ pub fn mosaic(rgba: &mut [f32], w: u32, h: u32, p: &MosaicParams) {
 /// rather than generated, because the WGSL twin spells the same nine numbers in
 /// the same order and the two must sum them identically.
 const SOBEL_X: [f32; 9] = [-1.0, 0.0, 1.0, -2.0, 0.0, 2.0, -1.0, 0.0, 1.0];
-/// See [`SOBEL_X`].
 const SOBEL_Y: [f32; 9] = [-1.0, -2.0, -1.0, 0.0, 0.0, 0.0, 1.0, 2.0, 1.0];
 
 /// Find edges (docs/08 §3.66) — the CPU reference and §1.6 oracle.
@@ -8527,7 +8415,6 @@ pub fn emboss_matted(rgba: &mut [f32], w: u32, h: u32, p: &EmbossParams, matte: 
     }
 }
 
-/// One resolved Texturize (docs/08 §3.68).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TexturizeParams {
     /// The vector from the pixel toward the light, in raster pixels — Light
@@ -8585,10 +8472,7 @@ pub fn texturize_matted(
             // Tile: wrap into 0..1 by subtracting the floor, the form WGSL
             // spells op-for-op (§3.38's note about `rem_euclid`).
             1 => (u - u.floor(), v - v.floor()),
-            // Centre: nothing outside one copy is textured.
             2 if !(0.0..1.0).contains(&u) || !(0.0..1.0).contains(&v) => return None,
-            // Stretch (and Centre inside the copy): hold the edge outward, which
-            // `bilinear_edge`'s repeat policy already does.
             _ => (u, v),
         };
         let t = bilinear_edge(texture, w, h, su * fw, sv * fh, 1);
@@ -8619,7 +8503,6 @@ pub fn texturize_matted(
 /// multiplies by, so the kernel runs no division (§1.6).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MoodLightingParams {
-    /// The light field's shape (§3.37's core), seed included.
     pub field: FractalField,
     /// `1 ÷ pool size` across and down, in raster pixels.
     pub inv_scale: [f32; 2],
@@ -8702,7 +8585,6 @@ pub fn mood_lighting_matted(
     }
 }
 
-/// One resolved Broadcast safe (docs/08 §3.69).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BroadcastSafeParams {
     /// The largest `Y + C` the pixel may carry — Maximum signal and the
@@ -8808,7 +8690,6 @@ pub struct BeamParams {
     pub outside: [f32; 3],
     /// False when the drawn interval is empty — Time 0 (§3.73's fourth note).
     pub active: bool,
-    /// Whether the layer that arrived is kept under the beam.
     pub composite: bool,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
@@ -8890,7 +8771,6 @@ pub struct LightningParams {
     pub core_colour: [f32; 3],
     /// The glow's colour, scene-linear RGB.
     pub glow_colour: [f32; 3],
-    /// Whether the layer that arrived is kept under the bolt.
     pub composite: bool,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
@@ -9013,7 +8893,6 @@ pub struct RadioWavesParams {
     pub colour: [f32; 3],
     /// Opacity ÷ 100.
     pub opacity: f32,
-    /// Whether the layer that arrived is kept under the waves.
     pub composite: bool,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
@@ -9056,7 +8935,6 @@ pub fn radio_waves_sample(px: f32, py: f32, p: &RadioWavesParams) -> f32 {
     acc
 }
 
-/// Radio waves (docs/08 §3.75) — the CPU reference and §1.6 oracle.
 pub fn radio_waves(rgba: &mut [f32], w: u32, h: u32, p: &RadioWavesParams) {
     radio_waves_matted(rgba, w, h, p, &[]);
 }
@@ -9087,7 +8965,6 @@ pub fn radio_waves_matted(rgba: &mut [f32], w: u32, h: u32, p: &RadioWavesParams
     }
 }
 
-/// One resolved Vegas (docs/08 §3.76), reduced to what both paths read.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct VegasParams {
     /// True to read the alpha rather than the perceptual luma.
@@ -9108,7 +8985,6 @@ pub struct VegasParams {
     pub colour: [f32; 3],
     /// Opacity ÷ 100.
     pub opacity: f32,
-    /// Whether the layer that arrived is kept under the stroke.
     pub composite: bool,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
@@ -9141,7 +9017,6 @@ pub fn vegas_stroke(px: f32, py: f32, l: f32, gx: f32, gy: f32, p: &VegasParams)
     // than lighting it.
     let sd = (l - p.level) / g.max(1e-6);
     let across = ((p.half_width - sd.abs()) / p.band + 0.5).clamp(0.0, 1.0);
-    // The contour's own direction, and the dash laid along it.
     let inv = 1.0 / g.max(1e-6);
     let tx = -gy * inv;
     let ty = gx * inv;
@@ -9157,7 +9032,6 @@ pub fn vegas_stroke(px: f32, py: f32, l: f32, gx: f32, gy: f32, p: &VegasParams)
 /// steady enough to lay a dash along: a 3×3 gradient on a compressed gradient
 /// points a different way in every pixel, and the dashes come out as speckle.
 pub const VEGAS_SMOOTH: [f32; 5] = [1.0, 4.0, 6.0, 4.0, 1.0];
-/// The derivative half; see [`VEGAS_SMOOTH`].
 pub const VEGAS_DERIV: [f32; 5] = [-1.0, -2.0, 0.0, 2.0, 1.0];
 
 /// Vegas (docs/08 §3.76) — the CPU reference and §1.6 oracle. One separable 5×5
@@ -9219,7 +9093,6 @@ pub fn vegas_matted(rgba: &mut [f32], w: u32, h: u32, p: &VegasParams, matte: &[
     }
 }
 
-/// One resolved Add grain (docs/08 §3.77), reduced to what both paths read.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct AddGrainParams {
     /// The grain's amplitude in perceptual units, per channel — Intensity, the
@@ -9233,7 +9106,6 @@ pub struct AddGrainParams {
     pub tonal: [f32; 3],
     /// True to read one lane for all three channels.
     pub monochrome: bool,
-    /// Which draw the grain follows (§2.4).
     pub seed: u32,
     /// The frame's draw, zero when Animate is off.
     pub tick: i32,
@@ -9377,14 +9249,11 @@ pub struct PathDrawParams {
     /// Where in the wobble's evolution this frame sits — taken from layer time
     /// host-side, so the kernel never sees a clock (§2.4).
     pub wiggle_tick: f32,
-    /// The wobble's seed.
     pub seed: u32,
     /// The drawing's colour, scene-linear RGB.
     pub colour: [f32; 3],
     /// Opacity ÷ 100.
     pub opacity: f32,
-    /// One of [`PAINT_ON_ORIGINAL`], [`PAINT_ON_TRANSPARENT`],
-    /// [`PAINT_REVEAL_ORIGINAL`].
     pub style: u32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
@@ -9738,7 +9607,6 @@ pub const PIXEL_SORT_MAX_SPAN: u32 = 4096;
 /// values have.
 const PIXEL_SORT_LEVELS: u32 = 0x003f_ffff;
 
-/// One resolved Pixel sort (docs/08 §3.99), reduced to what both paths read.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PixelSortParams {
     /// Which property the sort orders by: 0 Red, 1 Green, 2 Blue, 3 Luminance,
@@ -9748,7 +9616,6 @@ pub struct PixelSortParams {
     pub vertical: bool,
     /// What a sorted span is written back as: 0 Sort, 1 Stretch, 2 Mirror.
     pub span_mode: u32,
-    /// True when a span is ordered the other way round.
     pub reverse: bool,
     /// The bottom of the band that sorts, 0..1.
     pub min: f32,
@@ -9818,8 +9685,6 @@ fn pixel_sort_key(value: f32, span_start: u32, reverse: bool) -> u32 {
     (span_start << 22) | q
 }
 
-/// Pixel sort (docs/08 §3.99): runs of pixels picked out by a threshold, each
-/// one sorted along its own line.
 pub fn pixel_sort(rgba: &mut [f32], w: u32, h: u32, p: &PixelSortParams) {
     pixel_sort_matted(rgba, w, h, p, &[]);
 }
@@ -9835,7 +9700,7 @@ pub fn pixel_sort(rgba: &mut [f32], w: u32, h: u32, p: &PixelSortParams) {
 #[allow(clippy::too_many_lines)]
 pub fn pixel_sort_matted(rgba: &mut [f32], w: u32, h: u32, p: &PixelSortParams, matte: &[f32]) {
     if p.mix <= 0.0 {
-        return; // bit-exact identity (the WGSL twin matches)
+        return;
     }
     let stride = p.stride.clamp(1, PIXEL_SORT_MAX_SPAN) as usize;
     let (len, lines) = if p.vertical { (h, w) } else { (w, h) };
@@ -9921,8 +9786,6 @@ pub fn pixel_sort_matted(rgba: &mut [f32], w: u32, h: u32, p: &PixelSortParams, 
                 let (s, e) = (start[i] as usize, end[i] as usize);
                 let (l, o) = (e - s + 1, i - s);
                 let from = match p.span_mode {
-                    // Stretch: the whole span takes the pixel the sort put at
-                    // its far end, so the span reads as one long streak.
                     1 => e,
                     // Mirror: the sorted run laid out from both ends inward, so
                     // the span climbs to its middle and falls back. Every

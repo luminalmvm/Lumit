@@ -63,14 +63,11 @@ use lumit_ingress::checked_raster_bytes;
 /// short.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Tier {
-    /// The graphics card's memory: textures, buffers, the work-texture pool.
     Vram,
-    /// System memory: decoded pictures, the frame arena, cache tiers.
     Ram,
 }
 
 impl Tier {
-    /// The name a refusal prints.
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {
@@ -80,7 +77,6 @@ impl Tier {
     }
 }
 
-/// Why a reservation was refused.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum BudgetError {
     /// The tier is full. `wanted` is what was asked for, `free` what was left.
@@ -107,10 +103,6 @@ impl From<lumit_ingress::IngressError> for BudgetError {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Default budgets
-// ---------------------------------------------------------------------------
-
 /// What the ledger falls back to on a machine that **will not say** what it
 /// has — a platform with no implementation, a build without the graphics
 /// features that carry the query, or a Linux renderer that has not opened an
@@ -125,7 +117,6 @@ impl From<lumit_ingress::IngressError> for BudgetError {
 ///
 /// A machine that *does* answer never uses these: see [`budgets_for`].
 pub const DEFAULT_VRAM_BUDGET: u64 = 2 << 30;
-/// See [`DEFAULT_VRAM_BUDGET`].
 pub const DEFAULT_RAM_BUDGET: u64 = 4 << 30;
 
 /// The share of a reported pool the governor will spend, per docs/13 §3.
@@ -139,7 +130,6 @@ pub fn vram_budget_for(reported_bytes: u64) -> u64 {
     reported_bytes.saturating_mul(70) / 100
 }
 
-/// See [`vram_budget_for`].
 #[must_use]
 pub fn ram_budget_for(physical_bytes: u64) -> u64 {
     physical_bytes.saturating_mul(60) / 100
@@ -201,19 +191,11 @@ pub fn budgets_for(reported_vram: u64, physical_ram: u64, unified: bool) -> (u64
     )
 }
 
-// ---------------------------------------------------------------------------
-// The meter
-// ---------------------------------------------------------------------------
-
 #[derive(Debug)]
 struct Meter {
     budget: AtomicU64,
     used: AtomicU64,
-    /// The most that was ever held at once, for the readout and for the tests
-    /// that assert a change lowered it.
     peak: AtomicU64,
-    /// How many reservations this tier has refused, so "it went slowly" can be
-    /// told apart from "it went slowly because it kept being refused".
     denials: AtomicU64,
 }
 
@@ -277,10 +259,6 @@ impl Meter {
     }
 }
 
-// ---------------------------------------------------------------------------
-// The ledger
-// ---------------------------------------------------------------------------
-
 /// One ledger per renderer. Shared by `Arc`, read and written from any thread.
 #[derive(Debug)]
 pub struct Ledger {
@@ -298,14 +276,11 @@ impl Default for Ledger {
 }
 
 impl Ledger {
-    /// A ledger at the default budgets.
     #[must_use]
     pub fn new() -> Arc<Self> {
         Arc::new(Ledger::default())
     }
 
-    /// A ledger at budgets the caller names — what a test uses to reach a
-    /// ceiling without allocating a gigabyte to do it.
     #[must_use]
     pub fn with_budgets(vram: u64, ram: u64) -> Arc<Self> {
         Arc::new(Ledger {
@@ -374,31 +349,26 @@ impl Ledger {
         self.reserve(tier, bytes).ok()
     }
 
-    /// What is held right now.
     #[must_use]
     pub fn used(&self, tier: Tier) -> u64 {
         self.meter(tier).used.load(Ordering::Relaxed)
     }
 
-    /// The ceiling.
     #[must_use]
     pub fn budget(&self, tier: Tier) -> u64 {
         self.meter(tier).budget.load(Ordering::Relaxed)
     }
 
-    /// What is left.
     #[must_use]
     pub fn free(&self, tier: Tier) -> u64 {
         self.budget(tier).saturating_sub(self.used(tier))
     }
 
-    /// The most that was ever held at once.
     #[must_use]
     pub fn peak(&self, tier: Tier) -> u64 {
         self.meter(tier).peak.load(Ordering::Relaxed)
     }
 
-    /// How many reservations this tier has refused.
     #[must_use]
     pub fn denials(&self, tier: Tier) -> u64 {
         self.meter(tier).denials.load(Ordering::Relaxed)
@@ -415,8 +385,6 @@ impl Ledger {
         self.meter(tier).budget.store(bytes, Ordering::Relaxed);
     }
 
-    /// Forget the peak and the denial count. The readout's "since when", not a
-    /// change to what is held.
     pub fn reset_statistics(&self) {
         for meter in [&self.vram, &self.ram] {
             meter
@@ -475,22 +443,16 @@ impl Ledger {
     }
 }
 
-/// What the governor is holding, across both tiers, at one moment.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Snapshot {
     pub vram: TierSnapshot,
     pub ram: TierSnapshot,
 }
 
-/// One tier's numbers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TierSnapshot {
-    /// What is reserved right now.
     pub used: u64,
-    /// The ceiling it is reserved against.
     pub budget: u64,
-    /// The most that was ever reserved at once, since the last
-    /// [`Ledger::reset_statistics`].
     pub peak: u64,
     /// How many reservations have been refused since then.
     ///
@@ -499,7 +461,6 @@ pub struct TierSnapshot {
     /// — which is a different fault from one that is merely full, and is
     /// invisible in every other number here.
     pub denials: u64,
-    /// How close to the ceiling, as the degradation ladder reads it.
     pub pressure: Pressure,
 }
 
@@ -509,27 +470,20 @@ pub struct TierSnapshot {
 /// test and a caller can say "trim above Tight" in one comparison.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Pressure {
-    /// Under three quarters. Nothing to do.
     Easy,
     /// Three quarters to nine tenths. Cheap trims are worth making.
     Tight,
     /// Nine tenths and up. Trim properly; a refusal is close.
     Severe,
-    /// At or past the ceiling. Anything new will be refused.
     Full,
 }
 
 impl Pressure {
-    /// Whether a caller that can do less should.
     #[must_use]
     pub const fn should_trim(self) -> bool {
         matches!(self, Pressure::Severe | Pressure::Full)
     }
 }
-
-// ---------------------------------------------------------------------------
-// The reservation
-// ---------------------------------------------------------------------------
 
 /// Memory the ledger has granted, held until this is dropped.
 ///
@@ -552,13 +506,11 @@ pub struct Reservation {
 }
 
 impl Reservation {
-    /// How much this holds.
     #[must_use]
     pub fn bytes(&self) -> u64 {
         self.bytes
     }
 
-    /// Which tier it is against.
     #[must_use]
     pub fn tier(&self) -> Tier {
         self.tier
@@ -596,10 +548,6 @@ impl Reservation {
         Ok(())
     }
 
-    /// Give part of it back early, keeping the rest.
-    ///
-    /// For a caller that reserved a worst case and then found out the real one —
-    /// a frame that reserved for eight shutter samples and drew three.
     pub fn shrink_to(&mut self, bytes: u64) {
         let Some(giving_back) = self.bytes.checked_sub(bytes) else {
             return;
@@ -622,10 +570,6 @@ mod tests {
 
     const GB: u64 = 1 << 30;
 
-    /// **The budgets come from the machine** (docs/13 §3). Every reading the
-    /// ladder makes is a fraction of these two numbers, so a card told the
-    /// wrong size steps down at the wrong moment in one direction and loses the
-    /// device in the other.
     #[test]
     fn a_machine_that_answers_is_budgeted_by_what_it_has() {
         let (vram, ram) = budgets_for(24 * GB, 32 * GB, false);
@@ -657,17 +601,13 @@ mod tests {
                 free: 300
             }
         );
-        // Both numbers are in the sentence, because "out of memory" is not
-        // something anybody can act on.
         let words = refused.to_string();
         assert!(words.contains("400") && words.contains("300"), "{words}");
         assert!(words.contains("video memory"), "{words}");
 
-        // A refusal takes nothing: what was held before is exactly what is held.
         assert_eq!(ledger.used(Tier::Vram), 700);
         assert_eq!(ledger.denials(Tier::Vram), 1);
 
-        // And what does fit still fits.
         assert!(ledger.reserve(Tier::Vram, 300).is_ok());
     }
 
@@ -699,12 +639,9 @@ mod tests {
     #[test]
     fn a_raster_is_reserved_by_the_arithmetic_that_will_allocate_it() {
         let ledger = Ledger::with_budgets(1 << 30, 1 << 30);
-        // 1920 x 1080 RGBA half-float.
         let held = ledger.reserve_raster(Tier::Vram, 1920, 1080, 4, 2).unwrap();
         assert_eq!(held.bytes(), 1920 * 1080 * 4 * 2);
 
-        // A raster out of a file whose numbers do not multiply is an overflow
-        // rather than a wrap into something small and plausible.
         assert_eq!(
             ledger
                 .reserve_raster(Tier::Vram, u64::MAX, 2, 4, 4)
@@ -728,9 +665,6 @@ mod tests {
             "folding must not release anything"
         );
 
-        // A different tier is handed back rather than mis-filed — and, the part
-        // that matters, rather than dropped: a caller that got the tiers wrong
-        // must not silently release memory it still holds.
         let ram = ledger.reserve(Tier::Ram, 10).unwrap();
         let ram = a.absorb(ram).expect_err("a mismatched tier comes back");
         assert_eq!(ram.bytes(), 10);
@@ -758,9 +692,7 @@ mod tests {
         let _c = ledger.reserve(Tier::Vram, 8).unwrap();
         assert_eq!(ledger.pressure(Tier::Vram), Pressure::Full);
 
-        // Reading it took nothing.
         assert_eq!(ledger.used(Tier::Vram), 100);
-        // And the order is a usable comparison.
         assert!(Pressure::Full > Pressure::Easy);
     }
 }

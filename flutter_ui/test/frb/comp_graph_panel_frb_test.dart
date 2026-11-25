@@ -41,8 +41,6 @@ import 'package:uuid/uuid.dart';
 
 import 'frb_test_support.dart';
 
-/// The console's category-kicker key stem, so the strip's order can be read
-/// off the tree.
 const String _cat = 'fx-console-cat-';
 
 void main() {
@@ -58,18 +56,14 @@ void main() {
     };
     List<String> open() =>
         [for (final p in compBoxRows(fx, params, values, {}).open) p.id];
-    // At its defaults, Time offset is on view under its heading, and the
-    // rows it switches on are not.
     expect(open(), contains('time_offset'));
     expect(open(), isNot(contains('time_samples')));
     expect(compBoxRows(fx, params, values, {}).kickers['time_offset'], 'Time');
-    // Switched on, the whole group shows.
     values['time_offset'] = const BridgeEffectValue.choice(1);
     expect(open(), containsAll(['time_offset', 'time_step', 'time_samples']));
   });
 
   group('Node graph canvas (frb)', () {
-    /// A project holding one node graph, fronted, and one comp beside it.
     ({LumitState state, LumitUiState uiState, CompositionReference graph})
         withGraph() {
       final p = freshProject();
@@ -94,8 +88,6 @@ void main() {
       await tester.pump();
     }
 
-    /// The wiring as it stands with one change folded in: how a test seeds a
-    /// graph without going through a gesture.
     BridgeCompWiring wiringWith(
       BridgeCompWiring w, {
       List<BridgeReadNode>? reads,
@@ -114,7 +106,6 @@ void main() {
 
     UuidValue fresh() => UuidValue.fromString(const Uuid().v4());
 
-    /// A Read of a project item, placed, from outside the panel.
     UuidValue seedReadOf(
         CompositionReference graph, UuidValue item, Offset at) {
       final id = fresh();
@@ -133,7 +124,6 @@ void main() {
       return id;
     }
 
-    /// A Read of an imported clip, placed, from outside the panel.
     UuidValue seedRead(
             CompositionReference graph, LumitState state, Offset at) =>
         seedReadOf(
@@ -143,8 +133,6 @@ void main() {
                 .internalid,
             at);
 
-    /// A catalogue box, placed, from outside the panel. [bound] is the comp a
-    /// nested Node graph box applies, which that one entry requires.
     UuidValue seedFx(CompositionReference graph, String name, Offset at,
         {CompositionReference? bound}) {
       final made = graph.newGraphInstance(name: name, graph: bound);
@@ -160,7 +148,6 @@ void main() {
       return id;
     }
 
-    /// An Input box, placed, from outside the panel.
     UuidValue seedInput(CompositionReference graph, Offset at) {
       final id = fresh();
       final w = graph.getNodeGraph().wiring;
@@ -205,7 +192,6 @@ void main() {
       await tester.pump();
     }
 
-    /// The console's own door: Ctrl+Space over the canvas, then a row.
     testWidgets('the console adds a Read, and one undo takes it away',
         (tester) async {
       final p = withGraph();
@@ -222,8 +208,6 @@ void main() {
       expect(find.byKey(const ValueKey<String>('fx-console-item-Graph')),
           findsNothing);
 
-      // And the list is in §4.2's order: the project's items, Input, the
-      // effects, then the boxes only a graph can hold.
       final kickers = [
         for (final element in find
             .byWidgetPredicate((w) =>
@@ -242,7 +226,6 @@ void main() {
       expect(kickers.indexOf(l10n.fxControls),
           greaterThan(kickers.indexOf(l10n.fxBlurAndSharpen)),
           reason: 'the drivers file under Controls, at the end of the effects');
-      // Reached by typing, as a hand reaches a row past the list's fold.
       await tester.enterText(
           find.byKey(const ValueKey('fx-console-query')), 'Scene');
       await tester.pump();
@@ -281,7 +264,6 @@ void main() {
           reason: 'one output feeds any number of inputs');
       expect(edges.where((e) => e.from == read), hasLength(2),
           reason: 'the fork is two wires out of one socket');
-      // And they are drawn: every wire has both its ends on the canvas.
       expect(find.byKey(const ValueKey<String>('comp-graph-canvas')),
           findsOneWidget);
       for (final edge in edges) {
@@ -310,7 +292,6 @@ void main() {
       expect(p.graph.documentRevision(), was,
           reason: 'nothing crossed the bridge');
 
-      // The same wire onto a socket the number does fit: one op.
       await tester.tap(find.byKey(ValueKey<String>('graph-twirl-node:$blur')));
       await tester.pump();
       final twirled = p.graph.documentRevision();
@@ -420,11 +401,6 @@ void main() {
       );
     });
 
-    // --- What an open box draws (§4.2): the Node panel's row on every
-    // parameter, its socket level with it, and the picture's sockets as they
-    // were.
-
-    /// Where a box sits on the canvas, from the document.
     Offset placeOf(CompositionReference graph, UuidValue id) {
       final p = graph.getNodeGraph().wiring.layout.firstWhere((l) => l.node == id);
       return Offset(p.x, p.y);
@@ -541,8 +517,6 @@ void main() {
     // derived by that panel's own rules, so a box and the panel can never
     // disagree about what an effect is showing.
 
-    /// The Node graph box's way in, on its menu, where a double-click also
-    /// goes (§4.2).
     testWidgets("a Node graph box's Open graph row goes in", (tester) async {
       final p = withGraph();
       final inner = p.state.project!.newNodeGraph(name: 'Inner');
@@ -560,7 +534,6 @@ void main() {
           reason: 'the row opens the graph the box applies');
     });
 
-    /// Type [source] into the shader editor that [edit] opens, and apply it.
     Future<void> editShader(
         WidgetTester tester, Finder edit, String source) async {
       await tester.tap(edit);
@@ -582,8 +555,6 @@ void main() {
         '    return lumit_sample(uv);\n'
         '}\n';
 
-    /// A picked Custom shader box's Edit shader, on the Node panel's row,
-    /// opens the editor, and Apply is one op on the graph.
     testWidgets("a Custom shader box's Edit shader applies to the graph",
         (tester) async {
       final p = withGraph();
@@ -617,8 +588,6 @@ void main() {
       expect(find.byKey(ValueKey<String>('shader-thumb-empty-$box')),
           findsOneWidget,
           reason: 'the box carries the picture of its inner graph');
-      // On the first socket row, clear of that picture, which opens on one
-      // click.
       final at = tester.getTopLeft(card(box)) + const Offset(75, 30);
       await tester.tapAt(at);
       await tester.pump(kDoubleTapMinTime);
@@ -630,7 +599,6 @@ void main() {
           findsNothing,
           reason: 'a node graph has no layer to name');
 
-      // An edit inside is one op on the node graph, and one undo.
       String? inner() => p.graph
           .getNodeGraphInstances()
           .firstWhere((i) => i.id() == box)
@@ -668,7 +636,6 @@ void main() {
       await wire(tester, read, 'output', blur, 'input');
       expect(p.graph.getNodeGraph().wiring.edges, hasLength(1));
 
-      // A band drawn wholly round the wider box picks it, and nothing else.
       final canvas =
           tester.getTopLeft(find.byKey(const ValueKey('comp-graph-canvas')));
       await tester.dragFrom(
@@ -700,7 +667,6 @@ void main() {
       expect(find.byKey(ValueKey<String>('node-row-$blur-radius')),
           findsOneWidget);
 
-      // And a value typed on that row commits through the graph's own op.
       final field = find.byKey(ValueKey<String>('fx-float-$blur-radius'));
       await tester.tap(field);
       await tester.pump();
@@ -720,8 +686,6 @@ void main() {
       );
     });
 
-    /// Auto-wire: a box added while one is picked lands after it, and takes
-    /// over whatever that box was feeding.
     testWidgets('a box added while one is picked is wired after it',
         (tester) async {
       final p = withGraph();
@@ -758,7 +722,6 @@ void main() {
       );
     });
 
-    /// N7: a loose box let go over a wire falls into it.
     testWidgets('a box dropped on a wire is spliced in', (tester) async {
       final p = withGraph();
       final read = seedRead(p.graph, p.state, const Offset(40, 40));
@@ -769,7 +732,6 @@ void main() {
       await wire(tester, read, 'output', out, 'input');
       expect(p.graph.getNodeGraph().wiring.edges, hasLength(1));
 
-      // Onto the middle of the one wire on the canvas.
       final from = tester.getCenter(socket(read, 'output'));
       final to = tester.getCenter(socket(out, 'input'));
       final middle = (from + to) / 2;
@@ -794,7 +756,6 @@ void main() {
       await wire(tester, read, 'output', blur, 'input');
       await wire(tester, read, 'output', glow, 'input');
 
-      // Down across both wires, halfway between the boxes.
       final x = (tester.getCenter(socket(read, 'output')).dx +
               tester.getCenter(socket(blur, 'input')).dx) /
           2;
@@ -807,7 +768,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(p.graph.getNodeGraphTies().single.wires, hasLength(2));
 
-      // Every box move rewrites the graph, and the tie rides along.
       await tester.drag(card(glow), const Offset(0, 60));
       await tester.pumpAndSettle();
       expect(p.graph.getNodeGraphTies(), hasLength(1));
@@ -963,8 +923,6 @@ void main() {
       final boxes = p.graph.getNodeGraph().nodes.length;
       final pan = panOf(tester, p.graph, p.graph.getNodeGraph().wiring.output);
 
-      // A right-click on empty ground opens the canvas menu, whose first
-      // row is the search, and the box lands under the click.
       const click = Offset(300, 200);
       await tester.tapAt(canvas + click, buttons: kSecondaryMouseButton);
       await tester.pump();
@@ -974,7 +932,6 @@ void main() {
       expect(p.graph.getNodeGraph().nodes, hasLength(boxes + 1));
       expect(placeOf(p.graph, p.uiState.compGraphNode.value!.id), click - pan);
 
-      // Tab with the canvas focused, the box landing at the pointer.
       await tester.tapAt(canvas + const Offset(600, 450));
       await tester.pump();
       const pointer = Offset(120, 380);
@@ -996,7 +953,6 @@ void main() {
       await pickExposure(tester);
       expect(p.graph.getNodeGraph().nodes, hasLength(boxes + 3));
 
-      // Ctrl+A opens nothing, and select all still picks every box.
       await tester.tapAt(canvas + const Offset(600, 450));
       await tester.pump();
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
@@ -1084,7 +1040,6 @@ void main() {
       );
       expect(find.byType(CompGraphPanel), findsNWidgets(2));
 
-      // Picked on the Graph panel's canvas.
       await tester.tapAt(tester.getCenter(card(blur).first));
       await tester.pump();
       expect(p.uiState.compGraphNode.value?.id, blur);

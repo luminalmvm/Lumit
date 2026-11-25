@@ -1,5 +1,3 @@
-//! The blend modes' menu order and display names.
-
 use super::BlendMode;
 
 impl BlendMode {
@@ -70,7 +68,6 @@ impl BlendMode {
         "Luminosity",
     ];
 
-    /// The mode's display name (British English, sentence case — docs/15).
     pub fn name(self) -> &'static str {
         match self {
             BlendMode::Normal => "Normal",

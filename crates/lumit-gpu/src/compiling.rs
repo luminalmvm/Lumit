@@ -1,5 +1,3 @@
-//! Pipelines compiling while an engine is put together.
-
 /// A pipeline compiling on the thread pool.
 ///
 /// Compiling shaders is nearly all of what building an engine costs and no
@@ -25,9 +23,6 @@ impl<T: Send + 'static> Compiling<T> {
         Self { done, compile }
     }
 
-    /// The pipeline, compiled here if the pool never answered.
-    // ponytail: this blocks, so an engine built from inside the pool on a
-    // one-core machine would wait on itself. Nothing builds one there.
     pub(crate) fn wait(self) -> T {
         self.done.recv().unwrap_or_else(|_| (self.compile)())
     }

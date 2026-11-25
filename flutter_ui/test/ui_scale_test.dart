@@ -24,14 +24,10 @@ void main() {
       ),
     ));
 
-    // The child's OWN logical size is the window divided by the drawn scale —
-    // 2 × 1.1 — so nothing overflows.
     final size = tester.getSize(find.byKey(key));
     expect(size.width, closeTo(880 / 2.2, 0.01));
     expect(size.height, closeTo(660 / 2.2, 0.01));
 
-    // Its on-screen (post-transform) rect fills the whole window — the scale
-    // paints it back up to size.
     final rect = tester.getRect(find.byKey(key));
     expect(rect.width, closeTo(880, 0.01));
     expect(rect.height, closeTo(660, 0.01));

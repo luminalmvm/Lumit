@@ -123,10 +123,6 @@ VoidCallback? onSelection(
   };
 }
 
-// ---------------------------------------------------------------------------
-// Mask
-// ---------------------------------------------------------------------------
-
 /// The mask a Timeline row has picked, with the layer it sits on — or null
 /// when no mask row is selected.
 ///
@@ -151,7 +147,6 @@ VoidCallback? onSelection(
   return null;
 }
 
-/// The shape item a Timeline row has picked, the same way.
 ({LayerReference layer, BridgeShapeItem item})? pickedShape(LumitUiState ui) {
   for (final path in ui.selectedProperties.value) {
     final layerId = layerIdOfPath(path);
@@ -307,7 +302,6 @@ List<MenuEntry> maskAndShapePathRows(LumitState app, LumitUiState ui) {
   final shape = masks.isEmpty ? pickedShape(ui) : null;
   final comp = ui.selectedComp;
 
-  // Each picked mask, as one undo step, the way the Mask rows write.
   VoidCallback eachMask(
           void Function(LayerReference layer, BridgeMask mask) run) =>
       () {
@@ -408,11 +402,6 @@ List<MenuEntry> expandAllCopiesRows(LumitState app, LumitUiState ui) {
   ];
 }
 
-// ---------------------------------------------------------------------------
-// Transform
-// ---------------------------------------------------------------------------
-
-/// The properties that say where a layer is.
 const _placement = {
   BridgeTransformProp.anchorX,
   BridgeTransformProp.anchorY,
@@ -518,7 +507,6 @@ List<MenuEntry> transformRows(LumitState app, LumitUiState ui) {
           ],
         );
       },
-          // Greyed while there is nothing to put back.
           when: (entry) => fresh(entry).entries.any((e) {
                 final held = read(entry.info.transform, e.key);
                 return held is! BridgeScalar_Static ||
@@ -617,7 +605,6 @@ List<MenuEntry> transformRows(LumitState app, LumitUiState ui) {
   ];
 }
 
-/// Layer ▸ Transform ▸ Orient, for the selection.
 List<MenuEntry> _orientRows(LumitState app, LumitUiState ui) {
   final picked = selectedEntries(ui);
   final first = picked.firstOrNull;
@@ -704,10 +691,6 @@ List<MenuEntry> axisModeRows(LumitState app, LumitUiState ui) {
   ];
 }
 
-// ---------------------------------------------------------------------------
-// Switches, markers, blend and matte
-// ---------------------------------------------------------------------------
-
 /// Layer ▸ Flow: optical flow on this layer, offered on Footage and Precomp
 /// layers, the kinds with frames to make an in-between from ([hasFlow]).
 ///
@@ -778,7 +761,6 @@ MenuEntry cameraSettingsRow(
               .firstOrNull),
     );
 
-/// Opens [picked]'s camera window, or null where there is none to open.
 VoidCallback? _cameraWindow(BuildContext context, LumitState app,
     LumitUiState ui, BridgeLayerEntry? picked) {
   final comp = ui.selectedComp;
@@ -796,8 +778,6 @@ VoidCallback? _cameraWindow(BuildContext context, LumitState app,
   };
 }
 
-/// Layer ▸ Light settings: the light's window again, greyed until a light is
-/// picked.
 MenuEntry lightSettingsRow(
         BuildContext context, LumitState app, LumitUiState ui) =>
     MenuEntry(
@@ -811,7 +791,6 @@ MenuEntry lightSettingsRow(
               .firstOrNull),
     );
 
-/// Opens [picked]'s light window, or null where there is none to open.
 VoidCallback? _lightWindow(BuildContext context, LumitState app,
     LumitUiState ui, BridgeLayerEntry? picked) {
   final comp = ui.selectedComp;
@@ -832,8 +811,6 @@ VoidCallback? _lightWindow(BuildContext context, LumitState app,
   };
 }
 
-/// Layer ▸ Project from camera: a picture on every material of the Model layers
-/// selected, greyed until there is a camera and a picture to use.
 MenuEntry projectFromCameraRow(LumitState app, LumitUiState ui) {
   final selected = [
     for (final entry in selectedEntries(ui)) entry.layer.internallayerId,
@@ -854,8 +831,6 @@ MenuEntry projectFromCameraRow(LumitState app, LumitUiState ui) {
   );
 }
 
-/// Layer ▸ Model settings: the Model layer's window again, greyed until one is
-/// picked.
 MenuEntry modelSettingsRow(BuildContext context, LumitUiState ui) => MenuEntry(
       l10n.modelSettings,
       _modelWindow(
@@ -879,7 +854,6 @@ MenuEntry editInBlenderRow(LumitUiState ui) {
       path = field0.filePath();
     }
   } catch (_) {
-    // The project closed as the menu opened.
   }
   return MenuEntry(
     l10n.menuEditInBlender,
@@ -892,8 +866,6 @@ MenuEntry editInBlenderRow(LumitUiState ui) {
   );
 }
 
-/// Layer ▸ Create cameras and lights: keyed layers from what the picked Model
-/// layer's file holds, greyed when it holds neither.
 MenuEntry modelLayersRow(LumitState app, LumitUiState ui) {
   final picked = selectedEntries(ui)
       .where((entry) => entry.info.modelRows?.holdsLights ?? false)
@@ -909,13 +881,11 @@ MenuEntry modelLayersRow(LumitState app, LumitUiState ui) {
                   lightName: l10n.modelLightName);
               if (made > 0) app.notifyDocumentChanged();
             } catch (_) {
-              // The layer went away under the menu: nothing to make.
             }
           },
   );
 }
 
-/// Opens [picked]'s Model settings, or null where there is none to open.
 VoidCallback? _modelWindow(BuildContext context, BridgeLayerEntry? picked) {
   if (picked == null) return null;
   return () => showModelSettingsFrb(context: context, layer: picked.layer);
@@ -987,7 +957,6 @@ List<MenuEntry> markerRows(LumitState app, LumitUiState ui) {
   ];
 }
 
-/// Layer ▸ Blending mode: the engine's list, ticked at the one in force.
 List<MenuEntry> blendRows(LumitState app, LumitUiState ui) {
   final modes = blendModeNames();
   final lead = selectedEntries(ui).firstOrNull;
@@ -995,7 +964,6 @@ List<MenuEntry> blendRows(LumitState app, LumitUiState ui) {
     for (var i = 0; i < modes.length; i++)
       MenuEntry(
         engineLabel(modes[i]),
-        // The mode a layer already has makes no undo step.
         onSelection(app, ui, (entry) {
           if (entry.info.blend != i) entry.layer.setBlend(index: i);
         }),
@@ -1084,7 +1052,6 @@ MenuEntry lockRow(LumitState app, LumitUiState ui) {
               );
               app.notifyDocumentChanged();
             } catch (_) {
-              // The layer went away between the draw and the press.
             }
           },
     action: 'layer.lock.toggle',
@@ -1092,8 +1059,6 @@ MenuEntry lockRow(LumitState app, LumitUiState ui) {
   );
 }
 
-/// Layer ▸ Unlock all layers: every padlock in the composition off, selected
-/// or not, as one undo step. Greyed when nothing is locked.
 MenuEntry unlockAllRow(LumitState app, LumitUiState ui) {
   final comp = ui.selectedComp;
   final locked = [
@@ -1135,7 +1100,6 @@ List<MenuEntry> arrangeRows(LumitState app, LumitUiState ui) {
   ];
 
   VoidCallback? move({required bool up, required bool toEnd}) {
-    // Nowhere to go when the block already sits against that end.
     final blocked = moving.isEmpty ||
         (up
             ? moving.last == moving.length - 1
@@ -1162,7 +1126,6 @@ List<MenuEntry> arrangeRows(LumitState app, LumitUiState ui) {
         final taken = <int>{};
         for (final i in up ? moving : moving.reversed) {
           final to = up ? i - 1 : i + 1;
-          // Against the end, or against a selected layer that could not move.
           if (to < 0 || to >= all.length || taken.contains(to)) {
             taken.add(i);
             continue;
@@ -1227,8 +1190,6 @@ bool shiftSelectedLayers(LumitState app, LumitUiState ui, int frames) {
   return true;
 }
 
-/// The kinds with a picture to gate another layer with — everything except the
-/// kinds that draw no pixels at all.
 bool _gates(BridgeLayerEntry entry) => switch (entry.info.kind) {
       BridgeLayerKind.camera ||
       BridgeLayerKind.light ||
@@ -1356,8 +1317,6 @@ List<MenuEntry> styleRows(LumitState app, LumitUiState ui) => [
         ),
     ];
 
-/// Layer ▸ Grade: the current shot's grade nodes and the commands on its
-/// whole grade. Each row greys out where it could not act.
 List<MenuEntry> gradeRows(
     BuildContext context, LumitState app, LumitUiState ui) {
   final shot = ui.gradeShot.value != null;

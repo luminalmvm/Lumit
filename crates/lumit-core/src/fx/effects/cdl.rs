@@ -23,13 +23,11 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// The match name.
 pub const CDL: &str = "cdl";
 
 /// How many `vec4`s [`CdlPacked::words`] writes: `fx_grade.wgsl`'s `Params`.
 pub const WORDS: usize = 16;
 
-/// CDL's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "cdl",
@@ -46,19 +44,15 @@ pub struct Cdl {
     /// linear.
     #[choice(options = SPACE_OPTIONS, default = 0)]
     pub space: u32,
-    /// Multiplies each channel.
     #[colour(default = [1.0, 1.0, 1.0, 1.0], min = 0.0, max = 4.0)]
     pub slope: [f32; 4],
-    /// Adds to each channel, after Slope.
     #[colour(default = [0.0, 0.0, 0.0, 1.0], min = -1.0, max = 1.0)]
     pub offset: [f32; 4],
-    /// The exponent each channel is raised to, last.
     #[colour(default = [1.0, 1.0, 1.0, 1.0], min = 0.0, max = 4.0)]
     pub power: [f32; 4],
     /// Colourfulness about Rec. 709 luma.
     #[slider(min = 0.0, max = 2.0, default = 1.0, hard_min = 0.0, hard_max = 10.0, unit = Raw)]
     pub saturation: f32,
-    /// The host-uniform Mix every effect ends with, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -70,7 +64,6 @@ pub struct Cdl {
     pub mix: f32,
 }
 
-/// CDL's numbers, ready to draw.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CdlPacked {
     pub space: u32,
@@ -84,7 +77,6 @@ pub struct CdlPacked {
 }
 
 impl Cdl {
-    /// What both render paths draw with.
     #[must_use]
     pub fn packed(&self) -> CdlPacked {
         let rgb = |c: [f32; 4]| [c[0], c[1], c[2]];
@@ -108,7 +100,6 @@ impl Cdl {
 }
 
 impl CdlPacked {
-    /// The uniform `fx_grade.wgsl`'s `cdl` reads.
     #[must_use]
     pub fn words(&self) -> [[f32; 4]; WORDS] {
         let v3 = |v: [f32; 3]| [v[0], v[1], v[2], 0.0];
@@ -120,7 +111,6 @@ impl CdlPacked {
         out
     }
 
-    /// One premultiplied pixel through the list.
     #[must_use]
     pub fn pixel(&self, o: [f32; 4]) -> [f32; 4] {
         let v = maths::v_in(o, self.space);
@@ -143,7 +133,6 @@ impl CdlPacked {
     }
 }
 
-/// CDL's behaviour.
 pub struct CdlDef;
 
 impl EffectDef for CdlDef {

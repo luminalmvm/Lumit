@@ -19,7 +19,6 @@
 /// Room past the maximum delay for the cubic read's outer taps.
 const HEADROOM: usize = 4;
 
-/// A ring of samples and the head that writes into it.
 #[derive(Clone, Debug)]
 pub struct DelayLine {
     buf: Vec<f32>,
@@ -46,7 +45,6 @@ impl DelayLine {
         self.max
     }
 
-    /// Empty the line and put the write head back at the start.
     pub fn reset(&mut self) {
         self.buf.fill(0.0);
         self.write = 0;
@@ -63,7 +61,6 @@ impl DelayLine {
         }
     }
 
-    /// The sample `back` whole samples behind the write head.
     fn tap(&self, back: usize) -> f32 {
         let len = self.buf.len();
         let index = (self.write + len - 1 - back % len) % len;

@@ -22,10 +22,8 @@ import '../widgets/controls.dart';
 import 'layer_fit.dart';
 import 'timeline_layer_menu_frb.dart' show showMenuEntriesAt;
 
-/// The most a grid grows to. Past this the dots are only taking up room.
 const double _largestGrid = 112;
 
-/// The height of the row of buttons under the composition's grid.
 const double _footHeight = 26;
 
 class AlignPanel extends StatelessWidget {
@@ -128,7 +126,6 @@ class AlignPanel extends StatelessWidget {
     );
   }
 
-  /// The panel's commands by name, by the same road a press takes.
   void _menu(BuildContext context, Offset at, LumitState app, LumitUiState ui,
       int picked) {
     const middle = Offset(0.5, 0.5);
@@ -136,7 +133,6 @@ class AlignPanel extends StatelessWidget {
     final on = ui.workspace.interface;
     MenuEntry align(String label, double? x, double? y) => MenuEntry(
         label, picked < 2 ? null : () => ui.requestArrange(x: x, y: y));
-    // By one point of every box, or with the same gap between them all.
     List<MenuEntry> spread(Axis axis, List<String> by) => [
           for (final (i, label) in by.indexed)
             MenuEntry(
@@ -191,7 +187,6 @@ class AlignPanel extends StatelessWidget {
   }
 }
 
-/// A small icon button, the panel's one kind.
 Widget _iconButton({
   required Key key,
   required String tip,
@@ -214,7 +209,6 @@ Widget _iconButton({
       ),
     );
 
-/// Fit to comp, width and height, under the composition's grid.
 class _FitButtons extends StatelessWidget {
   final double side;
   final LumitState app;
@@ -248,13 +242,10 @@ class _FitButtons extends StatelessWidget {
   }
 }
 
-/// Six buttons lining the selection up with itself, and two spacing it out,
-/// taking up the room a grid of dots does.
 class _SelectionGrid extends StatelessWidget {
   final double side;
   final LumitUiState ui;
 
-  /// How many layers with a box are picked.
   final int picked;
 
   const _SelectionGrid(
@@ -320,7 +311,6 @@ class _DotGrid extends StatefulWidget {
   final double size;
   final ValueChanged<Offset>? onPick;
 
-  /// A right press, at this point in the window.
   final ValueChanged<Offset> onMenu;
 
   const _DotGrid({
@@ -330,7 +320,6 @@ class _DotGrid extends StatefulWidget {
     required this.onMenu,
   });
 
-  /// The gap from the edge to the outer dots, so they draw whole.
   static double insetFor(double size) => size / 9;
 
   @override

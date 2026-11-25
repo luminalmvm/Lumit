@@ -31,7 +31,6 @@ pub const MOTION_BLUR_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
     cond: EnabledCond::LayerSet,
 }];
 
-/// Motion blur's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "motion_blur",
@@ -134,7 +133,6 @@ pub struct MotionBlur {
     )]
     pub view: u32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,

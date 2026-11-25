@@ -10,13 +10,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/viewer_zoom.dart';
 
 void main() {
-  // A 1000×500 comp in an 800×400 panel, fitted: 0.8 of comp resolution, drawn
-  // 800×400 and filling the panel exactly.
   const compSize = Size(1000, 500);
   const panel = Size(800, 400);
   const fitted = Rect.fromLTWH(0, 0, 800, 400);
 
-  /// Where the comp point currently under [screen] would be after [zoom].
   Offset after(ViewerZoom zoom, Offset screen) {
     final s1 = fitted.width / compSize.width;
     final u = (screen - fitted.topLeft) / s1;
@@ -46,7 +43,6 @@ void main() {
 
   group('Zooming to a box', () {
     test('the box fills the panel and lands in its middle', () {
-      // A quarter-width box in the middle of the picture.
       const box = Rect.fromLTWH(300, 150, 200, 100);
       final zoom = zoomToBox(
         box: box,
@@ -55,7 +51,6 @@ void main() {
         compSize: compSize,
         panel: panel,
       );
-      // 800/200 and 400/100 are both 4, so the box grows four-fold.
       expect(zoom.scale, closeTo(3.2, 1e-9));
       final centre = after(zoom, box.center);
       expect(centre.dx, closeTo(panel.width / 2, 1e-9));

@@ -38,7 +38,6 @@ class _LookFadeState extends State<LookFade>
     });
   }
 
-  /// Keep the look as it is now, to fade out once the new one is drawn.
   void _hold() {
     final spec = ThemeScope.of(context).motion.swap;
     final box = _boundary.currentContext?.findRenderObject();

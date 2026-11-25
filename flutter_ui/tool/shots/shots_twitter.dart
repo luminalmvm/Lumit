@@ -128,7 +128,6 @@ Future<void> main() async {
       Panel.effectsAndPresets.pane(), DropPosition.stack);
   ui.workspace.touch();
   ui.frontPanel(Panel.effectControls);
-  // The picture at this frame is rendered from real footage; give it time.
   await pause(14);
 
   Future<void> look(ThemeShape shape, LumitColorScheme scheme,
@@ -146,8 +145,6 @@ Future<void> main() async {
     await pause(3);
   }
 
-  // ---- The edit, four ways ------------------------------------------------
-  // Eight frames, eight schemes: a wide mix rather than the stock dark.
   await look(ThemeShape.studio, LumitColorScheme.mallowDark);
   await captureUi('1-studio-edit.png', scale: 2);
   await look(ThemeShape.desk, LumitColorScheme.vellumLight);
@@ -186,13 +183,10 @@ Future<void> main() async {
   final rows = comp.getLayers();
   final plain = rows[0];
   final track = rows[1];
-  // The plain row runs under the playhead, turned down.
   plain.setSpan(
       span: BridgeSpan(
           inPoint: secs(6), outPoint: secs(16), startOffset: secs(0)));
   plain.setVolumeDb(value: const BridgeScalar.static_(-6));
-  // The track: a clip trimmed to eight seconds with a fade at each end, and a
-  // second laid two seconds into its tail so the overlap is a crossfade.
   track.setSpan(
       span: BridgeSpan(
           inPoint: secs(2), outPoint: secs(18), startOffset: secs(0)));
@@ -223,7 +217,6 @@ Future<void> main() async {
   ui.workspace.applyWorkspacePreset(WorkspacePreset.audio);
   comp.audioPrepare();
   ui.scrubTo(mixFrame);
-  // The peaks are read off the music in the background.
   await pause(20);
   ui.setSelection([plain]);
   await pause(1);

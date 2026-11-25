@@ -26,14 +26,12 @@ use serde::Deserialize;
 /// longer needs no code change at all: its `render_timeout_ms` in `quirks.json`
 /// is the exception mechanism.
 const DEFAULT_RENDER_TIMEOUT: Duration = Duration::from_secs(10);
-/// See [`DEFAULT_RENDER_TIMEOUT`].
 const DEFAULT_CONTROL_TIMEOUT: Duration = Duration::from_secs(2);
 /// How long a plugin gets to warm up: making an instance, and the first frame
 /// that instance renders in a fresh process. A plugin that loads a model or
 /// builds its kernels does it here, and that can take a minute.
 const DEFAULT_WARM_UP_TIMEOUT: Duration = Duration::from_secs(120);
 
-/// The whole table.
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct QuirksTable {
@@ -43,19 +41,14 @@ pub struct QuirksTable {
     plugins: Vec<PluginQuirks>,
 }
 
-/// One plugin's entry.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PluginQuirks {
-    /// The plugin's own `pluginIdentifier`, matched exactly.
     identifier: String,
-    /// Restrict the entry to one major version, or leave it out for all.
     #[serde(default)]
     version_major: Option<u32>,
-    /// Override the render deadline, in milliseconds.
     #[serde(default)]
     render_timeout_ms: Option<u64>,
-    /// Override the control-action deadline, in milliseconds.
     #[serde(default)]
     control_timeout_ms: Option<u64>,
     /// Pin a suite to a version other than the newest we have, for a plugin
@@ -66,27 +59,17 @@ pub struct PluginQuirks {
     /// so a diagnostic can say why a plugin is being treated specially.
     #[serde(default)]
     note: Option<String>,
-    /// The `kOfxPropName` this plugin is shown instead of Lumit's own.
     #[serde(default)]
     present_as: Option<String>,
 }
 
-/// The answers for one plugin, defaults filled in.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Quirks {
-    /// The render deadline for this plugin.
     pub render_timeout: Duration,
-    /// The deadline for describe, instance and other control actions.
     pub control_timeout: Duration,
-    /// The deadline for making an instance and for its first frame.
     pub warm_up_timeout: Duration,
-    /// Suite versions this plugin must be given, by suite name.
     pub suite_versions: BTreeMap<String, i32>,
-    /// Why this plugin has an entry, for the diagnostics panel and for the
-    /// next person to read the table.
     pub note: Option<String>,
-    /// The host name this plugin is shown, when it is not Lumit's own.
-    /// Applied by [`crate::bundle::Bundle::load`].
     pub present_as: Option<String>,
 }
 
@@ -125,7 +108,6 @@ impl QuirksTable {
         serde_json::from_str(json)
     }
 
-    /// The answers for one plugin.
     #[must_use]
     pub fn for_plugin(&self, identifier: &str, version_major: u32) -> Quirks {
         let mut quirks = Quirks::default();

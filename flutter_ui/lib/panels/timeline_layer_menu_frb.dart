@@ -51,7 +51,6 @@ void revealInProject(LumitUiState ui, ItemReference item) {
   ui.projectPickRequest.value = item;
 }
 
-/// A list of menu entries floated at [position], as a right-click menu.
 Future<void> showMenuEntriesAt(
   BuildContext context,
   Offset position,
@@ -254,7 +253,6 @@ List<MenuEntry> layerMenuEntries(
       asOneUndoStep(app.project, () {
         for (final e in entries) {
           try {
-            // The colour it already has makes no undo step.
             if (e.layer.getLabel() != picked) e.layer.setLabel(label: picked);
           } catch (_) {}
         }
@@ -295,8 +293,6 @@ List<MenuEntry> layerMenuEntries(
               ])),
     ]),
     MenuEntry.divider(),
-    // One row for the light fold: out of the group the selection is in, or
-    // into a new one.
     if (ui.model.groups.any((g) => g.members.any(ui.selectedLayerIds.contains)))
       MenuEntry(l10n.menuUngroup, () {
         if (ungroupSelection(comp: comp, layerIds: ui.selectedLayerIds)) {
@@ -386,14 +382,12 @@ List<MenuEntry> _controlRows(LumitUiState ui, BridgeLayerEntry entry,
   ];
 }
 
-/// The kinds that can carry sound, which is what the Audio rows are about.
 bool _sounds(BridgeLayerKind kind) =>
     kind == BridgeLayerKind.footage ||
     kind == BridgeLayerKind.sequence ||
     kind == BridgeLayerKind.precomp ||
     kind == BridgeLayerKind.audio;
 
-/// The kinds whose own flat picture a layer style draws around.
 bool _styled(BridgeLayerKind kind) =>
     kind == BridgeLayerKind.footage ||
     kind == BridgeLayerKind.solid ||
@@ -451,9 +445,6 @@ MenuEntry _switchRow(
       checked: on,
     );
 
-/// Audio ▸: mute, the layer's sound onto its own row, which streams of its
-/// file it plays, and whether a retimed sound keeps its pitch. The Audio
-/// heading in the fold has the same rows.
 List<MenuEntry> audioRows(
     LumitState app, LumitUiState ui, BridgeLayerEntry entry,
     {void Function(LayerReference layer)? createCaptions}) {
@@ -517,7 +508,6 @@ List<MenuEntry> audioRows(
             },
       checked: !entry.info.pitchFollowsSpeed,
     ),
-    // Composition ▸ Detect beats, from the music's own row.
     if (comp != null)
       MenuEntry(l10n.menuDetectBeats,
           () => detectCompBeats(app, comp, layer: entry.layer)),
@@ -648,8 +638,6 @@ List<MenuEntry> _createRows(
   ];
 }
 
-/// Parent ▸: none, then every other layer in the comp, numbered as the
-/// outline numbers them, ticked at the one in force.
 List<MenuEntry> _parentRows(LumitState app, LumitUiState ui,
     BridgeLayerEntry entry, List<BridgeLayerEntry> unlocked) {
   final all = ui.model.layers;

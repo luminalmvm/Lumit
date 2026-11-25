@@ -47,14 +47,12 @@ pub struct AudioSend {
 }
 
 impl Layer {
-    /// This layer is a Bus layer.
     #[must_use]
     pub fn is_bus(&self) -> bool {
         self.audio_only && matches!(self.kind, LayerKind::Null)
     }
 }
 
-/// Why a layer's routing was refused.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum RouteError {
     #[error("the output is not a bus of this composition")]
@@ -129,8 +127,6 @@ pub fn check_routes(
     Ok(())
 }
 
-/// Whether `layer` may send to or output to `bus` as the comp stands, for a
-/// menu to ask before it offers the bus.
 #[must_use]
 pub fn route_allowed(comp: &Composition, layer: Uuid, bus: Uuid) -> bool {
     bus != layer
@@ -158,7 +154,6 @@ fn edges(
     edges
 }
 
-/// Whether `to` can be reached from `from` along `edges`.
 fn reaches(edges: &[(Uuid, Uuid)], from: Uuid, to: Uuid) -> bool {
     let mut seen = vec![from];
     let mut next = vec![from];
@@ -189,9 +184,6 @@ mod tests {
         layer
     }
 
-    /// A circle through the routing would never finish mixing, so it is
-    /// refused: a bus feeding the bus that feeds it, and a layer lowered
-    /// behind a sound its own sound reaches.
     #[test]
     fn a_route_or_a_duck_that_comes_back_round_is_refused() {
         let mut comp = Composition {
@@ -231,7 +223,6 @@ mod tests {
             sends: Vec::new(),
         };
 
-        // A bus may feed another bus, but not one that feeds it back.
         assert_eq!(check_routes(&comp, a_id, &to(b_id), None), Ok(()));
         comp.layers[0].audio_routes = to(b_id);
         assert_eq!(
@@ -241,8 +232,6 @@ mod tests {
         assert!(!route_allowed(&comp, b_id, a_id));
         assert!(route_allowed(&comp, voice_id, b_id));
 
-        // The music may lower behind the voice, but the voice may not then
-        // lower behind the music: each would wait on the other.
         let behind = |id: Uuid| crate::mixer::Duck::behind(id);
         assert_eq!(
             check_routes(

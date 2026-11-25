@@ -63,7 +63,6 @@ fn layer(name: &str) -> Layer {
     }
 }
 
-/// A document with one comp holding four Nulls, top to bottom: a, b, c, d.
 fn doc_with_four() -> (Document, Uuid, Vec<Uuid>) {
     let layers: Vec<Layer> = ["a", "b", "c", "d"].iter().map(|n| layer(n)).collect();
     let ids: Vec<Uuid> = layers.iter().map(|l| l.id).collect();
@@ -123,7 +122,6 @@ fn grouping_folds_a_run_and_undo_puts_it_back() {
     let c = after.comp(comp).unwrap();
     assert_eq!(c.groups.len(), 1);
     assert_eq!(c.groups[0].name, "Lower third");
-    // The stack itself is untouched — that is the whole promise.
     assert_eq!(
         c.layers.iter().map(|l| l.name.as_str()).collect::<Vec<_>>(),
         ["a", "b", "c", "d"]
@@ -133,11 +131,9 @@ fn grouping_folds_a_run_and_undo_puts_it_back() {
     assert_eq!(group_of(&stack, &c.groups, ids[2]), Some(group_id));
     assert_eq!(group_of(&stack, &c.groups, ids[0]), None);
 
-    // One undo step, and it takes the whole grouping.
     let undone = store.undo().unwrap().expect("the grouping is undoable");
     assert!(undone.comp(comp).unwrap().groups.is_empty());
 
-    // Redo puts it back with the same id, name and members.
     let redone = store.redo().unwrap().expect("and redoable");
     assert_eq!(redone.comp(comp).unwrap().groups[0].id, group_id);
     assert_eq!(
@@ -150,8 +146,6 @@ fn grouping_folds_a_run_and_undo_puts_it_back() {
 fn ungrouping_leaves_every_layer_where_it_was_and_undo_restores_the_slot() {
     let (doc, comp, ids) = doc_with_four();
     let store = DocumentStore::new(doc);
-    // Two groups, so the *slot* an undo restores into is a real question and
-    // not always zero.
     let first = group_of_ids("Plates", &ids[0..1]);
     let second = group_of_ids("Titles", &ids[2..4]);
     let (first_id, second_id) = (first.id, second.id);
@@ -195,7 +189,6 @@ fn a_scattered_selection_is_refused_and_so_is_a_second_home() {
     let (doc, comp, ids) = doc_with_four();
     let store = DocumentStore::new(doc);
 
-    // a and c, with an ungrouped b between them: not a band anything can draw.
     assert_eq!(
         store.commit(Op::GroupLayers {
             comp,
@@ -219,7 +212,6 @@ fn a_scattered_selection_is_refused_and_so_is_a_second_home() {
             group: group_of_ids("Titles", &ids[0..2]),
         })
         .unwrap();
-    // b is spoken for; a group may not take it as well.
     assert_eq!(
         store.commit(Op::GroupLayers {
             comp,
@@ -268,10 +260,6 @@ fn a_project_with_no_groups_round_trips_byte_identical() {
         .is_empty());
 }
 
-/// **Effects on the header** (docs/impl/group-effects.md §5):
-/// `SetGroupEffects` round-trips exactly; Ungroup discards the stack with the
-/// band and one undo restores both, because the inverse carries the whole
-/// group and the group now carries its effects.
 #[test]
 fn a_headers_effect_stack_round_trips_and_survives_ungroup_undo() {
     let (doc, comp, ids) = doc_with_four();
@@ -296,8 +284,6 @@ fn a_headers_effect_stack_round_trips_and_survives_ungroup_undo() {
         .unwrap();
     assert_eq!(dressed.comp(comp).unwrap().groups[0].effects.len(), 1);
 
-    // The op is exactly invertible: one undo is the empty list again, and
-    // one redo the dressed one.
     let undone = store.undo().unwrap().unwrap();
     assert!(undone.comp(comp).unwrap().groups[0].effects.is_empty());
     store.redo().unwrap();
@@ -321,7 +307,6 @@ fn a_headers_effect_stack_round_trips_and_survives_ungroup_undo() {
         "undoing the ungroup restores the header's stack with the band"
     );
 
-    // An unknown group refuses calmly, like the other group ops.
     assert!(matches!(
         store.commit(Op::SetGroupEffects {
             comp,
@@ -332,9 +317,6 @@ fn a_headers_effect_stack_round_trips_and_survives_ungroup_undo() {
     ));
 }
 
-/// A grouped project round-trips too, and a member deleted out from under a
-/// group is read as one fewer member rather than as a fault (the same
-/// degrade-not-error rule a dangling matte or parent follows).
 #[test]
 fn a_deleted_member_quietly_leaves_the_group() {
     let (doc, comp, ids) = doc_with_four();

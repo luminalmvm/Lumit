@@ -11,7 +11,6 @@ use rsmpeg::avutil::{AVFrame, AVHWDeviceContext};
 use rsmpeg::ffi;
 use std::sync::{Mutex, PoisonError};
 
-/// Which device a decoder asks for.
 #[derive(Clone, Copy)]
 pub(super) enum HwKind {
     /// The platform's own: D3D11VA on Windows, CUDA or VA-API on Linux.
@@ -73,8 +72,6 @@ fn platform_device(fits: impl Fn(ffi::AVHWDeviceType) -> bool) -> Option<AVHWDev
     fits(*kind).then(|| device.clone())
 }
 
-/// The macOS sibling is VideoToolbox and lands with the macOS pass; until
-/// then every other platform decodes in software, on all cores.
 #[cfg(not(any(windows, target_os = "linux")))]
 fn platform_device(_fits: impl Fn(ffi::AVHWDeviceType) -> bool) -> Option<AVHWDeviceContext> {
     None
@@ -141,7 +138,6 @@ fn find_device() -> Option<Shared> {
     None
 }
 
-/// One line to whoever [`super::report_hardware_to`] named.
 fn say(line: &str) {
     if let Some(sink) = super::HARDWARE_REPORT.get() {
         sink(line);
@@ -164,7 +160,6 @@ fn say_once(line: String) {
     }
 }
 
-/// A kind of stream by name, as "cuda h264 yuv422p10le".
 fn kind_name((device, codec, format): Kind) -> String {
     let device = rsmpeg::avutil::hwdevice_get_type_name(device).map(|n| n.to_string_lossy());
     let codec = AVCodec::find_decoder(codec).map(|c| c.name().to_string_lossy().into_owned());
@@ -213,7 +208,6 @@ fn allowed(device: ffi::AVHWDeviceType, format: ffi::AVPixelFormat) -> bool {
         || (device == ffi::AV_HWDEVICE_TYPE_CUDA && four_two_two.contains(&format))
 }
 
-/// A device, a codec and the layout software decoding gives.
 type Kind = (ffi::AVHWDeviceType, ffi::AVCodecID, ffi::AVPixelFormat);
 
 /// What the check against software found for each kind of stream, for the
@@ -233,7 +227,6 @@ fn judge(kind: Kind, good: bool) {
     }
 }
 
-/// The layout a hardware frame comes back from the card in.
 fn surface_format(frame: &AVFrame) -> Option<ffi::AVPixelFormat> {
     // SAFETY: a hardware frame's frames context is an AVBufferRef whose data
     // is the AVHWFramesContext libav made with it. Both live as long as the
@@ -250,7 +243,6 @@ fn surface_format(frame: &AVFrame) -> Option<ffi::AVPixelFormat> {
     }
 }
 
-/// The type of the device `ctx` decodes on, if it has one.
 fn device_type(ctx: &AVCodecContext) -> Option<ffi::AVHWDeviceType> {
     let device = ctx.hw_device_ctx;
     if device.is_null() {
@@ -476,7 +468,6 @@ fn same_samples(a: &AVFrame, b: &AVFrame) -> bool {
     }
 }
 
-/// A frame's planes end to end, with no row padding.
 fn flat(frame: &AVFrame) -> Option<Vec<u8>> {
     let mut out = vec![0; frame.image_get_buffer_size(1).ok()?];
     frame.image_copy_to_buffer(&mut out, 1).ok()?;

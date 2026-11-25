@@ -1,5 +1,3 @@
-//! Small builders for graph nodes and wires.
-
 use super::*;
 use lumit_core::comp_graph::{GraphInput, InputKind};
 

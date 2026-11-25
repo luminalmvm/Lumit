@@ -16,7 +16,6 @@ use crate::ops::Op;
 use lumit_fx_macros::Effect;
 use uuid::Uuid;
 
-/// What [`GeometryOptions`] is known by.
 pub const MATCH_NAME: &str = "geometry_options";
 
 /// The names of a solid's faces, in the order the layer keeps their rows,
@@ -26,10 +25,8 @@ pub const FACES: [&str; 4] = ["Front", "Bevel", "Side", "Back"];
 /// How far a curve can stray from the straight steps it is walked in, in
 /// layer pixels.
 const FLATNESS: f64 = 0.08;
-/// The most straight steps one curve is walked in.
 const MOST_STEPS: u32 = 48;
 
-/// The rows themselves.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "geometry_options",
@@ -54,7 +51,6 @@ pub struct GeometryOptions {
     pub hole_bevel_depth: f32,
 }
 
-/// The rows' behaviour: none of their own, the mesh pass reads them.
 pub struct GeometryOptionsDef;
 
 impl EffectDef for GeometryOptionsDef {
@@ -67,18 +63,13 @@ impl EffectDef for GeometryOptionsDef {
     }
 }
 
-/// The shape a bevel's slope takes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BevelStyle {
-    /// A flat slope.
     Angular,
-    /// Rounded over.
     Convex,
-    /// Scooped out.
     Concave,
 }
 
-/// What the rows come to at a moment.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Profile {
     pub depth: f64,
@@ -90,7 +81,6 @@ pub struct Profile {
 }
 
 impl Profile {
-    /// The rows `rows` at layer time `lt`, each number read by `read`.
     #[must_use]
     pub fn of(rows: &EffectInstance, read: &dyn Fn(&Property) -> f64) -> Self {
         let float = |id: &str, or: f64| match rows.param(id) {
@@ -279,9 +269,6 @@ mod tests {
         rows
     }
 
-    /// Depth arriving puts a 2D layer in 3D as one undo step, and undo puts
-    /// back both. Nought does nothing at all, and a saved layer with no rows
-    /// reads and writes as it always did.
     #[test]
     fn depth_arrives_in_one_step() {
         let mut layer = logo();
@@ -301,7 +288,6 @@ mod tests {
         layer.switches.three_d = true;
         assert!(draws_mesh(&layer));
 
-        // Already solid, a change of depth takes nothing else with it.
         assert!(matches!(
             set_geometry(comp, &layer, vec![Some(with_depth(60.0))]),
             Op::SetLayerGeometry { .. }

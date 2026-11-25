@@ -65,7 +65,6 @@ mod signature;
 
 use signature::{desk_signature, jobs_signature};
 
-/// A command for the audio thread — the only code that touches the engine.
 enum Cmd {
     /// Install a plan and rewind, then optionally seek and play — a fresh
     /// load (a different comp, or the first mix of a session).
@@ -94,20 +93,15 @@ enum Cmd {
     },
     /// Play toward this many seconds at the speed of the drag.
     Jog(f64),
-    /// The drag is over.
     JogEnd,
     Unload,
 }
 
-/// The audio device, as this session knows it.
 enum Device {
-    /// Never asked for yet — the first prepare/play resolves it.
     Untried,
     /// No output device (or the stream would not open): the calm terminal
     /// state. Playback has no sound; nothing retries.
     Unavailable,
-    /// A live engine on its thread: the command channel, the shared clock,
-    /// the mixer's meters, and the device rate media decodes at.
     Ready {
         tx: Sender<Cmd>,
         clock: lumit_audio::ClockHandle,
@@ -131,8 +125,6 @@ struct AudioState {
     /// number its stream was opened under, so a mix that finishes building
     /// after the device moved can tell its engine was closed underneath it.
     device_gen: u64,
-    /// Which comp's mix the engine holds, and the jobs signature it was built
-    /// from — the swap-vs-load and no-op decisions.
     loaded_comp: Option<Uuid>,
     loaded_sig: Option<u64>,
     /// The transport intent (Dart's play/pause), applied to a fresh load when
@@ -169,8 +161,6 @@ struct AudioState {
     /// what a queued prepare is about to mix.
     /// With the edit count it was asked at ([`automation::edits`]).
     pending_prepare: Option<(Uuid, Arc<Document>, u64)>,
-    /// The comp and document the running build is of, and the flag that
-    /// stops it once a newer mix is wanted.
     build: Option<(Uuid, std::sync::Weak<Document>, Arc<AtomicBool>)>,
     /// The audio-jobs walk with its has-audio probe cache. Taken out of the
     /// state (never probed under the lock) by the worker and put back.
@@ -189,7 +179,6 @@ struct AudioState {
     /// The plan the engine is playing and what it was built from. Goes with
     /// `loaded_comp`; a node's meter slot is its place in the plan.
     loaded_plan: Option<Loaded>,
-    /// The faders held from the mixer and the automation pass being written.
     live: automation::Live,
     /// The document the last [`scrub`] asked for a mix of. A scrub arrives
     /// once per frame the playhead crosses, and only the first one after an
@@ -233,12 +222,10 @@ impl AudioState {
     }
 }
 
-/// The mix the engine holds, and what it was built from.
 #[derive(Clone)]
 pub(crate) struct Loaded {
     pub plan: Arc<MixPlan>,
     pub rate: u32,
-    /// What each node of the plan is, in the plan's order.
     pub info: Arc<GraphInfo>,
     /// The document the plan was built from, where each fader is read now.
     /// None for a footage preview.
@@ -304,11 +291,9 @@ fn rack_stamp() -> u64 {
     h.finish()
 }
 
-/// One strip's bars, a bus's, or the master's — see [`meters`].
 pub(crate) struct Strip {
     /// The layer whose row this is; `None` for the master.
     pub layer: Option<Uuid>,
-    /// A Bus layer's row.
     pub bus: bool,
     pub reading: lumit_audio::meter::MeterReading,
 }
@@ -347,7 +332,6 @@ pub(crate) fn meters() -> Vec<Strip> {
     out
 }
 
-/// Put every clip light out (docs/09 §3.1): the desk's "I have seen it".
 pub(crate) fn reset_clip() {
     let st = lock();
     if let Device::Ready { meters, .. } = &st.device {
@@ -422,7 +406,7 @@ fn send(st: &AudioState, cmd: Cmd) {
 /// while one runs). Callers hold the state lock.
 fn kick_prepare(st: &mut AudioState, comp: Uuid, doc: Arc<Document>) {
     if matches!(st.device, Device::Unavailable) {
-        return; // calm terminal state: no sound, no worker
+        return;
     }
     let seq = automation::edits();
     if st.worker_busy {
@@ -441,8 +425,6 @@ fn kick_prepare(st: &mut AudioState, comp: Uuid, doc: Arc<Document>) {
     engine::spawn(move || run_prepare(comp, doc, seq));
 }
 
-/// Stop the build running now, if there is one: the engine it was for is
-/// closing.
 fn stop_build(st: &AudioState) {
     if let Some((_, _, cancel)) = &st.build {
         cancel.store(true, std::sync::atomic::Ordering::Relaxed);
@@ -516,7 +498,6 @@ fn run_prepare(mut comp: Uuid, mut doc: Arc<Document>, mut seq: u64) {
 /// at: a fader held until its edit's mix lands is let go here.
 fn prepare_once(comp: Uuid, doc: &Arc<Document>, seq: u64) {
     let Some(c) = doc.comp(comp) else {
-        // The comp is gone (deleted, undone): silence its mix if loaded.
         let mut st = lock();
         if st.loaded_comp == Some(comp) {
             send(&st, Cmd::Unload);
@@ -764,7 +745,6 @@ pub(crate) fn offset_seconds() -> f64 {
 /// are as they were, thus this is one atomic and one message.
 pub(crate) fn resume() {
     let mut st = lock();
-    // Nothing loaded means nothing to start; `play` does the preparing.
     if st.loaded_comp.is_none() {
         return;
     }
@@ -790,7 +770,6 @@ pub(crate) fn seek_for_picture(secs: f64) {
     send(&st, Cmd::Seek(secs.max(0.0)));
 }
 
-/// Stop: pause and rewind to the start (the transport's stop semantics).
 pub(crate) fn stop() {
     let mut st = lock();
     st.playing = false;

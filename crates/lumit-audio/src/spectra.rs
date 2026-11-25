@@ -39,10 +39,8 @@ const MIN_HZ: f32 = 40.0;
 /// what a picture can show before the quiet end is one shade of black anyway.
 const FLOOR_DB: f32 = -60.0;
 
-/// How much coarser each tier is than the one below it.
 const TIER_RATIO: usize = 8;
 
-/// How many tiers the grid holds.
 const TIERS: usize = 3;
 
 /// One level of detail: `cols` columns of [`BINS`] bytes, column-major.
@@ -52,7 +50,6 @@ struct Tier {
     values: Vec<u8>,
 }
 
-/// A whole source's spectrogram, at every zoom.
 pub struct Spectrogram {
     tiers: Vec<Tier>,
     duration_seconds: f64,
@@ -172,19 +169,16 @@ impl Spectrogram {
         }
     }
 
-    /// Whether there is anything here at all.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.tiers.is_empty()
     }
 
-    /// How long the source runs.
     #[must_use]
     pub fn duration_seconds(&self) -> f64 {
         self.duration_seconds
     }
 
-    /// What the grid costs to keep, for the session cache's byte budget.
     #[must_use]
     pub fn bytes(&self) -> usize {
         self.tiers.iter().map(|t| t.values.len()).sum()
@@ -242,7 +236,6 @@ impl Spectrogram {
 mod tests {
     use super::*;
 
-    /// Interleaved stereo of one sine at `hz`, `seconds` long.
     fn sine(hz: f32, seconds: f32, rate: u32) -> Vec<f32> {
         let n = (seconds * rate as f32) as usize;
         let mut out = Vec::with_capacity(n * 2);
@@ -254,7 +247,6 @@ mod tests {
         out
     }
 
-    /// The band a frequency lands in, mirroring the build's fold.
     fn band(hz: f32) -> usize {
         let ratio = (MAX_HZ / MIN_HZ).ln() / BINS as f32;
         if hz <= MIN_HZ {
@@ -274,7 +266,6 @@ mod tests {
         for c in 0..8 {
             let col = &cols[c * BINS..(c + 1) * BINS];
             assert!(col[lit] > 200, "the tone's band is bright: {}", col[lit]);
-            // Two bands clear of the tone, near silence.
             assert!(col[band(100.0)] < 60, "a distant band stays dark");
         }
     }

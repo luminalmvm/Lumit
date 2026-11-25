@@ -1,12 +1,3 @@
-// The Puppet tools' own arithmetic (PU3 — test 15 of
-// docs/impl/puppet.md's plan, the half that needs no engine).
-//
-// Three things are easy to get subtly wrong and are all here: which kind of pin
-// each tool places, which of a pin's numbers a pin of that kind actually shows
-// in the Timeline (a position pin has no amount, and only a bend pin turns), and
-// that an edit to one of those numbers leaves the other five exactly as they
-// were. The round trip through the document, the undo and the two refusals live
-// where the document does, in `lumit_bridge`'s own tests.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/layer_fold_frb.dart';

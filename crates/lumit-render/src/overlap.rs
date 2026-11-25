@@ -40,17 +40,13 @@ pub(crate) fn under_incoming(
     }
 }
 
-/// The outgoing clip's picture where it came along beside the incoming one.
 pub(crate) fn across(lp: &CompLayerPixels) -> Option<&CompLayerPixels> {
     let moment = lp.shutter.iter().find(|(at, _)| *at == ACROSS);
     moment.and_then(|(_, picture)| picture.as_deref())
 }
 
-/// A clip's picture and its natural size.
 type Picture = (DrawSource, (f32, f32));
 
-/// One of the mix's two draws, fitted about the middle of the picture it is
-/// mixed on, `natural`.
 fn part(layer: &Layer, (source, size): Picture, natural: (f32, f32)) -> CompLayerDraw {
     let mut draw = read_draw(layer, source, size);
     draw.position = (natural.0 * 0.5, natural.1 * 0.5);
@@ -169,7 +165,6 @@ pub(crate) fn wiped(
     }
     let diag = ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
     let markers = MarkerContext::for_layer(comp, layer);
-    // Both pictures are whole ones now, drawn at the comp's own scale.
     let run = |draw: &mut CompLayerDraw, stack: &[EffectInstance]| {
         let (fx_ids, fx) = lumit_core::fx::resolved::resolve_stack_temporal_named(
             stack,
@@ -189,7 +184,6 @@ pub(crate) fn wiped(
     let mut going = part(layer, going, natural);
     run(&mut going, &gone);
     let draws = match transition::share(effect, u) {
-        // As `dissolved` mixes them.
         Some(here) => {
             going.opacity = ((1.0 - here) * 100.0) as f32;
             coming.opacity = (here * 100.0) as f32;
@@ -197,7 +191,6 @@ pub(crate) fn wiped(
             vec![going, coming]
         }
         None if transition::incoming_over(effect) => vec![going, coming],
-        // Two pictures of different sizes don't meet edge to edge.
         None if size == natural && transition::side_by_side(effect, local) => {
             coming.blend = Blend::Plus;
             vec![going, coming]

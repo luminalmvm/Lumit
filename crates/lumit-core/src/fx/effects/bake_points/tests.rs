@@ -1,5 +1,3 @@
-//! Tests of Bake points.
-
 use super::*;
 use crate::anim::Property;
 use crate::expression::ExpressionContext;
@@ -8,8 +6,6 @@ use crate::graph::{Edge, InputRef, NodeRef, OutputRef};
 use crate::model::*;
 use crate::time::{CompTime, Duration, FrameRate, Rational};
 
-/// A stream of the points `ids` at time `t`: every column carried, each
-/// point somewhere of its own, and one colour for all of them.
 fn points(ids: &[u64], t: f32) -> PointsStream {
     let each =
         |f: &dyn Fn(f32) -> f32| -> Vec<f32> { ids.iter().map(|&id| f(id as f32)).collect() };
@@ -63,9 +59,6 @@ fn bits(s: &PointsStream) -> Vec<u32> {
     rows.chain(ones).map(|v| v.to_bits()).collect()
 }
 
-/// The frames of a bake: still for a frame, then point 1 dies, 40 is
-/// born and the rest come in another order, then nothing at all, then
-/// points with no stretch or pick and a nought with its sign.
 fn frames() -> Vec<PointsStream> {
     let mut last = points(&[0, 1, 2, 3, 4, 5], 2.0 / 24.0);
     last.stretch.clear();
@@ -108,7 +101,6 @@ fn a_bake_reads_back_from_its_file_to_the_bit() {
     assert_eq!(added[1], 0, "a frame that holds still costs nothing");
     assert_eq!(baked.frames, [0, 0, 1, 2, 3]);
     assert_eq!(baked.unique.len(), 4);
-    // A frame with no room is left out, and the bake is as it was.
     assert_eq!(baked.push(&streams[2], 10), None);
     assert_eq!(baked.frames.len(), 5);
 
@@ -134,7 +126,6 @@ fn a_bake_reads_back_from_its_file_to_the_bit() {
         assert_eq!(bits(&read), bits(stream), "frame {k}, to the bit");
     }
 
-    // A file that does not add up is no bake, rather than a wrong one.
     let broken = |f: &dyn Fn(&mut StoredFrame)| {
         let mut s = stored.clone();
         f(&mut s.unique[1]);
@@ -166,8 +157,6 @@ fn mode(inst: &mut EffectInstance, mode: u32) {
     row.value = EffectValue::Choice(mode);
 }
 
-/// A board with Pick points, Bake points and Connect points on it, and a
-/// Math driver wired into each of the other two.
 fn board() -> (Document, Uuid) {
     let pick = crate::fx::instantiate("pick_points").unwrap();
     let bake = crate::fx::instantiate(MATCH_NAME).unwrap();
@@ -277,10 +266,6 @@ fn board() -> (Document, Uuid) {
     (doc, comp_id)
 }
 
-/// Auto hands on the bake only while what is above the effect is what it
-/// was baked from. Moving the layer, or changing what is below the
-/// effect, keeps it. Changing an effect above or a driver feeding one
-/// does not. Read hands on the bake whatever, and nothing past its end.
 #[test]
 fn auto_reads_a_bake_only_while_what_is_above_it_is_unchanged() {
     let (plain, comp_id) = board();
@@ -340,8 +325,6 @@ fn auto_reads_a_bake_only_while_what_is_above_it_is_unchanged() {
     let bypass = edited(&|l| mode(&mut l.effects[1], MODE_BYPASS));
     assert!(live(&bypass, 2.0 / 24.0));
 
-    // What the effect resolves to says which frame of which bake is read,
-    // so a picture drawn from one is never served for another.
     let derived = |doc: &Arc<Document>, t: f64| {
         let layer = &doc.comp(comp_id).unwrap().layers[0];
         let context = ExpressionContext {

@@ -19,8 +19,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// A twirl with no visibility condition — the shape all four of this effect's
-/// groups take.
 const fn group(
     label: &'static str,
     params: &'static [&'static str],
@@ -54,7 +52,6 @@ pub const FRACTAL_NOISE_GROUPS: &[ParamGroup] = &[
     group("Evolution options", &["cycle_evolution", "cycle"], true),
 ];
 
-/// Which rows go grey when the switch beside them takes over.
 pub const FRACTAL_NOISE_ENABLED_WHEN: &[EnabledWhen] = &[
     // Uniform scaling decides which of the three size rows is in charge: one
     // number for both axes, or a width and a height.
@@ -303,11 +300,9 @@ pub struct FractalNoise {
     #[counter(min = 1, max = 30, default = 1, hard_min = 1, hard_max = 30, unit = Raw)]
     pub cycle: i32,
 
-    /// Which field this instance draws (§2.4).
     #[seed]
     pub seed: u32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -378,7 +373,6 @@ impl FractalNoise {
     }
 }
 
-/// Fractal noise's behaviour.
 pub struct FractalNoiseDef;
 
 impl EffectDef for FractalNoiseDef {

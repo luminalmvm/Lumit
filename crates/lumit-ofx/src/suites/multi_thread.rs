@@ -38,7 +38,6 @@ use crate::host::state;
 use crate::status::Status;
 use crate::suites::{guard, guard_code, out_handle};
 
-/// The table handed out by `fetchSuite`.
 pub static SUITE: OfxMultiThreadSuiteV1 = OfxMultiThreadSuiteV1 {
     multi_thread,
     multi_thread_num_cpus,
@@ -52,7 +51,6 @@ pub static SUITE: OfxMultiThreadSuiteV1 = OfxMultiThreadSuiteV1 {
 };
 
 thread_local! {
-    /// Which of a `multiThread` fan-out this thread is, while it is inside one.
     static THREAD_INDEX: std::cell::Cell<Option<c_uint>> = const { std::cell::Cell::new(None) };
 }
 
@@ -77,8 +75,6 @@ fn pool() -> Option<&'static rayon::ThreadPool> {
     .as_ref()
 }
 
-/// How wide this host will actually go, which is what `multiThreadNumCPUs`
-/// answers.
 #[must_use]
 pub fn host_thread_count() -> usize {
     let cores = std::thread::available_parallelism().map_or(4, std::num::NonZeroUsize::get);
@@ -221,8 +217,6 @@ unsafe extern "C" fn multi_thread_is_spawned_thread() -> c_int {
     }
 }
 
-// ------------------------------------------------------------------ mutexes --
-
 /// One lock the host holds for a plugin.
 ///
 /// The raw lock rather than `parking_lot::Mutex` because OFX separates locking
@@ -248,10 +242,6 @@ unsafe extern "C" fn mutex_create(mutex: *mut OfxMutexHandle, lock_count: c_int)
         let created = Arc::new(HostMutex {
             raw: RawMutex::INIT,
         });
-        // `lockCount` is how many times the mutex arrives already locked.
-        // Anything past one would need a recursive lock, which no plugin in
-        // the test bench asks for; one is honoured and more is refused rather
-        // than silently rounded down.
         if lock_count > 1 {
             return Err(Status::ErrUnsupported);
         }

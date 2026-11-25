@@ -1,9 +1,3 @@
-// The volume rubber band (the AudioWorkspace board): the Volume curve
-// drawn on the waveform lane, grabbable near its own line — a drag writes
-// volume keyframes through the same `setVolumeDb` every other control uses.
-//
-// Against the real engine, like every frb panel test: a band that does not
-// reach the document is a picture of a control.
 
 import 'dart:io';
 import 'dart:typed_data';
@@ -47,7 +41,6 @@ void main() {
     final layer = comp.getLayers().first;
     final id = layer.internallayerId;
 
-    // Open Audio, then the Waveform lane the band rides on.
     await tester.tap(find.byKey(ValueKey<String>('tl-twirl-$id')));
     await tester.pump();
     await tester.tap(find.text('Audio'));
@@ -60,10 +53,8 @@ void main() {
 
     final rect = tester.getRect(band);
     const span = volumeBandTopDb - volumeBandFloorDb;
-    // Where a level draws inside the band, mirroring the widget's mapping.
     double yOf(double db) =>
         rect.top + 1 + (volumeBandTopDb - db) / span * (rect.height - 2);
-    // The line runs where the layer is heard, so the clicks land along it.
     final ends = (tester
             .widget<CustomPaint>(find.descendant(
                 of: band, matching: find.byType(CustomPaint)))
@@ -77,7 +68,6 @@ void main() {
         .info
         .volumeDb;
 
-    // --- Ctrl-click plants keys on the line, at the level it already reads.
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.tapAt(Offset(xAt(0.3), yOf(0)));
     await tester.pump();
@@ -92,7 +82,6 @@ void main() {
     expect(keys[0].value, closeTo(0, 0.5),
         reason: 'a planted key takes the level the line already read');
 
-    // --- A vertical drag on the second key pulls its level down.
     final gesture = await tester.startGesture(
       Offset(xAt(0.6), yOf(keys[1].value)),
       kind: PointerDeviceKind.mouse,
@@ -109,8 +98,6 @@ void main() {
         reason: 'a real travel is a real drop at the band scale');
     expect(keys[0].value, closeTo(0, 0.5), reason: 'the other key held still');
 
-    // --- Alt-click lifts a key; lifting the last leaves the level static at
-    // what the key read.
     await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
     await tester.tapAt(Offset(xAt(0.3), yOf(keys[0].value)));
     await tester.pump();

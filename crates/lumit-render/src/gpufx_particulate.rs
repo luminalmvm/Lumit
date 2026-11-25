@@ -1,5 +1,3 @@
-//! Particulate's GPU pass, kept beside the dispatch table rather than in it.
-
 use lumit_core::fx::params::Params;
 use lumit_core::fx::registry::EffectMetadata;
 use lumit_gpu::fx::FxEngine;
@@ -135,8 +133,6 @@ pub(crate) fn particulate_frames(sched: &lumit_core::fx::points::PointsSchedule)
 /// turn it on.
 pub(crate) struct Particulate;
 impl Particulate {
-    /// The GPU op this frame's Particulate draws, handed to `f` with the
-    /// sprite it stamps, if any.
     pub(crate) fn with_op<R>(
         p: Params<'_>,
         aux: AuxSlot<'_>,

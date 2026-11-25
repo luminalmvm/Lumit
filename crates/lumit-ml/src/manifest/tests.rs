@@ -1,6 +1,5 @@
 use super::*;
 
-/// A depth pack exactly as docs/impl/addons.md §4 writes it.
 fn good() -> String {
     r#"{
       "format": 1,
@@ -66,8 +65,6 @@ fn a_good_manifest_round_trips() {
     assert_eq!(parse(&written).unwrap(), parsed);
 }
 
-/// **Everything else §4 rules out is refused by name.** One case per
-/// rule, each differing from the good manifest in one place.
 #[test]
 fn every_rule_in_the_format_refuses_by_name() {
     let cases = [

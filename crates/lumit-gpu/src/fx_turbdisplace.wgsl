@@ -23,7 +23,7 @@ struct Params {
     cycle: i32,               // depth loop length in cells; 0 = no loop
     mix_amt: f32,             // 0..1, blended against the unprocessed input
     matte_on: f32,            // 1 = scale the displacement by the matte's luma
-    _pad1: f32,               // was Invert; now applied once at the seam
+    _pad1: f32,
     _pad0: f32,
 };
 

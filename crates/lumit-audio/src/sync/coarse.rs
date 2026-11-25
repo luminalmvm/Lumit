@@ -18,7 +18,6 @@ const MIN_OVERLAP: usize = 10 * FPS;
 /// Peaks kept per piece, at least a second apart.
 const PEAKS: usize = 3;
 const PEAK_GAP: usize = FPS;
-/// How far from a line a piece's peak may be and still agree with it.
 const TOLERANCE: f64 = 0.015;
 /// Real clocks drift well under a thousandth; a steeper line is a fluke.
 const MAX_SLOPE: f64 = 1e-3;
@@ -45,7 +44,6 @@ impl Line {
     }
 }
 
-/// A pair the coarse search accepts.
 pub(super) struct Found {
     pub(super) line: Line,
     /// Median standard score of the agreeing peaks.
@@ -57,7 +55,6 @@ pub(super) struct Found {
     pub(super) times: Vec<f64>,
 }
 
-/// One peak of one piece.
 struct Point {
     piece: usize,
     t: f64,
@@ -164,7 +161,6 @@ pub(super) fn search(
         let Some(piece) = s.get(p..p + piece_len) else {
             continue;
         };
-        // A mostly silent piece has nothing to say.
         if piece.iter().filter(|v| **v != 0.0).count() * 2 < piece_len {
             continue;
         }
@@ -319,7 +315,6 @@ fn peaks(ncc: &[f32]) -> Vec<(usize, f32, f32)> {
             0.0
         }
     };
-    // The best of each second, then the best of those a second apart.
     let mut best: Vec<(usize, f32)> = ncc
         .chunks(PEAK_GAP)
         .map(|chunk| chunk.iter().copied().fold(f32::NEG_INFINITY, f32::max))
@@ -398,7 +393,6 @@ fn agreeing(points: &[Point], mask: &[bool], line: Line) -> Vec<usize> {
         .collect()
 }
 
-/// How strongly the peaks in `mask` back `line`: their summed scores.
 fn score(points: &[Point], mask: &[bool], line: Line) -> f64 {
     agreeing(points, mask, line)
         .iter()

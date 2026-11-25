@@ -1,9 +1,3 @@
-// The flowchart: a composition with the comps that place it on its left and
-// the comps it places on its right. Tab opens it on the pointer, the way After
-// Effects opens its mini-flowchart.
-//
-// One step each way. A neighbour whose nesting carries on wears a stub, and
-// arrowing past the edge slides the chart along to it.
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -28,8 +22,6 @@ BridgeCompFlow? _engineFlow(CompositionReference comp) {
   }
 }
 
-/// Open the flowchart for the fronted comp, on the pointer. False when there
-/// is no comp to draw.
 bool openFlowchartFrb(BuildContext context, LumitUiState ui) {
   final comp = ui.selectedComp;
   if (comp == null) return false;
@@ -64,8 +56,6 @@ bool showFlowchartFrb({
 
   final at = anchor == null ? null : overlayLocal(context, anchor);
   entry = OverlayEntry(
-    // It fades up as a menu does, and takes the keyboard from its first
-    // frame.
     builder: (context) => Entrance(
       spec: ThemeScope.of(context).motion.popup,
       leads: true,
@@ -83,7 +73,6 @@ bool showFlowchartFrb({
   return true;
 }
 
-/// Which column the cursor is in.
 enum _Side { usedBy, centre, uses }
 
 const double _pillHeight = 24;
@@ -91,9 +80,7 @@ const double _pillGap = 6;
 const double _pillPad = 10;
 const double _pillMin = 72;
 const double _pillMax = 200;
-// The room between two columns, which the wires cross.
 const double _wire = 44;
-// The room outside a column for the stub that says the nesting carries on.
 const double _stub = 16;
 const double _pad = 12;
 const double _edge = 1;
@@ -167,7 +154,6 @@ class _FlowchartState extends State<_Flowchart> {
         _Side.centre => const [],
       };
 
-  /// The neighbour under the cursor, or null when the cursor is on the middle.
   BridgeCompFlowLink? get _cursor {
     final links = _links(_side);
     return links.isEmpty ? null : links[_row.clamp(0, links.length - 1)];
@@ -183,7 +169,6 @@ class _FlowchartState extends State<_Flowchart> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _reveal());
   }
 
-  /// Slide the chart so [link] is the middle, keeping the cursor on it.
   void _slideTo(BridgeCompFlowLink link) {
     final flow = widget.read(link.comp);
     if (flow == null) return;
@@ -195,8 +180,6 @@ class _FlowchartState extends State<_Flowchart> {
     });
   }
 
-  /// One step along the nesting: towards the comps that place this one, or
-  /// towards the ones it places.
   void _step(_Side towards) {
     if (_side == _Side.centre) {
       _moveTo(towards, 0);
@@ -277,7 +260,6 @@ class _FlowchartState extends State<_Flowchart> {
     );
   }
 
-  /// Scroll a tall chart so the cursor's pill is on screen.
   void _reveal() {
     if (!mounted || !_scroll.hasClients || _side == _Side.centre) return;
     final g = _geometry(ThemeScope.of(context).theme);
@@ -301,14 +283,11 @@ class _FlowchartState extends State<_Flowchart> {
       onKeyEvent: _onKey,
       child: LayoutBuilder(builder: (context, box) {
         final width = g.width + (_pad + _edge) * 2;
-        // Everything in the popover but the chart: its edges and padding
-        // and the kickers.
         final fixed = (_pad + _edge) * 2 + head;
         final room = box.maxHeight - _margin * 2 - fixed;
         final chart = g.height < room ? g.height : (room < 0 ? 0.0 : room);
         final anchor =
             widget.anchor ?? Offset(box.maxWidth / 2, box.maxHeight / 2);
-        // The middle pill lands on the pointer, pulled in to stay on screen.
         final left = _fit(
             anchor.dx - _edge - _pad - g.centreX - g.centreWidth / 2,
             _margin,
@@ -374,7 +353,6 @@ class _FlowchartState extends State<_Flowchart> {
   static double _fit(double v, double lo, double hi) =>
       hi < lo ? lo : (v < lo ? lo : (v > hi ? hi : v));
 
-  /// The words over the two outer columns.
   Widget _kickers(LumitTheme t, _Geometry g) => SizedBox(
         width: g.width,
         height: _kickerHeight,
@@ -434,7 +412,6 @@ class _FlowchartState extends State<_Flowchart> {
                   hot: _side == side && _row == i,
                   onHover: () => _moveTo(side, i),
                   onTap: () => _open(link.comp)),
-              // The stub slides the chart along without opening anything.
               if (link.more)
                 Positioned(
                   key: ValueKey('flowchart-more-${side.name}-$i'),
@@ -465,8 +442,6 @@ class _FlowchartState extends State<_Flowchart> {
     required VoidCallback onTap,
     bool centre = false,
   }) {
-    // The middle is the accent's: full while the cursor is on it, a tint once
-    // the cursor has moved off. A neighbour lifts under the cursor.
     final fill = centre
         ? (hot ? t.accent : t.accent.withValues(alpha: 0.16))
         : (hot ? t.surface3 : null);
@@ -546,8 +521,6 @@ class _Geometry {
       Object.hash(leftWidth, centreWidth, rightWidth, leftRows, rightRows);
 }
 
-/// The wires from the middle pill to each neighbour, and the stubs past the
-/// ones whose nesting carries on.
 class _WirePainter extends CustomPainter {
   final _Geometry geometry;
   final List<bool> leftMore, rightMore;
@@ -571,13 +544,10 @@ class _WirePainter extends CustomPainter {
     final middle = g.rowTop(1, 0) + _pillHeight / 2;
     void column(_Side which, List<bool> more) {
       final left = which == _Side.usedBy;
-      // The pill's edge facing the middle, the middle's edge facing it, and
-      // which way is outwards.
       final near = left ? g.leftX + g.leftWidth : g.rightX;
       final centre = left ? g.centreX : g.centreX + g.centreWidth;
       final outer = left ? g.leftX : g.rightX + g.rightWidth;
       final out = left ? -1.0 : 1.0;
-      // The cursor's wire last, so it lies over the others.
       final order = [
         for (var i = 0; i < more.length; i++)
           if (!(side == which && row == i)) i,

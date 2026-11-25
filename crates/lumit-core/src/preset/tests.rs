@@ -1,5 +1,3 @@
-//! Tests for presets.
-
 use super::*;
 
 fn stack() -> Vec<EffectInstance> {
@@ -24,7 +22,6 @@ fn instantiating_gives_fresh_ids_but_keeps_the_effects() {
     let preset = from_json(&to_json("look", &stack()).unwrap()).unwrap();
     let a = instantiated(&preset);
     let b = instantiated(&preset);
-    // Same effects and params, but every instance id is unique.
     assert_eq!(a.len(), 2);
     assert_eq!(a[0].effect, preset.effects[0].effect);
     assert_ne!(a[0].id, preset.effects[0].id);
@@ -34,7 +31,6 @@ fn instantiating_gives_fresh_ids_but_keeps_the_effects() {
 #[test]
 fn list_presets_reads_names_sorts_and_ignores_non_lumfx() {
     let dir = tempfile::tempdir().unwrap();
-    // Two valid presets whose display names differ from their file stems.
     std::fs::write(
         dir.path().join("z-file.lumfx"),
         to_json("Alpha look", &stack()).unwrap(),
@@ -45,21 +41,16 @@ fn list_presets_reads_names_sorts_and_ignores_non_lumfx() {
         to_json("Beta look", &stack()).unwrap(),
     )
     .unwrap();
-    // A non-preset file and a garbage .lumfx (kept, listed by its stem).
     std::fs::write(dir.path().join("notes.txt"), "ignore me").unwrap();
     std::fs::write(dir.path().join("broken.lumfx"), "{ not json").unwrap();
 
     let entries = list_presets(dir.path());
     let names: Vec<&str> = entries.iter().map(|e| e.name.as_str()).collect();
-    // Sorted by display name (case-insensitive): the parsed names win over
-    // the stems, and the unreadable file falls back to its stem.
     assert_eq!(names, vec!["Alpha look", "Beta look", "broken"]);
 }
 
 #[test]
 fn a_newer_format_still_loads() {
-    // A preset written by a hypothetical newer Lumit, with an unknown
-    // top-level field, still parses — serde ignores what it doesn't know.
     let effects = stack();
     let mut v = serde_json::to_value(EffectPreset {
         format: 99,
@@ -75,11 +66,6 @@ fn a_newer_format_still_loads() {
     assert_eq!(back.effects, effects);
 }
 
-// --- Node groups ------------------------------------------------------
-
-/// Two drivers wired to each other and on into a blur in the stack, a
-/// third outside them, and one wire leaving the set: the shape every
-/// group claim is made against.
 fn wired_graph() -> (
     crate::graph::LayerGraph,
     Vec<EffectInstance>,
@@ -99,7 +85,6 @@ fn wired_graph() -> (
         out_unwired: false,
         nodes: vec![wiggle, smooth, outside],
         edges: vec![
-            // Inside the pair.
             Edge {
                 from: OutputRef::Driver {
                     node: a,
@@ -110,7 +95,6 @@ fn wired_graph() -> (
                     port: "value".into(),
                 },
             },
-            // Out of the set, into the box left behind.
             Edge {
                 from: OutputRef::Driver {
                     node: b,
@@ -121,7 +105,6 @@ fn wired_graph() -> (
                     port: "amount".into(),
                 },
             },
-            // Inside the set, into the stack's blur.
             Edge {
                 from: OutputRef::Driver {
                     node: b,
@@ -140,7 +123,6 @@ fn wired_graph() -> (
             (NodeRef::Effect(d), [420.0, 60.0]),
         ],
         exposed: Vec::new(),
-        // The two drivers are a group of their own, inside the set.
         groups: vec![crate::graph::NodeGroup {
             name: "Pair".into(),
             colour: 2,
@@ -199,7 +181,6 @@ fn inserting_a_group_mints_fresh_ids_and_re_points_the_wires() {
     let added = group_instantiated(&preset, [400.0, 200.0]);
     let (nodes, edges, layout, group) = (added.nodes, added.edges, added.layout, added.group);
     assert_eq!(nodes.len(), 2);
-    // The blur came too, as a fresh effect for the stack, still driven.
     assert_eq!(added.effects.len(), 1);
     assert_ne!(added.effects[0].id, stack[0].id);
     assert_eq!(
@@ -216,7 +197,6 @@ fn inserting_a_group_mints_fresh_ids_and_re_points_the_wires() {
             .all(|n| !preset.nodes.iter().any(|s| s.id == n.id)),
         "every instance id is fresh, so inserting twice never shares one"
     );
-    // The wires came back pointing at the *new* boxes, not the saved ones.
     assert_eq!(edges.len(), 2);
     let crate::graph::OutputRef::Driver { node: from, .. } = edges[0].from else {
         panic!("a driver wire");
@@ -230,12 +210,10 @@ fn inserting_a_group_mints_fresh_ids_and_re_points_the_wires() {
     };
     assert_eq!(from, nodes[0].id);
     assert_eq!(to, nodes[1].id);
-    // Dropped where it was asked for, keeping the saved shape.
     assert_eq!(layout[0].1, [400.0, 200.0]);
     assert_eq!(layout[1].1, [560.0, 230.0]);
     assert_eq!(group.name, "Audio rig");
     assert_eq!(group.members.len(), 3);
-    // The group inside it came back round the two fresh drivers.
     assert_eq!(added.inner.len(), 1);
     assert_eq!(added.inner[0].name, "Pair");
     assert_eq!(
@@ -247,10 +225,6 @@ fn inserting_a_group_mints_fresh_ids_and_re_points_the_wires() {
     );
 }
 
-// -- 5.8, a node graph's groups -------------------------------------------
-
-/// A Read, a blur and an Output, wired in a line, with the first two
-/// picked. The Output is picked too, to prove it is never saved.
 fn wired_comp_graph() -> (crate::comp_graph::CompGraph, Vec<uuid::Uuid>, uuid::Uuid) {
     use crate::comp_graph::{CompGraph, GraphEdge, GraphNode};
     use crate::graph::{INPUT_PORT, OUTPUT_PORT};
@@ -299,8 +273,6 @@ fn inserting_a_comp_group_mints_fresh_ids_and_keeps_a_reads_item() {
         &comp_group_to_json(&comp_group_from_graph(&graph, "Plate rig", 4, &members)).unwrap(),
     )
     .unwrap();
-    // A wire naming a box the file does not carry is dropped rather than
-    // landing dangling, which would cost the whole insert.
     preset.edges.push(crate::comp_graph::GraphEdge {
         from: uuid::Uuid::now_v7(),
         from_port: "output".into(),
@@ -317,8 +289,6 @@ fn inserting_a_comp_group_mints_fresh_ids_and_keeps_a_reads_item() {
             .all(|n| !preset.nodes.iter().any(|s| s.id() == n.id())),
         "every id is fresh, so inserting twice never makes two boxes one"
     );
-    // A Read keeps the item it names: the item is the project's, not the
-    // group's, and one this project lacks wears the missing mark.
     match &added.nodes[0] {
         GraphNode::Read { item: named, .. } => assert_eq!(*named, item),
         other => panic!("the Read came back as {other:?}"),
@@ -331,7 +301,6 @@ fn inserting_a_comp_group_mints_fresh_ids_and_keeps_a_reads_item() {
     assert_eq!(added.group.name, "Plate rig");
     assert_eq!(added.group.members.len(), 2);
 
-    // A second insert shares nothing with the first.
     let again = comp_group_instantiated(&preset, [0.0, 0.0]);
     assert!(added
         .nodes

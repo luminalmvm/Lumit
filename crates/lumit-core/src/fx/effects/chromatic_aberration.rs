@@ -16,7 +16,6 @@ use lumit_fx_macros::Effect;
 /// there is no angle (the offset is always radial) and no per-tap scale.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Fringe {
-    /// The three tinted radial taps at fractions −1 / 0 / +1.
     Classic {
         /// Peak channel offset in raster pixels, reached at the corner distance
         /// from the frame centre.
@@ -26,7 +25,6 @@ pub enum Fringe {
         /// 0..1.
         mix: f32,
     },
-    /// The Wavelength tier: RGB split's spectral machinery run radially.
     Spectral {
         /// Peak spectral offset in raster pixels.
         amount_px: f32,
@@ -40,7 +38,6 @@ pub enum Fringe {
     },
 }
 
-/// Chromatic aberration's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "chromatic_aberration",
@@ -85,11 +82,9 @@ pub struct ChromaticAberration {
     #[colour(label = "Colour 1", default = [1.0, 0.0, 0.0, 1.0])]
     pub channel_colour_1: [f32; 4],
 
-    /// See [`channel_colour_1`](Self::channel_colour_1).
     #[colour(label = "Colour 2", default = [0.0, 1.0, 0.0, 1.0])]
     pub channel_colour_2: [f32; 4],
 
-    /// See [`channel_colour_1`](Self::channel_colour_1).
     #[colour(label = "Colour 3", default = [0.0, 0.0, 1.0, 1.0])]
     pub channel_colour_3: [f32; 4],
 
@@ -104,7 +99,6 @@ pub struct ChromaticAberration {
     #[slider(min = 3.0, max = 64.0, default = 16.0, hard_min = 3.0, hard_max = 64.0, unit = Raw)]
     pub samples: f32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -153,7 +147,6 @@ impl ChromaticAberration {
     }
 }
 
-/// Chromatic aberration's behaviour.
 pub struct ChromaticAberrationDef;
 
 impl EffectDef for ChromaticAberrationDef {

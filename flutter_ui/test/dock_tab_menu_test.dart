@@ -1,4 +1,3 @@
-// The right-click menu on a panel's tab: Close panel.
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
@@ -10,8 +9,6 @@ import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
 
 void main() {
-  /// Two panels tabbed together beside a third, so there is a tab strip to
-  /// right-click and something left over after one is closed.
   DockSplit layout() => DockSplit(
         DockAxis.horizontal,
         [
@@ -45,7 +42,6 @@ void main() {
         ),
       );
 
-  /// Right-click the tab pill whose label reads [title].
   Future<void> rightClickTab(WidgetTester tester, String title) async {
     final at = tester.getCenter(find.text(LumitTheme.dark().kickerCase(title)));
     final gesture = await tester.startGesture(at, buttons: kSecondaryButton);

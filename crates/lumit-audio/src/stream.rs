@@ -51,9 +51,6 @@ pub const DEFAULT_BUDGET_BYTES: usize = 512 * 1024 * 1024;
 /// Blocks to a table, and tables to a source. A source's tables are made as
 /// its blocks are first asked for, so a short file costs one.
 const TABLE_BLOCKS: usize = 256;
-// ponytail: 64 tables of 256 two-second blocks is a little over nine hours of
-// one file. Sound past that is silence. Raise the count if a single source
-// ever runs longer; a table is ten kilobytes and only made when reached.
 const TABLES: usize = 64;
 
 /// How many files are kept open for decoding at once. A row plays one file at
@@ -61,8 +58,6 @@ const TABLES: usize = 64;
 /// opening a file again for every block.
 const OPEN_READERS: usize = 12;
 
-/// How many sources the pool remembers before it forgets the ones holding
-/// nothing.
 const KEPT_SOURCES: usize = 1024;
 
 /// One block of one file: interleaved stereo, as long as a block is except at
@@ -92,11 +87,9 @@ impl Slot {
     }
 }
 
-/// A file's blocks: those of the streams of it one [`SoundSource`] names.
 struct File {
     sound: SoundSource,
     pool: Weak<Pool>,
-    /// Names this source among the pool's open readers.
     id: u64,
     block_frames: usize,
     tables: [OnceLock<Box<[Slot]>>; TABLES],
@@ -149,14 +142,12 @@ enum Kind {
     File(Box<File>),
 }
 
-/// One stereo source at one rate: a whole buffer, or a file read in blocks.
 pub struct Source {
     rate: u32,
     kind: Kind,
 }
 
 impl Source {
-    /// A buffer already in memory, read as it stands.
     #[must_use]
     pub fn whole(buffer: Arc<AudioBuffer>) -> Arc<Source> {
         Arc::new(Source {
@@ -170,14 +161,11 @@ impl Source {
         self.rate
     }
 
-    /// Whether this is a file read in blocks, and not a buffer in memory.
     #[must_use]
     pub fn is_file(&self) -> bool {
         matches!(self.kind, Kind::File(_))
     }
 
-    /// The file this source reads and which of its audio streams, for one
-    /// that reads a file.
     #[must_use]
     pub fn sound(&self) -> Option<&SoundSource> {
         match &self.kind {
@@ -353,7 +341,7 @@ impl Source {
                     let to = ((within + n) * 2).min(len);
                     out.extend_from_slice(&held.samples[from..to]);
                     if to - from < n * 2 {
-                        break; // the file ended inside this block
+                        break;
                     }
                     at += n;
                 }
@@ -479,13 +467,11 @@ struct PoolState {
     /// and that holds no block is forgotten, and made again for nothing if it
     /// is asked for.
     sources: HashMap<(SoundSource, u32), Arc<Source>>,
-    /// The blocks in memory, for choosing which to drop.
     held: Vec<(Arc<Source>, usize)>,
     readers: Vec<OpenReader>,
     next_id: u64,
 }
 
-/// The decoded blocks of every file, under one byte budget.
 pub struct Pool {
     budget: usize,
     bytes: AtomicUsize,
@@ -538,14 +524,11 @@ impl Pool {
         source
     }
 
-    /// The first audio stream of the file at `path`, at `rate`: what
-    /// [`Self::source`] answers for a file with one.
     #[must_use]
     pub fn file(self: &Arc<Self>, path: &Path, rate: u32) -> Arc<Source> {
         self.source(&SoundSource::file(path), rate)
     }
 
-    /// How many bytes of decoded blocks are in memory now.
     #[must_use]
     pub fn resident_bytes(&self) -> usize {
         self.bytes.load(Ordering::Relaxed)
@@ -696,8 +679,6 @@ pub(crate) mod tests {
     use super::*;
     use std::path::PathBuf;
 
-    /// A folder of this test's own under the system's temporary one, removed
-    /// when the guard goes.
     pub(crate) struct Scratch(pub PathBuf);
 
     impl Scratch {
@@ -726,8 +707,8 @@ pub(crate) mod tests {
         bytes.extend_from_slice(&(36 + data).to_le_bytes());
         bytes.extend_from_slice(b"WAVEfmt ");
         bytes.extend_from_slice(&16u32.to_le_bytes());
-        bytes.extend_from_slice(&1u16.to_le_bytes()); // PCM
-        bytes.extend_from_slice(&2u16.to_le_bytes()); // stereo
+        bytes.extend_from_slice(&1u16.to_le_bytes());
+        bytes.extend_from_slice(&2u16.to_le_bytes());
         bytes.extend_from_slice(&rate.to_le_bytes());
         bytes.extend_from_slice(&(rate * 4).to_le_bytes());
         bytes.extend_from_slice(&4u16.to_le_bytes());
@@ -744,10 +725,6 @@ pub(crate) mod tests {
         path
     }
 
-    /// **The budget holds and nothing is lost by it**: blocks past the budget
-    /// push the stalest out, a block that was dropped decodes again to the
-    /// same samples, and the waiting read is the whole-file decode whatever
-    /// was in memory when it was asked.
     #[test]
     fn the_pool_drops_the_stalest_block_and_reads_the_same_sound_back() {
         const RATE: u32 = 8_000;
@@ -756,30 +733,24 @@ pub(crate) mod tests {
         let whole = lumit_media::audio::decode_all(&path, RATE).unwrap();
         let block_bytes = BLOCK_SECONDS * RATE as usize * 2 * 4;
 
-        // Room for three blocks of the eleven the file has.
         let pool = Pool::new(block_bytes * 3);
         let source = pool.file(&path, RATE);
         assert!(Arc::ptr_eq(&source, &pool.file(&path, RATE)));
         assert_eq!(source.frames(), None, "nothing is opened to make a source");
 
-        // The callback's read of a block that is not there: all of it missed,
-        // none of it sounded, and nothing decoded on its behalf.
         let mut heard = 0;
         let missed = source.read_runs(0, 100, |_, run| heard += run.len());
         assert_eq!((missed, heard), (100, 0));
         assert_eq!(pool.resident_bytes(), 0);
 
         for block in 0..6 {
-            // Each wanted a moment after the one before.
             assert!(source.block(block, false, block as u64 + 1).is_some());
             assert!(pool.resident_bytes() <= block_bytes * 3, "block {block}");
         }
-        // The first blocks went to make room, and the newest are there.
         let there = |b: usize| source.read_runs(b * 2 * RATE as usize, 1, |_, _| {}) == 0;
         assert!(!there(0) && !there(1), "the stalest were dropped");
         assert!(there(5), "the newest is in memory");
 
-        // A stretch across dropped and kept blocks, and off the end.
         let from = 2 * RATE as usize - 5;
         let got = source.read(from, 9 * 2 * RATE as usize, true);
         assert!(got == whole.samples[from * 2..(from + 9 * 2 * RATE as usize) * 2]);
@@ -788,8 +759,6 @@ pub(crate) mod tests {
         assert_eq!(source.frames(), Some(whole.frames()));
         assert_eq!(source.frames_exactly(), whole.frames());
 
-        // The callback's read of what is there now is those same samples, and
-        // a stretch that runs off the end of the file misses nothing.
         let at = 20 * RATE as usize;
         let mut run_of = Vec::new();
         let missed = source.read_runs(at, 4 * RATE as usize, |off, run| {
@@ -799,7 +768,6 @@ pub(crate) mod tests {
         assert_eq!(missed, 0, "past the end is silence, not sound that is late");
         assert!(run_of == whole.samples[at * 2..]);
 
-        // A file that is not one is silence that nothing waits for.
         let gone = pool.file(Path::new("/definitely/not/a/file.wav"), RATE);
         assert!(gone.block(0, false, now()).is_none());
         assert_eq!(gone.read_runs(0, 100, |_, _| {}), 0);

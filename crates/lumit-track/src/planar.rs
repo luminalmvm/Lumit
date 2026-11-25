@@ -65,7 +65,6 @@ use crate::{geom::Mat3, pairs::GeometrySettings, TrackSet};
 /// each of those four times out.
 pub type Quad = [[f64; 2]; 4];
 
-/// What a planar track was asked for.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PlanarSettings {
     /// The robust fit's budget and inlier threshold — the same knobs the
@@ -94,10 +93,8 @@ impl Default for PlanarSettings {
     }
 }
 
-/// One frame's answer.
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct PlanarFrame {
-    /// The source frame number this describes.
     pub frame: i64,
     /// The quad's corners on this frame, in source raster pixels.
     pub corners: Quad,
@@ -120,7 +117,6 @@ pub struct PlanarFrame {
 /// first and last entries are the whole of its extent.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct PlanarTrack {
-    /// The frame the quad was drawn on, and everything is measured against.
     pub reference_frame: i64,
     /// The quad as drawn, in source raster pixels.
     pub reference_quad: Quad,
@@ -147,7 +143,6 @@ impl PlanarTrack {
             .map(|f| f.corners)
     }
 
-    /// The first and last frames the track covers.
     #[must_use]
     pub fn frame_range(&self) -> Option<(i64, i64)> {
         Some((self.frames.first()?.frame, self.frames.last()?.frame))
@@ -167,12 +162,10 @@ pub enum PlanarError {
     /// itself.
     #[error("the quad's contents are not a single flat surface")]
     NotPlanar,
-    /// The caller stopped it.
     #[error("the track was cancelled")]
     Cancelled,
 }
 
-/// The identity homography — what takes the reference frame to itself.
 const IDENTITY: Mat3 = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
 
 /// Follow `quad` — drawn on `reference_frame` in source raster pixels — through
@@ -301,8 +294,6 @@ pub fn solve_planar_cancellable(
     })
 }
 
-/// The homography from `from` to `to` over the tracks present on both, and how
-/// many of them agreed with it.
 fn fit_frame(
     set: &TrackSet,
     from: i64,
@@ -342,10 +333,6 @@ fn warp_quad(h: &Mat3, quad: Quad) -> Option<Quad> {
 pub fn quad_outline(quad: Quad) -> Vec<[f64; 2]> {
     vec![quad[0], quad[1], quad[3], quad[2]]
 }
-
-// ---------------------------------------------------------------------------
-// Point tracking
-// ---------------------------------------------------------------------------
 
 /// What a point track was asked for.
 ///

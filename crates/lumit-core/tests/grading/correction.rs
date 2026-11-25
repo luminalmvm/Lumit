@@ -1,11 +1,7 @@
-//! The Correction's grade rows on the CPU twin, each against the sum its
-//! module writes down, and the HDR zones against theirs.
-
 use lumit_core::model::{EffectInstance, EffectValue};
 
 use crate::support::{assert_near, at, at_xy, f, flat, fx, linear, luma, rgb, run, ss, strip};
 
-/// Opaque colours across the range, light and dark.
 const PROBES: [[f32; 3]; 5] = [
     [0.2, 0.4, 0.6],
     [0.05, 0.05, 0.05],
@@ -14,7 +10,6 @@ const PROBES: [[f32; 3]; 5] = [
     [0.9, 0.9, 0.9],
 ];
 
-/// The probes, then the first one again half clear and premultiplied.
 fn probes() -> Vec<f32> {
     let mut img = strip(&PROBES);
     let u = PROBES[0];
@@ -22,8 +17,6 @@ fn probes() -> Vec<f32> {
     img
 }
 
-/// `node` over the probes gives `want` of each, and the half-clear pixel is
-/// graded unpremultiplied and keeps its alpha.
 fn check(node: EffectInstance, want: impl Fn([f32; 3]) -> [f32; 3], tol: f32, what: &str) {
     let out = run(&[node], &probes(), PROBES.len() as u32 + 1, 1);
     for (i, u) in PROBES.iter().enumerate() {
@@ -39,8 +32,6 @@ fn check(node: EffectInstance, want: impl Fn([f32; 3]) -> [f32; 3], tol: f32, wh
     assert_eq!(out[PROBES.len() * 4 + 3], 0.5, "{what}: alpha is kept");
 }
 
-/// `u` with its Cb and Cr turned by `deg`, Y kept, worked out by hand from
-/// Rec. 709's YCbCr.
 fn turned(u: [f32; 3], deg: f32) -> [f32; 3] {
     let y = luma(u);
     let (cb, cr) = ((u[2] - y) / 1.8556, (u[0] - y) / 1.5748);
@@ -51,9 +42,6 @@ fn turned(u: [f32; 3], deg: f32) -> [f32; 3] {
     [r, (y - 0.2126 * r - 0.0722 * b) / 0.7152, b]
 }
 
-/// A fresh Correction hands the picture on bit for bit, and so does a grade
-/// at Mix 0. Then each group of rows, alone, grades as its formula says, in
-/// each of the three spaces.
 #[test]
 fn each_grade_row_of_a_correction_follows_its_formula() {
     let img = probes();
@@ -62,7 +50,6 @@ fn each_grade_row_of_a_correction_follows_its_formula() {
     let none = linear(&[("gain", rgb([2.0, 2.0, 2.0])), ("mix", f(0.0))]);
     assert_eq!(run(&[none], &img, n, 1), img);
 
-    // Wheels.
     check(
         linear(&[("gain", rgb([2.0, 1.0, 0.5]))]),
         |u| [2.0 * u[0], u[1], 0.5 * u[2]],
@@ -127,7 +114,6 @@ fn each_grade_row_of_a_correction_follows_its_formula() {
         "log wheels",
     );
 
-    // Adjust.
     check(
         linear(&[("exposure", f(1.0))]),
         |u| u.map(|c| 2.0 * c),
@@ -184,7 +170,6 @@ fn each_grade_row_of_a_correction_follows_its_formula() {
         "mixer keeping luma",
     );
 
-    // Curves.
     check(
         linear(&[
             ("curve_y", EffectValue::Curve(vec![[0.0, 0.0], [1.0, 0.5]])),
@@ -213,8 +198,6 @@ fn each_grade_row_of_a_correction_follows_its_formula() {
         1e-5,
         "soft clip",
     );
-    // Hue v hue at three quarters everywhere turns every hue a quarter; Hue v
-    // sat at nought takes every colour out.
     check(
         linear(&[(
             "hue_hue",
@@ -237,7 +220,6 @@ fn each_grade_row_of_a_correction_follows_its_formula() {
         "mix",
     );
 
-    // Midtone detail leaves a flat picture alone and sharpens an edge.
     let detail = || linear(&[("midtone_detail", f(100.0))]);
     let grey = flat(8, 8, [0.3, 0.3, 0.3]);
     let out = run(&[detail()], &grey, 8, 8);
@@ -254,8 +236,6 @@ fn each_grade_row_of_a_correction_follows_its_formula() {
     assert!(at_xy(&out, w, 32, 2)[1] > 0.6, "the light side lightens");
 }
 
-/// Each HDR zone moves the stops it covers and leaves the rest, and the
-/// global balance moves colour without moving luma.
 #[test]
 fn hdr_zones_move_only_their_own_stops() {
     let stops = [-4.0f32, 0.0, 7.0];
@@ -269,20 +249,17 @@ fn hdr_zones_move_only_their_own_stops() {
             assert_near(at(&out, i), g.map(|c| c * want[i]), tol, what);
         }
     };
-    // Specular from 4 stops up: the spike halves, the rest stays.
     zone(
         &[("hdr_specular_exposure", f(-1.0))],
         [1.0, 1.0, 0.5],
         "specular",
     );
-    // Shadow from 1 stop down over a falloff of 2: whole at -4, half at grey.
     zone(
         &[("hdr_shadow_exposure", f(1.0))],
         [2.0, 0.5f32.exp2(), 1.0],
         "shadow",
     );
 
-    // Light saturation at nought greys the bright colour only.
     let bright = [2.0f32, 1.3, 1.0];
     let dark = [0.02f32, 0.01, 0.005];
     let out = run(
@@ -294,7 +271,6 @@ fn hdr_zones_move_only_their_own_stops() {
     assert_near(at(&out, 0), [luma(bright); 3], 1e-4, "light saturation");
     assert_near(at(&out, 1), dark, 1e-6, "below the light zone");
 
-    // Black offset lifts black and fades out by mid grey.
     let out = run(
         &[linear(&[("hdr_black_offset", f(0.01))])],
         &strip(&[[0.0; 3], [0.5; 3]]),
@@ -304,7 +280,6 @@ fn hdr_zones_move_only_their_own_stops() {
     assert_near(at(&out, 0), [0.01; 3], 1e-6, "black offset at black");
     assert_near(at(&out, 1), [0.5; 3], 1e-6, "black offset past grey");
 
-    // A stop more red, luma put back.
     let u = PROBES[0];
     let out = run(
         &[linear(&[("hdr_balance", rgb([1.0, 0.0, 0.0]))])],

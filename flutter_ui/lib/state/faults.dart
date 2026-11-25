@@ -82,7 +82,6 @@ void recordFault(String message, StackTrace? stack) =>
 /// without filling the file a real session is writing to.
 void recordFaultTo(File file, String message, StackTrace? stack) {
   try {
-    // The cache folder may not exist yet on a first run.
     file.parent.createSync(recursive: true);
     // Checked before the write, as the engine does it: the record lands in the
     // file that keeps it rather than in one about to be truncated.

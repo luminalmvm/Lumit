@@ -1,5 +1,3 @@
-// The library sync's planner: every row of the design's table, and the rule
-// that a sync never throws away files the account does not hold.
 
 import 'dart:convert';
 
@@ -240,8 +238,6 @@ final _rows = <_Row>[
       want: ['renameThere presets/a.lumfx #1 @1']),
 ];
 
-/// Whether any step takes files away from here that neither the journal nor
-/// the account holds. Steps are followed in order.
 String? _losesBytes(_Row row, List<PlanStep> steps) {
   final held = {
     for (final i in [...row.journal, ...row.remote])

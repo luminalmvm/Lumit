@@ -24,7 +24,6 @@ use super::path::{corrections, sigma_frames, Model, Smoothing};
 use super::shown::Shown;
 use crate::anim::Keyframe;
 
-/// The smoothing as the Smoothness row holds it.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Smoothness {
     /// One standard deviation, in frames, for the whole shot.
@@ -87,7 +86,6 @@ impl Smoothness {
     }
 }
 
-/// Everything a plan depends on beyond the analysis.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PlanRows {
     pub model: Model,
@@ -125,20 +123,17 @@ impl PlanRows {
     }
 }
 
-/// What one analysed frame is drawn with.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FrameMap {
     /// Output pixel to the input pixel it shows, scale included, in the
     /// analysis's pixels.
     pub map: Mat3,
-    /// The scale the frame is drawn at.
     pub scale: f64,
     /// For Crop: the scale whose centred frame the picture is cut to. One
     /// otherwise.
     pub crop: f64,
 }
 
-/// A finished plan.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Plan {
     /// A hash of the analysis generation and the rows, unique enough to name
@@ -218,8 +213,6 @@ pub fn refit(analysis: &Analysis, dropped: &[u32]) -> Vec<Step> {
     let gone = |id: u32| dropped.binary_search(&id).is_ok();
     let (agree, close) = (analysis.agree_px(), close_px(analysis.scale));
     let size = [f64::from(analysis.width), f64::from(analysis.height)];
-    // The steps the dropped specks crossed, and the kept specks alive in each
-    // stretch of frames, in id order.
     let mut touched = vec![false; steps.len()];
     let mut alive: Vec<Vec<usize>> = vec![Vec::new(); (analysis.frames / BUCKET + 1) as usize];
     for (k, run) in analysis.runs.iter().enumerate() {
@@ -283,7 +276,6 @@ pub fn refit(analysis: &Analysis, dropped: &[u32]) -> Vec<Step> {
     steps
 }
 
-/// Frames to a stretch of the index [`refit`] walks.
 const BUCKET: u32 = 16;
 
 /// The refits in hand, newest last: the analysis generation, the dropped
@@ -338,7 +330,6 @@ pub fn judged_by(step: &Step, model: Model) -> Option<Mat3> {
     }
 }
 
-/// Make the plan for `analysis` under `rows`.
 #[must_use]
 pub fn build(analysis: &Analysis, generation: u64, rows: &PlanRows) -> Plan {
     let frames = analysis.frames as usize;
@@ -398,8 +389,6 @@ fn plans() -> &'static Mutex<HashMap<Uuid, Vec<Arc<Plan>>>> {
 /// was at a moment ago, so a slider scrubbed back and forth costs nothing.
 const KEPT_PLANS: usize = 3;
 
-/// The plan for `effect`'s `analysis` (filed at `generation`) under `rows`,
-/// made now if it is not already in hand.
 #[must_use]
 pub fn plan_for(effect: Uuid, analysis: &Analysis, generation: u64, rows: &PlanRows) -> Arc<Plan> {
     let id = rows.key(generation);
@@ -438,7 +427,6 @@ pub fn held(effect: Uuid, id: u64) -> Option<Arc<Plan>> {
         .cloned()
 }
 
-/// A plan waiting to be made: the analysis, its generation and the rows.
 type Wanted = (Arc<Analysis>, u64, PlanRows);
 
 /// The effects a worker is making a plan for, each with the plan asked for
@@ -508,7 +496,6 @@ pub fn make_later(effect: Uuid, analysis: Arc<Analysis>, generation: u64, rows: 
     }
 }
 
-/// Drop every plan `keep` does not ask for.
 pub fn retain(keep: impl Fn(&Uuid) -> bool) {
     if let Ok(mut held) = plans().lock() {
         held.retain(|id, _| keep(id));

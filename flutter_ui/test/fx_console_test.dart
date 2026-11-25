@@ -1,6 +1,3 @@
-// The Ctrl+Space console (popover face from the 2026-08-30 boards):
-// what the search ranks, what the category strip narrows, and what the keys
-// do while the popover is up.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -128,8 +125,6 @@ void main() {
           effect('Gaussian blur', run: () => applied = 'blur', group: 'Blur'),
         ]),
       );
-      // One step down crosses the Blur heading; Enter must run the row under
-      // it, never the heading.
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();

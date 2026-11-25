@@ -26,14 +26,11 @@ use super::{
 };
 use crate::track::{AnalysisError, Progress};
 
-/// The most layers and models the gas goes round.
 const MAX_SOLIDS: usize = 32;
 
 /// A kind the kernel emits nothing from: a row that names no layer.
 const EMITS_NOTHING: u32 = 3;
 
-/// One box of smoke in a frame's draw list: which effect it is, what time of its
-/// walk this frame shows, and how it looks.
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 #[derive(Clone)]
 pub(crate) struct VolumeDraw {
@@ -51,7 +48,6 @@ pub(crate) struct VolumeDraw {
     pub flame_across: f32,
 }
 
-/// A walk's working buffers and how far they have got.
 pub(super) struct Live {
     name: [u8; 32],
     work: Arc<SmokeWork>,
@@ -72,7 +68,6 @@ fn context(src: &Source<'_>, tc: f64) -> Arc<ExpressionContext> {
     })
 }
 
-/// The rows at layer time `lt`.
 fn rows_at(src: &Source<'_>, lt: f64) -> Option<Smoke> {
     let tc = lt + src.layer.start_offset.0.to_f64();
     let diag = f64::from(src.comp.width).hypot(f64::from(src.comp.height)) as f32;
@@ -112,7 +107,6 @@ fn rows_of(m: Mat4) -> [[f32; 4]; 3] {
 /// How far in from a walked box's sides its gas thins out, a share of the box.
 const EDGE_FADE: f32 = 0.12;
 
-/// The boxes of smoke `comp` shows at comp time `t`.
 pub(crate) fn volumes(
     doc: &Arc<Document>,
     comp: &lumit_core::model::Composition,
@@ -176,7 +170,6 @@ pub(crate) fn volumes(
         .collect()
 }
 
-/// A step's numbers from the rows at its time.
 fn step_of(rows: &Smoke, grid: &Grid, kind: u32, h: f32, clock: f32) -> SmokeStep {
     let p = smoke::physics(rows, grid);
     let [nx, ny, nz] = grid.cells.map(|c| c as f32);
@@ -199,7 +192,6 @@ fn step_of(rows: &Smoke, grid: &Grid, kind: u32, h: f32, clock: f32) -> SmokeSte
     }
 }
 
-/// What a walk is emitting from, found by its rows.
 enum Emits<'a> {
     Patch,
     Nothing,
@@ -300,7 +292,6 @@ pub(super) fn fresh(fx: &FxEngine, ctx: &GpuContext, src: &Source<'_>) -> Option
     })
 }
 
-/// Says on the Bake line that this grid is too much for the card.
 fn refused(effect: Uuid) {
     if !matches!(
         crate::track::progress(effect),
@@ -310,7 +301,6 @@ fn refused(effect: Uuid) {
     }
 }
 
-/// Takes that back once a grid fits, a smaller one or a card with room again.
 fn accepted(effect: Uuid) {
     if matches!(
         crate::track::progress(effect),
@@ -368,7 +358,6 @@ fn prepare_emit(
             let carried =
                 crate::trails::carriage(src.doc, src.comp, layer, from.inst, NO_CLONE, [0.0; 2]);
             let lt = tc - layer.start_offset.0.to_f64();
-            // Before that layer's in point there is nothing to lay.
             if lt < 0.0 {
                 step.emit[3] = EMITS_NOTHING as f32;
                 return Some(());
@@ -391,7 +380,6 @@ fn prepare_emit(
     Some(())
 }
 
-/// What the gas goes round in the frame ending at comp time `tc`.
 fn solids_at(src: &Source<'_>, live: &Live, tc: f64, grid: &Grid) -> Vec<SmokeSolid> {
     use lumit_core::fx::points::stepped::collider::Collider;
     let then = tc - src.dt;
@@ -452,7 +440,6 @@ fn solids_at(src: &Source<'_>, live: &Live, tc: f64, grid: &Grid) -> Vec<SmokeSo
         .collect()
 }
 
-/// One whole frame on from `live`'s.
 fn frame_on(fx: &FxEngine, ctx: &GpuContext, src: &Source<'_>, live: &mut Live) -> Option<()> {
     let f = live.ledger.frame;
     let lt = (f + 1) as f64 * src.dt;
@@ -502,8 +489,6 @@ fn take_live(fx: &FxEngine, ctx: &GpuContext, src: &Source<'_>, name: &[u8; 32])
     fresh(fx, ctx, src)
 }
 
-/// `live` back in the store, with the walks used longest ago let go once they
-/// hold too much.
 fn give_back(ctx: &GpuContext, live: Live) {
     let _ = with_store(ctx, |s| {
         s.smoke.insert(0, live);
@@ -518,8 +503,6 @@ fn give_back(ctx: &GpuContext, live: Live) {
     });
 }
 
-/// Puts a kept or baked state back if one is nearer than where `live` is, or
-/// empties it to start from the in point.
 fn start_from(fx: &FxEngine, ctx: &GpuContext, src: &Source<'_>, live: &mut Live, target: i64) {
     let here = Some(live.ledger.frame).filter(|f| *f <= target);
     let kept = super::furthest_kept(ctx, &live.name, target, 0)
@@ -543,7 +526,6 @@ fn start_from(fx: &FxEngine, ctx: &GpuContext, src: &Source<'_>, live: &mut Live
     }
 }
 
-/// Grid work between waits for the card: particle steps, as `hand_over` counts.
 fn step_work(live: &Live, steps: u32) -> u64 {
     lumit_gpu::fx::smoke::cell_count(live.work.cells) * u64::from(steps) * 8
 }
@@ -594,7 +576,6 @@ fn walked(fx: &FxEngine, ctx: &GpuContext, src: &Source<'_>, t: f64) -> Option<A
             hand_over(ctx, &mut work, step_work(&live, 1));
         }
     }
-    // Simulate off, with no state at or before this frame, is nothing to show.
     if !simulates && live.ledger.frame == 0 {
         give_back(ctx, live);
         return None;
@@ -650,7 +631,6 @@ fn file_volume(
     Some(VolumeOp { fields, look })
 }
 
-/// The boxes of `draws` as the marcher reads them, each walked to its frame.
 pub(crate) fn walked_volumes(
     fx: &FxEngine,
     ctx: &GpuContext,
@@ -673,8 +653,6 @@ pub(crate) fn walked_volumes(
         .collect()
 }
 
-/// A bake's walk: the frames the layer shows, from the start, with a state
-/// written every so often.
 pub(super) fn bake_walk(
     doc: &Arc<Document>,
     comp: Uuid,
@@ -685,7 +663,6 @@ pub(super) fn bake_walk(
 ) -> Result<(), AnalysisError> {
     let src = Source::find(doc, comp, layer, effect, NO_CLONE).ok_or(AnalysisError::Unreadable)?;
     let (first, end) = bake::frames_shown(&src);
-    // A volume file has nothing to walk.
     if end <= first || super::volume_file_path(doc, src.layer).is_some() {
         return Err(AnalysisError::NoFrames);
     }
@@ -724,8 +701,6 @@ pub(super) fn bake_walk(
     Ok(())
 }
 
-/// Whether a grid for `effect` fits on `ctx`'s card, as a walk finds out, with the
-/// Bake line saying so if not.
 #[must_use]
 pub fn fits(
     fx: &FxEngine,

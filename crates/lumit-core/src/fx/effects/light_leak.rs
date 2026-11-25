@@ -14,7 +14,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Light leak's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "light_leak",
@@ -71,7 +70,6 @@ pub struct LightLeak {
     #[seed]
     pub seed: u32,
 
-    /// The host-uniform Mix every effect ends with, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -83,7 +81,6 @@ pub struct LightLeak {
     pub mix: f32,
 }
 
-/// One frame of Light leak, as both render paths draw it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LightLeakParams {
     /// The band's normal over its width, so `dot(uv, normal)` is the distance
@@ -93,7 +90,6 @@ pub struct LightLeakParams {
     pub centre: [f32; 2],
     /// One over the picture's height, so `uv` is in heights.
     pub inv_h: f32,
-    /// The depth of the coarse and the fine noise.
     pub z: [f32; 2],
     /// Colour at the heart, times Amount.
     pub colour: [f32; 3],
@@ -116,8 +112,6 @@ impl LightLeak {
     /// Layer time, seconds. Never a panel row.
     pub const DERIVED_TIME: ParamId = ParamId::new("derived.time");
 
-    /// The numbers both kernels read, from the rows and the time in `p`, on a
-    /// `w` by `h` raster.
     #[must_use]
     pub fn packed(self, p: Params<'_>, w: u32, h: u32) -> LightLeakParams {
         let t = p.float(Self::DERIVED_TIME, 0.0);
@@ -185,7 +179,6 @@ pub const LIGHT_LEAK_LOOKS: &[EffectPreset] = &[
     },
 ];
 
-/// Light leak's behaviour.
 pub struct LightLeakDef;
 
 impl EffectDef for LightLeakDef {

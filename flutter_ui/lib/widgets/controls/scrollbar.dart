@@ -1,5 +1,3 @@
-// The house scrollbar: the thumb every scrolling list wears, the glide a
-// wheel gives a list, and the scroll behaviour that hands both to them.
 
 import 'dart:async' show scheduleMicrotask;
 
@@ -17,11 +15,8 @@ import '../../theme/theme.dart';
 import 'base.dart';
 import 'motion.dart';
 
-/// How many pixels thicker a thumb is under the pointer, where things swell.
 const double scrollbarSwell = 3;
 
-/// A thumb's colour: a raised block at rest, lit by [lit] of the way as the
-/// pointer comes over it, and brightest while it is [held].
 Color scrollThumbColour(LumitTheme t, double lit, {bool held = false}) => held
     ? t.textMuted
     : Color.lerp(
@@ -133,10 +128,8 @@ class SmoothWheel extends StatefulWidget {
 }
 
 class _SmoothWheelState extends State<SmoothWheel> {
-  /// The least a step has to be, in pixels, to be a notch.
   static const double _notch = 24;
 
-  /// Where the glide in flight is heading, or null when none is.
   double? _target;
 
   /// Counts the glides, so one that ends late does not clear a newer one.
@@ -179,8 +172,6 @@ class _SmoothWheelState extends State<SmoothWheel> {
       Listener(onPointerSignal: _wheel, child: widget.child);
 }
 
-/// Gives every scrolling list in the application a [HouseScrollbar], and its
-/// wheel a glide ([SmoothWheel]).
 class HouseScrollBehavior extends MaterialScrollBehavior {
   const HouseScrollBehavior();
 

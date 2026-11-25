@@ -18,13 +18,11 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// The wire-only data input.
 pub const POINTS_PORT: &str = "points";
 
 /// What this effect takes in. Nearness is judged on the frame, so not `three_d`.
 const POINTS_IN: &[Port] = &[Port::new(POINTS_PORT, "Points", PortType::Points)];
 
-/// Invert only changes Distance, and Number range only divides Number.
 pub const FIELD_ENABLED_WHEN: &[EnabledWhen] = &[
     EnabledWhen {
         param: "invert",
@@ -48,17 +46,13 @@ pub const FIELD_ENABLED_WHEN: &[EnabledWhen] = &[
     },
 ];
 
-/// What each pixel draws from its nearest point.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FieldOutput {
     /// Grey: 1 at a point, falling to 0 at Radius away.
     #[default]
     Distance,
-    /// Which way the point lies, as a displacement map.
     Direction,
-    /// The point's own colour.
     Colour,
-    /// The number the point carries, over Number range, as a grey.
     Number,
 }
 
@@ -79,18 +73,14 @@ impl FieldOutput {
     }
 }
 
-/// One point as the field reads it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Seed {
-    /// Where the point is seen on the frame.
     pub at: [f32; 2],
     /// Premultiplied scene-linear RGBA.
     pub colour: [f32; 4],
-    /// The number the point carries.
     pub number: f32,
 }
 
-/// Points field's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "points_field",
@@ -98,7 +88,6 @@ pub struct Seed {
     version = 1,
     category = Points,
     cost = Moderate,
-    // A point anywhere decides pixels everywhere.
     roi = FullFrame,
     premultiplied = true,
     // Nothing here changes over time by itself. The stream may, and that is
@@ -107,7 +96,6 @@ pub struct Seed {
     enabled_when = FIELD_ENABLED_WHEN,
 )]
 pub struct PointsField {
-    /// What each pixel draws from its nearest point.
     #[choice(label = "Output", options = *FieldOutput::OPTIONS, default = 0)]
     pub output: u32,
 
@@ -132,7 +120,6 @@ pub struct PointsField {
     #[toggle(label = "Invert", default = false)]
     pub invert: bool,
 
-    /// The number that draws as white when Output is Number.
     #[slider(
         label = "Number range",
         min = 1.0,
@@ -167,7 +154,6 @@ pub struct PointsField {
     )]
     pub max_points: i32,
 
-    /// The Mix every effect ends with, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -184,7 +170,6 @@ impl PointsField {
     /// pixels the frame is drawn at.
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
 
-    /// This instance's raster factor, read back out of a resolved bag.
     #[must_use]
     pub fn px_scale_of(p: Params<'_>) -> f32 {
         p.float(Self::DERIVED_PX_SCALE, 1.0)
@@ -205,7 +190,6 @@ impl PointsField {
                 let colour = match (self.colour_name.is_empty(), s.whole(named, i)) {
                     (true, _) => s.colour.get(i).copied().unwrap_or([0.0; 4]),
                     (false, Some((colour, 4))) => colour,
-                    // Anything narrower is one number, drawn as a grey.
                     (false, _) => s.read(named, i).map_or([0.0; 4], |v| [v, v, v, 1.0]),
                 };
                 (at[0].is_finite() && at[1].is_finite()).then(|| Seed {
@@ -217,8 +201,6 @@ impl PointsField {
             .collect()
     }
 
-    /// What the pixel centred on `p` draws, given the seed nearest to it.
-    /// The kernel's `shade` does the same sums in the same order.
     #[must_use]
     pub fn shade(self, p: [f32; 2], seed: &Seed) -> [f32; 4] {
         let (dx, dy) = (seed.at[0] - p[0], seed.at[1] - p[1]);
@@ -250,12 +232,6 @@ impl PointsField {
         }
     }
 
-    /// The CPU reference: the field mixed over `rgba`, a `w` by `h` picture
-    /// of premultiplied RGBA floats. `stream` and Radius are in its pixels.
-    ///
-    /// Every pixel asks every seed, and the earlier seed wins a tie.
-    /// (ponytail: brute force, pixels times points. It is the oracle, so it
-    /// only ever sees a test-sized frame. The card's pass is the fast one.)
     pub fn draw(self, rgba: &mut [f32], w: u32, h: u32, stream: &PointsStream) {
         let seeds = self.seeds(stream);
         let mix = (self.mix / 100.0).clamp(0.0, 1.0);
@@ -292,7 +268,6 @@ impl EffectDef for PointsFieldDef {
         &<PointsField as EffectMetadata>::SCHEMA
     }
 
-    /// A picture in, a picture out, and a stream in beside it.
     fn signature(&self) -> Signature {
         Signature::Image {
             inputs: POINTS_IN,
@@ -300,8 +275,6 @@ impl EffectDef for PointsFieldDef {
         }
     }
 
-    /// The raster factor, so a px@comp stream reaches the pixels this frame
-    /// is drawn at.
     fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
         push(PointsField::DERIVED_PX_SCALE, Value::Float(cx.px_scale));
     }

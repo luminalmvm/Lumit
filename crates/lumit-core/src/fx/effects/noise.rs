@@ -17,7 +17,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Noise's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "noise",
@@ -40,8 +39,6 @@ pub struct Noise {
     #[slider(min = 0.0, max = 100.0, default = 25.0, hard_min = 0.0, unit = Percent)]
     pub amount: f32,
 
-    /// Uniform draws flat across the range; Gaussian clusters near zero, which
-    /// reads as film grain rather than video noise.
     #[choice(options = ["Uniform", "Gaussian"], default = 0)]
     pub distribution: u32,
 
@@ -56,11 +53,9 @@ pub struct Noise {
     #[toggle(default = true)]
     pub animate: bool,
 
-    /// Which draw the grain follows (§2.4).
     #[seed]
     pub seed: u32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -72,7 +67,6 @@ pub struct Noise {
     pub mix: f32,
 }
 
-/// Everything [`cpu::noise`] and the WGSL twin want, in their order.
 type Packed = (f32, bool, bool, u32, i32, f32);
 
 impl Noise {
@@ -84,8 +78,6 @@ impl Noise {
     /// frames where a block pop may.
     pub const DERIVED_TICK: ParamId = ParamId::new("derived.tick");
 
-    /// This instance's tick read back out of a resolved bag: [`Noise::packed`]'s
-    /// missing argument, so no caller has to know the id.
     #[must_use]
     pub fn tick_of(p: Params<'_>) -> i32 {
         p.int(Self::DERIVED_TICK, 0)
@@ -109,7 +101,6 @@ impl Noise {
     }
 }
 
-/// Noise's behaviour.
 pub struct NoiseDef;
 
 impl EffectDef for NoiseDef {

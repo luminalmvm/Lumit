@@ -1,5 +1,3 @@
-//! The camera's depth of field on a 3D layer.
-
 /// How far one pass of the camera's blur reaches at most, in texels. A layer
 /// seen nearly edge on would otherwise reach across all of it.
 const DOF_REACH: f32 = 512.0;

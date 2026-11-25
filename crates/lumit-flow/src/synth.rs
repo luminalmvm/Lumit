@@ -53,7 +53,6 @@ struct Buffers {
     bind: wgpu::BindGroup,
 }
 
-/// The synthesis pipelines, built once per device.
 pub struct GpuSynth {
     ctx: GpuContext,
     layout: wgpu::BindGroupLayout,
@@ -174,7 +173,6 @@ impl GpuSynth {
             return Err(FlowError::DimensionMismatch);
         }
         let dev = &self.ctx.device;
-        // Rebuild the buffer set only when a size changes.
         {
             let mut slot = self.buffers.borrow_mut();
             let stale = slot

@@ -67,7 +67,6 @@ const MAX_BYTES: usize = 96 * 1024 * 1024;
 struct PeakEntry {
     sound: SoundSource,
     pyramid: Arc<PeakPyramid>,
-    /// When this entry was last asked for, on the cache's own counter.
     used: u64,
 }
 
@@ -199,22 +198,6 @@ impl PeakCache {
     }
 }
 
-// --- The spectrogram cache: the same bargain, for the other picture.
-//
-// Kept beside the peaks rather than folded into them because the two are
-// asked for separately — a lane in spectral mode never wants peaks, and
-// most lanes never want a spectrogram — and a combined entry would decode
-// and hold both for every file either was asked about.
-//
-// ponytail: a file in both caches is decoded twice, once per structure;
-// share one decode if the double cost ever shows in a profile.
-//
-// ponytail: unlike the peaks, a spectrogram is still built from the whole
-// file decoded into memory, kept for four sources and written nowhere. Only a
-// lane switched to the spectral view asks for one. If a long cut is ever
-// worked in that view, build the grid a window at a time as the pyramid is
-// built and give it a file beside the peak file.
-
 /// How many sources' spectrograms to keep. The grid is a few kilobytes per
 /// second of audio, so the byte ceiling below is the binding one.
 #[cfg(feature = "media")]
@@ -261,7 +244,6 @@ pub(crate) fn spectrogram_for(
         }
     }
 
-    // Nothing held while FFmpeg and the FFT run.
     let buffer = lumit_media::audio::decode_sound(sound, PEAK_RATE).ok()?;
     let grid = Arc::new(lumit_audio::spectra::Spectrogram::build(
         &buffer.samples,

@@ -30,11 +30,9 @@ use crate::check::{arg, Place};
 use crate::fit::tolerance;
 use crate::LottieError;
 
-/// The most a frame-by-frame outline may add to the file.
 const MAX_BAKE_BYTES: usize = 2 * 1024 * 1024;
 
 impl Svg<'_> {
-    /// A Shape layer's contents.
     pub(super) fn shape_layer(
         &mut self,
         scope: &Scope<'_>,
@@ -95,7 +93,6 @@ impl Svg<'_> {
         Ok(())
     }
 
-    /// One run's `<path>`, painted and animated.
     fn run_element(
         &mut self,
         scope: &Scope<'_>,
@@ -209,7 +206,6 @@ impl Svg<'_> {
         Ok(tag)
     }
 
-    /// The contours of an Xor run as one path.
     fn joined(&self, scope: &Scope<'_>, layer: &Layer, members: &[Lowered<'_>]) -> PathValue {
         let moves = members.iter().any(|m| m.item.path_is_animated());
         let d_at = |lt: f64| -> String {
@@ -236,8 +232,6 @@ impl Svg<'_> {
         PathValue::Steps(steps)
     }
 
-    /// The fill, the outline and their opacities, onto `tag`, their
-    /// animations onto `animations`.
     pub(super) fn paint(
         &mut self,
         scope: &Scope<'_>,
@@ -339,7 +333,6 @@ impl Svg<'_> {
         }
     }
 
-    /// A colour's alpha channel, 0 to 1, times `opacity`.
     fn times(
         &mut self,
         scope: &Scope<'_>,
@@ -368,7 +361,6 @@ impl Svg<'_> {
         }
     }
 
-    /// An opacity attribute, left off while it is a still 1.
     fn opacity_attr(&self, attr: &str, value: &Value, tag: &mut String, animations: &mut String) {
         if matches!(value, Value::Still(v) if v.first().is_some_and(|o| *o >= 1.0)) {
             return;
@@ -686,7 +678,6 @@ impl Svg<'_> {
     }
 }
 
-/// The numbers `range` of a value, as a value of their own.
 pub(super) fn pick(value: &Value, range: std::ops::Range<usize>) -> Value {
     let cut = |v: &[f64]| {
         v.get(range.clone())
@@ -717,7 +708,6 @@ pub(super) fn pick(value: &Value, range: std::ops::Range<usize>) -> Value {
     }
 }
 
-/// True for a property that never moves.
 pub(super) fn still(p: &Property) -> bool {
     matches!(p.animation, Animation::Static(_))
 }

@@ -50,13 +50,11 @@ struct VsOut {
 
 @vertex
 fn vs_layer(@builtin(vertex_index) i: u32) -> VsOut {
-    // Unit quad 0..1 (two triangles, 6 vertices).
     var corners = array<vec2<f32>, 6>(
         vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 0.0), vec2<f32>(0.0, 1.0),
         vec2<f32>(1.0, 0.0), vec2<f32>(1.0, 1.0), vec2<f32>(0.0, 1.0),
     );
     var c = corners[i];
-    // A piece of a layer draws as a fan of triangles from its first corner.
     let count = u32(layer.cut.y);
     if (count >= 3u) {
         let k = i % 3u;
@@ -89,13 +87,10 @@ fn srgb_decode_c(v: vec3<f32>) -> vec3<f32> {
     return select(hi, lo, v <= vec3<f32>(0.04045));
 }
 
-// W3C soft-light D(d) helper.
 fn soft_light_d(d: vec3<f32>) -> vec3<f32> {
     let poly = ((16.0 * d - 12.0) * d + 4.0) * d;
     return select(sqrt(d), poly, d <= vec3<f32>(0.25));
 }
-
-// --- Separable blend formulas (per channel, W3C/PDF; s = source, d = dst). ---
 
 fn f_screen(s: vec3<f32>, d: vec3<f32>) -> vec3<f32> {
     let one = vec3<f32>(1.0);
@@ -106,7 +101,7 @@ fn f_hard_light(s: vec3<f32>, d: vec3<f32>) -> vec3<f32> {
     return select(one - 2.0 * (one - s) * (one - d), 2.0 * s * d, s <= vec3<f32>(0.5));
 }
 fn f_overlay(s: vec3<f32>, d: vec3<f32>) -> vec3<f32> {
-    return f_hard_light(d, s); // hard light with src/dst swapped
+    return f_hard_light(d, s);
 }
 fn f_soft_light(s: vec3<f32>, d: vec3<f32>) -> vec3<f32> {
     let one = vec3<f32>(1.0);
@@ -117,14 +112,14 @@ fn f_soft_light(s: vec3<f32>, d: vec3<f32>) -> vec3<f32> {
 fn f_colour_burn(s: vec3<f32>, d: vec3<f32>) -> vec3<f32> {
     let one = vec3<f32>(1.0);
     let base = one - min(one, (one - d) / max(s, vec3<f32>(1e-6)));
-    let r = select(base, vec3<f32>(0.0), s <= vec3<f32>(0.0)); // s==0 → 0
-    return select(r, one, d >= one); // d==1 → 1 (wins)
+    let r = select(base, vec3<f32>(0.0), s <= vec3<f32>(0.0));
+    return select(r, one, d >= one);
 }
 fn f_colour_dodge(s: vec3<f32>, d: vec3<f32>) -> vec3<f32> {
     let one = vec3<f32>(1.0);
     let base = min(one, d / max(one - s, vec3<f32>(1e-6)));
-    let r = select(base, one, s >= one); // s==1 → 1
-    return select(r, vec3<f32>(0.0), d <= vec3<f32>(0.0)); // d==0 → 0 (wins)
+    let r = select(base, one, s >= one);
+    return select(r, vec3<f32>(0.0), d <= vec3<f32>(0.0));
 }
 fn f_linear_burn(s: vec3<f32>, d: vec3<f32>) -> vec3<f32> {
     return clamp(s + d - vec3<f32>(1.0), vec3<f32>(0.0), vec3<f32>(1.0));
@@ -155,8 +150,6 @@ fn f_exclusion(s: vec3<f32>, d: vec3<f32>) -> vec3<f32> {
 fn f_divide(s: vec3<f32>, d: vec3<f32>) -> vec3<f32> {
     return clamp(d / max(s, vec3<f32>(1e-6)), vec3<f32>(0.0), vec3<f32>(1.0));
 }
-
-// --- Non-separable (HSL) helpers (W3C compositing §non-separable). ---
 
 fn blend_lum(c: vec3<f32>) -> f32 {
     return dot(c, vec3<f32>(0.3, 0.59, 0.11));
@@ -193,32 +186,32 @@ fn blend_encoded(mode: f32, s: vec3<f32>, d: vec3<f32>) -> vec3<f32> {
     else if (mode < 1.5) { return f_overlay(s, d); }
     else if (mode < 2.5) { return f_soft_light(s, d); }
     else if (mode < 3.5) { return f_hard_light(s, d); }
-    else if (mode < 7.5) { return f_colour_burn(s, d); }        // 7
-    else if (mode < 8.5) { return f_linear_burn(s, d); }        // 8
-    else if (mode < 9.5) {                                      // 9 darker colour
+    else if (mode < 7.5) { return f_colour_burn(s, d); }
+    else if (mode < 8.5) { return f_linear_burn(s, d); }
+    else if (mode < 9.5) {
         return select(d, s, blend_lum(s) < blend_lum(d));
     }
-    else if (mode < 10.5) { return f_colour_dodge(s, d); }      // 10
-    else if (mode < 11.5) {                                     // 11 lighter colour
+    else if (mode < 10.5) { return f_colour_dodge(s, d); }
+    else if (mode < 11.5) {
         return select(d, s, blend_lum(s) > blend_lum(d));
     }
-    else if (mode < 12.5) { return f_vivid_light(s, d); }       // 12
-    else if (mode < 13.5) { return f_linear_light(s, d); }      // 13
-    else if (mode < 14.5) { return f_pin_light(s, d); }         // 14
-    else if (mode < 15.5) { return f_hard_mix(s, d); }          // 15
-    else if (mode < 16.5) { return f_difference(s, d); }        // 16
-    else if (mode < 17.5) { return f_exclusion(s, d); }         // 17
-    else if (mode < 18.5) { return f_divide(s, d); }            // 18
-    else if (mode < 19.5) {                                     // 19 hue
+    else if (mode < 12.5) { return f_vivid_light(s, d); }
+    else if (mode < 13.5) { return f_linear_light(s, d); }
+    else if (mode < 14.5) { return f_pin_light(s, d); }
+    else if (mode < 15.5) { return f_hard_mix(s, d); }
+    else if (mode < 16.5) { return f_difference(s, d); }
+    else if (mode < 17.5) { return f_exclusion(s, d); }
+    else if (mode < 18.5) { return f_divide(s, d); }
+    else if (mode < 19.5) {
         return set_lum(set_sat(s, blend_sat(d)), blend_lum(d));
     }
-    else if (mode < 20.5) {                                     // 20 saturation
+    else if (mode < 20.5) {
         return set_lum(set_sat(d, blend_sat(s)), blend_lum(d));
     }
-    else if (mode < 21.5) {                                     // 21 colour
+    else if (mode < 21.5) {
         return set_lum(s, blend_lum(d));
     }
-    else {                                                      // 22 luminosity
+    else {
         return set_lum(d, blend_lum(s));
     }
 }
@@ -257,13 +250,13 @@ fn fs_layer_snapshot(in: VsOut) -> @location(0) vec4<f32> {
     let dst = textureSample(dst_snapshot, samp, comp_uv);
     let mode = layer.target_size.z;
     var blended: vec3<f32>;
-    if (mode >= 3.5 && mode < 4.5) { // lighten: per-channel max, linear
+    if (mode >= 3.5 && mode < 4.5) {
         blended = max(texel.rgb, dst.rgb);
-    } else if (mode >= 4.5 && mode < 5.5) { // darken: per-channel min, linear
+    } else if (mode >= 4.5 && mode < 5.5) {
         blended = min(texel.rgb, dst.rgb);
-    } else if (mode >= 5.5 && mode < 6.5) { // subtract: dst − src, clamped, linear
+    } else if (mode >= 5.5 && mode < 6.5) {
         blended = max(dst.rgb - texel.rgb, vec3<f32>(0.0));
-    } else { // the encoded (perceptual) set: 0–3 and 7–22
+    } else {
         let s_enc = srgb_encode_c(clamp(texel.rgb, vec3<f32>(0.0), vec3<f32>(1.0)));
         let d_enc = srgb_encode_c(clamp(dst.rgb, vec3<f32>(0.0), vec3<f32>(1.0)));
         blended = srgb_decode_c(blend_encoded(mode, s_enc, d_enc));
@@ -295,7 +288,6 @@ fn layer_colour(in: VsOut) -> vec4<f32> {
     var k = layer.params.x * textureSample(layer_mask, samp, in.uv).a;
     var a = texel.a * k;
     if (layer.params.y > 0.5) {
-        // Matte lives in comp space: sample at this fragment's comp position.
         let comp_uv = in.pos.xy / layer.target_size.xy;
         let m = textureSample(matte, samp, comp_uv);
         var strength = m.a;
@@ -364,8 +356,6 @@ fn fs_accumulate_f32(in: VsOut) -> @location(0) vec4<f32> {
     return prev + textureSample(src, samp, in.uv) * layer.params.x;
 }
 
-// Resolve the fp32 running sum back into the working (fp16) format — the single,
-// final rounding, for downstream compositing and display.
 @fragment
 fn fs_copy_f32(in: VsOut) -> @location(0) vec4<f32> {
     return textureLoad(accum_prev, vec2<i32>(in.pos.xy), 0);

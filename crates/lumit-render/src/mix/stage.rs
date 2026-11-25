@@ -1,6 +1,3 @@
-//! The bus stage: sound arriving through a Precomp layer with a rack or a
-//! retime is summed and run through it before it reaches the mix.
-
 use uuid::Uuid;
 
 use std::sync::atomic::AtomicBool;
@@ -9,8 +6,6 @@ use super::bake::{chain_bake_until, gain_bake};
 use super::jobs::{AudioJob, Carrier};
 use super::mixdown::read_retimed;
 
-/// One job on its way into the mix, as the bus stage takes it: the run about
-/// to be placed (its clip and layer racks already run) and where it lands.
 pub struct PlacedJob<'a> {
     pub job: &'a AudioJob,
     pub start_frame: i64,
@@ -25,17 +20,11 @@ pub fn in_a_bus(job: &AudioJob) -> bool {
     bus_at(job, 0).is_some()
 }
 
-/// Whose sound one [`MixRun`] is.
 pub enum RunOf {
-    /// One job's own, at this index of what the stage was handed: the caller
-    /// places the samples it already has.
     Job(usize),
-    /// A **bus**: everything arriving through one Precomp layer, summed and
-    /// run through that layer's rack.
     Bus(Vec<f32>),
 }
 
-/// One run for the mixer to place, with the gain still to ride on it.
 pub struct MixRun {
     /// Which of the jobs handed to [`bus_runs`] this run stands where: the
     /// job itself, or the first job of the bus. Runs are summed in the order
@@ -84,8 +73,6 @@ pub fn bus_runs(
     runs_at(placed, &all, 0, rate, offline, cancel)
 }
 
-/// The first carrier at or past `depth` that holds a rack or a retime: where
-/// this job's sound is summed on its way out.
 fn bus_at(job: &AudioJob, depth: usize) -> Option<usize> {
     job.carriers
         .iter()
@@ -107,8 +94,6 @@ fn bus_mark(c: &Carrier) -> Option<*const ()> {
         })
 }
 
-/// The runs inside one bus: `which` indexes [`bus_runs`]'s input and `depth`
-/// is the first carrier whose gain has not been spent yet.
 fn runs_at(
     placed: &[PlacedJob<'_>],
     which: &[usize],

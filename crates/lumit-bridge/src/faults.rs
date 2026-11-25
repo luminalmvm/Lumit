@@ -65,7 +65,6 @@ fn record_to(file: &std::path::Path, line: &str) {
     let over = std::fs::metadata(file)
         .map(|m| m.len() > CAP)
         .unwrap_or(false);
-    // The cache directory may not exist yet on a first run.
     if let Some(parent) = file.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
@@ -124,7 +123,6 @@ pub(crate) fn record_adapter() {
     });
 }
 
-/// Said once, whoever asks and however many renderers a session builds.
 static ADAPTER: Once = Once::new();
 
 /// A frame the Linux Viewer could not be handed. Every frame after it fails the
@@ -154,8 +152,6 @@ pub(crate) fn record_dmabuf_failure(err: &str) {
 /// worker's own call arms nothing and costs nothing.
 pub(crate) fn watch() {
     HOOK.call_once(|| {
-        // The device's errors and its loss, which the engine only says on the
-        // console otherwise.
         lumit_gpu::diagnostics_to(record);
         let previous = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |info| {
@@ -176,7 +172,6 @@ pub(crate) fn watch() {
     });
 }
 
-/// Installed once, whoever asks and however often.
 static HOOK: Once = Once::new();
 
 /// Arm the hook as the library loads, before any of Lumit's own code runs.
@@ -197,8 +192,6 @@ static ARM_ON_LOAD: extern "C" fn() = arm_on_load;
 
 extern "C" fn arm_on_load() {
     watch();
-    // Which device hardware decode found and why it stepped back to
-    // software, in the same file, from before any footage opens.
     #[cfg(feature = "media")]
     lumit_media::decode::report_hardware_to(record);
 }
@@ -212,10 +205,8 @@ mod tests {
         std::fs::read_to_string(path()).unwrap_or_default()
     }
 
-    /// The name of the test below, as the harness filters on it.
     const NO_WORKER_TEST: &str = "faults::tests::the_hook_is_armed_before_any_worker_exists";
 
-    /// Set on the child run, and holding the marker the child panics with.
     const CHILD: &str = "LUMIT_FAULTS_NO_WORKER_CHILD";
 
     /// **The regression a start-up crash needs.** The hook must be armed before
@@ -291,8 +282,6 @@ mod tests {
         );
     }
 
-    /// The file cannot grow without bound: a session faulting in a loop starts
-    /// the file again rather than filling the disk.
     #[test]
     fn the_file_starts_again_once_it_is_too_big() {
         // Its own file: filling the real one would wipe the markers the other

@@ -19,7 +19,6 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/viewer_panel_frb.dart';
 
-/// The surface: a green field with a 20 × 20 filtered [picture] in the middle.
 Future<int Function(int, int)> _render(
   WidgetTester tester,
   ViewerChannel channel,
@@ -70,15 +69,12 @@ void main() {
     testWidgets('the $channel filter does not paint outside the picture',
         (tester) async {
       final at = await _render(tester, channel, const Texture(textureId: 0));
-      // Two far corners, standing in for the toolbar and the side panel.
       expect(at(5, 5), 0xFF00FF00, reason: 'the surround must keep its colour');
       expect(at(700, 500), 0xFF00FF00);
     });
   }
 
   testWidgets('the filter still reaches the picture', (tester) async {
-    // The red channel of #3366FF is 0x33, shown grey — so a clip that swallowed
-    // the filter along with the escape would fail here.
     final at = await _render(
         tester, ViewerChannel.red, Container(color: const Color(0xFF3366FF)));
     expect(at(50, 50), 0xFF333333);

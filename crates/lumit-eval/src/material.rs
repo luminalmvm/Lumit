@@ -1,5 +1,3 @@
-//! A layer's Material options' part of a frame's name.
-
 use lumit_core::model::{Composition, Layer};
 
 use crate::feed_f64;
@@ -9,7 +7,6 @@ use crate::feed_f64;
 /// existed, so those keys stay valid.
 pub(crate) fn feed(h: &mut blake3::Hasher, comp: &Composition, layer: &Layer, lt: f64) {
     let m = &layer.transform.material;
-    // Its shadows, and whether a Model layer is a holdout.
     let shadows = [
         m.casts_shadows as u8,
         m.accepts_shadows as u8,

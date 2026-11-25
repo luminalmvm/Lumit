@@ -39,7 +39,6 @@ use planes::{
     plane_f32_mut, plane_i16_mut, plane_i32_mut,
 };
 
-/// Delivery codec choice (docs/06-RENDER-PIPELINE.md §7.4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum VideoCodec {
     H264,
@@ -53,7 +52,6 @@ pub enum VideoCodec {
     ProRes422Hq,
     /// Ten-bit 4:4:4 with an alpha channel.
     ProRes4444,
-    /// 4444 at a higher data rate.
     ProRes4444Xq,
     /// VP9 in a `.webm`, with an alpha channel, as a browser plays it.
     Vp9,
@@ -63,7 +61,6 @@ pub enum VideoCodec {
 }
 
 impl VideoCodec {
-    /// User-facing name (glossary voice: plain, no marketing).
     pub fn label(self) -> &'static str {
         match self {
             VideoCodec::H264 => "H.264",
@@ -96,7 +93,6 @@ impl VideoCodec {
         self.prores_profile().is_some()
     }
 
-    /// The kinds that carry alpha: ProRes 4444, VP9 and Animation.
     pub fn has_alpha(self) -> bool {
         matches!(
             self,
@@ -241,7 +237,6 @@ fn stamp_colour(frame: &mut AVFrame, tags: ColourTags) {
     }
 }
 
-/// Everything the video stream needs to open.
 #[derive(Debug, Clone)]
 pub struct VideoSettings {
     pub codec: VideoCodec,
@@ -256,7 +251,6 @@ pub struct VideoSettings {
     /// Constant bitrate: the stream holds `bit_rate` throughout, rather than
     /// spending more where the picture is busy up to `max_rate`.
     pub cbr: bool,
-    /// What the container states this stream's colour to be.
     pub colour: ColourTags,
     /// How wide each channel of the frames [`Encoder::write_rgba`] is handed:
     /// eight bits, or sixteen (little-endian) to fill a ten-bit ProRes.
@@ -282,7 +276,6 @@ pub enum BitDepth {
 }
 
 impl BitDepth {
-    /// Bytes one channel occupies in a packed frame buffer.
     pub fn bytes_per_channel(self) -> usize {
         match self {
             BitDepth::Eight => 1,
@@ -291,7 +284,6 @@ impl BitDepth {
         }
     }
 
-    /// User-facing name (glossary voice: plain, no marketing).
     pub fn label(self) -> &'static str {
         match self {
             BitDepth::Eight => "8-bit",
@@ -313,7 +305,6 @@ impl BitDepth {
     }
 }
 
-/// The audio codec a container carries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum AudioCodec {
     /// AAC — what every delivery preset uses (docs/09 §8), and the only thing
@@ -355,7 +346,6 @@ impl AudioCodec {
         }
     }
 
-    /// Calm user-facing name.
     pub fn label(self) -> &'static str {
         match self {
             AudioCodec::Aac => "AAC",
@@ -366,7 +356,6 @@ impl AudioCodec {
     }
 }
 
-/// Everything the audio stream needs to open.
 #[derive(Debug, Clone)]
 pub struct AudioSettings {
     /// Sample rate in Hz (delivery presets use 48 000, docs/06 §7.5).
@@ -403,7 +392,6 @@ impl Metadata {
     pub const COMMENT: &'static str = "comment";
     pub const CREATION_TIME: &'static str = "creation_time";
 
-    /// The classic set, in page order.
     pub const STANDARD_KEYS: [&'static str; 5] = [
         Self::TITLE,
         Self::AUTHOR,
@@ -506,7 +494,6 @@ pub fn pix_fmt_for(codec: VideoCodec, encoder: &str) -> i32 {
     }
 }
 
-/// Calm user-facing name for an encoder ("Encoded with NVENC" style).
 pub fn encoder_label(encoder: &str) -> &'static str {
     match encoder {
         "h264_nvenc" | "hevc_nvenc" => "NVENC",
@@ -536,7 +523,6 @@ pub enum ImageFormat {
 }
 
 impl ImageFormat {
-    /// User-facing name (glossary voice: plain, no marketing).
     pub fn label(self) -> &'static str {
         match self {
             ImageFormat::Png => "PNG sequence",
@@ -545,7 +531,6 @@ impl ImageFormat {
         }
     }
 
-    /// The file extension each frame carries.
     pub fn extension(self) -> &'static str {
         match self {
             ImageFormat::Png => "png",
@@ -814,7 +799,6 @@ pub fn quiet_ffmpeg_log() {
 #[cfg(target_arch = "wasm32")]
 pub fn quiet_ffmpeg_log() {}
 
-/// The audio half of the muxer: AAC context plus the sample bookkeeping.
 #[cfg(not(target_arch = "wasm32"))]
 struct AudioTrack {
     ctx: AVCodecContext,
@@ -824,22 +808,18 @@ struct AudioTrack {
     rate: u32,
     /// 1 or 2 — the interleave width of every buffer this track handles.
     channels: usize,
-    /// Samples per AAC frame (1024 for the FFmpeg encoder).
     frame_size: usize,
-    /// Interleaved stereo samples not yet handed to the encoder.
     pending: Vec<f32>,
     /// Next frame's pts, counted in samples.
     next_pts: i64,
 }
 
-/// The video half of the muxer: encoder context plus its frame bookkeeping.
 #[cfg(not(target_arch = "wasm32"))]
 struct VideoTrack {
     ctx: AVCodecContext,
     encoder: &'static str,
     sws: SwsContext,
     encode_pix_fmt: i32,
-    /// What `write_rgba` is handed: eight-bit RGBA or sixteen-bit.
     src_pix_fmt: i32,
     src_bytes_per_px: usize,
     width: i32,
@@ -860,7 +840,6 @@ pub struct Encoder {
     /// The audio streams after the first, in a file opened to carry several
     /// ([`Self::open_with_sound`]). Empty for every export.
     more_audio: Vec<AudioTrack>,
-    /// The subtitle streams ([`Self::open_with_subtitles`]).
     subtitles: Vec<subtitles::SubtitleStream>,
     finished: bool,
 }
@@ -917,7 +896,6 @@ impl Encoder {
         }
     }
 
-    /// Calm user-facing name of the encoder in use (e.g. "NVENC").
     pub fn encoder_label(&self) -> &'static str {
         match (&self.video, &self.audio) {
             (Some(v), _) => encoder_label(v.encoder),
@@ -926,7 +904,6 @@ impl Encoder {
         }
     }
 
-    /// Whether this container carries a video stream.
     pub fn has_video(&self) -> bool {
         self.video.is_some()
     }
@@ -947,7 +924,6 @@ impl Encoder {
                 rgba.len()
             )));
         }
-        // RGBA source frame borrowing the caller's bytes via copy (v0).
         let mut src = AVFrame::new();
         src.set_width(track.width);
         src.set_height(track.height);
@@ -1055,7 +1031,6 @@ impl Encoder {
     }
 }
 
-/// Run the encoder ladder and add the video stream to the container.
 #[cfg(not(target_arch = "wasm32"))]
 fn open_video(
     output: &mut AVFormatContextOutput,
@@ -1167,7 +1142,6 @@ fn sliced_scaler(width: i32, height: i32, from: i32, to: i32) -> Result<SwsConte
         (*c).dst_h = height;
         (*c).dst_format = to;
         (*c).flags = ffi::SWS_BILINEAR as _;
-        // As many as the machine has.
         (*c).threads = 0;
         if ffi::sws_init_context(c, std::ptr::null_mut(), std::ptr::null_mut()) < 0 {
             return Err(failed());
@@ -1335,7 +1309,6 @@ fn test_encode(name: &str, v: &VideoSettings) -> Result<(), MediaError> {
     discard_packets(&mut ctx, true)
 }
 
-/// Pull and drop every ready packet from a test-encode context.
 #[cfg(not(target_arch = "wasm32"))]
 fn discard_packets(ctx: &mut AVCodecContext, at_eof: bool) -> Result<(), MediaError> {
     loop {
@@ -1349,7 +1322,6 @@ fn discard_packets(ctx: &mut AVCodecContext, at_eof: bool) -> Result<(), MediaEr
     }
 }
 
-/// Open the audio encoder and add its stream to the container.
 #[cfg(not(target_arch = "wasm32"))]
 fn open_audio(
     output: &mut AVFormatContextOutput,
@@ -1433,7 +1405,6 @@ fn pump_audio(
     Ok(())
 }
 
-/// Encode exactly one AAC frame's worth of interleaved samples.
 #[cfg(not(target_arch = "wasm32"))]
 fn encode_audio_frame(
     track: &mut AudioTrack,
@@ -1458,9 +1429,6 @@ fn encode_audio_frame(
         .map_err(|e| MediaError::Ffmpeg(e.to_string()))?;
     match track.codec {
         AudioCodec::Aac => {
-            // Planar float: one plane per channel, de-interleaved. Stereo is
-            // plane 0 = left and plane 1 = right; mono is plane 0 and nothing
-            // else.
             for ch in 0..chans {
                 let plane = plane_f32_mut(frame.data[ch], n)?;
                 for (dst, src) in plane
@@ -1489,7 +1457,6 @@ fn encode_audio_frame(
             }
         }
         AudioCodec::Opus => {
-            // Packed float: one plane, L R L R …, as it comes.
             let out = plane_f32_mut(frame.data[0], n * chans)?;
             out.copy_from_slice(&interleaved[..n * chans]);
         }
@@ -1627,25 +1594,17 @@ mod tests {
         }
     }
 
-    /// The core fallback rule: hardware that exists in the build but fails
-    /// its test open is skipped, not fatal.
     #[test]
     fn pick_falls_through_hardware_that_fails_to_open() {
         let candidates = encoder_candidates(VideoCodec::H264);
-        // Simulate a machine where NVENC and AMF exist but cannot open
-        // (wrong GPU vendor) and QSV is absent: software must win.
         let picked = pick_first_working(candidates, |name| name == "libx264");
         assert_eq!(picked, Some("libx264"));
-        // Simulate a working NVIDIA machine: the first rung wins.
         let picked = pick_first_working(candidates, |name| {
             name.ends_with("_nvenc") || name.starts_with("libx")
         });
         assert_eq!(picked, Some("h264_nvenc"));
     }
 
-    /// Self-verifying loop: encode a gradient sweep, then probe and index the
-    /// file with our OWN readers — dimensions, rate, and frame count must
-    /// round-trip exactly.
     #[test]
     fn encoded_file_round_trips_through_our_own_probe_and_index() {
         let dir = tempfile::tempdir().unwrap();
@@ -1795,7 +1754,6 @@ mod tests {
             assert_eq!(&stream_tag.to_le_bytes(), tag);
         }
 
-        // Sixteen-bit frames go in little-endian: mid grey stays mid grey.
         let path = dir.path().join("deep.mov");
         let mut v = video_settings(VideoCodec::ProRes422Hq, 320, 240);
         v.depth = BitDepth::Sixteen;
@@ -1812,10 +1770,6 @@ mod tests {
         assert!(red.abs_diff(0x60) <= 2, "read back {red}");
     }
 
-    /// **A WebM and a QuickTime Animation keep their alpha.** VP9 in a .webm
-    /// with Opus sound, and Animation in a .mov with PCM: each opens, writes,
-    /// and reads back as the codec it claims, with a transparent pixel still
-    /// transparent.
     #[test]
     fn webm_and_animation_keep_their_alpha() {
         let dir = tempfile::tempdir().unwrap();
@@ -1836,7 +1790,6 @@ mod tests {
                 &Metadata::new(),
             )
             .unwrap();
-            // The left half opaque grey, the right half clear.
             let mut rgba = Vec::with_capacity(320 * 240 * 4);
             for _ in 0..240 {
                 for x in 0..320 {
@@ -1860,8 +1813,6 @@ mod tests {
         }
     }
 
-    /// **Constant bitrate opens on the software ladder.** x264 with its floor
-    /// and ceiling at the target writes a playable file.
     #[test]
     fn a_constant_bitrate_h264_opens_and_writes() {
         let dir = tempfile::tempdir().unwrap();
@@ -1911,8 +1862,6 @@ mod tests {
                         &Metadata::new(),
                     )
                     .unwrap_or_else(|e| panic!("{name} at {rate} Hz, {channels} ch: {e}"));
-                    // Half a second of a steady half-scale tone, interleaved
-                    // at this layout's own width.
                     let frames = rate as usize / 2;
                     let samples: Vec<f32> = vec![0.5; frames * usize::from(channels)];
                     enc.write_audio(&samples).unwrap();
@@ -1927,8 +1876,6 @@ mod tests {
                     );
                     assert_eq!(audio.codec, name);
 
-                    // The uncompressed forms must come back at the level that
-                    // went in — which is what checks the 24-bit scaling.
                     if codec != AudioCodec::Aac {
                         let back = crate::audio::decode_all(&path, rate).unwrap();
                         let mid = back.samples.len() / 2;
@@ -1953,10 +1900,6 @@ mod tests {
         }
     }
 
-    /// Audio joins the container: a 440 Hz sine goes in as f32 samples and
-    /// must come back out — probed as 48 kHz stereo AAC, decodable by our
-    /// own audio reader, at the amplitude that went in (AAC is lossy, so a
-    /// generous tolerance).
     #[test]
     fn audio_round_trips_interleaved_with_video() {
         let dir = tempfile::tempdir().unwrap();
@@ -1986,8 +1929,6 @@ mod tests {
                 [s, s]
             })
             .collect();
-        // Interleave like the export loop does: one video frame, then the
-        // samples that cover it.
         let mut fed = 0usize;
         for n in 0..frames {
             enc.write_rgba(&rgba).unwrap();
@@ -2004,14 +1945,12 @@ mod tests {
         assert_eq!(audio.sample_rate, 48_000);
         assert_eq!(audio.channels, 2);
         assert_eq!(audio.codec, "aac");
-        // ~1.5 s of both streams.
         assert!(
             (probe.duration_seconds - 1.5).abs() < 0.15,
             "duration {}",
             probe.duration_seconds
         );
 
-        // Decode our own file back: the sine must survive with its level.
         let buf = crate::audio::decode_all(&path, rate).unwrap();
         assert!(
             (buf.duration_seconds() - 1.5).abs() < 0.15,
@@ -2029,10 +1968,6 @@ mod tests {
         assert!((rms - 0.3535).abs() < 0.035, "rms {rms}");
     }
 
-    /// A PNG sequence really writes one numbered file per frame, where the
-    /// pattern says, and each is a readable image (the PNG magic is enough to
-    /// prove the codec ran — a zero-byte or misnumbered file is the failure
-    /// this guards).
     #[test]
     fn a_png_sequence_writes_one_numbered_file_per_frame() {
         let dir = tempfile::tempdir().unwrap();
@@ -2088,8 +2023,6 @@ mod tests {
                 ColourTags::Srgb,
             )
             .unwrap();
-            // Interleaved scene-linear float RGBA: red four times white, green
-            // a half, blue nought, opaque.
             let mut frame = Vec::new();
             for _ in 0..8 * 4 {
                 for v in [4.0f32, 0.5, 0.0, 1.0] {
@@ -2126,20 +2059,13 @@ mod tests {
         }
     }
 
-    /// Regression: `width * height * 4` used to be raw `i32` arithmetic in
-    /// `write_rgba`, which overflow-panics (debug builds) or wraps into a
-    /// wrong, too-small size (release builds) for large-but-plausible
-    /// dimensions. It must report a typed error instead.
     #[test]
     fn frame_len_errors_instead_of_overflowing() {
-        // 50,000 x 50,000 x 4 overflows i32::MAX (2,147,483,647).
         assert!(frame_len(50_000, 50_000, 4).is_err());
         assert_eq!(frame_len(2, 2, 4).unwrap(), 16);
         assert_eq!(frame_len(320, 240, 4).unwrap(), 320 * 240 * 4);
     }
 
-    /// Metadata really lands in the container: written on the way out, read
-    /// back with FFmpeg's own reader on the way in.
     #[test]
     fn metadata_round_trips_into_the_container() {
         let dir = tempfile::tempdir().unwrap();
@@ -2174,14 +2100,10 @@ mod tests {
         assert_eq!(got(Metadata::COMMENT).as_deref(), Some("exported by Lumit"));
     }
 
-    /// A sixteen-bit still really writes sixteen-bit files, in both formats,
-    /// from little-endian `u16` samples — and a frame sized for eight bits is
-    /// refused rather than read past its end.
     #[test]
     fn sixteen_bit_stills_write_wide_files() {
         let dir = tempfile::tempdir().unwrap();
         let (w, h) = (16u32, 8u32);
-        // Mid grey at full alpha, as little-endian u16 samples.
         let px: Vec<u8> = [0x8000u16, 0x4000, 0x2000, 0xffff]
             .iter()
             .flat_map(|s| s.to_le_bytes())
@@ -2205,14 +2127,11 @@ mod tests {
             )
             .unwrap();
             enc.write_rgba(&frame).unwrap();
-            // An eight-bit-sized buffer is the wrong size now, and says so.
             assert!(enc.write_rgba(&vec![0u8; (w * h * 4) as usize]).is_err());
             enc.finish().unwrap();
 
             let written = std::fs::read(sequence_frame_path(&path, 1)).unwrap();
             assert!(!written.is_empty(), "{name} has bytes");
-            // Probe it back through our own reader: a 16-bit still decodes,
-            // and its dimensions survive.
             let probe = crate::probe::probe(sequence_frame_path(&path, 1)).unwrap();
             let video = probe.video.expect("a still is a one-frame video");
             assert_eq!((video.width, video.height), (w, h), "{name}");

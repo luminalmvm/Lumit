@@ -31,29 +31,23 @@ import 'pro_window.dart';
 import 'settings_window_frb.dart';
 import 'sign_in_window.dart';
 
-/// How wide the card is drawn.
 const double profileCardWidth = 288;
 
-/// A profile's name, or the stand-in for one that has none.
 String profileName(Profile profile) =>
     profile.name.trim().isEmpty ? l10n.profileUnnamed : profile.name.trim();
 
-/// The sweep that marks Lumit Pro, corner to corner.
 const LinearGradient proSweep = LinearGradient(
   begin: Alignment.topLeft,
   end: Alignment.bottomRight,
   colors: brandProSweep,
 );
 
-/// [child] drawn in the sweep, which is how a mark says it is Lumit Pro's.
 Widget proSwept(Widget child) => ShaderMask(
       blendMode: BlendMode.srcIn,
       shaderCallback: (bounds) => proSweep.createShader(bounds),
       child: child,
     );
 
-/// A profile's picture: the one its account came with, or its initial on
-/// its own colour. With [pro] it stands inside the Pro ring.
 class ProfileAvatar extends StatelessWidget {
   final Profile profile;
   final double size;
@@ -98,7 +92,6 @@ class ProfileAvatar extends StatelessWidget {
               width: inner,
               height: inner,
               fit: BoxFit.cover,
-              // A picture that will not load is the initial, not a hole.
               errorBuilder: (_, __, ___) => initial,
               frameBuilder: (_, child, frame, __) =>
                   frame == null ? initial : child,
@@ -121,7 +114,6 @@ class ProfileAvatar extends StatelessWidget {
   }
 }
 
-/// The small badge that says Pro, lettered in the sweep.
 class ProBadge extends StatelessWidget {
   final bool preview;
   const ProBadge({super.key, this.preview = false});
@@ -150,7 +142,6 @@ class ProBadge extends StatelessWidget {
   }
 }
 
-/// The button on the bottom strip.
 class ProfileChip extends StatefulWidget {
   const ProfileChip({super.key});
 
@@ -164,7 +155,6 @@ class _ProfileChipState extends State<ProfileChip> {
   Future<void> _show(LumitUiState ui) async {
     final box = context.findRenderObject()! as RenderBox;
     setState(() => _open = true);
-    // Who has asked since, for the count on the Friends row.
     unawaited(ui.account.loadFriends());
     // Anchored at the button's own corner. The card is taller than the room
     // under that, so the popup's own placing lifts it clear of the window's
@@ -371,7 +361,6 @@ class _ProfileCard extends StatelessWidget {
     );
   }
 
-  /// Who this is: the picture, the name, and the account or the lack of one.
   Widget _who(LumitTheme t, Profile profile, CloudAccount? account) => Padding(
         padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
         child: Row(
@@ -411,7 +400,6 @@ class _ProfileCard extends StatelessWidget {
       );
 }
 
-/// Open the shop's page for the account's subscription, in the browser.
 Future<void> openSubscriptionPage(AccountState account) async {
   try {
     await openExternalLink(await account.portalUrl());
@@ -420,8 +408,6 @@ Future<void> openSubscriptionPage(AccountState account) async {
   }
 }
 
-/// What a person without Pro sees in the card: a quiet invitation, edged in
-/// the sweep.
 class _ProInvite extends StatefulWidget {
   final VoidCallback onSee;
   const _ProInvite({required this.onSee});
@@ -617,7 +603,6 @@ class _RingPainter extends CustomPainter {
   final Color track;
   final double stroke;
 
-  /// The colour of the arc that turns, or null for a ring with none.
   final Color? arc;
 
   const _RingPainter(this.track, this.stroke, this.arc);

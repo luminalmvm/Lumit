@@ -120,7 +120,6 @@ impl ExclusionMask {
     }
 }
 
-/// Whether any of `masks` forbids `(x, y)`.
 pub(crate) fn excluded(masks: &[ExclusionMask], x: f64, y: f64) -> bool {
     masks.iter().any(|m| m.excludes(x, y))
 }

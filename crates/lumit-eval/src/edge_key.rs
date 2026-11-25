@@ -1,5 +1,3 @@
-//! What one node graph wire adds to a frame's name.
-
 /// Fold one wire into the frame key.
 ///
 /// Where it comes from and where it goes, tag byte first so two shapes cannot

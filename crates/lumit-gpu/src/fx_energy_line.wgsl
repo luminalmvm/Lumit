@@ -14,7 +14,6 @@
 
 const TILE: u32 = 16u;
 const MAX_SAMPLES: u32 = 16u;
-// == draw::HALO_REACH and draw::HALO_FALL.
 const HALO_REACH: f32 = 8.0;
 const HALO_FALL: f32 = 1.2;
 
@@ -64,7 +63,6 @@ struct Params {
 @group(0) @binding(6) var halo: texture_2d<f32>;
 @group(0) @binding(7) var dst: texture_storage_2d<rgba16float, write>;
 
-// == draw::WARP_TAPS.
 fn tap(i: u32) -> vec2<f32> {
     switch i {
         case 1u: { return vec2<f32>(17.31, -9.73); }
@@ -74,7 +72,6 @@ fn tap(i: u32) -> vec2<f32> {
     }
 }
 
-// == draw::warp.
 fn warp(x: f32, y: f32, amount: f32, pair: u32) -> vec2<f32> {
     if (amount <= 0.0) {
         return vec2<f32>(0.0, 0.0);
@@ -89,13 +86,11 @@ fn warp(x: f32, y: f32, amount: f32, pair: u32) -> vec2<f32> {
     return vec2<f32>(nx, ny);
 }
 
-// == draw::halo_at.
 fn halo_at(out: f32, r: f32) -> f32 {
     let floor_v = exp(-HALO_REACH / HALO_FALL);
     return clamp((exp(-out / (r * HALO_FALL)) - floor_v) / (1.0 - floor_v), 0.0, 1.0);
 }
 
-// == draw::core_at.
 @compute @workgroup_size(8, 8)
 fn el_core(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (gid.x >= p.w || gid.y >= p.h) {
@@ -149,7 +144,6 @@ fn el_core(@builtin(global_invocation_id) gid: vec3<u32>) {
     textureStore(core_out, vec2<i32>(gid.xy), vec4<f32>(sum, 0.0));
 }
 
-// == draw::sample.
 fn sample(x: f32, y: f32) -> f32 {
     let fx = x - 0.5;
     let fy = y - 0.5;
@@ -167,7 +161,6 @@ fn sample(x: f32, y: f32) -> f32 {
     return top + (bottom - top) * ty;
 }
 
-// == draw::combine, after draw::render's glow push.
 @compute @workgroup_size(8, 8)
 fn el_combine(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (gid.x >= p.w || gid.y >= p.h) {

@@ -135,8 +135,6 @@ class _ShotsPanelFrbState extends State<ShotsPanelFrb> {
     }
   }
 
-  // --- Reads ---------------------------------------------------------------
-
   double _aspect() => _shape().$1;
 
   /// The comp's width in pixels, how big its picture is at its own size.
@@ -159,7 +157,6 @@ class _ShotsPanelFrbState extends State<ShotsPanelFrb> {
         );
       }
     } catch (_) {
-      // No comp; the usual shape.
     }
     _aspectRead = (comp?.internalid, revision, shape);
     return shape;
@@ -213,7 +210,6 @@ class _ShotsPanelFrbState extends State<ShotsPanelFrb> {
         }
         group = s.layer.getGradeGroup(clip: s.clip);
       } catch (_) {
-        // The shot went; it is gone from the list on the next read.
       }
       _meta[key] = (version: version, group: group);
     }
@@ -353,8 +349,6 @@ class _ShotsPanelFrbState extends State<ShotsPanelFrb> {
     return null;
   }
 
-  // --- Picking -------------------------------------------------------------
-
   List<BridgeShot> _shown(List<BridgeShot> all) => [
         for (final s in all)
           if ((_label == null || s.label == _label) &&
@@ -445,8 +439,6 @@ class _ShotsPanelFrbState extends State<ShotsPanelFrb> {
           x
     ];
   }
-
-  // --- Menu ----------------------------------------------------------------
 
   MenuRow _row(String key, String label, VoidCallback close, VoidCallback run,
           {bool enabled = true, bool? ticked, String? action}) =>
@@ -581,7 +573,6 @@ class _ShotsPanelFrbState extends State<ShotsPanelFrb> {
       try {
         edit();
       } catch (_) {
-        // The shot went, or refused.
       }
       _tell();
     }
@@ -722,8 +713,6 @@ class _ShotsPanelFrbState extends State<ShotsPanelFrb> {
     _tell();
   }
 
-  // --- Drawing -------------------------------------------------------------
-
   @override
   Widget build(BuildContext context) {
     final ui = uiState;
@@ -738,7 +727,6 @@ class _ShotsPanelFrbState extends State<ShotsPanelFrb> {
         final numbers = {
           for (final (i, s) in all.indexed) shotOf(s).key: i + 1,
         };
-        // Picks of shots that went are let go.
         _picked.removeWhere((k) => !numbers.containsKey(k));
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -867,7 +855,6 @@ class _ShotsPanelFrbState extends State<ShotsPanelFrb> {
     }
     _across = 1;
     final down = pane.height > pane.width;
-    // Across, the picture is as tall as the pane allows; down, as wide.
     final double pictureW, pictureH;
     if (down) {
       pictureW = (pane.width - pad * 2).clamp(40.0, 360.0);
@@ -917,8 +904,6 @@ class _ShotsPanelFrbState extends State<ShotsPanelFrb> {
     );
   }
 
-  /// The Lightbox: every shot as a large picture, row after row in time
-  /// order, with the strip's numbers, picks and menus.
   Widget _lightbox(LumitTheme t, Size pane, List<BridgeShot> all,
       List<BridgeShot> shown, Map<String, int> numbers, double aspect) {
     // About four across a full-width window, and never wider than the
@@ -1033,7 +1018,6 @@ class _ShotsPanelFrbState extends State<ShotsPanelFrb> {
                   ],
                 ),
               ),
-              // The name, and the version after it when there is a choice.
               SizedBox(
                 height: line,
                 child: Row(

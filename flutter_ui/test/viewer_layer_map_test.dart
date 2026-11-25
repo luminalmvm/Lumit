@@ -1,6 +1,3 @@
-// Unit tests for the ported egui `LayerMap` maths (viewer_layer_map.dart) —
-// hand-computed cases for the layer↔screen round trip, the pan-behind position,
-// and the scale-handle solve. No widget tree: pure geometry.
 
 import 'package:flutter/widgets.dart' show Matrix4;
 import 'package:flutter_test/flutter_test.dart';
@@ -32,7 +29,6 @@ void main() {
         origin: Offset.zero,
         viewScale: 1,
       );
-      // (10, 0) rotates to (0, 10): rx = 10·cos - 0·sin = 0, ry = 10·sin = 10.
       expectOffset(m.toScreen(10, 0), const Offset(0, 10), eps: 1e-9);
       expectOffset(m.layerOf(const Offset(0, 10)), const Offset(10, 0),
           eps: 1e-9);
@@ -62,7 +58,6 @@ void main() {
   });
 
   group('A 3D layer seen through a camera', () {
-    // A camera at rest over a 1920 by 1080 comp, its zoom 1000.
     const rows = <double>[1, 0, 0.96, 0, 0, 1, 0.54, 0, 0, 0, 0.001, 1];
     ViewerLayerMap map({double z = 0, double tilt = 0}) => ViewerLayerMap.of(
           positionX: 700,
@@ -103,7 +98,6 @@ void main() {
         expectOffset(m.layerOf(screen), p, eps: 1e-6);
         expect(m.depthAt(screen)! - m.depthOf(p.dx, p.dy), closeTo(0, 1e-9));
       }
-      // Pushed back, it is further away than the plane seen 1:1.
       expect(m.depthOf(50, 30), greaterThan(1));
     });
   });
@@ -227,8 +221,6 @@ void main() {
         origin: const Offset(3, 9),
         viewScale: 1.3,
       );
-      // Choose a target scale, compute where the corner would land, then check
-      // the solve recovers that scale from that pointer.
       const cornerX = 90.0, cornerY = 70.0;
       const wantSx = 175.0, wantSy = 60.0;
       final scaled = ViewerLayerMap.of(

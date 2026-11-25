@@ -17,17 +17,13 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Mood lighting's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "mood_lighting",
     label = "Mood lighting",
     version = 1,
     category = Stylise,
-    // Three octaves of 3-D noise a pixel, then a pointwise grade.
     cost = Moderate,
-    // The light is read at the pixel's own place; nothing is tapped from a
-    // neighbour.
     roi = Exact,
     // §2.2: a multiply and a grade of premultiplied colour would shift matte
     // edges.
@@ -39,9 +35,6 @@ use lumit_fx_macros::Effect;
     ),
 )]
 pub struct MoodLighting {
-    /// The shape of the light. Amorphous is soft round pools, Digital the same
-    /// pools read once per square block, Streaks the pools stretched sideways
-    /// into long bands.
     #[choice(options = ["Amorphous", "Digital", "Streaks"], default = 0)]
     pub style: u32,
 
@@ -80,11 +73,9 @@ pub struct MoodLighting {
     #[slider(min = 0.0, max = 200.0, default = 115.0, hard_min = 0.0, unit = Percent)]
     pub contrast: f32,
 
-    /// Which arrangement of pools this instance lights with (§2.4).
     #[seed]
     pub seed: u32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -148,7 +139,6 @@ impl MoodLighting {
     }
 }
 
-/// Mood lighting's behaviour.
 pub struct MoodLightingDef;
 
 impl EffectDef for MoodLightingDef {

@@ -186,11 +186,8 @@ List<Widget> flatGroupPrefix(LumitTheme t, String? group) => group == null
 /// the gesture. A drag that plants a *new* key was worse — it planted one per
 /// tick.
 class KeyedValueField extends StatefulWidget {
-  /// The key on the inner field, so tests and callers address it as they
-  /// would an ordinary value field.
   final Key fieldKey;
 
-  /// The document's value at the playhead.
   final double value;
   final double min;
   final double max;
@@ -198,10 +195,8 @@ class KeyedValueField extends StatefulWidget {
   final int decimals;
   final String? suffix;
 
-  /// The words the resting face reads, as [DragValueField.reading].
   final String Function(num value)? reading;
 
-  /// The property's default, where it has one: what the field's Reset keys.
   final double? resetTo;
 
   /// The finished edit: a released drag, or a typed value. Called once.
@@ -242,7 +237,6 @@ class KeyedValueField extends StatefulWidget {
 }
 
 class _KeyedValueFieldState extends State<KeyedValueField> {
-  /// The value under the pointer mid-drag; null when nothing is in flight.
   double? _staged;
 
   /// Whether this drag planted the key it is editing. That makes it the
@@ -265,8 +259,6 @@ class _KeyedValueFieldState extends State<KeyedValueField> {
   Widget build(BuildContext context) => DragValueField(
         key: widget.fieldKey,
         value: _staged ?? widget.value,
-        // This field exists only for a keyframed scalar, so its number rests
-        // in `animated` (§3.1) — the well is where a keyed property says so.
         keyed: true,
         min: widget.min,
         max: widget.max,
@@ -281,7 +273,6 @@ class _KeyedValueFieldState extends State<KeyedValueField> {
           setState(() => _staged = widget.value);
           _planted = widget.onStart?.call() ?? false;
         },
-        // A tick moves the number on screen, and shows it if the caller can.
         onChangeLive: (v) {
           setState(() => _staged = v.toDouble());
           _ordinary(() => widget.onLive?.call(v.toDouble()));
@@ -309,7 +300,6 @@ class PlayheadKeyedField extends StatelessWidget {
   final String? suffix;
   final double? resetTo;
 
-  /// The scalar with the edit keyed at the playhead.
   final ValueChanged<BridgeScalar> onWrite;
 
   const PlayheadKeyedField({
@@ -342,21 +332,16 @@ class PlayheadKeyedField extends StatelessWidget {
       );
 }
 
-/// The stopwatch a property row draws under [t]: the square-bodied one in
-/// Desk, where everything is square, and the round one in Studio and Lantern.
 String stopwatchGlyph(LumitTheme t) => t.shape == ThemeShape.desk
     ? LumitIcons.stopwatch
     : LumitIcons.stopwatchRound;
 
-/// What a row's menu asks of its keys, whatever they hold: a number or a
-/// whole shape.
 abstract interface class RowKeys {
   bool get animated;
   bool hasKeyAt(int frame);
   void toggleKeyAt(int frame);
   void toggleAnimatedAt(int frame);
 
-  /// The navigator for the end of a fold row's name, while the row is keyed.
   Widget? get trailingNavigator;
 }
 
@@ -375,12 +360,10 @@ class KeyframeControlsFrb extends StatelessWidget implements RowKeys {
   /// whole-value shape exists to avoid.
   final ValueChanged<List<BridgeScalar>> onWrite;
 
-  /// The comp, for turning frames into the exact rational times keys carry.
   final CompositionReference comp;
 
   final ValueChanged<int> onSeek;
 
-  /// Distinguishes this row's buttons in a panel full of them.
   final String rowKey;
 
   /// Lay the controls out on the Effect controls panel's **fixed columns**:
@@ -392,7 +375,6 @@ class KeyframeControlsFrb extends StatelessWidget implements RowKeys {
   /// render-switch column group, and it draws the two side by side.
   final bool fixedColumns;
 
-  /// Draw only the navigator, for the far end of a fixed-column row.
   final bool navigatorOnly;
 
   /// The Timeline's fold: the stopwatch alone, and the navigator from
@@ -422,8 +404,6 @@ class KeyframeControlsFrb extends StatelessWidget implements RowKeys {
     this.steps = true,
   });
 
-  /// This row's navigator as a widget of its own. [fold] keeps the fold's
-  /// button size.
   KeyframeControlsFrb navigator({bool fold = false, bool steps = true}) =>
       KeyframeControlsFrb(
         scalars: scalars,
@@ -440,26 +420,20 @@ class KeyframeControlsFrb extends StatelessWidget implements RowKeys {
   @override
   Widget? get trailingNavigator => _animated ? navigator(fold: true) : null;
 
-  /// Whether the row is keyed at all.
   @override
   bool get animated => _animated;
 
-  /// Whether a key sits on [frame].
   @override
   bool hasKeyAt(int frame) => _keyAt(frame) != null;
 
-  /// Add a key at [frame], or take away the one there.
   @override
   void toggleKeyAt(int frame) => _toggleKeyHere(frame);
 
-  /// Start animating, or stop and keep the value read at [frame].
   @override
   void toggleAnimatedAt(int frame) => _toggleAnimated(frame);
 
-  /// What each axis reads at [frame].
   List<double> valuesAtFrame(int frame) => _valuesNow(frame);
 
-  /// [values] written at [frame], as typing them into the row's wells does.
   void writeValuesAt(List<double> values, int frame) => onWrite([
         for (final (i, scalar) in scalars.indexed)
           scalarWithValueAt(scalar, values[i], comp, frame),
@@ -471,8 +445,6 @@ class KeyframeControlsFrb extends StatelessWidget implements RowKeys {
         BridgeScalar_Expression() => const [],
       };
 
-  /// Where the row has keys, which is what the navigator reads: the same
-  /// times its lane draws, whichever axes hold them.
   List<BridgeKeyframe> get _keys => rowKeysOf(scalars);
 
   /// True when *any* axis is animated. A row half-animated by the graph editor
@@ -579,8 +551,6 @@ class KeyframeControlsFrb extends StatelessWidget implements RowKeys {
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // The steps either side come up with the pointer, and the diamond
-          // stays to say whether the playhead is on a key.
           FxQuiet(child: navigator[0]),
           navigator[1],
           FxQuiet(child: navigator[2]),
@@ -595,8 +565,6 @@ class KeyframeControlsFrb extends StatelessWidget implements RowKeys {
       );
     }
 
-    // A stopwatch nothing has been keyed with rests quiet, and comes up with
-    // the pointer. A lit one is a statement about the row, and stays.
     return SizedBox(
       width: fxStopwatchColumn,
       child: _animated ? stopwatch : FxQuiet(rest: 0.3, child: stopwatch),
@@ -683,7 +651,6 @@ class KeyframeControlsFrb extends StatelessWidget implements RowKeys {
   BridgeKeyframe _newKeyAt(List<BridgeKeyframe> keys, int frame, double value) =>
       keyframeAmong(keys, comp.timeOfFrame(frame: frame), value);
 
-  /// The nearest key strictly before or after `frame`.
   BridgeKeyframe? _neighbour(int frame, {required bool before}) {
     BridgeKeyframe? best;
     int? bestFrame;
@@ -713,26 +680,18 @@ class KeyframeControlsFrb extends StatelessWidget implements RowKeys {
 /// of sending an animation. There is no value to plot, so the lane shows
 /// diamonds and no curve, and the row has no field.
 class PathKeyframesFrb extends StatelessWidget implements RowKeys {
-  /// This row's shape keys, as they came across with the mask or the
-  /// shape item they belong to.
   final List<BridgeKeyframe> keys;
 
-  /// Plant or take away a key at this composition time — the diamond.
   final void Function(BridgeRational time) onToggleKey;
 
-  /// Stop the shape animating, keeping the shape shown at this time — the
-  /// stopwatch turning off.
   final void Function(BridgeRational time) onClear;
 
-  /// What the buttons' widget keys are built from, so a test can find the row
-  /// it means.
   final String rowKey;
 
   final CompositionReference comp;
   final ValueChanged<int> onSeek;
   final VoidCallback onChanged;
 
-  /// As [KeyframeControlsFrb.navigatorApart] and its navigator alone.
   final bool navigatorApart;
   final bool navigatorOnly;
 
@@ -816,7 +775,6 @@ class PathKeyframesFrb extends StatelessWidget implements RowKeys {
       }
       onChanged();
     } catch (_) {
-      // As above.
     }
   }
 
@@ -824,8 +782,6 @@ class PathKeyframesFrb extends StatelessWidget implements RowKeys {
   Widget build(BuildContext context) {
     final playhead =
         Provider.of<LumitUiState>(context, listen: false).playheadFrame;
-    // A still path draws the same row at every frame — see the note on
-    // [KeyframeControlsFrb.build].
     if (!_animated) return _build(context, playhead.value, playhead);
     return ValueListenableBuilder<int>(
       valueListenable: playhead,

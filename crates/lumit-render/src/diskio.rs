@@ -29,7 +29,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
 
-/// Default disk budget (docs/06 §5.4: "default size cap 50 GB, user-set").
 pub const DEFAULT_CAP_BYTES: u64 = 50 * 1024 * 1024 * 1024;
 
 pub enum Cmd {
@@ -56,25 +55,23 @@ pub enum Cmd {
     },
     /// Bring a frame back for the tiers above, in the channel order the caller
     /// will upload it in.
-    Load { hash: u128, bgra: bool },
+    Load {
+        hash: u128,
+        bgra: bool,
+    },
     /// Set the byte cap (Settings → Performance). Remembered so it also
     /// applies to the cache opened on the next `SetRoot`.
     SetCap(u64),
     /// The most this project may hold for the drive's sake, so parking never
     /// fills it. Remembered across `SetRoot` like the cap.
     SetRoom(u64),
-    /// Delete every parked frame (Settings → Clear cache).
     Clear,
 }
 
-/// What the open project may hold: the cap less what the other projects beside
-/// it still hold, never under a quarter of the cap, and never more than the
-/// drive has room for.
 fn own_cap(cap: u64, others: u64, room: u64) -> u64 {
     cap.saturating_sub(others).max(cap / 4).min(room)
 }
 
-/// One frame read back off disk, in the channel order that was asked for.
 pub struct LoadedFrame {
     pub hash: u128,
     pub width: u32,
@@ -223,14 +220,11 @@ impl DiskIo {
         true
     }
 
-    /// How many frames are waiting to be written — the meter behind
-    /// [`MAX_PENDING_PARKS`], and what the tests assert on.
     #[must_use]
     pub fn pending_parks(&self) -> usize {
         self.pending.try_lock().map(|p| p.len()).unwrap_or(0)
     }
 
-    /// How many frames are parked, and how many bytes they take.
     #[must_use]
     pub fn stats(&self) -> (u64, u64) {
         let entries = self.known.try_lock().map(|k| k.len() as u64).unwrap_or(0);
@@ -238,8 +232,6 @@ impl DiskIo {
     }
 }
 
-/// Swap the red and blue bytes of a display frame in place — the one difference
-/// between the two orders the compositor emits. Alpha and green sit still.
 fn swizzle_rb(bytes: &mut [u8]) {
     for px in bytes.chunks_exact_mut(4) {
         px.swap(0, 2);
@@ -268,7 +260,6 @@ pub fn spawn() -> DiskIo {
             // the cap is shared with, and the folder they are measured from.
             let mut others = 0u64;
             let mut open_root: Option<PathBuf> = None;
-            // Everything that has arrived and not been dealt with, oldest first.
             let mut waiting: std::collections::VecDeque<Cmd> = Default::default();
             loop {
                 if waiting.is_empty() {
@@ -492,14 +483,11 @@ mod tests {
             "past the ceiling a park is refused — the frame keeps its place on \
              the card and in memory, and is offered again later"
         );
-        // One leaves, one may enter: the queue is a queue, not a one-shot.
         queue.done(0);
         assert!(queue.take(999));
         assert_eq!(queue.len(), MAX_PENDING_PARKS);
     }
 
-    /// The tier end to end on its own thread: park a frame, see it appear in the
-    /// mirror the cache bar and the fill read, and get the identical bytes back.
     #[test]
     fn a_parked_frame_comes_back_byte_for_byte() {
         let dir = tempfile::tempdir().unwrap();
@@ -537,7 +525,6 @@ mod tests {
         let (used, entries) = io.stats();
         assert!(used > 0 && entries == 1);
 
-        // A frame nobody parked is reported missing rather than answered.
         io.tx
             .send(Cmd::Load {
                 hash: 7,

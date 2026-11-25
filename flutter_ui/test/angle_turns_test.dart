@@ -19,8 +19,6 @@ import 'package:lumit_flutter/widgets/controls.dart';
 
 void main() {
   group('turns and degrees', () {
-    /// Every case round-trips: whatever the split says, putting it back has to
-    /// give the number that went in.
     void roundTrips(double value) {
       final turns = TurnsAndDegreesField.turnsOf(value);
       final degrees = TurnsAndDegreesField.degreesOf(value);
@@ -52,8 +50,6 @@ void main() {
   group('the dial winds through full turns', () {
     const size = 100.0;
 
-    /// A dial at [degrees] in a box at the origin, reporting every value the
-    /// drag hands back.
     Future<List<double>> mount(WidgetTester tester, double degrees) async {
       final seen = <double>[];
       await tester.pumpWidget(Directionality(
@@ -76,14 +72,11 @@ void main() {
       return seen;
     }
 
-    /// The point on the dial's rim [clockwise] degrees from twelve o'clock.
     Offset rim(double clockwise) {
       final a = clockwise * math.pi / 180;
       return Offset(size / 2 + math.sin(a) * 40, size / 2 - math.cos(a) * 40);
     }
 
-    /// One drag from twelve o'clock through [turns] whole turns in 45° steps,
-    /// clockwise for a positive count and anticlockwise for a negative one.
     Future<void> wind(WidgetTester tester, double turns) async {
       final gesture = await tester.startGesture(rim(0));
       final steps = (turns.abs() * 8).round();
@@ -95,9 +88,6 @@ void main() {
       await tester.pump();
     }
 
-    /// Dragging the hand round once used to hand back the angle it started
-    /// from: every move was measured against the start and folded to within
-    /// half a turn, so the turns box never moved off 0x.
     testWidgets('a clockwise drag past twelve adds a turn', (tester) async {
       final seen = await mount(tester, 30);
       await wind(tester, 1);
@@ -143,7 +133,6 @@ void main() {
       final seen = await mount(tester, 350);
       final box = find.byKey(const ValueKey<String>('angle-degrees-t'));
       final gesture = await tester.startGesture(tester.getCenter(box));
-      // Past the drag slop first, then the scrub proper in small steps.
       await gesture.moveBy(const Offset(20, 0));
       await tester.pump();
       for (var i = 0; i < 10; i++) {

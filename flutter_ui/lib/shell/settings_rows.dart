@@ -32,11 +32,8 @@ import 'settings_account.dart' show askBefore;
 /// it is taller by that line; nothing else grows.
 const double settingsRowHeight = 30;
 
-/// The inset every row and section header takes from the page's edges.
 const double settingsRowPadding = 16;
 
-/// The least a row's name keeps, the gap beside it, and what a row sets aside
-/// for each button after its control.
 const double settingsLabelMin = 130;
 const double settingsRowGap = 12;
 const double settingsActionAllowance = 80;
@@ -44,7 +41,6 @@ const double settingsActionAllowance = 80;
 /// A section's kicker band: 12 above the label, its 14px line, 4 below.
 const double settingsSectionHeaderHeight = 30;
 
-/// The air above a section's rule — every section but the page's first.
 const double settingsSectionGap = 6;
 
 /// A dropdown's closed face and a value well **in a dialog**: 22, the one
@@ -52,7 +48,6 @@ const double settingsSectionGap = 6;
 /// is roomier because it is read once rather than lived in.
 const double settingsControlHeight = 22;
 
-/// The dot beside a row's name when its setting differs from a new install's.
 const double settingsChangedMark = 4;
 
 /// Where a row's setting stands against a new install's: whether it differs,
@@ -65,8 +60,6 @@ class SettingState {
   final String? copy;
 }
 
-/// A row's control, carrying where its setting stands, so [settingsRow] can
-/// offer Reset and mark a change without each row wiring both.
 class SettingControl extends StatelessWidget {
   const SettingControl({super.key, required this.setting, required this.child});
   final SettingState setting;
@@ -139,7 +132,6 @@ Widget _rightClick(
       ),
     );
 
-/// The Reset page row every page heading's menu carries.
 Widget resetPageRow(VoidCallback reset, VoidCallback close,
         {bool enabled = true}) =>
     MenuRow(
@@ -152,8 +144,6 @@ Widget resetPageRow(VoidCallback reset, VoidCallback close,
       child: MenuLabel(l10n.settingsResetPage, enabled: enabled),
     );
 
-/// A row's right-click: Reset, greyed while it stands at the default, then
-/// Copy value where there is one worth copying.
 List<Widget> _settingMenu(SettingState setting, VoidCallback close) => [
       if (setting.reset case final reset?)
         MenuRow(
@@ -245,7 +235,6 @@ Widget settingsRow(
       ),
     ));
 
-/// [row] with its setting's menu and mark, when [control] carries one.
 Widget _withSetting(LumitTheme t, Widget control, Widget row) {
   if (control is! SettingControl) return row;
   final setting = control.setting;
@@ -281,8 +270,6 @@ String byteSize(int bytes) {
   return '${(b / (1 << 20)).toStringAsFixed(0)} ${l10n.unitMb}';
 }
 
-/// How much the browser keeps for Lumit, once it has said, and a Clear that
-/// forgets the files no recent project uses.
 Widget storageKept(LumitTheme t) => StatefulBuilder(
       builder: (context, setState) => Row(
         mainAxisSize: MainAxisSize.min,

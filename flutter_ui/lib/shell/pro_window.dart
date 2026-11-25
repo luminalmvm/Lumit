@@ -36,7 +36,6 @@ import 'wordmark.dart';
 
 const double proWindowWidth = 460;
 
-/// Open the Lumit Pro window.
 Future<void> showProWindow(BuildContext context) {
   final ui = context.read<LumitUiState>();
   return showLumitModal<void>(
@@ -46,14 +45,12 @@ Future<void> showProWindow(BuildContext context) {
   );
 }
 
-/// A date as it is written out in the language in use.
 String writtenDate(DateTime date) {
   try {
     // The English here is British, which the bare tag does not say.
     final tag = l10n.localeName;
     return DateFormat.yMMMMd(tag == 'en' ? 'en_GB' : tag).format(date);
   } catch (_) {
-    // A language whose dates are not loaded gets the plain form.
     return DateFormat.yMMMMd().format(date);
   }
 }
@@ -130,7 +127,6 @@ class _ProWindowState extends State<_ProWindow>
   /// now does, that happened here, and the window says thank you for it.
   late final bool _hadPro;
 
-  /// Plays once, when Pro arrives while the window is open.
   late final AnimationController _arrive = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 900));
 
@@ -141,7 +137,6 @@ class _ProWindowState extends State<_ProWindow>
     super.initState();
     _hadPro = _account.pro;
     _account.addListener(_changed);
-    // The prices, and whether Pro is on sale at all, as they stand now.
     unawaited(_account.loadConfig());
     if (_account.signedIn) unawaited(_account.refreshAccount());
   }
@@ -209,7 +204,6 @@ class _ProWindowState extends State<_ProWindow>
         ),
         ProHero(
           arrive: _arrive,
-          // Thanks are said once, to whoever just got it.
           headline:
               pro && !_hadPro ? l10n.proThanksHeadline : l10n.proHeadline,
           lead: pro && account!.preview ? l10n.proPreviewNote : null,
@@ -231,7 +225,6 @@ class _ProWindowState extends State<_ProWindow>
               ),
               _Feature(
                 index: 1,
-                // The link, which is what this wears everywhere else.
                 mark: LumitIcons.link,
                 title: l10n.proFeatureOnlineTitle,
                 body: l10n.proFeatureOnlineBody,
@@ -277,8 +270,6 @@ class _ProWindowState extends State<_ProWindow>
     );
   }
 
-  /// With Pro there is nothing left to buy, so the window ends as any other
-  /// does: how the subscription stands, and the ways out.
   Widget _proFooter(LumitTheme t, CloudAccount account) {
     final line = subscriptionLine(account);
     return dialogFooter(
@@ -294,7 +285,6 @@ class _ProWindowState extends State<_ProWindow>
     );
   }
 
-  /// Under the features: the plans and the button.
   List<Widget> _foot(LumitTheme t, CloudAccount? account, CloudConfig? config) {
     Widget note(String words, {bool warning = false}) => Text(
           words,
@@ -408,13 +398,10 @@ class _ProWindowState extends State<_ProWindow>
   }
 }
 
-/// The top of the window: the mark, a headline and a line under it, standing
-/// in front of a slow wash of the sweep.
 class ProHero extends StatelessWidget {
   final Animation<double> arrive;
   final String headline;
 
-  /// A line under the headline, once there is something to say there.
   final String? lead;
   final bool pro, preview;
 
@@ -439,8 +426,6 @@ class ProHero extends StatelessWidget {
               builder: (context, _) => CustomPaint(
                 painter: ProWashPainter(
                   t.surface1,
-                  // Brighter for a moment as Pro arrives, then settling a
-                  // little above where it began.
                   0.16 + 0.20 * math.sin(arrive.value * math.pi) +
                       (pro ? 0.06 : 0),
                 ),
@@ -490,9 +475,6 @@ class ProHero extends StatelessWidget {
   }
 }
 
-/// What a window shows in place of something that comes with Lumit Pro: the
-/// hero, with [headline] saying what it is, and the one button that opens
-/// the Lumit Pro window.
 class ProOffer extends StatelessWidget {
   final String headline;
 
@@ -523,7 +505,6 @@ class ProOffer extends StatelessWidget {
       );
 }
 
-/// Two soft lights, one of each key, falling away into the surface.
 class ProWashPainter extends CustomPainter {
   final Color ground;
   final double strength;
@@ -557,13 +538,10 @@ class ProWashPainter extends CustomPainter {
       old.strength != strength || old.ground != ground;
 }
 
-/// One thing Pro does: a glyph in the sweep, a title and a sentence. Each
-/// comes in a beat after the one above it.
 class _Feature extends StatelessWidget {
   final int index;
   final String mark, title, body;
 
-  /// Whether the account has it, which ticks it.
   final bool on;
 
   const _Feature({
@@ -628,7 +606,6 @@ class _Feature extends StatelessWidget {
     final motion = scope.motion;
     // A shape whose reveals don't rise has nothing to stagger.
     if (!motion.carries || motion.revealRise == 0) return row;
-    // Held back a beat for each row above it, then up and in.
     final wait = index * 45;
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
@@ -644,7 +621,6 @@ class _Feature extends StatelessWidget {
   }
 }
 
-/// One of the two ways to pay, as a card that is picked.
 class _Plan extends StatefulWidget {
   final String id, name, price, per;
   final int? saving;

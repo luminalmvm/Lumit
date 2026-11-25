@@ -19,12 +19,12 @@
 // per tile, `(u, v, score, 0)`, also rgba32float — the vectors must stay exact
 // f32 to match an f32 oracle.
 
-const SCORE_FLOOR: f32 = 0.25; // lumit_core::fx::cpu::MB_SCORE_FLOOR
+const SCORE_FLOOR: f32 = 0.25;
 
 // Scalars, not a vec3 tail: a vec3<i32> aligns to 16 bytes and would silently
 // make this struct 32 bytes against the host's 16.
 struct Params {
-    tile: i32,          // MB_TILE: tile side in pixels
+    tile: i32,
     vector_scale: f32,  // px@raster a full Motion vectors channel means
     pad1: i32,
     pad2: i32,

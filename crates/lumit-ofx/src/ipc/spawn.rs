@@ -27,7 +27,6 @@ pub(crate) fn no_console(command: &mut Command) {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        /// `CREATE_NO_WINDOW`, from winbase.h.
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         command.creation_flags(CREATE_NO_WINDOW);
     }
@@ -35,18 +34,14 @@ pub(crate) fn no_console(command: &mut Command) {
     let _ = command;
 }
 
-/// The live connection to one broker process.
 pub(crate) struct Link {
     pub(crate) child: Child,
     pub(crate) sender: SendHalf,
     pub(crate) incoming: Receiver<Incoming>,
 }
 
-/// What the reading thread hands back.
 pub(crate) enum Incoming {
-    /// The broker connected; here is the half to write to.
     Connected(SendHalf),
-    /// A message.
     Message(Box<BrokerMessage>),
     /// The pipe closed — which, for a child process, means it died.
     Gone,
@@ -70,7 +65,6 @@ pub(crate) fn fresh_identifier() -> Result<String, BrokerError> {
         .as_name())
 }
 
-/// Where the ring with this name lives.
 pub(crate) fn ring_path(identifier: &str) -> PathBuf {
     let mut path = std::env::temp_dir();
     path.push(format!("lumit-ofx-{identifier}.ring"));

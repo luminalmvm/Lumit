@@ -105,7 +105,6 @@ class GroupHeader {
 /// lane bar and the context menu all want the same set.
 @immutable
 class GroupActions {
-  /// Twirl the fold open or shut — session state, like a layer's own twirl.
   final ValueChanged<String> onToggleFold;
 
   /// Choose every member of the group (what makes the stack drag and every
@@ -119,15 +118,11 @@ class GroupActions {
       onSwitch;
   final ValueChanged<BridgeLayerGroup> onUngroup;
 
-  /// The heavy fold: pack the group's members into a composition of their own,
-  /// through the precompose road that already existed.
   final ValueChanged<BridgeLayerGroup> onPrecompose;
 
   /// The combined bar was dragged by this many frames — every member moves.
   final void Function(BridgeLayerGroup group, int deltaFrames) onShift;
 
-  /// Twirl the header's effect lanes open or shut — the fx tick's own
-  /// press, session state like [onToggleFold]'s.
   final ValueChanged<String> onToggleFxFold;
 
   const GroupActions({
@@ -174,11 +169,8 @@ class GroupOutlineRow extends StatefulWidget {
 }
 
 class _GroupOutlineRowState extends State<GroupOutlineRow> {
-  /// Open while the name is being typed into, exactly as a layer row's is.
   TextEditingController? _rename;
 
-  /// Whether the pointer is over this header. At rest an off switch draws as
-  /// dim as a layer row's, and comes up under the pointer the same way.
   bool _hover = false;
 
   BridgeLayerGroup get _group => widget.header.group;
@@ -196,8 +188,6 @@ class _GroupOutlineRowState extends State<GroupOutlineRow> {
     super.dispose();
   }
 
-  /// `Enter` with this group's band chosen names this header: open the editor
-  /// on it, exactly as a layer row answers the same notifier.
   void _maybeRename() {
     if (!mounted || _rename != null) return;
     if (widget.renameRequest.value != _group.id) return;
@@ -409,7 +399,6 @@ class _GroupOutlineRowState extends State<GroupOutlineRow> {
           width: 16,
           height: t.density.laneRow,
           child: Center(
-            // Under the pointer the bar thickens, as a layer's dot grows.
             child: Container(
               width: 3 + 2 * lit,
               height: 11 + 2 * lit,
@@ -557,8 +546,6 @@ Future<void> showGroupMenuFrb(
           key: const ValueKey('tl-group-menu-ungroup'),
           onPressed: () => close('ungroup'),
           child: MenuLabel(l10n.menuUngroup, action: 'layer.ungroup')),
-      // The heavy fold, one click from the light one: the same set of layers
-      // packed into a comp of their own, through the precompose road.
       MenuRow(
           key: const ValueKey('tl-group-menu-precompose'),
           onPressed: () => close('precompose'),
@@ -599,8 +586,6 @@ class GroupBar extends StatefulWidget {
   final GroupHeader header;
   final GroupActions actions;
 
-  /// Comp frames to pixels, and back — the axis the rest of the lane half
-  /// draws against, so the bar lands on the same grid its members' bars do.
   final double Function(num frame) xOfFrame;
   final int Function(double dx) framesOfDx;
   const GroupBar({

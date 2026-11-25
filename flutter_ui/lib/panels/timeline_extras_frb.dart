@@ -1,11 +1,3 @@
-// The Timeline's smaller surfaces: comp tabs, the cache bar, the search field,
-// the parent picker, and the marker / work-area editors. (The cache *meter*
-// moved to the shell's status line, where whole-store readouts belong.)
-//
-// A file of their own rather than more of timeline_panel_frb.dart, which is
-// already the length it wants to be. Each is small, self-contained and used
-// once — kept together because they are all "the chrome around the tracks"
-// rather than because they share anything.
 
 import 'dart:async';
 import 'dart:math';
@@ -69,8 +61,6 @@ class CompTabsFrb extends StatelessWidget {
   /// command palette start an export, and this button must start *that* one.
   final VoidCallback onExport;
 
-  /// The kicker ahead of the tabs. The Timeline's own name unless the panel
-  /// wearing this strip says otherwise, as the Audio timeline does.
   final String? title;
 
   /// Which view is up and how to ask for another. Lantern draws the Layers
@@ -114,8 +104,6 @@ class CompTabsFrb extends StatelessWidget {
                   style: t.kickerOn),
             ),
           ),
-          // The strip's empty end lifts the pane and has its menu, as the word
-          // ahead of it does.
           Expanded(
             child: Stack(
               fit: StackFit.expand,
@@ -140,8 +128,6 @@ class CompTabsFrb extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                 onPressed: onExport,
-                // `primary` sets the label's own style, kicker in `surface_0`
-                // on the accent fill (§7.1), and cases the word for the shape.
                 child: Text(l10n.exportAction),
               ),
             ),
@@ -176,9 +162,6 @@ class CompTabsFrb extends StatelessWidget {
     return comps;
   }
 
-  /// Lantern's one header line: the comp tabs as a segmented pill at the
-  /// left, the title and its dot centred, the Layers / Graph pill and the
-  /// filled Export at the right.
   Widget _lanternLine(BuildContext context, LumitTheme t) {
     final selected = uiState.selectedComp?.internalid;
     final comps = _openComps(selected);
@@ -211,8 +194,6 @@ class CompTabsFrb extends StatelessWidget {
                     BoxDecoration(color: t.accent, shape: BoxShape.circle),
               ),
               const SizedBox(width: 6),
-              // Scrolls sideways once the tabs outgrow the line, so the mode
-              // pill and Export always keep their place.
               Expanded(
                 child: Align(
                   alignment: Alignment.centerLeft,
@@ -278,7 +259,6 @@ class CompTabsFrb extends StatelessWidget {
     ));
   }
 
-  /// The tabs themselves, scrolling sideways when there are more than fit.
   Widget _strip(
     BuildContext context,
     LumitTheme t,
@@ -300,14 +280,12 @@ class CompTabsFrb extends StatelessWidget {
         fallback: comps.length == 1 ? null : comps[i == 0 ? 1 : i - 1].$1,
       );
 
-  /// Close every tab but the one at [i], which fronts.
   void _closeOtherTabs(List<(CompositionReference, String)> comps, int i) {
     for (final (j, (comp, _)) in comps.indexed) {
       if (j != i) uiState.closeComp(comp.internalid, fallback: comps[i].$1);
     }
   }
 
-  /// One draggable tab per open comp, in strip order.
   List<Widget> _tabs(
     BuildContext context,
     LumitTheme t,
@@ -362,7 +340,6 @@ class Segment extends StatelessWidget {
   final List<Widget> children;
   const Segment({super.key, required this.children});
 
-  /// The track's height on the header line.
   static const double height = 22;
 
   @override
@@ -380,7 +357,6 @@ class Segment extends StatelessWidget {
   }
 }
 
-/// One option in a [Segment].
 class SegmentOption extends StatelessWidget {
   final bool active;
   final VoidCallback onTap;
@@ -402,9 +378,7 @@ class SegmentOption extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 10),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            // The one not in force comes half way to it under the pointer.
             color: active ? t.surface2 : t.surface2.withValues(alpha: 0.5 * lit),
-            // The track's corner less the inset, so the margin holds round it.
             borderRadius: BorderRadius.circular(
                 max(0.0, t.tokens.actionRadius - t.tokens.pillInset)),
           ),
@@ -429,8 +403,6 @@ class DoubleTap {
   DateTime? _last;
   Offset? _lastAt;
 
-  /// Record a tap; true when it is the second inside [kDoubleTapTimeout] —
-  /// and, when [at] is given, within [slop] of the first.
   bool tap({Offset? at, double slop = 0}) {
     final now = clock.now();
     final last = _last;
@@ -510,9 +482,6 @@ Future<int?> showLabelPicker(
   );
 }
 
-/// The label picker's row of chips, [onPick] told which was tapped. The
-/// colour submenus on the Cut and Audio timelines wear the same row.
-/// [selected], where given, is ringed: the colour already in use.
 Widget labelChips(
   LumitTheme t, {
   required String keyPrefix,
@@ -539,7 +508,6 @@ Widget labelChips(
                     borderRadius:
                         BorderRadius.circular(t.tokens.controlRadius),
                   ),
-                  // The colour in use wears the ring at full strength.
                   foregroundDecoration: i == selected
                       ? BoxDecoration(
                           borderRadius:
@@ -553,8 +521,6 @@ Widget labelChips(
       ),
     );
 
-/// The Clip colour submenu on the Cut and Audio timelines: back to the
-/// track's colour, which [onPick] is told as null, then the label chips.
 Widget clipColourMenu(
   LumitTheme t, {
   required String keyPrefix,
@@ -605,7 +571,6 @@ Future<void> showMarkerMenuFrb({
   ValueChanged<bool>? onStep,
 }) async {
   final isRegion = (marker.durationFrames ?? 0) > 0;
-  // A region as long as was asked for, or as long as there is room for.
   int? fitted(int? frames) => frames == null || regionRoom == null
       ? frames
       : min(frames, max(1, regionRoom));
@@ -661,7 +626,6 @@ Future<void> showMarkerMenuFrb({
     ],
   );
   if (picked == null || !context.mounted) return;
-  // One marker changed and the rest of the list as it stands now.
   void change(BridgeMarker Function(BridgeMarker) edit) => write([
         for (final m in markers())
           if (m.id == marker.id) edit(m) else m,
@@ -694,13 +658,10 @@ Future<void> showMarkerMenuFrb({
       // A colour chip: the palette index after the colon, or nothing for the
       // plain marker grey.
       final colour = int.tryParse(picked.substring(picked.indexOf(':') + 1));
-      // The colour it already has makes no undo step.
       if (colour != marker.colour) change((m) => m.withColour(colour));
   }
 }
 
-/// A marker's colour: its own pick from the label palette, or the theme's
-/// marker grey when it was given none.
 Color markerColour(LumitTheme t, BridgeMarker marker) {
   final colour = marker.colour;
   return colour == null ? t.marker : t.labelColour(colour);
@@ -836,8 +797,6 @@ class _CompTab extends StatefulWidget {
   final String name;
   final bool active;
 
-  /// A tab being dragged is hovering over this one, which is where it would
-  /// land — lit so the drop is visible before it is taken.
   final bool dropping;
   final VoidCallback onTap;
   final ValueChanged<Offset> onMenu;
@@ -864,9 +823,6 @@ class _CompTabState extends State<_CompTab> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    // The fronted tab is a filled capsule where actions are capsules: a
-    // surface2 pill inside Lantern's segment. Desk draws a word over a 2px
-    // accent rule and fills nothing.
     final round = t.tokens.actionRadius == ShapeTokens.stadium;
     final desk = t.shape == ThemeShape.desk;
     final name = widget.name;
@@ -874,7 +830,6 @@ class _CompTabState extends State<_CompTab> {
     final dropping = widget.dropping;
     final tab = Container(
           height: round ? null : compTabHeight,
-          // A long name is cut short rather than making a tab that wide.
           constraints: const BoxConstraints(maxWidth: 200),
           padding: const EdgeInsets.only(left: 10, right: 10),
           // **The pointer says the tab is a control**. A tab that is
@@ -893,9 +848,6 @@ class _CompTabState extends State<_CompTab> {
                 )
               : null,
           decoration: BoxDecoration(
-            // Round fills the fronted tab with surface2 inside its segment;
-            // Studio seats it in the panel's own surface, so the tab and the
-            // comp under it read as one thing; Desk fills nothing.
             color: dropping
                 ? t.accent.withValues(alpha: 0.18)
                 : (active && !desk ? (round ? t.surface2 : t.surface1) : null),
@@ -976,7 +928,6 @@ class _CompTabState extends State<_CompTab> {
             : Stack(
                 children: [
                   tab,
-                  // The fronted tab's 2px accent rule, inset to the word.
                   if (active)
                     Positioned(
                       key: const ValueKey('tl-tab-rule'),
@@ -998,7 +949,6 @@ class _CompTabState extends State<_CompTab> {
 /// at either density.
 const double layerSearchWellHeight = 16;
 
-/// The outline's search field: narrows the rows to those whose name matches.
 class LayerSearchFrb extends StatefulWidget {
   final ValueChanged<String> onChanged;
   final double width;
@@ -1082,17 +1032,11 @@ class ParentPickerFrb extends StatelessWidget {
   final LayerReference layer;
   final BridgeLayerInfo info;
 
-  /// Every layer in the comp, from the read model.
   final List<BridgeLayerEntry> all;
 
-  /// The cell's width — its share of the compose group, which the header's
-  /// seam can be dragged to widen.
   final double width;
   final VoidCallback onChanged;
 
-  /// Whether the row is at rest, with no pointer over it and no focus in it.
-  /// A picker with no parent set then draws as its word alone
-  /// ([restingPicker]).
   final bool resting;
 
   const ParentPickerFrb({
@@ -1111,7 +1055,6 @@ class ParentPickerFrb extends StatelessWidget {
       width: width,
       child: LayerPicker(
         key: ValueKey<String>('tl-parent-${layer.internallayerId}'),
-        // In an outline row, so the mockup's 16/10 face (§12A.6).
         dense: true,
         layers: all,
         value: info.parent,
@@ -1147,11 +1090,8 @@ class MattePickerFrb extends StatelessWidget {
   final LayerReference layer;
   final BridgeLayerInfo info;
 
-  /// Every layer in the comp, from the read model.
   final List<BridgeLayerEntry> all;
 
-  /// The cell's width — its share of the compose group, which the header's
-  /// seam can be dragged to widen.
   final double width;
 
   /// Whether this cell's width includes room for the two mode toggles: true
@@ -1161,9 +1101,6 @@ class MattePickerFrb extends StatelessWidget {
   final bool toggleRoom;
   final VoidCallback onChanged;
 
-  /// Whether the row is at rest, with no pointer over it and no focus in it.
-  /// A cell with no matte set then draws as its words alone
-  /// ([restingPicker]).
   final bool resting;
 
   const MattePickerFrb({
@@ -1209,7 +1146,6 @@ class MattePickerFrb extends StatelessWidget {
             width: faceWidth,
             child: LayerPicker(
               key: ValueKey<String>('tl-matte-${layer.internallayerId}'),
-              // In an outline row, so the mockup's 16/10 face (§12A.6).
               dense: true,
               layers: all,
               value: matte?.layer,
@@ -1231,7 +1167,6 @@ class MattePickerFrb extends StatelessWidget {
                     )),
             ),
           ),
-          // The mode toggles only mean something once a source is set.
           if (matte != null) ...[
             _toggle(
               t,
@@ -1295,11 +1230,6 @@ class MattePickerFrb extends StatelessWidget {
   }
 }
 
-/// Add, rename and remove markers, and set the work area, from one dialogue.
-///
-/// A dialogue rather than direct manipulation on the ruler: dragging markers is
-/// its own gesture layer, and having the commands somewhere reachable first
-/// means the capability exists before the polish does.
 Future<void> showMarkerEditorFrb({
   required BuildContext context,
   required CompositionReference comp,
@@ -1470,8 +1400,6 @@ class _MarkerEditorState extends State<_MarkerEditor> {
   return (start: start, end: end, whole: start <= 0 && end >= duration);
 }
 
-/// Set the work area from the playhead: one click for its start, one for its
-/// end. The two buttons match the egui frontend's B and N keys.
 BridgeSpan workAreaWith({
   required CompositionReference comp,
   required BridgeSpan? current,
@@ -1512,8 +1440,6 @@ BridgeSpan workAreaWith({
   );
 }
 
-/// The glyph for a layer kind, matching the Project panel's row glyphs so a
-/// footage layer reads as footage in both.
 LumitIcon iconForKind(BridgeLayerKind kind) => switch (kind) {
       BridgeLayerKind.footage => LumitIcon.footage,
       BridgeLayerKind.sequence => LumitIcon.sequence,
@@ -1599,8 +1525,6 @@ class TimelineCacheBar extends StatefulWidget {
 class _TimelineCacheBarState extends State<TimelineCacheBar> {
   Uint8List _tiers = Uint8List(0);
 
-  /// What the held [_tiers] were read for. A read is repeated when one of these
-  /// moves, and skipped when the rebuild is only the zoom widening the bar.
   int? _readFrames;
   double? _readScale;
 
@@ -1702,12 +1626,8 @@ class TimelineAxis implements CacheBarAxis {
   @override
   final int frames;
 
-  /// The whole width the axis is laid out in — [inset] either side plus the
-  /// [span] the frames occupy.
   final double width;
 
-  /// The room this axis leaves either side of the frames: [pad], unless the
-  /// lanes it measures stand in a card with rounded corners ([padFor]).
   final double inset;
   const TimelineAxis({
     required this.frames,
@@ -1739,7 +1659,6 @@ class TimelineAxis implements CacheBarAxis {
   static double padFor(LumitTheme t) =>
       t.tokens.roomed ? max(pad, t.tokens.sectionRadius + 1) : pad;
 
-  /// The pixels the frames themselves occupy.
   double get span => max(0.0, width - inset * 2);
 
   double get perFrame => frames <= 0 ? 0 : span / frames;
@@ -1762,7 +1681,6 @@ class TimelineAxis implements CacheBarAxis {
 class RulerStyle {
   final ThemeShape shape;
 
-  /// The cache stripe's height on the floor.
   final double cacheBar;
 
   const RulerStyle({required this.shape, required this.cacheBar});
@@ -1770,10 +1688,8 @@ class RulerStyle {
   RulerStyle.of(LumitTheme t)
       : this(shape: t.shape, cacheBar: t.density.cacheBar);
 
-  /// Desk's engraved scale: three tick heights on the upper half, no band.
   bool get engraved => shape == ThemeShape.desk;
 
-  /// Lantern's round grammar: a capsule band, dot markers, rounded cache runs.
   bool get round => shape == ThemeShape.lantern;
 
   @override
@@ -1784,14 +1700,10 @@ class RulerStyle {
   int get hashCode => Object.hash(shape, cacheBar);
 }
 
-/// The time ruler: the time labels and ticks, the work area, the markers, and
-/// the scrub surface — drawn over the lanes in lane view and over the curves
-/// in graph view, so neither loses the clock (docs/07 §4.1, §5).
 class TimelineRuler extends StatefulWidget {
   final CompositionReference comp;
   final TimelineAxis axis;
 
-  /// The comp's rate, turning frames into the seconds the labels speak.
   final double fps;
   final double height;
   final ValueChanged<int> onSeek;
@@ -1803,9 +1715,6 @@ class TimelineRuler extends StatefulWidget {
   /// nothing to commit to wants.
   final void Function(BridgeSpan? span)? onWorkArea;
 
-  /// Everything a drag on this ruler can land on (docs/07 §4.5) — the panel's
-  /// one shared list, gathered from the read model, so an edge and a marker
-  /// snap to the same things a keyframe does. Empty leaves both unsnapped.
   final List<SnapTarget> snapTargets;
 
   /// Whether the magnet is on. `Ctrl` held suspends it for the moment, the
@@ -1839,7 +1748,6 @@ class TimelineRuler extends StatefulWidget {
   /// row. Null for a ruler with no cache to show.
   final Widget? cache;
 
-  /// Rows a view adds under the ground's menu, for edits of its own.
   final List<Widget> Function(VoidCallback close)? groundRows;
 
   const TimelineRuler({
@@ -1923,7 +1831,6 @@ class _TimelineRulerState extends State<TimelineRuler> {
     _scrollToPointer();
   }
 
-  /// The lanes moved under a pointer held still, so the playhead follows it.
   void _scrolledUnder() {
     final box = context.findRenderObject() as RenderBox?;
     if (box == null || !box.attached) return;
@@ -1948,7 +1855,6 @@ class _TimelineRulerState extends State<TimelineRuler> {
     super.dispose();
   }
 
-  /// Whether a drag is sounding the comp as it goes.
   bool _jogging = false;
 
   void _endJog() {
@@ -1985,7 +1891,6 @@ class _TimelineRulerState extends State<TimelineRuler> {
     if (HardwareKeyboard.instance.isShiftPressed) {
       caught = snapFrame(
         frame: widget.axis.frameAtExact(x),
-        // Everything but the playhead, which is the thing being moved.
         targets: widget.snapTargets.where((s) => s.kind != SnapKind.playhead),
         perFrame: widget.axis.perFrame,
         magnet: true,
@@ -2049,7 +1954,6 @@ class _TimelineRulerState extends State<TimelineRuler> {
     final edited =
         await showMarkerSettingsFrb(context: context, marker: marker);
     if (edited == null || !mounted) return;
-    // A region stops at the comp's end, however long was typed.
     final span = edited.durationFrames == null
         ? null
         : min(edited.durationFrames!, max(1, _roomAfter(marker)));
@@ -2067,8 +1971,6 @@ class _TimelineRulerState extends State<TimelineRuler> {
     ]);
   }
 
-  /// How many frames lie between [marker] and the end of the comp, which is
-  /// as long as its region can be.
   int _roomAfter(BridgeMarker marker) =>
       widget.axis.frames - frameAtTime(widget.comp, marker.time);
 
@@ -2081,14 +1983,10 @@ class _TimelineRulerState extends State<TimelineRuler> {
   int? _press;
   int? _flagPress;
 
-  /// The marker that press landed on, or null for a region's handle.
   UuidValue? _flagPressed;
 
-  /// What the last counted tap was on, so the second click of a pair only
-  /// counts when it lands on the same thing as the first.
   Object? _lastTapOn;
 
-  /// A flag or a region handle took this press, so the scrub stands down.
   void _claimPress(PointerDownEvent event, UuidValue? marker) {
     _flagPress = event.pointer;
     _flagPressed = marker;
@@ -2105,7 +2003,6 @@ class _TimelineRulerState extends State<TimelineRuler> {
   /// marker flinching away from the grab.
   double _dragMarkerGrab = 0;
 
-  /// Where a marker draws right now: the document's frame, or the dragged one.
   int _markerFrame(BridgeMarker marker) =>
       marker.id == _dragMarker && _dragMarkerFrame != null
           ? _dragMarkerFrame!
@@ -2142,8 +2039,6 @@ class _TimelineRulerState extends State<TimelineRuler> {
           except: (s) =>
               s.kind == SnapKind.marker &&
               (s.frame - _dragMarkerFrom).abs() < 0.5);
-      // A region is carried whole, so its flag stops where its end meets the
-      // end of the comp.
       final int span = marker.durationFrames ?? 0;
       final int last = _dragMarkerLast - (span > 1 ? span - 1 : 0);
       _dragMarkerFrame = at.clamp(0, last < 0 ? 0 : last);
@@ -2155,8 +2050,6 @@ class _TimelineRulerState extends State<TimelineRuler> {
     ));
   }
 
-  /// Say where a marker drag has got to, or with null that it is over: to
-  /// whoever holds this ruler, and to [markerDragPreview] for the lines.
   void _stageMarker(MarkerPreview? staged) {
     markerDragPreview.value = staged;
     widget.onMarkerPreview?.call(staged);
@@ -2166,7 +2059,6 @@ class _TimelineRulerState extends State<TimelineRuler> {
   /// of its own snap targets.
   double _dragMarkerFrom = 0;
 
-  /// Put a marker drag back where it found the flag, writing nothing.
   void _abandonMarkerDrag() {
     if (!mounted) return;
     setState(() {
@@ -2177,8 +2069,6 @@ class _TimelineRulerState extends State<TimelineRuler> {
     _stageMarker(null);
   }
 
-  /// The region whose end is being dragged, and how long that has made it.
-  /// Staged here and written once on release, as a marker's move is.
   UuidValue? _dragSpan;
   int? _dragSpanFrames;
 
@@ -2202,7 +2092,6 @@ class _TimelineRulerState extends State<TimelineRuler> {
     _stageMarker((id: marker.id, frame: from, span: _dragSpanFrames!));
   }
 
-  /// Put a region's end back where the drag found it, writing nothing.
   void _abandonSpanDrag() {
     if (!mounted) return;
     setState(() {
@@ -2213,7 +2102,6 @@ class _TimelineRulerState extends State<TimelineRuler> {
     _stageMarker(null);
   }
 
-  /// The drag ended: write the length the region has been drawn at, once.
   void _dropSpan(BridgeMarker marker) {
     final frames = _dragSpanFrames;
     setState(() {
@@ -2230,14 +2118,12 @@ class _TimelineRulerState extends State<TimelineRuler> {
     _stageMarker(null);
   }
 
-  /// A scrub is over, so whatever `Shift` had the playhead holding lets go.
   void _scrubEnded() {
     if (_caught == null || _dragMarker != null || _dragSpan != null) return;
     if (_dragFrame != null) return;
     setState(() => _caught = null);
   }
 
-  /// The same for a work-area edge.
   void _abandonWorkDrag() {
     if (!mounted) return;
     setState(() {
@@ -2247,7 +2133,6 @@ class _TimelineRulerState extends State<TimelineRuler> {
     widget.onWorkPreview?.call(null);
   }
 
-  /// The drag ended: write where the flag has been sitting, once.
   void _dropMarker(BridgeMarker marker) {
     final to = _dragMarkerFrame;
     setState(() {
@@ -2265,8 +2150,6 @@ class _TimelineRulerState extends State<TimelineRuler> {
     _stageMarker(null);
   }
 
-  /// The right-click menu on a flag: change what it says, its colour, whether
-  /// it is a region, or take it away.
   void _markerMenu(BuildContext context, BridgeMarker marker, Offset at) {
     showMarkerMenuFrb(
       context: context,
@@ -2283,15 +2166,10 @@ class _TimelineRulerState extends State<TimelineRuler> {
     );
   }
 
-  /// To the comp marker before or after the playhead, as the Composition
-  /// menu goes.
   void _step(bool back) => stepToMarkerFrb(
       Provider.of<LumitUiState>(context, listen: false), widget.comp,
       back: back);
 
-  /// The right-click menu on the ruler's own ground: a marker or a work-area
-  /// edge at [frame], the one under the pointer. A ruler with nothing to
-  /// commit to offers nothing.
   Future<void> _groundMenu(Offset at, int frame) => showRulerMenu(
         context,
         comp: widget.comp,
@@ -2303,8 +2181,6 @@ class _TimelineRulerState extends State<TimelineRuler> {
         onStep: _step,
       );
 
-  /// Whether [x], in the ruler's own pixels, lands in either work-area
-  /// handle's reach — the same [_workHandleWidth] the handles claim.
   bool _onWorkHandle(double x, ({int start, int end, bool whole}) work) {
     if (widget.onWorkArea == null) return false;
     const half = _workHandleWidth / 2;
@@ -2373,13 +2249,10 @@ class _TimelineRulerState extends State<TimelineRuler> {
         if (!onFlag && !_onWorkHandle(d.localPosition.dx, work)) {
           _seek(d.localPosition.dx, press: true);
         }
-        // What this click is on: one flag, a region's handle, or the ground.
         final Object on = !onFlag ? #ground : _flagPressed ?? #handle;
         final sameAsLast = on == _lastTapOn;
         _lastTapOn = on;
         if (!_rulerTaps.tap() || !sameAsLast) return;
-        // The second click of a pair. **On a flag**: its settings open, which
-        // is what a double-click on a marker does in After Effects.
         if (onFlag) {
           final id = _flagPressed;
           final hit = markers.where((m) => m.id == id).firstOrNull;
@@ -2432,8 +2305,6 @@ class _TimelineRulerState extends State<TimelineRuler> {
                     painter: _RulerTicksPainter(
                       axis: axis,
                       fps: widget.fps,
-                      // The clock's own start: the labels read the time the
-                      // comp's clock shows, as its Start timecode sets it.
                       start: widget.fps <= 0
                           ? 0
                           : Provider.of<LumitUiState>(context, listen: false)
@@ -2614,11 +2485,8 @@ class _TimelineRulerState extends State<TimelineRuler> {
                             isStart: isStart,
                           ));
                         } catch (_) {
-                          // The span on screen snaps back to the document's.
                         }
                       },
-                      // A cancelled drag commits nothing: the band snaps back
-                      // to the document's span, which is what cancel means.
                       onHorizontalDragCancel: () {
                         _escape.end();
                         _abandonWorkDrag();
@@ -2642,9 +2510,6 @@ class _TimelineRulerState extends State<TimelineRuler> {
                         padding:
                             const EdgeInsets.only(top: workAreaHandleTopInset),
                         child: Center(
-                          // Lantern's handle is a 6 by 18 round accent pill;
-                          // the other shapes draw the tab the full height
-                          // under the clock.
                           child: SizedBox(
                             width: style.round ? 6 : workAreaHandleTabWidth,
                             height: style.round ? workAreaPillHeight : null,
@@ -2740,8 +2605,6 @@ class _TimelineRulerState extends State<TimelineRuler> {
                             _escape.end();
                             _abandonSpanDrag();
                           },
-                          // A short post in the marker's colour, standing on
-                          // the bar it ends.
                           child: Align(
                             alignment: Alignment.bottomCenter,
                             child: SizedBox(
@@ -2839,9 +2702,6 @@ class _TimelineRulerState extends State<TimelineRuler> {
                   ),
                 ),
               ),
-            // What a work-area edge or a marker drag has landed on, marked
-            // while it holds it — the same hairline a lane key's drag draws,
-            // because it is the same service (docs/07 §4.5).
             if (_caught != null)
               Positioned(
                 key: const ValueKey('tl-ruler-snap-caught'),
@@ -2851,9 +2711,6 @@ class _TimelineRulerState extends State<TimelineRuler> {
                 width: 1,
                 child: IgnorePointer(child: ColoredBox(color: t.accent)),
               ),
-            // The cached segments, on the band's own row at the ruler's floor
-            // (§12A.1). Last, so they lie over the band — the band is what
-            // they are drawn *on*, not a strip beside them.
             if (widget.cache != null)
               Positioned(
                 left: 0,
@@ -2874,7 +2731,6 @@ class _TimelineRulerState extends State<TimelineRuler> {
 /// handle is catchable without the mark being heavy.
 const double _workHandleWidth = 10;
 
-/// How wide the end of a marker's region is to grab, for the same reason.
 const double _regionHandleWidth = 8;
 
 /// A marker in the middle of a drag on the ruler: which one, the frame it has
@@ -2901,7 +2757,6 @@ class MarkerRegionsGround extends StatelessWidget {
   final CompositionReference comp;
   final TimelineAxis axis;
 
-  /// The marker a drag on the ruler has staged, or null when none is on.
   final ValueListenable<MarkerPreview?> preview;
 
   @override
@@ -2949,7 +2804,6 @@ class MarkerRegionsGround extends StatelessWidget {
 }
 
 class _MarkerRegionsPainter extends CustomPainter {
-  /// Each region's two edges in the view's own pixels, and its colour.
   final List<(double, double, Color)> spans;
 
   const _MarkerRegionsPainter({required this.spans});
@@ -2960,8 +2814,6 @@ class _MarkerRegionsPainter extends CustomPainter {
       final left = from.clamp(0.0, size.width);
       final right = to.clamp(0.0, size.width);
       if (right <= left) continue;
-      // Light enough to read bars and keys through, with an edge at each end
-      // so where the region starts and stops is a line and not a guess.
       canvas.drawRect(
         Rect.fromLTRB(left, 0, right, size.height),
         Paint()..color = colour.withValues(alpha: markerRegionFillAlpha),
@@ -2985,8 +2837,6 @@ class _MarkerRegionsPainter extends CustomPainter {
   bool? hitTest(Offset position) => false;
 }
 
-/// How strongly a marker's region washes the lanes, and how strongly its two
-/// edges are drawn.
 const double markerRegionFillAlpha = 0.14;
 const double markerRegionEdgeAlpha = 0.45;
 
@@ -3008,8 +2858,6 @@ const double beatLineAlpha = 0.3;
 /// under bars, so lighter than [markerRegionFillAlpha].
 const double markerRegionBandAlpha = 0.08;
 
-/// How far apart beats have to stand, in pixels, before their lines are drawn
-/// at all, and how far apart before they are drawn at full strength.
 const double beatLineMinGap = 8;
 const double beatLineFullGap = 16;
 
@@ -3041,11 +2889,8 @@ class MarkerLinesGround extends StatelessWidget {
   final CompositionReference comp;
   final TimelineAxis axis;
 
-  /// The scroll the lanes ride sideways, when they ride one.
   final ScrollController? hScroll;
 
-  /// Whether each region is washed in faintly too, with a line at its end,
-  /// for a view with no [MarkerRegionsGround] of its own.
   final bool regions;
 
   @override
@@ -3103,7 +2948,6 @@ class MarkerLinesGround extends StatelessWidget {
             animation: Listenable.merge([markerDragPreview, hScroll]),
             builder: (context, _) {
               final staged = markerDragPreview.value;
-              // Each region's two ends, following a drag as its flag does.
               final ends = [
                 for (final r in spans)
                   staged != null && staged.id == r.id
@@ -3135,8 +2979,6 @@ class MarkerLinesGround extends StatelessWidget {
                         axis.xOf(staged != null && staged.id == line.id
                             ? staged.frame
                             : line.frame),
-                        // The one in hand at full strength, so it is read
-                        // against the clips it is being lined up with.
                         staged != null && staged.id == line.id
                             ? line.colour.withValues(alpha: 1)
                             : line.colour,
@@ -3163,10 +3005,8 @@ class MarkerLinesGround extends StatelessWidget {
 }
 
 class _MarkerLinesPainter extends CustomPainter {
-  /// Each line's place in the view's own pixels, and its colour.
   final List<(double, Color)> lines;
 
-  /// Each region's two edges and its wash, drawn under the lines.
   final List<(double, double, Color)> bands;
 
   /// Where this painter's left edge sits against the panel's pixel grid: the
@@ -3225,7 +3065,6 @@ class _MarkerLinesPainter extends CustomPainter {
 class MarkerFlag extends StatefulWidget {
   final String label;
 
-  /// The triangle — the part that says *which frame*.
   final Color fill;
 
   /// The pill behind the label. A surface, not the marker's own colour: the
@@ -3238,10 +3077,8 @@ class MarkerFlag extends StatefulWidget {
   /// `xOf(frame) - width / 2`, so the point lands on the frame.
   static const double width = 8;
 
-  /// How tall the triangle stands off the ruler's floor.
   static const double pointHeight = 6;
 
-  /// The pill's height — and the flag's, the triangle standing inside it.
   static const double height = 12;
 
   /// How thick a **spanning** marker's bar is (§12A.1). Thin enough to read as
@@ -3268,8 +3105,6 @@ class _MarkerFlagState extends State<MarkerFlag> {
   /// two draw the same widget.
   bool _hovered = false;
 
-  /// One step nearer the colour this panel selects in — the same move a
-  /// hovered bar's leading edge makes, at a flag's own gentler amount.
   Color _lift(Color colour, Color toward) =>
       _hovered ? Color.lerp(colour, toward, markerHoverLift)! : colour;
 
@@ -3308,14 +3143,11 @@ class _MarkerFlagState extends State<MarkerFlag> {
             padding: const EdgeInsets.only(left: MarkerFlag.width / 2),
             child: Container(
               height: MarkerFlag.height,
-              // Clear of the triangle's right half, which lies over the pill.
               padding: const EdgeInsets.only(
                   left: MarkerFlag.width / 2 + 3, right: 4),
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: _lift(widget.pill, t.textPrimary),
-                // Square where the triangle meets it, rounded away from it.
-                // Lantern's pill beside its dot is a capsule.
                 borderRadius: BorderRadius.only(
                   topRight: Radius.circular(markerPillRadius(t)),
                   bottomRight: Radius.circular(markerPillRadius(t)),
@@ -3330,7 +3162,6 @@ class _MarkerFlagState extends State<MarkerFlag> {
               ),
             ),
           ),
-          // Over the pill, so the point stays the shape you aim at.
           flag,
         ],
       ),
@@ -3346,8 +3177,6 @@ class _MarkerFlagPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Base on the floor, point up: the shape *stands on* the cache bar and
-    // aims at the time it marks.
     final base = size.height;
     if (dot) {
       canvas.drawCircle(Offset(size.width / 2, base - size.width / 2),
@@ -3400,7 +3229,6 @@ class _BeatTickPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Base on the floor, point up — the flag's own stance, at beat size.
     final base = size.height;
     canvas.drawPath(
       Path()
@@ -3449,8 +3277,6 @@ List<({int bar, double frame})> beatBarLabels({
   return out;
 }
 
-/// The bar numbers along the ruler's lower row, dim and mono — the beat
-/// band's own furniture, beside the ticks the beat markers wear.
 class BeatBandPainter extends CustomPainter {
   final BridgeBeatGrid grid;
   final TimelineAxis axis;
@@ -3555,7 +3381,6 @@ class _MarkerSettingsDialogState extends State<_MarkerSettingsDialog> {
     ));
   }
 
-  /// One labelled line of the form: what it is on the left, the control after.
   Widget _line(LumitTheme t, String name, Widget control) => Padding(
         padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
         child: Row(
@@ -3699,7 +3524,6 @@ void addMarkerFrb(
 }) =>
     writeMarkers(comp, markersWithFrb(comp, frame: frame, label: label));
 
-/// Previous marker and Next marker, with the Composition menu's chords.
 List<Widget> _markerStepRows(
         String keyPrefix, void Function(String?) close,
         {bool enabled = true}) =>
@@ -3718,10 +3542,6 @@ List<Widget> _markerStepRows(
               action: 'marker.next', enabled: enabled)),
     ];
 
-/// The menu on a ruler's ground, with [frame] as its "here": a marker there,
-/// and the work area's ends. Either half stays out where its callback is null.
-/// [extra] is a view's own rows, under them. [onStep] goes to the marker
-/// before or after the playhead.
 Future<void> showRulerMenu(
   BuildContext context, {
   required CompositionReference comp,
@@ -3733,8 +3553,6 @@ Future<void> showRulerMenu(
   ValueChanged<bool>? onStep,
 }) async {
   if (setWork == null && addMarker == null) return;
-  // The Composition menu's Trim comp to work area, here too, beside the
-  // work area it trims to; greyed when the comp has none.
   final trim = setWork == null
       ? null
       : trimCompAction(Provider.of<LumitState>(context, listen: false), comp);
@@ -3882,8 +3700,6 @@ int? markerFrameFrb(CompositionReference comp, String label) {
 class PlayheadMarker extends StatelessWidget {
   const PlayheadMarker({super.key});
 
-  /// Half the head's width under Studio, how far left of the frame the
-  /// marker starts. The other shapes answer through [halfWidthFor].
   static const double halfWidth = 5;
 
   /// How tall the head is — the mockup's own 6. It sits at the very
@@ -3900,14 +3716,12 @@ class PlayheadMarker extends StatelessWidget {
         ThemeShape.lantern => 6,
       };
 
-  /// The head's height per shape.
   static double headHeightFor(ThemeShape shape) => switch (shape) {
         ThemeShape.studio => headHeight,
         ThemeShape.desk => 10,
         ThemeShape.lantern => 12,
       };
 
-  /// The stem's thickness: Lantern's pin is 2, the others a hairline.
   static double stemFor(ThemeShape shape) =>
       shape == ThemeShape.lantern ? 2 : 1;
 
@@ -3927,7 +3741,6 @@ class PlayheadMarker extends StatelessWidget {
               painter: _PlayheadHeadPainter(
                 head: t.accent,
                 notch: t.surface0,
-                // Lantern rings its round head in the lane ground.
                 ring: t.surface1,
                 shape: t.shape,
               ),
@@ -3970,7 +3783,6 @@ class PlayheadOverlay extends StatelessWidget {
   /// anything but this.
   final ValueListenable<int> playhead;
 
-  /// Where a frame falls in the view's own pixels — the caller's axis.
   final double Function(int frame) xOf;
 
   @override
@@ -4008,7 +3820,6 @@ class SharePlayheads extends StatelessWidget {
 
   final CompositionReference comp;
 
-  /// Where a frame falls in the view's own pixels.
   final double Function(int frame) xOf;
 
   @override
@@ -4044,18 +3855,11 @@ class SharePlayheads extends StatelessWidget {
   }
 }
 
-/// The notes left in a project kept online that were written in [comp]: a
-/// small flag each on the ruler at its frame, in its writer's colour. The
-/// words are on hover, and a press opens the Shared project window on them.
-///
-/// It listens to the notes being read, and is all that is rebuilt then. What
-/// it draws is what the share state already holds.
 class ShareNotes extends StatelessWidget {
   const ShareNotes({super.key, required this.comp, required this.xOf});
 
   final CompositionReference comp;
 
-  /// Where a frame falls in the view's own pixels.
   final double Function(int frame) xOf;
 
   static const double _flag = 9;
@@ -4084,7 +3888,6 @@ class ShareNotes extends StatelessWidget {
                         key: ValueKey<String>('tl-note-${note.id}'),
                         behavior: HitTestBehavior.opaque,
                         onTap: () => share.showActivity?.call(),
-                        // A pennant: square at the pole, cut away below.
                         child: Container(
                           width: _flag,
                           height: _flag,
@@ -4155,12 +3958,8 @@ class ShareKeys extends StatelessWidget {
 class _ShareKeysPainter extends CustomPainter {
   const _ShareKeysPainter(this.marks);
 
-  /// Each ring: where, whose colour, and how many rings are inside it. Two
-  /// people on one keyframe get a ring each, one outside the other.
   final List<(Offset, Color, int)> marks;
 
-  /// How far the first ring stands off the keyframe's own mark, and each
-  /// further one off the ring inside it.
   static const double _reach = laneKeyHalf + 3;
   static const double _step = 3;
 
@@ -4193,13 +3992,10 @@ class _ShareKeysPainter extends CustomPainter {
   bool? hitTest(Offset position) => false;
 }
 
-/// The playhead's head: a downward triangle with the hairline carried up into
-/// it as a notch.
 class _PlayheadHeadPainter extends CustomPainter {
   final Color head;
   final Color notch;
 
-  /// The ring round Lantern's pin head.
   final Color ring;
   final ThemeShape shape;
 
@@ -4214,16 +4010,12 @@ class _PlayheadHeadPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final mid = size.width / 2;
     if (shape == ThemeShape.desk) {
-      // A needle's knob: a round signal head with a notch of the ground
-      // through it, the way a meter's needle is pinned.
       final centre = Offset(mid, size.height / 2);
       canvas.drawCircle(centre, mid, Paint()..color = head);
       canvas.drawCircle(centre, 1.5, Paint()..color = notch);
       return;
     }
     if (shape == ThemeShape.lantern) {
-      // A round accent head with a 2px ring of the lane ground inside its
-      // edge, so it reads over any ruler ground.
       final centre = Offset(mid, size.height / 2);
       canvas.drawCircle(centre, mid, Paint()..color = head);
       canvas.drawCircle(
@@ -4243,8 +4035,6 @@ class _PlayheadHeadPainter extends CustomPainter {
         ..close(),
       Paint()..color = head,
     );
-    // Up from the tip to about where the triangle is still wide enough to hold
-    // it: the short stub that joins the head to the line.
     canvas.drawLine(
       Offset(mid, size.height * 0.45),
       Offset(mid, size.height),
@@ -4383,7 +4173,6 @@ BoxDecoration workAreaBand(LumitTheme t, {required double fillAlpha}) =>
       ),
     );
 
-/// The band's two edges, at half strength (§12A.1).
 Color workAreaEdgeColour(LumitTheme t) => t.animated.withValues(alpha: 0.5);
 
 /// A work-area **handle**'s tab (the owner's reference image).
@@ -4396,24 +4185,18 @@ Color workAreaEdgeColour(LumitTheme t) => t.animated.withValues(alpha: 0.5);
 /// says the handle is live by turning into the resize cursor.
 Color workAreaHandleColour(LumitTheme t) => switch (t.shape) {
       ThemeShape.studio => t.animated,
-      // Desk's tab is a hairline_strong mark, the band being unpainted.
       ThemeShape.desk => t.hairlineStrong,
       ThemeShape.lantern => t.accent,
     };
 
-/// How strong Lantern's accent-soft band fills.
 const double workAreaSoftFillAlpha = 0.18;
 
-/// How tall Lantern's round handle is.
 const double workAreaPillHeight = 18;
 
-/// Where Lantern's handle starts in a ruler [height] tall: centred in the
-/// room under [workAreaHandleTopInset].
 double workAreaPillTop(double height) =>
     workAreaHandleTopInset +
     (height - workAreaHandleTopInset - workAreaPillHeight) / 2;
 
-/// How far Lantern's band stops short of its handle's top and bottom.
 const double workAreaSoftInset = 2;
 
 /// How wide the drawn tab is, inside the [_workHandleWidth] it grabs across.
@@ -4444,27 +4227,19 @@ const double workAreaHandleTopInset = 18;
 TextStyle markerLabelStyle(LumitTheme t) =>
     t.mono.copyWith(fontSize: 9, color: t.textPrimary, height: 1);
 
-/// The corner of a marker's label pill: a capsule under Lantern, 2 elsewhere.
 double markerPillRadius(LumitTheme t) =>
     t.shape == ThemeShape.lantern ? ShapeTokens.stadium : 2;
 
-/// The fill under a selected row, both halves of the table: Lantern's
-/// accent_soft, the theme's own selection fill under the other shapes.
 Color rowSelectionFill(LumitTheme t) => switch (t.shape) {
       ThemeShape.lantern => t.accent.withValues(alpha: accentSoftAlpha),
-      // One selection everywhere under Desk: the signal at 14 percent
-      // (docs/design-alt/15-DESIGN-DESK.md 6.5).
       ThemeShape.desk => t.accent.withValues(alpha: 0.14),
       ThemeShape.studio => t.selectionFill,
     };
 
-/// How strong Lantern's accent_soft is (docs/design-alt/15-DESIGN-LANTERN.md).
 const double accentSoftAlpha = 0.26;
 
-/// Desk's bar: the layer hue mixed this far into the row's band.
 const double deskBarMix = 0.30;
 
-/// Lantern's bar: the layer hue at this strength.
 const double lanternBarAlpha = 0.55;
 
 /// The band's fill over the ruler's surface, and over the lane ground. Two
@@ -4494,9 +4269,6 @@ WaveformColours clipWaveColours(Color label, Color text) => WaveformColours(
       high: Color.lerp(label, text, 0.8)!,
     );
 
-/// A bar's corner radius on a flush pane: **none**, as the mockup draws it.
-/// It was 2, which rounded nothing visibly and softened every bar end by a
-/// pixel.
 const double sharpClipRadius = 0;
 
 /// The corner a layer bar or clip wears: the shape's content radius, except
@@ -4530,12 +4302,9 @@ const double clipBarHeight = 16;
 /// centred either way, which is the claim §12A.6 makes about it.
 double clipBarInsetFor(DensityTokens d) => (d.laneRow - clipBarHeight) / 2;
 
-/// The bar's height under the shape: Lantern draws 18 in its 28 row, the
-/// others the table's 16.
 double clipBarHeightOf(LumitTheme t) =>
     t.shape == ThemeShape.lantern ? 18 : clipBarHeight;
 
-/// The ground above the bar under the shape, so it stays centred in the row.
 double clipBarInsetOf(LumitTheme t) =>
     (t.density.laneRow - clipBarHeightOf(t)) / 2;
 
@@ -4616,11 +4385,9 @@ class _RulerTicksPainter extends CustomPainter {
   final double fps;
   final Color tick;
 
-  /// The minor ticks: quieter than the labelled ones.
   final Color minorTick;
   final TextStyle label;
 
-  /// Which shape's scale to draw.
   final RulerStyle style;
 
   /// The lanes' scroll, given only while the labels are finer than half a
@@ -4645,8 +4412,6 @@ class _RulerTicksPainter extends CustomPainter {
     this.scroll,
   }) : super(repaint: scroll);
 
-  /// The seconds to draw between: the whole comp, or with [scroll] the view
-  /// and a view either side.
   (double, double) _span(double seconds) {
     final p = scroll;
     if (p == null || !p.hasPixels || !p.hasViewportDimension) {
@@ -4665,8 +4430,6 @@ class _RulerTicksPainter extends CustomPainter {
   static final Map<String, TextPainter> _laidOut = {};
   static TextStyle? _laidOutIn;
 
-  /// The first whole multiple of `step` the clock reads at or after `from`
-  /// seconds into the comp.
   double _first(double step, double from) {
     final at = start + from;
     return step <= 0 ? at : (at / step - 1e-9).ceilToDouble() * step;
@@ -4744,8 +4507,6 @@ class _RulerTicksPainter extends CustomPainter {
       return;
     }
 
-    // Minor ticks between the labels, subdividing further the more room the
-    // zoom gives them — down to one tick per frame (§12A.1).
     final minor = rulerMinorStepSeconds(
         pixelsPerSecond: pxPerSec, labelStep: step, fps: fps);
     final (from, to) = _span(seconds);
@@ -4866,7 +4627,6 @@ class _CacheBarPainter extends CustomPainter {
   final Color held;
   final Color onDisk;
 
-  /// Lantern: each run a rounded rect with a 2px gap before the next.
   final bool rounded;
 
   const _CacheBarPainter({
@@ -5048,7 +4808,6 @@ class WorkAreaGroundPainter extends CustomPainter {
       old.compStartX != compStartX ||
       old.compEndX != compEndX;
 
-  /// Never absorbs a pointer — it is the ground, not a control.
   @override
   bool? hitTest(Offset position) => false;
 }

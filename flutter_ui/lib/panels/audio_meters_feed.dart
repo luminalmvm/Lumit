@@ -28,11 +28,8 @@ import 'mixer_live.dart';
 /// Mixer and an Audio panel side by side should not disagree about it.
 int meterPeakHoldSeconds = 3;
 
-/// The feeds polling now, for [resetMeterPeaks] to reach.
 final Set<AudioMeterFeed> _running = {};
 
-/// Forget every held peak and put the clip and limiter lights out. The mix is
-/// untouched.
 void resetMeterPeaks() {
   resetAudioClip();
   for (final feed in _running) {
@@ -44,8 +41,6 @@ void resetMeterPeaks() {
   }
 }
 
-/// Start the master's integrated loudness and its true peak afresh, and the
-/// history drawn of it.
 void resetLoudness() {
   resetAudioLoudness();
   for (final feed in _running) {
@@ -59,7 +54,6 @@ void resetLoudness() {
 /// infinity where nothing was measured. View state only; it notifies as it
 /// moves, for the graph's painter.
 class LoudnessHistory extends ChangeNotifier {
-  /// Thirty seconds of readings.
   static const int length = 300;
 
   final Float64List _ring = Float64List(length);
@@ -97,7 +91,6 @@ class LoudnessLevels {
     this.shortTerm = double.negativeInfinity,
     this.integrated = double.negativeInfinity,
     this.truePeak = double.negativeInfinity,
-    // The engine's own range before anything is measured.
     this.range = 0,
   });
 
@@ -142,8 +135,6 @@ class StripLevels {
   final double peakLeft, peakRight;
   final double rmsLeft, rmsRight;
 
-  /// The panel's own hold (docs/09 §3.1): the loudest peak of the last few
-  /// seconds, per channel.
   final double holdLeft, holdRight;
 
   /// How far the strip is held down, in dB: ducked, or the master limited.
@@ -231,7 +222,6 @@ class AudioMeterFeed {
   final ValueNotifier<LoudnessLevels> loudness =
       ValueNotifier(LoudnessLevels.silence);
 
-  /// The short-term loudness over the last half minute of playing.
   final LoudnessHistory history = LoudnessHistory();
   int _historyTicks = 0;
 
@@ -248,17 +238,13 @@ class AudioMeterFeed {
   final ValueNotifier<Map<String, StripPosition>> positions =
       ValueNotifier(const {});
 
-  /// Whether the limiter has held the master down since the light was put out.
   bool _limited = false;
 
-  /// The controls an automation pass is writing now. Empty while stopped.
   final ValueNotifier<Set<BridgeMixTarget>> recording =
       ValueNotifier(const {});
 
   int _passTicks = 0;
 
-  /// Whether the comp is playing, which is when [positions] and [recording]
-  /// are read.
   ValueListenable<bool>? _playing;
 
   Timer? _timer;
@@ -269,28 +255,20 @@ class AudioMeterFeed {
   @visibleForTesting
   List<BridgeAudioMeter> Function() read = audioMeters;
 
-  /// What [tick] reads the loudness with, asked only when the engine has a
-  /// master to measure.
   @visibleForTesting
   BridgeAudioLoudness Function() readLoudness = audioLoudness;
 
-  /// What [tick] reads the faders' places with while the comp plays.
   @visibleForTesting
   Map<String, StripPosition> Function() readPositions = mixerPositions;
 
-  /// What [tick] reads the pass being recorded with while the comp plays,
-  /// set by the panel that knows the comp.
   List<BridgeAutomationLine> Function() readPass = () => const [];
 
   /// About 30 frames a second: enough for a bar to read as live, and each
   /// tick is one sync crossing that copies a handful of numbers.
   static const Duration _period = Duration(milliseconds: 33);
 
-  /// What starts a parked poll again: the transport starting, or the
-  /// playhead moving under a scrub that may be heard.
   Listenable? _wake;
 
-  /// When something was last heard, or the poll last woken.
   DateTime _heard = DateTime.fromMillisecondsSinceEpoch(0);
 
   /// How long the bars stay silent before the poll parks. Long enough for a
@@ -306,13 +284,11 @@ class AudioMeterFeed {
     this.wake();
   }
 
-  /// Put out one strip's clip lamp.
   void clearClip(String layer) {
     if (!clips.value.contains(layer)) return;
     clips.value = {...clips.value}..remove(layer);
   }
 
-  /// Poll again, because something may be about to sound.
   void wake() {
     _heard = DateTime.now();
     _timer ??= Timer.periodic(_period, (_) => tick());
@@ -327,7 +303,6 @@ class AudioMeterFeed {
     _timer = null;
   }
 
-  /// One poll — public so a test can pulse the feed by hand.
   @visibleForTesting
   void tick() {
     final now = DateTime.now();

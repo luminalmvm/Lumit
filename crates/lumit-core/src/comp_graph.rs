@@ -44,66 +44,47 @@ pub const VALUE_PORT: Port = Port::new("value", "Value", PortType::Number);
 /// 3D layers is, metres (Scene depth).
 pub const READ_DEPTH_PORT: Port = Port::new("depth", "Depth", PortType::Depth);
 
-/// A Read's paths: the shape layers of the comp it reads, for a Repeat start
-/// to run once a path.
 pub const READ_SHAPES_PORT: Port = Port::new("shapes", "Shapes", PortType::Shape);
 
-/// The Merge's second picture: what its A is laid over.
 pub const BACKGROUND_PORT: Port = Port::new("background", "B", PortType::Image);
 
-/// The match name of the Merge node (§1.3).
 pub const MERGE: &str = "merge";
-/// The match name of the Switch node (§1.3).
 pub const SWITCH: &str = "switch";
-/// The match name of the Node graph effect (§1.3).
 pub const NODE_GRAPH: &str = "node_graph";
-/// The match name of the Split channels node (§1.3).
 pub const SPLIT_CHANNELS: &str = "split_channels";
-/// The match name of the Combine channels node (§1.3).
 pub const COMBINE_CHANNELS: &str = "combine_channels";
-/// The match name of the Repeat start box.
 pub const REPEAT_START: &str = "repeat_start";
-/// The match name of the Repeat end box.
 pub const REPEAT_END: &str = "repeat_end";
 
 /// Split channels' outputs and Combine channels' inputs, red to alpha. Red
 /// keeps the `output` and `input` ids, as Merge's A does, so Auto-wire and Heal
 /// still find it.
 pub const SPLIT_OUTPUTS: [&str; 4] = ["output", "green", "blue", "alpha"];
-/// See [`SPLIT_OUTPUTS`].
 pub const COMBINE_INPUTS: [&str; 4] = ["input", "green", "blue", "alpha"];
 const CHANNEL_LABELS: [&str; 4] = ["Red", "Green", "Blue", "Alpha"];
 
-/// What a node graph composition holds instead of layers.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CompGraph {
     /// The boxes, in document order. Never empty: the Output is among them.
     pub nodes: Vec<GraphNode>,
-    /// The wires (§1.4).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub edges: Vec<GraphEdge>,
     /// Canvas positions. **Document data**, as the layer graph's are: they
     /// persist and travel, and a box with no entry is auto-placed by the panel.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub layout: Vec<(Uuid, [f64; 2])>,
-    /// The boxes dragged wider or narrower by an edge, as the layer graph's.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub widths: Vec<(Uuid, f64)>,
     /// The boxes twirled open to show every socket. Presentation state, so it
     /// changes no picture and reaches no frame key.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub exposed: Vec<Uuid>,
-    /// The named washes over regions of the canvas, beside [`Self::layout`] and
-    /// for the same reasons.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub groups: Vec<GraphGroup>,
-    /// The notes left on the canvas, as a layer's graph keeps them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notes: Vec<crate::graph::Note>,
-    /// The ties on its wires, as a layer's graph keeps them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ties: Vec<crate::wire_tie::WireTie>,
-    /// Each box's label colour and fold, as a layer's graph keeps them.
     #[serde(default, skip_serializing_if = "BoxLooks::is_empty")]
     pub looks: BoxLooks<Uuid>,
 }
@@ -114,8 +95,6 @@ pub struct CompGraph {
 /// of the layer graph's derived sentinels.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum GraphNode {
-    /// A project item brought in: footage, a solid or a composition, a node
-    /// graph included.
     Read {
         id: Uuid,
         /// The project item this box reads. An item somebody deleted draws
@@ -125,19 +104,21 @@ pub enum GraphNode {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         custom_name: Option<String>,
     },
-    /// A value or picture handed in from outside the graph (§1.5).
-    Input { id: Uuid, input: GraphInput },
+    Input {
+        id: Uuid,
+        input: GraphInput,
+    },
     /// Any catalogue entry: an image effect, a driver, a Merge, a Switch, a
     /// Node graph effect. An ordinary [`EffectInstance`], which is what gives a
     /// box keyframes, expressions, driver wires, a bypass tick and a name for
     /// nothing.
     Fx(EffectInstance),
-    /// The one box whose picture the comp shows.
-    Output { id: Uuid },
+    Output {
+        id: Uuid,
+    },
 }
 
 impl GraphNode {
-    /// This box's id - the name every wire, position and group uses.
     #[must_use]
     pub fn id(&self) -> Uuid {
         match self {
@@ -148,7 +129,6 @@ impl GraphNode {
         }
     }
 
-    /// The user's own name for this box, where they have given it one.
     #[must_use]
     pub fn custom_name(&self) -> Option<&str> {
         match self {
@@ -159,14 +139,11 @@ impl GraphNode {
     }
 }
 
-/// One wire: an output socket of one box into an input socket of another.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GraphEdge {
     pub from: Uuid,
-    /// One of the source box's output sockets, as [`ports_of`] lists them.
     pub from_port: String,
     pub to: Uuid,
-    /// One of the destination box's input sockets.
     pub to_port: String,
 }
 
@@ -177,12 +154,10 @@ pub struct GraphEdge {
 /// boxes rather than trapping them.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GraphGroup {
-    /// What the group is called, drawn as the wash's kicker.
     pub name: String,
     /// Which chip of the label palette tints it. An index, not a colour: no
     /// colour has ever crossed the bridge.
     pub colour: u32,
-    /// The boxes inside it.
     pub members: Vec<Uuid>,
 }
 
@@ -192,7 +167,6 @@ pub struct GraphGroup {
 pub struct GraphInput {
     /// snake_case, unique in the graph, and the parameter id outside it.
     pub id: String,
-    /// The row's word.
     pub label: String,
     pub kind: InputKind,
     /// One number, or four for a colour.
@@ -267,15 +241,9 @@ impl GraphPort {
     }
 }
 
-/// The value half of a graph, turned into shapes the engine already evaluates
-/// (§2.2).
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Projection {
-    /// The Fx boxes that make pictures, in document order, with every wired
-    /// Input baked into the parameter it feeds.
     pub effects: Vec<EffectInstance>,
-    /// The driver boxes and the wires out of them, as the layer graph the
-    /// existing driver walk resolves.
     pub drivers: crate::graph::LayerGraph,
 }
 
@@ -318,8 +286,6 @@ pub fn ports_of(
     doc: Option<&Document>,
 ) -> (Vec<GraphPort>, Vec<GraphPort>) {
     match node {
-        // A Read is a source: it brings a picture in and takes nothing.
-        // A Read of a comp hands on its shape layers' paths too.
         GraphNode::Read { item, .. } => {
             let mut outs = vec![GraphPort::of(OUTPUT_PORT), GraphPort::of(READ_DEPTH_PORT)];
             if doc.is_some_and(|d| d.comp(*item).is_some()) {
@@ -339,8 +305,6 @@ pub fn ports_of(
     }
 }
 
-/// [`ports_of`] for an Fx box: the three node-graph natives first, then the
-/// ordinary rule an effect or a driver follows.
 fn fx_ports(
     graph: &CompGraph,
     inst: &EffectInstance,
@@ -450,7 +414,6 @@ fn fx_ports(
             }
         }
     }
-    // A Custom shader's own rows get sockets too.
     for param in schema.params.iter().chain(def.derived(inst)) {
         if let Some(ty) = param.kind.port_type() {
             ins.push(GraphPort::new(param.id, param.label, ty));
@@ -471,7 +434,6 @@ fn fx_ports(
     (ins, outs)
 }
 
-/// The view menu `inst`'s effect declares: its parameter id and its options.
 fn view_menu(inst: &EffectInstance) -> Option<(&'static str, &'static [&'static str])> {
     let def = crate::fx::builtins::def(&inst.effect.match_name)?;
     let param = def.view()?;
@@ -585,8 +547,6 @@ impl CompGraph {
         self.looks.retain(|id| nodes.iter().any(|n| n.id() == id));
     }
 
-    /// A fresh node graph: one Output box at the canvas origin, which is what
-    /// **New node graph** seeds.
     #[must_use]
     pub fn new_with_output() -> CompGraph {
         let id = Uuid::now_v7();
@@ -606,7 +566,6 @@ impl CompGraph {
         }
     }
 
-    /// The box named by `id`, if this graph carries one.
     #[must_use]
     pub fn node(&self, id: Uuid) -> Option<&GraphNode> {
         self.nodes.iter().find(|n| n.id() == id)
@@ -631,8 +590,6 @@ impl CompGraph {
         })
     }
 
-    /// What feeds `port` on `node`: the box the wire comes from and its output
-    /// socket, or `None` for a socket nothing is wired to.
     #[must_use]
     pub fn wire_into(&self, node: Uuid, port: &str) -> Option<(&Uuid, &str)> {
         self.edges
@@ -747,20 +704,16 @@ pub struct GraphView<'a> {
     /// The host's values, by Input id, as `node_graph::overrides_of` reads them
     /// off the instance.
     pub values: &'a [(String, EffectValue)],
-    /// Whether the picture Inputs are fed from outside.
     pub pictures_fed: bool,
 }
 
 impl GraphView<'_> {
-    /// A graph looked at on its own: no values and no pictures.
     pub const DEFAULTS: GraphView<'static> = GraphView {
         values: &[],
         pictures_fed: false,
     };
 }
 
-/// Whether this box hands a picture out - which is what the Viewer's *at this
-/// box* chip is offered for.
 fn makes_a_picture(node: &GraphNode) -> bool {
     match node {
         GraphNode::Read { .. } => true,
@@ -948,7 +901,6 @@ pub fn read_paths(
     let Some(comp) = context.document.comp(item) else {
         return Vec::new();
     };
-    // A Read lays its comp centred in the graph's frame.
     let off = [
         (size[0] - comp.width as f32) * 0.5,
         (size[1] - comp.height as f32) * 0.5,

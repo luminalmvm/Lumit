@@ -80,7 +80,6 @@ struct Cut {
     reads: usize,
 }
 
-/// The box [`Cut`] fills: a quarter of the frame, well inside it.
 const BOX: [u32; 4] = [W / 4, H / 4, W / 2, H / 2];
 
 impl PlaneModel for Cut {
@@ -108,7 +107,6 @@ impl PlaneModel for Cut {
     }
 }
 
-/// A model that will not run at all.
 struct Refuses;
 
 impl PlaneModel for Refuses {
@@ -164,9 +162,6 @@ fn job(frames: usize) -> PlaneJob {
     }
 }
 
-/// **A run reads every frame, reports as it goes, and files one record each.**
-/// The whole job in one assertion: the progress the card polls, the span the
-/// panel reads, and a plane per frame at the model's own raster.
 #[test]
 fn an_analysis_reads_the_clip_and_files_a_plane_a_frame() {
     let _guard = serially();
@@ -205,7 +200,6 @@ fn an_analysis_reads_the_clip_and_files_a_plane_a_frame() {
         assert_eq!((w, h), (PW, PH), "the model's own raster, not the clip's");
         assert_eq!(kind, PlaneKind::Depth);
         assert_eq!(data.len(), (PW as usize) * (PH as usize) * 2);
-        // The plane of frame n is the plane the model made of frame n.
         let expect = u16::from((frame * 10) as u8) * 257;
         assert_eq!(
             u16::from_le_bytes([data[0], data[1]]),
@@ -215,10 +209,6 @@ fn an_analysis_reads_the_clip_and_files_a_plane_a_frame() {
     }
 }
 
-/// **A cancel keeps the prefix it finished** (§6.1, the Roto brush's stance).
-/// Every frame reached is correct and correctly named, so they are kept, the
-/// span says how far it got, and a later Analyse carries on rather than
-/// starting again.
 #[test]
 fn a_cancel_keeps_the_prefix_it_finished() {
     let _guard = serially();
@@ -244,9 +234,6 @@ fn a_cancel_keeps_the_prefix_it_finished() {
     assert!(run.plane(3).is_none());
 }
 
-/// **A span reads only its own frames, and a second Analyse adds to the
-/// folder rather than reading it again.** The PNGs come back as the planes
-/// that were written, so a wider span asks the model for the new frames only.
 #[test]
 fn a_span_fills_its_folder_and_a_wider_one_only_adds_to_it() {
     let _guard = serially();
@@ -292,10 +279,6 @@ fn matte_job(frames: usize, arch: u32) -> PlaneJob {
     }
 }
 
-/// **A matte is kept as the box it covers, and comes back whole.** A coverage
-/// is a subject with nothing around it, so only the box is written; what the
-/// render path asks for is the plane at its own raster, and every byte outside
-/// the box has to be nought when it gets there.
 #[test]
 fn a_matte_is_boxed_on_the_way_in_and_whole_on_the_way_out() {
     let _guard = serially();
@@ -330,8 +313,6 @@ fn a_matte_is_boxed_on_the_way_in_and_whole_on_the_way_out() {
     }
 }
 
-/// **A model that will not run is a refusal, not a fault.** Nothing is filed
-/// and the reason has a name the bridge can carry.
 #[test]
 fn a_model_that_will_not_run_is_a_named_refusal() {
     let _guard = serially();
@@ -340,7 +321,6 @@ fn a_model_that_will_not_run_is_a_named_refusal() {
         analyse(job(3), None, &mut Refuses, &never(), &|_| {}).unwrap_err(),
         PlaneFailure::ModelFailed
     );
-    // And a clip with nothing in it says so rather than filing an empty run.
     let empty = PlaneJob {
         open: Box::new(|| Some(Box::new(Clip { frames: 0 }) as Box<dyn RotoFrames>)),
         ..job(0)
@@ -349,7 +329,6 @@ fn a_model_that_will_not_run_is_a_named_refusal() {
         analyse(empty, None, &mut Written { reads: 0 }, &never(), &|_| {}).unwrap_err(),
         PlaneFailure::NoFrames
     );
-    // And media that will not open at all.
     let offline = PlaneJob {
         open: Box::new(|| None),
         ..job(3)
@@ -360,8 +339,6 @@ fn a_model_that_will_not_run_is_a_named_refusal() {
     );
 }
 
-/// **The sidecar round trips, refuses what it cannot vouch for, and a deleted
-/// file rebuilds to what was deleted** (§11 test 6).
 #[test]
 fn the_sidecar_round_trips_and_refuses_what_it_cannot_vouch_for() {
     let _guard = serially();
@@ -381,7 +358,6 @@ fn the_sidecar_round_trips_and_refuses_what_it_cannot_vouch_for() {
         "a cache hit and the run it was made from are the same bytes"
     );
 
-    // A key that is not the one asked for.
     let elsewhere = PlaneSettings {
         arch: 1,
         ..settings()
@@ -390,7 +366,6 @@ fn the_sidecar_round_trips_and_refuses_what_it_cannot_vouch_for() {
     assert_ne!(other, key, "a settings change is a different name");
     assert!(read_sidecar(dir.path(), other).is_none());
 
-    // A file a newer Lumit wrote, and one that is not ours at all.
     let path = dir.path().join(key.file_name());
     let mut bytes = std::fs::read(&path).expect("the file");
     bytes[7] = 0xff;
@@ -399,7 +374,6 @@ fn the_sidecar_round_trips_and_refuses_what_it_cannot_vouch_for() {
     assert!(decode(b"nothing of the sort", key).is_none());
     assert!(decode(&[], key).is_none());
 
-    // Deleted, and rebuilt to what was deleted.
     std::fs::remove_file(&path).expect("the file goes");
     assert!(read_sidecar(dir.path(), key).is_none());
     let (again, _) =
@@ -413,8 +387,6 @@ fn the_sidecar_round_trips_and_refuses_what_it_cannot_vouch_for() {
     set_test_cache_dir(None);
 }
 
-/// A footage layer wearing one Depth effect, and the comp around it, so the
-/// real frame key can be asked about it.
 fn project(
     model: u32,
     with_depth: bool,
@@ -596,16 +568,12 @@ fn the_badge_names_what_is_missing_and_says_nothing_when_it_is_not() {
     let depth =
         lumit_core::fx::builtins::instantiate(lumit_core::planes::DEPTH).expect("a built-in");
 
-    // Nothing installed at all: the runtime is the first thing missing, and
-    // the badge sends the user to the runtime's own row.
     assert_eq!(refusal_for(&depth), Some(PlaneFailure::RuntimeMissing));
     assert_eq!(
         addon_missing(&depth).as_deref(),
         Some(lumit_ml::runtime::RUNTIME_ID)
     );
 
-    // The runtime and nothing else: the pack is what is missing now, and the
-    // badge names the pack the effect's own model row asks for.
     let library = lumit_ml::runtime::LIBRARY;
     an_addon(root, "runtime", &a_runtime_manifest(library), &[library]);
     assert_eq!(lumit_ml::store::scan().len(), 1, "the runtime is installed");
@@ -615,7 +583,6 @@ fn the_badge_names_what_is_missing_and_says_nothing_when_it_is_not() {
         Some(lumit_core::fx::effects::depth::model_pack(0))
     );
 
-    // Both: there is nothing to say and the effect wears no badge.
     an_addon(
         root,
         "depth-anything-v2-small",
@@ -634,7 +601,6 @@ fn the_badge_names_what_is_missing_and_says_nothing_when_it_is_not() {
 /// nothing is a working install.
 const ADDON_FILE_BYTES: usize = 12;
 
-/// Write one addon folder: its manifest, and each file the manifest lists.
 fn an_addon(root: &Path, id: &str, manifest: &str, files: &[&str]) {
     let home = root.join(id);
     std::fs::create_dir_all(&home).expect("the addon's folder");

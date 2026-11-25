@@ -1,6 +1,3 @@
-//! Round corners worked out on the outlines: each corner of a contour filleted
-//! by the radius.
-
 /// A closed contour with each side shorter than `nick` that cuts a corner off
 /// closed back into the corner: the two longer sides either side of it are
 /// carried on until they meet. Only where they meet near it, at 60° to 150°,
@@ -101,7 +98,6 @@ pub fn without_nicks(contour: &[[f32; 2]], nick: f32) -> Vec<[f32; 2]> {
                 continue;
             }
             let (a, b) = (c[(i + n - 1) % n], c[(i + 2) % n]);
-            // Where the line a→p meets the line b→q.
             let (d1, d2) = ([p[0] - a[0], p[1] - a[1]], [q[0] - b[0], q[1] - b[1]]);
             let den = d1[0] * d2[1] - d1[1] * d2[0];
             let (l1, l2) = (d1[0].hypot(d1[1]), d2[0].hypot(d2[1]));
@@ -114,7 +110,6 @@ pub fn without_nicks(contour: &[[f32; 2]], nick: f32) -> Vec<[f32; 2]> {
             let s = ((b[0] - a[0]) * d1[1] - (b[1] - a[1]) * d1[0]) / den;
             let x = [a[0] + d1[0] * t, a[1] + d1[1] * t];
             let mid = [(p[0] + q[0]) * 0.5, (p[1] + q[1]) * 0.5];
-            // Ahead of both sides, and no further off than the side is long.
             if t < 1.0 || s < 1.0 || (x[0] - mid[0]).hypot(x[1] - mid[1]) > len.max(1.0) {
                 continue;
             }
@@ -182,7 +177,6 @@ pub fn filleted(contour: &[[f32; 2]], radius: f32) -> Vec<[f32; 2]> {
             [(a[0] - p[0]) / la, (a[1] - p[1]) / la],
             [(b[0] - p[0]) / lb, (b[1] - p[1]) / lb],
         );
-        // Half the angle between the two sides.
         let half = (ua[0] * ub[0] + ua[1] * ub[1]).clamp(-1.0, 1.0).acos() * 0.5;
         if !(1e-4..=std::f32::consts::FRAC_PI_2 - 1e-3).contains(&half) {
             out.push(p);

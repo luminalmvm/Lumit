@@ -15,7 +15,6 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'dialog_frame.dart';
 
-/// The window of one script run.
 class ScriptDialogs {
   /// Where the window opens. Null, or gone, answers every window as closed.
   final BuildContext? context;
@@ -33,7 +32,6 @@ class ScriptDialogs {
   /// Whether the script is busy with the last thing done, so the next waits.
   bool _waiting = false;
 
-  /// Show the window as [tree] describes it, or show it again as it now is.
   void show(String tree) {
     final Map<String, dynamic> parsed;
     try {
@@ -73,14 +71,12 @@ class ScriptDialogs {
     });
   }
 
-  /// Take the window down, as the script has.
   void close() {
     _close?.call(null);
     _close = null;
     _tree.value = null;
   }
 
-  /// The close mark: the same as Escape.
   void dismiss() {
     final tree = _tree.value;
     close();
@@ -166,7 +162,6 @@ class _ScriptWindowState extends State<ScriptWindow> {
     super.didUpdateWidget(old);
     if (identical(old.tree, widget.tree)) return;
     _values = _values0();
-    // The script may have changed what a field says.
     for (final e in _texts.entries) {
       final said = _values[e.key];
       if (said is String && e.value.text != said) e.value.text = said;
@@ -230,7 +225,6 @@ class _ScriptWindowState extends State<ScriptWindow> {
     );
   }
 
-  /// A window, group or panel: its controls in a row or a column.
   Widget _holder(LumitTheme t, Map<String, dynamic> c) {
     final row = c['orientation'] == 'row';
     final along = (c['alignChildren'] as List?)?.cast<String>() ??
@@ -329,7 +323,6 @@ class _ScriptWindowState extends State<ScriptWindow> {
         );
       case 'radiobutton':
         void pick() {
-          // One of a group: the others in it go off.
           final parent = _find(widget.tree, (p) =>
               (p['children'] as List? ?? const [])
                   .any((k) => (k as Map)['id'] == id));
@@ -396,7 +389,6 @@ class _ScriptWindowState extends State<ScriptWindow> {
         : LumitTooltip(message: help, child: made);
   }
 
-  /// A tick or a dot with its words, the words as clickable as the mark.
   Widget _choice(Widget label, Widget mark, VoidCallback? onTap) =>
       GestureDetector(
         behavior: HitTestBehavior.opaque,

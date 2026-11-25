@@ -1,5 +1,3 @@
-//! Masks: each one's mode, feather and path, keys and all.
-
 use lumit_core::anim::Property as LumProperty;
 use lumit_core::mask::{BezierPath, Mask, MaskMode, PathKeyframe, Vertex};
 use uuid::Uuid;
@@ -92,10 +90,6 @@ fn mask(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Mask> {
         opacity: scalar(conv, &here, props, "ADBE Mask Opacity", 0, 100.0),
         mode,
         feather: LumProperty::fixed((fx + fy) / 2.0),
-        // AE's variable feather is a second point set with positions of its
-        // own, which Lumit's per-vertex widths are not a place to put:
-        // no fixture proves the layout, and guessing one would draw a shape
-        // nobody asked for. The single width above stands, as it always has.
         vertex_feather: Vec::new(),
         expansion: scalar(conv, &here, props, "ADBE Mask Offset", 0, 0.0),
         extra: ae_map(vec![
@@ -106,7 +100,6 @@ fn mask(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Mask> {
     })
 }
 
-/// A capture path as Lumit's own — parallel arrays become one vertex each.
 pub(super) fn bezier(shape: &Shape) -> BezierPath {
     let point = |list: &[Vec<f64>], i: usize| {
         list.get(i).map_or((0.0, 0.0), |p| {

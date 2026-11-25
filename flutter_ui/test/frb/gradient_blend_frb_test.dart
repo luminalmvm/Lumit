@@ -71,7 +71,6 @@ void main() {
         findsNothing,
         reason: 'not beside Mix as well',
       );
-      // Matte, Invert and Channel too: each a row of its own, in view.
       for (final row in ['matte', 'matte_invert', 'matte_channel']) {
         expect(find.byKey(ValueKey<String>('fx-row-$id-$row')), findsOneWidget,
             reason: '$row is a row of its own, without opening Compositing');
@@ -81,7 +80,6 @@ void main() {
           ids.sublist(ids.length - compositingRowIds.length), compositingRowIds,
           reason: 'the compositing rows come after the effect\'s own rows');
 
-      // A shut node graph box keeps them, the Matte as its socket.
       final info = effect.getInfo();
       final box = compBoxRows(
         name,
@@ -99,8 +97,6 @@ void main() {
           reason: 'the box draws the Blend once, as its own row');
       expect(box.riders['matte'], isNull);
 
-      // The Timeline lists what the panel lists: the compositing rows, and
-      // no colour the Colours count leaves out.
       final fold = [
         for (final r in foldEffectParams(
             info, {for (final v in info.values) v.id: v.value}))

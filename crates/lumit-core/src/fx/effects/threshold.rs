@@ -23,7 +23,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Threshold's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "threshold",
@@ -63,7 +62,6 @@ pub struct Threshold {
     #[slider(min = 0.0, max = 100.0, default = 0.0, hard_min = 0.0, unit = Percent)]
     pub softness: f32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -82,8 +80,6 @@ impl Threshold {
     /// what stops the smoothstep dividing by zero (§3.57's rule, second outing).
     pub const MIN_HALF_WIDTH: f32 = 1e-3;
 
-    /// The cut's position, its half-width and the mix
-    /// (docs/impl/effect-registry.md §2.4).
     #[must_use]
     pub fn packed(self) -> (f32, f32, f32) {
         (
@@ -94,7 +90,6 @@ impl Threshold {
     }
 }
 
-/// Threshold's behaviour.
 pub struct ThresholdDef;
 
 impl EffectDef for ThresholdDef {

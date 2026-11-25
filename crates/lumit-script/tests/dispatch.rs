@@ -1,7 +1,3 @@
-//! A run of commands through `dispatch` is one undo step: a camera with
-//! keys, a null it is parented to and the comp's markers, all taken back by
-//! one undo.
-
 // A test asserts by panicking; the engine's no-panic rule is about the engine
 // (the same allow every other integration test in the workspace carries).
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -21,7 +17,6 @@ use lumit_script::{
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-/// A host with a document and nothing else.
 struct Bare(DocumentStore);
 
 impl Host for Bare {
@@ -31,8 +26,6 @@ impl Host for Bare {
     fn path(&self) -> Option<PathBuf> {
         None
     }
-    // Saved as JSON, and a frame is the comp as JSON, each as it stands when
-    // asked for.
     fn save(&self, path: Option<&Path>) -> Result<PathBuf, ScriptError> {
         let path = path.ok_or_else(|| ScriptError::Failed("no saving here".into()))?;
         std::fs::write(path, serde_json::to_vec(&*self.0.snapshot()).unwrap()).unwrap();
@@ -64,7 +57,6 @@ impl Host for Bare {
     fn export_cancel(&self, _: u64) -> Result<(), ScriptError> {
         Err(ScriptError::Failed("no export here".into()))
     }
-    // Every file is 127 frames at 30 fps, 2544 by 1373.
     fn footage_info(&self, _: Uuid) -> Option<FootageInfo> {
         let rate = FrameRate::new(30, 1).unwrap();
         Some(FootageInfo {
@@ -161,8 +153,6 @@ fn a_run_of_commands_is_one_undo_step() {
     let doc = host.store().snapshot();
     assert!(doc.comp(comp.id).unwrap().markers.is_empty());
 
-    // A run that fails takes back what it did before failing, and leaves
-    // the history as it was: the step undone above can still be redone.
     let failed = one_step(host.store(), || {
         dispatch(
             &host,
@@ -183,8 +173,6 @@ fn a_run_of_commands_is_one_undo_step() {
     assert!(host.store().can_redo());
     assert_eq!(host.store().history().len(), 2);
 
-    // A run inside a group someone else opened is refused, so it can never
-    // take back their edits.
     host.store().begin_undo_group();
     let nested = one_step(host.store(), || Ok(()));
     host.store().end_undo_group();
@@ -213,7 +201,6 @@ fn a_layer_written_in_file_form_keeps_its_id_place_and_links() {
         json!({ "comp": "Main", "kind": "shape", "name": "Top" }),
     );
 
-    // A key list over a still value: the choice replaces it, not merged with it.
     call(
         &host,
         "layer.write",
@@ -245,7 +232,6 @@ fn a_layer_written_in_file_form_keeps_its_id_place_and_links() {
         layers[1]["name"], "Title",
         "the write keeps its place in the stack"
     );
-    // Turned about the middle of its words.
     assert!(
         after["transform"]["anchor_x"]["animation"]["Static"]
             .as_f64()
@@ -293,12 +279,9 @@ while (true) {}
         call(&host, "comp.get", json!({ "comp": "Main" }))["layers"],
         json!([])
     );
-    // Nothing of the script's is left to redo either.
     assert!(!host.store().can_redo());
 }
 
-/// An After Effects script keys a camera, and the camera turns in After
-/// Effects' order, Rx · Ry · Rz, so it keeps After Effects' own numbers.
 #[test]
 fn an_after_effects_script_keys_a_camera() {
     let host = Bare(DocumentStore::new(Document::new()));
@@ -343,7 +326,6 @@ app.endUndoGroup();
     assert_eq!(at(&p["position"][1], 2), 40.0);
     assert_eq!(p["zoom"][1]["hold"], json!(true));
     assert_eq!(at(&p["zoom"], 2), 1200.0);
-    // A value, or the value of each key.
     let angles = |p: &Value| -> Vec<f64> {
         match p {
             Value::Array(keys) => keys.iter().map(|k| k["value"].as_f64().unwrap()).collect(),
@@ -357,14 +339,10 @@ app.endUndoGroup();
     };
     assert_eq!(cam["after_effects_order"], json!(true));
     faces(p, 5.0);
-    // The whole run is one step, named after its undo group.
     let history = host.store().history();
     assert_eq!(history.len(), 1);
     assert_eq!(history[0].name, "Camera");
 
-    // X and Y keyed apart from Z, as Lumit can leave them. A second run
-    // reads every axis at every key, and reads the rotation back in After
-    // Effects' order, so turning Z alone leaves X and Y as they were.
     call(
         &host,
         "layer.keys",
@@ -401,11 +379,6 @@ read"#;
     faces(&cam["properties"], 15.0);
 }
 
-/// Orientation and X, Y and Z Rotation from an After Effects script turn a
-/// layer exactly as After Effects does, on a layer the script made 3D, which
-/// turns in After Effects' order (its angles kept as they are), and on one put
-/// back in Lumit's (its rotations rewritten). Placed as the compositor places
-/// them.
 #[test]
 fn an_after_effects_script_turns_layers_in_either_rotation_order() {
     use lumit_core::anim::Property;
@@ -469,7 +442,6 @@ for (var i = 1; i <= app.project.numItems; i++) {
         let orientation = tr.orientation.each_ref().map(|p| p.value_at(0.0));
         assert_eq!(orientation, [10.0, 20.0, 30.0], "{name}");
     }
-    // The imported layer keeps After Effects' own angles, and reads them back.
     let imported = comp.layers.iter().find(|l| l.name == "Imported").unwrap();
     let tr = &imported.transform;
     let rows = [&tr.rotation_x, &tr.rotation_y, &tr.rotation].map(|p| p.value_at(0.0));
@@ -492,10 +464,6 @@ var t = comp.layer("Imported").transform;
     assert_eq!(read, [40.0, 50.0, 60.0, 10.0, 20.0, 30.0]);
 }
 
-/// The After Effects pieces past keys and cameras: includes, eased keys, a
-/// solid, a precomp, a precompose, an effect with a keyed control, markers,
-/// an expression and a file written in the script's folder, with one outside
-/// it refused. A frame and a save straight after a key both have it.
 #[test]
 fn an_after_effects_script_eases_adds_effects_and_writes_a_file() {
     use lumit_core::anim::{Animation, SideInterp};
@@ -577,15 +545,12 @@ app.project.save(new File(here.fsName + "/out/saved.lum"));
     assert_eq!(read[0], Value::Null);
     assert!(read[1].as_str().unwrap().contains("own folder"), "{read}");
     assert_eq!(read[2].as_f64(), Some(75.0));
-    // Each file comes in once, however often it is named.
     assert_eq!(read[3].as_f64(), Some(1.0));
     assert_eq!(
         (read[4].as_f64(), read[5].as_str()),
         (Some(2.0), Some("Packed"))
     );
-    // The comp keeps its comment.
     assert_eq!(read[6], json!("Capture 120 fps"));
-    // The History step takes the first name the script gave its undo group.
     assert_eq!(host.store().history()[0].name, "Edit pass");
 
     let doc = host.store().snapshot();
@@ -600,8 +565,6 @@ app.project.save(new File(here.fsName + "/out/saved.lum"));
     };
     let (edit, inner) = (comp("Edit"), comp("Inner"));
     assert_eq!(doc.item_comments[&edit.id], "Capture 120 fps");
-    // A key made after the precompose lands on the layer in its new comp, and
-    // is in the frame and the file saved straight after it.
     let keyed = |c: &Composition| {
         c.layers.iter().any(|l| {
             matches!(
@@ -625,7 +588,6 @@ app.project.save(new File(here.fsName + "/out/saved.lum"));
         other => panic!("{other:?}"),
     };
 
-    // A red solid 800 by 600, with its fade eased in and its turn automatic.
     let red = layer("Red");
     let LayerKind::Solid { def } = red.kind else {
         panic!("{:?}", red.kind)
@@ -647,8 +609,6 @@ app.project.save(new File(here.fsName + "/out/saved.lum"));
         SideInterp::Auto { clamped: false, .. }
     ));
 
-    // The blur came across as importing brings it, its radius keyed and the
-    // effect off.
     let blur = &red.effects[0];
     assert_eq!(blur.effect.match_name, "blur");
     assert!(!blur.enabled);
@@ -666,14 +626,12 @@ app.project.save(new File(here.fsName + "/out/saved.lum"));
         lumit_core::time::Rational::new(2, 1).unwrap()
     );
 
-    // The precomp, its chapter marker, and the comp's own marker.
     let nest = layer("Inner");
     assert_eq!(nest.kind, LayerKind::Precomp { comp: inner.id });
     assert_eq!(nest.markers[0].label, "In");
     assert!(matches!(nest.markers[0].kind, MarkerKind::Chapter));
     assert_eq!(edit.markers[0].label, "Hit");
 
-    // One expression on each axis of the position, each told which it is.
     for (axis, prop) in [TransformProp::PositionX, TransformProp::PositionY]
         .into_iter()
         .enumerate()
@@ -688,12 +646,10 @@ app.project.save(new File(here.fsName + "/out/saved.lum"));
         );
     }
 
-    // The file inside the folder, and nothing outside it.
     let written = std::fs::read_to_string(folder.join("out").join("log.txt")).unwrap();
     assert_eq!(written.trim_end(), "layers 2");
     assert!(!dir.join("outside.txt").exists());
 
-    // A later run reads footage that was never placed.
     let world: lumit_core::model::FootageItem = serde_json::from_value(json!({
         "id": Uuid::now_v7(),
         "name": "world",
@@ -720,8 +676,6 @@ for (var i = 1; i <= app.project.numItems; i++) {
         .collect();
     assert_eq!(read, [127.0 / 30.0, 2544.0, 1373.0, 30.0, 1.0 / 30.0]);
 
-    // An error in an included file names it and its line, on the script's
-    // include line.
     std::fs::write(folder.join("lib").join("bad.jsx"), "var a = 1;\nnope();\n").unwrap();
     let failed = run(
         &host,
@@ -822,8 +776,6 @@ fn mcp_answers_in_the_shape_clients_expect() {
     let layer: Value = serde_json::from_str(text).unwrap();
     assert!(layer["id"].is_string(), "{text}");
 
-    // A command that fails is the tool's answer, an unknown method the
-    // protocol's.
     let missing = ask(
         json!({ "jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
         "name": "comp_get", "arguments": { "comp": "Nowhere" } } }),
@@ -833,8 +785,6 @@ fn mcp_answers_in_the_shape_clients_expect() {
     assert_eq!(unknown["error"]["code"], json!(-32601));
 }
 
-// The live endpoint is the one way in from another program, so a program
-// without the secret must get nothing, and one with it a working MCP.
 #[test]
 fn the_live_endpoint_answers_only_a_program_holding_the_secret() {
     use lumit_script::live;
@@ -870,7 +820,6 @@ fn the_live_endpoint_answers_only_a_program_holding_the_secret() {
         });
         let _stop = Stop(&stop);
 
-        // The right name with a secret of its own is let go after its proof.
         let text = std::fs::read_to_string(&file).unwrap();
         let name = text.lines().next().unwrap();
         let wrong = dir.join("wrong");
@@ -892,8 +841,6 @@ fn the_live_endpoint_answers_only_a_program_holding_the_secret() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-// What a copy of a graphics template is drawn from: a value a script sets
-// on it, and the row of linked data it follows.
 #[test]
 fn a_copy_takes_its_own_values_and_its_data_row() {
     use lumit_core::template::{author, Target, Template};

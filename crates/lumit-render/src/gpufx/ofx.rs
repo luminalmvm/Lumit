@@ -77,8 +77,6 @@ pub fn error_of(instance: Uuid) -> Option<String> {
     ERRORED.lock().ok()?.get(&instance).cloned()
 }
 
-/// Forget an op's failure — what a re-render that worked, or a deleted effect,
-/// leaves behind.
 pub fn clear_errored(instance: Uuid) {
     if let Ok(mut table) = ERRORED.lock() {
         table.remove(&instance);
@@ -133,7 +131,6 @@ pub fn note(instance: Uuid, error: Option<String>) {
     }
 }
 
-/// A pass that renders through the definition's own CPU path.
 struct CpuPass(&'static dyn EffectDef);
 
 impl GpuEffect for CpuPass {

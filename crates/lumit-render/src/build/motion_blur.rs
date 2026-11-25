@@ -1,5 +1,3 @@
-//! Per-layer motion blur's sub-frame copies (docs/06 §4).
-
 use std::sync::Arc;
 
 use glam::{Mat4, Vec4};

@@ -118,7 +118,6 @@ Future<List<ItemReference>> duplicateProjectItems(
       try {
         copies.add(item.duplicate());
       } catch (_) {
-        // Gone from under the selection.
       }
     }
   } finally {
@@ -127,7 +126,6 @@ Future<List<ItemReference>> duplicateProjectItems(
   return copies;
 }
 
-/// Whether [from] is footage, or a folder with some in it at any depth.
 bool _holdsFootage(ItemReference from) {
   if (from is ItemReference_Footage) return true;
   if (from is! ItemReference_Folder) return false;
@@ -178,10 +176,8 @@ Future<bool> deleteProjectItems(
 Widget _menuChipTip(String? message, Widget chip) =>
     message == null ? chip : LumitTooltip(message: message, child: chip);
 
-/// How wide the panel's menus are, with room for a row's chord.
 const double _menuWidth = 240;
 
-/// A submenu's list, which scrolls when there is more of it than fits.
 Widget _flyout(List<Widget> rows) => FloatSurface(
       width: _menuWidth,
       child: ConstrainedBox(
@@ -219,7 +215,6 @@ void addItemsToOpenComp(BuildContext context, List<ItemReference> items) {
           arrival: ui.streamsArrival,
           endToEnd: true,
           lightNames: modelLightNames());
-      // A 3D model asks how it sits as it lands.
       showDroppedModelSettingsFrb(context, placed);
     }
     for (final item in items) {
@@ -251,7 +246,6 @@ Future<void> showProjectMenuFrb({
   required VoidCallback onLocalEdit,
   Future<void> Function()? onRelink,
 
-  /// Narrow the list to what is missing. Null while nothing is.
   VoidCallback? onFindMissing,
 
   /// Put the row into its in-place rename editor. Null where the menu is
@@ -262,7 +256,6 @@ Future<void> showProjectMenuFrb({
   /// what makes the Label row absent rather than dead.
   ValueChanged<int>? onSetLabel,
 
-  /// The tag the item wears now, so the strip can mark it.
   int label = 0,
 
   /// The colour the item would inherit from its folders if it wore none
@@ -283,11 +276,8 @@ Future<void> showProjectMenuFrb({
   /// entry off the menu rather than opening onto nothing.
   List<(String, ItemReference)> folders = const [],
 
-  /// File the picked row, and the rest of the selection with it, into that
-  /// folder.
   void Function(ItemReference folder)? onMoveToFolder,
 
-  /// Select the items a command has just made. Null leaves the selection.
   void Function(List<ItemReference> items)? onPick,
 
   /// **What the commands act on**: the whole selection when [item] is
@@ -301,35 +291,25 @@ Future<void> showProjectMenuFrb({
   /// times over.
   List<ItemReference>? targets,
 
-  /// Whether everything [targets] holds is already at the top of the project,
-  /// where Move to root has nothing to do.
   bool atRoot = false,
 
-  /// Whether the file has sound, once it has been probed.
   bool hasAudio = true,
 
-  /// Take [targets] for the panel's paste.
   VoidCallback? onCopy,
 
-  /// Paste what was taken. Null while nothing has been.
   VoidCallback? onPaste,
 
-  /// A folder's row: whether it is open, and the twirl.
   bool folderOpen = true,
   VoidCallback? onToggleFolder,
 
-  /// A new folder inside this one.
   VoidCallback? onNewFolder,
 
-  /// Make a comp from these items, the panel's own New composition.
   void Function(List<FootageReference> footage)? onNewComposition,
 
   /// Bring in the library's newer version of this composition's graphics
   /// template. Null when it has none, and the row is left off.
   VoidCallback? onUpdateTemplate,
 
-  /// On the Graphics templates folder: bring in the newer version of every
-  /// template in it that has one. Null when none has.
   VoidCallback? onUpdateAll,
 }) async {
   final isFootage = item is ItemReference_Footage;
@@ -342,7 +322,6 @@ Future<void> showProjectMenuFrb({
     try {
       if (sharing) shared = field0.shareState();
     } catch (_) {
-      // The project closed as the menu opened.
     }
   }
   // In a project kept online the footage is on Lumit's server, and what it
@@ -378,8 +357,6 @@ Future<void> showProjectMenuFrb({
   };
   final picked = targets ?? [item];
   final several = picked.length > 1;
-  // Whether anything picked has its words written down, for Remove
-  // transcript. Read as the menu opens.
   final transcribed = picked.any((target) {
     try {
       return target is ItemReference_Footage && target.field0.hasTranscript();
@@ -389,7 +366,6 @@ Future<void> showProjectMenuFrb({
   });
   final transcribing =
       Provider.of<LumitState>(context, listen: false).transcription.running;
-  // Whether the comp is a multicam comp, for its tick. Read as the menu opens.
   final isMulticam = switch (item) {
     ItemReference_Composition(:final field0) => () {
         try {
@@ -400,11 +376,9 @@ Future<void> showProjectMenuFrb({
       }(),
     _ => false,
   };
-  // Where Reveal in composition can go: a list of them when there are two.
   final usedIn = several || item is ItemReference_Folder
       ? const <(CompositionReference, String)>[]
       : compsUsing(item);
-  // Something picked can go in the open comp, which can't hold itself.
   final placeable = openComp != null &&
       picked.any((target) => switch (target) {
             ItemReference_Composition(:final field0) => field0 != openComp,
@@ -439,7 +413,6 @@ Future<void> showProjectMenuFrb({
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // What this kind of thing is for.
             if (item is ItemReference_Folder) ...[
               row(_ProjectMenuAction.toggleFolder,
                   folderOpen ? l10n.collapse : l10n.expand,
@@ -514,7 +487,6 @@ Future<void> showProjectMenuFrb({
                     l10n.projectRemoveTranscript,
                     key: 'remove-transcript'),
             ],
-            // What the item is on disc, which only footage has.
             if (isFootage) ...[
               const MenuDivider(),
               // One command under two names: a broken row is relinked, and a
@@ -535,8 +507,6 @@ Future<void> showProjectMenuFrb({
               if (blend)
                 row(_ProjectMenuAction.editInBlender, l10n.menuEditInBlender,
                     key: 'edit-in-blender'),
-              // How the file is read. Remember takes this row's reading and
-              // Apply gives the last one remembered to everything picked.
               if (!missing)
                 SubmenuRow(
                   key: const ValueKey('project-menu-interpret-group'),
@@ -616,8 +586,6 @@ Future<void> showProjectMenuFrb({
                     ],
                   ),
                 ),
-            // Footage this computer has not got, in a project kept online: it
-            // comes from Lumit's server, when the server has it.
             if (shared != null &&
                 online &&
                 shared.here != BridgeFootageHere.original) ...[
@@ -637,8 +605,6 @@ Future<void> showProjectMenuFrb({
                   child: Text(l10n.shareOnlineNoOriginal),
                 ),
             ],
-            // Footage this computer has not got, in a shared project where
-            // someone has: ask them for a stand-in to cut with, or the file.
             if (shared != null &&
                 shared.holders.isNotEmpty &&
                 shared.here != BridgeFootageHere.original) ...[
@@ -661,7 +627,6 @@ Future<void> showProjectMenuFrb({
             row(_ProjectMenuAction.duplicate, l10n.menuDuplicate,
                 key: 'duplicate', chord: 'item.duplicate'),
             const MenuDivider(),
-            // Filing, the mouse way: the drag onto a folder row is the other.
             if (onMoveToFolder != null && folders.isNotEmpty)
               SubmenuRow(
                 key: const ValueKey('project-menu-move-to-folder'),
@@ -782,7 +747,6 @@ Future<void> showProjectMenuFrb({
         try {
           field0.setMulticam(on_: !isMulticam);
         } catch (_) {
-          // The comp went as the menu closed.
         }
         onLocalEdit();
       }
@@ -800,8 +764,6 @@ Future<void> showProjectMenuFrb({
       onPaste?.call();
     case _ProjectMenuAction.compSettings:
       if (item case ItemReference_Composition(:final field0)) {
-        // Reachable now that the dialog takes a CompositionReference rather than
-        // an AppStateStub; the port had to drop this entry until it did.
         if (await showCompSettingsFrb(context: context, comp: field0)) {
           onLocalEdit();
         }
@@ -897,7 +859,6 @@ Future<void> showProjectMenuFrb({
               ? footageOnline.fetch(field0, original: original)
               : field0.shareFetch(original: original);
         } catch (_) {
-          // The project closed between the menu and the click.
         }
       }
     case _ProjectMenuAction.makeProxy:
@@ -913,7 +874,6 @@ Future<void> showProjectMenuFrb({
             try {
               field0.getChildren().forEach(gather);
             } catch (_) {
-              // The folder went away under the menu.
             }
           default:
         }
@@ -974,8 +934,6 @@ Future<void> showProjectMenuFrb({
   }
 }
 
-/// The menu on the panel's own ground: what to make, what to paste, and how the
-/// list is ordered and opened.
 void showProjectGroundMenu({
   required BuildContext context,
   required Offset position,
@@ -1060,7 +1018,6 @@ void showProjectGroundMenu({
   );
 }
 
-/// One row per thing the list can be sorted by, the project's own order first.
 List<Widget> _sortRows(
         ProjectColumn? sort, ValueChanged<ProjectColumn?> onSort) =>
     [
@@ -1078,7 +1035,6 @@ List<Widget> _sortRows(
         ),
     ];
 
-/// The word a column goes by in a menu.
 String projectColumnName(ProjectColumn column) => switch (column) {
       ProjectColumn.name => l10n.name,
       ProjectColumn.items => l10n.projectColumnItems,
@@ -1190,12 +1146,9 @@ class _SequenceRateFieldState extends State<_SequenceRateField> {
             controller: _text,
             width: 56,
             fill: widget.theme.surface0,
-            // The drawings right-align every numeric well, and a rate is one.
             textAlign: TextAlign.right,
             onSubmitted: (_) {
               final rate = parseRate(_text.text);
-              // Nonsense leaves the run at the rate it had, and says so by
-              // putting that rate back in the field.
               if (rate == null) {
                 _text.text = formatRate(widget.rate.fpsNum, widget.rate.fpsDen);
                 return;
@@ -1207,7 +1160,6 @@ class _SequenceRateFieldState extends State<_SequenceRateField> {
       );
 }
 
-/// [footage]'s file, or empty when the project has gone.
 String _filePathOf(FootageReference footage) {
   try {
     return footage.filePath();
@@ -1229,7 +1181,6 @@ List<(CompositionReference, String)> compsUsing(ItemReference item) {
       out.add((comp, comp.getSettings().name));
     }
   } catch (_) {
-    // The project closed as the menu opened.
   }
   return out;
 }

@@ -1,6 +1,3 @@
-//! A 3D precomp's scene passes for the effects that read them: its distance
-//! from the camera, which way it faces, where it is, and its parts.
-
 use super::shadows::shadow_only;
 use super::{placed_in_3d, Realiser};
 use crate::draw::{CompLayerDraw, DrawSource, NestedInputDraw};
@@ -19,10 +16,6 @@ impl Realiser<'_> {
         n: &crate::draw::NestedInputDraw,
         capture: Option<&mut Option<lumit_gpu::fx::lens_blur::SceneLayers>>,
     ) -> wgpu::Texture {
-        // ponytail: 2D layers are still made here and only dropped by the depth
-        // pass. Skip them before making them if a heavy 2D layer ever shows.
-        // With no 3D layer nothing is made, unless rays want the 2D ones as
-        // their backdrop.
         let made = capture.is_some() || n.draws.iter().any(|d| d.three_d);
         let draws: &[CompLayerDraw] = if n.camera.is_some() && made {
             crate::environment::peel(&n.draws).1
@@ -74,7 +67,6 @@ impl Realiser<'_> {
         let shown = |l: &&CompLayerDraw| {
             l.three_d && l.opacity > 0.0 && !shadow_only(l) && !super::scene::draws_in_scene(l)
         };
-        // Each draw's group, the way the picture cuts its runs of 3D layers.
         let mut next = 0;
         let groups: Vec<u32> = draws
             .iter()

@@ -19,25 +19,20 @@
 
 import 'dart:ui' show Color;
 
-/// The green key, jade stop — the top of the `l`.
 const Color brandKeyJade = Color(0xff6fdca8);
 
-/// The green key, lime stop — the foot of the `l`.
 const Color brandKeyLime = Color(0xffb6e84f);
 
 /// The blue key, light stop — the top of the `t`, which is the green key turned
 /// through 180°, so its gradient runs the other way.
 const Color brandKeyBlueLight = Color(0xff86e2ff);
 
-/// The blue key, deep stop.
 const Color brandKeyBlue = Color(0xff2f6fe0);
 
 /// The wordmark's lettering on a dark ground — the near-white the SVG sources
 /// set `umi` in. Lumit is dark-first, so this is the mark as it is usually seen.
 const Color brandWordmarkPaper = Color(0xfff4f6f8);
 
-/// The wordmark's lettering on a light ground: the mark's own rim, which is the
-/// dark end of the brand's palette (docs/15-DESIGN.md §11).
 const Color brandWordmarkInk = Color(0xff0c0e14);
 
 /// What marks something as Lumit Pro: the ring round a profile's picture, the

@@ -17,9 +17,6 @@
 use std::fmt::Arguments;
 use std::io::Write;
 
-/// Write one diagnostic line to the error stream, ignoring a failed write.
-///
-/// Takes the same arguments as `eprintln!`.
 macro_rules! note {
     ($($arg:tt)*) => {
         $crate::note::write_line(&mut std::io::stderr(), format_args!($($arg)*))
@@ -37,8 +34,6 @@ mod tests {
     use super::write_line;
     use std::io::{Error, ErrorKind, Write};
 
-    /// A console that has gone away: every write fails the way a pipe with no
-    /// reader fails on Windows.
     struct ClosedPipe;
 
     impl Write for ClosedPipe {

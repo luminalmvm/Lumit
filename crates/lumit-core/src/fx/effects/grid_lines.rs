@@ -15,28 +15,22 @@ const CAMERA_PX: f32 = 960.0;
 pub struct LineAxis {
     /// The gap between lines. Nought draws none.
     pub cell: f32,
-    /// Where line 0 sits.
     pub origin: f32,
-    /// Half a line's width.
     pub half: f32,
     /// How far the lines run either side of the middle, along the other
     /// axis. Negative runs them without end.
     pub reach: f32,
     /// The last line's index, or -1 for lines without end.
     pub last: i32,
-    /// The line counted from for the major lines.
     pub middle: i32,
 }
 
-/// Everything one frame of Lines needs, in raster pixels.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GridLines {
-    /// Where the grid's middle lands: Position.
     pub centre: [f32; 2],
     /// The grid's across, down and outward directions after Swing, Latitude
     /// and Roll.
     pub axes: [[f32; 3]; 3],
-    /// The camera's focal length and its distance from the grid.
     pub focal: f32,
     pub distance: f32,
     /// The up and down lines, spaced across.
@@ -68,8 +62,6 @@ fn smooth(e0: f32, e1: f32, x: f32) -> f32 {
 }
 
 impl GridLines {
-    /// The setup for a resolved Grid, its pixel rows already at the raster's
-    /// size, and the raster factor for the camera.
     #[must_use]
     pub fn of(g: &Grid, px_scale: f32) -> Self {
         let (sw, cw) = g.swing.to_radians().sin_cos();
@@ -98,7 +90,6 @@ impl GridLines {
             ..u
         };
         if g.size_from == 1 {
-            // Position and Corner are two corners of one cell.
             u.cell = (g.corner_x - g.position_x).abs();
             v.cell = (g.corner_y - g.position_y).abs();
         } else {
@@ -175,7 +166,6 @@ impl GridLines {
             1.0
         };
         let mut share = (2.0 * axis.half * thicker / axis.cell).min(1.0);
-        // A grid with ends only has that tone between them.
         if axis.last >= 0 {
             let run = 0.5 * axis.last as f32 * axis.cell;
             let s = step.min(axis.cell);
@@ -210,7 +200,6 @@ impl GridLines {
         a.max(b)
     }
 
-    /// Draws the lines over a premultiplied picture, then Mix.
     pub fn draw(&self, rgba: &mut [f32], w: u32, _h: u32) {
         if self.mix <= 0.0 || w == 0 {
             return;

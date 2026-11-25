@@ -151,7 +151,6 @@ Future<ui.Image?> _still(LayerReference layer, CompositionReference comp,
 /// fractions and its rotation in degrees.
 typedef _Fit = ({double cx, double cy, double sx, double sy, double rot});
 
-/// The Transform rows the box writes.
 const _rows = [
   'anchor_x',
   'anchor_y',
@@ -162,7 +161,6 @@ const _rows = [
   'rotation',
 ];
 
-/// What a drag took hold of.
 enum _Grab { pan, scale, turn }
 
 /// Where the source sits in the view: its top-left and pixels per source
@@ -220,8 +218,6 @@ class _PanCropState extends State<_PanCrop> {
   bool _live = false;
   bool _lock = true;
 
-  /// The drag in hand: what it caught, which handle, the box and the source
-  /// point it started from.
   _Grab? _grab;
   (int, int) _handle = (0, 0);
   _Fit? _from;
@@ -330,8 +326,6 @@ class _PanCropState extends State<_PanCrop> {
     setState(() => _fit = f);
     if (write) _write();
   }
-
-  // ------------------------------------------------------------- the view
 
   Offset _toView(Offset p) {
     final at = _place(_view, widget.size);
@@ -455,8 +449,6 @@ class _PanCropState extends State<_PanCrop> {
     if (next != _cursor) setState(() => _cursor = next);
   }
 
-  // ------------------------------------------------------------ the fields
-
   void _width(num w, bool write) {
     final sx = _w / math.max(1, w.toDouble());
     final sy = _lock ? _fit.sy * sx / _fit.sx : _fit.sy;
@@ -497,7 +489,6 @@ class _PanCropState extends State<_PanCrop> {
         ),
       );
 
-  /// A right click on the picture: the box's own commands, by name.
   void _menu(Offset at) {
     final f = _fit;
     final centred = f.cx == _w / 2 && f.cy == _h / 2;
@@ -673,7 +664,6 @@ class _PanCropState extends State<_PanCrop> {
   }
 }
 
-/// The picture, the frame round it, and the box with its handles and knob.
 class _BoxPainter extends CustomPainter {
   final LumitTheme theme;
   final ui.Image? still;

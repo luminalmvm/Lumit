@@ -10,10 +10,8 @@ use super::SolveError;
 use super::{colours, gamma_row, percentile, pre_gain, wheel_input, wheels, RowValue, Rows};
 use crate::fx::effects::correction::{maths, Correction};
 
-/// The percentiles matched.
 const PERCENTILES: [f32; 3] = [0.01, 0.5, 0.99];
 
-/// Lift is searched over this range, in this many steps, then refined.
 const LIFT_RANGE: f32 = 0.9;
 const LIFT_STEPS: u32 = 360;
 
@@ -50,7 +48,6 @@ pub fn shot_match(
         gain_row[c] = g;
     }
 
-    // Saturation from the mid-tone chroma, the target read after the wheels.
     let graded: Vec<[f32; 3]> = tv
         .iter()
         .map(|v| [0, 1, 2].map(|c| wheels(v[c], lift[c], exponent[c], gain_row[c])))
@@ -87,13 +84,11 @@ pub fn linear_from_srgb8(rgba: &[u8]) -> Vec<f32> {
     out
 }
 
-/// Channel `c`'s three percentiles.
 fn points(v: &[[f32; 3]], c: usize) -> [f32; 3] {
     let mut ch: Vec<f32> = v.iter().map(|v| v[c]).collect();
     PERCENTILES.map(|p| percentile(&mut ch, p))
 }
 
-/// The mean chroma (`|Cb, Cr|`) of the pixels whose luma is a mid-tone.
 fn mid_chroma(v: &[[f32; 3]]) -> Option<f32> {
     let mut sum = 0.0f64;
     let mut n = 0u32;
@@ -167,8 +162,6 @@ mod tests {
     use super::*;
     use crate::grade_solve::test_support::{declared, graded, with_rows};
 
-    /// A picture graded away from its original by known wheels, matched back
-    /// to the original, lands on it.
     #[test]
     fn a_shifted_copy_matches_its_original() {
         let (w, h) = (64u32, 32u32);

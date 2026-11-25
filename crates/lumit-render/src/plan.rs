@@ -69,10 +69,7 @@ pub struct Quality {
     /// Scrub/drag draft: cap the decode width hard for instant feedback. Never
     /// raises the width the settings below ask for, only lowers it.
     pub draft: bool,
-    /// Auto resolution: decode at the size the frame is actually displayed,
-    /// never above native however far the view is zoomed in.
     pub auto_res: bool,
-    /// The on-screen scale of the Viewer, used by `auto_res`.
     pub display_scale: f32,
     /// Manual preview-resolution divisor: 1 = Full, 2 = Half, 3 = Third,
     /// 4 = Quarter (docs/01-GLOSSARY.md §5).
@@ -84,7 +81,6 @@ pub struct Quality {
 }
 
 impl Default for Quality {
-    /// Full resolution, no draft — what export and a still Viewer want.
     fn default() -> Self {
         Self {
             draft: false,
@@ -145,7 +141,6 @@ impl Quality {
             (self.divisor > 1).then(|| natural_w / self.divisor)
         };
         if self.draft {
-            // Never coarser than needed: cap the specified width, never raise it.
             let w = specified.unwrap_or(natural_w).min(DRAFT_MAX_WIDTH);
             return (w < natural_w).then_some(w.max(16));
         }
@@ -200,9 +195,6 @@ pub type HeldNested<'a> = &'a dyn Fn(
     Option<&lumit_core::model::EffectInstance>,
 ) -> bool;
 
-/// The inputs a plan walk carries down the Precomp recursion, unchanged at
-/// every depth: what the media is and how coarsely to decode. Bundled so the
-/// recursive walk stays readable.
 pub struct PlanContext<'a> {
     pub doc: &'a Document,
     /// `doc` as the renderer shares it, when it does. A copy of a graphics
@@ -257,8 +249,6 @@ pub(crate) fn rebuild_offsets(
     offsets.retain(|&o| o != 0);
     offsets.sort_unstable();
     offsets.dedup();
-    // ponytail: one field per picture. Datamosh and Motion blur on one layer
-    // both measuring a frame back lose Motion blur on that frame.
     offsets
         .into_iter()
         .map(|o| {
@@ -288,7 +278,6 @@ fn clone_moments_of(
     lt: f64,
 ) -> Vec<(Uuid, f64)> {
     use lumit_core::fx::effects::clone_to_points::CloneToPoints;
-    // Time loop's Source layer, at the moments the loop shows.
     if e.effect.match_name == "time_loop" {
         return lumit_core::fx::effects::time_loop::TimeLoop::planned(e, comp, t, lt)
             .into_iter()
@@ -399,7 +388,6 @@ pub fn collect_comp_jobs(
     // layer, which is the shape of a session that ends without a message.
     let any_solo = lumit_core::model::any_picture_solo(comp);
     let mut wanted: Vec<Uuid> = comp.environment_source(t).into_iter().collect();
-    // Whether a layer is drawn, which is the walk below's own gate.
     let drawn = |idx: usize, l: &lumit_core::model::Layer| {
         !occluder.is_some_and(|o| idx > o)
             && !l.audio_only
@@ -707,8 +695,6 @@ pub fn collect_comp_jobs(
                             &layer.effects,
                             layer.switches.fx,
                         ),
-                        // The accumulation shutter is a later refinement: a
-                        // clip under one is held.
                         shutter: Vec::new(),
                         shutter_flow: None,
                         cuts: Vec::new(),
@@ -761,17 +747,6 @@ pub fn collect_comp_jobs(
                     shown_job(lumit_core::sequence::shown_at(clips, lt), lt, whole)
                 };
                 let shown = lumit_core::sequence::shown_at(clips, lt);
-                // A clip that plays a composition is planned as a Precomp
-                // layer's comp is: the footage inside it, at the moment the
-                // clip shows, behind the same guard against a comp inside
-                // itself. A frame of it that is already a finished texture
-                // wants no decodes, asked where the builder asks by the same
-                // name, which is at the live time.
-                //
-                // ponytail: at the frame's own time only. A temporal effect
-                // that reads this layer at another moment is not handed a
-                // composition clip's footage as it is then. The upgrade is
-                // the other moments a Precomp layer plans.
                 let (first, second) = match shown {
                     Shown::Nothing => (None, None),
                     Shown::One { clip, .. } => (Some(clip), None),
@@ -900,7 +875,7 @@ pub fn collect_comp_jobs(
             }
             LayerKind::Precomp { comp: nested_id } => {
                 if visited.contains(nested_id) {
-                    continue; // cycle guard
+                    continue;
                 }
                 if let Some(nested) = doc.comp(*nested_id) {
                     // A copy of a graphics template is planned in the document
@@ -1035,7 +1010,6 @@ pub fn collect_comp_jobs(
                         temporal: Vec::new(),
                         flow_neighbours: Vec::new(),
                         slate: true,
-                        // Nothing was decoded, so nothing was extracted.
                         channels: None,
                         shutter: Vec::new(),
                         shutter_flow: None,
@@ -1297,18 +1271,11 @@ fn collect_graph_jobs(
         match &layer.kind {
             LayerKind::Precomp { comp: nested_id } => {
                 if visited.contains(nested_id) {
-                    continue; // cycle guard
+                    continue;
                 }
                 let Some(nested) = doc.comp(*nested_id) else {
                     continue;
                 };
-                // A comp with layers is built again at the same moments.
-                //
-                // ponytail: a node graph read here is lowered into this
-                // graph's plan, which fetches by this comp's boxes alone, so
-                // its footage holds. The same goes for a Node graph box and a
-                // Node graph effect. Build each through its own comp if a
-                // graph inside a graph ever needs to move.
                 let moments: &[f64] = if nested.graph.is_some() { &[] } else { moments };
                 // A held nested frame wants no decodes: the realiser will
                 // serve the texture and never look at the pixels. A rebuild
@@ -1325,7 +1292,6 @@ fn collect_graph_jobs(
                 visited.pop();
             }
             LayerKind::Footage { item } => {
-                // The one proxy resolution point, as the layer walk asks it.
                 let Some((media, probe)) = crate::source::effective_media(doc, probes, *item)
                 else {
                     continue;
@@ -1438,8 +1404,6 @@ fn nested_graph_jobs(
     visited.pop();
 }
 
-/// The decode plan for one comp frame: the convenience wrapper around
-/// [`collect_comp_jobs`] that sets up the cycle guard.
 #[must_use]
 pub fn plan_comp_frame(
     doc: &Document,

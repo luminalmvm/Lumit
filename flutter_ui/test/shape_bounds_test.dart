@@ -66,7 +66,6 @@ void main() {
         taper: null,
       )));
 
-  /// A repeater entry stepping [copies] times by [stepX].
   BridgeShapeEntry repeater(double copies, double stepX, {bool own = false}) =>
       BridgeShapeEntry(
       depth: 0,
@@ -114,11 +113,9 @@ void main() {
     final square = [corner(0, 0), corner(10, 0), corner(10, 10), corner(0, 10)];
     expect(shapeContentsBounds([item(square), repeater(3, 20)]),
         const Size(50, 10));
-    // The second repeater repeats the copies of the first: a grid.
     expect(
         shapeContentsBounds([item(square), repeater(3, 20), repeater(2, 0)]),
         const Size(50, 10));
-    // Above the art, it acts on nothing.
     expect(shapeContentsBounds([repeater(3, 20), item(square)]),
         const Size(10, 10));
   });
@@ -127,10 +124,8 @@ void main() {
       () {
     final a = [corner(0, 0), corner(10, 0), corner(10, 10), corner(0, 10)];
     final b = [corner(0, 20), corner(10, 20), corner(10, 30), corner(0, 30)];
-    // The first item's own repeater: three copies of it, the second alone.
     expect(shapeContentsBounds([item(a), repeater(3, 20, own: true), item(b)]),
         const Size(50, 30));
-    // After the second item, its own repeater does not reach the first.
     expect(shapeContentsBounds([item(a), item(b), repeater(3, 20, own: true)]),
         const Size(50, 30));
     final global = [item(a), item(b), repeater(2, 0, own: true), repeater(3, 20)];

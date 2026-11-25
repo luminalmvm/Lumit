@@ -40,7 +40,6 @@ use crate::{
 
 use cues::{Cue, Limits};
 
-/// A Text layer's captions.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Captions {
     /// The layer they were made from, in the same composition. While it is
@@ -50,15 +49,10 @@ pub struct Captions {
     pub source: Option<Uuid>,
     /// In order of time for each footage item, never overlapping one another.
     pub cues: Vec<Cue>,
-    /// The language the words are in, such as `en`, for the files written
-    /// from them.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub language: String,
-    /// How captions are cut and broken into lines when they are made or
-    /// broken again.
     #[serde(default)]
     pub limits: Limits,
-    /// The people the words name, with the names their labels print.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub speakers: Vec<crate::transcript::Speaker>,
     /// Unknown fields from newer Lumit versions.
@@ -66,7 +60,6 @@ pub struct Captions {
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
-/// One change to a layer's captions, carried by [`Op::EditCaptions`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum CaptionsEdit {
     /// Make the layer a caption layer, change everything about its captions,
@@ -83,7 +76,6 @@ pub enum CaptionsEdit {
 }
 
 impl CaptionsEdit {
-    /// What the History list calls it.
     #[must_use]
     pub fn name(&self) -> &'static str {
         match self {
@@ -93,28 +85,15 @@ impl CaptionsEdit {
     }
 }
 
-/// Why a subtitle file could not be read.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum CaptionsError {
     /// The file stops making sense at this line, counted from one.
     #[error("line {line} is not part of a caption")]
     Unreadable { line: usize },
-    /// The file is readable and holds no captions.
     #[error("there are no captions in the file")]
     Empty,
 }
 
-/// Apply `edit` to the captions of `layer` in `comp`, giving back the op that
-/// undoes it.
-///
-/// # Errors
-///
-/// [`OpError::UnknownComp`] and [`OpError::UnknownLayer`] for what is not
-/// there, [`OpError::KindNotConvertible`] for a layer that is not text,
-/// [`OpError::BadIndex`] for a splice past the end or on a layer without
-/// captions, and [`OpError::InvalidSpan`] when the result would hold a cue
-/// that ends before it starts, an empty cue, or two cues of one footage item
-/// out of order or overlapping.
 pub(crate) fn apply(
     doc: &mut Document,
     comp: Uuid,
@@ -169,8 +148,6 @@ pub(crate) fn apply(
     })
 }
 
-/// The edit that points `layer`'s captions at layer `to` when they were made
-/// from one of `from`, in comp `comp`: what precomposing their layer needs.
 pub(crate) fn repointed(comp: Uuid, layer: &Layer, from: &[Uuid], to: Uuid) -> Option<Op> {
     let LayerKind::Text { document } = &layer.kind else {
         return None;
@@ -320,12 +297,6 @@ mod tests {
         }))
     }
 
-    /// **Every caption edit undoes exactly, and a broken one is refused.**
-    /// Captions land on a Text layer, one is retyped, and walking the inverses
-    /// back leaves the document as it was; an edit that would leave a caption
-    /// empty, backwards or overlapping the next changes nothing. Every typed
-    /// correction is journalled as one of these, so an inverse that lost a
-    /// caption would lose it from the project.
     #[test]
     fn every_caption_edit_undoes_exactly() {
         let mut doc = Document::new();
@@ -464,8 +435,6 @@ mod tests {
         }
         assert_eq!(doc, before);
 
-        // A file's overlapping captions are cut where the next starts, and an
-        // empty one goes.
         let mut blank = cue("", 0, 100);
         blank.words.clear();
         let tidied = tidy(vec![cue("Late", 2000, 3000), cue("Early", 0, 2500), blank]);

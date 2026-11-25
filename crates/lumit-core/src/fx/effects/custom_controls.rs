@@ -29,7 +29,6 @@ use crate::fx::{
 use crate::model::{EffectInstance, EffectParam, EffectValue};
 use lumit_fx_macros::Effect;
 
-/// The `extra` key the list of controls lives under.
 pub const EXTRA_KEY: &str = "controls";
 
 /// The most controls one instance holds. A ceiling rather than a design: the
@@ -37,7 +36,6 @@ pub const EXTRA_KEY: &str = "controls";
 /// million rows.
 pub const MAX_CONTROLS: usize = 256;
 
-/// What one control is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ControlKind {
@@ -50,7 +48,6 @@ pub enum ControlKind {
     Menu,
 }
 
-/// One control of a set.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Control {
     /// The row's id, which is what the document stores its value under.
@@ -66,7 +63,6 @@ pub struct Control {
     pub min: f64,
     #[serde(default = "hundred")]
     pub max: f64,
-    /// A menu's options, in the order it lists them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub options: Vec<String>,
 }
@@ -85,12 +81,10 @@ fn hundred() -> f64 {
     category = Controls,
     cost = Trivial,
     roi = Exact,
-    // No picture, so no matte, as every other control declares.
     matte = false,
 )]
 pub struct CustomControls {}
 
-/// The controls this instance holds, in the order they are shown.
 #[must_use]
 pub fn controls_of(inst: &EffectInstance) -> Vec<Control> {
     inst.extra
@@ -159,7 +153,6 @@ pub fn set_controls(inst: &mut EffectInstance, controls: &[Control]) {
     }
 }
 
-/// Every list of controls this process has derived rows from, by its hash.
 type RowCache = RwLock<HashMap<u64, &'static [ParamSchema]>>;
 
 fn cache() -> &'static RowCache {
@@ -247,7 +240,6 @@ fn rows_of(inst: &EffectInstance) -> &'static [ParamSchema] {
     built
 }
 
-/// Custom controls' behaviour: none, by design.
 pub struct CustomControlsDef;
 
 impl EffectDef for CustomControlsDef {
@@ -255,7 +247,6 @@ impl EffectDef for CustomControlsDef {
         &<CustomControls as EffectMetadata>::SCHEMA
     }
 
-    /// It holds values. It does not draw.
     fn is_image_op(&self) -> bool {
         false
     }
@@ -264,7 +255,6 @@ impl EffectDef for CustomControlsDef {
         rows_of(inst)
     }
 
-    /// A menu's options.
     fn row_state(&self, inst: &EffectInstance) -> crate::fx::registry::RowState {
         let rows = rows_of(inst);
         let options = controls_of(inst)

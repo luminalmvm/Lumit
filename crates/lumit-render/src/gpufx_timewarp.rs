@@ -78,7 +78,6 @@ impl GpuEffect for TimewarpFx {
         let p = Timewarp::packed_from(p);
         let pictures = aux.layer_inputs();
         let picture = |i: usize| pictures.get(i).and_then(|l| l.as_ref()).map(|l| &l.tex);
-        // No moment to show is the frame as it is.
         let Some(a) = picture(0) else {
             return tex.clone();
         };
@@ -102,7 +101,6 @@ impl GpuEffect for TimewarpFx {
                 (_, Some(_)) if p.phase <= 0.0 => a.clone(),
                 (TimewarpMethod::PixelMotion, Some(b)) => match &fields {
                     Some((f, g)) => engines.kernels.synth(ctx, a, b, f, g, p.phase),
-                    // Without a measurement the frames are mixed.
                     None => engines.kernels.mix(ctx, a, b, p.phase),
                 },
                 (TimewarpMethod::FrameMix, Some(b)) => engines.kernels.mix(ctx, a, b, p.phase),

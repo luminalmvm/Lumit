@@ -1,5 +1,3 @@
-//! After Effects' Gradient Wipe onto Luma fade.
-
 use lumit_core::anim::Property;
 use lumit_core::model::{EffectInstance, EffectValue};
 
@@ -10,8 +8,6 @@ use super::fx_colour::Fx;
 use super::props::match_name_of;
 use super::Conv;
 
-/// This file's claim on a match name: the row whose conversion is
-/// `gradient_wipe`.
 pub(super) fn claim(
     conv: &mut Conv<'_>,
     path: &ItemPath,

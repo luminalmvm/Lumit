@@ -26,7 +26,6 @@ use crate::fx::{
 use crate::mask::MaskPolyline;
 use lumit_fx_macros::Effect;
 
-/// Scribble's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "scribble",
@@ -57,7 +56,6 @@ pub struct Scribble {
     #[colour(default = [0.85, 0.16, 0.12, 1.0], max = 4.0)]
     pub colour: [f32; 4],
 
-    /// Which way the strokes run. A dial, because it is an angle.
     #[dial(default = 30.0, step = 15.0)]
     pub angle: f32,
 
@@ -101,7 +99,6 @@ pub struct Scribble {
     )]
     pub start: f32,
 
-    /// Where it stops; see [`start`](Self::start).
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -119,8 +116,6 @@ pub struct Scribble {
     #[choice(label = "Wiggle type", options = ["Static", "Jagged", "Wiggly"], default = 0)]
     pub wiggle_type: u32,
 
-    /// How fast it moves. Greyed while the waver is Static, which is not moving
-    /// at all.
     #[slider(
         label = "Wiggles per second",
         min = 0.0,
@@ -147,12 +142,9 @@ pub struct Scribble {
     #[toggle(label = "Composite on original", default = true)]
     pub composite_on_original: bool,
 
-    /// Which waver. Two Scribbles on one shape with different seeds are two
-    /// different hands.
     #[seed]
     pub seed: u32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -164,7 +156,6 @@ pub struct Scribble {
     pub mix: f32,
 }
 
-/// A rate is not a control while nothing is moving.
 pub const SCRIBBLE_ENABLED_WHEN: &[crate::fx::schema::EnabledWhen] =
     &[crate::fx::schema::EnabledWhen {
         param: "wiggles_per_second",
@@ -182,7 +173,6 @@ pub const SCRIBBLE_ENABLED_WHEN: &[crate::fx::schema::EnabledWhen] =
 /// hand's waver, and comfortably short of the point where a displacement folds
 /// the picture back on itself.
 const WIGGLE_AMPLITUDE: f32 = 0.2;
-/// See [`WIGGLE_AMPLITUDE`].
 const WIGGLE_WAVELENGTH: f32 = 4.0;
 
 impl Scribble {
@@ -200,8 +190,6 @@ impl Scribble {
     /// than a clock, for §2.4's reason. Never a panel row.
     pub const DERIVED_TICK: ParamId = ParamId::new("derived.tick");
 
-    /// This instance's two derived values, read back out of a resolved bag, so
-    /// no caller has to know the ids.
     #[must_use]
     pub fn derived_of(p: Params<'_>) -> (f32, f32) {
         (

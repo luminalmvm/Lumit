@@ -1,5 +1,3 @@
-//! A track matte and a paint stroke on a Precomp layer reach the picture.
-
 use super::*;
 
 /// **A precomp set as a track matte must actually gate the layer**.
@@ -34,7 +32,6 @@ fn a_precomp_track_matte_gates_the_layer() {
     for item in child_doc.items {
         doc.items.push(item);
     }
-    // The matte itself is hidden, as a matte source always is.
     let mut matte = matrix_layer("Matte", LayerKind::Precomp { comp: child_id }, 16, 16);
     matte.switches.visible = false;
     let matte_id = matte.id;
@@ -59,13 +56,10 @@ fn a_precomp_track_matte_gates_the_layer() {
         let (rgba, w, h) = r
             .render_preview(&doc, comp_id, 0, quality, 1.0)
             .expect("render");
-        // Comp pixels, whatever size the frame came back at.
         let at = |x: u32, y: u32| {
             let i = (((y * h / ch) * w + x * w / cw) * 4) as usize;
             (rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3])
         };
-        // Left half: inside the precomp's opaque square, so the red shows.
-        // The middle and a corner, so a shrunken matte shows too.
         for (x, y) in [(8, 8), (2, 2)] {
             let (lr, _lg, _lb, la) = at(x, y);
             assert!(
@@ -74,8 +68,6 @@ fn a_precomp_track_matte_gates_the_layer() {
             );
             assert_eq!(la, 255, "and it should be opaque there");
         }
-        // Right half: the precomp is transparent there, so nothing is drawn —
-        // this is the pixel that stayed red while the matte was being dropped.
         let (rr, rg, rb, _ra) = at(24, 8);
         assert!(
             rr < 30 && rg < 30 && rb < 30,
@@ -119,7 +111,6 @@ fn a_paint_stroke_on_a_precomp_layer_reaches_the_picture() {
     stroke.hardness = 1.0;
     stroke.colour = LinearColour([1.0, 0.0, 0.0, 1.0]);
     pre.paint.push(stroke);
-    // Index 0 is the top of the stack, over the black base.
     doc.comp_mut(comp_id).unwrap().layers.insert(0, pre);
 
     let (rgba, w, _h) = r

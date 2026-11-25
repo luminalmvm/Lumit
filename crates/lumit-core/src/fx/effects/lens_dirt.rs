@@ -63,7 +63,6 @@ pub const LENS_DIRT_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
     cond: EnabledCond::ChoiceIs(1),
 }];
 
-/// Lens dirt's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "lens_dirt",
@@ -78,7 +77,6 @@ pub const LENS_DIRT_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
     enabled_when = LENS_DIRT_ENABLED_WHEN,
 )]
 pub struct LensDirt {
-    /// How bright the lit dirt is.
     #[slider(min = 0.0, max = 2.0, default = 0.35, hard_min = 0.0, unit = Raw)]
     pub intensity: f32,
 
@@ -140,34 +138,27 @@ pub struct LensDirt {
     #[slider(min = 0.0, max = 1.0, default = 0.35, hard_min = 0.0, hard_max = 1.0, unit = Raw)]
     pub dust: f32,
 
-    /// Fine sharp specks.
     #[slider(min = 0.0, max = 1.0, default = 0.2, hard_min = 0.0, hard_max = 1.0, unit = Raw)]
     pub grit: f32,
 
-    /// Curling fibres.
     #[slider(min = 0.0, max = 1.0, default = 0.0, hard_min = 0.0, hard_max = 1.0, unit = Raw)]
     pub hairs: f32,
 
-    /// Greasy streaks and fingerprints.
     #[slider(min = 0.0, max = 1.0, default = 0.5, hard_min = 0.0, hard_max = 1.0, unit = Raw)]
     pub smudges: f32,
 
-    /// A thin film over the whole glass.
     #[slider(min = 0.0, max = 1.0, default = 0.2, hard_min = 0.0, hard_max = 1.0, unit = Raw)]
     pub haze: f32,
 
     #[slider(min = 0.0, max = 1.0, default = 0.15, hard_min = 0.0, hard_max = 1.0, unit = Raw)]
     pub scratches: f32,
 
-    /// Water on the glass.
     #[slider(min = 0.0, max = 1.0, default = 0.0, hard_min = 0.0, hard_max = 1.0, unit = Raw)]
     pub droplets: f32,
 
-    /// How hard the droplets bend the picture behind them.
     #[slider(min = 0.0, max = 1.0, default = 0.5, hard_min = 0.0, hard_max = 2.0, unit = Raw)]
     pub refraction: f32,
 
-    // ---- Iris ----
     #[counter(min = 3, max = 16, default = 9, hard_min = 3, hard_max = 16, unit = Raw)]
     pub blades: i32,
 
@@ -178,8 +169,6 @@ pub struct LensDirt {
     #[dial(default = 0.0, step = 15.0)]
     pub rotation: f32,
 
-    // ---- Light ----
-    /// Brightness above which the picture lights the dirt.
     #[slider(min = 0.0, max = 4.0, default = 0.9, hard_min = 0.0, unit = Raw)]
     pub threshold: f32,
 
@@ -187,7 +176,6 @@ pub struct LensDirt {
     #[slider(min = 0.0, max = 1.0, default = 0.35, hard_min = 0.0, hard_max = 2.0, unit = Raw)]
     pub spread: f32,
 
-    /// Light on all of the glass, whatever the picture.
     #[slider(min = 0.0, max = 1.0, default = 0.0, hard_min = 0.0, unit = Raw)]
     pub ambient: f32,
 

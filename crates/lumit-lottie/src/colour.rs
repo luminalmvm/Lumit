@@ -9,7 +9,6 @@
 //! encoded ends (`fit` then keeps only the frames it needs). A gradient gets
 //! stops between its own for the same reason ([`between`]).
 
-/// The sRGB transfer: a linear channel as the encoded value a file states.
 #[must_use]
 pub fn srgb_encode(linear: f64) -> f64 {
     let c = linear.clamp(0.0, 1.0);
@@ -20,7 +19,6 @@ pub fn srgb_encode(linear: f64) -> f64 {
     }
 }
 
-/// The inverse of [`srgb_encode`], for colours read from a file.
 #[must_use]
 pub fn srgb_decode(encoded: f64) -> f64 {
     let c = encoded.clamp(0.0, 1.0);
@@ -42,10 +40,8 @@ pub fn rec709_display(linear: [f64; 3]) -> [f64; 3] {
 /// Lumit's mix in linear light, per channel: half an eight-bit step.
 const MIX_TOLERANCE: f64 = 0.5 / 255.0;
 
-/// The finest a span between two stops is cut: a 1024th of it.
 const MAX_DEPTH: u32 = 10;
 
-/// The most stops placed between two of a gradient's own.
 const MAX_BETWEEN: usize = 64;
 
 /// Where to put stops between two of a gradient's colours, as fractions of

@@ -1,8 +1,3 @@
-// The axes in a 3D viewport's corner: which way x, y and z point as the view
-// sees them, a click on an end to look straight along it, as Top, Front,
-// Left and the rest, and a drag on them to orbit. Under them, the switch
-// between perspective and orthographic, and the one that draws the view as
-// lines only.
 
 import 'dart:async';
 
@@ -17,10 +12,8 @@ import 'viewer_camera.dart' show CameraPose;
 import 'viewer_gizmo_3d.dart' show gizmoAxisColours;
 import 'viewer_menus.dart';
 
-/// How far in from the viewport's top right corner the axes sit.
 const double viewCubeInset = 26;
 
-/// The axes' reach from their middle, and the size of the ends.
 const double _arm = 24;
 const double _end = 6.5;
 const double _side = 2 * (_arm + _end + 2);
@@ -36,7 +29,6 @@ const List<ViewerView> _faces = [
   ViewerView.front,
 ];
 
-/// How far in from the view's top left corner its look is named.
 const double viewLookInset = 8;
 
 /// Which way a view looks when it isn't through the comp's camera, and which
@@ -89,7 +81,6 @@ class _ViewLookTagState extends State<ViewLookTag> {
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
           child: AnimatedOpacity(
             key: const ValueKey('viewer-look-tag'),
-            // At once on the way up, and slower on the way down.
             duration: _changed ? Duration.zero : scope.motion.hoverOut.duration,
             curve: scope.motion.hoverOut.curve,
             opacity: _changed ? 1 : 0.7,
@@ -110,10 +101,8 @@ class ViewerViewCube extends StatefulWidget {
   final bool ortho;
   final bool wireframe;
 
-  /// Look along an end: one of the six fixed views' directions.
   final ValueChanged<ViewerView> onSnap;
 
-  /// A drag on the axes, which orbits.
   final VoidCallback onOrbitStart;
   final ValueChanged<Offset> onOrbit;
   final VoidCallback onOrbitEnd;
@@ -239,7 +228,6 @@ class _ViewerViewCubeState extends State<ViewerViewCube> {
             ),
           ),
         ),
-        // What the end under the pointer looks from, by its name.
         SizedBox(
           height: 14,
           child: hover == null

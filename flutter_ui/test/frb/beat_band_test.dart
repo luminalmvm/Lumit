@@ -85,8 +85,6 @@ void main() {
       expect(find.byKey(const ValueKey('tl-beat-bars')), findsOneWidget,
           reason: 'the confirmed grid numbers the bars');
 
-      // Clear generated: the ticks go, and the band's numbers go with the
-      // grid that described them.
       comp.clearBeatMarkers();
       clearCompTimeCache();
       p.uiState.model.refresh();

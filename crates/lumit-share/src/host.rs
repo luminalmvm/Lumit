@@ -38,10 +38,8 @@ pub(crate) const GREETING_ROOM: usize = 8;
 /// every place.
 pub(crate) const GREETING_EACH: usize = 3;
 
-/// How long a caller that failed to say hello keeps its place.
 pub(crate) const GUESS_PAUSE: Duration = Duration::from_secs(1);
 
-/// One caller still saying hello.
 struct Greeter {
     id: u64,
     /// Where it came from, for a caller on this machine's own port.
@@ -52,23 +50,17 @@ struct Greeter {
     since: Instant,
 }
 
-/// How often the accepting thread looks for a caller, tidies up, and sends on
-/// what the host is looking at.
 const BEAT: Duration = Duration::from_millis(50);
 
-/// How many guests the host remembers the last edit of.
 const HEARD: usize = 4 * MAX_PEOPLE;
 
-/// The way to one seated guest.
 struct Link {
     id: u32,
-    /// What its guest said hello with.
     token: u64,
     out: SyncSender<Out>,
     socket: TcpStream,
 }
 
-/// Who is here. Bounded by [`MAX_PEOPLE`].
 struct Seats {
     /// The invite's secret. Replaced when a guest is removed, so it is read
     /// under the lock a caller is seated under.
@@ -82,7 +74,6 @@ struct Seats {
     /// to tell one that comes back. The newest [`HEARD`] guests, oldest first.
     heard: Vec<(u64, u64)>,
     next: u32,
-    /// Someone came or went and the others have not been told yet.
     changed: bool,
 }
 
@@ -94,7 +85,6 @@ impl Seats {
             .map_or(self.key, |lock| locked_key(&self.key, &lock))
     }
 
-    /// The invite as it stands, by these ways to the host.
     fn invite(&self, addresses: Vec<String>, relays: Vec<String>) -> Invite {
         Invite {
             locked: self.lock.is_some(),
@@ -107,12 +97,9 @@ impl Seats {
 struct Hub {
     store: Arc<DocumentStore>,
     port: u16,
-    /// The folder the host's own footage is found under.
     root: Option<PathBuf>,
     events: Events,
     stop: AtomicBool,
-    /// The callers part-way through saying hello, and the number the next
-    /// one is known by.
     greeters: Mutex<Vec<Greeter>>,
     callers: AtomicU64,
     seats: Mutex<Seats>,
@@ -123,13 +110,8 @@ struct Hub {
     /// Every edit since the project was last saved, kept on disk. Taken in
     /// the tap, so nothing that holds it calls the store.
     log: Mutex<Option<HostLog>>,
-    /// Whether people outside this network can get in.
     reach: Mutex<Reach>,
-    /// The relay this host keeps a room at, if it was given one, and how
-    /// that is going.
     relay: Mutex<Option<(String, Relayed)>>,
-    /// The footage this host sends, takes and passes on, once it has been
-    /// given some to carry.
     bulk: Mutex<Option<Arc<bulk::Hub>>>,
 }
 
@@ -141,8 +123,6 @@ struct Hub {
 pub struct Host {
     hub: Arc<Hub>,
     accepting: Mutex<Option<JoinHandle<()>>>,
-    /// Hears when the thread that keeps the router's port open has closed
-    /// it and gone.
     reaching: Mutex<Option<Done<()>>>,
     restored: usize,
 }
@@ -209,7 +189,6 @@ pub fn host(
     events: Events,
 ) -> Result<Host, ShareError> {
     let (listeners, port) = listen(address, port)?;
-    // A new invite is one nobody is coming back by.
     let fresh = key.is_none();
     let key = match key {
         Some(key) => key,
@@ -281,7 +260,6 @@ pub fn host(
 }
 
 impl Host {
-    /// `address` with the port this host listens on.
     fn at(&self, address: &str) -> String {
         let address = address.trim();
         // An IPv6 address has colons of its own, so it goes in brackets.
@@ -290,8 +268,6 @@ impl Host {
         format!("{open}{address}{close}:{}", self.hub.port)
     }
 
-    /// The invite to hand out, for a host reached at `address` and nowhere
-    /// else.
     #[must_use]
     pub fn invite(&self, address: &str) -> Invite {
         let seats = self.hub.seats.lock();
@@ -329,27 +305,21 @@ impl Host {
         self.hub.seats.lock().invite(addresses, relays)
     }
 
-    /// The port it is listening on.
     #[must_use]
     pub fn port(&self) -> u16 {
         self.hub.port
     }
 
-    /// The invite's secret, to share the same project by again later.
     #[must_use]
     pub fn key(&self) -> [u8; 32] {
         self.hub.seats.lock().key
     }
 
-    /// What this host's password comes to, if it set one, to share the same
-    /// project by again later without asking for the password again.
     #[must_use]
     pub fn lock(&self) -> Option<Lock> {
         self.hub.seats.lock().lock
     }
 
-    /// How many edits made since the project was last saved were put back
-    /// when sharing started, for a host that had closed without saving.
     #[must_use]
     pub fn restored(&self) -> usize {
         self.restored
@@ -368,8 +338,6 @@ impl Host {
         })
     }
 
-    /// The project was saved with the first `mark` kept edits in it, so they
-    /// need keeping no longer.
     pub fn saved(&self, mark: usize) {
         if let Some(log) = self.hub.log.lock().as_mut() {
             log.saved(mark);
@@ -415,7 +383,6 @@ impl Host {
             .spawn(move || reach::take_back(&hub.stop));
     }
 
-    /// Whether people outside this network can get in.
     #[must_use]
     pub fn reach(&self) -> Reach {
         self.hub.reach.lock().clone()
@@ -444,14 +411,12 @@ impl Host {
         }
     }
 
-    /// Whether this host has a room at a relay.
     #[must_use]
     pub fn relayed(&self) -> Relayed {
         let relay = self.hub.relay.lock();
         relay.as_ref().map_or(Relayed::Off, |(_, relayed)| *relayed)
     }
 
-    /// Send and take footage. See [`crate::Sharing::carry_footage`].
     pub fn carry_footage(&self, footage: Arc<dyn Footage>, limits: Arc<Limits>) {
         let mut bulk = self.hub.bulk.lock();
         if bulk.is_none() && !self.hub.stop.load(Ordering::Relaxed) {
@@ -467,14 +432,12 @@ impl Host {
         carried
     }
 
-    /// Who has the original of `item`.
     #[must_use]
     pub fn holders(&self, item: Uuid) -> Vec<(u32, u64)> {
         let bulk = self.hub.bulk.lock().clone();
         bulk.map_or_else(Vec::new, |bulk| bulk.holders(item))
     }
 
-    /// Ask whichever guest has it for `wanted`.
     pub fn want(&self, wanted: Wanted) {
         let bulk = self.hub.bulk.lock().clone();
         if let Some(bulk) = bulk {
@@ -482,7 +445,6 @@ impl Host {
         }
     }
 
-    /// Stop taking `wanted`, and tell whoever is sending it.
     pub fn unwant(&self, wanted: &Wanted) {
         let bulk = self.hub.bulk.lock().clone();
         if let Some(bulk) = bulk {
@@ -490,7 +452,6 @@ impl Host {
         }
     }
 
-    /// Say `body` to the guest numbered `to`.
     pub fn note(&self, to: u32, body: serde_json::Value) {
         self.hub.pass(0, to, body);
     }
@@ -537,8 +498,6 @@ impl Host {
         }
     }
 
-    /// Let go of the store, the guests and the port, saying `last` to each
-    /// guest first if there is something to say.
     fn end(&self, last: Option<&Message>) {
         if self.hub.stop.swap(true, Ordering::Relaxed) {
             return;
@@ -579,8 +538,6 @@ impl Drop for Host {
 }
 
 impl Hub {
-    /// The reach thread: have the router open the port, keep it open for as
-    /// long as the project is shared, and close it after.
     fn reach(&self) {
         let said = |reach: Reach| {
             self.reach.lock().clone_from(&reach);
@@ -653,7 +610,6 @@ impl Hub {
                 }
                 _ => said(Relayed::Unreachable),
             }
-            // Asked again before long, and at once for a new secret.
             let asked = Instant::now();
             while current() && asked.elapsed() < lumit_relay::PING {
                 thread::sleep(BEAT);
@@ -661,7 +617,6 @@ impl Hub {
         }
     }
 
-    /// Take a guest waiting at the relay and seat it like any other caller.
     fn take(self: &Arc<Self>, relay: &str, name: &str, token: &str, guest: u64) {
         let Some(id) = self.greet(None, None) else {
             return;
@@ -705,7 +660,6 @@ impl Hub {
         Some(id)
     }
 
-    /// A caller fetched from the relay is here, and its hello starts now.
     fn arrived(&self, id: u64, socket: &TcpStream) {
         if let Some(greeter) = self.greeters.lock().iter_mut().find(|g| g.id == id) {
             greeter.socket = socket.try_clone().ok();
@@ -713,7 +667,6 @@ impl Hub {
         }
     }
 
-    /// A caller has finished saying hello, well or badly.
     fn greeted(&self, id: u64) {
         self.greeters.lock().retain(|greeter| greeter.id != id);
     }
@@ -732,7 +685,6 @@ impl Hub {
         }
     }
 
-    /// Note what `peer` is looking at, to be sent on at the next beat.
     fn look(&self, peer: u32, presence: Presence) {
         let mut looking = self.looking.lock();
         match looking.iter_mut().find(|(who, _)| *who == peer) {
@@ -741,7 +693,6 @@ impl Hub {
         }
     }
 
-    /// Note which footage `peer` has the original of, and tell everyone.
     fn hold(&self, peer: u32, items: Vec<Held>) {
         let Some(bulk) = self.bulk.lock().clone() else {
             return;
@@ -752,7 +703,6 @@ impl Hub {
         }
     }
 
-    /// Pass a note from `from` on to `to`, which is this machine for 0.
     fn pass(&self, from: u32, to: u32, body: serde_json::Value) {
         if to == 0 {
             return (self.events)(Event::Note { from, body });
@@ -784,7 +734,6 @@ impl Hub {
         }
     }
 
-    /// Say one last thing to a guest and close its connection behind it.
     fn dismiss(&self, link: &Link, last: &Message) {
         if let Ok(bytes) = encode(last, &self.names) {
             let _ = link.out.try_send(Out::Bytes(bytes));
@@ -1030,7 +979,6 @@ impl Hub {
         true
     }
 
-    /// Read one guest's edits until it goes or says something out of turn.
     fn listen(&self, (peer, token): (u32, u64), receiver: &mut Receiver, out: &SyncSender<Out>) {
         while !self.stop.load(Ordering::Relaxed) {
             let Ok(bytes) = receiver.recv(wire::EDIT_LIMIT) else {
@@ -1078,7 +1026,6 @@ impl Hub {
         }
     }
 
-    /// Someone is looking at something else: note it and tell the others.
     fn presence(&self, peer: u32, presence: Presence) {
         let presence = presence.tidied();
         let people = {

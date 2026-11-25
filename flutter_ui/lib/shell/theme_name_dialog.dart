@@ -61,8 +61,6 @@ Future<String?> askThemeName(
               ),
               HouseButton(
                 key: const ValueKey('theme-name-ok'),
-                // The default action. The name field holds focus, so Enter
-                // lands there and submits: the fill just says what Enter does.
                 primary: true,
                 onPressed: () => close(controller.text),
                 child: Text(confirm ?? l10n.save),

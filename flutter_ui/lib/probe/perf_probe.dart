@@ -1,19 +1,3 @@
-// The parked measurement probe behind docs/impl/ui-performance.md:
-// the manual instrument for docs/13's B1/B2 on the real edit. Its
-// gesture code (ProbeGestures, below) is shared with the real-window harness,
-// integration_test/ui_budget_test.dart, which is what CI runs. Activated only
-// when the build passes --dart-define=LUMIT_PROBE_PROJECT=<path-to-.lum> (see
-// main.dart); an ordinary build compiles it out of reach, so it ships in nothing.
-//
-// What it does: opens the given project, fronts the comp named "Clips" (or
-// the first comp), then drives the measured gestures — select clicks, wheel
-// scrolls, Ctrl+wheel zoom flights, playhead and work-area drags, the graph
-// mode comparison — with synthetic pointer events through the real hit-test
-// path, recording every FrameTiming (UI-thread build ms, raster-thread ms,
-// total span) and every bridge crossing per gesture. Results are written to
-// LUMIT_PROBE_OUT as plain text: the note's §2 table is this file's output.
-//
-// Every ui-performance work package re-runs this before and after.
 
 import 'dart:developer' as developer;
 import 'dart:io';
@@ -33,7 +17,6 @@ import '../state/ui_state.dart';
 
 const String probeProjectPath = String.fromEnvironment('LUMIT_PROBE_PROJECT');
 
-/// Where the table is written; relative paths land in the working directory.
 const String probeOutPath = String.fromEnvironment('LUMIT_PROBE_OUT',
     defaultValue: 'lumit-probe-out.txt');
 
@@ -101,7 +84,6 @@ List<FrameTiming> framesWithin(List<FrameTiming> frames, int t0, int t1) => [
 double percentile(List<double> sorted, double q) =>
     sorted.isEmpty ? 0 : sorted[((sorted.length - 1) * q).round()];
 
-/// The Timeline's on-screen rects, clamped to the panel (see [timelineGeometry]).
 typedef TimelineGeometry = ({
   Rect panel,
   Rect ruler,
@@ -135,8 +117,6 @@ mixin ProbeGestures {
         pointer: id, position: at, kind: PointerDeviceKind.mouse));
   }
 
-  /// A press without its release, so a caller can look at the frame between
-  /// the two, which is what B2 is.
   int press(Offset at) {
     final id = _pointer++;
     send(PointerDownEvent(
@@ -195,8 +175,6 @@ mixin ProbeGestures {
           timeStamp: Duration.zero));
     }
   }
-
-  // ---- element lookup -----------------------------------------------------
 
   List<Element> elements(bool Function(Element) test) {
     final found = <Element>[];
@@ -262,7 +240,6 @@ mixin ProbeGestures {
     return extent;
   }
 
-  /// Wheel notches of 120 px that stay inside [extent].
   static int notchesFor(double extent) =>
       extent <= 0 ? 9 : (extent / 120).floor().clamp(2, 30);
 }
@@ -279,8 +256,6 @@ class _Probe with ProbeGestures {
   final StringBuffer out = StringBuffer();
 
   _Probe(this.state, this.ui, this.bridge);
-
-  // ---- frame timing collection -------------------------------------------
 
   List<FrameTiming>? _bucket;
 
@@ -364,8 +339,6 @@ class _Probe with ProbeGestures {
     ]);
 
     out.writeln('== $name ==');
-    // The gesture's window on the Timeline clock, for lining a CPU-sample or
-    // VM-timeline capture up against exactly these frames.
     out.writeln('tus=$t0..$t1');
     out.writeln(
         'frames=${inGesture.length} (+${frames.length - inGesture.length}'
@@ -417,14 +390,11 @@ class _Probe with ProbeGestures {
     debugPrint('PROBE flushed ${out.length} chars');
   }
 
-  // ---- the run ------------------------------------------------------------
-
   Future<void> run() async {
     SchedulerBinding.instance.addTimingsCallback(_onTimings);
     out.writeln('LUMIT PERF PROBE ${DateTime.now()}');
     out.writeln('project: $probeProjectPath');
 
-    // Wait for the project and the Timeline to be up.
     for (var i = 0; i < 240; i++) {
       await Future<void>.delayed(const Duration(milliseconds: 500));
       if (state.project == null) continue;
@@ -438,7 +408,6 @@ class _Probe with ProbeGestures {
       return;
     }
 
-    // Front the comp whose name contains "clip".
     final comps = state.comps();
     out.writeln('comps: ${comps.map((c) => c.$2).join(", ")}');
     final target = comps
@@ -467,7 +436,6 @@ class _Probe with ProbeGestures {
     out.writeln('media beside project: '
         '${mediaLive ? "resolves (live preview)" : "MISSING (empty preview)"}');
 
-    // Panel geometry, clamped to the window (see [timelineGeometry]).
     final geometry = timelineGeometry();
     final rows = byTypeName('OutlineRow');
     if (geometry == null || rows.isEmpty) {
@@ -482,7 +450,6 @@ class _Probe with ProbeGestures {
     final laneCentre =
         Offset(lanes.left + lanes.width * 0.55, lanes.top + lanes.height * 0.4);
 
-    // Warm-up: zoom out to fit, scroll the rows to the top.
     await withCtrl(() async {
       for (var i = 0; i < 24; i++) {
         wheel(laneCentre, 120);
@@ -535,7 +502,6 @@ class _Probe with ProbeGestures {
       out.writeln('screenshot failed: $e');
     }
 
-    // G0: idle baseline — how many frames does a quiet editor draw?
     await _measure('idle 3s', () async {
       await Future<void>.delayed(const Duration(seconds: 3));
     });
@@ -554,8 +520,6 @@ class _Probe with ProbeGestures {
     await _selectClicks('edit: clicks on a row lock switch',
         dx: 0, cellPrefix: 'tl-locked-');
 
-    // G2: wheel-scroll the lanes down then up, faster than any hand (25 ms a
-    // notch), staying inside the extent.
     await _measure('scroll: lanes wheel $vNotches down + $vNotches up, 25ms',
         () async {
       for (var i = 0; i < vNotches; i++) {
@@ -585,7 +549,6 @@ class _Probe with ProbeGestures {
       }
     });
 
-    // G3: wheel-scroll over the outline half.
     final outlineCentre = Offset(panel.left + (lanes.left - panel.left) * 0.5,
         lanes.top + lanes.height * 0.4);
     await _measure('scroll: outline wheel $vNotches down + $vNotches up, 25ms',
@@ -600,7 +563,6 @@ class _Probe with ProbeGestures {
       }
     });
 
-    // G4: ctrl+wheel zoom in then out over the lanes.
     await _measure('zoom: ctrl+wheel 14 in + 14 out', () async {
       await withCtrl(() async {
         for (var i = 0; i < 14; i++) {
@@ -633,8 +595,6 @@ class _Probe with ProbeGestures {
           const Duration(milliseconds: 2500));
     });
 
-    // G6: work-area end-handle drag. Narrow the work area first so the end
-    // handle stands mid-panel, then find it by its key.
     try {
       final comp = target.$1;
       final duration = comp.durationFrames();
@@ -704,7 +664,6 @@ class _Probe with ProbeGestures {
       out.writeln('graph tab not found; skipped');
     }
 
-    // G8: playhead drag with render-time measuring OFF, against G5's default.
     ui.renderTimings.setMeasuring(false);
     await Future<void>.delayed(const Duration(milliseconds: 600));
     await _measure('playhead drag, measuring off', () async {
@@ -724,9 +683,6 @@ class _Probe with ProbeGestures {
       : 'l=${r.left.toStringAsFixed(0)} t=${r.top.toStringAsFixed(0)} '
           'w=${r.width.toStringAsFixed(0)} h=${r.height.toStringAsFixed(0)}';
 
-  /// One row of per-click evidence: acknowledgement (down → the next finished
-  /// frame), quiet (down → 300ms with no frame at all), the frames in the
-  /// burst, and every bridge call the click set off.
   Future<void> _selectClicks(String name,
       {double dx = 0, String? cellPrefix}) async {
     await _settle();
@@ -753,7 +709,6 @@ class _Probe with ProbeGestures {
       await click(at);
       await SchedulerBinding.instance.endOfFrame;
       final ack = sw.elapsedMicroseconds / 1000.0;
-      // Quiet: 300ms with no frame reported, or 4s cap.
       while (sw.elapsed < const Duration(seconds: 4)) {
         await Future<void>.delayed(const Duration(milliseconds: 25));
         if (DateTime.now().difference(_lastFrameAt) >

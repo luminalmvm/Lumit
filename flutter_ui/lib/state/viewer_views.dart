@@ -30,9 +30,7 @@ import 'viewer_view.dart'
     show PreviewResolution, ViewerChannel, ViewerView, defaultViewSlots;
 import 'workspace.dart' show ViewerLook, neutralLook;
 
-/// Which of the three display modes a view is in (docs/07 §2.1).
 enum ViewMode {
-  /// The rendered composite at the playhead.
   composition,
 
   /// A project footage item with its interpretation applied.
@@ -42,15 +40,12 @@ enum ViewMode {
   layer,
 }
 
-/// How the views inside one Viewer panel are laid out (docs/07 §2, and After
-/// Effects' own view-layout menu).
 enum ViewLayout {
   one,
   twoAcross,
   twoDown,
   four;
 
-  /// How many views this layout shows.
   int get views => switch (this) {
         ViewLayout.one => 1,
         ViewLayout.twoAcross => 2,
@@ -61,23 +56,17 @@ enum ViewLayout {
   bool get horizontal => this != ViewLayout.twoDown;
 }
 
-/// Which way a compare puts two views together (docs/07 §2, item 10 of the
-/// multi-viewer note).
 enum CompareMode {
-  /// Off: the views are side by side in their own panes as usual.
   none,
 
-  /// One picture, cut at the divider, both halves in register.
   wipe,
 
-  /// The two pictures side by side inside one pane, each squeezed to its half.
   split,
 
   /// One view's picture wiped against its own snapshot, the snapshot on the
   /// left. No second view: the snapshot is the other side.
   snapshot;
 
-  /// Whether this compare puts two views together.
   bool get pairsViews => this == wipe || this == split;
 }
 
@@ -138,8 +127,6 @@ class ViewerSurface {
   UuidValue? anglePicture;
   UuidValue? angleSound;
 
-  // --- How this view is looking at it ------------------------------------
-
   /// Null means "fit", which is a rule rather than a number and has to be
   /// re-resolved every time the pane is resized.
   double? magnification;
@@ -180,7 +167,6 @@ class ViewerSurface {
   /// Escape's switch to the last 3D view.
   final Map<String, ViewerView> lastViews = {};
 
-  /// The 3D views F10, F11 and F12 switch this view to.
   final List<ViewerView> viewSlots = [...defaultViewSlots];
 
   /// In a 3D viewport: how many pixels it is drawn with, its own tier apart
@@ -260,7 +246,6 @@ class ViewerSurface {
         if (ground != null) 'ground': ground,
         if (axes != null) 'axes': axes,
         if (resolution != PreviewResolution.half) 'resolution': resolution.name,
-        // A 3D viewport's free view of each comp, so it is where it was left.
         if (cameraPoses.keys.any((k) => k.endsWith('/${ViewerView.free.name}')))
           'free': {
             for (final e in cameraPoses.entries)
@@ -418,7 +403,6 @@ class ViewerViews extends ChangeNotifier {
   /// like the layout.
   final Set<PaneId> viewportPanes = {};
 
-  /// Whether [view] is in a 3D viewport.
   bool isViewport(ViewerSurface view) => viewportPanes
       .any((pane) => paneViews[pane]?.contains(view.id) ?? false);
 
@@ -443,15 +427,6 @@ class ViewerViews extends ChangeNotifier {
 
   String? get activeId => active?.id;
 
-  /// The view the transport plays: the named one, or the active one — but
-  /// never a view of a file, which has no transport of its own and must not
-  /// have a composition painted over it. With a footage view active the
-  /// picture goes to the first composition view instead, which is what the
-  /// transport has always meant (docs/impl/multi-viewer.md §3.3).
-  ///
-  /// ponytail: with no composition view on screen at all it falls back to the
-  /// named one, because the engine needs a view to publish into and there is
-  /// nowhere better. Give playback somewhere to go if that ever shows.
   ViewerSurface? get previewing {
     final named = byId(alwaysPreviewId) ?? active;
     if (named == null || named.mode == ViewMode.composition) return named;
@@ -461,8 +436,6 @@ class ViewerViews extends ChangeNotifier {
     return named;
   }
 
-  /// The engine ids of views closed since this was last asked, so the caller
-  /// can hand their textures back.
   List<int> takeClosed() {
     final out = List.of(_closed);
     _closed.clear();
@@ -474,7 +447,6 @@ class ViewerViews extends ChangeNotifier {
   List<ViewerSurface> forPane(PaneId pane) {
     final ids = paneViews[pane] ??= [];
     final layout = paneLayouts[pane] ?? ViewLayout.one;
-    // Trim ids naming views that have gone, then top up to the layout.
     ids.removeWhere((id) => byId(id) == null);
     while (ids.length > layout.views) {
       _forget(ids.removeLast());
@@ -549,7 +521,6 @@ class ViewerViews extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Make a view, copying what `seed` was showing when there is one.
   ViewerSurface _make(ViewerSurface? seed) {
     final made = ViewerSurface(
       id: _uuid.v4(),
@@ -562,7 +533,6 @@ class ViewerViews extends ChangeNotifier {
     return made;
   }
 
-  /// Drop a view and remember to tell the engine.
   void _forget(String id) {
     final view = byId(id);
     if (view == null) return;
@@ -572,7 +542,6 @@ class ViewerViews extends ChangeNotifier {
     if (alwaysPreviewId == id) alwaysPreviewId = null;
   }
 
-  /// Every view a pane holds goes when the pane does.
   void forgetPane(PaneId pane) {
     for (final id in paneViews.remove(pane) ?? const <String>[]) {
       _forget(id);
@@ -585,7 +554,6 @@ class ViewerViews extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Front a view. Everything that follows the active view follows this.
   bool front(String id) {
     if (_activeId == id || byId(id) == null) return false;
     _activeId = id;
@@ -593,7 +561,6 @@ class ViewerViews extends ChangeNotifier {
     return true;
   }
 
-  /// The next or previous view in the order they were made, for the keyboard.
   void cycle(int step) {
     if (views.length < 2) return;
     final at = views.indexWhere((v) => v.id == activeId);
@@ -637,16 +604,11 @@ class ViewerViews extends ChangeNotifier {
   ViewerSurface optionsFor(ViewerSurface view) =>
       shareViewOptions ? (active ?? view) : view;
 
-  /// Announce a change to what a view is showing or how.
   void touch() => notifyListeners();
 
-  // --- Persistence -------------------------------------------------------
-
-  /// The project's half: what each view shows and whether it is locked.
   List<Map<String, dynamic>> toProjectJson() =>
       [for (final v in views) v.toJson()];
 
-  /// The workspace's half: which pane holds which views, and how.
   Map<String, dynamic> toWorkspaceJson() => {
         'panes': {
           for (final e in paneViews.entries) _paneKey(e.key): e.value,

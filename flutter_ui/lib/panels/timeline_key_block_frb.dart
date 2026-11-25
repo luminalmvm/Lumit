@@ -1,7 +1,3 @@
-// The Timeline's block-selection box: the box round the caught keys, its
-// stretch handles and badge, and the painter that draws a lane's keys.
-//
-// Split out of timeline_panel_frb.dart.
 
 import 'dart:math';
 
@@ -127,15 +123,12 @@ class _KeyBlockOverlayState extends State<KeyBlockOverlay> {
   /// block could not be pulled off a target it had passed.
   double _rawTo = 0;
 
-  /// What the stretch last landed on, so the capture can be drawn — the same
-  /// indication a lane key's drag gives (docs/07 §4.5).
   SnapTarget? _caught;
 
   /// The frames the block's own keys sit on, gathered when the handle was
   /// taken hold of: they all move, so none of them is a place to land.
   Set<double> _moving = const {};
 
-  /// Which end is in hand, so the live readout rides beside it.
   bool _draggingStart = false;
 
   /// `Escape` abandons the stretch: the box goes back over the keys it started
@@ -175,7 +168,6 @@ class _KeyBlockOverlayState extends State<KeyBlockOverlay> {
     }
   }
 
-  /// Put the block back where the stretch found it and write nothing.
   void _abandon() {
     widget.stretch.value = null;
     if (!mounted) return;
@@ -241,9 +233,6 @@ class _KeyBlockOverlayState extends State<KeyBlockOverlay> {
         final caught = _caught;
         return Stack(
           children: [
-            // What the stretch landed on, marked while it holds it — the same
-            // capture a lane key's drag draws, because it is the same service
-            // (docs/07 §4.5).
             if (live != null && caught != null)
               Positioned(
                 key: const ValueKey('tl-block-snap-caught'),
@@ -425,8 +414,6 @@ class _KeyBlockOverlayState extends State<KeyBlockOverlay> {
         ),
       );
 
-  /// The badge: how many keys the block holds and how many frames it spans,
-  /// and — pressed — the way into the Ease popover.
   Widget _badge(
     LumitTheme t,
     KeyBlock block, {
@@ -442,8 +429,6 @@ class _KeyBlockOverlayState extends State<KeyBlockOverlay> {
         child: Builder(
           builder: (badgeContext) => LumitTooltip(
             message: l10n.tipEaseTheBlock,
-            // It reads as a label, so it lights and swells under the pointer
-            // to say it is the way in. From its left, the end nearest the box.
             child: HoverMark(
               swells: true,
               alignment: Alignment.centerLeft,
@@ -485,7 +470,6 @@ class _KeyBlockOverlayState extends State<KeyBlockOverlay> {
     required double bottom,
   }) {
     final x = _draggingStart ? left : right;
-    // Beside the handle, or on its other side where the axis has run out.
     const pill = 76.0;
     return Positioned(
       key: const ValueKey('tl-block-stretch-hint'),
@@ -504,17 +488,13 @@ class _KeyBlockOverlayState extends State<KeyBlockOverlay> {
 /// It sits behind the bars and the keys, so they keep their own gestures, and
 /// it lets a click through to the ground beneath it.
 class KeyBlockMoveGrab extends StatefulWidget {
-  /// The selected keys, from the area's one walk.
   final List<SelectedKey> places;
   final TimelineAxis axis;
   final ValueNotifier<KeyStretch?> stretch;
   final bool magnet;
 
-  /// The release: write every key where the move has carried it.
   final ValueChanged<KeyStretch> onMove;
 
-  /// The rows a stagger drag moves, grouped and in order, as the key lanes
-  /// ask for them.
   final List<List<String>> Function()? staggerUnits;
 
   const KeyBlockMoveGrab({
@@ -552,15 +532,12 @@ class _KeyBlockMoveGrabState extends State<KeyBlockMoveGrab> {
     final perFrame = widget.axis.perFrame;
     if (!_escape.running || perFrame <= 0) return;
     _deltaPx += dx;
-    // ponytail: whole frames only. A key's own drag also snaps to markers and
-    // the playhead, give this the same if a block needs to land on one.
     var by = _deltaPx / perFrame;
     if (widget.magnet &&
         !snapSuspended(
             controlPressed: HardwareKeyboard.instance.isControlPressed)) {
       by = by.roundToDouble();
     }
-    // Held inside the axis, as one key's drag is.
     final back = block.first < 0 ? 0.0 : -block.first;
     final room = widget.axis.frames - block.last;
     by = by.clamp(back, room < 0 ? 0.0 : room).toDouble();
@@ -578,7 +555,6 @@ class _KeyBlockMoveGrabState extends State<KeyBlockMoveGrab> {
   Widget build(BuildContext context) {
     final block = KeyBlockOverlay.blockOf(widget.places);
     if (block == null) return const SizedBox.shrink();
-    // Between the handles, which keep the two ends.
     final left = widget.axis.xOf(block.first) + _blockHandleGrab / 2;
     final right = widget.axis.xOf(block.last) - _blockHandleGrab / 2;
     if (right <= left) return const SizedBox.shrink();
@@ -610,7 +586,6 @@ class _KeyBlockMoveGrabState extends State<KeyBlockMoveGrab> {
                 final units =
                     staggerKeysHeld() ? widget.staggerUnits?.call() : null;
                 _units = units != null && units.length > 1 ? units : null;
-                // The row under the hand is the one that follows it.
                 final y = top + _blockBoxInset + d.localPosition.dy;
                 _heldRow = widget.places
                     .where((p) => y >= p.top && y < p.top + p.height)

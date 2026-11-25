@@ -21,9 +21,6 @@ String _scratchStore(String name) =>
     '${Directory.systemTemp.path}${Platform.pathSeparator}'
     'lumit-test-$name${Platform.pathSeparator}workspace.json';
 
-/// A workspace writing somewhere harmless, torn down after the test. The
-/// scratch folder is emptied first, so a previous run's files are not read as
-/// this run's.
 Workspace _workspace(String name) {
   Workspace.storeOverride = _scratchStore(name);
   addTearDown(() => Workspace.storeOverride = null);
@@ -32,7 +29,6 @@ Workspace _workspace(String name) {
   return Workspace();
 }
 
-/// The same store read afresh — what the next launch sees.
 Workspace _reopened() => Workspace()..loadUserWorkspaces();
 
 void main() {
@@ -70,8 +66,6 @@ void main() {
       expect(_reopened().userWorkspaces.map((s) => s.name), ['Mine', 'Mine 2']);
     });
 
-    /// Layout changes persist automatically to the active workspace (§1.4):
-    /// a workspace edited by dragging keeps what it was dragged into.
     test('dragging the panels writes back to the workspace in force', () {
       final w = _workspace('user-workspace-drag');
       w.saveWorkspaceAs('Mine');
@@ -100,7 +94,6 @@ void main() {
           reason: 'a theme renamed .lumworkspace is not a workspace');
     });
 
-    /// One unreadable file costs its workspace, never the launch.
     test('a corrupt file is skipped rather than fatal', () {
       final w = _workspace('user-workspace-corrupt');
       w.saveWorkspaceAs('Good');

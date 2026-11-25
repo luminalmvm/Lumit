@@ -1,8 +1,3 @@
-//! Ring wave: rings that start at random places, grow outwards and give each
-//! copy a value as they cross it, with a turn, a count of the rings that have
-//! passed and how much they make it grow. One of the Siceliot drivers, as
-//! [`super::siceliot`].
-
 use super::siceliot::{between, VALUE_PORT};
 use crate::fx::{
     params::Value, points, registry::DriverCx, registry::EffectDef, registry::EffectMetadata,
@@ -11,13 +6,11 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Where RingWave's rings start.
 pub const RING_WAVE_ORIGINS: &[&str] = &["Anywhere", "Edges", "Centre", "Away from points"];
 
 /// The turn the rings give what they cross, degrees.
 pub const ROTATION_PORT: &str = "rotation";
 
-/// How many rings have crossed a point so far.
 pub const PASSES_PORT: &str = "passes";
 
 /// How much bigger the rings make what they cross, per cent: each ring's
@@ -31,18 +24,14 @@ const RING_WAVE_OUT: &[Port] = &[
     Port::new(GROW_PORT, "Grow", PortType::Number),
 ];
 
-/// Clearance is read only on Away from points.
 pub const RING_WAVE_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
     param: "clearance",
     on: "origin",
     cond: EnabledCond::ChoiceIs(3),
 }];
 
-/// The dice a ring rolls for where it starts, how fast and thick it is and
-/// how it turns things.
 const RING_WAVE_ATTR: u32 = 120;
 
-/// Ring wave's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "ring_wave",
@@ -55,11 +44,9 @@ const RING_WAVE_ATTR: u32 = 120;
     enabled_when = RING_WAVE_ENABLED_WHEN,
 )]
 pub struct RingWave {
-    /// The value where no ring is.
     #[slider(label = "Minimum", min = -100.0, max = 100.0, default = 0.0, unit = Raw)]
     pub minimum: f32,
 
-    /// The value in the middle of a ring.
     #[slider(label = "Maximum", min = -100.0, max = 100.0, default = 100.0, unit = Raw)]
     pub maximum: f32,
 
@@ -85,7 +72,6 @@ pub struct RingWave {
     )]
     pub speed: f32,
 
-    /// How much faster or slower each ring may be.
     #[slider(
         label = "Speed variance",
         min = 0.0,
@@ -108,7 +94,6 @@ pub struct RingWave {
     )]
     pub thickness_min: f32,
 
-    /// The thickest.
     #[slider(
         label = "Thickness max",
         min = 1.0,
@@ -154,7 +139,6 @@ pub struct RingWave {
     )]
     pub grow_min: f32,
 
-    /// The most.
     #[slider(
         label = "Grow max",
         min = 0.0,
@@ -181,7 +165,6 @@ pub struct RingWave {
     pub seed: u32,
 }
 
-/// Ring wave's behaviour.
 pub struct RingWaveDef;
 
 impl EffectDef for RingWaveDef {
@@ -216,7 +199,6 @@ impl EffectDef for RingWaveDef {
     }
 }
 
-/// What Ring wave reads at one point.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RingWaveAt {
     /// Minimum where no ring is, Maximum in the middle of one.
@@ -270,8 +252,6 @@ fn ring(
             }
         }
         2 => [w * 0.5, h * 0.5],
-        // Places on the frame in turn until one is clear of the points, as
-        // the sketch's do-while does.
         3 => {
             let place = |t: u32| [roll(20 + 2 * t) * w, roll(21 + 2 * t) * h];
             (0..AWAY_TRIES)
@@ -341,8 +321,6 @@ pub fn ring_wave(
         if s > 0.0 {
             strength += s;
             grow += s * r.grow;
-            // The way out from the ring's start, turned by the ring's own
-            // offset and spin, and given more the nearer its middle.
             let way = dy.atan2(dx) + r.offset + r.spin_rate * age;
             turn += way * 0.5 * s * s;
         }
@@ -364,10 +342,6 @@ pub fn ring_wave(
 mod tests {
     use super::*;
 
-    /// RingWave's rings: the value peaks where a ring's middle is and rests at
-    /// Minimum elsewhere, Passes only ever grows and counts a ring once its
-    /// middle is near, and the turn is nought away from the rings. Guards
-    /// the decode look's waves, and the text a wave leaves behind.
     #[test]
     fn ring_wave_rings_grow_and_count_their_passes() {
         let p = RingWave {
@@ -389,7 +363,6 @@ mod tests {
         let frame = [1000.0, 1000.0];
         let point = [800.0, 500.0];
         let at = |lt: f64| ring_wave(&p, point, frame, lt, None);
-        // The first ring reaches 300 px at one second.
         assert!((at(1.0).value - 100.0).abs() < 1e-3, "{:?}", at(1.0));
         assert!((at(0.9).value - 50.0).abs() < 1e-2, "half way in");
         assert_eq!(at(0.3).value, 0.0, "no ring yet");
@@ -404,7 +377,6 @@ mod tests {
             last = now.passes;
         }
         assert!(last > 40.0, "a ring every half second: {last}");
-        // Rings from anywhere fall on the frame, and the seed moves them.
         let anywhere = RingWave { origin: 0, ..p };
         let other = RingWave {
             seed: 4,
@@ -424,11 +396,9 @@ mod tests {
                 .any(|lt| ring_wave(&anywhere, point, frame, lt, None).rotation != 0.0),
             "a ring crossing turns the point"
         );
-        // Grow: a ring's own share, by its strength.
         assert!((at(1.0).grow - 30.0).abs() < 1e-2, "{:?}", at(1.0));
         assert!((at(0.9).grow - 15.0).abs() < 0.1);
         assert_eq!(at(0.3).grow, 0.0);
-        // Add up: two rings on one point go past Maximum only when asked.
         let busy = RingWave {
             interval: 0.05,
             thickness_min: 400.0,
@@ -441,8 +411,6 @@ mod tests {
             ..busy
         };
         assert!(ring_wave(&added, point, frame, 1.0, None).value > 150.0);
-        // Away from points: no ring starts within Clearance of a point. A
-        // block of points fills the left half of the frame.
         let block: Vec<[f32; 2]> = (0..25)
             .flat_map(|x| (0..50).map(move |y| [x as f32 * 20.0, y as f32 * 20.0]))
             .collect();

@@ -1,11 +1,5 @@
-//! A stagger wired into Clone to points.
-
 use super::*;
 
-/// A Stagger wired into Clone to points' Rotation gives each
-/// point of the stream its own value, through the same resolve the frame
-/// uses, and a stream with nothing wired is left alone. Guards every stamp
-/// taking the value its copy is owed.
 #[test]
 fn a_stagger_into_clone_to_points_turns_each_stamp() {
     use super::per_copy::{drive_rows, COPY_ROTATION, COPY_ROWS};

@@ -31,8 +31,6 @@ void main() {
         (tester) async {
       final p = withComp();
       final layer = p.comp.addSolidLayer();
-      // Asked for out of order: the order on screen is Photoshop's, not the
-      // order they were added in.
       layer.addStyle(name: 'style_stroke');
       layer.addStyle(name: 'style_drop_shadow');
       layer.addEffect(name: 'blur');
@@ -70,7 +68,6 @@ void main() {
             ),
         isTrue,
       );
-      // And an effect's rows are still the effect's.
       expect(
         rows
             .whereType<FoldEffectParamRow>()

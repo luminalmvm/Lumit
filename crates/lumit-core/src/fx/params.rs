@@ -123,7 +123,6 @@ pub enum Unit {
     /// plug-in declares it, for a normalised X. After Effects stores the same
     /// control in pixels, so the import divides by the width.
     FrameWidth,
-    /// The same for the frame's height: an OFX plug-in's normalised Y.
     FrameHeight,
 }
 
@@ -147,7 +146,6 @@ pub enum Value {
     Float(f32),
     Int(i32),
     Bool(bool),
-    /// A Choice option index.
     Choice(u32),
     /// Scene-linear RGBA.
     Colour([f32; 4]),
@@ -224,7 +222,6 @@ pub struct ShortText {
 const _: () = assert!(size_of::<ShortText>() <= size_of::<CurvePoints>());
 
 impl ShortText {
-    /// No text at all.
     pub const EMPTY: Self = Self {
         bytes: [0; TEXT_MAX_BYTES],
         len: 0,
@@ -243,7 +240,6 @@ impl ShortText {
         out
     }
 
-    /// The text.
     #[must_use]
     pub fn as_str(&self) -> &str {
         self.bytes
@@ -252,7 +248,6 @@ impl ShortText {
             .unwrap_or("")
     }
 
-    /// Whether nothing was typed.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len == 0
@@ -287,8 +282,6 @@ pub struct CurvePoints {
 }
 
 impl CurvePoints {
-    /// The identity diagonal — a fresh curve, and the fallback for one that
-    /// arrives unreadable.
     pub const IDENTITY: Self = {
         let mut xy = [[0.0; 2]; CURVE_MAX_POINTS];
         xy[1] = [1.0, 1.0];
@@ -348,7 +341,6 @@ impl CurvePoints {
         out
     }
 
-    /// The points, in x order.
     #[must_use]
     pub fn points(&self) -> &[[f32; 2]] {
         &self.xy[..self.len as usize]
@@ -389,7 +381,6 @@ impl Value {
             // A shape is not a number; its first point's output is the least
             // misleading scalar to give a caller that asked anyway.
             Value::Curve(c) => c.xy[0][1],
-            // Words are not a number either, and nor is an outline.
             Value::Text(_) | Value::Shape(_) => 0.0,
         }
     }
@@ -425,13 +416,10 @@ pub struct Params<'a> {
 }
 
 impl<'a> Params<'a> {
-    /// A view over an explicit slice — the shape tests and the CPU oracle build
-    /// directly.
     pub const fn new(entries: &'a [(ParamId, Value)]) -> Self {
         Self { entries }
     }
 
-    /// The empty set (an effect with no parameters, such as Invert).
     pub const EMPTY: Params<'static> = Params { entries: &[] };
 
     /// Every parameter, in schema order. The order is a promise: the panel, the
@@ -440,12 +428,10 @@ impl<'a> Params<'a> {
         self.entries.iter().copied()
     }
 
-    /// How many parameters this effect resolved to.
     pub fn len(&self) -> usize {
         self.entries.len()
     }
 
-    /// Whether the effect resolved to no parameters at all.
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
@@ -462,7 +448,6 @@ impl<'a> Params<'a> {
         self.entries.iter().find(|(k, _)| *k == id).map(|(_, v)| *v)
     }
 
-    /// `id` as a float, or `default` when absent or of another kind.
     pub fn float(&self, id: ParamId, default: f32) -> f32 {
         match self.get(id) {
             Some(Value::Float(v)) => v,
@@ -471,7 +456,6 @@ impl<'a> Params<'a> {
         }
     }
 
-    /// `id` as a whole number, or `default` when absent or of another kind.
     pub fn int(&self, id: ParamId, default: i32) -> i32 {
         match self.get(id) {
             Some(Value::Int(v)) => v,
@@ -480,7 +464,6 @@ impl<'a> Params<'a> {
         }
     }
 
-    /// `id` as a switch, or `default` when absent or of another kind.
     pub fn bool(&self, id: ParamId, default: bool) -> bool {
         match self.get(id) {
             Some(Value::Bool(v)) => v,
@@ -498,7 +481,6 @@ impl<'a> Params<'a> {
         }
     }
 
-    /// `id` as scene-linear RGBA, or `default` when absent or of another kind.
     pub fn colour(&self, id: ParamId, default: [f32; 4]) -> [f32; 4] {
         match self.get(id) {
             Some(Value::Colour(v)) => v,
@@ -517,7 +499,6 @@ impl<'a> Params<'a> {
         }
     }
 
-    /// Whether the layer reference `id` is bound to a picture this frame.
     pub fn layer_bound(&self, id: ParamId) -> bool {
         matches!(self.get(id), Some(Value::Layer(true)))
     }
@@ -528,9 +509,6 @@ impl<'a> Params<'a> {
         matches!(self.get(id), Some(Value::MaskPath(true)))
     }
 
-    /// The tone curve `id`, or the identity diagonal when absent or of
-    /// another kind — a missing curve is a straight line, never a
-    /// fault.
     pub fn curve(&self, id: ParamId) -> CurvePoints {
         match self.get(id) {
             Some(Value::Curve(c)) => c,
@@ -538,7 +516,6 @@ impl<'a> Params<'a> {
         }
     }
 
-    /// The Shape row `id`, or no points when absent or of another kind.
     pub fn shape(&self, id: ParamId) -> ShapePoints {
         match self.get(id) {
             Some(Value::Shape(s)) => s,
@@ -546,7 +523,6 @@ impl<'a> Params<'a> {
         }
     }
 
-    /// The text row `id`, or `default` when absent or of another kind.
     pub fn text(&self, id: ParamId, default: &str) -> ShortText {
         match self.get(id) {
             Some(Value::Text(text)) => text,
@@ -572,7 +548,6 @@ impl<'a> Params<'a> {
 /// point of the exercise (docs/impl/effect-registry.md §2.4).
 #[derive(Clone, Copy)]
 pub struct ResolvedFx<'a> {
-    /// The effect's definition, from the registry.
     pub def: &'static dyn EffectDef,
     /// The instance this resolved from, so a diagnostic can name the row and the
     /// auxiliary inputs can be matched up one-for-one.
@@ -580,7 +555,6 @@ pub struct ResolvedFx<'a> {
     /// The layer time this op's parameters were evaluated at — what a
     /// plugin's render is told the frame is. Nought for a hand-built stack.
     pub lt: f64,
-    /// The resolved parameters, in schema order.
     pub params: Params<'a>,
 }
 
@@ -594,7 +568,6 @@ impl std::fmt::Debug for ResolvedFx<'_> {
     }
 }
 
-/// One effect's entry in the arena: which effect, and where its parameters sit.
 #[derive(Clone)]
 struct Op {
     def: &'static dyn EffectDef,
@@ -624,12 +597,10 @@ pub struct ResolvedStack {
 }
 
 impl ResolvedStack {
-    /// An empty stack.
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Empty this arena while retaining its allocations for another resolution.
     pub fn clear(&mut self) {
         self.ops.clear();
         self.entries.clear();
@@ -679,9 +650,6 @@ impl ResolvedStack {
         }
     }
 
-    /// Drop the op most recently begun, and its parameters with it — how an
-    /// effect that resolves to nothing this frame (an unset file, a zero mix) is
-    /// withdrawn after the fact.
     pub fn drop_last(&mut self) {
         if let Some(op) = self.ops.pop() {
             self.entries.truncate(op.span.start as usize);
@@ -709,17 +677,14 @@ impl ResolvedStack {
         }));
     }
 
-    /// How many ops the stack resolved to.
     pub fn len(&self) -> usize {
         self.ops.len()
     }
 
-    /// Whether the stack resolved to nothing at all.
     pub fn is_empty(&self) -> bool {
         self.ops.is_empty()
     }
 
-    /// The op at `index`, in stack order.
     pub fn get(&self, index: usize) -> Option<ResolvedFx<'_>> {
         let op = self.ops.get(index)?;
         let entries = self
@@ -733,7 +698,6 @@ impl ResolvedStack {
         })
     }
 
-    /// Every op, in stack order.
     pub fn iter(&self) -> impl Iterator<Item = ResolvedFx<'_>> + '_ {
         (0..self.ops.len()).filter_map(|i| self.get(i))
     }
@@ -889,13 +853,10 @@ impl ResolvedFx<'_> {
                         feed(&p[1].to_le_bytes());
                     }
                 }
-                // The length first, as a curve's is, then only the bytes
-                // typed.
                 Value::Text(text) => {
                     feed(&[text.len]);
                     feed(text.as_str().as_bytes());
                 }
-                // The length first, then the live points, as a curve's.
                 Value::Shape(s) => {
                     feed(&(s.len() as u32).to_le_bytes());
                     for p in s.points() {

@@ -1,13 +1,9 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-//! Timewarp's kernels against their CPU oracle: the crossfade, and the frame
-//! made from the motion between two moments, on a square that moves.
-
 use lumit_core::fx::effects::timewarp::{timewarp_mix, timewarp_synth};
 use lumit_gpu::fx::common::{readback_linear_f32, upload_flow_field, upload_linear_f32};
 use lumit_gpu::fx::timewarp::TimewarpKernels;
 
-/// A soft-edged square at `x0` on a ramp.
 fn frame(w: usize, h: usize, x0: f32) -> Vec<f32> {
     let mut img = vec![0.0f32; w * h * 4];
     for y in 0..h {
@@ -91,8 +87,6 @@ fn wgsl_timewarp_matches_the_cpu_oracle() {
             .map(|(x, y)| (x - y).abs())
             .fold(0.0, f32::max);
         assert!(worst < 4e-3, "synth at {phase}: worst {worst}");
-        // Half way, the square sits half way: its centre is where neither
-        // moment had it.
         if phase == 0.5 {
             let at = |x: usize| gpu[(12 * w + x) * 4];
             assert!(

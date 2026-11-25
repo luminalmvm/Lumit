@@ -24,7 +24,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Displacement map's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "displacement_map",
@@ -94,7 +93,6 @@ pub struct DisplacementMap {
     #[choice(label = "Edges", options = *EDGE_OPTIONS, default = 1)]
     pub edge: u32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,

@@ -123,7 +123,6 @@ pub(super) fn flash_nth(e: &EffectInstance, lt: f64) -> u32 {
 /// alone otherwise.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct MarkerWindow {
-    /// Comp frames per second.
     pub fps: f64,
     /// The nearest trigger at/before the frame, layer-local seconds.
     pub before: Option<f64>,

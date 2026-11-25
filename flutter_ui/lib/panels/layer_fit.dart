@@ -26,8 +26,6 @@ import 'viewer_stage.dart' show parentMatrix;
 
 enum LayerFit { inside, fill, width, height }
 
-/// Whether Fit to comp has anything to work on: a box, and a Scale and Position
-/// an expression isn't driving.
 bool canFit(BridgeLayerEntry entry) {
   final tf = entry.info.transform;
   return !const {
@@ -144,8 +142,6 @@ void _fit(
   );
 }
 
-/// Fit to comp, width and height, and fill, for the selection. Shift on Fit to
-/// comp fills, as the row below it does.
 List<MenuEntry> fitRows(LumitState app, LumitUiState ui) {
   final comp = ui.selectedComp;
   VoidCallback? fit(LayerFit Function() how) => comp == null

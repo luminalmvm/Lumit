@@ -39,8 +39,6 @@ pub type Mat3 = [[f64; 3]; 3];
 /// pathological case.
 const MAX_SWEEPS: usize = 20;
 
-// --- The models ------------------------------------------------------------
-
 /// The Hartley-normalised eight-point fundamental matrix, rank-2 enforced.
 ///
 /// Needs at least eight correspondences; more are a least-squares fit over all
@@ -167,8 +165,6 @@ pub fn homography_dlt(pts: &[Correspondence]) -> Option<Mat3> {
     Some(h)
 }
 
-// --- The residuals ---------------------------------------------------------
-
 /// Sampson distance: the first-order approximation of the distance from a
 /// correspondence to the nearest pair that `f` explains exactly, in the units
 /// the points are given in.
@@ -214,8 +210,6 @@ pub fn project(h: &Mat3, p: [f64; 2]) -> Option<[f64; 2]> {
     }
     Some([v[0] / v[2], v[1] / v[2]])
 }
-
-// --- Small shared arithmetic ------------------------------------------------
 
 /// The median of `v`, sorted in place under a total order so a NaN cannot make
 /// the answer depend on the comparison order. `None` for an empty slice.
@@ -399,8 +393,6 @@ fn mat_from_column(vecs: &[[f64; 9]; 9], j: usize) -> Mat3 {
     out
 }
 
-// --- Hartley normalisation --------------------------------------------------
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Side {
     From,
@@ -468,8 +460,6 @@ impl Hartley {
         ]
     }
 }
-
-// --- The eigensolver --------------------------------------------------------
 
 /// Eigenvalues and eigenvectors of a symmetric matrix, ascending by eigenvalue,
 /// with the eigenvectors as **columns**.

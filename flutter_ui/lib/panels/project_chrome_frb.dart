@@ -36,7 +36,6 @@ const double _previewPad = 10;
 const double _thumbWidth = 128;
 const double _thumbHeight = 72;
 
-/// The gap between the card's three text lines.
 const double _previewLineGap = 2;
 
 /// How many moments a hover across the poster frame can land on (docs/07
@@ -73,7 +72,6 @@ const double _footerGap = 12;
 /// the 0.12em a kicker carries, because it isn't naming a container.
 const double _footerCountTracking = 0.54;
 
-/// The bottom bar's glyphs, drawn at the size its own mockup computed.
 const double projectFooterIconSize = 13;
 
 /// The colour filter's one square, *inside* the search well at its left
@@ -150,7 +148,6 @@ class _ColumnSeam extends StatelessWidget {
   }
 }
 
-/// The column a seam belongs to: the one drawn immediately before [column].
 ProjectColumn _leftOf(ProjectColumns cols, ProjectColumn column) {
   final order = cols.visible;
   return order[order.indexOf(column) - 1];
@@ -184,8 +181,6 @@ Widget projectColumnHeader(
           start: projectHeaderPadLeft, end: projectRowPadding),
       child: Row(
         children: [
-          // Name is the flexible slot, and what it is left with is
-          // [projectNameColumn] — see [ProjectColumns.laidOutWidth].
           Expanded(
             child: _sortHeading(t, ProjectColumn.name, sort, ascending, onSort,
                 Text(t.kickerCase(l10n.name), style: t.kicker)),
@@ -247,7 +242,6 @@ Widget _sortHeading(LumitTheme t, ProjectColumn column, ProjectColumn? sort,
               )
             : Stack(
                 clipBehavior: Clip.none,
-                // The word keeps the width its column gave it.
                 fit: StackFit.passthrough,
                 children: [
                   word,
@@ -582,7 +576,6 @@ Widget projectFooter(
         // fixed — which meant a narrow bar carrying a broken item overflowed
         // rather than shortening.
         Expanded(
-            // Too narrow for a short count, it goes rather than being cut.
             child: LayoutBuilder(
                 builder: (context, box) => box.maxWidth <
                         _footerTextWidth(
@@ -676,7 +669,6 @@ Widget projectPreviewCard(
   required ui.Image? thumb,
   required BridgeMediaInfo? info,
 
-  /// The colour its row's mark wears, and that mark.
   required Color tint,
   required LumitIcon icon,
 
@@ -695,7 +687,6 @@ Widget projectPreviewCard(
   /// picture there instead.
   VoidCallback? onPlaySound,
 
-  /// Whether that button is showing sound already running.
   bool soundPlaying = false,
 
   /// Whether a picked composition is a node graph, which is the one thing the
@@ -703,10 +694,8 @@ Widget projectPreviewCard(
   /// for the reason the name is.
   bool nodeGraph = false,
 
-  /// A right press on the card, which is the item's own menu.
   ValueChanged<Offset>? onMenu,
 
-  /// A press on the uses line, which reveals them, at where it landed.
   ValueChanged<Offset>? onUses,
 }) =>
     GestureDetector(
@@ -772,8 +761,6 @@ Widget _previewContent(
               size: iconSizeTransport, color: missing ? t.warning : tint),
     ),
   );
-  // A sound file has no picture to show or to scrub, so the same square
-  // carries the one thing there is to do with it: hear it.
   if (onPlaySound != null) {
     face = _previewSoundButton(t, soundPlaying, onPlaySound);
   }
@@ -784,8 +771,6 @@ Widget _previewContent(
   if (!missing && onScrub != null && projectScrubFrame(info, 0) != null) {
     thumb = MouseRegion(
       key: const ValueKey('project-preview-scrub'),
-      // Hover only: nothing is pressed, nothing is dragged, and the poster
-      // frame comes back the moment the pointer goes elsewhere.
       onHover: (event) =>
           onScrub(projectScrubFrame(info, event.localPosition.dx)),
       onExit: (_) => onScrub(null),
@@ -863,7 +848,6 @@ int? projectScrubFrame(BridgeMediaInfo? info, double dx) {
   return (step * (frames - 1) / (projectScrubSteps - 1)).round();
 }
 
-/// The play button that stands where a sound file's poster frame would be.
 Widget _previewSoundButton(LumitTheme t, bool playing, VoidCallback onPress) =>
     Semantics(
       button: true,
@@ -966,7 +950,6 @@ String? _previewCodecs(
   return parts.isEmpty ? null : parts.join(' · ');
 }
 
-/// "Used twice", which takes you to those uses when there are any.
 Widget _usesLine(LumitTheme t, int uses, ValueChanged<Offset>? onUses) {
   Widget line(double lit) => Text(l10n.projectUsedCount(uses),
       key: const ValueKey('project-info-uses'),

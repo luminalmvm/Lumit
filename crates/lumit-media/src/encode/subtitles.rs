@@ -25,10 +25,8 @@ use super::{
 };
 use crate::MediaError;
 
-/// Subtitle times are counted in milliseconds.
 const MILLISECONDS: AVRational = AVRational { num: 1, den: 1000 };
 
-/// One subtitle stream: its `mov_text` encoder and where it sits in the file.
 pub(super) struct SubtitleStream {
     ctx: AVCodecContext,
     stream_index: usize,
@@ -99,7 +97,6 @@ impl Encoder {
     }
 }
 
-/// Open a container with every stream it is asked for, and write its header.
 pub(super) fn open(
     path: &Path,
     video: Option<&VideoSettings>,
@@ -162,7 +159,6 @@ pub(super) fn open(
     })
 }
 
-/// Open a `mov_text` encoder and add its stream, in `language`.
 fn open_subtitle(
     output: &mut AVFormatContextOutput,
     language: &str,
@@ -242,7 +238,6 @@ fn dialogue(lines: &[String]) -> String {
     format!("0,0,Default,,0,0,0,,{}", lines.join("\\N"))
 }
 
-/// Encode one caption's dialogue text as a `mov_text` sample.
 fn encode(ctx: &mut AVCodecContext, text: &str) -> Result<Vec<u8>, MediaError> {
     let text = CString::new(text.replace('\0', ""))
         .map_err(|_| MediaError::Ffmpeg("a caption is not text".into()))?;
@@ -337,7 +332,6 @@ fn iso639_2(language: &str) -> Option<&'static str> {
         pl:pol ps:pus pt:por ro:ron ru:rus sa:san sd:snd si:sin sk:slk sl:slv sn:sna so:som \
         sq:sqi sr:srp su:sun sv:swe sw:swa ta:tam te:tel tg:tgk th:tha tk:tuk tl:tgl tr:tur \
         tt:tat uk:ukr ur:urd uz:uzb vi:vie yi:yid yo:yor zh:zho";
-    // The twenty languages with an English form as well.
     const ENGLISH: &str = "tib:bo cze:cs wel:cy ger:de gre:el baq:eu per:fa fre:fr arm:hy \
         ice:is geo:ka mao:mi mac:mk may:ms bur:my dut:nl rum:ro slo:sk alb:sq chi:zh";
     let code = language.split(['-', '_']).next()?.to_ascii_lowercase();
@@ -423,7 +417,6 @@ mod tests {
                 ));
             }
         }
-        // Braces and a backslash before an `n` are words, not styling.
         assert_eq!(
             found,
             Some((200, 600, "Hello (you)\nC:\\\u{2060}new".to_owned()))

@@ -13,7 +13,6 @@
 /// A 3×3 matrix taking column vectors `(x, y, 1)`, row-major.
 pub type Mat3 = [[f64; 3]; 3];
 
-/// The identity.
 pub const IDENTITY: Mat3 = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
 
 /// `a · b`: `b` applied first.
@@ -28,7 +27,6 @@ pub fn mul(a: &Mat3, b: &Mat3) -> Mat3 {
     out
 }
 
-/// The inverse, or `None` for a matrix that flattens the plane.
 #[must_use]
 pub fn invert(m: &Mat3) -> Option<Mat3> {
     let c00 = m[1][1] * m[2][2] - m[1][2] * m[2][1];
@@ -76,7 +74,6 @@ pub fn from_similarity(s: [f64; 4]) -> Mat3 {
     [[s[0], -s[1], s[2]], [s[1], s[0], s[3]], [0.0, 0.0, 1.0]]
 }
 
-/// Nine row-major numbers as a matrix.
 #[must_use]
 pub fn from_rows(h: [f64; 9]) -> Mat3 {
     [[h[0], h[1], h[2]], [h[3], h[4], h[5]], [h[6], h[7], h[8]]]
@@ -154,7 +151,6 @@ fn solve_augmented<const N: usize, const M: usize>(mut a: [[f64; M]; N]) -> Opti
     Some(x)
 }
 
-/// Accumulates a weighted least-squares problem in `N` unknowns.
 struct Normal<const N: usize> {
     ata: [[f64; N]; N],
     atb: [f64; N],
@@ -249,7 +245,6 @@ impl Frame {
         [(p[0] - self.cx) * self.s, (p[1] - self.cy) * self.s]
     }
 
-    /// The matrix doing [`Self::to`].
     fn matrix(&self) -> Mat3 {
         [
             [self.s, 0.0, -self.cx * self.s],
@@ -315,13 +310,11 @@ fn on_layer(px: f64, scale: f64) -> f64 {
     px * s
 }
 
-/// [`AGREE_TRACKED_PX`] on a raster `scale` times the tracked one.
 #[must_use]
 pub fn agree_px(scale: f64) -> f64 {
     on_layer(AGREE_TRACKED_PX, scale)
 }
 
-/// [`CLOSE_TRACKED_PX`] on a raster `scale` times the tracked one.
 #[must_use]
 pub fn close_px(scale: f64) -> f64 {
     on_layer(CLOSE_TRACKED_PX, scale)
@@ -332,8 +325,6 @@ pub fn close_px(scale: f64) -> f64 {
 /// changes across the pairs, and outside them they are only extrapolation.
 const SPAN: f64 = 0.5;
 
-/// Whether `pairs` spread far enough over a `size` frame, both ways, for a
-/// four-corner fit to be made from them.
 #[must_use]
 pub fn spans(pairs: &[Pair], size: [f64; 2]) -> bool {
     let (mut lo, mut hi) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
@@ -377,8 +368,6 @@ pub fn four_corner(pairs: &[Pair], sim: [f64; 4], size: [f64; 2], close: f64) ->
     fitted.unwrap_or_else(|| to_rows(&similar))
 }
 
-/// Whether `m` takes the pair's first point within `agree` pixels of its
-/// second.
 #[must_use]
 pub fn within(m: &Mat3, p: &Pair, agree: f64) -> bool {
     apply(m, p.0).is_some_and(|q| (q[0] - p.1[0]).hypot(q[1] - p.1[1]) < agree)
@@ -528,7 +517,6 @@ pub fn fit_homography(pairs: &[Pair], start: &Mat3, close: f64) -> Option<([f64;
         let res: Vec<f64> = pairs.iter().map(|p| residual(&h, p)).collect();
         w = weights(&res, floor(close));
     }
-    // The same last plain fit over the agreeing pairs as the similarity's.
     let near: Vec<f64> = pairs
         .iter()
         .map(|p| f64::from(u8::from(residual(&h, p) < close)))
@@ -557,8 +545,6 @@ mod tests {
 
     #[test]
     fn a_crowd_moving_its_own_way_does_not_pull_the_fit() {
-        // Two hundred points on the picture, slid and turned a little, and sixty
-        // on something crossing it the other way.
         let truth = [0.999_8f64, 0.02, 5.0, -3.0];
         let mut pairs = Vec::new();
         for i in 0..200 {

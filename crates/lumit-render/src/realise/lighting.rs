@@ -1,6 +1,3 @@
-//! A finished layer lit by the comp's lights and blurred by the camera's
-//! depth of field.
-
 use super::{dof, Realiser};
 use crate::draw::{CompLayerDraw, DrawSource};
 

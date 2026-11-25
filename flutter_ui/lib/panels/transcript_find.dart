@@ -16,7 +16,6 @@ import 'transcript_text.dart';
 
 enum TranscriptFindMode { search, fillers, pauses, speakers }
 
-/// What is found and which one is in hand. Results are runs of tokens.
 class TranscriptFind extends ChangeNotifier {
   TranscriptFindMode? mode;
   final TextEditingController query = TextEditingController();
@@ -26,17 +25,14 @@ class TranscriptFind extends ChangeNotifier {
   List<(int, int)> results = const [];
   int current = -1;
 
-  /// Every token in a result, worked out with them.
   Set<int> foundTokens = const {};
 
   /// The fillers Keep passed over, by [TranscriptToken.identity], which
   /// outlives the token indices an edit shifts.
   final Set<Object> kept = {};
 
-  /// The speaker the speakers review lists.
   int speaker = 0;
 
-  /// Whether the search's Replace row is out.
   bool replaceOpen = false;
 
   void toggleReplace() {
@@ -59,7 +55,6 @@ class TranscriptFind extends ChangeNotifier {
 
   bool get isOpen => mode != null;
 
-  /// Open the bar in [to], or bring it to that mode.
   void show(TranscriptFindMode to) {
     if (mode != to) {
       mode = to;
@@ -78,12 +73,10 @@ class TranscriptFind extends ChangeNotifier {
     current = -1;
     _currentKey = null;
     _currentStart = null;
-    // The well empties with the bar, so no search is left standing in it.
     query.clear();
     notifyListeners();
   }
 
-  /// Work the results out again over [model] with the panel's settings.
   void refresh(TranscriptModel model, InterfaceSettings s) {
     final m = mode;
     if (m == null) return;
@@ -107,7 +100,6 @@ class TranscriptFind extends ChangeNotifier {
     if (results.isEmpty) {
       current = -1;
     } else if (_currentStart case final start?) {
-      // The one in hand, or the first one after where it was.
       current = results
           .indexWhere((r) => model.tokens[r.$1].identity == _currentKey);
       if (current < 0) {
@@ -126,7 +118,6 @@ class TranscriptFind extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Move to the next result, or back, wrapping at the ends.
   void step(TranscriptModel model, int by) {
     if (results.isEmpty) return;
     current = current < 0
@@ -162,7 +153,6 @@ class TranscriptFind extends ChangeNotifier {
   }
 }
 
-/// What the bar's buttons do, all the panel's.
 class TranscriptFindActions {
   final VoidCallback previous;
   final VoidCallback next;
@@ -203,7 +193,6 @@ class TranscriptFindActions {
   });
 }
 
-/// The bar under the strip. Rebuilt by the panel when [find] changes.
 class TranscriptFindBar extends StatelessWidget {
   final TranscriptFind find;
   final TranscriptModel model;
@@ -261,7 +250,6 @@ class TranscriptFindBar extends StatelessWidget {
           const SizedBox(width: 6),
           field,
         ]);
-    // The search well itself is on the strip above.
     final controls = <Widget>[
       ...switch (mode) {
         TranscriptFindMode.search => const <Widget>[],
@@ -361,7 +349,6 @@ class TranscriptFindBar extends StatelessWidget {
                 some ? actions.deleteAll : null),
           ],
       },
-      // How a delete takes its words: closing the gap, or leaving it.
       Row(mainAxisSize: MainAxisSize.min, children: [
         Container(width: 1, height: 14, color: t.hairline),
         const SizedBox(width: 6),
@@ -373,7 +360,6 @@ class TranscriptFindBar extends StatelessWidget {
             () => actions.setLift(true),
             on: settings.transcriptLift),
       ]),
-      // Replace waits behind a disclosure, as an editor's find does.
       if (mode == TranscriptFindMode.search)
         HouseButton(
           key: const ValueKey('transcript-replace-toggle'),
@@ -435,9 +421,6 @@ class TranscriptFindBar extends StatelessWidget {
       ),
       padding: const EdgeInsets.fromLTRB(8, 3, 8, 3),
       child: LayoutBuilder(builder: (context, box) {
-        // One row where it fits; a tight panel puts the actions on a second
-        // row, and either wraps rather than clips. The close mark keeps the
-        // right edge.
         final oneRow = box.maxWidth >= 860;
         Widget wrap(List<Widget> children) => Wrap(
               spacing: 4,

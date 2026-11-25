@@ -1,5 +1,3 @@
-//! The oval mask the mask-path effects draw along.
-
 use super::*;
 
 /// An oval covering most of the frame, for the three effects that draw along a

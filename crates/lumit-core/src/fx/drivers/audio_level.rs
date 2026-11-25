@@ -46,7 +46,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Audio level's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "audio_level",
@@ -114,22 +113,14 @@ pub const AUDIO_LEVEL_ENABLED_WHEN: &[EnabledWhen] = &[
     },
 ];
 
-/// What the Source row offers, in the order it offers them.
 pub const SOURCE_OPTIONS: [&str; 3] = ["This comp", "Layer", "Clip"];
-/// Source: the composition's own mix, the whole of it.
 pub const SOURCE_THIS_COMP: u32 = 0;
-/// Source: one layer's contribution to that mix, post-fader.
 pub const SOURCE_LAYER: u32 = 1;
-/// Source: one clip of that layer, with its own fades.
 pub const SOURCE_CLIP: u32 = 2;
 
-/// The port the whole sound's level leaves by.
 pub const AMPLITUDE_PORT: &str = "amplitude";
-/// The port the low band's level leaves by.
 pub const LOW_PORT: &str = "low";
-/// The port the loudest sample in the window leaves by.
 pub const PEAK_PORT: &str = "peak";
-/// The port the top band's level leaves by.
 pub const HIGH_PORT: &str = "high";
 
 /// Where the low band stops, in hertz — a kick drum and a bass line, not a
@@ -141,7 +132,6 @@ const LOW_BAND_HZ: f64 = 200.0;
 /// voice. A constant for the reason [`LOW_BAND_HZ`] is one.
 const HIGH_BAND_HZ: f64 = 4000.0;
 
-/// Audio level's behaviour.
 pub struct AudioLevelDef;
 
 impl EffectDef for AudioLevelDef {
@@ -186,7 +176,6 @@ impl EffectDef for AudioLevelDef {
     }
 
     fn driver_window(&self, p: crate::fx::params::Params<'_>) -> f64 {
-        // Centred, so it reaches half the window either side of the frame.
         f64::from(AudioLevel::read(p).window.max(0.0)) / 2.0
     }
 
@@ -257,8 +246,6 @@ fn level(cx: &DriverCx<'_>, window: f64, source: u32) -> [f32; 4] {
     if window <= 0.0 {
         return [0.0; 4];
     }
-    // ponytail: one Vec per driver per frame. A window is milliseconds of
-    // mono audio; give the tap a reusable buffer if a profile ever shows it.
     let mut samples = Vec::new();
     let Some(rate) = read_window(cx, tap, source, window / 2.0, &mut samples) else {
         return [0.0; 4];

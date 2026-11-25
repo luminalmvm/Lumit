@@ -24,7 +24,6 @@
 //! 12 dB under the floor first; steady noise then lands within a couple of dB
 //! of Reduction rather than six short of it.
 
-/// The decision-directed estimator's weight on the previous frame.
 const DD_ALPHA: f64 = 0.98;
 
 /// The lowest a priori SNR is allowed to fall: -25 dB.
@@ -34,13 +33,11 @@ const XI_MIN: f64 = 0.003_162_277_660_168_379_4;
 /// factor: 12 dB.
 const INNER: f64 = 0.25;
 
-/// How fast a gain opens, in milliseconds.
 const ATTACK_MS: f64 = 5.0;
 
 /// Where frequency smoothing starts widening to a twelfth of an octave.
 const WIDE_FROM_HZ: f64 = 2_000.0;
 
-/// The band a frame's voice is judged in, in hertz.
 const VOICE_LOW_HZ: f64 = 100.0;
 const VOICE_HIGH_HZ: f64 = 4_000.0;
 
@@ -83,18 +80,13 @@ pub fn lsa_gain(xi: f64, gamma: f64) -> f64 {
     (xi / (1.0 + xi) * (0.5 * exp_integral(v)).exp()).min(1.0)
 }
 
-/// One channel's gain state, carried frame to frame.
 pub struct SpectralGain {
     bin_hz: f64,
-    /// The previous frame's clean power estimate, per bin.
     clean: Vec<f32>,
-    /// The time-smoothed gain, per bin.
     held: Vec<f32>,
-    /// The final gains, per bin.
     gains: Vec<f32>,
     /// Running sum of the log gains, one longer than the bins.
     logs: Vec<f64>,
-    /// How many bins either side the frequency smoothing reaches, per bin.
     reach: Vec<usize>,
     /// The Smoothing row the reach and release were last worked out for.
     smoothing: f64,
@@ -104,7 +96,6 @@ pub struct SpectralGain {
 }
 
 impl SpectralGain {
-    /// State for `bins` bins `bin_hz` apart, frames `hop_s` seconds apart.
     #[must_use]
     pub fn new(bins: usize, bin_hz: f64, hop_s: f64) -> Self {
         let mut out = Self {
@@ -150,8 +141,6 @@ impl SpectralGain {
         }
     }
 
-    /// This frame's gains, from each bin's `power`, the `noise` power to take
-    /// out of it, and the lowest gain each bin may fall to.
     pub fn gains(&mut self, power: &[f32], noise: &[f32], floor: &[f32]) -> &[f32] {
         // The raw gain, allowed [`INNER`] under the floor so that the
         // smoothing after it, which can only ever lift a gain, leaves steady
@@ -220,7 +209,6 @@ impl SpectralGain {
     }
 }
 
-/// A one-pole coefficient for a time constant of `ms` at frames `hop_s` apart.
 fn coeff(ms: f64, hop_s: f64) -> f32 {
     if ms <= 0.0 {
         0.0

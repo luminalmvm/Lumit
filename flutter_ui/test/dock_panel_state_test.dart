@@ -19,13 +19,8 @@ import 'package:lumit_flutter/widgets/controls.dart';
 /// string — the transform is the style's, not the arb file's.
 Finder _tab(String title) => find.text(LumitTheme.dark().kickerCase(title));
 
-/// A scrollable panel body whose State construction is counted, so a test can
-/// prove the State object survived (was not rebuilt from scratch). Reads/writes
-/// its scroll through a controller supplied from outside, so the offset lives
-/// where the test can inspect it.
 int _scrollBodyBuilds = 0;
 
-/// Taps that reached a bare pane's own body, for the corner-grip test below.
 int taps = 0;
 
 class _ScrollBody extends StatefulWidget {
@@ -53,8 +48,6 @@ class _ScrollBodyState extends State<_ScrollBody> {
   }
 }
 
-/// A drag target that counts horizontal-drag updates, to prove a drag begun
-/// while the panel was inactive still takes effect on that same first gesture.
 class _DragCounter extends StatefulWidget {
   final void Function() onDrag;
   const _DragCounter(this.onDrag);
@@ -123,15 +116,12 @@ void main() {
     ));
     await tester.pump();
 
-    // Scroll pane A and snapshot its State object while it is the active pane.
     controller.jumpTo(120);
     await tester.pump();
     final stateBefore = tester.state(find.byType(_ScrollBody));
     final buildsBefore = _scrollBodyBuilds;
     expect(controller.offset, 120);
 
-    // Click pane B, making it active and pane A inactive — the flip that used
-    // to discard pane A's subtree.
     await tester.tap(find.text('pane B'));
     await tester.pump();
 
@@ -175,13 +165,11 @@ void main() {
     expect(builds[Panel.hierarchy], isNull,
         reason: 'a tab never shown builds nothing at all');
 
-    // A dock-level rebuild for an unrelated reason must not reach it either.
     active.value = Panel.project.pane();
     await tester.pump();
     expect(builds[Panel.hierarchy], isNull,
         reason: 'dock rebuilds never cascade into hidden tabs');
 
-    // Showing it builds it; hiding it again freezes it at that count.
     await tester.tap(_tab('Hierarchy'));
     await tester.pump();
     expect(builds[Panel.hierarchy], isNotNull);
@@ -217,16 +205,15 @@ void main() {
     ));
     await tester.pump();
 
-    // Scroll tab 1's body, then switch to tab 2 and back.
     controller.jumpTo(90);
     await tester.pump();
     expect(controller.offset, 90);
 
-    await tester.tap(_tab('Hierarchy')); // the second tab's pill
+    await tester.tap(_tab('Hierarchy'));
     await tester.pump();
     expect(find.text('body of Hierarchy'), findsOneWidget);
 
-    await tester.tap(_tab('Project')); // back to the first tab's pill
+    await tester.tap(_tab('Project'));
     await tester.pump();
 
     expect(controller.offset, 90,

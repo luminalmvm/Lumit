@@ -1,5 +1,3 @@
-//! Where a footage item's pixels are read from.
-
 use lumit_core::model::Document;
 use std::path::PathBuf;
 use uuid::Uuid;

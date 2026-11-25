@@ -1,13 +1,3 @@
-// The Lumit theme, ported one-for-one from crates/lumit-ui/src/theme.rs
-// (docs/15-DESIGN.md). This is the ONLY Dart file where colour hex values may
-// appear — everything else reads the LumitTheme object, mirroring the Rust
-// no-hex-outside-theme rule.
-//
-// In plain terms: every colour, radius, gap and shadow the interface uses is a
-// named token here: the seven colour schemes the Rust frontend ships, the
-// twelve paired ones and Desk's two rooms added since, and the three shapes.
-// The numbers the Rust frontend has are carried over digit-for-digit so the
-// two can be compared.
 
 import 'dart:math' as math;
 
@@ -16,7 +6,6 @@ import 'package:lumit_flutter/l10n/strings.dart';
 
 Color _rgb(int r, int g, int b) => Color.fromARGB(0xff, r, g, b);
 
-/// Light vs dark colour family.
 enum ThemeMode2 { dark, light }
 
 /// The three arrangements the chrome can be laid out in. A shape names an
@@ -32,30 +21,22 @@ enum ThemeShape {
   lantern,
 }
 
-/// How a container label is cased before it is drawn.
 enum LabelCase {
-  /// Every letter a capital.
   caps,
 
-  /// Every letter small.
   lower,
 
-  /// Left as the string was written.
   sentence,
 }
 
-/// How much UI-chrome motion to show.
 enum AnimationLevel { all, minimal, none }
 
-/// How node graph wires run between their sockets.
 enum WireStyle {
-  /// Out of each socket in an S-curve. The default.
   curved,
 
   /// Straight lines that turn only at 45 or 90 degrees, each turn rounded.
   angled,
 
-  /// Slack cables that droop between the sockets.
   hanging,
 }
 
@@ -95,7 +76,6 @@ enum LumitColorScheme {
   greyRoom,
   graphite;
 
-  /// Sentence-case display name for menus and settings.
   String get label => switch (this) {
         LumitColorScheme.dark => l10n.schemeDark,
         LumitColorScheme.darkBlue => l10n.schemeDarkBlue,
@@ -190,9 +170,6 @@ enum LumitColorScheme {
       };
 }
 
-/// Shape-dependent chrome geometry. `studio` reproduces the egui frontend's
-/// original numbers exactly; `desk` keeps them on a tighter float; `lantern`
-/// is the card-in-a-room system (docs/design-alt/15-DESIGN-LANTERN.md §12).
 class ShapeTokens {
   /// A control's corner radius: button, chip, tab, dropdown, value box.
   ///
@@ -207,13 +184,10 @@ class ShapeTokens {
   final double windowInset;
   final List<BoxShadow> cardShadow;
 
-  /// How a container label is cased before it is drawn.
   final LabelCase labelCase;
 
-  /// Whether a panel title sits centred on its strip with a dot at the corner.
   final bool titleCentred;
 
-  /// Whether a panel header carries the small accent dot before its title.
   final bool headerDot;
 
   /// The stroke an icon is drawn with, in logical pixels.
@@ -232,7 +206,6 @@ class ShapeTokens {
   /// The corner of content on a lane: layer bars and clips.
   final double contentRadius;
 
-  /// Whether panes are cards standing on a room colour rather than flush tiles.
   final bool roomed;
 
   /// The margin between a pill and the filled state drawn inside it, on every
@@ -349,8 +322,6 @@ class ShapeTokens {
     contentRadius: 0,
     roomed: false,
     pillInset: 0,
-    // One face, tabular figures, and a lowercase label at +0.04em
-    // (docs/design-alt/15-DESIGN-DESK.md 7.2).
     sansFamily: 'IBM Plex Sans',
     monoFamily: 'IBM Plex Mono',
     tabularNumbers: true,
@@ -388,7 +359,6 @@ class ShapeTokens {
     contentRadius: 3,
     roomed: true,
     pillInset: 3,
-    // Lantern's labels are its tracked mono capitals.
     kickerMono: true,
   );
 
@@ -458,25 +428,19 @@ class DensityTokens {
   /// nothing and each control keeps the size it has always measured itself to.
   final double? timelineChromeControl;
 
-  /// The pickers that sit *inside* a layer's row: matte, blend and parent.
   final double inRowPicker;
 
-  /// A dropdown's closed face anywhere else — a panel row, a bar.
   final double dropdownFace;
 
-  /// A property or effect-parameter row in the Effect controls.
   final double propertyRow;
 
   /// A panel's title strip, and the Viewer's two bars.
   final double headerStrip;
 
-  /// The cache stripe on the ruler's floor.
   final double cacheBar;
 
-  /// The time navigator strip above the ruler.
   final double navigatorBand;
 
-  /// The gutter scrollbar's thickness.
   final double scrollbar;
 
   /// The top line's height: the menu bar under Studio and Desk, the room's
@@ -605,8 +569,6 @@ class DensityTokens {
     menuBar: 40,
   );
 
-  /// Lantern compact: the surveyed compact set under the same row pitch and
-  /// card title line.
   static const lanternCompact = DensityTokens(
     laneRow: 28,
     secondaryRow: 18,
@@ -623,7 +585,6 @@ class DensityTokens {
     menuBar: 40,
   );
 
-  /// The pair a shape draws on.
   static DensityTokens forShape(ThemeShape shape, bool isCompact) =>
       switch (shape) {
         ThemeShape.studio => of(isCompact),
@@ -632,7 +593,6 @@ class DensityTokens {
       };
 }
 
-/// Per-layer-type identity colours (docs/15-DESIGN.md §6.1).
 class LayerColours {
   final Color footage, sequence, precomp, solid, text, camera;
   const LayerColours({
@@ -711,15 +671,11 @@ class FaultColours {
 /// layer palette's own azure, amber, magenta, teal and mint, which were picked
 /// to be told apart at a glance and already read on both grounds.
 class PortColours {
-  /// Image and matte — the picture's own path down the stack.
   final Color image;
 
-  /// Number: the type nearly every driven parameter is.
   final Color number;
   final Color colour;
 
-  /// Shape and points — geometry, whether it is one outline or a stream of
-  /// thousands.
   final Color geometry;
   final Color audio;
 
@@ -779,8 +735,6 @@ class WaveformColours {
   int get hashCode => Object.hash(rest, low, mid, high);
 }
 
-/// Semantic colour tokens; names mirror docs/15-DESIGN.md §tokens and the
-/// Rust `Theme` struct field-for-field.
 class LumitTheme {
   final ThemeMode2 mode;
   final ThemeShape shape;
@@ -798,10 +752,8 @@ class LumitTheme {
   /// (grading accuracy, 15-DESIGN §2.1/§11).
   final Color viewerSurround;
 
-  // Text.
   final Color textPrimary, textSecondary, textMuted, textDisabled;
 
-  // Hairlines.
   final Color hairline, hairlineStrong;
 
   // Roles — the accent is THE single accent per view.
@@ -816,7 +768,6 @@ class LumitTheme {
   final Color animated;
   final Color success, warning, error, cacheDisk;
 
-  /// Graph-editor curve strokes.
   final List<Color> curve;
   final LayerColours layer;
 
@@ -835,9 +786,6 @@ class LumitTheme {
   /// ramp cannot express because it is a ramp.
   final Color selectionFill;
 
-  /// What waveforms draw in — the single wave and the three bands of the
-  /// multiwave stack. Its own grouping rather than roles borrowed one at a
-  /// time, per the §6.4 direction.
   final WaveformColours waveform;
 
   /// What the Graph panel's wires and sockets draw in, by port type. The
@@ -1106,8 +1054,6 @@ class LumitTheme {
         scrim: scrim,
       );
 
-  /// The full composition a scheme + shape (+ accent override) resolves to —
-  /// the Dart `Theme::for_scheme` + `with_accent`.
   static LumitTheme forScheme(
     LumitColorScheme scheme,
     ThemeShape shape, {
@@ -1133,7 +1079,7 @@ class LumitTheme {
         textDisabled: _rgb(0x5e, 0x66, 0x6b),
         hairline: _rgb(0x26, 0x29, 0x2c),
         hairlineStrong: _rgb(0x3c, 0x41, 0x45),
-        accent: defaultAccent, // spruce #35785e
+        accent: defaultAccent,
         accentHover: _shift(defaultAccent, 0x12), // #478a70, derived - which is
         // what keeps withAccent(defaultAccent) reproducing this pair
         animated: _rgb(0xd8, 0xa2, 0x4a),
@@ -1157,7 +1103,6 @@ class LumitTheme {
         ),
       );
 
-  /// The older ramp: bluer, a step lighter; everything else shared with dark().
   factory LumitTheme.darkBlue() {
     final base = LumitTheme.dark();
     return LumitTheme(
@@ -1186,7 +1131,6 @@ class LumitTheme {
     );
   }
 
-  /// The light ramp: one uniform light theme.
   factory LumitTheme.light() => LumitTheme(
         mode: ThemeMode2.light,
         surface0: _rgb(0xee, 0xec, 0xe9),
@@ -1202,15 +1146,8 @@ class LumitTheme {
         textDisabled: _rgb(0x98, 0x98, 0x94),
         hairline: _rgb(0xd8, 0xd6, 0xd2),
         hairlineStrong: _rgb(0xc4, 0xc1, 0xbc),
-        // Light used to keep a hand-darkened accent of its own, because clay
-        // on white sat under the contrast floor. Spruce clears it at 5.3:1, so
-        // the exception is gone: both stock schemes are now exactly
-        // withAccent(defaultAccent), and the hover is the same ±0x12 step in
-        // each - lighter in Dark, darker here.
-        accent: defaultAccent, // spruce #35785e
-        accentHover: _shift(defaultAccent, -0x12), // #23664c
-        // Provisional pending the light-mode pass: the dark scheme's amber
-        // taken down until it holds against white.
+        accent: defaultAccent,
+        accentHover: _shift(defaultAccent, -0x12),
         animated: _rgb(0x9a, 0x6a, 0x1c),
         success: _rgb(0x2f, 0x8f, 0x71),
         warning: _rgb(0xb5, 0x5f, 0x46),
@@ -1232,7 +1169,6 @@ class LumitTheme {
         ),
       );
 
-  /// Gruvbox dark.
   factory LumitTheme.gruvboxDark() => LumitTheme(
         mode: ThemeMode2.dark,
         surface0: _rgb(0x28, 0x28, 0x28),
@@ -1270,7 +1206,6 @@ class LumitTheme {
         ),
       );
 
-  /// Gruvbox light.
   factory LumitTheme.gruvboxLight() => LumitTheme(
         mode: ThemeMode2.light,
         surface0: _rgb(0xeb, 0xdb, 0xb2),
@@ -1287,7 +1222,6 @@ class LumitTheme {
         hairlineStrong: _rgb(0xbd, 0xae, 0x93),
         accent: _rgb(0xaf, 0x3a, 0x03),
         accentHover: _rgb(0x86, 0x35, 0x0e),
-        // Provisional pending the light-mode pass.
         animated: _rgb(0x8f, 0x64, 0x14),
         success: _rgb(0x79, 0x74, 0x0e),
         warning: _rgb(0xb5, 0x76, 0x14),
@@ -1309,7 +1243,6 @@ class LumitTheme {
         ),
       );
 
-  /// Catppuccin Mocha.
   factory LumitTheme.catppuccinMocha() => LumitTheme(
         mode: ThemeMode2.dark,
         surface0: _rgb(0x11, 0x11, 0x1b),
@@ -1348,7 +1281,6 @@ class LumitTheme {
         ),
       );
 
-  /// Catppuccin Latte.
   factory LumitTheme.catppuccinLatte() => LumitTheme(
         mode: ThemeMode2.light,
         surface0: _rgb(0xe6, 0xe9, 0xef),
@@ -1367,7 +1299,6 @@ class LumitTheme {
         hairlineStrong: _rgb(0xbc, 0xc0, 0xcc),
         accent: _rgb(0x88, 0x39, 0xef),
         accentHover: _rgb(0x6a, 0x2c, 0xba),
-        // Provisional pending the light-mode pass.
         animated: _rgb(0x9c, 0x61, 0x14),
         success: _rgb(0x40, 0xa0, 0x2b),
         warning: _rgb(0xdf, 0x8e, 0x1d),
@@ -1389,7 +1320,6 @@ class LumitTheme {
         ),
       );
 
-  /// Mallow dark.
   factory LumitTheme.mallowDark() => LumitTheme(
         mode: ThemeMode2.dark,
         surface0: _rgb(0x1c, 0x19, 0x20),
@@ -1427,7 +1357,6 @@ class LumitTheme {
         ),
       );
 
-  /// Mallow light.
   factory LumitTheme.mallowLight() => LumitTheme(
         mode: ThemeMode2.light,
         surface0: _rgb(0xeb, 0xe4, 0xec),
@@ -1465,7 +1394,6 @@ class LumitTheme {
         ),
       );
 
-  /// Glacier dark.
   factory LumitTheme.glacierDark() => LumitTheme(
         mode: ThemeMode2.dark,
         surface0: _rgb(0x0c, 0x10, 0x14),
@@ -1503,7 +1431,6 @@ class LumitTheme {
         ),
       );
 
-  /// Glacier light.
   factory LumitTheme.glacierLight() => LumitTheme(
         mode: ThemeMode2.light,
         surface0: _rgb(0xe3, 0xe8, 0xec),
@@ -1541,7 +1468,6 @@ class LumitTheme {
         ),
       );
 
-  /// Hearth dark.
   factory LumitTheme.hearthDark() => LumitTheme(
         mode: ThemeMode2.dark,
         surface0: _rgb(0x1a, 0x15, 0x12),
@@ -1579,7 +1505,6 @@ class LumitTheme {
         ),
       );
 
-  /// Hearth light.
   factory LumitTheme.hearthLight() => LumitTheme(
         mode: ThemeMode2.light,
         surface0: _rgb(0xec, 0xe5, 0xdc),
@@ -1617,7 +1542,6 @@ class LumitTheme {
         ),
       );
 
-  /// Chalk dark.
   factory LumitTheme.chalkDark() => LumitTheme(
         mode: ThemeMode2.dark,
         surface0: _rgb(0x06, 0x06, 0x06),
@@ -1655,7 +1579,6 @@ class LumitTheme {
         ),
       );
 
-  /// Chalk light.
   factory LumitTheme.chalkLight() => LumitTheme(
         mode: ThemeMode2.light,
         surface0: _rgb(0xe6, 0xe6, 0xe6),
@@ -1693,7 +1616,6 @@ class LumitTheme {
         ),
       );
 
-  /// Vellum dark.
   factory LumitTheme.vellumDark() => LumitTheme(
         mode: ThemeMode2.dark,
         surface0: _rgb(0x1e, 0x1d, 0x1b),
@@ -1731,7 +1653,6 @@ class LumitTheme {
         ),
       );
 
-  /// Vellum light.
   factory LumitTheme.vellumLight() => LumitTheme(
         mode: ThemeMode2.light,
         surface0: _rgb(0xe9, 0xe3, 0xd8),
@@ -1769,7 +1690,6 @@ class LumitTheme {
         ),
       );
 
-  /// Neon dark.
   factory LumitTheme.neonDark() => LumitTheme(
         mode: ThemeMode2.dark,
         surface0: _rgb(0x1a, 0x1a, 0x1f),
@@ -1807,7 +1727,6 @@ class LumitTheme {
         ),
       );
 
-  /// Neon light.
   factory LumitTheme.neonLight() => LumitTheme(
         mode: ThemeMode2.light,
         surface0: _rgb(0xe5, 0xe5, 0xec),
@@ -1845,7 +1764,6 @@ class LumitTheme {
         ),
       );
 
-  /// Canopy dark.
   factory LumitTheme.canopyDark() => LumitTheme(
         mode: ThemeMode2.dark,
         surface0: _rgb(0x16, 0x1c, 0x17),
@@ -1883,7 +1801,6 @@ class LumitTheme {
         ),
       );
 
-  /// Canopy light.
   factory LumitTheme.canopyLight() => LumitTheme(
         mode: ThemeMode2.light,
         surface0: _rgb(0xe1, 0xe7, 0xe0),
@@ -1921,7 +1838,6 @@ class LumitTheme {
         ),
       );
 
-  /// Slate dark.
   factory LumitTheme.slateDark() => LumitTheme(
         mode: ThemeMode2.dark,
         surface0: _rgb(0x1a, 0x1a, 0x1a),
@@ -1959,7 +1875,6 @@ class LumitTheme {
         ),
       );
 
-  /// Slate light.
   factory LumitTheme.slateLight() => LumitTheme(
         mode: ThemeMode2.light,
         surface0: _rgb(0xe5, 0xe5, 0xe5),
@@ -1997,7 +1912,6 @@ class LumitTheme {
         ),
       );
 
-  /// Nocturne dark.
   factory LumitTheme.nocturneDark() => LumitTheme(
         mode: ThemeMode2.dark,
         surface0: _rgb(0x19, 0x1a, 0x24),
@@ -2035,7 +1949,6 @@ class LumitTheme {
         ),
       );
 
-  /// Nocturne light.
   factory LumitTheme.nocturneLight() => LumitTheme(
         mode: ThemeMode2.light,
         surface0: _rgb(0xe4, 0xe5, 0xee),
@@ -2073,7 +1986,6 @@ class LumitTheme {
         ),
       );
 
-  /// Tavern dark.
   factory LumitTheme.tavernDark() => LumitTheme(
         mode: ThemeMode2.dark,
         surface0: _rgb(0x26, 0x17, 0x10),
@@ -2111,7 +2023,6 @@ class LumitTheme {
         ),
       );
 
-  /// Tavern light.
   factory LumitTheme.tavernLight() => LumitTheme(
         mode: ThemeMode2.light,
         surface0: _rgb(0xf4, 0xe3, 0xcf),
@@ -2149,7 +2060,6 @@ class LumitTheme {
         ),
       );
 
-  /// Arcane dark.
   factory LumitTheme.arcaneDark() => LumitTheme(
         mode: ThemeMode2.dark,
         surface0: _rgb(0x11, 0x1b, 0x28),
@@ -2187,7 +2097,6 @@ class LumitTheme {
         ),
       );
 
-  /// Arcane light.
   factory LumitTheme.arcaneLight() => LumitTheme(
         mode: ThemeMode2.light,
         surface0: _rgb(0xdf, 0xe6, 0xec),
@@ -2225,7 +2134,6 @@ class LumitTheme {
         ),
       );
 
-  /// Gilt dark.
   factory LumitTheme.giltDark() => LumitTheme(
         mode: ThemeMode2.dark,
         surface0: _rgb(0x20, 0x18, 0x1f),
@@ -2263,7 +2171,6 @@ class LumitTheme {
         ),
       );
 
-  /// Gilt light.
   factory LumitTheme.giltLight() => LumitTheme(
         mode: ThemeMode2.light,
         surface0: _rgb(0xed, 0xe4, 0xd6),
@@ -2383,8 +2290,6 @@ class LumitTheme {
         ),
       );
 
-  // --- Type scale (docs/15-DESIGN §density: 11 px body, 10 px small) -------
-
   static const String fontFamily = 'Hanken Grotesk';
 
   /// Hanken Grotesk has no Cyrillic; Inter stays bundled as the fallback so
@@ -2492,11 +2397,8 @@ class LumitTheme {
   /// by the workspace as it builds the theme, the way the icon weight is.
   static LabelCase? labelCaseChoice;
 
-  /// The label case in force: the one chosen in Settings, else the shape's.
   LabelCase get labelCase => labelCaseChoice ?? tokens.labelCase;
 
-  /// A container label cased the way [labelCase] says: Lantern shouts, Desk
-  /// whispers, Studio leaves the words as they were written.
   String kickerCase(String s) => switch (labelCase) {
         LabelCase.caps => s.toUpperCase(),
         LabelCase.lower => s.toLowerCase(),
@@ -2540,7 +2442,6 @@ class LumitTheme {
                 : const Color(0x14000000)),
       ];
 
-  /// The dimmed backdrop behind a true modal (Settings, the palette).
   Color get modalBackdrop => const Color(0x59000000);
 
   /// The one-click presets on the comp background swatch.
@@ -2565,8 +2466,8 @@ class LumitTheme {
   /// meaning as the theme does. The full wheel is still a click away in the
   /// theme editor — these are the quick answers, not the whole answer.
   static const List<Color> accentPresets = [
-    defaultAccent, // spruce - THE default
-    Color(0xFFE05A72), // clay - what it replaced; one click back
+    defaultAccent,
+    Color(0xFFE05A72),
     Color(0xFF4AA3E0),
     Color(0xFF46C98E),
     Color(0xFFE0A33C),

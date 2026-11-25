@@ -30,16 +30,11 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// This driver's catalogue name.
 pub const MATCH_NAME: &str = "beat_trigger";
 
-/// What the Events row offers.
 pub const EVENT_OPTIONS: [&str; 3] = ["Beat markers", "Detected beats", "Level crossing"];
-/// Events: the comp's beat markers.
 pub const EVENTS_MARKERS: u32 = 0;
-/// Events: beats found in the sound.
 pub const EVENTS_DETECTED: u32 = 1;
-/// Events: the band's level rising past Threshold.
 pub const EVENTS_LEVEL: u32 = 2;
 
 /// What the Band row offers: the whole sound, below 200 Hz, above 4 kHz.
@@ -52,7 +47,6 @@ const OUTPUTS: &[Port] = &[
     Port::new("since", "Time since last", PortType::Number),
 ];
 
-/// Beat trigger's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "beat_trigger",
@@ -65,27 +59,21 @@ const OUTPUTS: &[Port] = &[
     enabled_when = BEAT_TRIGGER_ENABLED_WHEN,
 )]
 pub struct BeatTrigger {
-    /// What counts as an event.
     #[choice(label = "Events", options = EVENT_OPTIONS, default = 0)]
     pub events: u32,
 
-    /// Which sound is listened to, as Audio level's Source row.
     #[choice(options = SOURCE_OPTIONS, default = 0)]
     pub source: u32,
 
-    /// The layer *Layer* and *Clip* listen to.
     #[layer(label = "Audio", self_default = false)]
     pub audio: bool,
 
-    /// The clip *Clip* listens to.
     #[clip]
     pub clip: (),
 
-    /// The part of the sound listened to.
     #[choice(options = BAND_OPTIONS, default = 0)]
     pub band: u32,
 
-    /// How readily a beat is found, as the Beats panel's slider.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -107,7 +95,6 @@ pub struct BeatTrigger {
     )]
     pub min_gap: f32,
 
-    /// The level the band has to rise past.
     #[slider(min = 0.0, max = 1.0, default = 0.2, hard_min = 0.0, unit = Raw)]
     pub threshold: f32,
 
@@ -133,7 +120,6 @@ pub struct BeatTrigger {
     pub decay: f32,
 }
 
-/// The rows each Events choice leaves live.
 pub const BEAT_TRIGGER_ENABLED_WHEN: &[EnabledWhen] = &[
     EnabledWhen {
         param: "source",
@@ -177,7 +163,6 @@ pub const BEAT_TRIGGER_ENABLED_WHEN: &[EnabledWhen] = &[
     },
 ];
 
-/// Beat trigger's behaviour.
 pub struct BeatTriggerDef;
 
 impl EffectDef for BeatTriggerDef {

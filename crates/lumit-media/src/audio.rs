@@ -44,8 +44,6 @@ impl AudioBuffer {
     }
 }
 
-/// Decode the file's first audio stream entirely, resampled to stereo f32
-/// at `target_rate`.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn decode_all(path: &Path, target_rate: u32) -> Result<AudioBuffer, MediaError> {
     let mut reader = AudioReader::open(path, target_rate)?;
@@ -61,9 +59,6 @@ pub fn decode_all(path: &Path, target_rate: u32) -> Result<AudioBuffer, MediaErr
     crate::web::sound::decode_all(path, target_rate)
 }
 
-/// Decode all of `sound`, resampled to stereo f32 at `target_rate`: what
-/// [`decode_all`] is for a file's first stream, for whichever streams `sound`
-/// names.
 pub fn decode_sound(sound: &SoundSource, target_rate: u32) -> Result<AudioBuffer, MediaError> {
     if sound.is_first() {
         return decode_all(&sound.path, target_rate);
@@ -84,7 +79,6 @@ pub fn decode_sound(sound: &SoundSource, target_rate: u32) -> Result<AudioBuffer
     })
 }
 
-/// How many frames [`decode_sound`] asks its reader for at a time.
 const DECODE_FRAMES: usize = 1 << 16;
 
 /// The most streams one [`SoundSource`] names. A file with more than a
@@ -118,7 +112,6 @@ pub struct SoundSource {
 }
 
 impl SoundSource {
-    /// The file's first audio stream, which is all a file with one has.
     #[must_use]
     pub fn file(path: impl Into<PathBuf>) -> Self {
         let path = path.into();
@@ -147,13 +140,11 @@ impl SoundSource {
         }
     }
 
-    /// The streams read, by their place among the file's audio streams.
     #[must_use]
     pub fn streams(&self) -> &[u32] {
         &self.streams
     }
 
-    /// Whether this is the file's first audio stream and nothing else.
     #[must_use]
     pub fn is_first(&self) -> bool {
         self.streams == [0]
@@ -216,7 +207,6 @@ pub struct AudioReader {
     /// A hint: never used to place a sample, only to avoid landing past the
     /// end.
     hint: Option<u64>,
-    /// Whether this file may be landed in at all.
     lands: bool,
     /// Uncompressed or lossless sound, where a landing decodes the very
     /// samples a decode from the top does.
@@ -234,7 +224,6 @@ pub struct AudioReader {
     ended: bool,
     /// The file's length in output frames, once a decode has reached the end.
     total: Option<u64>,
-    /// Set after a landing: the bookkeeping that checks it.
     landing: Option<Landing>,
     /// A landing did not check out. The next read starts again from the top,
     /// and the file is not landed in again.
@@ -261,7 +250,6 @@ struct Landing {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl AudioReader {
-    /// Open `path`'s first audio stream for decoding at `target_rate`.
     pub fn open(path: &Path, target_rate: u32) -> Result<Self, MediaError> {
         Self::open_stream(path, 0, target_rate)
     }
@@ -373,7 +361,6 @@ impl AudioReader {
         self.total
     }
 
-    /// Tell a fresh reader the length another reader of the same file found.
     pub fn set_total(&mut self, total: u64) {
         self.total = Some(total);
     }
@@ -399,8 +386,6 @@ impl AudioReader {
         if self.total.is_some_and(|total| start >= total) {
             return Ok((Vec::new(), true));
         }
-        // A little further on than where the reader stands, inside what it has
-        // already decoded: drop the gap and carry on.
         let held = (self.ready.len() / 2) as u64;
         if start > self.next && start - self.next <= held {
             self.ready.drain(..((start - self.next) * 2) as usize);
@@ -412,8 +397,6 @@ impl AudioReader {
         let want = frames.saturating_mul(2);
         loop {
             if self.inexact || self.overshot {
-                // The landing did not hold: the stretch is reached from the
-                // top instead.
                 self.restart(!self.inexact)?;
                 self.wanted_from = start;
                 self.next = start;
@@ -429,14 +412,10 @@ impl AudioReader {
         Ok((out, self.is_exact()))
     }
 
-    /// Whether what this reader is decoding now is what a decode from the top
-    /// would: it is one, or the sound is lossless.
     fn is_exact(&self) -> bool {
         self.landing.is_none() || self.lossless
     }
 
-    /// The file's exact length in output frames, decoding to the end to find
-    /// it where that has not happened yet.
     pub fn length(&mut self) -> Result<u64, MediaError> {
         if let Some(total) = self.total {
             return Ok(total);
@@ -472,23 +451,18 @@ impl AudioReader {
     fn seek(&mut self, to: u64, exact: bool) -> Result<(), MediaError> {
         self.ready.clear();
         self.stand(to, exact)?;
-        // Whatever standing there decoded on the way is not wanted.
         self.ready.clear();
         self.next = to;
         self.wanted_from = to;
         Ok(())
     }
 
-    /// [`Self::seek`]'s choice between walking on, landing, and starting
-    /// again from the top.
     fn stand(&mut self, to: u64, exact: bool) -> Result<(), MediaError> {
         let rate = u64::from(self.rate);
         if self.inexact || self.overshot {
             self.restart(!self.inexact)?;
         }
         let may_land = self.lands && (self.lossless || !exact);
-        // Whether decoding on from here reaches `to`: it is ahead, and what
-        // is being decoded is good enough for whoever asks.
         let ahead = |r: &Self| to >= r.produced && (r.is_exact() || !exact);
         if ahead(self) && (self.ended || to - self.produced <= WALK_SECONDS * rate || !may_land) {
             return Ok(());
@@ -571,8 +545,6 @@ impl AudioReader {
         Ok(())
     }
 
-    /// Decode one packet's worth, or drain the decoder and the resampler at
-    /// the end of the file. `false` once there is nothing more to decode.
     fn step(&mut self) -> Result<bool, MediaError> {
         if self.ended {
             return Ok(false);
@@ -588,7 +560,6 @@ impl AudioReader {
             None => {
                 self.decoder.send_packet(None)?;
                 self.drain()?;
-                // The end came before the landing did, so nothing checked it.
                 if self
                     .landing
                     .as_ref()
@@ -597,7 +568,6 @@ impl AudioReader {
                     self.overshot = true;
                 }
                 if !self.inexact && !self.overshot {
-                    // Flush the resampler's tail.
                     self.push(None, 0)?;
                     self.total = Some(self.produced);
                 }
@@ -634,7 +604,6 @@ impl AudioReader {
         if self.landing.is_none() {
             if self.origin.is_none() {
                 self.origin = Some(frame.pts);
-                // A file with no timestamps cannot be landed in.
                 self.lands &= frame.pts != ffi::AV_NOPTS_VALUE;
             }
             return Some(0);
@@ -687,7 +656,6 @@ impl AudioReader {
         let frames = u64::try_from(converted).unwrap_or(0);
         let first = self.produced;
         self.produced += frames;
-        // Frames before the wanted one are the run-up, or the walk to it.
         let drop = self.wanted_from.saturating_sub(first).min(frames) as usize;
         let floats = (frames as usize - drop) * 2;
         if floats == 0 {
@@ -733,7 +701,6 @@ impl SoundReader {
         Ok(Self { readers })
     }
 
-    /// As [`AudioReader::reaches`], for the reader with furthest to go.
     #[must_use]
     pub fn reaches(&self, start: u64, exact: bool) -> Option<u64> {
         let mut furthest = 0;
@@ -743,7 +710,6 @@ impl SoundReader {
         Some(furthest)
     }
 
-    /// The sound's length in output frames, once every stream's is known.
     #[must_use]
     pub fn total(&self) -> Option<u64> {
         let mut longest = 0;
@@ -789,7 +755,6 @@ impl SoundReader {
         Ok((sum, all_exact))
     }
 
-    /// As [`AudioReader::length`]: the longest stream's.
     pub fn length(&mut self) -> Result<u64, MediaError> {
         let mut longest = 0;
         for reader in &mut self.readers {
@@ -852,7 +817,6 @@ mod tests {
             / mid.len() as f64)
             .sqrt();
         assert!((rms - 0.3535).abs() < 0.035, "rms {rms}");
-        // Stereo interleave: both channels carry the same mono sine.
         let l = buf.samples[1000];
         let r = buf.samples[1001];
         assert!((l - r).abs() < 1e-3, "L {l} vs R {r}");
@@ -889,9 +853,6 @@ mod tests {
         assert!(peak > 0.3, "the fold-down still carries the sound: {peak}");
     }
 
-    /// Regression: a video-only file has no audio stream, so `decode_all`
-    /// must return `NoStreams` rather than panicking anywhere in the
-    /// packet/frame loop.
     #[test]
     fn decode_all_on_video_only_file_errors_not_panics() {
         let dir = tempfile::tempdir().unwrap();
@@ -905,8 +866,6 @@ mod tests {
         ));
     }
 
-    // A file cut short, as a download that stopped or an export that crashed
-    // leaves one: its start reads as media and the rest is not there.
     #[test]
     fn decode_all_on_truncated_file_errors_not_panics() {
         let dir = tempfile::tempdir().unwrap();
@@ -915,16 +874,9 @@ mod tests {
             return;
         };
         let truncated = crate::index::tests_support::truncated_copy(&file, dir.path(), 200);
-        // A cut-short m4a should fail cleanly; the important assertion is
-        // that decode_all returns rather than panicking either way.
         let _ = decode_all(&truncated, 48_000);
     }
 
-    /// **Each audio stream of a file is its own sound, and several are their
-    /// sum.** A file with a low tone on its first stream and a high one on its
-    /// second: the second read on its own is the high tone and none of the
-    /// low, both together are the two added, and a stream the file has not
-    /// got is silence beside one it has and an error alone.
     #[test]
     fn a_files_audio_streams_are_read_apart_and_together() {
         let dir = tempfile::tempdir().unwrap();
@@ -940,8 +892,6 @@ mod tests {
         assert_eq!(second.frames(), 4 * RATE as usize);
         assert_eq!(both.frames(), second.frames(), "as long as the longest");
 
-        // How many times a second the wave crosses nought going up, which is
-        // its pitch.
         let pitch = |samples: &[f32]| {
             let left: Vec<f32> = samples.iter().step_by(2).copied().collect();
             let rises = left.windows(2).filter(|w| w[0] < 0.0 && w[1] >= 0.0);
@@ -954,7 +904,6 @@ mod tests {
             assert!((sum - apart).abs() < 1e-6, "sample {i}");
         }
 
-        // A stretch of the sum read on its own is the stretch the whole holds.
         let mut reader = SoundReader::open(&SoundSource::streams_of(&file, &[0, 1]), RATE).unwrap();
         let from = 2 * RATE as usize + 321;
         let (got, exact) = reader.read(from as u64, RATE as usize * 2, true).unwrap();
@@ -1000,8 +949,6 @@ mod tests {
     #[test]
     fn a_stretch_decoded_alone_matches_the_whole_file_across_a_seam() {
         let dir = tempfile::tempdir().unwrap();
-        // Name, rate, encoder arguments, whether it lands, and whether a
-        // landing is the same samples.
         let cases = [
             (
                 "plain.m4a",
@@ -1015,7 +962,6 @@ mod tests {
             ("sweep.mka", 44_100, &["-c:a", "aac"][..], false, true),
         ];
         const RATE: u32 = 48_000;
-        // Two seconds, the mixer's own block.
         const BLOCK: usize = 2 * RATE as usize;
         for (name, rate, args, lands, same) in cases {
             let Some(file) = sweep(dir.path(), name, rate, args) else {
@@ -1057,8 +1003,6 @@ mod tests {
             }
             assert_eq!(reader.lands(), lands, "{name}: every landing checked out");
 
-            // Asked for exactly, every file is the whole-file decode, and
-            // says so: what an export reads.
             for block in order {
                 let (got, exact) = reader.read((block * BLOCK) as u64, BLOCK, true).unwrap();
                 assert!(
@@ -1067,9 +1011,6 @@ mod tests {
                 );
             }
 
-            // A fresh reader finds the length without decoding the file
-            // through, and reads a stretch that starts mid-block as a trimmed
-            // clip does.
             let mut fresh = AudioReader::open(&file, RATE).unwrap();
             assert_eq!(fresh.length().unwrap(), whole.frames() as u64, "{name}");
             let odd = 5 * RATE as usize + 12_345;

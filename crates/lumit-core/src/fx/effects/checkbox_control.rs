@@ -9,7 +9,6 @@
 use crate::fx::{registry::EffectDef, registry::EffectMetadata, schema::EffectSchema};
 use lumit_fx_macros::Effect;
 
-/// The Checkbox control's one control.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "checkbox_control",
@@ -27,7 +26,6 @@ pub struct CheckboxControl {
     pub checkbox: bool,
 }
 
-/// The Checkbox control's behaviour: none, by design.
 pub struct CheckboxControlDef;
 
 impl EffectDef for CheckboxControlDef {

@@ -20,8 +20,6 @@ import 'package:lumit_flutter/shell/window_frame.dart';
 import 'package:lumit_flutter/state/faults.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 
-/// The whole application, when there is no application: a heading, a line of
-/// explanation, and the error itself where it can be selected and copied.
 class StartupFailureApp extends StatelessWidget {
   const StartupFailureApp(this.detail, {super.key});
 

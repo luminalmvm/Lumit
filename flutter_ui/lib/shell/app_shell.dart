@@ -1,5 +1,3 @@
-// The application widget, the boot gate, and the shell view that dispatches
-// keys and lays the panels out. Lifted out of main.dart unchanged.
 
 import 'dart:async' show unawaited;
 import 'dart:io';
@@ -135,8 +133,6 @@ class LumitAppNew extends StatelessWidget {
         value: state,
         child: ChangeNotifierProvider.value(
           value: uiState,
-          // Rebuilt when the workspace changes, so the scale slider and the
-          // scheme picker take effect as they are moved.
           child: ListenableBuilder(
             listenable: uiState,
             builder: (context, _) => ThemeScope(
@@ -162,9 +158,6 @@ class LumitAppNew extends StatelessWidget {
                       : WindowBackdrop.showing
                           ? WindowBackdrop.tint
                           : uiState.theme.room,
-                  // Settings → Interface → UI scale, the Flutter counterpart of
-                  // egui's `set_pixels_per_point`: layout and hit-testing scale
-                  // together (see widgets/ui_scale.dart).
                   child: UiScaleView(
                     scale: uiState.workspace.interface.uiScale,
                     // Over the Overlay, so a dialogue's scrim never covers
@@ -196,7 +189,6 @@ class _RoomPicture extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Rebuilt with the theme, which is rebuilt whenever the style changes.
     ThemeScope.of(context);
     final style = StyleSheet.current;
     final path = style?.roomPicture;
@@ -332,10 +324,8 @@ class LumitAppView extends StatefulWidget {
 }
 
 class _LumitAppViewState extends State<LumitAppView> {
-  /// Lets go of this view's Escape claim (the maximised pane).
   VoidCallback? _escapeRelease;
 
-  /// And of its claim on the lowest rung, the Viewer's last 3D view.
   VoidCallback? _viewEscapeRelease;
 
   @override
@@ -348,8 +338,6 @@ class _LumitAppViewState extends State<LumitAppView> {
     // funeral). A hardware-keyboard handler fires wherever focus is; the
     // focused-text-field guard inside _onKey keeps typing safe.
     HardwareKeyboard.instance.addHandler(_handleKey);
-    // A caption asked to be typed into, from the Timeline or the Viewer, is
-    // typed into in the Captions panel, which comes up for it.
     _captionUi = context.read<LumitUiState>();
     _captionUi!.captionSelection.typeRequest.addListener(_frontCaptions);
     // A pane filling the window is a full-window surface, so Escape puts the
@@ -392,7 +380,6 @@ class _LumitAppViewState extends State<LumitAppView> {
     _clipboardWatch = AppLifecycleListener(
       onShow: () => context.read<LumitUiState>().adoptSystemClipboard(),
       onRestart: () => context.read<LumitUiState>().adoptSystemClipboard(),
-      // Icons and styles edited elsewhere show when the window comes back.
       onResume: () => context.read<LumitUiState>().workspace.refreshFromDisk(),
     );
     // The first-run questions, after the first frame so there is an
@@ -449,12 +436,8 @@ class _LumitAppViewState extends State<LumitAppView> {
       });
     });
     _share = context.read<LumitState>().share..addListener(_offerConflicts);
-    // Which graphics templates the library has newer versions of, and which
-    // timeline had the keys last, followed from the start.
     TemplateUpdates.of(context.read<LumitState>(), context.read<LumitUiState>());
     listenForOpenRequests(_openAsked);
-    // A friend's invite that comes while Lumit is open is said on the status
-    // line, with the way to the Multi-edit window, where it is joined.
     context.read<LumitUiState>().friendInvites.onNew = (invite) {
       if (!mounted) return;
       final app = context.read<LumitState>();
@@ -543,7 +526,6 @@ class _LumitAppViewState extends State<LumitAppView> {
 
   late final ShareState _share;
 
-  /// How many conflicts were waiting the last time the share state spoke.
   int _held = 0;
 
   /// Conflicts a merge has just left open their window by themselves. Not
@@ -567,7 +549,6 @@ class _LumitAppViewState extends State<LumitAppView> {
     }
   }
 
-  /// The question about someone's export is on screen.
   bool _asking = false;
 
   LumitUiState? _captionUi;
@@ -664,7 +645,6 @@ class _LumitAppViewState extends State<LumitAppView> {
       child: DockWidget(
         root: uiState.split,
         buildPanel: buildPanelBodyFrb,
-        // Persisted, so an arrangement survives a restart.
         onLayoutChanged: uiState.saveLayout,
         activePanel: uiState.activePane,
         maximised: uiState.maximisedPane,
@@ -681,8 +661,6 @@ class _LumitAppViewState extends State<LumitAppView> {
     return Column(
       children: [
         LumitMenuBarFrb(app: state),
-        // The tools, under the menu and above everything else, where a
-        // toolbar goes, and where docs/07 §1.7 puts it.
         if (!rail) const LumitToolBarFrb(),
         // A row with or without the rail, so the dock stays where it is when
         // a style brings the rail or takes it away. Moved, it would be built
@@ -698,8 +676,6 @@ class _LumitAppViewState extends State<LumitAppView> {
             ],
           ),
         ),
-        // The strip under the dock (docs/07 §1): the running export's
-        // progress and Cancel, reachable without the dialogue open.
         const StatusLineFrb(),
       ],
     );
@@ -788,7 +764,6 @@ class _LumitAppViewState extends State<LumitAppView> {
       return KeyEventResult.ignored;
     }
 
-    // The Transcript panel's caret and text-size keys are its own.
     if (ui.activePanel == Panel.transcript && transcriptKeyOf(event) != null) {
       return KeyEventResult.ignored;
     }
@@ -827,7 +802,6 @@ class _LumitAppViewState extends State<LumitAppView> {
     // A tool action can also arrive from the primary lookup, if someone rebinds
     // one into a context a panel is. Same handler either way.
     if (ui.tools.handleAction(action)) return KeyEventResult.handled;
-    // A held key repeats, and these are pressed once however long it is held.
     if (event is KeyRepeatEvent && _pressedOnce(action)) {
       return KeyEventResult.handled;
     }
@@ -911,7 +885,6 @@ class _LumitAppViewState extends State<LumitAppView> {
                   ))
                     keyFrame(key, ui.model.fps).round(),
                 ]
-              // A cut between clips, so only a Sequence layer has any.
               : [
                   for (final clip in entry.layer.getClips()) ...[
                     clip.startFrame,
@@ -919,7 +892,6 @@ class _LumitAppViewState extends State<LumitAppView> {
                   ],
                 ];
           for (final frame in frames) {
-            // One outside the composition is nowhere for a playhead to stand.
             if (frame < 0 || frame >= ui.model.durationFrames) continue;
             if (before ? frame >= at : frame <= at) continue;
             if (to == null || (before ? frame > to : frame < to)) to = frame;
@@ -932,7 +904,6 @@ class _LumitAppViewState extends State<LumitAppView> {
         }
       case 'playback.comp.start':
         ui.playheadFrame.value = 0;
-      // Vegas's loop key: the work area loops, or plays once and stops.
       case 'playback.loop.toggle':
         ui.workspace.setLoopMode(
             ui.workspace.performance.loop == LoopMode.once
@@ -941,8 +912,6 @@ class _LumitAppViewState extends State<LumitAppView> {
       case 'playback.comp.end':
         final last = (comp?.durationFrames() ?? 1) - 1;
         ui.playheadFrame.value = last < 0 ? 0 : last;
-      // Ten frames at a time (Shift+PageUp/PageDown, docs/07 §15), through the
-      // same clamped step the single-frame keys take.
       case 'playback.frame.prev10':
         ui.stepFrame(-10);
       case 'playback.frame.next10':
@@ -990,7 +959,6 @@ class _LumitAppViewState extends State<LumitAppView> {
         } else {
           ramp();
         }
-      // The Effect menu's two rows above its categories.
       case 'effect.apply.last':
         final layers = ui.selectedLayers.value;
         final last = EffectDragData.last;
@@ -1022,7 +990,6 @@ class _LumitAppViewState extends State<LumitAppView> {
         } else {
           state.toggleRetime(layer);
         }
-      // Layer ▸ New from the keyboard: the menu row's own call.
       case 'layer.new.light.point' ||
             'layer.new.solid' ||
             'layer.new.audio' ||
@@ -1128,7 +1095,6 @@ class _LumitAppViewState extends State<LumitAppView> {
         handled = cameraToView(state, ui);
       case 'viewer.3d.place':
         ui.requestViewerCamera(ViewerCameraCommand.placeOnSurface);
-      // How the view in front shows models.
       case 'viewer.look.lines':
         ui.toggleLines(ui.activeViewId);
       case 'viewer.look.faces':
@@ -1147,22 +1113,16 @@ class _LumitAppViewState extends State<LumitAppView> {
       case 'viewer.look.normals':
         ui.setModelDisplay(ui.activeViewId,
             display: BridgeModelDisplay.normals);
-      // The panel under the pointer fills the window and comes back
-      // (docs/07 §1.1's backtick). The keymap has always carried this; this is
-      // where it finally does something.
       case 'panel.maximise':
         ui.toggleMaximisedPane();
-      // The panel the keyboard is in, into a window of its own and back.
       case 'panel.float':
         final pane = ui.activePane.value;
         handled = pane != null && DockCommands.float(pane);
       case 'panel.dock':
         final pane = ui.activePane.value;
         handled = pane != null && DockCommands.dock(pane);
-      // The Viewer's picture alone on a display of its own, and off again.
       case 'window.monitor':
         unawaited(ui.toggleVideoMonitor());
-      // Moving between panels without the mouse (docs/07 §15, "Panels").
       case 'panel.focus.next':
         handled = ui.cyclePanelFocus(1);
         if (ui.activePane.value case final pane? when handled) {
@@ -1210,8 +1170,6 @@ class _LumitAppViewState extends State<LumitAppView> {
           );
           state.notifyDocumentChanged();
         }
-      // The picked effects, else every selected layer, through the call the
-      // Edit menu makes.
       case 'layer.duplicate' || 'effect.duplicate':
         handled = duplicateSelectionFrb(state, ui);
       // The light fold, beside the heavy one below it. Ctrl+G gathers
@@ -1292,7 +1250,6 @@ class _LumitAppViewState extends State<LumitAppView> {
         } else {
           exportRemoteFrb(context);
         }
-      // Composition ▸ Save frame as….
       case 'comp.frame.save':
         if (comp == null) {
           handled = false;
@@ -1378,7 +1335,6 @@ class _LumitAppViewState extends State<LumitAppView> {
           addMarkerFrb(comp, frame: ui.playheadFrame.value);
           state.notifyDocumentChanged();
         }
-      // The marker either side of the playhead, the menu row's own step.
       case 'marker.prev' || 'marker.next':
         handled = comp != null &&
             stepToMarkerFrb(ui, comp, back: action == 'marker.prev');
@@ -1438,7 +1394,6 @@ class _LumitAppViewState extends State<LumitAppView> {
         } else if (ui.sourceView case final view?) {
           ui.markSource(view, markIn: action == 'cut.mark.in');
         }
-      // Shift+I and Shift+O stand the source on its marks.
       case 'cut.goto.in' || 'cut.goto.out':
         final view = ui.sourceView;
         final mark =
@@ -1448,7 +1403,6 @@ class _LumitAppViewState extends State<LumitAppView> {
         } else {
           ui.seekFootageView(view, mark);
         }
-      // The two ways of putting the marked span down at the playhead.
       case 'cut.insert' || 'cut.overwrite':
         if (ui.sourceView case final view?) {
           ui.placeSource(view, insert: action == 'cut.insert');
@@ -1506,8 +1460,6 @@ class _LumitAppViewState extends State<LumitAppView> {
       // and a row that would be greyed out leaves the key alone.
       case 'keyframe.toggle':
         handled = setKeyframeRow(state, ui).press();
-      // After Effects' Alt+Shift+P and its four siblings: the same command on
-      // one Transform property of the selected layers, with no row to pick.
       case final id when id.startsWith('keyframe.toggle.'):
         handled = toggleTransformKeys(
             state, ui, id.substring('keyframe.toggle.'.length));
@@ -1519,7 +1471,6 @@ class _LumitAppViewState extends State<LumitAppView> {
         handled = keyframeSpeedRow(context, state, ui).press();
       case 'expression.add':
         handled = addExpressionRow(context, state, ui).press();
-      // The selected rows, as the Composition menu's own row adds them.
       case 'template.controls.add':
         handled = addToControlsRow(ui).press();
       case 'layer.stabilise':
@@ -1585,14 +1536,12 @@ class _LumitAppViewState extends State<LumitAppView> {
         showLibrary(context);
       case 'help.open':
         openLumitHelp(state);
-      // The View menu's two switches that had no key.
       case 'viewer.controls.toggle':
         ui.setViewerLayerControls(!ui.viewerLayerControls);
       case 'viewer.snap.grid.toggle':
         ui.tools.snapToGrid = !ui.tools.snapToGrid;
       case 'path.points.transform':
         ui.requestPointsTurn();
-      // A panel put up or taken down, as its tick in the Window menu does.
       case final id when id.startsWith('panel.toggle.'):
         final panel = Panel.values
             .where((panel) => panelToggleAction(panel) == id)

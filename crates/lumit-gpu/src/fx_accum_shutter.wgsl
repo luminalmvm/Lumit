@@ -26,7 +26,7 @@
 
 struct Params {
     anchor: f32,  // where the frame's own time falls across the open shutter, 0..1
-    n: f32,       // how many sub-frame samples there are
+    n: f32,
     k: f32,       // which one this dispatch is folding in, 0..n-1
     first: f32,   // 1 on the first sample: start the accumulator rather than add to it
 };

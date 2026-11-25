@@ -1,8 +1,3 @@
-// The Timeline's outline column: the gutter scrollbar, the group seams, the
-// column headers, the key readout and the list of rows itself.
-//
-// Split out of timeline_panel_frb.dart; one outline row is
-// timeline_outline_row_frb.dart.
 
 import 'dart:math' as math;
 
@@ -53,8 +48,6 @@ class GutterScrollbar extends StatefulWidget {
 
 class _GutterScrollbarState extends State<GutterScrollbar>
     with TickerProviderStateMixin {
-  /// The thumb lighting and swelling under the pointer, as every other
-  /// scrollbar's does.
   late final HoverGlow _glow = HoverGlow(this, () => setState(() {}));
 
   @override
@@ -79,7 +72,6 @@ class _GutterScrollbarState extends State<GutterScrollbar>
         }
         final viewport = position.viewportDimension;
         final range = position.maxScrollExtent;
-        // Nothing overflows: no thumb, and nothing to grab at.
         if (range <= 0.5 || viewport <= 0) return const SizedBox.expand();
 
         return LayoutBuilder(
@@ -229,8 +221,6 @@ class _GroupSeam extends StatefulWidget {
 /// panel already follows: a bar stages in [BarDragPreview], a key in
 /// `_KeyLaneState`, a work-area edge in the ruler's own `_dragFrame`.
 class _GroupSeamState extends State<_GroupSeam> {
-  /// How far the seam has been dragged since the button went down, or null
-  /// when no drag is in flight.
   double? _staged;
 
   @override
@@ -326,15 +316,12 @@ class ColumnHeader extends StatelessWidget {
   final bool matteToggles;
   final void Function(TimelineGroup dragged, TimelineGroup target) onReorder;
 
-  /// A seam dragged: widen (or narrow) the group on its left by `delta`.
   final void Function(TimelineGroup group, double delta) onResize;
 
   /// The same drag as it happens, and null when it ends (T4) — what the
   /// outline draws its rows at while the hand is on the seam.
   final void Function(TimelineGroup group, double? delta) onResizeLive;
 
-  /// A right-click anywhere on the headings, which opens the list of columns
-  /// to show and hide.
   final ValueChanged<Offset> onMenu;
 
   const ColumnHeader({
@@ -437,7 +424,6 @@ class ColumnHeader extends StatelessWidget {
   /// naming its column, which for a truncated word is how the whole of it is
   /// still read.
   Widget _cells(LumitTheme t, TimelineGroup group, double width) {
-    /// One kicker over a column, left-aligned on the column's own edge.
     Widget title(String text, String tip, double cellWidth,
             {double inset = 0}) =>
         SizedBox(
@@ -504,7 +490,6 @@ class ColumnHeader extends StatelessWidget {
           ],
         ),
       TimelineGroup.render => title(l10n.columnModes, l10n.columnModes, width),
-      // The render-time column's header is its switch — see timeline_timings.
       TimelineGroup.timings => const TimingsHeaderCell(),
       TimelineGroup.compose => () {
           final (matte, blend) =
@@ -727,18 +712,13 @@ class LayerSelection {
     this.otherProperties = const {},
   });
 
-  /// Whether this layer is one of the selected ones — what its row and its bar
-  /// draw lit.
   final bool selected;
   final bool highlighted;
   final List<String> properties;
   final Map<String, List<Color>> colours;
 
-  /// The colour of each other person who has this layer selected, or
-  /// something on it.
   final List<int> others;
 
-  /// The same for this layer's property rows, by path.
   final Map<String, List<int>> otherProperties;
 
   static LayerSelection of(TimelineSelection all, String layerId) {
@@ -893,7 +873,6 @@ class _LayerBlockState extends State<LayerBlock> {
   }
 }
 
-/// The left column: one row per layer, with its switches and columns.
 class Outline extends StatelessWidget {
   final CompositionReference comp;
 
@@ -907,13 +886,9 @@ class Outline extends StatelessWidget {
   /// hides the rows around it.
   final List<BridgeLayerEntry> stack;
 
-  /// The column groups in their current order and at their current widths
-  /// (docs/07 §4.2) — rows draw their cells to match the header's.
   final List<TimelineGroup> groupOrder;
   final Map<TimelineGroup, double> widths;
 
-  /// Whether the compose group's width carries the matte mode toggles' room —
-  /// the panel's one answer for the whole outline.
   final bool matteToggles;
 
   /// Which layers and rows are picked and which layer is marked — listened to
@@ -924,7 +899,6 @@ class Outline extends StatelessWidget {
   final ValueChanged<String> onEditProperty;
   final Set<int> Function(String path) keysPickedOn;
 
-  /// Open or close a Sequence layer's view.
   final void Function(BridgeLayerEntry entry)? onOpenSequence;
   final ValueChanged<String> onToggle;
   final void Function(List<String> paths, bool open)? onFoldPaths;
@@ -939,7 +913,6 @@ class Outline extends StatelessWidget {
   final LayerDragState layerDrag;
   final List<double> blockHeights;
 
-  /// The layer `Enter` has just asked to rename.
   final ValueNotifier<UuidValue?> renameRequest;
 
   /// What a group header row can be asked to do — the panel's, so the
@@ -996,14 +969,10 @@ class Outline extends StatelessWidget {
     // The rows on screen, which is what a drag and a multi-row command act
     // on.
     final layers = [for (final row in rows) row.entry];
-    // Each layer's number, looked up once here and not once a row.
     final numbers = {
       for (var i = 0; i < stack.length; i++)
         stack[i].layer.internallayerId.toString(): i + 1,
     };
-    // Only the blocks in view are built; the rest are two blanks holding the
-    // stack open, so the outline costs what is on screen rather than what the
-    // comp has.
     return LazyBlocks(
       // Named for the same reason the lane half's band is: a zoom is
       // the lanes' business, so a budget test needs to be able to read this
@@ -1088,7 +1057,6 @@ class Outline extends StatelessWidget {
                   key: ValueKey<String>('tl-row-${rows[i].id}'),
                   comp: comp,
                   entry: rows[i].entry,
-                  // Only a layer with a view of its own to open in place.
                   onOpenSequence: rows[i].entry.info.kind ==
                               BridgeLayerKind.sequence ||
                           rows[i].captions
@@ -1127,7 +1095,6 @@ class Outline extends StatelessWidget {
                   key: ValueKey<String>('tl-seq-room-${rows[i].id}'),
                   height: rows[i].sequenceExtra,
                 ),
-              // The fold-out, from the same list the lanes leave room for.
               if (rows[i].bodyDrawn)
                 for (final row in rows[i].drawnRows)
                   // A raw pointer listener, not a gesture: touching a sub-item

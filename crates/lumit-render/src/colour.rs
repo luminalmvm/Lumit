@@ -37,29 +37,21 @@ use lumit_colour::{
 };
 use lumit_core::model::{Document, WorkingSpace};
 
-/// Which transform a baked artefact is, so two of them are never confused for
-/// each other in the cache.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Edge {
-    /// A footage item's colour space → the working space.
     Input(String),
-    /// The working space → what a display shows through a view.
     DisplayView(String, String),
-    /// The working space → a named space, which is what an export delivers.
     Output(String),
-    /// One named space to another, an empty name being the working space on
-    /// either side: the OCIO colour space transform effect (docs/08 §3.97).
-    Convert { from: String, to: String },
-    /// A named space (empty: the working space) → a display and view, or the
-    /// reverse: the OCIO display transform effect.
+    Convert {
+        from: String,
+        to: String,
+    },
     Display {
         input: String,
         display: String,
         view: String,
         inverse: bool,
     },
-    /// A look between two named spaces (empty: the working space): the OCIO
-    /// look transform effect.
     Look {
         input: String,
         look: String,
@@ -80,22 +72,14 @@ pub enum Edge {
 /// where these are built.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TableRequest {
-    /// A `lut` effect's `.cube` path.
     Cube(String),
-    /// One of the OCIO effects' tables.
     Ocio(OcioRequest),
 }
 
-/// An OCIO effect's table: an edge of the project's config, or a file read
-/// on its own, which needs no config at all.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum OcioRequest {
     Config(Edge),
-    /// The OCIO file transform effect: a LUT or CDL file, forward or inverted.
-    File {
-        path: String,
-        inverse: bool,
-    },
+    File { path: String, inverse: bool },
 }
 
 /// A refusal as the frontend needs it: the stable id it writes its own
@@ -138,20 +122,13 @@ impl Refusal {
 /// so a refusal is per name and said where the name is offered (§3.3).
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Item {
-    /// A colour space footage may be tagged with: the space → the working space.
     Input(String),
-    /// A colour space an export may deliver: the working space → the space.
     Output(String),
-    /// A display and one of its views.
     View(String, String),
-    /// A look, by name.
     Look(String),
 }
 
-/// A config the renderer has tried to load, in whichever of the three states it
-/// ended up in.
 pub struct Loaded {
-    /// The path the document named, for the sentence the frontend shows.
     pub path: String,
     /// The content hash of the config file. Part of every frame's name, so
     /// editing the config on disk retires the frames it made.
@@ -186,29 +163,21 @@ pub struct Loaded {
 }
 
 impl Loaded {
-    /// Whether this config was read and parsed, which is the one question the
-    /// degrade ladder asks. What it cannot make is per name, in [`Self::problems`].
     #[must_use]
     pub fn usable(&self) -> bool {
         self.config.is_some()
     }
 
-    /// Every name this config offers but cannot make, with the engine's
-    /// sentence and the keyed refusal. Empty for a config that does all it says.
     #[must_use]
     pub fn problems(&self) -> &BTreeMap<Item, (String, Refusal)> {
         &self.problems
     }
 
-    /// The working space's name when the project composites in the config's
-    /// `scene_linear`, `None` for Lumit's own linear Rec.709.
     #[must_use]
     pub fn working_space(&self) -> Option<&str> {
         self.config.as_ref()?.working_space()
     }
 
-    /// Linear Rec.709 → the working space, or `None` when they are one and
-    /// the same for rendering (see the field).
     #[must_use]
     pub fn rec709_to_working(&self) -> Option<&lumit_colour::matrix::Matrix34> {
         self.rec709_to_working.as_ref()
@@ -382,8 +351,6 @@ fn srgb_curve(dir: Direction) -> Op {
 
 impl Loaded {}
 
-/// The renderer's colour state: at most one config, reloaded when the document
-/// points somewhere else or the file underneath changes.
 #[derive(Default)]
 pub struct ColourState {
     loaded: Option<Arc<Loaded>>,
@@ -483,9 +450,6 @@ impl ColourState {
     }
 }
 
-/// The look-up-table files the config at `path` names, for whoever has to
-/// carry a config somewhere whole ([`LoadedConfig::files_read`]). Empty for a
-/// config that will not read.
 #[must_use]
 pub fn config_files(path: &Path) -> Vec<std::path::PathBuf> {
     LoadedConfig::load(path)
@@ -493,8 +457,6 @@ pub fn config_files(path: &Path) -> Vec<std::path::PathBuf> {
         .unwrap_or_default()
 }
 
-/// Load and check a config, turning every failure into a state rather than an
-/// error (§3.3).
 fn load(path: &str, hash: u64, present: bool, working: WorkingSpace) -> Loaded {
     let empty = |problem: String, refusal: Refusal| Loaded {
         path: path.to_string(),
@@ -565,25 +527,6 @@ fn load(path: &str, hash: u64, present: bool, working: WorkingSpace) -> Loaded {
     }
 }
 
-/// The config's content hash — the config file's own bytes, plus the identity
-/// of every look-up-table file it names (§5.5) — folded to the 64 bits a frame
-/// key wants.
-///
-/// A config is not one file: it points at `.spi3d`, `.cube` and `.clf` files
-/// beside it, and editing one of those changes the picture just as surely as
-/// editing the config does. So each one is folded in here, and a frame made
-/// before the edit is named differently from a frame made after it.
-///
-/// ponytail: the LUT files are folded in by path, length and last-modified
-/// stamp rather than by their bytes — the same identity
-/// [`crate::fxops::LutCache`] keys an effect's `.cube` on, and for the
-/// same reason: this runs at the top of every render, and re-reading tens of
-/// megabytes of cube per frame to be told nothing changed is a cost that only
-/// shows up on someone else's machine. The ceiling is an edit that changes
-/// neither length nor stamp — a hex editor swapping bytes in place, or a build
-/// step restoring the mtime it found — which keeps the frames it made until the
-/// project is reloaded. If that ever bites, hash the bytes and cache each
-/// file's hash against its stamp.
 fn content_hash(bytes: &[u8], files: &[std::path::PathBuf], working: WorkingSpace) -> u64 {
     let mut hasher = blake3::Hasher::new();
     hasher.update(bytes);
@@ -670,8 +613,6 @@ pub fn tables(artefact: &Artefact) -> lumit_gpu::OcioTables {
     }
 }
 
-/// The footage colour space a layer's pixels arrived in, if the layer is
-/// footage and somebody has said.
 #[must_use]
 pub fn footage_colour_space(doc: &Document, kind: &lumit_core::model::LayerKind) -> Option<String> {
     let lumit_core::model::LayerKind::Footage { item } = kind else {
@@ -709,8 +650,6 @@ pub struct InputTransforms {
 }
 
 impl InputTransforms {
-    /// Bake and upload one artefact per distinct colour space named by the
-    /// document's footage items.
     #[must_use]
     pub fn build(
         doc: &Document,
@@ -757,23 +696,17 @@ impl InputTransforms {
             .or(self.default.as_ref())
     }
 
-    /// Whether this frame needs any input transform at all — the cheap check
-    /// that keeps an ordinary project's render exactly as it was.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.by_space.is_empty() && self.default.is_none()
     }
 }
 
-/// Whether an artefact is the factorised shape, for the tests that care which
-/// form a chain took.
 #[must_use]
 pub fn is_factorised(artefact: &Artefact) -> bool {
     matches!(artefact, Artefact::Factorised { .. })
 }
 
-/// How many stages a factorised artefact has — the number the fixed-shape
-/// guard bounds at three.
 #[must_use]
 pub fn stage_count(artefact: &Artefact) -> usize {
     match artefact {
@@ -782,7 +715,6 @@ pub fn stage_count(artefact: &Artefact) -> usize {
     }
 }
 
-/// The stages, for a test that wants to look at them.
 #[must_use]
 pub fn stages(artefact: &Artefact) -> &[Stage] {
     match artefact {

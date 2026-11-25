@@ -13,7 +13,6 @@ import 'package:web/web.dart' as web;
 
 import 'web_player_page.dart';
 
-/// The bundled player script, listed in pubspec under `assets/players/`.
 const String _playerScript = 'assets/players/lottie/lottie_svg.min.js';
 
 /// The page's `window.lumit`: calls go up to this window and events come
@@ -36,14 +35,11 @@ window.lumit = (function () {
 })();
 </script>''';
 
-/// What the window tells the page, and what the page tells it.
 class WebPlayerController {
   WebPlayerController({required this.onFrame, this.onEnded});
 
-  /// The frame the page is on.
   final ValueChanged<int> onFrame;
 
-  /// A file that doesn't loop has played to its end.
   final VoidCallback? onEnded;
 
   _WebPlayerState? _page;
@@ -56,7 +52,6 @@ class WebPlayerController {
   bool _playing = false;
   int _frame = 0;
 
-  /// A new file: [kind] is `lottie` or `svg`. Played from [frame].
   void load({
     required Uint8List bytes,
     required String kind,
@@ -89,7 +84,6 @@ class WebPlayerController {
     _page?._post({'event': 'seek', 'data': {'frame': frame}});
   }
 
-  /// What the page shows behind the picture, as a CSS background.
   void setGround(String css) {
     _ground = css;
     _page?._post({'event': 'ground', 'data': {'css': css}});
@@ -111,14 +105,11 @@ class WebPlayer extends StatefulWidget {
 }
 
 class _WebPlayerState extends State<WebPlayer> {
-  /// The page's frame, once the view has made it.
   web.HTMLIFrameElement? _frame;
   late final JSFunction _listener = _message.toJS;
 
-  /// The page has run its script and is listening.
   bool _up = false;
 
-  /// The blob URL of the file the page was last given.
   String? _url;
 
   @override
@@ -168,7 +159,6 @@ class _WebPlayerState extends State<WebPlayer> {
   void _post(Map<String, Object?> message) => _frame?.contentWindow
       ?.postMessage(jsonEncode(message).toJS, web.window.origin.toJS);
 
-  /// Hand the page the controller's file, to show where the transport is.
   void _load() {
     final c = widget.controller;
     final bytes = c._bytes;
@@ -219,7 +209,6 @@ class _WebPlayerState extends State<WebPlayer> {
     }
   }
 
-  /// Flutter's own iframe view, which lets the element go with the view.
   @override
   Widget build(BuildContext context) => HtmlElementView.fromTagName(
         tagName: 'iframe',

@@ -34,7 +34,6 @@ const _turns = ['rotation_x', 'rotation_y', 'rotation_z'];
 const double _moveStep = 10;
 const double _turnStep = math.pi / 12;
 
-/// The handles on the part `uiState.pickedPart` names, over [boxes]' layer.
 class ViewerPartGizmo extends StatefulWidget {
   final CompositionReference comp;
   final LumitUiState uiState;
@@ -147,7 +146,6 @@ class _ViewerPartGizmoState extends State<ViewerPartGizmo> {
       _place = box.layer.getModelPartPlace(
           part_: UuidValue.fromString(part), atFrame: frame);
     } catch (_) {
-      // The layer went away between the pick and this frame.
       _place = null;
     }
     return _place;
@@ -163,7 +161,6 @@ class _ViewerPartGizmoState extends State<ViewerPartGizmo> {
   bool get _tools =>
       _turning || widget.uiState.tools.tool.group == ToolGroup.select;
 
-  /// Whether an expression writes the rows the handles would.
   bool get _driven => (_turning ? _turns : _moves)
       .any((id) => _scalar(id) is BridgeScalar_Expression);
 
@@ -251,7 +248,6 @@ class _ViewerPartGizmoState extends State<ViewerPartGizmo> {
           effects: layer.getModelRows(),
         );
       } catch (_) {
-        // The layer went away mid-drag, there is nothing to put back.
       }
     }
     setState(() {
@@ -293,7 +289,6 @@ class _ViewerPartGizmoState extends State<ViewerPartGizmo> {
         frame: frame, scale: widget.uiState.viewerScale));
   }
 
-  /// What the drag in hand has changed, by the pointer.
   List<String> get _readout {
     if (_held == null) return const [];
     if (_ring != null) {
@@ -469,7 +464,6 @@ class _PartPainter extends CustomPainter {
       held: held,
       tint: driven ? drivenTint : null,
     );
-    // The pivot, which the rows turn it about.
     canvas.drawCircle(g.centre, 3.5, Paint()..color = outline);
     canvas.drawCircle(g.centre, 2.5, Paint()..color = line);
     if (pointer case final at?) {

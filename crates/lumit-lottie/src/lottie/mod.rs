@@ -43,7 +43,6 @@ use value::{Class, Fmt};
 /// none of its fixes for older files.
 const VERSION: &str = "5.12.2";
 
-/// Everything one export carries from layer to layer.
 pub(crate) struct Ctx<'a> {
     pub doc: &'a Arc<Document>,
     pub settings: &'a Settings,
@@ -57,18 +56,14 @@ pub(crate) struct Ctx<'a> {
     /// Footage items already made assets, with the asset's id (`None` when
     /// it couldn't be).
     pub images: Vec<(Uuid, Option<String>)>,
-    /// Comps already made assets, with the asset's id.
     pub comps: Vec<(Uuid, String)>,
     /// The comps being written now, outermost first, so a comp that
     /// contains itself stops.
     pub building: Vec<Uuid>,
-    /// Pictures that go beside the file or into the zip, by file name.
     pub files: Vec<(String, Vec<u8>)>,
-    /// Fonts a text layer names, as `fonts.list` entries.
     pub fonts: Vec<Value>,
 }
 
-/// `comp` as a Lottie or a dotLottie.
 pub fn export(
     doc: &Arc<Document>,
     comp: &Composition,
@@ -144,7 +139,6 @@ pub fn export(
     })
 }
 
-/// The layers of `comp` that go out, top first, on the comp's clock `tb`.
 pub(crate) fn layers(
     cx: &mut Ctx,
     comp: &Composition,
@@ -175,7 +169,6 @@ pub(crate) fn layers(
 /// gradient's stops by the count `p` they have already met.
 const FIRST: [&str; 2] = ["ty", "p"];
 
-/// A JSON tree written with [`FIRST`] leading each object.
 struct Ordered<'a>(&'a Value);
 
 impl serde::Serialize for Ordered<'_> {

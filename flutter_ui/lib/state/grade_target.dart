@@ -16,10 +16,8 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:uuid/uuid.dart';
 
-/// The effect a grade node usually is.
 const String correctionName = 'correction';
 
-/// The Colour warper, a node with an editor of its own.
 const String colourWarperName = 'colour_warper';
 
 /// The effects a grade is made of: everything under Colour that a version
@@ -56,7 +54,6 @@ List<BridgeEffectInstanceInfo> gradeNumberedOf(
         if (gradeEffectNames.contains(e.name) || isSharedReference(e)) e,
     ];
 
-/// One shot: a layer, or with [clip] one clip on a Sequence layer.
 @immutable
 class GradeShot {
   final LayerReference layer;
@@ -70,34 +67,21 @@ class GradeShot {
       other.layer.internallayerId == layer.internallayerId &&
       other.clip == clip;
 
-  /// A name for maps that remember something per shot.
   String get key => '${layer.internallayerId}/${clip ?? ''}';
 }
 
-/// Which grade the nodes belong to: the shot's own, or a group's, or the
-/// comp's.
 enum GradeScope { shot, groupPre, groupPost, comp }
 
-/// The Grade panel's pages, in the order its page control shows them.
 enum GradePage { wheels, adjust, curves, qualifier, windows, match, look }
 
-/// How the Wheels page shows a wheel's colour: as wheels, bars, the log
-/// wheels, or the HDR zones.
 enum GradeWheelMode { wheels, bars, log, hdr }
 
-/// What the Viewer's split-screen grid shows: the current shot's versions,
-/// the stills picked in the Gallery, or the picked shots.
 enum GradeGrid { versions, stills, shots }
 
-/// What the Viewer shows of the current node's key.
 enum GradeMatte { off, highlight, key }
 
-/// What Highlight shows where the key is not: grey, black, white, or the
-/// picture in black and white.
 enum GradeMatteBackdrop { grey, black, white, mono }
 
-/// The qualifier's tools on the picture: take a new range, widen it, or
-/// pull it in.
 enum GradePick { pick, add, subtract }
 
 /// One stroke a 3D qualifier tool drew on the picture, in comp pixels: what
@@ -110,27 +94,19 @@ class GradeStroke {
   const GradeStroke(this.points, {this.drop = false});
 }
 
-/// How the Viewer lays the reference against the picture: a wipe with an
-/// upright divider or one across, the same region side by side, the
-/// difference between the two, or one faded over the other.
 enum GradeCompare { wipe, wipeAcross, split, difference, mix }
 
-/// A still dragged out of the Gallery: dropped on a shot, it grades it.
 @immutable
 class GradeStillDrag {
-  /// The still's `.lumstill` path.
   final String path;
   const GradeStillDrag(this.path);
 }
 
-/// What Match matches the shot to: a still, or another shot at a frame.
 @immutable
 class GradeReference {
-  /// A still's `.lumstill` path and its picture, for a still.
   final String? still;
   final String? stillPicture;
 
-  /// A shot and the comp frame it is read at, for a shot.
   final GradeShot? shot;
   final int frame;
 
@@ -149,7 +125,6 @@ class GradeReference {
         stillPicture = null;
 }
 
-/// The grading panels' shared state. Made by `LumitUiState`.
 class GradeTarget {
   GradeTarget({
     required ValueListenable<LayerReference?> layer,
@@ -173,7 +148,6 @@ class GradeTarget {
 
   final ProjectReference? Function() _project;
 
-  /// The open project, which keeps the groups and the shared nodes.
   ProjectReference? get project => _project();
 
   /// The current shot: the picked Cut clip, else the selected layer.
@@ -191,27 +165,21 @@ class GradeTarget {
   final ValueNotifier<GradeWheelMode> wheelMode =
       ValueNotifier(GradeWheelMode.wheels);
 
-  /// Whether the Shots panel fills the window as a grid of large pictures.
   final ValueNotifier<bool> lightbox = ValueNotifier(false);
 
-  /// What the Viewer's split-screen grid shows, or null while it is off.
   final ValueNotifier<GradeGrid?> grid = ValueNotifier(null);
 
-  /// The stills picked in the Gallery, in its order.
   final ValueNotifier<List<GradeReference>> pickedStills =
       ValueNotifier(const []);
 
-  /// The Viewer's matte view of the current node.
   final ValueNotifier<GradeMatte> matte = ValueNotifier(GradeMatte.off);
 
-  /// Whether the Grade nodes panel shows what each node puts out.
   final ValueNotifier<bool> nodeThumbnails = ValueNotifier(false);
 
   /// What Highlight shows around the key, until Lumit closes.
   final ValueNotifier<GradeMatteBackdrop> matteBackdrop =
       ValueNotifier(GradeMatteBackdrop.grey);
 
-  /// The qualifier tool armed on the picture, if any.
   final ValueNotifier<GradePick?> pick = ValueNotifier(null);
 
   /// The 3D qualifier strokes drawn on each node while the project is open,
@@ -228,7 +196,6 @@ class GradeTarget {
     };
   }
 
-  /// Node [node]'s kept strokes or its dropped ones forgotten.
   void clearStrokes(UuidValue node, {required bool drop}) {
     strokes.value = {
       ...strokes.value,
@@ -242,14 +209,12 @@ class GradeTarget {
   /// The window slot whose handles the Viewer shows, 1 to 4, or 0 for none.
   final ValueNotifier<int> window = ValueNotifier(0);
 
-  /// Whether the Viewer shows the colour chart's grid.
   final ValueNotifier<bool> chart = ValueNotifier(false);
 
   /// The chart's four corners in picture pixels, from the top left round
   /// clockwise, while the Viewer shows it. Null until it is placed.
   final ValueNotifier<List<Offset>?> chartCorners = ValueNotifier(null);
 
-  /// What the Viewer compares against, which Match can match to.
   final ValueNotifier<GradeReference?> reference = ValueNotifier(null);
 
   /// Whether the Viewer shows the reference now. A reference stays set while
@@ -266,13 +231,11 @@ class GradeTarget {
   /// In a mix it is how much of the reference shows.
   final ValueNotifier<double> compareAt = ValueNotifier(0.5);
 
-  /// Compare against [to] in the Viewer, or stop with null.
   void compareWith(GradeReference? to) {
     reference.value = to;
     comparing.value = to != null;
   }
 
-  /// The chart's corners on each shot it was placed on, while the project is open.
   final Map<String, List<Offset>?> _charts = {};
 
   /// The Gallery's open album, where Grab still puts a still. Null puts it
@@ -307,8 +270,6 @@ class GradeTarget {
     window.value = 0;
     pick.value = null;
   }
-
-  // --- The shot and the playhead ---------------------------------------------
 
   ValueNotifier<int>? _playhead;
   late List<BridgeShot> Function() _shots;
@@ -405,7 +366,6 @@ class GradeTarget {
     }
   }
 
-  /// Make [id] the current node on the current shot, and remember it there.
   void setNode(UuidValue? id) {
     final current = shot.value;
     if (current != null) _nodes[current.key] = id;

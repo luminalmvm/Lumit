@@ -1,6 +1,3 @@
-//! A layer's Material options: what layers had before them, reading and
-//! writing their rows, and a new layer's.
-
 use super::{Material, MaterialSettings, ShadowMode, TransformProp};
 use crate::anim::Property;
 
@@ -47,7 +44,6 @@ impl Material {
         }
     }
 
-    /// Take `s`, handing back what it had.
     pub fn set_settings(&mut self, s: MaterialSettings) -> MaterialSettings {
         let previous = self.settings();
         (self.casts_shadows, self.accepts_shadows) = (s.casts_shadows, s.accepts_shadows);
@@ -69,7 +65,6 @@ impl Material {
     }
 }
 
-/// A new layer's material, on After Effects' defaults.
 impl Default for Material {
     fn default() -> Self {
         Self {

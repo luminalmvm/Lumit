@@ -1,5 +1,3 @@
-// Settings → Appearance: the theme picker, the customise window, and the
-// scopes toggle.
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -40,8 +38,6 @@ void main() {
       return p;
     }
 
-    /// The picker groups by what anyone is choosing by first — light or dark
-    /// — with the user's own themes last.
     testWidgets('the theme picker is grouped, and custom themes join it',
         (tester) async {
       final p = await openAppearance(tester);
@@ -61,14 +57,11 @@ void main() {
       // selection (saving a theme selects it).
       expect(find.text('Mine'), findsWidgets);
 
-      // Choosing it selects it.
       await tester.tap(find.text('Mine').last);
       await tester.pumpAndSettle();
       expect(p.uiState.workspace.customThemeName, 'Mine');
     });
 
-    /// Saving from a built-in asks for a name; saving again while that theme
-    /// is selected updates it in place rather than asking twice.
     testWidgets('the first save names the theme, later ones update it',
         (tester) async {
       final p = await openAppearance(tester);
@@ -88,7 +81,6 @@ void main() {
       expect(p.uiState.workspace.customThemeName, 'Night');
       expect(p.uiState.workspace.customThemes.map((t) => t.name), ['Night']);
 
-      // Saving again does not ask a second time.
       await tester.tap(find.byKey(const ValueKey('theme-editor-save')));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('theme-name-field')), findsNothing);

@@ -345,7 +345,6 @@ fn flow_and_blur_frame_cost() {
         let (a, b) = (a_rgba, b_rgba);
         let (wu, hu) = (w as usize, h as usize);
 
-        // --- flow, per Vector detail tier (Medium is the shipped default) ---
         let mut last = None;
         for (tier, detail) in [
             ("Normal (Medium)", VectorDetail::Medium),
@@ -360,7 +359,7 @@ fn flow_and_blur_frame_cost() {
             };
             let (ga, gb, _) = lumit_flow::flow_grays(&a, &b, wu, hu, &set);
             let mut eng = lumit_flow::FlowEngine::new_auto();
-            let warm = eng.flow_pair_with(&ga, &gb, &set); // shaders, plan, buffers
+            let warm = eng.flow_pair_with(&ga, &gb, &set);
             let started = Instant::now();
             for _ in 0..runs {
                 let _ = eng.flow_pair_with(&ga, &gb, &set);
@@ -373,7 +372,6 @@ fn flow_and_blur_frame_cost() {
             last = Some((warm, set));
         }
 
-        // --- blur, per Quality tier, on the field the effect actually gets ---
         let Some(((fwd, bwd), _set)) = last else {
             continue;
         };
@@ -395,7 +393,7 @@ fn flow_and_blur_frame_cost() {
             // more than the blur, so timing one against the other measures the
             // copy and calls it the shader.
             let warm = fx.motion_blur(&ctx, &src, &flow_t, w, h, None, &op);
-            drop(readback_linear_f32(&ctx, &warm, w, h)); // shaders, pipeline
+            drop(readback_linear_f32(&ctx, &warm, w, h));
             let blurs = 20u32;
             let started = Instant::now();
             for _ in 0..blurs {

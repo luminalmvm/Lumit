@@ -136,7 +136,6 @@ void main() {
       await tester.pump();
     }
 
-    /// Open the bottom bar's view menu and choose the row [key].
     Future<void> pickViewRow(WidgetTester tester, String key) async {
       await pressBar(tester, 'viewer-guides-menu');
       await tester.pumpAndSettle();
@@ -194,7 +193,6 @@ void main() {
       await tester.pump();
       expect(find.byType(DropperViewfinder), findsOneWidget);
 
-      // An ordinary wheel scroll: the Viewer zooms about the pointer.
       await tester.sendEventToBinding(
         PointerScrollEvent(position: centre, scrollDelta: const Offset(0, -60)),
       );
@@ -202,7 +200,6 @@ void main() {
       expect(tester.takeException(), isNull,
           reason: 'zooming under it is fine');
 
-      // And again the other way, with the magnifier still up.
       await tester.sendEventToBinding(
         PointerScrollEvent(position: centre, scrollDelta: const Offset(0, 120)),
       );
@@ -212,11 +209,9 @@ void main() {
           reason: 'and it is still following the pointer');
     });
 
-    /// Where the picture is drawn, as the panel hands it to the stage.
     Rect drawnPicture(WidgetTester tester) =>
         tester.widget<ViewerStage>(find.byType(ViewerStage)).fitted;
 
-    /// A drag across the stage on whichever button is asked for.
     Future<void> dragStage(WidgetTester tester, Offset by,
         {required int buttons}) async {
       final from =
@@ -322,8 +317,6 @@ void main() {
       await pressBar(tester, 'viewer-step-back');
       expect(p.uiState.playheadFrame.value, 0);
 
-      // Stepping back from the start stays at the start rather than going
-      // negative — a frame before the comp is not a frame.
       await pressBar(tester, 'viewer-step-back');
       expect(p.uiState.playheadFrame.value, 0);
 
@@ -518,8 +511,6 @@ void main() {
         ),
       );
 
-      // Out of the top strip and onto the picture: a horizontal guide, kept
-      // against this comp.
       final stage = tester.getTopLeft(find.byType(ViewerStage));
       await tester.dragFrom(
           stage + const Offset(200, viewerRulerBand / 2), const Offset(0, 120));
@@ -532,7 +523,6 @@ void main() {
         reason: 'a guide is written down with where the user was',
       );
 
-      // And the menu takes them all off again.
       await pickViewRow(tester, 'viewer-guides-clear');
       expect(p.uiState.guides, isEmpty);
     });
@@ -555,7 +545,6 @@ void main() {
       final show = find.byKey(const ValueKey('viewer-snapshot-show'));
       final shown = find.byKey(const ValueKey('viewer-snapshot-overlay'));
 
-      // Nothing photographed yet, so there is no Show to press.
       expect(show, findsNothing);
       expect(shown, findsNothing);
 
@@ -577,8 +566,6 @@ void main() {
       await tester.pump();
       expect(shown, findsNothing, reason: 'let go, the live picture is back');
 
-      // And Take is still a plain click: holding it must not compare, now that
-      // the second mark is what does.
       await tester.ensureVisible(take);
       await tester.pump();
       final again = await tester.startGesture(tester.getCenter(take));
@@ -634,9 +621,6 @@ void main() {
           image.height, lessThanOrEqualTo((panel.height * ratio).ceil() + 2));
       expect(image.width, greaterThan(1), reason: 'and it is still a picture');
 
-      // And it is put back over the slice it was taken from, not stretched
-      // across the whole 400 % picture: at this magnification that slice is at
-      // most the panel.
       final over = tester
           .getRect(find.byKey(const ValueKey('viewer-snapshot-overlay')));
       expect(over.width, lessThanOrEqualTo(panel.width + 1));
@@ -646,10 +630,6 @@ void main() {
       await tester.pump();
     });
 
-    /// **How good the preview is, asked once** (docs/07 §2.2 item 2).
-    /// The header's middle picker names the preview resolution, and its menu
-    /// carries both answers: the resolutions, and the two playback behaviours
-    /// whose button the drawing takes off the bar.
     testWidgets('the quality picker sets the resolution and the playback mode',
         (tester) async {
       final p = withLayer();
@@ -657,8 +637,6 @@ void main() {
 
       expect(find.byKey(const ValueKey('viewer-resolution')), findsOneWidget);
 
-      // **Opened once**: every row in this menu is an option row, so
-      // the menu stays up and the next answer is one tap away.
       await pressBar(tester, 'viewer-resolution');
       await tester.pumpAndSettle();
 
@@ -682,8 +660,6 @@ void main() {
       await pick('viewer-playback-everyFrame');
       expect(p.uiState.workspace.performance.playback, PlaybackMode.everyFrame);
 
-      // Three choices, and the menu never went away — which is what makes
-      // comparing two tiers a matter of looking rather than of reopening.
       expect(find.byKey(const ValueKey('viewer-quality-auto')), findsOneWidget);
     });
 
@@ -715,14 +691,12 @@ void main() {
       expect(find.text('+0.0'), findsOneWidget,
           reason: 'neutral still reads signed, and to one decimal');
 
-      // A tenth of a stop per pixel: 14 pixels right is +1.4.
       await scrub(tester, box, 14);
       await tester.pump();
       expect(find.text('+1.4'), findsOneWidget);
       expect(p.uiState.viewerLook.stops, closeTo(1.4, 1e-9),
           reason: 'the drag reached the state the engine is told from');
 
-      // And back through zero to the other side of it.
       await scrub(tester, box, -37);
       await tester.pump();
       expect(find.text('-2.3'), findsOneWidget);
@@ -770,8 +744,6 @@ void main() {
           reason: 'one undo puts back the whole drag, both axes at once');
     });
 
-    /// A layer at half size, moved off the middle, for the overlays that work
-    /// in a layer's own pixels.
     LayerReference halfSizeLayer(CompositionReference comp) {
       final layer = comp.addSolidLayer();
       final size = comp.getSize();
@@ -786,8 +758,6 @@ void main() {
       return layer;
     }
 
-    /// Where [layer], at half size, puts its own pixel ([x], [y]) on screen,
-    /// through the stage's own box so it holds under the interface's scale.
     Offset Function(double x, double y) layerToScreen(
         WidgetTester tester, CompositionReference comp, LayerReference layer) {
       double still(BridgeScalar s) => (s as BridgeScalar_Static).field0;
@@ -801,9 +771,6 @@ void main() {
               view);
     }
 
-    /// An effect's point is in its layer's own pixels. On a layer at half
-    /// size and moved, the mark sits where the layer puts the point, a drag
-    /// writes the layer's own pixels, and both halves undo together.
     testWidgets('a dragged effect point is one undo step', (tester) async {
       final p = withLayer();
       final layer = halfSizeLayer(p.comp);
@@ -868,9 +835,6 @@ void main() {
           reason: 'one undo puts the whole point back');
     });
 
-    /// The crosshair beside a point picks it in the layer's own pixels too:
-    /// on a layer at half size and moved, the pick is the pixel of the layer
-    /// under the pointer, not of the composition.
     testWidgets("a picked effect point is the layer's own pixel",
         (tester) async {
       final p = withLayer();
@@ -882,7 +846,6 @@ void main() {
         ..setSelection([layer])
         ..setEffectSelection(layer, [fx])
         ..model.refresh();
-      // The Viewer beside Effect controls, where the crosshair is.
       tester.view.physicalSize = const Size(1180, 760);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -965,10 +928,7 @@ void main() {
         expect(c.dy, closeTo(at.dy, 0.5));
       }
 
-      // Screen pixels per layer pixel, as the window has them.
       final perPixel = onScreen(x + 1, y).dx - onScreen(x, y).dx;
-      // A mouse drag in several moves, then the release, which measures and
-      // writes once the measure lands.
       Future<void> drag(Offset from, Offset step, String watched) async {
         final was = row(watched);
         final mouse =
@@ -989,14 +949,12 @@ void main() {
         await tester.pump();
       }
 
-      // Moved by its middle: the square follows the pointer exactly.
       await drag(onScreen(x, y), const Offset(6, 4), 'sample_x');
       expect(row('sample_x'), closeTo(x + 48 / perPixel, 0.5),
           reason: 'the move is the whole of the pointer travel');
       expect(row('sample_y'), closeTo(y + 32 / perPixel, 0.5));
       expect(row('sample_size'), side);
 
-      // Grown by a corner, about its centre: the side follows the corner.
       await drag(tester.getCenter(grip('bottomRight')), const Offset(3, 3),
           'sample_size');
       expect(row('sample_size'), closeTo(side + 2 * 24 / perPixel, 0.5),
@@ -1020,8 +978,6 @@ void main() {
       p.uiState.model.refresh();
       await mount(tester, p);
 
-      // Sweep the whole panel: everything wholly inside is taken, and the
-      // adjustment layer's box is exactly the comp, so it qualifies too.
       final stage = tester.getRect(find.byKey(const ValueKey('viewer-stage')));
       final gesture =
           await tester.startGesture(stage.topLeft + const Offset(2, 2));
@@ -1042,10 +998,6 @@ void main() {
           reason: 'the small solid is wholly inside the sweep');
     });
 
-    /// Where the picture is drawn inside the panel, worked out the way the
-    /// panel works it out: the stage is the panel less its bar, and the comp is
-    /// fitted into it. The gizmo's handles sit on this rectangle for a
-    /// comp-sized layer, which is what lets a test grab one.
     Rect fittedRect(WidgetTester tester, CompositionReference comp) {
       // Measured rather than worked out from the panel less a bar height: the
       // Viewer wears a header strip as well as a bottom bar, and a
@@ -1110,7 +1062,6 @@ void main() {
       await mount(tester, p);
       await tester.pumpAndSettle();
 
-      // The path is on the picture: the selected layer's box carries it.
       final painter = tester
           .widget<CustomPaint>(find.byKey(const ValueKey('viewer-gizmo')))
           .painter as dynamic;
@@ -1119,11 +1070,8 @@ void main() {
           reason: 'a keyed position draws its motion path');
       expect(drawn.single.motionPath!.keys, hasLength(2));
 
-      // A body drag, grabbed anywhere on the layer, keys the position at the
-      // playhead, as in After Effects, and one undo takes it back.
       final fitted = fittedRect(tester, p.comp);
       final scale = fitted.width / p.comp.getSize().width;
-      // Off its middle: the layer, comp-sized, sits on x 0 at the playhead.
       final size = p.comp.getSize();
       var gesture = await tester.startGesture(fitted.topLeft +
           Offset(size.width * 0.2 * scale, size.height * 0.3 * scale));
@@ -1142,8 +1090,6 @@ void main() {
       final held = p.layer.getTransform().positionX as BridgeScalar_Keyframed;
       expect(held.field0.map((k) => k.value), [0, 400]);
 
-      // Dragging the last key's box moves that key. It sits at (400, y) in
-      // comp pixels, on the picture's own placement.
       final y = (p.layer.getTransform().positionY as BridgeScalar_Static).field0;
       final dot = fitted.topLeft + Offset(400 * scale, y * scale);
       // One long first move, as the body drag above makes: a touch pan is
@@ -1181,8 +1127,6 @@ void main() {
         'a drag inside the selection moves the selected layer, not the'
         ' one above it', (tester) async {
       final p = withLayer();
-      // A second comp-sized layer, added last and therefore on top of the one
-      // the test selects.
       final above = p.comp.addSolidLayer();
       p.uiState.setSelection([p.layer]);
       p.uiState.model.refresh();
@@ -1223,9 +1167,6 @@ void main() {
       p.uiState.model.refresh();
       await mount(tester, p);
 
-      // Both layers are comp-sized, so the middle of the picture is inside
-      // both and the topmost — the solid, added last and therefore on top —
-      // takes the click.
       await tester.tapAt(fittedRect(tester, p.comp).center);
       await tester.pumpAndSettle();
       expect(p.uiState.selectedLayers.value.length, 1);
@@ -1258,7 +1199,6 @@ void main() {
       );
     }
 
-    /// A layer at half size, so its handles are reachable.
     void halveIt(LayerReference layer) {
       layer.setTransform(
           prop: BridgeTransformProp.scaleX, value: BridgeScalar.static_(50));
@@ -1291,8 +1231,6 @@ void main() {
           reason: 'pulling the corner away from the anchor grows the layer');
     });
 
-    /// The Zoom tool armed, on a comp bigger than the panel so there is room
-    /// to zoom in before the clamp.
     Future<
         ({
           LumitState state,
@@ -1347,14 +1285,12 @@ void main() {
         ' leaves unselected layers alone', (tester) async {
       final p = withLayer();
       final other = p.comp.addSolidLayer();
-      // Only the adjustment layer is selected.
       p.uiState.setSelection([p.layer]);
       p.uiState.tools.select(ToolMode.rotate);
       p.uiState.model.refresh();
       await mount(tester, p);
 
       final fitted = fittedRect(tester, p.comp);
-      // A quarter-turn about the middle: straight up, round to the right.
       final gesture = await tester
           .startGesture(Offset(fitted.center.dx, fitted.center.dy - 100));
       await tester.pump();
@@ -1399,9 +1335,6 @@ void main() {
       final after = p.layer.getTransform();
       expect(at(after.anchorX), isNot(anchorBefore.$1),
           reason: 'the pivot moved');
-      // Pan behind: the anchor moved right, so Position moved right by exactly
-      // as much (the layer is unscaled and unturned), and the picture did not
-      // move at all.
       final anchorDelta = at(after.anchorX) - anchorBefore.$1;
       final positionDelta = at(after.positionX) - positionBefore.$1;
       expect(positionDelta, closeTo(anchorDelta, 0.001),
@@ -1453,9 +1386,6 @@ void main() {
       }
     });
 
-    /// The shape tools. With a layer selected a drag draws a **mask** on
-    /// it; with nothing selected there is nothing to mask, and the status line
-    /// says so rather than the drag vanishing into silence.
     testWidgets('a shape drag adds a mask to the selected layer',
         (tester) async {
       final p = withLayer();
@@ -1480,8 +1410,6 @@ void main() {
       expect(masks.single.closed, isTrue);
       expect(masks.single.vertices, hasLength(4),
           reason: 'an ellipse is four cubics');
-      // Drawn in layer space, so the mask sits where the drag was: the comp is
-      // 1920x1080 and the drag was about its middle.
       final xs = [for (final v in masks.single.vertices) v.x];
       expect(xs.reduce((a, b) => a < b ? a : b), greaterThan(0));
       expect(xs.reduce((a, b) => a > b ? a : b), lessThan(1920));
@@ -1504,19 +1432,15 @@ void main() {
       expect(p.layer.getMasks(), isEmpty,
           reason: 'an open path is a shape being drawn, not a mask yet');
 
-      // Clicking the first point again closes it, and that is what applies it.
       await tester.tapAt(first);
       await tester.pumpAndSettle();
 
       final masks = p.layer.getMasks();
       expect(masks, hasLength(1));
-      // Numbered, not named for the tool: every path the Pen draws is a path,
-      // so the number is the only thing that tells two of them apart.
       expect(masks.single.name, 'Mask 1');
       expect(masks.single.vertices, hasLength(3));
       expect(masks.single.closed, isTrue);
 
-      // Enter applies a path open.
       await tester.tapAt(first);
       await tester.pumpAndSettle();
       await tester.tapAt(fitted.center + const Offset(80, 60));
@@ -1528,12 +1452,8 @@ void main() {
       expect(open.closed, isFalse);
     });
 
-    /// Mask points are editable on the picture: they draw as squares on
-    /// the path, a marquee gathers them, and dragging moves them.
     testWidgets('a mask\'s points can be swept up and dragged', (tester) async {
       final p = withLayer();
-      // A small rectangle mask in the middle of the comp, so its points sit
-      // well inside the picture.
       p.layer.addMask(
         mask: BridgeMask(
           id: UuidValue.fromString(const Uuid().v4()),
@@ -1563,8 +1483,6 @@ void main() {
 
       final before = p.layer.getMasks().single.vertices;
       final fitted = fittedRect(tester, p.comp);
-      // Where the mask's top-left point is on screen: layer space maps 1:1 to
-      // the comp here, so it is the fitted rect scaled.
       Offset onScreen(double x, double y) => Offset(
             fitted.left + x / 1920 * fitted.width,
             fitted.top + y / 1080 * fitted.height,
@@ -1584,10 +1502,8 @@ void main() {
       await tester.pump();
       await gesture.up();
       await tester.pumpAndSettle();
-      // Nothing has moved yet — a sweep only chooses.
       expect(p.layer.getMasks().single.vertices.first.x, before.first.x);
 
-      // Now drag one of the caught points; both should travel.
       final drag = await tester.startGesture(onScreen(860, 440));
       await tester.pump();
       // Past the framework's pan slop, which is larger than the touch slop.
@@ -1607,15 +1523,9 @@ void main() {
           reason: 'the points the sweep missed stayed put');
     });
 
-    /// **A shape layer's own art is correctable on the picture**, by the same
-    /// gesture a mask's points take. Before this, art could be drawn and then
-    /// only redrawn.
     testWidgets("a shape layer's points can be swept up and dragged",
         (tester) async {
       final p = withLayer();
-      // A shape layer with a square of its own, in comp coordinates — the
-      // layer maps 1:1 to the comp, so its points sit where the maths below
-      // says they do.
       final item = UuidValue.fromString(const Uuid().v4());
       final shape = p.comp.addShapeLayer(
         name: 'Square',
@@ -1662,7 +1572,6 @@ void main() {
         ],
       );
       p.uiState.setSelection([shape]);
-      // A shape's points are offered while its Path row is picked.
       p.uiState.selectedProperties.value = [
         '${shape.internallayerId}/contents/$item/path'
       ];
@@ -1792,8 +1701,6 @@ void main() {
       expect(layer.getText()!.text, 'Retitled');
     });
 
-    /// Painting: a drag on the selected layer leaves a stroke, and one
-    /// drag is one stroke and one undo step.
     testWidgets('a brush drag paints a stroke on the selected layer',
         (tester) async {
       final p = withLayer();
@@ -1833,8 +1740,6 @@ void main() {
           reason: 'the path the pointer took, not one dab');
       expect(strokes.single.width, p.uiState.tools.brushSize);
 
-      // The stroke is in layer coordinates: the middle of the picture is the
-      // middle of a comp-sized layer.
       final size = p.comp.getSize();
       expect(strokes.single.points.first.x,
           closeTo(size.width / 2, size.width * 0.02));
@@ -1844,9 +1749,6 @@ void main() {
       expect(p.layer.getPaint(), isEmpty, reason: 'one undo step');
     });
 
-    /// A stylus's pressure rides in with the points and widens the mark, and
-    /// the brush's own toggle turns that off, which stores a full press
-    /// throughout and so the stroke a mouse would have made.
     testWidgets('a stylus drag commits the pressure it was drawn with',
         (tester) async {
       final p = withLayer();
@@ -1923,7 +1825,6 @@ void main() {
       await paintAt(fitted.center);
       expect(p.layer.getPaint().single.mode, BridgePaintMode.erase);
 
-      // The clone stamp refuses to stamp until it has been given a source.
       p.uiState.tools.select(ToolMode.cloneStamp);
       await tester.pump();
       await paintAt(fitted.center + const Offset(0, 40));
@@ -1931,7 +1832,6 @@ void main() {
           reason: 'no source yet, so nothing was stamped');
       expect(p.state.notice.value?.message, contains('clone source'));
 
-      // Alt-click sets it, and then the stroke lands with the offset it implies.
       await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
       await tester.tapAt(fitted.center - const Offset(80, 0));
       await tester.pumpAndSettle();
@@ -1945,8 +1845,6 @@ void main() {
           reason: 'the source was to the left of where the stroke began');
     });
 
-    /// The other half of the shape tools' gesture: with nothing
-    /// selected they make a **shape layer** rather than saying they cannot.
     testWidgets('a shape drag with nothing selected makes a shape layer',
         (tester) async {
       final p = withLayer();
@@ -1977,15 +1875,11 @@ void main() {
       expect(contents.items.single.fill, isNotNull,
           reason: "it takes the toolbar's fill");
 
-      // The art lands where it was drawn: the drag began at the middle of the
-      // picture, so the layer's position is the middle of the comp.
       final size = p.comp.getSize();
       double still(dynamic s) => (s as dynamic).field0 as double;
       expect(still(shape.getTransform().positionX),
           closeTo(size.width / 2, size.width * 0.02));
 
-      // And the new layer is what is selected, so the next drag adds a shape
-      // to it rather than a mask, as After Effects does.
       expect(p.uiState.selectedLayerIds, contains(shape.internallayerId));
       p.uiState.model.refresh();
       await tester.pumpAndSettle();
@@ -2002,8 +1896,6 @@ void main() {
       expect(shape.getMasks(), isEmpty);
     });
 
-    /// The camera tools: a drag moves the composition's active camera,
-    /// and with no camera the tool says so rather than swallowing the gesture.
     testWidgets('the camera tools orbit, track and dolly the active camera',
         (tester) async {
       final p = withLayer();
@@ -2043,8 +1935,6 @@ void main() {
             zoom: still(tf.camera!.zoom),
           );
 
-      // Orbit: the rotations change, the eye swings, and what the camera is
-      // looking at stays exactly where it was.
       await drag(const Offset(120, 0));
       var after = camera.getTransform();
       expect(still(after.rotationY), isNot(still(before.rotationY)));
@@ -2053,7 +1943,6 @@ void main() {
       expect(still(after.positionX), isNot(still(before.positionX)),
           reason: 'and the eye is what moved');
 
-      // Track: the position moves, the rotations do not.
       p.uiState.tools.select(ToolMode.cameraPan);
       await tester.pump();
       final beforeTrack = camera.getTransform();
@@ -2063,7 +1952,6 @@ void main() {
       expect(
           still(after.rotationY), closeTo(still(beforeTrack.rotationY), 1e-9));
 
-      // Dolly: it moves along the view axis.
       p.uiState.tools.select(ToolMode.cameraDolly);
       await tester.pump();
       final beforeDolly = camera.getTransform();
@@ -2077,8 +1965,6 @@ void main() {
               (e1.$3 - e0.$3) * f.$3,
           greaterThan(0));
 
-      // A keyed camera moves too: the orbit keys what is keyed at the
-      // playhead, leaves a still row still, and is one undo step.
       BridgeKeyframe key(int frame, double value) => BridgeKeyframe(
             time: p.comp.timeOfFrame(frame: frame),
             value: value,
@@ -2108,10 +1994,6 @@ void main() {
           closeTo(still(placed.rotationY), 1e-9));
     });
 
-    /// The Viewer's own parent walk, which boxes follow during a drag, puts a
-    /// child where the engine does: under a 2D null, a camera on a doubled
-    /// null, a two-node camera and an aimed light. A point light on each is
-    /// the probe, its engine mark against the walk through the same view.
     testWidgets('the Viewer places children of every kind of parent as the engine does',
         (tester) async {
       final p = withLayer();
@@ -2249,7 +2131,6 @@ void main() {
       await settleFrb(tester, until: () => badge.evaluate().isNotEmpty);
       expect(badge, findsOneWidget);
 
-      // The layers stay the same, only the file behind one of them changes.
       gone.relink(path: _silentWavFile());
       await settleFrb(tester, until: () => badge.evaluate().isEmpty);
       expect(badge, findsNothing);
@@ -2268,7 +2149,6 @@ void main() {
       addTearDown(sub.cancel);
       await mount(tester, p);
 
-      // Exactly what the Timeline ruler and the arrow keys do: set it.
       final before = p.uiState.frameArrived.value;
       p.uiState.playheadFrame.value = 12;
       await tester.pump();
@@ -2306,7 +2186,6 @@ void main() {
       final centre = tester.getCenter(find.byType(ViewerPanelFrb));
       final pointer = TestPointer(1, PointerDeviceKind.mouse);
       pointer.hover(centre);
-      // Three notches in.
       for (var i = 0; i < 3; i++) {
         await tester.sendEventToBinding(pointer.scroll(const Offset(0, -120)));
         await tester.pump();
@@ -2314,7 +2193,6 @@ void main() {
 
       expect(p.uiState.viewerScale, greaterThan(before),
           reason: 'zooming in raises the on-screen fraction of the comp');
-      // The picker tells the truth about a zoom between its steps.
       expect(find.textContaining('%'), findsWidgets);
 
       // And back out well past fit. The picture really does get smaller — and
@@ -2358,7 +2236,6 @@ void main() {
       });
       addTearDown(sub.cancel);
 
-      // Let the mount render land, then count what follows it.
       await settleFrb(tester,
           minRounds: 10,
           maxRounds: coldWorkerRounds,
@@ -2370,17 +2247,10 @@ void main() {
           reason: 'nothing moved, so nothing should have been rendered');
     });
 
-    /// **The stale-picture regression.** The Viewer asked for a frame when the
-    /// playhead moved and at no other time, so an edit made with the playhead
-    /// still — typing an opacity, adding an effect, anything another panel
-    /// commits — left the old picture on screen until something moved the
-    /// playhead. Playing was the usual accident that fixed it, which is exactly
-    /// how it was reported: "the Viewer does not update until I play".
     testWidgets('an edit with the playhead still redraws the picture',
         (tester) async {
       final p = withLayer();
       await mount(tester, p);
-      // The mount's own picture, which is a cold worker's first frame.
       await settleFrb(tester,
           minRounds: 10,
           maxRounds: coldWorkerRounds,
@@ -2448,8 +2318,6 @@ void main() {
       await settleFrb(tester, until: () => File(other).existsSync());
 
       await mount(tester, p);
-      // Straight into the open, with the badge's probes unanswered: the
-      // registry is cleared while they are on the wire.
       final adopted = p.state.project;
       p.state.openProject(other);
       await settleFrb(tester,
@@ -2460,8 +2328,6 @@ void main() {
   }, skip: !engineAvailable);
 }
 
-/// A tenth of a second of silent 8-bit mono WAV, which the engine probes as
-/// real media.
 String _silentWavFile() {
   final file = File(
       '${Directory.systemTemp.createTempSync('lumit-relink').path}/back.wav');
@@ -2473,8 +2339,8 @@ String _silentWavFile() {
   u32(36 + 800);
   out.add('WAVEfmt '.codeUnits);
   u32(16);
-  u16(1); // PCM
-  u16(1); // mono
+  u16(1);
+  u16(1);
   u32(8000);
   u32(8000);
   u16(1);

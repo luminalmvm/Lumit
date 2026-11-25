@@ -28,8 +28,6 @@ use crate::fit::tolerance;
 const FEATHER_SIGMA: f64 = 0.4;
 
 impl Svg<'_> {
-    /// `layer`'s masks as a group around what it draws. How many groups it
-    /// opened.
     pub(super) fn masks(
         &mut self,
         scope: &Scope<'_>,
@@ -89,7 +87,6 @@ impl Svg<'_> {
             .map(|m| reach(&m.feather) * 2.0 + reach(&m.expansion))
             .fold(0.0, f64::max)
             + 4.0;
-        // The art's box in the layer's own pixels, wherever its corner goes.
         let (x0, y0, x1, y1) = self.content_box(scope, layer);
         let (mut lo, mut hi) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
         for t in &self.span.grid {
@@ -266,8 +263,6 @@ impl Svg<'_> {
         out
     }
 
-    /// The filter a mask's feather and expansion draw with, or `None` when
-    /// it has neither.
     fn mask_filter(
         &mut self,
         scope: &Scope<'_>,
@@ -393,7 +388,6 @@ impl Svg<'_> {
     }
 }
 
-/// The most a mask number reaches across its keys, for padding a region.
 fn reach(p: &lumit_core::anim::Property) -> f64 {
     match &p.animation {
         Animation::Static(v) => v.abs(),

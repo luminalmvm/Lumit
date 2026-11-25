@@ -17,7 +17,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Beam's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "beam",
@@ -117,7 +116,6 @@ pub struct Beam {
     #[colour(label = "Inside colour", default = [1.0, 1.0, 1.0, 1.0], max = 4.0)]
     pub inside_colour: [f32; 4],
 
-    /// The rim's colour.
     #[colour(label = "Outside colour", default = [0.10, 0.35, 1.0, 1.0], max = 4.0)]
     pub outside_colour: [f32; 4],
 
@@ -127,7 +125,6 @@ pub struct Beam {
     #[toggle(label = "Composite on original", default = true)]
     pub composite_on_original: bool,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -185,7 +182,6 @@ impl Beam {
     }
 }
 
-/// Beam's behaviour.
 pub struct BeamDef;
 
 impl EffectDef for BeamDef {

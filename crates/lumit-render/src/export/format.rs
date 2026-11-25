@@ -1,17 +1,12 @@
-//! The formats an export can write, and what each one can carry.
-
 use super::{
     AudioDepth, ColourSpace, BUILT_IN_COLOUR_SPACES, EXPORT_AUDIO_RATES, UNTAGGED_COLOUR_SPACE,
 };
 use lumit_media::encode::BitDepth;
 
-/// The sound-only containers an export can write (docs/06 §7.4).
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub enum AudioFormat {
-    /// AAC in an `.m4a` — the delivery form, same codec a video export uses.
     #[default]
     M4a,
-    /// Uncompressed 16-bit PCM in a `.wav` — the master form.
     Wav,
 }
 
@@ -53,20 +48,17 @@ pub struct ExportLoudness {
     pub true_peak_db: f64,
 }
 
-/// What the export writes: a video file, an animated GIF or WebP, one still image per
-/// frame, or sound with no picture at all.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, serde::Serialize, serde::Deserialize)]
 pub enum ExportFormat {
-    /// An `.mp4`, in the given codec.
     Video(lumit_media::encode::VideoCodec),
     /// A numbered image per frame — `shot.00001.png` beside the chosen path.
     Images(lumit_media::encode::ImageFormat),
-    /// An `.m4a` or `.wav` of the comp's mix, with no video stream.
     Audio(AudioFormat),
-    /// An animated `.gif`.
     Gif,
     /// An animated `.webp`, lossy unless asked otherwise.
-    Webp { lossless: bool },
+    Webp {
+        lossless: bool,
+    },
 }
 
 /// What one output format can and cannot carry (docs/06 §7.4).
@@ -79,16 +71,12 @@ pub enum ExportFormat {
 /// quietly ignored.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct FormatCaps {
-    /// Carries a picture at all.
     pub video: bool,
-    /// Can carry the comp's sound.
     pub audio: bool,
-    /// Can carry an alpha channel (so the Channels choice means something).
     pub alpha: bool,
     /// The choice between premultiplied and straight alpha means something.
     /// A GIF's alpha is on or off, so its kept pixels are always straight.
     pub alpha_mode: bool,
-    /// Dither, palette and plays apply, which only a GIF has.
     pub gif: bool,
     /// The colour depths this format can write, best last.
     pub depths: &'static [lumit_media::encode::BitDepth],
@@ -107,7 +95,6 @@ pub struct FormatCaps {
     pub audio_depths: &'static [AudioDepth],
     /// A video bitrate applies (lossless formats have none to choose).
     pub bit_rate: bool,
-    /// The container holds metadata.
     pub metadata: bool,
     /// The colour spaces this format's container can *state* — the nclx/`colr`
     /// box on an mp4, the cICP chunk on a PNG. A space the file cannot name is
@@ -119,7 +106,6 @@ pub struct FormatCaps {
     /// GIF counts in hundredths of a second, and browsers play a frame of one
     /// hundredth as ten, so a GIF goes no faster than 50, two a frame.
     pub max_fps: Option<u32>,
-    /// Can carry captions as subtitle streams: the mp4 and mov family.
     pub subtitles: bool,
 }
 
@@ -136,7 +122,6 @@ const EXR_DEPTHS: &[BitDepth] = &[BitDepth::Half, BitDepth::Float];
 const AAC_DEPTH: &[AudioDepth] = &[AudioDepth::Sixteen];
 /// Opus runs at 48 kHz, the one rate the export offers it.
 const OPUS_RATES: &[u32] = &[48_000];
-/// Uncompressed PCM in a `.wav` carries either width.
 const PCM_DEPTHS: &[AudioDepth] = &[AudioDepth::Sixteen, AudioDepth::TwentyFour];
 /// What a still sequence can state. PNG carries cICP and TIFF carries nothing,
 /// and one export writes one kind of file, so the honest common answer is the
@@ -145,11 +130,8 @@ const PCM_DEPTHS: &[AudioDepth] = &[AudioDepth::Sixteen, AudioDepth::TwentyFour]
 const STILL_COLOUR_SPACES: &[ColourSpace] = UNTAGGED_COLOUR_SPACE;
 
 impl ExportFormat {
-    /// This format's capability row.
     pub fn caps(self) -> FormatCaps {
         match self {
-            // QuickTime Animation in mov: lossless eight-bit RGB with alpha, PCM
-            // sound, no bitrate to choose.
             ExportFormat::Video(lumit_media::encode::VideoCodec::QtAnimation) => FormatCaps {
                 video: true,
                 audio: true,
@@ -165,8 +147,6 @@ impl ExportFormat {
                 max_fps: None,
                 subtitles: true,
             },
-            // VP9 in webm: eight bits, alpha, Opus sound at 48 kHz, and a bitrate
-            // to choose.
             ExportFormat::Video(lumit_media::encode::VideoCodec::Vp9) => FormatCaps {
                 video: true,
                 audio: true,
@@ -182,8 +162,6 @@ impl ExportFormat {
                 max_fps: None,
                 subtitles: false,
             },
-            // ProRes in mov: no bitrate to choose, PCM sound, and the 4444 kinds
-            // hold alpha.
             ExportFormat::Video(c) if c.is_prores() => FormatCaps {
                 video: true,
                 audio: true,
@@ -199,8 +177,6 @@ impl ExportFormat {
                 max_fps: None,
                 subtitles: true,
             },
-            // H.264/HEVC in mp4: 4:2:0, eight bits, no alpha, a bitrate to
-            // choose, and a container that holds metadata.
             ExportFormat::Video(_) => FormatCaps {
                 video: true,
                 audio: true,
@@ -255,7 +231,6 @@ impl ExportFormat {
                 max_fps: Some(50),
                 subtitles: false,
             },
-            // A WebP is a GIF's row with full alpha and none of its palette.
             ExportFormat::Webp { .. } => FormatCaps {
                 gif: false,
                 max_fps: None,
@@ -273,7 +248,6 @@ impl ExportFormat {
                     AudioFormat::M4a => AAC_DEPTH,
                     AudioFormat::Wav => PCM_DEPTHS,
                 },
-                // AAC has a bitrate; PCM is exactly what it is.
                 bit_rate: f == AudioFormat::M4a,
                 metadata: true,
                 colour_spaces: &[],
@@ -283,7 +257,6 @@ impl ExportFormat {
         }
     }
 
-    /// The file extension this format writes.
     pub fn extension(self) -> &'static str {
         match self {
             ExportFormat::Video(c) => c.extension(),

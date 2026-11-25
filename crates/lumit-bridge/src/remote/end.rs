@@ -16,7 +16,6 @@ use web_time::{Duration, Instant};
 
 use super::{files, job, Event, Io, Remote, Stage};
 
-/// The most an export's list of files may be.
 const LIST_MOST: u64 = 16 << 20;
 
 pub(super) struct End {
@@ -157,7 +156,6 @@ pub(super) fn out_files(root: &std::path::Path, job: Uuid) -> Vec<(Uuid, PathBuf
 }
 
 impl Remote {
-    /// Something a job's link said, on the jobs' thread.
     pub(super) fn told(&self, job: Uuid, news: News) {
         match news {
             News::Moving {
@@ -179,7 +177,6 @@ impl Remote {
                     return;
                 };
                 if !j.sent && matches!(wanted, Wanted::Original { .. }) && !j.stage.ended() {
-                    // The sender has not got what it said it had.
                     self.give_up(job, "lost");
                 }
                 // A sender asking for a file that is not ready yet asks
@@ -192,7 +189,6 @@ impl Remote {
         }
     }
 
-    /// `done` of `total` bytes of `wanted` have crossed for `job`.
     fn moved(&self, job: Uuid, wanted: &Wanted, done: u64, total: u64) {
         let item = match wanted {
             Wanted::Original { item } => *item,
@@ -223,7 +219,6 @@ impl Remote {
         });
     }
 
-    /// Bytes a second over the last few seconds of `job`'s transfers.
     pub(super) fn rate(&self, job: Uuid) -> u64 {
         let Ok(moving) = self.moving.lock() else {
             return 0;
@@ -240,7 +235,6 @@ impl Remote {
         }
     }
 
-    /// Start `job`'s link with this end, the worker's when `work`.
     pub(super) fn start_link(
         self: &Arc<Self>,
         job: &job::Job,
@@ -292,7 +286,6 @@ impl Remote {
     }
 }
 
-/// Every item of `holding`, as the sender says it holds them.
 pub(super) fn holds(holding: &HashMap<Uuid, (PathBuf, u64)>) -> Vec<lumit_share::bulk::Held> {
     holding
         .iter()

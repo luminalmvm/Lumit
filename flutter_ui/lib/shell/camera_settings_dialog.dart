@@ -26,8 +26,6 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'dialog_frame.dart';
 
-/// The frame this drawing measures for itself, on the Composition settings
-/// dialog's proportions.
 const double cameraDialogWidth = 460;
 const double cameraLabelColumn = 120;
 const double cameraRowGap = 12;
@@ -38,11 +36,8 @@ const double cameraWell = 90;
 /// holds comp pixels and millimetres whichever of these is chosen.
 enum CameraUnits { pixels, millimetres, inches }
 
-/// Millimetres in an inch, for the third of them.
 const double _mmPerInch = 25.4;
 
-/// Edit a camera's settings. Returns true when the button was pressed, so the
-/// caller can redraw; false when it was cancelled.
 Future<bool> showCameraSettingsFrb({
   required BuildContext context,
   required LayerReference layer,
@@ -96,8 +91,6 @@ class _CameraSettingsBodyState extends State<_CameraSettingsBody> {
   late double _pxPerMetre;
   late CameraUnits _units;
 
-  /// The four animatable numbers this window can write, or null where the
-  /// channel is animated and it cannot.
   double? _zoom;
   double? _focus;
   double? _aperture;
@@ -128,15 +121,12 @@ class _CameraSettingsBodyState extends State<_CameraSettingsBody> {
     _recompute();
   }
 
-  /// The readings that follow the zoom, the film size and the aperture.
   void _recompute() {
     final zoom = _zoom ?? 0;
     _lens = cameraLens(zoom: zoom, filmMm: _filmMm, compW: widget.compWidth);
     _fStop = cameraFStop(zoom: zoom, aperture: _aperture ?? 0);
   }
 
-  /// A new zoom, with everything that reads off it brought along - including
-  /// the focus distance while it is locked to the zoom.
   void _setZoom(double zoom) => setState(() {
         _zoom = zoom;
         if (_lockToZoom && _focus != null) _focus = zoom;
@@ -157,8 +147,6 @@ class _CameraSettingsBodyState extends State<_CameraSettingsBody> {
         CameraUnits.inches => _filmMm / widget.compWidth / _mmPerInch,
       };
 
-  /// How many decimals a distance well shows: whole pixels, but a fraction of
-  /// a millimetre or of an inch.
   int get _unitDecimals => _units == CameraUnits.pixels ? 0 : 2;
 
   String get _unitLabel => switch (_units) {
@@ -167,8 +155,6 @@ class _CameraSettingsBodyState extends State<_CameraSettingsBody> {
         CameraUnits.inches => l10n.unitSymbolInches,
       };
 
-  /// The preset whose focal length the lens is currently at, or null for a
-  /// lens of its own.
   double? get _preset {
     for (final mm in _presets) {
       if ((mm - _lens.focalMm).abs() < 0.05) return mm;
@@ -282,8 +268,6 @@ class _CameraSettingsBodyState extends State<_CameraSettingsBody> {
       ],
     );
   }
-
-  // ---- the rows ------------------------------------------------------------
 
   Widget _typeRow(LumitTheme t) => dialogDropdown<bool>(
         t,
@@ -508,11 +492,9 @@ class _CameraSettingsBodyState extends State<_CameraSettingsBody> {
           ],
         );
 
-  /// A new focal length: the zoom that gives it at the film size in force.
   void _setFocal(double mm) => _setZoom(cameraZoomForFocal(
       focalMm: mm, filmMm: _filmMm, compW: widget.compWidth));
 
-  /// What an animated channel shows where its well would be.
   Widget _animated(LumitTheme t, String id) => Align(
         alignment: AlignmentDirectional.centerStart,
         child: Text(
@@ -521,8 +503,6 @@ class _CameraSettingsBodyState extends State<_CameraSettingsBody> {
           style: t.small.copyWith(color: t.textMuted),
         ),
       );
-
-  // ---- the pieces ----------------------------------------------------------
 
   Widget _row(LumitTheme t, String label, Widget control) => dialogRow(
         t,

@@ -61,14 +61,10 @@ part 'transcript_keys.dart';
 /// The engine's "none" for an index.
 const int _none = 0xFFFFFFFF;
 
-/// The page's side padding, as the Notes panel's, and the widest a line
-/// gets.
 const double _pagePad = 10;
 const double _pageWidth = 680;
 const double _headingHeight = 22;
 
-/// The panel's model from the engine's, with pauses left out when they are
-/// not shown.
 TranscriptModel _modelOf(BridgeCutTranscript b, {required bool showPauses}) {
   int? index(int v) => v == _none ? null : v;
   return TranscriptModel(
@@ -122,7 +118,6 @@ TranscriptModel _modelOf(BridgeCutTranscript b, {required bool showPauses}) {
 class TranscriptPanelFrb extends StatefulWidget {
   const TranscriptPanelFrb({super.key, this.initialReview});
 
-  /// A results bar open from the first frame, for the width sweep.
   @visibleForTesting
   final TranscriptFindMode? initialReview;
 
@@ -137,13 +132,9 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
 
   InterfaceSettings get _s => _ui.workspace.interface;
 
-  /// Whether the page shows the source view's footage rather than the
-  /// composition. Follows whichever side of the Viewer was fronted last, and
-  /// the strip's switch.
   bool _source = false;
   ViewMode? _lastViewMode;
 
-  /// What the engine last sent, and the page made of it.
   BridgeCutTranscript? _bridge;
   TranscriptModel _model = TranscriptModel.empty;
   bool _reading = false;
@@ -153,7 +144,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
   int _readSeq = 0;
   String? _readStamp;
 
-  /// What the page last read: the side and the item or composition.
   String? _subject;
 
   /// Bumped as each transcription ends, so a page with no composition open
@@ -175,46 +165,34 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
 
   TranscriptSelection _selection = TranscriptSelection.none;
 
-  /// Where a drag started, and whether Ctrl is adding a range to the ones
-  /// already picked.
   int? _anchor;
   TranscriptSelection _before = TranscriptSelection.none;
   bool _selecting = false;
 
-  /// The x a caret keeps as it moves up and down the lines.
   double? _goalX;
 
-  /// Where the caret goes once the page is read again after an edit.
   int? _caretFrame;
 
-  /// The word the playhead is on.
   int? _current;
 
   /// Whether the playhead is moving because the page asked, which the page
   /// does not follow.
   bool _ownSeek = false;
 
-  /// How many of following's own scrolls are running.
   int _following = 0;
 
-  /// The token a drag selection last reached, and the clips last asked of
-  /// the Cut timeline.
   int? _lastHit;
   Set<String> _sentClips = const {};
 
-  /// A press on picked words that may become a drag of them.
   Offset? _pressAt;
   bool _dragging = false;
   int? _drop;
   final DragEscape _drag = DragEscape();
 
-  /// Clicks on one token in quick succession: two pick the word, three the
-  /// paragraph.
   int _taps = 0;
   int? _tapToken;
   Duration _tapAt = Duration.zero;
 
-  /// The caret's blink.
   Timer? _blink;
   bool _caretOn = true;
 
@@ -225,22 +203,16 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
 
   final TranscriptFind _find = TranscriptFind();
 
-  /// The heard footage with no transcript, by name and id, and the set the
-  /// row's close mark hid, which stays hidden until the set changes.
   List<String> _untranscribedNames = const [];
   Set<String> _untranscribedIds = const {};
   Set<String>? _hiddenUntranscribed;
 
-  /// The page scrolling itself while a drag sits near its top or bottom
-  /// edge, and the last move to carry on from after each step.
   Timer? _edgeScroll;
   double _edgeSpeed = 0;
   PointerMoveEvent? _lastMove;
   final ScrollController _scroll = ScrollController();
   bool _followPaused = false;
 
-  /// An inline correction over the selected words, and the words it
-  /// replaces, taken when it opened.
   TextEditingController? _correct;
   ({FootageReference item, int at, int remove, String was})? _correctRun;
   final FocusNode _correctFocus = FocusNode();
@@ -315,8 +287,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
     super.dispose();
   }
 
-  // ------------------------------------------------------------- the subject
-
   CompositionReference? get _comp => _ui.selectedComp;
   ViewerSurface? get _sourceView => _ui.sourceView;
   FootageReference? get _footage {
@@ -334,7 +304,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
     return (facts?.startFrame.toInt() ?? 0, facts?.startDropFrame ?? false);
   }
 
-  /// The Viewer fronted its other side: the page goes with it.
   void _onViews() {
     final mode = _ui.views.active?.mode;
     if (mode != _lastViewMode) {
@@ -377,8 +346,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
     }
     final subject = '$_source/${_source ? footage?.internalid : comp?.internalid}';
     if (subject != _subject) {
-      // Another page: what was picked, the caret and what failed belong to
-      // the last.
       _subject = subject;
       _failed = false;
       _selection = TranscriptSelection.none;
@@ -472,8 +439,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
     _onPlayhead();
   }
 
-  /// The first and last word of [range] by identity, or null when it holds
-  /// only pauses and breaks.
   (Object, Object)? _wordEnds((int, int) range) {
     Object? first, last;
     for (var i = range.$1; i < range.$2; i++) {
@@ -493,7 +458,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
         : tokens[caret.clamp(0, tokens.length - 1)].startFrame;
   }
 
-  /// The first token starting at or after [frame].
   int? _tokenAtFrame(int? frame) {
     if (frame == null || _model.tokens.isEmpty) return null;
     final tokens = _model.tokens;
@@ -510,8 +474,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
     _read();
   }
 
-  // ------------------------------------------------------------ the playhead
-
   int get _playhead =>
       _source ? (_sourceView?.sourceFrame ?? 0) : _ui.playheadFrame.value;
 
@@ -519,7 +481,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
     final at = _playhead;
     final tokens = _model.tokens;
     int? found;
-    // The word heard at the playhead: the last one starting at or before it.
     var lo = 0, hi = tokens.length - 1;
     while (lo <= hi) {
       final mid = (lo + hi) >> 1;
@@ -539,15 +500,12 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
     }
   }
 
-  /// Whether either side is playing: the composition, or the source view.
   bool get _playing => _ui.playing.value || _ui.sourcePlaying.value;
 
   void _onPlaying() {
-    // Playing again lifts the pause a scroll put on following.
     if (_playing) _followPaused = false;
   }
 
-  /// Keep the word being played about a third of the way down.
   void _follow(int token) {
     final layout = _layout;
     if (layout == null || !_scroll.hasClients) return;
@@ -599,8 +557,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
     }
   }
 
-  // ----------------------------------------------------------- the selection
-
   void _select(TranscriptSelection next, {bool seek = false}) {
     _selection = next;
     _goalX = null;
@@ -619,7 +575,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
     }
   }
 
-  /// [next], with [anchor] as where a Shift+click extends from, or none.
   void _selectAt(TranscriptSelection next, int? anchor, {bool seek = false}) {
     _anchor = anchor;
     _select(next, seek: seek);
@@ -650,8 +605,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
     _sentClips = clips;
   }
 
-  /// The frame stretches the selection covers, or the token at the caret's
-  /// side when nothing is picked.
   List<BridgeFrameSpan> _spans({bool before = false}) {
     var ranges = _selection.ranges;
     if (ranges.isEmpty) {
@@ -707,7 +660,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
   void _onFind() {
     if (!mounted) return;
     setState(() {});
-    // The result in hand is picked and the playhead goes to it.
     final range = _find.currentRange;
     if (range == null || !_find.isOpen) {
       _shownResult = null;
@@ -729,7 +681,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
 
   void _onQuery() {
     final text = _find.query.text;
-    // New text is a search, whichever review was open.
     if (text != _queryWas &&
         text.isNotEmpty &&
         _find.mode != TranscriptFindMode.search) {
@@ -757,8 +708,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
     _scroll.jumpTo((top - view / 3).clamp(0.0, _scroll.position.maxScrollExtent));
     if (sought) _following--;
   }
-
-  // ----------------------------------------------------------------- the keys
 
   void _onActivePanel() {
     if (_ui.activePanel == Panel.transcript) {
@@ -877,8 +826,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
     _find.step(_model, by);
   }
 
-  // ---------------------------------------------------------------- the edits
-
   /// One engine call named in the History list, said on the status line when
   /// refused, and told to everyone when it went through. Nothing is sent
   /// while a page is being read, as its frames would be the last page's.
@@ -901,7 +848,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
     return true;
   }
 
-  /// A project-level write with no result to report.
   bool _write(String name, void Function() call) {
     final project = _app.project;
     if (project == null || _reading) return false;
@@ -925,7 +871,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
 
   bool get _ripple => !_s.transcriptLift;
 
-  /// Delete or lift the selected words, or the one beside the caret.
   void _remove({required bool ripple, bool before = false, String? name}) {
     if (_source) return;
     final comp = _comp;
@@ -953,7 +898,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
       final result = comp.cutTranscriptCopy(spans: spans);
       _ui.reportCut(result);
       if (result != BridgeCutResult.done) return false;
-      // The words' text goes to the system clipboard too.
       unawaited(_textToClipboard(spans));
       return true;
     } catch (_) {
@@ -978,7 +922,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
     }
   }
 
-  /// Drop the dragged words before [drop], moving or copying them.
   void _moveTo(int drop, {required bool copy}) {
     final comp = _comp;
     final spans = _spans();
@@ -992,14 +935,12 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
       return moved.result;
     });
     if (done && end != null) {
-      // The playhead to where the words now start.
       _caretFrame = end;
       _seekTo(end! -
           spans.fold(0, (n, s) => n + s.endFrame - s.startFrame));
     }
   }
 
-  /// The removed words picked, by clip and item, back into the composition.
   void _restore() {
     final comp = _comp;
     final b = _bridge;
@@ -1055,8 +996,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
         return false;
       });
 
-  /// The selected words as one item's run, or null when they span items,
-  /// several ranges or none.
   ({int item, int from, int to, int first, int last})? get _oneRun {
     if (_selection.ranges.length != 1) return null;
     final (a, b) = _selection.ranges.single;
@@ -1065,7 +1004,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
       final t = _model.tokens[i];
       if (!t.isWord) continue;
       if (t.item == null || t.index == null) return null;
-      // One item's words, one after another.
       if (item != null && (t.item != item || t.index != to! + 1)) return null;
       item = t.item;
       from ??= t.index;
@@ -1118,7 +1056,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
             ]));
   }
 
-  /// The selected words' runs, one per item and stretch of indices.
   List<BridgeWordRun> _wordRuns() {
     final b = _bridge;
     if (b == null) return const [];
@@ -1172,7 +1109,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
       'Rename speaker',
       () => _app.project!.renameSpeaker(speaker: speaker.id, name: name));
 
-  /// Transcribe the heard footage with no transcript, or all of it again.
   Future<void> _transcribe({bool again = false}) async {
     final b = _bridge;
     if (b == null) return;
@@ -1195,7 +1131,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
     }
   }
 
-  /// The running job's latest step, null when idle.
   ValueNotifier<BridgeTranscribeEvent?> get _job => _app.transcription.progress;
 
   void _onJob() {
@@ -1208,8 +1143,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
     }
   }
 
-  /// What a step says, for the bar: how far, the stage's word, and whether
-  /// it stopped badly.
   ({double fraction, String stage, bool failed})? _jobView(
       BridgeTranscribeEvent? event) {
     if (event == null) return null;
@@ -1217,7 +1150,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
       BridgeTranscribeStage.loading => l10n.transcriptStageLoading,
       BridgeTranscribeStage.listening => l10n.transcriptStageListening,
       BridgeTranscribeStage.speakers => l10n.transcriptStageSpeakers,
-      // A cancelled job is let go before it is shown.
       BridgeTranscribeStage.done || BridgeTranscribeStage.cancelled => l10n.done,
       BridgeTranscribeStage.failed => l10n.transcriptFailed,
     };
@@ -1239,9 +1171,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
   String _language = '';
   int _speakerCount = 0;
 
-  // ------------------------------------------------------- the source's words
-
-  /// The selected words' stretches as the item's own seconds.
   List<BridgeSourceSpan> _sourceSpans() => [
         for (final s in _model.spansOf(_selection.ranges))
           BridgeSourceSpan(
@@ -1250,7 +1179,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
           ),
       ];
 
-  /// [spans] of the source into [comp] at [at], one after another.
   bool _placeInto(CompositionReference comp, FootageReference footage,
       List<BridgeSourceSpan> spans, int at,
       {required bool insert, required String name}) {
@@ -1261,7 +1189,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
       name: name,
       (target, linked, withPicture, arrival) {
         final placed = comp.cutPlaceWords(
-          // The target is a layer of the fronted composition.
           target: fronted ? target : null,
           footage: footage,
           spans: spans,
@@ -1287,7 +1214,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
         insert: insert, name: insert ? 'Insert words' : 'Overwrite with words');
   }
 
-  /// After the composition's last clip.
   void _appendWords() {
     final comp = _comp;
     final footage = _footage;
@@ -1339,8 +1265,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
     });
     if (made case final comp?) _ui.setSelectedComp(comp);
   }
-
-  // ------------------------------------------------------- the results bar
 
   TranscriptFindActions get _findActions => TranscriptFindActions(
         previous: () => _stepFind(-1),
@@ -1442,7 +1366,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
             ));
   }
 
-  /// The found words retyped as the replacement, one undo step.
   void _replace({required bool current}) {
     final b = _bridge;
     if (b == null) return;
@@ -1481,8 +1404,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
     if (edits.isEmpty) return;
     _write('Correct words', () => _app.project!.correctWords(edits: edits));
   }
-
-  // --------------------------------------------------------------- the menus
 
   void _wordMenu(Offset global, int? token) {
     if (token != null && !_selection.contains(token)) {
@@ -1587,7 +1508,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
     );
   }
 
-  /// The speaker every selected word has, or null.
   int? get _selectedSpeaker {
     int? who;
     for (final (a, b) in _selection.ranges) {
@@ -1620,7 +1540,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
               endFrame: _model.tokens.last.endFrame),
         ]);
 
-  /// The words in [spans], as the engine writes them, on the system clipboard.
   Future<void> _textToClipboard(List<BridgeFrameSpan> spans) async {
     if (spans.isEmpty) return;
     String text;
@@ -1638,7 +1557,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
       _toggle((s) => s.transcriptTextSize = size.clamp(10, 22).roundToDouble());
 
   void _moreMenu(Offset global, {bool folded = false}) {
-    // The pause length as it is dragged, set when the drag lets go.
     num? pauseLive;
     showMenuAt<void>(
       context: context,
@@ -1656,7 +1574,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
               child: MenuLabel(label, ticked: ticked, action: action),
             );
         return [
-          // A strip too tight for its buttons keeps them here instead.
           if (folded) ...[
             row('transcript-more-fillers',
                 '${l10n.transcriptFillers} $_fillerCount',
@@ -1753,14 +1670,11 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
     );
   }
 
-  /// The speakers review, on speaker [i].
   void _findSpeaker(int i) {
     _find.speaker = i;
     _find.show(TranscriptFindMode.speakers);
     _find.refresh(_model, _s);
   }
-
-  // ------------------------------------------------------------- the windows
 
   Future<void> _export() async {
     final comp = _comp;
@@ -1871,9 +1785,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
     if (made.missing.isNotEmpty) await showLinesNotFound(context, made.missing);
   }
 
-  // -------------------------------------------------------------- the pointer
-
-  /// The page's coordinates for a pointer position in the list.
   Offset _pageOffset(Offset local) =>
       Offset(local.dx - _pagePad, local.dy + _scroll.offset - _pagePad);
 
@@ -1881,7 +1792,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
     final layout = _layout;
     if (layout == null) return null;
     final at = _pageOffset(local);
-    // Right of the text is the scrollbar's.
     if (at.dx > layout.width) return null;
     final b = layout.blockAt(at.dy);
     if (b == null) return null;
@@ -1944,7 +1854,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
         : 1;
     _tapToken = token;
     _tapAt = now;
-    // A first press on picked words may be the start of dragging them.
     if (!ctrl && _taps == 1 && _selection.contains(token)) {
       _pressAt = e.position;
       return;
@@ -1955,7 +1864,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
     if (_taps >= 3) {
       final p = _layout?.paragraphOf(token);
       if (p != null) {
-        // The caret ends the paragraph, and the playhead goes to its start.
         _select(_before.adding((p.from, p.to), caret: p.to));
         final first = _model.tokens[p.from];
         _seekTo(first.isWord ? first.heardStartFrame : first.startFrame);
@@ -2019,8 +1927,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
     _select(_before.adding(range, caret: hit >= a ? hit + 1 : hit));
   }
 
-  /// Near the page's top or bottom edge a drag scrolls it, faster the
-  /// closer, so words can go further than one screen.
   void _edgeScrollFor(double y) {
     if (!_scroll.hasClients) return;
     const edge = 28.0;
@@ -2059,7 +1965,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
       if (_dragging && live && drop != null) {
         _moveTo(drop, copy: HardwareKeyboard.instance.isAltPressed);
       } else if (!_dragging) {
-        // A click on picked words collapses the pick to a caret there.
         final hit = _hitAt(e.localPosition);
         if (hit != null) {
           _selectAt(TranscriptSelection(caret: hit.token), hit.token,
@@ -2083,8 +1988,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
       _setTextSize(_s.transcriptTextSize + by);
     });
   }
-
-  // ------------------------------------------------------------------ the page
 
   TranscriptLayout _layoutFor(LumitTheme t, double width) {
     final size = _s.transcriptTextSize;
@@ -2218,7 +2121,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
     return _page(t);
   }
 
-  /// The Transcribe button with the language and speaker count beside it.
   Widget _transcribeRow(LumitTheme t) => Wrap(
         alignment: WrapAlignment.center,
         crossAxisAlignment: WrapCrossAlignment.center,
@@ -2261,8 +2163,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
         ],
       );
 
-  /// A thin bar under the strip while a job runs: how far, the stage's word
-  /// and the percentage, and Cancel.
   Widget _progressRow(
       LumitTheme t, ({double fraction, String stage, bool failed}) view) {
     return Container(
@@ -2292,8 +2192,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
 
   void _cancelTranscription() => _app.transcription.cancel();
 
-  /// One file by name, several by count, with Transcribe and a close mark
-  /// that hides the row until the set of files changes.
   Widget _untranscribedRow(LumitTheme t) => Container(
         key: const ValueKey('transcript-untranscribed'),
         height: t.density.secondaryRow,
@@ -2390,7 +2288,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
                   // before the list scrolls.
                   itemBuilder: (context, i) => Listener(
                     onPointerSignal: _onPointerSignal,
-                    // The whole row, not only where its block paints.
                     behavior: HitTestBehavior.opaque,
                     child: Padding(
                       padding: const EdgeInsets.only(left: _pagePad),
@@ -2450,7 +2347,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
           ),
         ),
         if (p.heading) _heading(t, p),
-        // Each pause chip says how long it is on hover.
         for (var k = 0; k < p.placeholderOf.length; k++)
           if (p.placeholderOf[k] >= 0 && p.placeholderOf[k] < boxes.length)
             Positioned.fromRect(
@@ -2470,8 +2366,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
     );
   }
 
-  /// The speaker's dot and name, when the paragraph names one, and the
-  /// timecode of its first word.
   Widget _heading(LumitTheme t, TranscriptParagraph p) {
     final who = p.speaker;
     final name = who != null && who < _model.speakers.length
@@ -2516,7 +2410,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
     );
   }
 
-  /// The correction field over the first line of the words being retyped.
   Widget _correctField(LumitTheme t, TranscriptParagraph p, int first,
       TextEditingController field) {
     final rects = p.rectsOf(first);
@@ -2537,8 +2430,6 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
       ),
     );
   }
-
-  // ---------------------------------------------------------------- the strip
 
   int get _fillerCount => _model
       .fillers(

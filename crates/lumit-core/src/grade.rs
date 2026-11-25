@@ -19,7 +19,6 @@ use crate::model::{Document, EffectInstance, LayerKind};
 use crate::ops::{Op, OpError};
 use versions::GradeVersions;
 
-/// A shot: a layer, or one clip on a Sequence layer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Shot {
     pub comp: Uuid,
@@ -27,7 +26,6 @@ pub struct Shot {
     pub clip: Option<Uuid>,
 }
 
-/// Why a grade edit was refused.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum GradeError {
     #[error("no such layer or clip")]
@@ -44,8 +42,6 @@ pub enum GradeError {
     Op(#[from] OpError),
 }
 
-/// Whether `e` is part of a grade, the one definition versions, copied and
-/// pasted grades and looks all keep to ([`is_grade_name`]).
 #[must_use]
 pub fn is_grade(e: &EffectInstance) -> bool {
     is_grade_name(&e.effect.match_name)
@@ -61,7 +57,6 @@ pub fn is_grade_name(match_name: &str) -> bool {
             .is_some_and(|s| s.category == crate::fx::schema::FxCategory::Colour)
 }
 
-/// `shot`'s own stack and stored versions, as the document holds them.
 pub fn read(
     doc: &Document,
     shot: Shot,
@@ -137,8 +132,6 @@ pub fn write(
     })
 }
 
-/// Read `shot`, let `edit` change copies of its stack and versions, and
-/// answer what `edit` answered with the op that writes the change.
 pub fn edit<T>(
     doc: &Document,
     shot: Shot,

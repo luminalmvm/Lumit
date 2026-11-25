@@ -39,8 +39,6 @@ struct Params {
     paint: u32,
 };
 
-// ---- The SICELIOT texture helpers: the same text in every SICELIOT texture ----
-
 // A point in layer pixels turned by -angle about centre: the pattern turns.
 fn sx_turn(px: vec2<f32>, centre: vec2<f32>, degrees: f32) -> vec2<f32> {
     let d = px - centre;
@@ -48,7 +46,6 @@ fn sx_turn(px: vec2<f32>, centre: vec2<f32>, degrees: f32) -> vec2<f32> {
     return vec2<f32>(d.x * cos(a) - d.y * sin(a), d.x * sin(a) + d.y * cos(a));
 }
 
-// The finished colour, kept inside the layer when Paint asks for it.
 fn sx_paint(c: vec4<f32>, uv: vec2<f32>) -> vec4<f32> {
     if (p.paint == 0u) {
         return c * lumit_sample(uv).a;
@@ -58,7 +55,6 @@ fn sx_paint(c: vec4<f32>, uv: vec2<f32>) -> vec4<f32> {
 
 fn shade(uv: vec2<f32>) -> vec4<f32> {
     let px = lumit_px(uv);
-    // Side gradients across the layer's picture.
     let v = mix(p.top, p.bottom, uv.y) / 100.0;
     let h = mix(p.left, p.right, uv.x) / 100.0;
     var k = p.intensity / 100.0 * v * h;

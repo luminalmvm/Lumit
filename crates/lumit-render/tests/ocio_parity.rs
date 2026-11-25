@@ -32,8 +32,6 @@ use lumit_render::headless::HeadlessRenderer;
 use lumit_render::plan::Quality;
 use uuid::Uuid;
 
-/// Colours to compare, and the point of the list: the last eight rows are
-/// outside 0–1, which is the seam this whole design exists to close.
 fn probe_colours() -> Vec<[f32; 3]> {
     let mut v = vec![
         [0.0, 0.0, 0.0],
@@ -45,8 +43,6 @@ fn probe_colours() -> Vec<[f32; 3]> {
         [0.0, 0.0, 1.0],
         [0.004, 0.002, 0.001],
     ];
-    // Out of domain: negatives a wider gamut leaves behind in Rec.709 working,
-    // and high dynamic range up to the hundred §7.1 names.
     v.extend_from_slice(&[
         [-0.05, 0.4, 0.9],
         [-0.2, -0.1, 0.02],
@@ -60,8 +56,6 @@ fn probe_colours() -> Vec<[f32; 3]> {
     v
 }
 
-/// A factorised chain: a transfer curve then a primaries matrix, the shape
-/// every camera input transform has.
 fn factorised_chain() -> Chain {
     Chain::new(vec![
         Op::MonCurve {
@@ -75,7 +69,6 @@ fn factorised_chain() -> Chain {
     ])
 }
 
-/// A chain that mixes the channels, so it cannot factorise and takes the cube.
 fn cube_chain() -> Chain {
     Chain::new(vec![
         Op::Cdl {
@@ -406,9 +399,6 @@ fn solid_layer(name: &str, def: Uuid) -> Layer {
     }
 }
 
-/// One configuration's row: render the Viewer's present and the export's, and
-/// require one picture. Returns the eight-bit bytes so configurations can be
-/// compared with each other as well as with themselves.
 fn parity_row(
     r: &mut HeadlessRenderer,
     doc: &std::sync::Arc<Document>,
@@ -451,8 +441,6 @@ fn preview_equals_export_in_every_colour_configuration() {
         }
     };
 
-    // 1 — no config. The built-in display transform, and the state every
-    // project is in until somebody names a config.
     let (plain, plain_comp) = reference_comp(None);
     r.sync_colour(&plain);
     r.set_colour_view(None);
@@ -496,13 +484,10 @@ fn preview_equals_export_in_every_colour_configuration() {
         r.colour().loaded().and_then(|l| l.problem.clone())
     );
 
-    // 3 — the Viewer looking through a display/view.
     r.set_colour_output(None);
     r.set_colour_view(Some(("sRGB".into(), "Standard".into())));
     let through_view = parity_row(&mut r, &managed, managed_comp, "a config's display/view");
 
-    // 4 — a config space named at export. Same bake, same blit, bound at the
-    // other end of the same `display_tables` choice.
     r.set_colour_view(None);
     r.set_colour_output(Some("out_srgb".into()));
     assert!(
@@ -511,8 +496,6 @@ fn preview_equals_export_in_every_colour_configuration() {
     );
     let through_output = parity_row(&mut r, &managed, managed_comp, "a config space at export");
 
-    // The two ends of that choice are one transform: this config's view and its
-    // output space are both the sRGB encode, so the pictures are the same one.
     assert_eq!(
         through_view, through_output,
         "the view the Viewer shows and the space the export delivers are one table"

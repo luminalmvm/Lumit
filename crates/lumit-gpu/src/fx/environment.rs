@@ -19,10 +19,8 @@ const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 const IRRADIANCE: u32 = 32;
 /// The largest specular side, about a 2K panorama's own detail.
 const MAX_SIDE: u32 = 512;
-/// How many pictures are kept made at once.
 const KEPT: usize = 4;
 
-/// One picture's cubes on the card, and their charge on the ledger.
 pub struct EnvironmentMaps {
     /// The panorama itself, which the background reads at its own detail.
     picture: wgpu::Texture,
@@ -31,7 +29,6 @@ pub struct EnvironmentMaps {
     _held: Option<lumit_budget::Reservation>,
 }
 
-/// How a frame is lit by its environment.
 #[derive(Clone)]
 pub struct EnvironmentLight {
     pub maps: Arc<EnvironmentMaps>,
@@ -66,8 +63,6 @@ impl EnvironmentLight {
     }
 }
 
-/// The four entries a pass lit by an environment takes from `first`: the
-/// irradiance and specular cubes, their sampler and the uniform.
 pub(crate) fn layout(first: u32, stages: wgpu::ShaderStages) -> [wgpu::BindGroupLayoutEntry; 4] {
     let entry = |binding, ty| wgpu::BindGroupLayoutEntry {
         binding: first + binding,
@@ -133,7 +128,6 @@ fn cube(device: &wgpu::Device, label: &str, side: u32, levels: u32) -> wgpu::Tex
     })
 }
 
-/// What a pass binds: the two cubes and the uniform.
 pub(crate) struct Views {
     irradiance: wgpu::TextureView,
     specular: wgpu::TextureView,
@@ -141,7 +135,6 @@ pub(crate) struct Views {
 }
 
 impl Views {
-    /// `light`'s, made for one draw.
     pub(crate) fn of(ctx: &GpuContext, light: &EnvironmentLight) -> Self {
         Self {
             irradiance: cube_view(&light.maps.irradiance),
@@ -156,7 +149,6 @@ impl Views {
         }
     }
 
-    /// [`layout`]'s entries.
     pub(crate) fn entries<'a>(
         &'a self,
         first: u32,
@@ -228,7 +220,6 @@ struct Background {
     raster: [f32; 4],
 }
 
-/// The passes that make the cubes and the background, and the cubes made.
 pub(crate) struct EnvironmentFx {
     layout: wgpu::BindGroupLayout,
     keep: wgpu::ComputePipeline,
@@ -513,7 +504,6 @@ impl FxEngine {
             .get_or_init(|| EnvironmentFx::new(&ctx.device))
     }
 
-    /// The cubes kept for the picture named `key`, if they are.
     pub fn kept_environment(&self, key: u128) -> Option<Arc<EnvironmentMaps>> {
         let fx = self.environment.get()?;
         let mut kept = fx.kept.lock().ok()?;

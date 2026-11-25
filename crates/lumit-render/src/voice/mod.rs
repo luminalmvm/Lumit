@@ -55,10 +55,8 @@ const KEPT_BYTES: usize = 768 << 20;
 /// why.
 const MOST_SAMPLES: usize = 3600 * 48_000 * AUDIO_CHANNELS;
 
-/// What the badge says beneath an input longer than [`MOST_SAMPLES`].
 pub const TOO_LONG: &str = "Too long for Voice isolation. Split the layer.";
 
-/// One kept answer.
 struct Kept(Arc<Voices>);
 
 impl ByteSized for Kept {
@@ -82,7 +80,6 @@ pub(crate) fn account_against(ledger: &Arc<lumit_budget::Ledger>) {
     }
 }
 
-/// The model, as the effect is handed it.
 struct Model;
 
 impl VoiceModel for Model {
@@ -144,8 +141,6 @@ pub fn addon_missing(fx: &EffectInstance) -> Option<String> {
     installed().is_none().then(|| effect::PACK.to_owned())
 }
 
-/// The voice in `input`, interleaved stereo at `rate`: the one call into the
-/// model, kept by what it was asked.
 fn voices(input: &[f32], rate: u32) -> Heard {
     let Some(pack) = installed() else {
         return Heard::Missing;

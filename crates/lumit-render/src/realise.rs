@@ -117,7 +117,6 @@ impl Bounds {
         }
     }
 
-    /// The most a box may keep round a `w × h` frame.
     fn limit(w: u32, h: u32, frames: u32) -> Self {
         let (rx, ry) = (
             Self::room(w, frames).0 as u32,
@@ -155,7 +154,6 @@ impl Bounds {
         }
     }
 
-    /// This window of the frame's space, for the compositor.
     fn region(self) -> lumit_gpu::composite::Region {
         lumit_gpu::composite::Region {
             x: self.x as f32,
@@ -276,7 +274,6 @@ pub struct Reach {
     pub at_limit: bool,
 }
 
-/// What [`Realiser::late_clones`] calls.
 pub type LateCloneMaker<'a> = dyn Fn(&crate::draw::LateClones, usize) -> Vec<LayerInputDraw> + 'a;
 
 /// The flow backend for measuring a **composite's** motion (docs/08 §3.2),
@@ -292,7 +289,6 @@ pub type LateCloneMaker<'a> = dyn Fn(&crate::draw::LateClones, usize) -> Vec<Lay
 #[derive(Default)]
 pub struct CompositeFlow {
     engine: Option<lumit_flow::FlowEngine>,
-    /// The pictures made of neighbour frames, kept for the next frame.
     neighbours: neighbour_textures::NeighbourTextures,
     /// The synthesis model a Precomp on Flow with RIFE paints with, opened
     /// as the decode pool opens its own.
@@ -665,14 +661,10 @@ impl Realiser<'_> {
                     }
                     LayerInputDraw::EffectOutput(id) => return LayerInput::EffectOutput(*id),
                     LayerInputDraw::EffectKey(id) => return LayerInput::EffectKey(*id),
-                    // Made when its op comes round (`late_clones`).
                     LayerInputDraw::Late(_) => return LayerInput::Late,
-                    // An op's whole list: each layer rendered as it would be
-                    // alone, with its own size kept beside it.
                     LayerInputDraw::Several(list) => return self.several(list, w, h, of, below),
                     LayerInputDraw::Layer(d) => d,
                 };
-                // Onto the consuming layer's raster, where its placement says.
                 let set_down = |linear: &wgpu::Texture| match &d.place {
                     Some(place) => crate::fxops::layer_input::place_layer_input(
                         self.compositor,
@@ -696,9 +688,6 @@ impl Realiser<'_> {
                         d.tex_h as f32,
                     ),
                 };
-                // A Precomp input realises its nested comp exactly as a
-                // Precomp layer's picture does; anything else is
-                // the uploaded source pixels.
                 let linear = if let Some(n) = d.nested.as_ref().filter(|n| n.reads_depth()) {
                     // Distance, not a picture, so the referenced layer's own
                     // stack below has nothing to work on.
@@ -724,11 +713,6 @@ impl Realiser<'_> {
                 // The size it came out at. A comp is realised at the render
                 // scale, so in a zoomed-out Viewer it is smaller than `d.tex_w`.
                 let (lw, lh) = (linear.width(), linear.height());
-                // Effects-and-masks depth: run the depth layer's own
-                // stack on its texture before it is resampled, when the consumer's
-                // depth source is Effects and masks (`d.fx` non-empty). Temporal
-                // inputs stay empty in v1 (same boundary as the matte). Export
-                // does the same, so the two depth passes match.
                 let linear = if d.fx.is_empty() {
                     linear
                 } else {
@@ -793,8 +777,6 @@ impl Realiser<'_> {
                         &[],
                         &self.load_flare_lens(&d.flare_lens_files),
                         &[],
-                        // No mask paths through a referenced layer's own stack
-                        // — the same v1 boundary its mattes take.
                         &[],
                         // Its own birth schedules, so a Particulate in the
                         // referenced layer's stack draws its particles.
@@ -805,8 +787,6 @@ impl Realiser<'_> {
                         // it, not a row of its own: its cost is inside that
                         // layer's span already.
                         None,
-                        // Nothing names a referenced layer's picture in v1,
-                        // so its stack runs uncached.
                         None,
                     )
                 };
@@ -949,8 +929,6 @@ impl Realiser<'_> {
     ) -> wgpu::Texture {
         use crate::fxops::LayerInput;
         let frame = Bounds::frame(w, h);
-        // A picture moved onto another window of the frame's space, cut or
-        // padded with transparent to fit it.
         let place = |(tex, from): (wgpu::Texture, Bounds), to: Bounds| {
             lumit_gpu::fx::fit_at(&self.ctx, tex, to.w, to.h, [from.x - to.x, from.y - to.y])
         };
@@ -966,7 +944,6 @@ impl Realiser<'_> {
         };
         for step in &plan.steps {
             let tex = match step {
-                // The picture handed in, or nothing at all.
                 GraphStep::Provided => provided.cloned().map(|t| (t, frame)),
                 GraphStep::SceneDepth(n) => {
                     let depth = self.realise_scene_depth(n, None);
@@ -1190,9 +1167,6 @@ impl Realiser<'_> {
                         },
                         &[],
                         None,
-                        // Nothing names a box's picture in v1, so every step
-                        // runs uncached; the comp above it is cached by its
-                        // frame key as any comp is.
                         None,
                     );
                     // An op that spreads, a blur, grows the raster evenly on
@@ -1234,7 +1208,6 @@ impl Realiser<'_> {
                         Some(p) => place(p, room),
                         None => self.transparent(room.w, room.h),
                     });
-                    // The Channel pick and Invert as run_ops reads them.
                     let matte = match channel {
                         Some(c) if lumit_core::fx::cpu::matte_needs_prepare(*c, *invert) => self
                             .fx
@@ -1258,7 +1231,6 @@ impl Realiser<'_> {
                     if a.is_none() && b.is_none() {
                         None
                     } else {
-                        // Each laid where it sits, on a raster that holds both.
                         fn full(
                             (texture, at): &(wgpu::Texture, Bounds),
                             blend: lumit_gpu::composite::Blend,
@@ -1625,7 +1597,6 @@ impl Realiser<'_> {
                 },
                 &graphs,
                 fx_ms.as_mut(),
-                // The composite below carries no name in v1.
                 None,
             );
             // An adjustment layer's stack cannot grow the raster: what
@@ -1780,7 +1751,6 @@ impl Realiser<'_> {
                 None => return below.clone(),
             }
         } else {
-            // Equal weights 1/N sum to 1: the premultiplied arithmetic mean.
             let weight = 1.0 / n as f32;
             let mut running = self.compositor.accumulator(&self.ctx, tw, th);
             for k in 0..n {
@@ -1793,7 +1763,6 @@ impl Realiser<'_> {
         if ab.mix >= 1.0 {
             average
         } else {
-            // Mix blends the blurred average against the live below-composite.
             self.compositor.accumulate(
                 &self.ctx,
                 tw,
@@ -1843,34 +1812,6 @@ impl Realiser<'_> {
         (neighbours, fields)
     }
 
-    /// One measurement, entirely on the card: two pictures in, the `rgba32float`
-    /// field the kernels read out (docs/08 §3.2).
-    ///
-    /// The flow engine's texture entry point converts each picture to the luma
-    /// its pyramid starts from with one compute pass, so neither composite is
-    /// ever read back — a readback of two 1080p frames costs several times what
-    /// the measurement does.
-    ///
-    /// `None` is always a degrade and never a fault: no backend was given, the
-    /// device has no GPU flow, or the solver faulted (in which case the engine
-    /// has already given up on the GPU for good). The caller then binds no
-    /// field, and an effect with no field is its documented passthrough.
-    ///
-    /// ponytail: measured per realise, not cached across them. The decode
-    /// worker's flow cache keys by *content* — the source item and the two
-    /// frames — and a composite has no such name (`fx_input_key` is `None` for
-    /// exactly this reason), so filing one under the layer and the time
-    /// would go stale the moment somebody edited a layer below. Caching would
-    /// also save the smaller half: the neighbour composite is a whole extra comp
-    /// render and the flow is ~8 ms on top of it. So the ceiling is a doubled
-    /// comp render for every frame that reaches a flow effect above an
-    /// adjustment, and the trigger is that doubling measured: docs/13 B3's
-    /// scrub p95 on a comp whose flow effect sits on an adjustment layer
-    /// against the same effect over footage, where the decode worker's cache
-    /// answers instead. If the composite path is the one missing B3's 50 ms
-    /// while the footage path holds it, this is the whole of the difference.
-    /// The upgrade is to name the below-composite the way a nested comp's
-    /// frame is named, and then both halves can be cached under the one name.
     fn measure_flow(
         &self,
         a: &wgpu::Texture,
@@ -1935,9 +1876,6 @@ impl Realiser<'_> {
         m: &crate::draw::MatteDraw,
         region: Option<lumit_gpu::composite::Region>,
     ) -> wgpu::Texture {
-        // A Precomp matte realises its nested comp exactly as a Precomp
-        // layer's picture does (the layer-input shape); anything else is the
-        // uploaded source pixels.
         let linear = if let Some(n) = &m.nested {
             self.realise_nested(n.key, n.camera, n.width, n.height, n.background, &n.draws)
         } else {
@@ -1949,11 +1887,6 @@ impl Realiser<'_> {
         };
         // As for a layer input: a comp comes out at the render scale.
         let (lw, lh) = (linear.width(), linear.height());
-        // After-effects matte: run the matte source's own
-        // stack on its texture before it gates the consumer, so a keyed
-        // or blurred matte works. Temporal inputs stay empty in v1 — the
-        // matte source's echo/flow degrades to a still (documented). The
-        // same run export performs, so the two agree.
         let linear = if m.fx.is_empty() {
             linear
         } else {
@@ -2011,8 +1944,6 @@ impl Realiser<'_> {
                 &[],
                 &self.load_flare_lens(&m.flare_lens_files),
                 &[],
-                // As above: a referenced layer's own stack walks no
-                // mask path, and carries no birth schedule, in v1.
                 &[],
                 &[],
                 &side,
@@ -2020,7 +1951,6 @@ impl Realiser<'_> {
                 // A matte's own stack is part of the layer it
                 // gates, not a row of its own.
                 None,
-                // As above: unnamed in v1, so uncached.
                 None,
             )
         };
@@ -2176,7 +2106,6 @@ impl Realiser<'_> {
         let order = shadows::models_last(layers, shadowed);
         let mut early = None;
         let mut waiting = Vec::new();
-        // Each model's depth, by its place in the list.
         let mut model_depths = Vec::new();
         // Particles in the scene: each one's depth by layer, and where its
         // emitter is, by its place in the list.
@@ -2375,11 +2304,6 @@ impl Realiser<'_> {
                 })
             })
             .collect();
-        // Matte layers render alone into comp space (one texture per consumer;
-        // the shared-matte cache optimisation arrives with the evaluator).
-        // Deliberately at FULL comp resolution whatever the render scale: the
-        // fragment samples the matte by normalised comp UV, so any size is
-        // correct — shrink it later if it ever shows in a profile.
         let matte_textures: Vec<Option<wgpu::Texture>> = layers
             .iter()
             .map(|l| {
@@ -2718,7 +2642,6 @@ pub(crate) fn placed_in_3d<'a>(
     }
 }
 
-/// The pixels per metre a slot that reads the depth below carries, if one does.
 fn below_px_per_metre(slots: &[LayerInputDraw]) -> Option<f64> {
     slots.iter().find_map(|s| match s {
         LayerInputDraw::Below(ppm) => Some(*ppm),
@@ -2759,27 +2682,6 @@ fn region_is_safe(layers: &[CompLayerDraw]) -> bool {
     !layers.iter().any(CompLayerDraw::needs_whole_frame)
 }
 
-/// One propagated matte on the card: a gray8 plane at the source's own
-/// raster, uploaded as the working linear format so it goes through the same
-/// sampler every other auxiliary picture does.
-///
-/// Grey into all four channels. `set_matte` reads the luminance of whichever
-/// channel it is told to, so the alpha carries the same number as the colour and
-/// the plane reads correctly whichever way it is asked. The values are the
-/// matte's own 0..1 and are **not** colour, so no transfer function is applied
-/// to them — a coverage is a weight, not a picture.
-/// A gray8 byte goes straight to the fp16 bits the texture holds, through a
-/// 256-entry table — the same numbers the f32 route produced, without the
-/// full-plane f32 temporary in between.
-///
-// ponytail: uploaded fresh every rendered frame. An unchanged matte — the
-// common case, since a propagated run does not move while it is being watched
-// — re-uploads the whole plane per frame per Roto layer. Memoising the texture
-// per (effect instance, source frame) is the upgrade, and it belongs beside
-// `LutCache`/`FxCache` on the `Realiser`'s owner rather than in the roto store,
-// which is process-wide and knows nothing of a device. Observable trigger: a
-// Roto layer's upload showing up in the docs/13 budget traces, or scrubbing a
-// 4K propagated shot dropping frames the matte solve is not paying for.
 fn upload_roto_matte(ctx: &lumit_gpu::GpuContext, m: &crate::draw::RotoMatteDraw) -> wgpu::Texture {
     let mut table = [0u16; 256];
     for (v, bits) in table.iter_mut().enumerate() {

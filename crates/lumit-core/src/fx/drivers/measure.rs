@@ -36,12 +36,10 @@ use crate::sequence::{ClipSource, Shown};
 use crate::shape::geometry::Affine;
 use lumit_fx_macros::Effect;
 
-/// The layer-reference row, by parameter id.
 pub const LAYER_PARAM: &str = "layer";
 /// The wire-only Points input. Wired, it is measured instead of the layer.
 pub const POINTS_PORT: &str = "points";
 
-/// What the Space row offers.
 pub const SPACE_OPTIONS: [&str; 2] = ["Layer", "Comp"];
 /// Space: the box through the layer's transform and its parents'.
 pub const SPACE_COMP: u32 = 1;
@@ -58,7 +56,6 @@ const OUTPUTS: &[Port] = &[
     Port::new("bottom", "Bottom", PortType::Number),
 ];
 
-/// Measure's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "measure",
@@ -83,12 +80,10 @@ pub struct Measure {
     #[slider(label = "Padding y", min = 0.0, max = 200.0, default = 0.0, unit = Px)]
     pub padding_y: f32,
 
-    /// The layer's own pixels, or the comp's.
     #[choice(label = "Space", options = SPACE_OPTIONS, default = 0)]
     pub space: u32,
 }
 
-/// Measure's behaviour.
 pub struct MeasureDef;
 
 impl EffectDef for MeasureDef {
@@ -159,7 +154,6 @@ fn measured(cx: &DriverCx<'_>, comp_space: bool) -> Option<[f64; 4]> {
     })
 }
 
-/// The box round some points, or `None` when there are none.
 fn bounds(points: impl Iterator<Item = (f64, f64)>) -> Option<[f64; 4]> {
     points.fold(None, |b, (x, y)| {
         Some(b.map_or([x, y, x, y], |b: [f64; 4]| {
@@ -176,18 +170,14 @@ fn stream_box(stream: &PointsStream) -> Option<[f64; 4]> {
     }))
 }
 
-/// The frame size of each footage item the renderer has opened.
 static FOOTAGE: RwLock<BTreeMap<uuid::Uuid, (u32, u32)>> = RwLock::new(BTreeMap::new());
 
-/// Tell Measure the frame size of a footage item, as the renderer reads it.
 pub fn note_footage_frame(item: uuid::Uuid, width: u32, height: u32) {
     if let Ok(mut sizes) = FOOTAGE.write() {
         sizes.insert(item, (width, height));
     }
 }
 
-/// The frame size of footage `item` as the renderer read it, or `None` before
-/// it has been opened.
 #[must_use]
 pub fn footage_frame(item: uuid::Uuid) -> Option<(u32, u32)> {
     FOOTAGE.read().ok().and_then(|s| s.get(&item).copied())

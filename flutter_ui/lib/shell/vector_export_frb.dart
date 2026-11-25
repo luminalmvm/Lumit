@@ -50,11 +50,9 @@ import 'review_link_parts.dart' show reviewRowMenu;
 part 'vector_export_check.dart';
 part 'vector_export_player.dart';
 
-/// The label column of the settings rows and the gap after it.
 const double _labelColumn = 72;
 const double _rowGap = 10;
 
-/// How long a burst of edits settles before the export is asked for again.
 const Duration _settle = Duration(milliseconds: 250);
 
 /// The three formats, by the key the engine knows them by.
@@ -73,8 +71,6 @@ const List<String> _lottiePlayers = [
   'flutter',
 ];
 
-/// Open the window on the composition in front. Open already, it switches to
-/// that composition instead: it is one window, bound to one comp at a time.
 Future<void> showVectorExportFrb(BuildContext context) async {
   final ui = context.read<LumitUiState>();
   final comp = ui.selectedComp;
@@ -113,7 +109,6 @@ class _VectorWindow extends StatefulWidget {
   State<_VectorWindow> createState() => _VectorWindowState();
 }
 
-/// A composition the title strip offers.
 class _CompRow {
   final CompositionReference comp;
   final String name;
@@ -132,7 +127,6 @@ class _VectorWindowState extends State<_VectorWindow>
   List<_CompRow> _comps = const [];
   final Map<UuidValue, bool> _nodeGraphs = {};
 
-  /// The other compositions ticked into the batch, by id.
   final Set<UuidValue> _ticked = {};
 
   late BridgeVectorSettings _settings;
@@ -154,17 +148,14 @@ class _VectorWindowState extends State<_VectorWindow>
   /// restart of the interface over a running engine counts on from above.
   static int _epoch = DateTime.now().millisecondsSinceEpoch;
 
-  /// Each format's file ending, asked of the engine once.
   late final Map<String, String> _endings;
 
-  /// The ticked comps' own checks, by comp.
   final Map<UuidValue, List<BridgeVectorIssue>> _others = {};
 
   StreamSubscription<ScopedChange>? _changes;
   Timer? _debounce;
   final ScrollController _scroll = ScrollController();
 
-  // The player's state is in vector_export_player.dart.
   _Player _player = _Player.lottie;
   _Ground _ground = _Ground.board;
 
@@ -175,8 +166,6 @@ class _VectorWindowState extends State<_VectorWindow>
   bool _playing = false;
   int _frame = 0;
 
-  /// The player keeps to the Timeline: it shows the playhead's frame, and
-  /// moving it moves the playhead.
   bool _follow = false;
 
   /// The window is moving the playhead itself, so the change it hears back
@@ -195,7 +184,6 @@ class _VectorWindowState extends State<_VectorWindow>
     },
   );
 
-  /// The check's lines opened to show their places.
   final Set<String> _openLines = {};
 
   /// `setState` for the part files, whose extensions cannot call it.
@@ -206,7 +194,6 @@ class _VectorWindowState extends State<_VectorWindow>
   /// click beside the window gives it up, and a click in it takes it back.
   final ControlFocusNode _focus = ControlFocusNode(debugLabel: 'vector');
 
-  /// A write that failed, said in the footer until the next try.
   String? _writeError;
 
   @override
@@ -215,7 +202,6 @@ class _VectorWindowState extends State<_VectorWindow>
     _open = this;
     _endings = {for (final f in _formats) f: vectorExtension(format: f)};
     _clock.addListener(_tick);
-    // The clock has stopped by its last tick, so the last frame is set here.
     _clock.addStatusListener((status) {
       if (status == AnimationStatus.completed && _playing) {
         setState(() {
@@ -244,10 +230,6 @@ class _VectorWindowState extends State<_VectorWindow>
     super.dispose();
   }
 
-  // ---- the composition ------------------------------------------------------
-
-  /// Bind the window to [comp]: its remembered settings and path, its own
-  /// facts for the frame rate list, and a fresh export.
   void _bind(CompositionReference comp) {
     _playing = false;
     _clock.stop();
@@ -282,7 +264,6 @@ class _VectorWindowState extends State<_VectorWindow>
     unawaited(_ask());
   }
 
-  /// Switch the window to [comp], which is what opening it again does.
   void switchTo(CompositionReference comp) {
     if (comp.internalid == _comp.internalid) return;
     setState(() => _bind(comp));
@@ -296,7 +277,6 @@ class _VectorWindowState extends State<_VectorWindow>
     }
   }
 
-  /// Every composition in the project, in the Project panel's order.
   void _readComps() {
     final project = widget.app.project;
     if (project == null) return;
@@ -324,7 +304,6 @@ class _VectorWindowState extends State<_VectorWindow>
       .firstOrNull ??
       _compSettings.name;
 
-  /// The compositions whose edits concern this window.
   Set<UuidValue> get _watched => {
         _comp.internalid,
         ..._ticked,
@@ -353,8 +332,6 @@ class _VectorWindowState extends State<_VectorWindow>
       unawaited(_ask());
     });
   }
-
-  // ---- the export, in memory --------------------------------------------------
 
   /// Ask the engine for the export as the settings stand. A newer ask stops
   /// an older one on the engine's side and drops its answer here.
@@ -399,7 +376,6 @@ class _VectorWindowState extends State<_VectorWindow>
     });
   }
 
-  /// Change the settings, and ask again.
   void _edit(BridgeVectorSettings next) {
     setState(() => _settings = next);
     _askSoon();
@@ -451,9 +427,6 @@ class _VectorWindowState extends State<_VectorWindow>
     return picked;
   }
 
-  // ---- the export, on disk -----------------------------------------------------
-
-  /// The last export came back whole, so the file can be written.
   bool get _canExport => _preview != null && _error == null;
 
   Future<void> _export() async {
@@ -508,13 +481,10 @@ class _VectorWindowState extends State<_VectorWindow>
     return path;
   }
 
-  // ---- keys -------------------------------------------------------------------
-
   KeyEventResult _key(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
-    // A key typed into the path field is the field's.
     final focused = FocusManager.instance.primaryFocus?.context;
     if (focused != null &&
         focused.findAncestorWidgetOfExactType<EditableText>() != null) {
@@ -541,8 +511,6 @@ class _VectorWindowState extends State<_VectorWindow>
     }
     return KeyEventResult.handled;
   }
-
-  // ---- the window -------------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
@@ -604,7 +572,6 @@ class _VectorWindowState extends State<_VectorWindow>
     );
   }
 
-  /// The footer's facts, or the one calm line about what went wrong.
   String _footerLine() {
     final error = _writeError ?? _error;
     if (error != null && !_busy) return error;
@@ -614,8 +581,6 @@ class _VectorWindowState extends State<_VectorWindow>
         _fpsText(p.fps), p.width, p.height);
   }
 
-  /// The composition's name as a dropdown of every composition, each with a
-  /// tick that adds it to the batch. Picking a name switches the window.
   Widget _compPicker(BuildContext context, LumitTheme t) => Align(
         alignment: AlignmentDirectional.centerStart,
         child: Builder(
@@ -708,7 +673,6 @@ class _VectorWindowState extends State<_VectorWindow>
     );
   }
 
-  /// Output and Content over the check, scrolling as one column.
   Widget _settingsColumn(BuildContext context, LumitTheme t) =>
       dialogScroller(
         context,
@@ -844,7 +808,6 @@ class _VectorWindowState extends State<_VectorWindow>
   Widget _row(LumitTheme t, String label, Widget control) =>
       dialogRow(t, label, control, labelColumn: _labelColumn, gap: _rowGap);
 
-  /// Format, with each file extension dimmed beside its name.
   Widget _formatDropdown(LumitTheme t) => SizedBox(
         height: dialogControlHeight,
         child: BareDropdown<String>(
@@ -863,8 +826,6 @@ class _VectorWindowState extends State<_VectorWindow>
         ),
       );
 
-  /// The comp's own rate first, then the usual ones, and the comp's own
-  /// number among them when it is not one of those.
   List<(int, int)> get _rates {
     final own = (_compSettings.fpsNum, _compSettings.fpsDen);
     const usual = [(24, 1), (25, 1), (30, 1), (50, 1), (60, 1)];
@@ -888,8 +849,6 @@ class _VectorWindowState extends State<_VectorWindow>
     );
   }
 
-  /// The players the check judges against: a menu of ticks that stays open
-  /// while they are set.
   Widget _playersMenu(BuildContext context, LumitTheme t) {
     final ticked = _lottiePlayers.where(_settings.players.contains).length;
     return Align(
@@ -950,7 +909,6 @@ class _VectorWindowState extends State<_VectorWindow>
   }
 }
 
-/// A player's name for the reader, by the engine's key.
 String playerName(String key) => switch (key) {
       'web' => l10n.vectorPlayerWeb,
       'web_canvas' => l10n.vectorPlayerWebCanvas,
@@ -970,7 +928,6 @@ String _formatName(String format) => switch (format) {
       _ => l10n.vectorFormatLottie,
     };
 
-/// `29.97`, or `30` when it is whole.
 String _fpsText(double fps) =>
     fps == fps.roundToDouble() ? fps.round().toString() : fps.toStringAsFixed(2);
 
@@ -980,7 +937,6 @@ String _withExtension(String path, String ext) {
   return dot > slash ? '${path.substring(0, dot)}.$ext' : '$path.$ext';
 }
 
-/// [name] as a file name: the characters no file system takes are dropped.
 String _fileName(String name) {
   final clean = name.replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1f]'), '').trim();
   return clean.isEmpty ? 'animation' : clean;

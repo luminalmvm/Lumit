@@ -46,22 +46,16 @@ use crate::scenarios::{elapsed_ms, p95, scatter, span_scaled, Measurement, HALF,
 /// so there is no run of samples to take a percentile of, and the best of
 /// three is the work itself without whatever else the machine was doing.
 const OPEN_REPEATS: usize = 3;
-/// Frames sampled across the two hours for B19.
 const BOOKKEEPING_SAMPLES: usize = 64;
-/// Frames B20 plays: four seconds of the montage, twenty of `V1`'s cuts.
 const CUT_PLAY_FRAMES: u64 = 240;
 /// How far ahead of the frame being rendered its source decodes are posted,
 /// the playback scheduler's own figure.
 const READ_AHEAD: u64 = 4;
-/// Clips B21 steps through after the playback, one frame in each.
 const DECODER_ITEMS: usize = 32;
-/// Edits committed for B22, and for B23.
 const TRIM_SAMPLES: usize = 20;
 const RIPPLE_SAMPLES: usize = 10;
-/// Read-model walks timed for B24.
 const MODEL_SAMPLES: usize = 20;
 
-/// The long-form comp, built once, ready to be driven by any scenario.
 pub struct LongHarness {
     doc: Arc<Document>,
     comp: Uuid,
@@ -69,8 +63,6 @@ pub struct LongHarness {
 }
 
 impl LongHarness {
-    /// Generate (or reuse) the media in `media_dir` and build the long-form
-    /// comp over it. `Err` when the media cannot be made.
     pub fn new(media_dir: &Path) -> Result<Self, String> {
         let media = crate::media::generate_long(media_dir)?;
         let (doc, comp) = long_comp::build(&media)?;
@@ -82,7 +74,6 @@ impl LongHarness {
         })
     }
 
-    /// Every scenario in order, each reported to `progress` as it lands.
     pub fn all(&self, progress: &mut dyn FnMut(Measurement)) -> Result<Vec<Measurement>, String> {
         let mut out = Vec::new();
         let mut land = |ms: Vec<Measurement>| {
@@ -204,7 +195,6 @@ impl LongHarness {
                 ahead.request(r.prefetch_wants(&self.doc, self.comp, future, HALF));
             }
             posted_to = posted_to.max(ahead_to);
-            // And a second ahead, the files of the clips about to start.
             let through = (frame + FPS as u64).min(last);
             let after = cut_ahead_to.max(ahead_to);
             if after < through {
@@ -228,7 +218,6 @@ impl LongHarness {
             frames: count,
         };
 
-        // One frame in each of the clips after the montage, on the main row.
         let after = rat(MONTAGE_START + MONTAGE_FRAMES, FPS);
         let main = self.row(&self.doc, MAIN_PICTURE)?;
         let mut later: Vec<&Clip> = clips_of(main)
@@ -265,7 +254,6 @@ impl LongHarness {
             let doc = store.snapshot();
             let mut ops = Vec::new();
             let main = clips_of(self.row(&doc, MAIN_PICTURE)?);
-            // A different clip each time, across the whole row.
             let target = &main[scatter(i, 0, main.len()) as usize];
             let end = target.place_end().checked_sub(frame).map_err(time)?;
             for name in [MAIN_PICTURE, MAIN_SOUND] {
@@ -388,7 +376,6 @@ impl LongHarness {
         })
     }
 
-    /// The row called `name` in `doc`'s copy of the long comp.
     fn row<'a>(&self, doc: &'a Document, name: &str) -> Result<&'a Layer, String> {
         doc.comp(self.comp)
             .and_then(|c| c.layers.iter().find(|l| l.name == name))
@@ -449,7 +436,6 @@ fn clip_ops(comp: Uuid, row: &Layer, clips: Vec<Clip>) -> Vec<Op> {
     ops
 }
 
-/// A time that overflowed, as a scenario's error.
 fn time(e: lumit_core::time::TimeError) -> String {
     format!("long comp time: {e}")
 }

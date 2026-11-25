@@ -41,7 +41,6 @@ const REDUCTION_DB: f64 = 12.0;
 const REVERB_TIME_S: f64 = 0.8;
 const SMOOTHING: f64 = 50.0;
 
-/// Where the late reverb starts, in seconds after the sound.
 const LATE_S: f64 = 0.05;
 
 /// How much of each frame's power the running power estimate takes.
@@ -52,18 +51,14 @@ const POWER_SMOOTHING: f32 = 0.5;
 /// microphone than the room's critical distance.
 const KAPPA: f32 = 1.0;
 
-/// How much more than the predicted late reverb a bin gives up.
 const OVER: f32 = 1.5;
 
-/// How fast a gain opens, in milliseconds.
 const ATTACK_MS: f64 = 5.0;
 
-/// A one-pole coefficient for a time constant of `ms` at frames `hop_s` apart.
 fn coeff(ms: f64, hop_s: f64) -> f32 {
     (-hop_s / (ms.max(1e-3) * 0.001)).exp() as f32
 }
 
-/// The octave bands the reverb time is measured in.
 const BANDS_HZ: [f64; 5] = [250.0, 500.0, 1_000.0, 2_000.0, 4_000.0];
 
 /// Reverb time is only read while the effect is not finding the room's
@@ -75,7 +70,6 @@ pub const AUDIO_DEREVERB_ENABLED_WHEN: &[crate::fx::schema::EnabledWhen] =
         cond: crate::fx::schema::EnabledCond::BoolIs(false),
     }];
 
-/// Reverb reduction's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "audio_dereverb",
@@ -91,24 +85,19 @@ pub struct AudioDereverb {
     /// The deepest the reverb is turned down, in dB.
     #[bounded(min = 0.0, max = 30.0, default = REDUCTION_DB, unit = Raw)]
     pub reduction: f32,
-    /// Measure the room's reverb time from the sound itself.
     #[toggle(default = true, label = "Find reverb time")]
     pub auto: bool,
     /// The room's reverb time when Find reverb time is off, in seconds.
     #[bounded(min = 0.1, max = 3.0, default = REVERB_TIME_S, unit = Raw, label = "Reverb time")]
     pub reverb_time: f32,
-    /// How slowly the gain closes after a sound.
     #[bounded(min = 0.0, max = 100.0, default = SMOOTHING, unit = Percent)]
     pub smoothing: f32,
-    /// A slower, cleaner pass over the whole sound first.
     #[toggle(default = false, label = "Best quality")]
     pub best: bool,
-    /// Play only what was taken away.
     #[toggle(default = false, label = "Reverb only")]
     pub reverb_only: bool,
 }
 
-/// Reverb reduction's behaviour.
 pub struct AudioDereverbDef;
 
 impl EffectDef for AudioDereverbDef {
@@ -155,14 +144,10 @@ impl EffectDef for AudioDereverbDef {
     }
 }
 
-/// One channel's view of the room.
 pub(super) struct Room {
-    /// The running power per bin.
     power: Vec<f32>,
-    /// The reverberant power per bin over the last few frames, as a ring.
     ring: Vec<Vec<f32>>,
     at: usize,
-    /// The time-smoothed gain per bin.
     held: Vec<f32>,
     attack: f32,
     release: f32,
@@ -171,8 +156,6 @@ pub(super) struct Room {
 }
 
 impl Room {
-    /// This frame's late reverberant power per bin into `late`, from the
-    /// frame's `power` and the decay per hop.
     pub(super) fn late(&mut self, power: &[f32], decay: f32, late: &mut [f32]) {
         let span = self.ring.len().max(1);
         // The reverberant power now, from its own last value and the running
@@ -194,7 +177,6 @@ impl Room {
             }
         }
         self.at = (self.at + 1) % span;
-        // The oldest in the ring, carried on to now: the late part.
         let reach = decay.powi(span as i32 - 1);
         for (k, l) in late.iter_mut().enumerate() {
             *l = self
@@ -210,7 +192,6 @@ impl Room {
         }
     }
 
-    /// A fresh room for the framing.
     pub(super) fn new(framing: &Framing) -> Self {
         let late = ((LATE_S / framing.hop_s()).round() as usize).max(1);
         let mut room = Self {
@@ -279,7 +260,6 @@ pub(super) fn decay_per_hop(t60: f64, hop_s: f64) -> f32 {
     (-2.0 * 3.0 * std::f64::consts::LN_10 / t60.max(0.01) * hop_s).exp() as f32
 }
 
-/// One open Reverb reduction.
 struct Dereverb {
     state: Mutex<State>,
     latency: u32,
@@ -298,14 +278,9 @@ struct State {
     late: Vec<f32>,
     gains: Vec<f32>,
     channels: Vec<Room>,
-    /// The reverb time the look found.
     found: Option<f64>,
-    /// The spectrum as it came, before anything was taken away.
     came: Vec<Complex<f32>>,
-    /// Best quality's prediction weights, once the look has found them.
     filters: Option<Filters>,
-    /// Each channel's last few spectra as they came, as a ring, and where
-    /// the newest is.
     past: Vec<Vec<Vec<Complex<f32>>>>,
     newest: usize,
 }
@@ -331,7 +306,6 @@ impl AudioProcessor for Dereverb {
 
         let low = 10f64.powf(-reduction / 20.0) as f32;
 
-        // The decay per hop, and over the late reverb's delay.
         let hop_s = st.framing.hop_s();
         let decay = decay_per_hop(t60, hop_s);
         let State {
@@ -359,8 +333,6 @@ impl AudioProcessor for Dereverb {
                 room.set_smoothing(smoothing);
                 fft.forward(frame, spectrum);
                 came.copy_from_slice(spectrum);
-                // Best quality: the late part the weights predict from the
-                // frames before, taken away first.
                 if let Some(filters) = filters.as_ref() {
                     let at = *newest;
                     filters.predict(j, c, spectrum, |d| {
@@ -377,7 +349,6 @@ impl AudioProcessor for Dereverb {
                 room.late(power, decay, late);
                 room.gains(power, late, low, gains);
                 for ((x, y), &g) in spectrum.iter_mut().zip(came.iter()).zip(gains.iter()) {
-                    // Reverb only: what came in less what goes out.
                     *x = if only { y - *x * g } else { *x * g };
                 }
                 fft.inverse(spectrum, frame);
@@ -466,9 +437,7 @@ pub fn find_reverb_time(interleaved: &[f32], channels: usize, rate: u32) -> Opti
     Some(m.clamp(0.1, 3.0))
 }
 
-/// One band's reverb time from its power per frame.
 fn band_reverb_time(power: &[f64], hop_s: f64) -> Option<f64> {
-    // Three frames averaged, in dB.
     let db: Vec<f64> = (0..power.len())
         .map(|j| {
             let lo = j.saturating_sub(1);
@@ -499,8 +468,6 @@ fn band_reverb_time(power: &[f64], hop_s: f64) -> Option<f64> {
         while j + 1 < db.len() && db.get(j + 1) < db.get(j) {
             j += 1;
         }
-        // The stretch start..=j falls throughout. Fit the part after the
-        // sound's own stop and above the quiet.
         let from = start + skip;
         let mut to = j;
         while to > from && db.get(to).is_some_and(|d| *d < stop) {
@@ -541,8 +508,6 @@ mod tests {
     use super::*;
     use crate::fx::effects::audio::modulation::harness;
 
-    /// Bursts of noise, 150 ms on and 850 ms off, through a room with an
-    /// exponential noise tail of `t60` seconds, and the dry bursts.
     fn roomy(rate: u32, seconds: f64, t60: f64) -> (Vec<f32>, Vec<f32>) {
         let frames = (seconds * f64::from(rate)) as usize / 512 * 512;
         let mut seed = 21u64;
@@ -568,7 +533,6 @@ mod tests {
                 }
             })
             .collect();
-        // Convolve sparsely: the bursts are the only sound.
         let mut wet = vec![0.0f32; frames];
         for (n, x) in dry.iter().enumerate() {
             if *x == 0.0 {
@@ -592,8 +556,6 @@ mod tests {
         harness::same_seconds_at_any_rate(&AudioDereverbDef, &[], 440.0, 1.0, 0.03);
     }
 
-    /// **Plan 3**: a room's tail after each burst comes out much quieter and
-    /// the bursts themselves keep their level.
     #[test]
     fn it_shortens_the_tail_and_keeps_the_bursts() {
         let rate = 48_000;
@@ -612,7 +574,6 @@ mod tests {
                 })
                 .sum()
         };
-        // 200 to 600 ms after each burst starts: tail only.
         let tail_in = energy(&wet, 9_600, 28_800, 0);
         let tail_out = energy(&out, 9_600, 28_800, lat);
         let shorter = 10.0 * (tail_in / tail_out).log10();

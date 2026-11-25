@@ -1,6 +1,3 @@
-//! Drawing one run of a shape layer's art: the taper, the gradient, the
-//! combine, the dashes, and the outline an effect walks.
-
 use super::geometry::{densified, dist, flatten_path, polyline_path, transform_path, Affine};
 use super::modifier::{self, Lowered, ShapeModifier};
 use super::{colour, GradientStop, ShapeItem, Taper, MAX_GRADIENT_STOPS};
@@ -27,8 +24,6 @@ impl Taper {
             from /= over;
             to /= over;
         }
-        // How far down a ramp `x` of the way along it is: straight, or
-        // rounded by the ease.
         let ramp = |x: f64| {
             let x = x.clamp(0.0, 1.0);
             x + (x * x * (3.0 - 2.0 * x) - x) * ease
@@ -117,8 +112,6 @@ impl ShapeItem {
         let faded = |p: &Property| (p.value_at(t).clamp(0.0, 100.0) / 100.0) as f32;
         let from_alpha = from.0[3] * faded(&self.gradient_start_opacity);
         let to_alpha = to.0[3] * faded(&self.gradient_end_opacity);
-        // The ramp's colours in order: the fill, the stops between, then the
-        // gradient colour.
         let mut between: Vec<(f64, &GradientStop)> = self
             .gradient_stops
             .iter()
@@ -277,14 +270,11 @@ fn combined_at(run: &[Lowered], t: f64) -> Vec<Vec<(f64, f64)>> {
 pub(super) struct Art<'a> {
     /// The run's first item, whose paint the whole run takes.
     pub(super) item: &'a ShapeItem,
-    /// The modifiers acting on that item, which the whole run is drawn through.
     pub(super) mods: &'a [&'a ShapeModifier],
-    /// The item's own shape this instant, which a keyed path moves.
     drawn: std::borrow::Cow<'a, BezierPath>,
     /// What a combine, an offset or a trim made of it. `None` is "nothing
     /// has changed it", which draws the bezier itself.
     lines: Option<Vec<Vec<(f64, f64)>>>,
-    /// A combined run, whose contours close on themselves.
     ring: bool,
 }
 
@@ -331,7 +321,6 @@ impl<'a> Art<'a> {
         })
     }
 
-    /// The paths one copy draws, placed by `to_box`.
     pub(super) fn placed(&self, to_box: &Affine) -> Vec<BezierPath> {
         // A boolean's contours close on themselves; a trimmed piece has two
         // ends whatever the path it was cut from had.
@@ -439,7 +428,6 @@ pub(super) fn walked(
         return crate::mask::MaskPolyline::default();
     }
     let closed = points.len() > 2 && points.first() == points.last();
-    // A closed line ends on its first point again, which is no second vertex.
     let n = points.len() - usize::from(closed);
     let at = |j: usize| points.get(j % n).copied().unwrap_or_default();
     let corners = (0..n)
@@ -571,7 +559,6 @@ pub(super) fn dashed(
     while at < total {
         let length = pattern[i % pattern.len()];
         let end = at + length;
-        // Even entries are dashes, odd ones gaps — the SVG and AE convention.
         if i.is_multiple_of(2) && length > 0.0 && end > 0.0 && at < total {
             let piece = crate::paint::trimmed_with(
                 points,

@@ -16,8 +16,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Map placement means nothing until a Matte layer is picked, and Scale
-/// nothing while the brightness comes from the picture.
 pub const LUMA_FADE_ENABLED_WHEN: &[EnabledWhen] = &[
     EnabledWhen {
         param: "matte_placement",
@@ -31,7 +29,6 @@ pub const LUMA_FADE_ENABLED_WHEN: &[EnabledWhen] = &[
     },
 ];
 
-/// Luma fade's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "luma_fade",
@@ -93,11 +90,9 @@ pub struct LumaFade {
     )]
     pub pattern_scale: i32,
 
-    /// Where the Matte layer's picture sits on this one.
     #[choice(label = "Map placement", options = *MAP_PLACEMENT_OPTIONS, default = 0)]
     pub matte_placement: u32,
 
-    /// The host-uniform Mix every effect ends with, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -109,14 +104,12 @@ pub struct LumaFade {
     pub mix: f32,
 }
 
-/// One resolved Luma fade, reduced to what both paths read.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LumaFadeParams {
     /// Completion ÷ 100.
     pub completion: f32,
     /// Softness as a share of the 0..1 brightness range, floored above zero.
     pub band: f32,
-    /// The brightest parts go first instead of the darkest.
     pub invert: bool,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
@@ -221,7 +214,6 @@ pub fn luma_fade(rgba: &mut [f32], w: u32, p: &LumaFadeParams, matte: &[f32]) {
     }
 }
 
-/// Luma fade's behaviour.
 pub struct LumaFadeDef;
 
 impl EffectDef for LumaFadeDef {

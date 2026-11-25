@@ -1,6 +1,3 @@
-//! What the lighting pass reads: the comp's lights and a layer's Material
-//! options, and the placement maths that puts them in space.
-
 use lumit_core::expression::ExpressionContext;
 use std::sync::Arc;
 
@@ -97,8 +94,6 @@ pub(crate) fn add_lights(
     );
 }
 
-/// One resolved light as the lighting kernel reads it, for a picture lit in
-/// display encoding when `encoded`.
 pub(crate) fn lighting_light(
     l: &lumit_core::model::ResolvedLight,
     encoded: bool,
@@ -209,8 +204,6 @@ pub(crate) fn place_point(m: &[[f32; 4]; 4], x: f32, y: f32, z: f32) -> [f32; 3]
     [0, 1, 2].map(|k| m[0][k] * x + m[1][k] * y + m[2][k] * z + m[3][k])
 }
 
-/// A direction through the same matrix: the translation column is left out,
-/// which is what makes it a direction rather than a position.
 pub(crate) fn place_dir(m: &[[f32; 4]; 4], x: f32, y: f32, z: f32) -> [f32; 3] {
     [0, 1, 2].map(|k| m[0][k] * x + m[1][k] * y + m[2][k] * z)
 }
@@ -223,7 +216,6 @@ pub(crate) fn unit(v: [f32; 3]) -> [f32; 3] {
     v.map(|c| c / len)
 }
 
-/// A casting 3D layer's plane, as its shadows read it.
 pub(crate) fn caster_plane(
     tex: &wgpu::Texture,
     l: &crate::draw::CompLayerDraw,
@@ -239,7 +231,6 @@ pub(crate) fn caster_plane(
     }
 }
 
-/// A flat 8 x 8 tile at the layer's own size, as wide as the card takes.
 pub(crate) fn at_own_size(d: &mut crate::draw::CompLayerDraw) {
     let natural = (d.natural_size.0 as u32, d.natural_size.1 as u32);
     if let crate::draw::DrawSource::Pixels {

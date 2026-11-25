@@ -48,17 +48,13 @@ import 'layer_fold_frb.dart'
 import 'param_row_menu.dart' show ParamRowExtras, axisName;
 import 'timeline_extras_frb.dart' show showMenuAt;
 
-/// The rows that say whether a copy plays the template's intro and outro.
 const String copyPlayIntro = 'play_intro';
 const String copyPlayOutro = 'play_outro';
 
-/// What stands in for a value that differs between the selected copies.
 const String _dash = '—';
 
-/// The longer edge a footage well's picture is read at.
 const int _wellPictureEdge = 96;
 
-/// One copy the card edits.
 class CopyTarget {
   const CopyTarget({
     required this.layer,
@@ -74,7 +70,6 @@ class CopyTarget {
   final UuidValue? clip;
   final BridgeCopy copy;
 
-  /// The copy's staged rows as they were last read.
   final BridgeEffectInstanceInfo rows;
 }
 
@@ -101,10 +96,8 @@ class CopyCardFrb extends StatefulWidget {
   /// The copies the card edits, the one it shows first. Never empty.
   final List<CopyTarget> targets;
 
-  /// The composition the copies are in.
   final CompositionReference comp;
 
-  /// The panel's staging, which a row's drag and its commit go through.
   final EffectStackEditor editor;
   final bool open;
   final VoidCallback onToggle;
@@ -118,7 +111,6 @@ class CopyCardFrb extends StatefulWidget {
   final void Function(UuidValue effect, String param, BridgeEffectValue value)
       onLive;
 
-  /// The document changed, so the panel reads it again.
   final VoidCallback onChanged;
 
   /// The panel's row filter, lowercase. Empty draws every control.
@@ -129,7 +121,6 @@ class CopyCardFrb extends StatefulWidget {
 }
 
 class _CopyCardFrbState extends State<CopyCardFrb> {
-  /// Each text control's box and its focus, by the control's id.
   final Map<String, TextEditingController> _words = {};
   final Map<String, FocusNode> _wordNodes = {};
 
@@ -152,22 +143,16 @@ class _CopyCardFrbState extends State<CopyCardFrb> {
   /// them: a Reset or a Set as default changed their words under it.
   final Set<String> _resync = {};
 
-  /// The controls whose differing values have been opened to set.
   final Set<String> _revealed = {};
 
-  /// The installed font families, and the faces of each asked about.
   List<String>? _families;
   bool _familiesAsked = false;
   final Map<String, List<String>> _faces = {};
 
-  /// What each footage well shows, by the item's id: its name, and its
-  /// picture once that is read.
   final Map<String, ({String name, ui.Image? picture})> _pictures = {};
 
   CopyTarget get _first => widget.targets.first;
 
-  /// The templates the library has a newer version of: the heading offers
-  /// Update while this copy's is one.
   late final TemplateUpdates _updates;
 
   void _updatesChanged() {
@@ -225,12 +210,9 @@ class _CopyCardFrbState extends State<CopyCardFrb> {
     super.dispose();
   }
 
-  // --- Reading --------------------------------------------------------------
-
   Map<String, BridgeEffectValue> _valuesOf(CopyTarget target) =>
       {for (final v in target.rows.values) v.id: v.value};
 
-  /// Whether [rows] hold different values on the selected copies.
   bool _mixed(Iterable<String> rows) {
     if (widget.targets.length < 2) return false;
     final first = _valuesOf(_first);
@@ -368,8 +350,6 @@ class _CopyCardFrbState extends State<CopyCardFrb> {
     setState(() => _pictures[id] = (name: held.name, picture: image));
   }
 
-  // --- Writing --------------------------------------------------------------
-
   /// Run [edit] on every selected copy as one undo step, then have the
   /// panel read the document again.
   void _toEach(void Function(CopyTarget target) edit) {
@@ -392,7 +372,6 @@ class _CopyCardFrbState extends State<CopyCardFrb> {
     widget.onChanged();
   }
 
-  /// A row's typed value or the release of its drag, on every selected copy.
   void _write(UuidValue effect, String param, BridgeEffectValue value) =>
       _writeAll(effect, {param: value});
 
@@ -423,14 +402,11 @@ class _CopyCardFrbState extends State<CopyCardFrb> {
     widget.onChanged();
   }
 
-  /// Let [rows] follow the template again, on every selected copy.
   void _clear(List<String> rows) {
-    // Every row, for the card's own Reset.
     _resync.addAll(rows.isEmpty ? _words.keys : rows);
     _toEach((t) => t.layer.clearCopyRows(rows: rows, clip: t.clip));
   }
 
-  /// Write the shown copy's value for [control] into the template.
   void _setAsDefault(BridgeCopyControl control) {
     _resync.add(control.id);
     try {
@@ -458,8 +434,6 @@ class _CopyCardFrbState extends State<CopyCardFrb> {
       ui.setSelectedComp(template);
     }
   }
-
-  // --- Words ----------------------------------------------------------------
 
   /// Make a box for each text control and bring each up to the document,
   /// leaving the one being typed in alone.
@@ -612,8 +586,6 @@ class _CopyCardFrbState extends State<CopyCardFrb> {
     WidgetsBinding.instance.ensureVisualUpdate();
   }
 
-  // --- Drawing --------------------------------------------------------------
-
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
@@ -694,7 +666,6 @@ class _CopyCardFrbState extends State<CopyCardFrb> {
       rows.add(_playRow(context, draw, intro, outro));
     }
 
-    // Reset is offered while the copy holds anything of its own.
     final own = widget.targets.any((t) => t.copy.controls.any((c) => c.own)) ||
         _differs(intro, shown(copyPlayIntro)) ||
         _differs(outro, shown(copyPlayOutro));
@@ -763,7 +734,6 @@ class _CopyCardFrbState extends State<CopyCardFrb> {
     );
   }
 
-  /// One of the heading's words: Update, Open, Reset.
   Widget _headingWord(
           LumitTheme t, String key, String label, VoidCallback onPressed,
           {Color? colour}) =>
@@ -777,7 +747,6 @@ class _CopyCardFrbState extends State<CopyCardFrb> {
             style: t.mono.copyWith(fontSize: 10, color: colour ?? t.textMuted)),
       );
 
-  /// The rows one control draws, by its kind.
   List<Widget> _controlRows(
       BuildContext context, _Draw draw, BridgeCopyControl c) {
     final keyed = c.kind != BridgeControlKind.text &&
@@ -929,7 +898,6 @@ class _CopyCardFrbState extends State<CopyCardFrb> {
     ];
   }
 
-  /// [row] with Set as default in its menu, on a control the copy has set.
   Widget _withDefault(BridgeCopyControl c, Widget row) => c.own
       ? ParamRowExtras(rows: (close) => [_defaultRow(c, close)], child: row)
       : row;
@@ -943,8 +911,6 @@ class _CopyCardFrbState extends State<CopyCardFrb> {
         child: MenuLabel(l10n.templateCopySetAsDefault),
       );
 
-  /// What the menu of a row the card draws itself holds: Reset, and Set as
-  /// default on a control the copy has set.
   List<Widget> _ownRows(BridgeCopyControl c, List<String> rows, bool own,
           VoidCallback close) =>
       [
@@ -960,7 +926,6 @@ class _CopyCardFrbState extends State<CopyCardFrb> {
         if (c.own && c.kind != BridgeControlKind.footage) _defaultRow(c, close),
       ];
 
-  /// The menu of a row the card draws itself: the words, a font, a well.
   Widget _menued(BuildContext context, BridgeCopyControl c,
           {required List<String> rows,
           required bool own,
@@ -985,8 +950,6 @@ class _CopyCardFrbState extends State<CopyCardFrb> {
         ),
       );
 
-  /// The arrow that lets a row follow the template again, as the ordinary
-  /// rows' own arrow does.
   Widget _resetArrow(LumitTheme t, String key, VoidCallback onPressed) =>
       LumitTooltip(
         message: l10n.tipResetParameter,
@@ -1010,8 +973,6 @@ class _CopyCardFrbState extends State<CopyCardFrb> {
         child: Text(_dash, style: t.mono.copyWith(color: t.textMuted)),
       );
 
-  /// A text control: its name, then a box as wide as the card that grows
-  /// with its lines.
   Widget _wordsRow(BuildContext context, _Draw draw, BridgeCopyControl c) {
     final t = draw.t;
     final own = _differs(draw.params[c.id], draw.shown(c.id));
@@ -1070,8 +1031,6 @@ class _CopyCardFrbState extends State<CopyCardFrb> {
                       node: node,
                       style: style,
                       hint: mixed ? _dash : null,
-                      // A right-click in the box: the text's own menu, with
-                      // the control's rows under it.
                       menuRows: (close) => _ownRows(c, [c.id], own, close),
                     ),
                   ),
@@ -1084,8 +1043,6 @@ class _CopyCardFrbState extends State<CopyCardFrb> {
     );
   }
 
-  /// A font: the Text panel's family and face pickers. [under] sets it in
-  /// under a text control's words.
   Widget _fontRow(BuildContext context, _Draw draw, BridgeCopyControl c,
       BridgeParamInfo param,
       {required bool under}) {
@@ -1176,9 +1133,6 @@ class _CopyCardFrbState extends State<CopyCardFrb> {
     );
   }
 
-  /// A footage control: a well with the picture and its name, which takes
-  /// footage or a composition dropped from the Project panel, and how the
-  /// picture is fitted beside it.
   Widget _wellRow(BuildContext context, _Draw draw, BridgeCopyControl c) {
     final t = draw.t;
     final fitRow = '${c.id}_fit';
@@ -1212,7 +1166,6 @@ class _CopyCardFrbState extends State<CopyCardFrb> {
             borderRadius: BorderRadius.circular(t.tokens.wellRadius),
             border: Border.all(color: lit ? t.accent : t.hairline),
           ),
-          // In a narrow panel the picture gives way to the name.
           child: LayoutBuilder(
             builder: (context, room) => Row(
               children: [
@@ -1299,8 +1252,6 @@ class _CopyCardFrbState extends State<CopyCardFrb> {
     );
   }
 
-  /// The ticks at the foot of the card for a template with an intro or an
-  /// outro: whether this copy plays each.
   Widget _playRow(BuildContext context, _Draw draw, BridgeParamInfo? intro,
       BridgeParamInfo? outro) {
     final t = draw.t;
@@ -1345,7 +1296,6 @@ class _CopyCardFrbState extends State<CopyCardFrb> {
   }
 }
 
-/// What every row of one build of the card is drawn from.
 class _Draw {
   const _Draw({
     required this.t,
@@ -1358,14 +1308,12 @@ class _Draw {
 
   final LumitTheme t;
 
-  /// The staged instance the rows belong to.
   final UuidValue id;
   final Map<String, BridgeParamInfo> params;
 
   /// A row's value, the one a drag is holding where there is one.
   final BridgeEffectValue? Function(String row) shown;
 
-  /// [child] under the row's name in a shared project.
   final Widget Function(String row, Widget child) marked;
 
   /// Where the rows sit in the Timeline's selection, for a copy that is a
@@ -1373,8 +1321,6 @@ class _Draw {
   final String? rowPath;
 }
 
-/// A text control's box: as wide as the room it is given, and as tall as
-/// its lines.
 class _WordsBox extends StatelessWidget {
   const _WordsBox({
     super.key,
@@ -1391,7 +1337,6 @@ class _WordsBox extends StatelessWidget {
   final String? hint;
   final List<Widget> Function(VoidCallback close) menuRows;
 
-  /// The well's own inset and edge, across and down.
   static const double _across = 14;
   static const double _down = 8;
 

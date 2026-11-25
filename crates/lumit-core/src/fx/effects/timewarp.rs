@@ -23,8 +23,6 @@ use crate::fx::{
 use crate::model::{EffectInstance, EffectValue};
 use lumit_fx_macros::Effect;
 
-/// Timewarp's groups: the Speed or the Source frame, whichever drives it, the
-/// measurement, the motion blur and the input's rate.
 pub const TIMEWARP_GROUPS: &[ParamGroup] = &[
     ParamGroup {
         label: "",
@@ -63,14 +61,12 @@ pub const TIMEWARP_GROUPS: &[ParamGroup] = &[
     },
 ];
 
-/// Timewarp's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "timewarp",
     label = "Timewarp",
     version = 1,
     category = Temporal,
-    // Two renders of its input a frame, and the motion between them.
     cost = Heavy,
     roi = FullFrame,
     // What it shows moves with the clock under fixed controls.
@@ -78,7 +74,6 @@ pub const TIMEWARP_GROUPS: &[ParamGroup] = &[
     groups = TIMEWARP_GROUPS,
 )]
 pub struct Timewarp {
-    /// Whether a Speed or a Source frame says what time is shown.
     #[choice(label = "Adjust time by", options = ["Speed", "Source frame"], default = 0)]
     pub adjust: u32,
 
@@ -99,11 +94,9 @@ pub struct Timewarp {
     #[slider(label = "Source frame", min = 0.0, max = 300.0, default = 0.0, unit = Frames)]
     pub source_frame: f32,
 
-    /// How a time between two frames is shown.
     #[choice(options = ["Whole frames", "Frame mix", "Pixel motion"], default = 2)]
     pub method: u32,
 
-    /// How closely the motion is measured, for Pixel motion and the motion blur.
     #[choice(options = ["Draft", "Normal", "High"], default = 1)]
     pub quality: u32,
 
@@ -119,7 +112,6 @@ pub struct Timewarp {
     )]
     pub smoothness: f32,
 
-    /// Smear along the measured motion, as long as the shutter is open.
     #[toggle(label = "Motion blur", default = false)]
     pub motion_blur: bool,
 
@@ -135,7 +127,6 @@ pub struct Timewarp {
     )]
     pub shutter_angle: f32,
 
-    /// The most taps along a streak.
     #[slider(min = 2.0, max = 64.0, default = 16.0, hard_min = 2.0, hard_max = 64.0, unit = Raw)]
     pub samples: f32,
 
@@ -153,7 +144,6 @@ pub struct Timewarp {
     )]
     pub input_rate: f32,
 
-    /// The host-uniform Mix every effect ends with, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -165,7 +155,6 @@ pub struct Timewarp {
     pub mix: f32,
 }
 
-/// How the in-between frame is shown, as the kernel reads it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TimewarpMethod {
     WholeFrames,
@@ -173,7 +162,6 @@ pub enum TimewarpMethod {
     PixelMotion,
 }
 
-/// One resolved Timewarp, reduced to what the GPU pass reads.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TimewarpParams {
     pub method: TimewarpMethod,
@@ -269,7 +257,6 @@ impl Timewarp {
     /// How many frames of the input pass a frame, for the motion blur.
     pub const DERIVED_ADVANCE: ParamId = ParamId::new("derived.advance");
 
-    /// [`Self::packed`] with its two derived numbers read out of a resolved bag.
     #[must_use]
     pub fn packed_from(p: Params<'_>) -> TimewarpParams {
         Self::read(p).packed(
@@ -282,8 +269,6 @@ impl Timewarp {
     /// shown time moves through the input, input frames a frame.
     #[must_use]
     pub fn packed(self, phase: f32, advance: f64) -> TimewarpParams {
-        // Draft, Normal and Best: how small the picture is measured at and how
-        // hard the search works.
         let (divisor, detail) = match self.quality {
             0 => (4, 0),
             2 => (1, 2),
@@ -320,7 +305,6 @@ pub fn timewarp_mix(a: &mut [f32], b: &[f32], phase: f32) {
     }
 }
 
-/// One `w` by `h` RGBA picture or field, read as the kernel reads it.
 struct Plane<'a> {
     px: &'a [f32],
     w: usize,
@@ -389,7 +373,6 @@ pub fn timewarp_synth(
         },
     );
     let len = |x: f32, y: f32| (x * x + y * y).sqrt();
-    // How far each field has no partner in the other, or is not trusted.
     let unmatched = |f: [f32; 4], other: &Plane<'_>, x: f32, y: f32| -> f32 {
         let g = other.sample(x + f[0], y + f[1]);
         let thr = (OCC_REL * (len(f[0], f[1]) + len(g[0], g[1]))).max(OCC_ABS);
@@ -473,7 +456,6 @@ pub fn timewarp_synth(
     out
 }
 
-/// Timewarp's behaviour.
 pub struct TimewarpDef;
 
 impl EffectDef for TimewarpDef {

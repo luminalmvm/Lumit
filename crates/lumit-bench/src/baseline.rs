@@ -21,8 +21,6 @@ use std::collections::BTreeMap;
 
 use crate::scenarios::Measurement;
 
-/// How much worse than baseline is a regression rather than noise. Overridden
-/// by `LUMIT_BENCH_GATE_FACTOR` — see [`gate_factor`].
 pub const DEFAULT_GATE_FACTOR: f64 = 1.6;
 
 /// Below this, a ratio means nothing and the gate does not fire.
@@ -92,8 +90,6 @@ pub const DESKTOP_BUDGET_MS: [(&str, f64); 35] = [
     ("B41", 300.0),
 ];
 
-/// A run's numbers, keyed by budget — the results file the harness writes and,
-/// once a copy of it is committed, the baseline it is judged against.
 fn default_span_fraction() -> u64 {
     100
 }
@@ -114,7 +110,6 @@ pub struct Baseline {
 }
 
 impl Baseline {
-    /// This machine's results, ready to be written out.
     #[must_use]
     pub fn from_results(results: &[Measurement]) -> Self {
         Self {
@@ -128,7 +123,6 @@ impl Baseline {
     }
 }
 
-/// How one budget's number compares with its baseline.
 #[derive(Debug, Clone, Copy, serde::Serialize)]
 pub struct Verdict {
     pub budget: &'static str,
@@ -269,7 +263,6 @@ mod tests {
     #[test]
     fn past_the_factor_fails_and_names_the_budget() {
         let base = baseline(std::env::consts::OS);
-        // 1.625x baseline: past 1.6, and the kind of jump a real regression makes.
         let results = [result("B3", 65.0), result("B7", 30.0)];
         let verdicts = compare(&base, &results, DEFAULT_GATE_FACTOR).unwrap();
         let failed: Vec<_> = verdicts.iter().filter(|v| !v.pass).collect();
@@ -279,8 +272,6 @@ mod tests {
 
     #[test]
     fn a_measurement_under_the_noise_floor_does_not_fire() {
-        // A warm-playback serve that got five times dearer — and is still
-        // fifty microseconds, which nothing can see.
         let base = Baseline {
             os: std::env::consts::OS.into(),
             span_fraction: 100,
@@ -288,9 +279,7 @@ mod tests {
         };
         let verdicts = compare(&base, &[result("B5", 0.05)], DEFAULT_GATE_FACTOR).unwrap();
         assert!(verdicts[0].pass);
-        // The ratio is still reported: the gate is quiet, not blind.
         assert_eq!(verdicts[0].ratio, Some(5.0));
-        // Past the floor it fires like anything else.
         let verdicts = compare(&base, &[result("B5", 2.0)], DEFAULT_GATE_FACTOR).unwrap();
         assert!(!verdicts[0].pass);
     }

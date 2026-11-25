@@ -33,7 +33,6 @@ use crate::gpufx::AuxSlot;
 
 type Tex = wgpu::Texture;
 
-/// How often a walk keeps where it got to, in frames.
 pub(crate) const KEEP_EVERY: i64 = 8;
 
 /// The most bytes kept states hold between them, and at most a quarter of what
@@ -44,7 +43,6 @@ const KEPT_BYTES: u64 = 4 << 30;
 /// always has its own.
 const WALK_BYTES: u64 = 1 << 30;
 
-/// A state kept for the frames after it.
 struct Kept {
     buffer: wgpu::Buffer,
     ledger: Ledger,
@@ -56,26 +54,20 @@ impl lumit_cache::ByteSized for Kept {
     }
 }
 
-/// A walk's working buffers and how far they have got.
 struct Live {
     name: [u8; 32],
     work: Arc<SimWork>,
     ledger: Ledger,
-    /// The frame's own state, while `work` holds a time between frames, and what
-    /// the ledger has granted for it.
     between: Option<(wgpu::Buffer, Option<Reservation>)>,
     colliders: colliders::Models,
-    /// What the ledger has granted for `work`.
     _held: Option<Reservation>,
 }
 
-/// Kept states and working buffers, for the one card they are on.
 struct Store {
     ledger: Weak<lumit_budget::Ledger>,
     kept: lumit_cache::ByteLru<u128, Kept>,
     /// Latest used first.
     live: Vec<Live>,
-    /// The same, for smoke's walks.
     smoke: Vec<smoke::Live>,
     /// Volume files' frames, latest used first.
     #[cfg(not(target_arch = "wasm32"))]
@@ -85,7 +77,6 @@ struct Store {
 /// One store a card, so a Viewer and an export don't take each other's walks.
 static STORES: Mutex<Vec<Store>> = Mutex::new(Vec::new());
 
-/// Runs `f` on the store for `ctx`'s card, and lets go of a card that has gone.
 fn with_store<R>(ctx: &GpuContext, f: impl FnOnce(&mut Store) -> R) -> Option<R> {
     let mut stores = STORES.lock().ok()?;
     stores.retain(|s| s.ledger.strong_count() > 0);
@@ -115,7 +106,6 @@ fn state_name(walk: &[u8; 32], frame: i64) -> u128 {
     u128::from_le_bytes(out)
 }
 
-/// The furthest state kept of `walk` from `from` to `frame`.
 fn furthest_kept(ctx: &GpuContext, walk: &[u8; 32], frame: i64, from: i64) -> Option<Kept> {
     with_store(ctx, |s| {
         let mut k = frame.div_euclid(KEEP_EVERY) * KEEP_EVERY;
@@ -133,7 +123,6 @@ fn furthest_kept(ctx: &GpuContext, walk: &[u8; 32], frame: i64, from: i64) -> Op
     .flatten()
 }
 
-/// The volume file `layer` draws, if it does.
 fn volume_file_path(doc: &Document, layer: &Layer) -> Option<std::path::PathBuf> {
     #[cfg(not(target_arch = "wasm32"))]
     return volume_file::path_of(doc, layer);
@@ -144,7 +133,6 @@ fn volume_file_path(doc: &Document, layer: &Layer) -> Option<std::path::PathBuf>
     }
 }
 
-/// A walk's name: the rows and all it reads, and which clone it is.
 fn walk_name(carried: &Trails) -> [u8; 32] {
     let mut h = blake3::Hasher::new_derive_key("lumit card walk 1");
     h.update(&carried.key);
@@ -153,7 +141,6 @@ fn walk_name(carried: &Trails) -> [u8; 32] {
     *h.finalize().as_bytes()
 }
 
-/// Everything a walk needs of the document, found once.
 pub(crate) struct Source<'a> {
     pub doc: &'a Arc<Document>,
     pub comp: &'a Composition,
@@ -258,7 +245,6 @@ fn steps_of(then: &Inputs, steady: &Steady, frame: i64, h: f64, dt: f64) -> Vec<
         .collect()
 }
 
-/// One lot of steps of `work`, from rows `then`.
 #[allow(clippy::too_many_arguments)]
 fn run_steps(
     fx: &FxEngine,
@@ -329,7 +315,6 @@ fn run_steps(
     );
 }
 
-/// A kept state put back, and whatever the walk had to the side of it.
 fn start_from(
     fx: &FxEngine,
     ctx: &GpuContext,
@@ -361,7 +346,6 @@ fn start_from(
         }
     }
     if reached.is_none() {
-        // From the in point, with the burst it opens on.
         fx.sim_clear(ctx, &live.work);
         live.ledger = Ledger {
             frame: from,
@@ -412,8 +396,6 @@ pub fn walked_here() -> u64 {
     WALKED.with(std::cell::Cell::get)
 }
 
-/// One whole frame on from `live`'s, whose rows at the frame's start are `now`.
-/// Hands back the rows at its end.
 fn frame_on(
     fx: &FxEngine,
     ctx: &GpuContext,
@@ -450,7 +432,6 @@ fn frame_on(
     Some(then)
 }
 
-/// How long a walk goes on before the Viewer's bar says so.
 const SAY_WALKING_AFTER_MS: u128 = 250;
 
 /// Particle steps between handing work to the card and waiting for it, so a
@@ -458,7 +439,6 @@ const SAY_WALKING_AFTER_MS: u128 = 250;
 /// one (docs/13 section 5).
 const WORK_PER_SUBMIT: u64 = 2_000_000;
 
-/// Counts `more` particle steps of work, and hands them over once they add up.
 pub(crate) fn hand_over(ctx: &GpuContext, work: &mut u64, more: u64) {
     *work += more;
     if *work >= WORK_PER_SUBMIT {
@@ -480,7 +460,6 @@ fn keep(fx: &FxEngine, ctx: &GpuContext, name: &[u8; 32], live: &Live) {
     let _ = with_store(ctx, |s| s.kept.insert(at, Kept { buffer, ledger }));
 }
 
-/// `name`'s working buffers, or new ones for `cap` particles with none born.
 fn take_live(fx: &FxEngine, ctx: &GpuContext, name: &[u8; 32], cap: u32) -> Option<Live> {
     let found = with_store(ctx, |s| {
         s.live
@@ -494,8 +473,6 @@ fn take_live(fx: &FxEngine, ctx: &GpuContext, name: &[u8; 32], cap: u32) -> Opti
     Some(bake::fresh(fx, ctx, *name, cap))
 }
 
-/// `live` back in the store, with the walks used longest ago let go once they
-/// hold too much.
 fn give_back(ctx: &GpuContext, live: Live) {
     let _ = with_store(ctx, |s| {
         s.live.insert(0, live);
@@ -545,8 +522,6 @@ fn walked(
             let done = (live.ledger.frame - from_frame) as f32;
             crate::profile::report_walk(done / (target - from_frame).max(1) as f32);
         }
-        // A frame nobody wants any more stops here, and the walk is left where
-        // it got to for the next.
         if crate::cancel::requested() {
             crate::cancel::cut_short();
             give_back(ctx, live);
@@ -560,7 +535,6 @@ fn walked(
         if keeps && live.ledger.frame % KEEP_EVERY == 0 {
             keep(fx, ctx, name, &live);
         }
-        // The last frame's steps go with the draw.
         if live.ledger.frame < target {
             hand_over(
                 ctx,
@@ -606,15 +580,12 @@ fn walked(
     Some(work)
 }
 
-/// Lets go of every walk and kept state, on a project going away.
 pub fn let_go() {
     if let Ok(mut stores) = STORES.lock() {
         stores.clear();
     }
 }
 
-/// Lets go of the kept states, with the rest of the card's caches. A walk then
-/// starts from where it is, or from the start.
 pub fn clear_kept() {
     if let Ok(mut stores) = STORES.lock() {
         for s in stores.iter_mut() {
@@ -655,8 +626,6 @@ pub fn timed_steps(
     Some(best)
 }
 
-/// The particles a simulation's op got to, for a wire to read. `None` for any
-/// other op, and when the frame is no longer wanted.
 pub(crate) fn for_stream(
     fx: &FxEngine,
     ctx: &GpuContext,
@@ -675,7 +644,6 @@ pub(crate) fn for_stream(
     walked(fx, ctx, &src, &walk_name(carried), sched.t)
 }
 
-/// How `work`'s particles are drawn with the rows `p`.
 pub(crate) fn view<'a>(work: &'a SimWork, p: Params<'_>) -> SimView<'a> {
     SimView {
         state: &work.state,
@@ -723,7 +691,6 @@ pub fn state_after(
     )
 }
 
-/// A simulated Particulate over `input`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn draw(
     fx: &FxEngine,

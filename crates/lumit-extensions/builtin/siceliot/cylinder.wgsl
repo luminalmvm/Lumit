@@ -58,7 +58,6 @@ fn cy_turn(v: vec3<f32>, axis: u32, rad: f32) -> vec3<f32> {
     }
 }
 
-// The axes in the order the tube is turned about them.
 fn cy_order() -> vec3<u32> {
     switch p.rotation_order {
         case 1u: { return vec3<u32>(0u, 2u, 1u); }
@@ -94,7 +93,6 @@ fn cy_returned(v0: vec3<f32>) -> vec3<f32> {
     return cy_turn(v, o.z, cy_angle(o.z));
 }
 
-// Where the light comes from, as a direction (as Sphere's).
 fn cy_light() -> vec3<f32> {
     let lift = clamp(p.light_height * 0.01, -1.0, 1.0);
     let flat = sqrt(max(1.0 - lift * lift, 0.0));
@@ -117,8 +115,6 @@ fn cy_lit(skin: vec4<f32>, n: vec3<f32>) -> vec4<f32> {
     return vec4<f32>(rgb, skin.a);
 }
 
-// One hit on the tube: the skin there, lit, and how much of the pixel the
-// tube's top or bottom rim leaves it.
 fn cy_hit(o: vec3<f32>, d: vec3<f32>, t: f32, inside: bool) -> vec4<f32> {
     let pt = o + d * t;
     let half_h = max(p.height, 1e-3) * 0.5;

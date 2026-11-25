@@ -28,7 +28,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Set matte's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "set_matte",
@@ -62,7 +61,6 @@ pub struct SetMatte {
     #[toggle(label = "Combine with existing alpha", default = false)]
     pub combine: bool,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
