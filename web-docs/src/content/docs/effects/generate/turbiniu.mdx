@@ -128,9 +128,9 @@ The guides follow the masks' keys, so the strokes move as the masks do.
 | **Rough edge grain** | Slider | 1 to 100; down to 0.5 and up to 10000 | 12 | Pixels at composition size |
 | **Coverage hardness** | Slider | 0 to 100 | 0 | Per cent |
 | **Density colour** | Slider | 0 to 100 | 0 | Per cent |
-| **Thin paint colour** | Colour | Each channel 0 to 4, scene-linear | 0.15, 0.15, 0.15, 1 | - |
-| **Mid paint colour** | Colour | Each channel 0 to 4, scene-linear | 0.5, 0.5, 0.5, 1 | - |
-| **Dense paint colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Thin paint colour** | Colour | Each channel 0 to 4, scene-linear | 0.8, 0.45, 0.15, 1 | - |
+| **Mid paint colour** | Colour | Each channel 0 to 4, scene-linear | 0.55, 0.08, 0.05, 1 | - |
+| **Dense paint colour** | Colour | Each channel 0 to 4, scene-linear | 0.05, 0.02, 0.03, 1 | - |
 | **First path** | Masks | This layer's masks | First mask | - |
 | **First guide › Edge softness** | Slider | 0 to 10; up to 1000 | 1 | Pixels at composition size |
 | **First guide › Sample spacing profile** | Curve | 2 to 32 points in the unit square | The identity diagonal | - |
@@ -284,10 +284,12 @@ the strokes as they were.
   the outer strokes the tearing reaches. **Rough edge grain** is how long each tear is.
 - **Coverage hardness** goes from soft, wet coverage to crisp, dry coverage: the coverage
   from the texture, the wave and **Dry brush** is pressed towards fully on or off, as Levels
-  squeezes a matte.
+  squeezes a matte. **Base coverage** itself is kept, so strokes made see-through with it
+  stay as they are.
 - **Density colour** recolours the strokes by how much paint they carry: thin paint takes
   **Thin paint colour**, middling paint **Mid paint colour** and full paint **Dense paint
-  colour**, a three-tone colour map read from the coverage.
+  colour**, a three-tone colour map read from the coverage. They start as paint looks: pale
+  and warm where it is thin, full red in between, nearly black where it is dense.
 
 The patterns are laid along the stroke in pixels, so they stay where they are as **Trim out**
 draws the stroke on, and **Variation seed** gives other ones.

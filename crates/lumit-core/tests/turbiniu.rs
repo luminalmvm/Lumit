@@ -512,20 +512,32 @@ fn edge_roughness_eats_each_side_on_its_own() {
 #[test]
 fn hardness_presses_coverage_to_on_or_off() {
     let (guide, fx) = brush();
-    let at = |base: f32, hardness: f32| {
+    let at = |base: f32, wave: f32, hardness: f32| {
         coverages(
             &Turbiniu {
                 alpha_noise_brightness: base,
+                alpha_sinus_amplitude: wave,
+                alpha_sinus_frequency: 4.0,
                 coverage_hardness: hardness,
                 ..fx
             }
             .geometry(&guide, &guide, 1.0, [400, 100]),
-        )[10]
+        )
     };
-    assert!((at(0.4, 0.0) - 0.4).abs() < 1e-5);
-    assert!(at(0.4, 100.0) < 1e-5);
-    assert!(at(0.6, 100.0) > 1.0 - 1e-5);
-    assert!(at(0.4, 50.0) < 0.4 && at(0.6, 50.0) > 0.6);
+    // A Base coverage lowered to see through the strokes is kept.
+    for hardness in [0.0, 50.0, 100.0] {
+        assert!(at(0.4, 0.0, hardness)
+            .iter()
+            .all(|&a| (a - 0.4).abs() < 1e-5));
+    }
+    // What the wave takes away goes to on or off, under Base coverage.
+    let soft = at(0.8, 0.6, 0.0);
+    let hard = at(0.8, 0.6, 100.0);
+    let between = |s: &[f32]| s.iter().filter(|&&a| a > 0.05 && a < 0.75).count();
+    assert!(between(&soft) > soft.len() / 3);
+    assert!(between(&hard) < hard.len() / 10, "{}", between(&hard));
+    assert!(hard.iter().all(|&a| a < 0.8 + 1e-5));
+    assert!(hard.iter().any(|&a| a < 1e-3) && hard.iter().any(|&a| a > 0.8 - 1e-3));
 }
 
 #[test]
@@ -577,4 +589,63 @@ fn edge_roughness_tears_a_familys_outline_from_the_outside() {
     );
     assert!(stroke(40).iter().any(|&a| a < 0.1), "on both sides");
     assert!(stroke(0).iter().any(|&a| a > 0.9), "but not all away");
+}
+
+#[test]
+fn the_brush_texture_meets_itself_round_a_closed_guide() {
+    let ring = path(
+        &[
+            [20.0, 20.0],
+            [220.0, 20.0],
+            [220.0, 220.0],
+            [20.0, 220.0],
+            [20.0, 20.0],
+        ],
+        true,
+    );
+    let flat = CurvePoints::sanitised(&[[0.0, 1.0], [1.0, 1.0]]);
+    let fx = Turbiniu {
+        curve_segments: 400,
+        dry_brush: 50.0,
+        dry_brush_ramp: flat,
+        dry_brush_scale: 15.0,
+        ..controls()
+    };
+    for seed in 0..6 {
+        let vertices = Turbiniu {
+            random_seed: seed,
+            ..fx
+        }
+        .geometry(&ring, &ring, 1.0, [240, 240]);
+        let pieces: Vec<_> = vertices.chunks(18).collect();
+        let start = pieces[0][6][5];
+        let end = pieces[pieces.len() - 1][8][5];
+        assert!(
+            (start - end).abs() < 0.05,
+            "seed {seed}: {start} then {end}"
+        );
+    }
+}
+
+#[test]
+fn a_tip_sits_on_a_torn_strokes_middle() {
+    let (guide, fx) = brush();
+    let vertices = Turbiniu {
+        edge_roughness: 100.0,
+        cap_end: 3,
+        ..fx
+    }
+    .geometry(&guide, &guide, 1.0, [400, 100]);
+    // A round tip is 12 slices of 9 vertices, its centre first.
+    let tip = vertices.len() - 108;
+    let centre = vertices[tip];
+    let last = &vertices[tip - 18..tip];
+    let middle = [
+        (last[8][0] + last[10][0]) * 0.5,
+        (last[8][1] + last[10][1]) * 0.5,
+    ];
+    assert!(
+        (centre[0] - middle[0]).abs() < 1e-3 && (centre[1] - middle[1]).abs() < 1e-3,
+        "{centre:?} vs {middle:?}"
+    );
 }

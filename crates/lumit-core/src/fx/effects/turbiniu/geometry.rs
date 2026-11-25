@@ -245,9 +245,35 @@ fn smoothstep(lo: f32, hi: f32, x: f32) -> f32 {
 
 /// The brush texture's own patterns, read along a stroke in 0..1: `x` in
 /// grains along it, each stroke (and each `salt`) on a row of its own.
-fn grain(field: &Perlin, x: f32, line: usize, salt: f32) -> f32 {
+///
+/// `lap` is how many grains a closed guide is round, 0 on an open one. On a
+/// closed guide the pattern is read round a circle of that length, so it
+/// meets itself where the guide starts and ends instead of jumping there.
+fn grain(field: &Perlin, x: f32, lap: f32, line: usize, salt: f32) -> f32 {
     let y = line as f32 * 3.71 + salt;
-    (field.sample(x.clamp(-1e6, 1e6), y, salt * 0.5, 0.0) * 2.0 + 0.5).clamp(0.0, 1.0)
+    let value = if lap > 0.0 {
+        let radius = lap / TAU;
+        let angle = x / lap * TAU;
+        field.sample(
+            (radius * angle.cos()).clamp(-1e6, 1e6),
+            y,
+            (radius * angle.sin() + salt * 0.5).clamp(-1e6, 1e6),
+            0.0,
+        )
+    } else {
+        field.sample(x.clamp(-1e6, 1e6), y, salt * 0.5, 0.0)
+    };
+    (value * 2.0 + 0.5).clamp(0.0, 1.0)
+}
+
+/// A station moved onto its stroke's middle along the strip's normal `n`,
+/// for a tip, which is drawn about `xy`.
+fn centred(s: Station, n: Vec2) -> Station {
+    Station {
+        xy: add(s.xy, scale(n, s.shift)),
+        shift: 0.0,
+        ..s
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -627,9 +653,11 @@ impl Turbiniu {
                 let dry = (self.dry_brush / 100.0).clamp(0.0, 1.0) * look.dry_ramp.at(u);
                 if dry > 0.0 {
                     let soft = mix(0.15, 0.01, hardness);
+                    let per_grain = path_px / self.dry_brush_scale.max(0.5);
                     let n = grain(
                         &look.dry_field,
-                        u * path_px / self.dry_brush_scale.max(0.5),
+                        u * per_grain,
+                        if closed { per_grain } else { 0.0 },
                         line,
                         0.0,
                     );
@@ -638,7 +666,14 @@ impl Turbiniu {
                     alpha *= smoothstep(level - soft, level + soft, n);
                 }
                 if hardness > 0.0 {
-                    alpha = ((alpha - 0.5) / (1.0 - 0.98 * hardness) + 0.5).clamp(0.0, 1.0);
+                    // Pressed within the coverage the stroke has without any
+                    // texture, so a Base coverage lowered to see through the
+                    // strokes stays where it was: only what the texture, the
+                    // wave and Dry brush take away goes to on or off.
+                    let ceiling =
+                        (self.alpha_noise_brightness + self.alpha_sinus_constant).clamp(1e-3, 1.0);
+                    let t = (alpha / ceiling).clamp(0.0, 1.0);
+                    alpha = ceiling * ((t - 0.5) / (1.0 - 0.98 * hardness) + 0.5).clamp(0.0, 1.0);
                 }
                 let mut half = mix(half_a, half_b, between) * width_gain;
                 let mut shift = 0.0;
@@ -651,7 +686,9 @@ impl Turbiniu {
                         (((2.0 * between - 1.0).abs() - (1.0 - depth)) / depth).clamp(0.0, 1.0)
                     };
                     let k = rough * edge;
-                    let x = u * path_px / self.edge_roughness_scale.max(0.5);
+                    let per_grain = path_px / self.edge_roughness_scale.max(0.5);
+                    let lap = if closed { per_grain } else { 0.0 };
+                    let x = u * per_grain;
                     if count > 1 {
                         // The family's own outline torn: one tear pattern per
                         // side, shared by every stroke on it, eats in from the
@@ -659,15 +696,16 @@ impl Turbiniu {
                         let side = if between < 0.5 { 0.0 } else { 13.0 };
                         let inward = 2.0 * between.min(1.0 - between);
                         let tear =
-                            rough * depth * 1.6 * grain(&look.rough_field, x, 0, 40.0 + side);
+                            rough * depth * 1.6 * grain(&look.rough_field, x, lap, 0, 40.0 + side);
                         // Each stroke a little ahead or behind, for fibres.
-                        let fibre = (grain(&look.rough_field, x * 3.0, line, 70.0) - 0.5) * 0.08;
+                        let fibre =
+                            (grain(&look.rough_field, x * 3.0, lap * 3.0, line, 70.0) - 0.5) * 0.08;
                         let w = (1.0 / count as f32).max(0.01);
                         alpha *= smoothstep(tear - w, tear + w, inward + fibre + w);
                     }
                     if k > 0.0 {
-                        let low = half * (1.0 - k * grain(&look.rough_field, x, line, 0.0));
-                        let high = half * (1.0 - k * grain(&look.rough_field, x, line, 17.0));
+                        let low = half * (1.0 - k * grain(&look.rough_field, x, lap, line, 0.0));
+                        let high = half * (1.0 - k * grain(&look.rough_field, x, lap, line, 17.0));
                         half = (low + high) * 0.5;
                         shift = (high - low) * 0.5;
                     }
@@ -803,18 +841,23 @@ impl Turbiniu {
                     }
                     mesh.strip(&stations, before, after);
                     if plan.leading(span_idx) {
+                        let outward = unit(sub(stations[0].xy, stations[1].xy));
                         mesh.cap(
-                            stations[0],
-                            unit(sub(stations[0].xy, stations[1].xy)),
+                            // On the stroke's own middle, where Edge roughness
+                            // moved it: the strip's normal there runs along
+                            // the stroke, the other way from `outward`.
+                            centred(stations[0], normal(scale(outward, -1.0))),
+                            outward,
                             self.cap_begin,
                             self.arrow_length_begin,
                             self.arrow_angle_begin,
                         );
                     }
                     if plan.trailing(span_idx) {
+                        let outward = unit(sub(stations[last].xy, stations[last - 1].xy));
                         mesh.cap(
-                            stations[last],
-                            unit(sub(stations[last].xy, stations[last - 1].xy)),
+                            centred(stations[last], normal(outward)),
+                            outward,
                             self.cap_end,
                             self.arrow_length_end,
                             self.arrow_angle_end,

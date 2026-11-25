@@ -562,8 +562,9 @@ pub struct Turbiniu {
     #[slider(label = "Rough edge grain", min = 1.0, max = 100.0, default = 12.0, unit = Px, hard_min = 0.5, hard_max = 10000.0)]
     pub edge_roughness_scale: f32,
 
-    /// From soft, wet coverage to crisp, dry coverage: the textured coverage
-    /// pressed towards fully on or off, as Levels squeezes a matte.
+    /// From soft, wet coverage to crisp, dry coverage: what the texture, the
+    /// wave and Dry brush leave pressed towards fully on or off, as Levels
+    /// squeezes a matte. Base coverage itself is kept.
     #[slider(label = "Coverage hardness", min = 0.0, max = 100.0, default = 0.0, unit = Percent, hard_min = 0.0, hard_max = 100.0)]
     pub coverage_hardness: f32,
 
@@ -572,13 +573,15 @@ pub struct Turbiniu {
     #[slider(label = "Density colour", min = 0.0, max = 100.0, default = 0.0, unit = Percent, hard_min = 0.0, hard_max = 100.0)]
     pub density_colour: f32,
 
-    #[colour(label = "Thin paint colour", default = [0.15, 0.15, 0.15, 1.0], max = 4.0)]
+    /// As paint looks: thin paint pale and warm, middling paint full red,
+    /// dense paint nearly black.
+    #[colour(label = "Thin paint colour", default = [0.8, 0.45, 0.15, 1.0], max = 4.0)]
     pub density_colour_thin: [f32; 4],
 
-    #[colour(label = "Mid paint colour", default = [0.5, 0.5, 0.5, 1.0], max = 4.0)]
+    #[colour(label = "Mid paint colour", default = [0.55, 0.08, 0.05, 1.0], max = 4.0)]
     pub density_colour_mid: [f32; 4],
 
-    #[colour(label = "Dense paint colour", default = [1.0, 1.0, 1.0, 1.0], max = 4.0)]
+    #[colour(label = "Dense paint colour", default = [0.05, 0.02, 0.03, 1.0], max = 4.0)]
     pub density_colour_dense: [f32; 4],
 
     #[mask_path(label = "First path")]
