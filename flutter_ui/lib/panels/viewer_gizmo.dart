@@ -2613,6 +2613,10 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
         if (box.id != editing) box
     ];
     final frame = _pointsFrame;
+    // A box whose points are no longer picked is down for good: picking
+    // points again later does not bring it back, and Ctrl+Shift+T then puts
+    // up a new one rather than taking a hidden one down.
+    if (frame == null && _turnBox != null) _turnBox = null;
     final boxMap = _boxMap();
     // The single-selection case is the one that gets handles: scaling and
     // rotating a set about a shared box is a different gesture with its own
