@@ -395,6 +395,16 @@ pub(super) fn queue_list() -> Vec<super::QueueRow> {
                 },
                 ItemState::Failed(error) => super::QueueRowState::Failed(error.clone()),
             },
+            height: match (item.spec.height, &item.source) {
+                (0, Source::Document(doc)) => doc.comp(item.comp).map_or(0, |c| c.height),
+                (height, _) => height,
+            },
+            fps: match &item.source {
+                Source::Document(doc) if item.spec.fps <= 0.0 => {
+                    doc.comp(item.comp).map_or(0.0, |c| c.frame_rate.fps())
+                }
+                _ => item.spec.fps,
+            },
             job: match &item.source {
                 Source::Job { job, .. } => Some(*job),
                 Source::Document(_) => None,

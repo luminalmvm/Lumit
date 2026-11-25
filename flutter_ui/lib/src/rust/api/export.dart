@@ -462,6 +462,8 @@ class BridgeExportQueueItem {
   /// default: the work area as it stood at queue time, else the whole comp.
   final int rangeStartFrame;
   final int rangeEndFrame;
+  final int height;
+  final double fps;
   final BridgeExportQueueState state;
 
   /// The remote export this item does for another computer, empty for one of
@@ -482,6 +484,8 @@ class BridgeExportQueueItem {
     required this.codec,
     required this.rangeStartFrame,
     required this.rangeEndFrame,
+    required this.height,
+    required this.fps,
     required this.state,
     required this.job,
     required this.also,
@@ -499,6 +503,8 @@ class BridgeExportQueueItem {
       codec.hashCode ^
       rangeStartFrame.hashCode ^
       rangeEndFrame.hashCode ^
+      height.hashCode ^
+      fps.hashCode ^
       state.hashCode ^
       job.hashCode ^
       also.hashCode;
@@ -518,6 +524,8 @@ class BridgeExportQueueItem {
           codec == other.codec &&
           rangeStartFrame == other.rangeStartFrame &&
           rangeEndFrame == other.rangeEndFrame &&
+          height == other.height &&
+          fps == other.fps &&
           state == other.state &&
           job == other.job &&
           also == other.also;

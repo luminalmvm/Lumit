@@ -1097,6 +1097,8 @@ void main() {
           codec: 'h264',
           rangeStartFrame: -1,
           rangeEndFrame: -1,
+          height: 1080,
+          fps: 30,
           state: state,
           job: '',
           also: const [],
