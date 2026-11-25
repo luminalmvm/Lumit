@@ -12,7 +12,7 @@ import 'dock.dart' show PaneId, WorkspacePreset;
 import 'updates.dart' show isNightlyVersion;
 import 'workspace.dart';
 
-const bool usageCollectorLive = false;
+const bool usageCollectorLive = true;
 
 typedef UsageMachine = ({int ram, int vram, int vendor, String gpu});
 
