@@ -26,6 +26,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/src/rust/api/assets.dart' show BridgeColourRgba;
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -36,6 +37,7 @@ import 'package:uuid/uuid.dart';
 import '../l10n/strings.dart';
 import '../widgets/controls.dart';
 import 'layer_fold_frb.dart' show shapeItemWith, stillColour;
+import 'shape_target.dart';
 import 'timeline_extras_frb.dart' show showMenuAt;
 import 'viewer_gizmo.dart';
 import 'viewer_menus.dart' show viewerRow;
@@ -312,6 +314,18 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
             !HardwareKeyboard.instance.isAltPressed);
   }
 
+  ShapePaint get _paint {
+    final box = _target;
+    final tools = widget.uiState.tools;
+    final held = box == null
+        ? null
+        : shapeTargets(widget.uiState, only: box.id).firstOrNull;
+    return held == null
+        ? paintOfTools(tools)
+        : paintOfShape(shownShape(held), tools, widget.comp,
+            widget.uiState.playheadFrame.value);
+  }
+
   /// The space the art being drawn lives in, and how to get it back on screen.
   ///
   /// The preview used to be drawn only when a layer was selected, because it
@@ -333,6 +347,7 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
     // A carried path is already on the picture, so its draft is outline only.
     final art = _drawsArt && _carrying == null;
     final space = _space;
+    final paint = _paint;
     return Positioned.fill(
       child: TapRegion(
         onTapOutside: (_) {
@@ -371,15 +386,13 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
                       fill: !art
                           ? widget.accent
                               .withValues(alpha: _carrying == null ? 1 : 0)
-                          : widget.uiState.tools.fillOn
-                              ? colourOf(widget.uiState.tools.fill)
+                          : paint.fillOn
+                              ? colourOf(paint.fill)
                               : const Color(0x00000000),
-                      stroke: art && widget.uiState.tools.strokeOn
-                          ? colourOf(widget.uiState.tools.stroke)
+                      stroke: art && paint.strokeOn
+                          ? colourOf(paint.stroke)
                           : null,
-                      strokeWidth: art
-                          ? widget.uiState.tools.strokeWidth * space.screenScale
-                          : 0,
+                      strokeWidth: art ? paint.width * space.screenScale : 0,
                       from: _from,
                       to: _to,
                       square: HardwareKeyboard.instance.isShiftPressed,
@@ -562,17 +575,18 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
   /// swatches that had nothing to paint until there were shape layers.
   BridgeShapeItem _item(ToolMode tool, List<BridgeVertex> path,
       BridgeShapePrimitive? primitive, bool closed) {
-    final tools = widget.uiState.tools;
+    final paint = _paint;
+    BridgeColour still(ToolColour c) =>
+        stillColour(BridgeColourRgba(r: c.r, g: c.g, b: c.b, a: 1));
     return BridgeShapeItem(
       id: UuidValue.fromString(const Uuid().v4()),
       name: shapeMaskName(tool),
       vertices: path,
       closed: closed,
-      fill: tools.fillOn ? stillColour(tools.fillRgba) : null,
-      stroke: tools.strokeOn && tools.strokeWidth > 0
-          ? stillColour(tools.strokeRgba)
-          : null,
-      strokeWidth: BridgeScalar.static_(tools.strokeWidth),
+      fill: paint.fillOn ? still(paint.fill) : null,
+      stroke:
+          paint.strokeOn && paint.width > 0 ? still(paint.stroke) : null,
+      strokeWidth: BridgeScalar.static_(paint.width),
       opacity: const BridgeScalar.static_(100),
       dashes: const [],
       dashOffset: const BridgeScalar.static_(0),

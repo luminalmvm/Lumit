@@ -41,13 +41,16 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart'
     show BridgeBrushShape, BridgeLayerKind;
+import 'package:lumit_flutter/src/rust/api/effect.dart' show BridgeScalar_Static;
 import 'package:provider/provider.dart';
 
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
 import '../main.dart';
+import '../panels/shape_target.dart';
 import '../panels/viewer_paint.dart' show brushShapeLabel;
 import '../state/dock.dart';
+import '../state/preview_throttle.dart';
 import '../state/settings.dart' show ToolBarPosition;
 import '../state/tools.dart';
 import '../theme/motion.dart';
@@ -697,18 +700,15 @@ class _ToolOptions extends StatelessWidget {
         ],
       );
     }
+    if (shows == ToolOptions.shape) return _ShapeOptions(tools: tools);
     return Row(
       children: [
+        // No None here: text and paint always lay a colour down.
         _Swatch(
           label: l10n.toolFill,
           colour: tools.fill,
           resetTo: ToolColour.white,
           onPicked: (colour) => tools.fill = colour,
-          // None is for shapes: text and paint always lay a colour down.
-          on: shows != ToolOptions.shape || tools.fillOn,
-          onToggle: shows == ToolOptions.shape
-              ? (on) => tools.fillOn = on
-              : null,
         ),
         const SizedBox(width: 6),
         if (shows == ToolOptions.paint) ...[
@@ -790,29 +790,143 @@ class _ToolOptions extends StatelessWidget {
                 onChanged: (v) => tools.textSize = v.toDouble(),
               ),
             ),
-          )
-        else ...[
-          _Swatch(
-            label: l10n.toolStroke,
-            colour: tools.stroke,
-            resetTo: ToolColour.black,
-            onPicked: (colour) => tools.stroke = colour,
-            on: shows != ToolOptions.shape || tools.strokeOn,
-            onToggle: shows == ToolOptions.shape
-                ? (on) => tools.strokeOn = on
-                : null,
           ),
-          const SizedBox(width: 6),
-          _Number(
-            label: l10n.toolWidth,
-            tip: l10n.tipOutlineWidth,
-            value: tools.strokeWidth,
-            min: 0,
-            max: 1000,
-            suffix: ' px',
-            onChanged: (v) => tools.strokeWidth = v,
-          ),
-        ],
+      ],
+    );
+  }
+}
+
+class _ShapeOptions extends StatefulWidget {
+  final ToolsState tools;
+
+  const _ShapeOptions({required this.tools});
+
+  @override
+  State<_ShapeOptions> createState() => _ShapeOptionsState();
+}
+
+class _ShapeOptionsState extends State<_ShapeOptions> {
+  final PreviewThrottle _throttle = PreviewThrottle();
+
+  double? _width;
+
+  late LumitState _app;
+
+  @override
+  void dispose() {
+    _throttle.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    _app = Provider.of<LumitState>(context, listen: false);
+    return ListenableBuilder(
+      listenable: Listenable.merge(
+          [widget.tools, ui.model, ui.selectedLayers, ui.selectedProperties]),
+      builder: (context, _) {
+        final targets = shapeTargets(ui);
+        final comp = ui.selectedComp;
+        if (targets.isEmpty || comp == null) {
+          _width = null;
+          return _row(ui, const [], paintOfTools(widget.tools));
+        }
+        final shape = shownShape(targets.first);
+        Widget live() => _row(ui, targets,
+            paintOfShape(shape, widget.tools, comp, ui.playheadFrame.value));
+        final moves = [
+          for (final colour in [shape.fill, shape.stroke])
+            if (colour != null) ...[colour.r, colour.g, colour.b],
+          shape.strokeWidth,
+        ].any((s) => s is! BridgeScalar_Static);
+        return moves
+            ? ValueListenableBuilder<int>(
+                valueListenable: ui.playheadFrame,
+                builder: (context, _, __) => live(),
+              )
+            : live();
+      },
+    );
+  }
+
+  void _commit(LumitUiState ui, List<ShapeTarget> targets, ShapeEdit edit) {
+    _settle();
+    if (!commitShapes(_app, ui, targets, edit)) {
+      previewShapes(ui, targets.first, null);
+    }
+  }
+
+  void _preview(LumitUiState ui, ShapeTarget target, ShapeEdit? edit) =>
+      _throttle.request(() => previewShapes(ui, target, edit));
+
+  void _drop(LumitUiState ui, ShapeTarget target) {
+    _settle();
+    previewShapes(ui, target, null);
+  }
+
+  void _settle() {
+    _throttle.cancel();
+    if (mounted && _width != null) setState(() => _width = null);
+  }
+
+  Widget _row(LumitUiState ui, List<ShapeTarget> targets, ShapePaint paint) {
+    final tools = widget.tools;
+    final target = targets.firstOrNull;
+    return Row(
+      children: [
+        _Swatch(
+          label: l10n.toolFill,
+          colour: paint.fill,
+          resetTo: ToolColour.white,
+          onPicked: (colour) => target == null
+              ? tools.fill = colour
+              : _commit(ui, targets, fillColourEdit(colour)),
+          onPreview: target == null
+              ? null
+              : (colour) => _preview(ui, target, fillColourEdit(colour)),
+          onClosed: target == null ? null : () => _drop(ui, target),
+          on: paint.fillOn,
+          onToggle: (on) => target == null
+              ? tools.fillOn = on
+              : _commit(ui, targets, fillOnEdit(on, paint.fill)),
+        ),
+        const SizedBox(width: 6),
+        _Swatch(
+          label: l10n.toolStroke,
+          colour: paint.stroke,
+          resetTo: ToolColour.black,
+          onPicked: (colour) => target == null
+              ? tools.stroke = colour
+              : _commit(ui, targets, strokeColourEdit(colour)),
+          onPreview: target == null
+              ? null
+              : (colour) => _preview(ui, target, strokeColourEdit(colour)),
+          onClosed: target == null ? null : () => _drop(ui, target),
+          on: paint.strokeOn,
+          onToggle: (on) => target == null
+              ? tools.strokeOn = on
+              : _commit(ui, targets, strokeOnEdit(on, paint.stroke)),
+        ),
+        const SizedBox(width: 6),
+        _Number(
+          label: l10n.toolWidth,
+          tip: l10n.tipOutlineWidth,
+          value: _width ?? paint.width,
+          min: 0,
+          max: 1000,
+          suffix: ' px',
+          onChanged: (v) => target == null
+              ? tools.strokeWidth = v
+              : _commit(ui, targets, strokeWidthEdit(v, paint.stroke)),
+          onChangeLive: target == null
+              ? null
+              : (v) {
+                  setState(() => _width = v);
+                  _preview(ui, target, strokeWidthEdit(v, paint.stroke));
+                },
+          onDragCancel: target == null ? null : () => _drop(ui, target),
+        ),
       ],
     );
   }
@@ -827,6 +941,9 @@ class _Number extends StatelessWidget {
   final String suffix;
   final ValueChanged<double> onChanged;
 
+  final ValueChanged<double>? onChangeLive;
+  final VoidCallback? onDragCancel;
+
   const _Number({
     required this.label,
     required this.tip,
@@ -835,11 +952,14 @@ class _Number extends StatelessWidget {
     required this.max,
     required this.suffix,
     required this.onChanged,
+    this.onChangeLive,
+    this.onDragCancel,
   });
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
+    final live = onChangeLive;
     return Padding(
       padding: const EdgeInsetsDirectional.only(end: 6),
       child: LumitTooltip(
@@ -856,6 +976,8 @@ class _Number extends StatelessWidget {
                 max: max,
                 suffix: suffix,
                 onChanged: (v) => onChanged(v.toDouble()),
+                onChangeLive: live == null ? null : (v) => live(v.toDouble()),
+                onDragCancel: onDragCancel,
               ),
             ),
           ],
@@ -877,6 +999,9 @@ class _Swatch extends StatelessWidget {
   final bool on;
   final ValueChanged<bool>? onToggle;
 
+  final ValueChanged<ToolColour>? onPreview;
+  final VoidCallback? onClosed;
+
   final ToolColour resetTo;
 
   const _Swatch({
@@ -885,8 +1010,39 @@ class _Swatch extends StatelessWidget {
     required this.onPicked,
     this.on = true,
     this.onToggle,
+    this.onPreview,
+    this.onClosed,
     required this.resetTo,
   });
+
+  Future<void> _pick(BuildContext context, Offset at) async {
+    final opened = PickedColour(colour.r, colour.g, colour.b);
+    final preview = onPreview;
+    var written = false;
+    await showColourPicker(
+      context: context,
+      position: at,
+      initial: opened,
+      scale: ColourScale.bytes,
+      linear: true,
+      onPreview: preview == null
+          ? null
+          : (picked) => preview(ToolColour(picked.r, picked.g, picked.b)),
+      onCommit: (picked) {
+        if (preview != null &&
+            !written &&
+            (picked.r - opened.r).abs() < 1e-4 &&
+            (picked.g - opened.g).abs() < 1e-4 &&
+            (picked.b - opened.b).abs() < 1e-4) {
+          return;
+        }
+        written = true;
+        onPicked!(ToolColour(picked.r, picked.g, picked.b));
+        onToggle?.call(true);
+      },
+    );
+    onClosed?.call();
+  }
 
   Widget _label(LumitTheme t) {
     final toggle = onToggle;
@@ -963,17 +1119,7 @@ class _Swatch extends StatelessWidget {
             onPicked: (picked) =>
                 onPicked!(ToolColour(picked.r, picked.g, picked.b)),
           ),
-          onTapUp: (details) => showColourPicker(
-            context: context,
-            position: details.globalPosition,
-            initial: PickedColour(colour.r, colour.g, colour.b),
-            scale: ColourScale.bytes,
-            linear: true,
-            onCommit: (picked) {
-              onPicked!(ToolColour(picked.r, picked.g, picked.b));
-              onToggle?.call(true);
-            },
-          ),
+          onTapUp: (details) => _pick(context, details.globalPosition),
           child: split ? well(lit) : row(lit),
         ),
       ),

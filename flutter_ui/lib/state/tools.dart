@@ -512,9 +512,6 @@ class ToolsState extends ChangeNotifier {
     notifyListeners();
   }
 
-  BridgeColourRgba get strokeRgba =>
-      BridgeColourRgba(r: _stroke.r, g: _stroke.g, b: _stroke.b, a: 1);
-
   double _strokeWidth = 2;
   double get strokeWidth => _strokeWidth;
   set strokeWidth(double value) {
