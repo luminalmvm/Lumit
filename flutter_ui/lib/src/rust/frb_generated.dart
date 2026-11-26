@@ -36187,6 +36187,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeFrameOverBudget dco_decode_box_autoadd_bridge_frame_over_budget(
+      dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_bridge_frame_over_budget(raw);
+  }
+
+  @protected
   BridgeFrameProfile dco_decode_box_autoadd_bridge_frame_profile(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_bridge_frame_profile(raw);
@@ -39145,6 +39152,19 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       colourSpaces: dco_decode_list_String(arr[10]),
       maxFps: dco_decode_u_32(arr[11]),
       subtitles: dco_decode_bool(arr[12]),
+    );
+  }
+
+  @protected
+  BridgeFrameOverBudget dco_decode_bridge_frame_over_budget(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return BridgeFrameOverBudget(
+      wanted: dco_decode_CastedPrimitive_u_64(arr[0]),
+      budget: dco_decode_CastedPrimitive_u_64(arr[1]),
+      undoable: dco_decode_bool(arr[2]),
     );
   }
 
@@ -46206,6 +46226,10 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         );
       case 8:
         return WorkerResponse_DeviceReset();
+      case 9:
+        return WorkerResponse_FrameOverBudget(
+          dco_decode_box_autoadd_bridge_frame_over_budget(raw[1]),
+        );
       default:
         throw Exception("unreachable");
     }
@@ -46723,6 +46747,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_bridge_footage_facts(deserializer));
+  }
+
+  @protected
+  BridgeFrameOverBudget sse_decode_box_autoadd_bridge_frame_over_budget(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_bridge_frame_over_budget(deserializer));
   }
 
   @protected
@@ -49905,6 +49936,17 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         colourSpaces: var_colourSpaces,
         maxFps: var_maxFps,
         subtitles: var_subtitles);
+  }
+
+  @protected
+  BridgeFrameOverBudget sse_decode_bridge_frame_over_budget(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_wanted = sse_decode_CastedPrimitive_u_64(deserializer);
+    var var_budget = sse_decode_CastedPrimitive_u_64(deserializer);
+    var var_undoable = sse_decode_bool(deserializer);
+    return BridgeFrameOverBudget(
+        wanted: var_wanted, budget: var_budget, undoable: var_undoable);
   }
 
   @protected
@@ -58969,6 +59011,10 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         return WorkerResponse_FrameProfile(var_field0);
       case 8:
         return WorkerResponse_DeviceReset();
+      case 9:
+        var var_field0 =
+            sse_decode_box_autoadd_bridge_frame_over_budget(deserializer);
+        return WorkerResponse_FrameOverBudget(var_field0);
       default:
         throw UnimplementedError('');
     }
@@ -59563,6 +59609,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       BridgeFootageFacts self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_bridge_footage_facts(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_bridge_frame_over_budget(
+      BridgeFrameOverBudget self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_bridge_frame_over_budget(self, serializer);
   }
 
   @protected
@@ -62102,6 +62155,15 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_list_String(self.colourSpaces, serializer);
     sse_encode_u_32(self.maxFps, serializer);
     sse_encode_bool(self.subtitles, serializer);
+  }
+
+  @protected
+  void sse_encode_bridge_frame_over_budget(
+      BridgeFrameOverBudget self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_CastedPrimitive_u_64(self.wanted, serializer);
+    sse_encode_CastedPrimitive_u_64(self.budget, serializer);
+    sse_encode_bool(self.undoable, serializer);
   }
 
   @protected
@@ -69223,6 +69285,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_box_autoadd_bridge_frame_profile(field0, serializer);
       case WorkerResponse_DeviceReset():
         sse_encode_i_32(8, serializer);
+      case WorkerResponse_FrameOverBudget(field0: final field0):
+        sse_encode_i_32(9, serializer);
+        sse_encode_box_autoadd_bridge_frame_over_budget(field0, serializer);
     }
   }
 }

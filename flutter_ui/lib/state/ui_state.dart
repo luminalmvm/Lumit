@@ -1049,6 +1049,10 @@ class LumitUiState extends ChangeNotifier {
   /// only the cache bar, which listens to both.
   final ValueNotifier<int> cacheChanged = ValueNotifier(0);
 
+  /// Called when the engine didn't draw a frame because it needs more memory
+  /// than Lumit may use. The shell shows the window.
+  void Function(BridgeFrameOverBudget over)? onFrameOverBudget;
+
   /// Bumped when a Camera track analysis lands a solve. Its own
   /// notifier because a solve moves neither the document's revision nor the
   /// playhead — and those two are exactly what the Viewer's point cloud is
@@ -3528,6 +3532,9 @@ class LumitUiState extends ChangeNotifier {
         // the only thing left is to say why the picture blinked.
         case WorkerResponse_DeviceReset():
           state.postNotice(l10n.graphicsDeviceReset);
+        // The engine says this once per edit, so it is shown as it comes.
+        case WorkerResponse_FrameOverBudget(:final field0):
+          onFrameOverBudget?.call(field0);
       }
     }, onDone: () {
       // The engine's render worker has finished for good — it could not build

@@ -467,6 +467,9 @@ pub enum WorkerResponse {
     /// picture back, and the frontend's whole part is one calm line in the
     /// status bar saying why the preview blinked.
     DeviceReset,
+    /// A frame the Viewer asked for needs more video memory than Lumit may
+    /// use, so it was not drawn and the last picture stays. Sent once.
+    FrameOverBudget(crate::api::cache::BridgeFrameOverBudget),
 }
 
 pub(crate) type CallbackStream = StreamSink<ScopedChange>;

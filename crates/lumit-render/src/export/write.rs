@@ -195,9 +195,15 @@ pub(super) fn frames(
                        src: usize|
          -> Result<Result<Rendered, String>, String> {
             renderer.watch_faults();
+            let over_before = renderer.frames_over_budget();
             let frame = render(renderer, src);
+            // A frame bigger than the whole budget is still drawn, but if the
+            // card then had no room, that is the reason given.
+            let over = (renderer.frames_over_budget() != over_before)
+                .then(|| renderer.over_budget())
+                .flatten();
             match renderer.faults() {
-                Some(Fault::Starved(why)) => Ok(Err(why)),
+                Some(Fault::Starved(why)) => Ok(Err(over.map_or(why, |o| o.to_string()))),
                 // Reported, and the frame kept as drawn, as it always was.
                 Some(Fault::Refused(why)) => {
                     let _ = writeln!(std::io::stderr(), "export: frame {src}: {why}");

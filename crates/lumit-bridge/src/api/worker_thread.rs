@@ -15,6 +15,7 @@ use dropper::cut_patch;
 use dropper::sample_layer_alone;
 #[cfg(target_arch = "wasm32")]
 use dropper::soloed;
+use frame_watch::{profile_of, watched};
 #[cfg(not(target_arch = "wasm32"))]
 use scope::trace_scope;
 use uuid::Uuid;
@@ -24,7 +25,9 @@ use web::{sample_pixels, trace_scope};
 
 mod cut;
 mod dropper;
+mod frame_watch;
 mod item;
+mod over_budget;
 mod panics;
 mod scope;
 mod shuttle;
@@ -170,6 +173,8 @@ pub struct WorkerState {
     /// [`crate::framecache::vram`]).
     applied_vram_budget: usize,
     seen_vram_clears: u64,
+    /// Frames too big for the memory budget, said once ([`over_budget::tell`]).
+    refusals: over_budget::Refusals,
     /// `(used, entries)` last published for the VRAM meter, so an unchanged
     /// cache publishes nothing.
     published_vram: (u64, u64),
@@ -531,7 +536,18 @@ fn sync_caches(state: &mut WorkerState) {
     // by content now (docs/06 §5.2), so an edit renames exactly the frames
     // it changed and leaves the rest addressable — which is what keeps the cache
     // bar green through a rename, and what makes an undo instantly valid.
-    let budget = crate::framecache::vram::budget();
+    // The card's cache never takes more than half of what the governor may
+    // spend on the card. The other half is for the frame being drawn: a heavy
+    // frame wants several gigabytes, and a cache that has taken the lot leaves
+    // it to spill into system memory or lose the device. The meter reads the
+    // figure that applies, not the one asked for.
+    // Only where that budget is one the machine can be held to.
+    let ceiling = if state.renderer.refuses_frames_over_budget() {
+        usize::try_from(state.renderer.governor().vram.budget / 2).unwrap_or(usize::MAX)
+    } else {
+        usize::MAX
+    };
+    let budget = crate::framecache::vram::budget().min(ceiling);
     if budget != state.applied_vram_budget {
         state.applied_vram_budget = budget;
         // One VRAM budget, shared: a quarter holds the per-effect and nested
@@ -3081,12 +3097,13 @@ fn build_viewer_renderer(
     // numbers, so a governor left on its fallbacks is a governor stepping the
     // ladder at the wrong moments on every machine that is not the size of the
     // fallback.
+    // `video_memory_bytes` is the one place that knows how to ask each
+    // platform — DXGI here on Windows, Metal and Vulkan through the
+    // renderer elsewhere — and answers 0 where none of them will say.
+    let card = crate::api::system::video_memory_bytes();
     {
-        // `video_memory_bytes` is the one place that knows how to ask each
-        // platform — DXGI here on Windows, Metal and Vulkan through the
-        // renderer elsewhere — and answers 0 where none of them will say.
         let (vram, ram) = lumit_budget::budgets_for(
-            crate::api::system::video_memory_bytes(),
+            card,
             crate::api::system::system_memory_bytes(),
             renderer.unified_memory(),
         );
@@ -3100,6 +3117,11 @@ fn build_viewer_renderer(
     // own renderer and never asks for this, so an export still bakes exactly
     // and is bit-for-bit what it was.
     renderer.set_deferred_flare_bakes(true);
+    // A frame that can never fit the memory budget is not drawn here but
+    // said ([`over_budget::tell`]). An export draws it anyway.
+    // Windows gives a card that shares the machine's memory a token figure of
+    // its own, so a budget from it, or from no figure, is not held to.
+    renderer.refuse_frames_over_budget(card != 0 && !(cfg!(windows) && renderer.unified_memory()));
 
     // The two profiler sinks (docs/13 §7.1), installed for the session and fed
     // from inside a render — which is why they take a *clone* of the reply
@@ -3369,6 +3391,7 @@ fn worker_loop(
         // the wish is.
         applied_vram_budget: 0,
         seen_vram_clears: crate::framecache::vram::clears(),
+        refusals: Default::default(),
         published_vram: (0, 0),
         published_bar: None,
         bar_strip: Vec::new(),
@@ -4049,6 +4072,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                     state.renderer.set_deferred_flare_bakes(false);
                 }
                 let started = web_time::Instant::now();
+                let before = over_budget::mark(state);
                 let rendered = prepare_frame(
                     state, &document, comp_id, frame, quality, bgra,
                     // Committed document: a warm span plays from the VRAM cache
@@ -4087,8 +4111,10 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                         // spinning on it — the alternative is a silent loop burning
                         // a core on a comp that cannot be drawn.
                         note!("Playback stopped: {err}");
+                        let revision = playback.revision;
                         state.playback = None;
                         _ = stream.add(WorkerResponse::PlaybackEnded);
+                        over_budget::tell(state, stream, before, revision, comp_id, false);
                     }
                 }
                 return;
@@ -4665,99 +4691,16 @@ fn drain_to_newest<T>(
     (kept, scopes, sample, superseded)
 }
 
-/// Translate one measured frame for the frontend (docs/13 §7.1). Ids cross as
-/// strings because that is how every other reference does — the frontend
-/// matches them against the ids its read model already holds.
-#[frb(ignore)]
-fn profile_of(
-    p: &lumit_render::profile::FrameProfile,
-    view: u32,
-) -> crate::api::state::BridgeFrameProfile {
-    let stage = |s: lumit_render::profile::RenderStage| f64::from(p.stage_ms[s.code() as usize]);
-    crate::api::state::BridgeFrameProfile {
-        frame: p.frame,
-        total_ms: f64::from(p.total_ms),
-        plan_ms: stage(lumit_render::profile::RenderStage::Planning),
-        decode_ms: stage(lumit_render::profile::RenderStage::Decoding),
-        build_ms: stage(lumit_render::profile::RenderStage::Building),
-        composite_ms: stage(lumit_render::profile::RenderStage::Compositing),
-        present_ms: stage(lumit_render::profile::RenderStage::Presenting),
-        layers: p
-            .layers
-            .iter()
-            .map(|l| crate::api::state::BridgeLayerTiming {
-                layer: l.layer.to_string(),
-                ms: f64::from(l.ms),
-                effects: l
-                    .effects
-                    .iter()
-                    .map(|e| crate::api::state::BridgeEffectTiming {
-                        effect: e.effect.to_string(),
-                        ms: f64::from(e.ms),
-                    })
-                    .collect(),
-            })
-            .collect(),
-        view,
-    }
-}
-
-/// Render the one frame the user is waiting for, with the bar running.
-///
-/// The switches are turned on for this frame and off again straight after, so
-/// **nothing else the worker renders is watched or measured** — not playback,
-/// not the idle cache fill, not a scope trace. That is the whole rule
-/// (docs/07 §2.5: the bar never appears during playback), and keeping it here
-/// rather than in each render path is what stops a later caller forgetting it.
-/// The one other measured render is [`measure_pending`]'s: the same frame
-/// this one asked for, composited again in an idle moment because a tier
-/// served it without numbers.
-///
-/// The closing report is sent whatever happened inside, including a frame that
-/// faulted or one served straight from the cache with no report at all: a bar
-/// that was started must always be ended.
-///
-/// `measure` is false for a live drag's frame. Measuring waits for the card
-/// at every layer and every effect, which on a slow card is most of a drag
-/// tick, and a drag frame is provisional anyway: the release commits and the
-/// committed frame comes back through here measured, so the Time column
-/// reads the frame that stays rather than one that was already replaced.
-#[frb(ignore)]
-fn watched<R>(
-    state: &mut WorkerState,
-    stream: &mut WorkerResponseStream,
-    frame: u64,
-    measure: bool,
-    render: impl FnOnce(&mut WorkerState, &mut WorkerResponseStream) -> R,
-) -> R {
-    state.renderer.watch_frames(true);
-    state
-        .renderer
-        .measure_frames(measure && crate::profiling::wanted());
-    let out = render(state, stream);
-    state.renderer.watch_frames(false);
-    state.renderer.measure_frames(false);
-    _ = stream.add(WorkerResponse::RenderProgress(
-        crate::api::state::BridgeRenderProgress {
-            frame,
-            stage: lumit_render::profile::RenderStage::Presenting.code(),
-            fraction: 1.0,
-            done: true,
-            view: state.view_id(),
-        },
-    ));
-    out
-}
-
 fn render_comp(
     req: RenderCompRequest,
     state: &mut WorkerState,
     stream: &mut WorkerResponseStream,
 ) -> Result<(), BridgeError> {
-    let document = {
+    let (document, revision, can_undo) = {
         let document = state.project.state()?;
         let document = document.read().map_err(|_| BridgeError::ReadFailed)?;
-        document.store.snapshot()
+        let (snapshot, revision) = document.store.snapshot_and_revision();
+        (snapshot, revision, document.store.undo_takes_back(revision))
     };
 
     // Whose picture this is, from here until a request says otherwise
@@ -4784,6 +4727,7 @@ fn render_comp(
     // Not a 3D viewport's draft, which is never banked, so it never pushes
     // the Viewer's own frames out.
     let cacheable = !view.is_some_and(|v| v.draft);
+    let before = over_budget::mark(state);
     watched(state, stream, req.frame, true, |state, stream| {
         publish_frame(
             state,
@@ -4796,6 +4740,7 @@ fn render_comp(
             cacheable,
         );
     });
+    over_budget::tell(state, stream, before, revision, req.comp.id, can_undo);
     // A view drawn while another plays hands the renderer back to the run.
     if let Some(playing) = state.playback.as_ref().map(|p| p.view) {
         state.set_view_id(playing);
@@ -5466,6 +5411,7 @@ fn remember_shown(
     frame: u64,
     prepared: &lumit_render::headless::PreparedFrame,
 ) {
+    state.refusals.shown += 1;
     let view = state.view_id();
     state.stand_ins.retain(|(v, c, _)| (*v, *c) != (view, comp));
     state.stand_ins.push((view, comp, prepared.clone()));
@@ -6063,6 +6009,7 @@ mod tests {
             seen_disk_location: (u64::MAX, None),
             applied_vram_budget: 0,
             seen_vram_clears: crate::framecache::vram::clears(),
+            refusals: Default::default(),
             published_vram: (0, 0),
             published_bar: None,
             bar_strip: Vec::new(),

@@ -269,10 +269,14 @@ What the export dialogue opens on.
   **Third** or **Quarter**. **Reset** starts it again at full.
 - **Cache budgets** for all three tiers: rendered frames in memory, preview frames on the
   graphics card, and frames parked on disk. Each **Budget** is typed or dragged in
-  megabytes, from 64. Each tier shows what is **In use**, with **Clear**, and clearing the
-  disk tier asks first. The disk cache's location is set here too: **Where** is **With
-  Lumit**, **Beside the project** or **A folder I choose**, and **Applies to** makes the
-  choice for **Everything** or **This project**.
+  megabytes, from 64. The graphics card's budget is held to half of the **Graphics memory**
+  budget under **Resource governor**. A higher figure can be entered, and the field and the
+  status line's meter read the figure that applies. It is not held on Windows with a
+  graphics card that shares the computer's memory, or with a card that reports no memory
+  figure. Each tier shows what is **In use**, with **Clear**, and clearing the disk tier
+  asks first. The disk cache's location is set here too: **Where** is **With Lumit**,
+  **Beside the project** or **A folder I choose**, and **Applies to** makes the choice for
+  **Everything** or **This project**.
 - **Resource governor**: how much **Graphics memory** and **Ordinary memory** is in use
   against its budget, the most held at once, and how many requests it has turned away. Under
   each is **Room to spare**, **Getting tight**, **Nearly full**, which pauses cache fill, or

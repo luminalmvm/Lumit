@@ -70,6 +70,24 @@ where possible increase cache sizes to let Lumit reduce the need to render. Desp
 previews not always being realtime or taking time to render, Lumit aims to provide a
 responsive interface regardless of what's rendering.
 
+## "Memory budget exceeded"
+
+The frame the Viewer asked for needs more video memory than Lumit may use. It is not drawn,
+and the Viewer keeps the last picture. The window gives both sizes.
+
+Where an edit or a redo of your own stopped frames that had been drawing, the window's
+button is **Undo**, which undoes it. Otherwise, as after an undo or someone else's edit in a
+shared project, the button is **Close**. During playback, playback stops. While frames
+still do not draw, further edits do not open the window again.
+
+The need is counted from the composition's size at the preview resolution, with more for
+each adjustment layer and each layer with motion blur. What Lumit may use is the **Graphics
+memory** budget under **Settings ▸ Preview and cache ▸ Resource governor**.
+
+The Viewer draws the frame on Windows with a graphics card that shares the computer's
+memory, and with a card that reports no memory figure. An export draws it too. See
+[Exporting](/use/export/#the-queue).
+
 ## Does exporting look the same as what I see in the Viewer?
 
 It may not. Exporting allows you to change certain options, including resolution and 
