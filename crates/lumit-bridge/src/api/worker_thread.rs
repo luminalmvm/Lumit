@@ -27,6 +27,7 @@ mod cut;
 mod dropper;
 mod frame_watch;
 mod item;
+mod over_budget;
 mod panics;
 mod scope;
 mod shuttle;
@@ -172,6 +173,8 @@ pub struct WorkerState {
     /// [`crate::framecache::vram`]).
     applied_vram_budget: usize,
     seen_vram_clears: u64,
+    /// Frames too big for the memory budget, said once ([`over_budget::tell`]).
+    refusals: over_budget::Refusals,
     /// `(used, entries)` last published for the VRAM meter, so an unchanged
     /// cache publishes nothing.
     published_vram: (u64, u64),
@@ -3083,12 +3086,13 @@ fn build_viewer_renderer(
     // numbers, so a governor left on its fallbacks is a governor stepping the
     // ladder at the wrong moments on every machine that is not the size of the
     // fallback.
+    // `video_memory_bytes` is the one place that knows how to ask each
+    // platform — DXGI here on Windows, Metal and Vulkan through the
+    // renderer elsewhere — and answers 0 where none of them will say.
+    let card = crate::api::system::video_memory_bytes();
     {
-        // `video_memory_bytes` is the one place that knows how to ask each
-        // platform — DXGI here on Windows, Metal and Vulkan through the
-        // renderer elsewhere — and answers 0 where none of them will say.
         let (vram, ram) = lumit_budget::budgets_for(
-            crate::api::system::video_memory_bytes(),
+            card,
             crate::api::system::system_memory_bytes(),
             renderer.unified_memory(),
         );
@@ -3102,6 +3106,11 @@ fn build_viewer_renderer(
     // own renderer and never asks for this, so an export still bakes exactly
     // and is bit-for-bit what it was.
     renderer.set_deferred_flare_bakes(true);
+    // A frame that can never fit the memory budget is not drawn here but
+    // said ([`over_budget::tell`]). An export draws it anyway.
+    // Windows gives a card that shares the machine's memory a token figure of
+    // its own, so a budget from it, or from no figure, is not held to.
+    renderer.refuse_frames_over_budget(card != 0 && !(cfg!(windows) && renderer.unified_memory()));
 
     // The two profiler sinks (docs/13 §7.1), installed for the session and fed
     // from inside a render — which is why they take a *clone* of the reply
@@ -3371,6 +3380,7 @@ fn worker_loop(
         // the wish is.
         applied_vram_budget: 0,
         seen_vram_clears: crate::framecache::vram::clears(),
+        refusals: Default::default(),
         published_vram: (0, 0),
         published_bar: None,
         bar_strip: Vec::new(),
@@ -4051,6 +4061,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                     state.renderer.set_deferred_flare_bakes(false);
                 }
                 let started = web_time::Instant::now();
+                let before = over_budget::mark(state);
                 let rendered = prepare_frame(
                     state, &document, comp_id, frame, quality, bgra,
                     // Committed document: a warm span plays from the VRAM cache
@@ -4089,8 +4100,10 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                         // spinning on it — the alternative is a silent loop burning
                         // a core on a comp that cannot be drawn.
                         note!("Playback stopped: {err}");
+                        let revision = playback.revision;
                         state.playback = None;
                         _ = stream.add(WorkerResponse::PlaybackEnded);
+                        over_budget::tell(state, stream, before, revision, comp_id, false);
                     }
                 }
                 return;
@@ -4672,10 +4685,11 @@ fn render_comp(
     state: &mut WorkerState,
     stream: &mut WorkerResponseStream,
 ) -> Result<(), BridgeError> {
-    let document = {
+    let (document, revision, can_undo) = {
         let document = state.project.state()?;
         let document = document.read().map_err(|_| BridgeError::ReadFailed)?;
-        document.store.snapshot()
+        let (snapshot, revision) = document.store.snapshot_and_revision();
+        (snapshot, revision, document.store.undo_takes_back(revision))
     };
 
     // Whose picture this is, from here until a request says otherwise
@@ -4702,6 +4716,7 @@ fn render_comp(
     // Not a 3D viewport's draft, which is never banked, so it never pushes
     // the Viewer's own frames out.
     let cacheable = !view.is_some_and(|v| v.draft);
+    let before = over_budget::mark(state);
     watched(state, stream, req.frame, true, |state, stream| {
         publish_frame(
             state,
@@ -4714,6 +4729,7 @@ fn render_comp(
             cacheable,
         );
     });
+    over_budget::tell(state, stream, before, revision, req.comp.id, can_undo);
     // A view drawn while another plays hands the renderer back to the run.
     if let Some(playing) = state.playback.as_ref().map(|p| p.view) {
         state.set_view_id(playing);
@@ -5384,6 +5400,7 @@ fn remember_shown(
     frame: u64,
     prepared: &lumit_render::headless::PreparedFrame,
 ) {
+    state.refusals.shown += 1;
     let view = state.view_id();
     state.stand_ins.retain(|(v, c, _)| (*v, *c) != (view, comp));
     state.stand_ins.push((view, comp, prepared.clone()));
@@ -5981,6 +5998,7 @@ mod tests {
             seen_disk_location: (u64::MAX, None),
             applied_vram_budget: 0,
             seen_vram_clears: crate::framecache::vram::clears(),
+            refusals: Default::default(),
             published_vram: (0, 0),
             published_bar: None,
             bar_strip: Vec::new(),

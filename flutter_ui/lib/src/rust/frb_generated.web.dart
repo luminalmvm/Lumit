@@ -374,6 +374,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeFootageFacts dco_decode_box_autoadd_bridge_footage_facts(dynamic raw);
 
   @protected
+  BridgeFrameOverBudget dco_decode_box_autoadd_bridge_frame_over_budget(
+      dynamic raw);
+
+  @protected
   BridgeFrameProfile dco_decode_box_autoadd_bridge_frame_profile(dynamic raw);
 
   @protected
@@ -1168,6 +1172,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeFormatCaps dco_decode_bridge_format_caps(dynamic raw);
+
+  @protected
+  BridgeFrameOverBudget dco_decode_bridge_frame_over_budget(dynamic raw);
 
   @protected
   BridgeFrameProfile dco_decode_bridge_frame_profile(dynamic raw);
@@ -3468,6 +3475,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeFrameOverBudget sse_decode_box_autoadd_bridge_frame_over_budget(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeFrameProfile sse_decode_box_autoadd_bridge_frame_profile(
       SseDeserializer deserializer);
 
@@ -4411,6 +4422,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeFormatCaps sse_decode_bridge_format_caps(SseDeserializer deserializer);
+
+  @protected
+  BridgeFrameOverBudget sse_decode_bridge_frame_over_budget(
+      SseDeserializer deserializer);
 
   @protected
   BridgeFrameProfile sse_decode_bridge_frame_profile(
@@ -7068,6 +7083,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeFootageFacts self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_bridge_frame_over_budget(
+      BridgeFrameOverBudget self, SseSerializer serializer);
+
+  @protected
   void sse_encode_box_autoadd_bridge_frame_profile(
       BridgeFrameProfile self, SseSerializer serializer);
 
@@ -8075,6 +8094,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_format_caps(
       BridgeFormatCaps self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_frame_over_budget(
+      BridgeFrameOverBudget self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_frame_profile(

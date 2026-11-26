@@ -41667,6 +41667,20 @@ impl SseDecode for crate::api::export::BridgeFormatCaps {
     }
 }
 
+impl SseDecode for crate::api::cache::BridgeFrameOverBudget {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_wanted = <u64>::sse_decode(deserializer);
+        let mut var_budget = <u64>::sse_decode(deserializer);
+        let mut var_undoable = <bool>::sse_decode(deserializer);
+        return crate::api::cache::BridgeFrameOverBudget {
+            wanted: var_wanted,
+            budget: var_budget,
+            undoable: var_undoable,
+        };
+    }
+}
+
 impl SseDecode for crate::api::state::BridgeFrameProfile {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -52555,6 +52569,11 @@ impl SseDecode for crate::api::state::WorkerResponse {
             8 => {
                 return crate::api::state::WorkerResponse::DeviceReset;
             }
+            9 => {
+                let mut var_field0 =
+                    <crate::api::cache::BridgeFrameOverBudget>::sse_decode(deserializer);
+                return crate::api::state::WorkerResponse::FrameOverBudget(var_field0);
+            }
             _ => {
                 unimplemented!("");
             }
@@ -58264,6 +58283,28 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::export::BridgeFormatCaps>
     for crate::api::export::BridgeFormatCaps
 {
     fn into_into_dart(self) -> crate::api::export::BridgeFormatCaps {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::cache::BridgeFrameOverBudget {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.wanted.into_into_dart().into_dart(),
+            self.budget.into_into_dart().into_dart(),
+            self.undoable.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::cache::BridgeFrameOverBudget
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::cache::BridgeFrameOverBudget>
+    for crate::api::cache::BridgeFrameOverBudget
+{
+    fn into_into_dart(self) -> crate::api::cache::BridgeFrameOverBudget {
         self
     }
 }
@@ -66993,6 +67034,9 @@ impl flutter_rust_bridge::IntoDart for crate::api::state::WorkerResponse {
                 [7.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
             crate::api::state::WorkerResponse::DeviceReset => [8.into_dart()].into_dart(),
+            crate::api::state::WorkerResponse::FrameOverBudget(field0) => {
+                [9.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
             _ => {
                 unimplemented!("");
             }
@@ -69515,6 +69559,15 @@ impl SseEncode for crate::api::export::BridgeFormatCaps {
         <Vec<String>>::sse_encode(self.colour_spaces, serializer);
         <u32>::sse_encode(self.max_fps, serializer);
         <bool>::sse_encode(self.subtitles, serializer);
+    }
+}
+
+impl SseEncode for crate::api::cache::BridgeFrameOverBudget {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <u64>::sse_encode(self.wanted, serializer);
+        <u64>::sse_encode(self.budget, serializer);
+        <bool>::sse_encode(self.undoable, serializer);
     }
 }
 
@@ -77844,6 +77897,10 @@ impl SseEncode for crate::api::state::WorkerResponse {
             }
             crate::api::state::WorkerResponse::DeviceReset => {
                 <i32>::sse_encode(8, serializer);
+            }
+            crate::api::state::WorkerResponse::FrameOverBudget(field0) => {
+                <i32>::sse_encode(9, serializer);
+                <crate::api::cache::BridgeFrameOverBudget>::sse_encode(field0, serializer);
             }
             _ => {
                 unimplemented!("");

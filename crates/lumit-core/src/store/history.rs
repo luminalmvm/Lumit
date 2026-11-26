@@ -108,6 +108,20 @@ impl DocumentStore {
         !self.journal.lock().undo.is_empty()
     }
 
+    /// Whether an undo now takes back what made `revision` the current one:
+    /// an edit or a redo made here, not an undo or someone else's edit.
+    #[must_use]
+    pub fn undo_takes_back(&self, revision: u64) -> bool {
+        let journal = self.journal.lock();
+        self.revision() == revision
+            && !journal.undo.is_empty()
+            && journal.redo.last().is_none_or(|e| e.at != revision)
+            && journal
+                .shared
+                .as_ref()
+                .is_none_or(|s| s.touched.values().all(|&at| at != revision))
+    }
+
     pub fn can_redo(&self) -> bool {
         !self.journal.lock().redo.is_empty()
     }
