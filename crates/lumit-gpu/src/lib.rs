@@ -207,7 +207,7 @@ pub struct GpuContext {
     /// and not yet waited for, oldest first. Shared with every handle, as
     /// `in_flight` is: a nested comp is drawn through a handle of its own, and
     /// it is the one card that falls behind.
-    batches_in_flight: BatchesInFlight,
+    batches_in_flight: pacing::Behind,
     /// Tags noted on this handle whose work is not submitted yet. They join
     /// `in_flight` at [`Self::submit`], so another handle seeing the queue
     /// empty before then can't clear them.
@@ -221,12 +221,13 @@ pub struct GpuContext {
     /// handle, as `in_flight` is: a nested comp and the frame after this one
     /// are each drawn through a handle of their own, and it is the one card
     /// that falls behind.
-    frames_in_flight: FramesInFlight,
+    frames_in_flight: pacing::Behind,
+    /// Every submission to this device not yet waited for, shared with every
+    /// handle: see [`pacing::SUBMITS_IN_FLIGHT`].
+    submitted: pacing::Behind,
 }
 
 type InFlight = std::sync::Arc<std::sync::Mutex<Vec<u64>>>;
-type FramesInFlight =
-    std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<wgpu::SubmissionIndex>>>;
 
 /// How many frames a device is left with before it waits for the
 /// oldest ([`GpuContext::end_frame`]). Two keeps the card fed while the CPU
@@ -650,9 +651,6 @@ pub fn hardware_adapter_ready() -> bool {
     })
 }
 
-type BatchesInFlight =
-    std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<wgpu::SubmissionIndex>>>;
-
 /// How many batches inside one frame a device is left with before
 /// [`GpuContext::flush_paced`] waits for the oldest.
 const BATCHES_IN_FLIGHT: usize = 2;
@@ -692,10 +690,11 @@ impl GpuContext {
             // device goes, and never claims to.
             lost: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             in_flight: InFlight::default(),
-            batches_in_flight: BatchesInFlight::default(),
+            batches_in_flight: Default::default(),
             noted: std::cell::RefCell::new(Vec::new()),
             last_submission: std::cell::RefCell::new(None),
-            frames_in_flight: FramesInFlight::default(),
+            frames_in_flight: Default::default(),
+            submitted: Default::default(),
         }
     }
 
@@ -802,6 +801,7 @@ impl GpuContext {
             noted: std::cell::RefCell::new(Vec::new()),
             last_submission: std::cell::RefCell::new(None),
             frames_in_flight: std::sync::Arc::clone(&self.frames_in_flight),
+            submitted: std::sync::Arc::clone(&self.submitted),
         }
     }
 
@@ -845,6 +845,7 @@ impl GpuContext {
         let mut n = 0u64;
         let index = self.queue.submit(buffers.into_iter().inspect(|_| n += 1));
         *self.last_submission.borrow_mut() = Some(index.clone());
+        self.keep_within(&self.submitted, index.clone(), pacing::SUBMITS_IN_FLIGHT);
         self.submits
             .fetch_add(n, std::sync::atomic::Ordering::Relaxed);
         let noted = std::mem::take(&mut *self.noted.borrow_mut());
@@ -1200,30 +1201,9 @@ impl GpuContext {
 
     /// See [`Self::end_frame`].
     fn wait_for_frames_behind(&self) {
-        let Some(closed) = self.last_submission.borrow_mut().take() else {
-            return;
-        };
-        // The lock is let go before the wait: another handle closing a frame
-        // meanwhile waits for its own oldest, not for this one.
-        let oldest = {
-            let Ok(mut frames) = self.frames_in_flight.lock() else {
-                return;
-            };
-            frames.push_back(closed);
-            if frames.len() <= FRAMES_IN_FLIGHT {
-                return;
-            }
-            frames.pop_front()
-        };
-        if let Some(oldest) = oldest {
-            // A lost device answers no wait.
-            if self.device_lost() {
-                return;
-            }
-            let done = self
-                .device
-                .poll(wgpu::Maintain::WaitForSubmissionIndex(oldest));
-            self.forget_finished(done);
+        let closed = self.last_submission.borrow_mut().take();
+        if let Some(closed) = closed {
+            self.keep_within(&self.frames_in_flight, closed, FRAMES_IN_FLIGHT);
         }
     }
 
@@ -1317,25 +1297,7 @@ impl GpuContext {
             return;
         };
         let index = self.submit([enc.finish()]);
-        let oldest = {
-            let Ok(mut batches) = self.batches_in_flight.lock() else {
-                return;
-            };
-            batches.push_back(index);
-            if batches.len() <= BATCHES_IN_FLIGHT {
-                return;
-            }
-            batches.pop_front()
-        };
-        if let Some(oldest) = oldest {
-            if self.device_lost() {
-                return;
-            }
-            let done = self
-                .device
-                .poll(wgpu::Maintain::WaitForSubmissionIndex(oldest));
-            self.forget_finished(done);
-        }
+        self.keep_within(&self.batches_in_flight, index, BATCHES_IN_FLIGHT);
     }
 
     /// An encoder to record into.
@@ -1576,10 +1538,11 @@ impl GpuContext {
             submits: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
             lost,
             in_flight: InFlight::default(),
-            batches_in_flight: BatchesInFlight::default(),
+            batches_in_flight: Default::default(),
             noted: std::cell::RefCell::new(Vec::new()),
             last_submission: std::cell::RefCell::new(None),
-            frames_in_flight: FramesInFlight::default(),
+            frames_in_flight: Default::default(),
+            submitted: Default::default(),
         })
     }
 }
@@ -3676,6 +3639,7 @@ pub mod device;
 pub mod drm;
 pub mod fx;
 pub mod mesh;
+mod pacing;
 pub mod scope;
 /// The Windows-only zero-copy Viewer target. Present only in the opt-in
 /// `shared-texture` build on Windows; every other build has no shared texture at
