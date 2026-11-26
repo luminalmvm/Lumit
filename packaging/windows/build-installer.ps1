@@ -79,9 +79,15 @@ New-Item -ItemType Directory -Force "$release\data\colour" | Out-Null
 Copy-Item "$root\crates\lumit-colour\vendored\*.artefact" "$release\data\colour" -Force
 Write-Host "Bundled the vendored colour artefacts"
 
-& cmake -S "$root\ofx" -B "$root\flutter_ui\build\resolve-ofx" -G 'Visual Studio 17 2022' -A x64 -DLUMIT_REQUIRE_GPU=ON
+# The generator names the Visual Studio found above, which on GitHub's runners
+# moved from 2022 to 2026, and that Visual Studio's own CMake knows its name.
+$vsMajor = (& $vswhere -path $vs -property installationVersion).Split('.')[0]
+$vsYear = & $vswhere -path $vs -property catalog_productLineVersion
+$cmake = "$vs\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
+if (-not (Test-Path $cmake)) { $cmake = 'cmake' }
+& $cmake -S "$root\ofx" -B "$root\flutter_ui\build\resolve-ofx" -G "Visual Studio $vsMajor $vsYear" -A x64 -DLUMIT_REQUIRE_GPU=ON
 if ($LASTEXITCODE) { throw 'Resolve plugin configure failed' }
-& cmake --build "$root\flutter_ui\build\resolve-ofx" --config Release -j4
+& $cmake --build "$root\flutter_ui\build\resolve-ofx" --config Release -j4
 if ($LASTEXITCODE) { throw 'Resolve plugin build failed' }
 $link = "$release\Resolve"
 New-Item -ItemType Directory -Force "$link\LumitPreview.ofx.bundle\Contents\Win64" | Out-Null
