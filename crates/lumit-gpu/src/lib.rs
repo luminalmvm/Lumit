@@ -225,6 +225,8 @@ pub struct GpuContext {
     /// Every submission to this device not yet waited for, shared with every
     /// handle: see [`pacing::SUBMITS_IN_FLIGHT`].
     submitted: pacing::Behind,
+    /// Frames that can never fit the budget, shared with every handle.
+    over_budget: std::sync::Arc<frame_budget::Gate>,
 }
 
 type InFlight = std::sync::Arc<std::sync::Mutex<Vec<u64>>>;
@@ -695,6 +697,7 @@ impl GpuContext {
             last_submission: std::cell::RefCell::new(None),
             frames_in_flight: Default::default(),
             submitted: Default::default(),
+            over_budget: Default::default(),
         }
     }
 
@@ -802,6 +805,7 @@ impl GpuContext {
             last_submission: std::cell::RefCell::new(None),
             frames_in_flight: std::sync::Arc::clone(&self.frames_in_flight),
             submitted: std::sync::Arc::clone(&self.submitted),
+            over_budget: std::sync::Arc::clone(&self.over_budget),
         }
     }
 
@@ -1543,6 +1547,7 @@ impl GpuContext {
             last_submission: std::cell::RefCell::new(None),
             frames_in_flight: Default::default(),
             submitted: Default::default(),
+            over_budget: Default::default(),
         })
     }
 }
@@ -3637,6 +3642,7 @@ mod compiling;
 pub mod composite;
 pub mod device;
 pub mod drm;
+pub mod frame_budget;
 pub mod fx;
 pub mod mesh;
 mod pacing;

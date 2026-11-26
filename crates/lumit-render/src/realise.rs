@@ -1289,8 +1289,13 @@ impl Realiser<'_> {
         // (docs/13 §3): a texture cannot be denied half way through a pass, so
         // the whole frame is reserved for before a single one of them records.
         let (tw, th) = lumit_gpu::composite::scaled_size(width, height, self.render_scale);
-        self.open_frame(tw, th, layers);
-        let out = self.realise_at_depth(camera, width, height, background, layers, region, ground);
+        // A frame that can never fit is not drawn: the caller hears of it
+        // from the context and shows nothing of this.
+        let out = if self.open_frame(tw, th, layers) {
+            self.realise_at_depth(camera, width, height, background, layers, region, ground)
+        } else {
+            self.transparent(1, 1)
+        };
         self.ctx.end_frame();
         if let Some(p) = self.profiler {
             p.leave_comp();

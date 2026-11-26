@@ -25,10 +25,14 @@ impl Realiser<'_> {
     /// says no earlier next time, not an abort. Nested frames take this path
     /// too and reserve nothing: they are already inside their parent's
     /// reservation, and counting them again would refuse a frame that fits.
-    pub(super) fn open_frame(&self, tw: u32, th: u32, layers: &[CompLayerDraw]) {
+    ///
+    /// The one exception is a frame that needs more than the whole budget, on
+    /// a context that refuses those (the Viewer's): false, and the caller
+    /// draws nothing ([`lumit_gpu::GpuContext::skip_over_budget`]).
+    pub(super) fn open_frame(&self, tw: u32, th: u32, layers: &[CompLayerDraw]) -> bool {
         let estimate = self.frame_estimate(tw, th, layers);
         if self.ctx.try_begin_frame(estimate).is_ok() {
-            return;
+            return true;
         }
         // Rung one is already taken and takes itself back: the effect walk
         // reads the same pressure and stops filing while it lasts
@@ -36,9 +40,11 @@ impl Realiser<'_> {
         // later remember to clear. Rung two is this.
         self.fx_cache.borrow_mut().trim_under_pressure();
         self.let_go_of_kept();
-        if self.ctx.try_begin_frame(estimate).is_err() {
-            self.ctx.begin_frame();
+        if self.ctx.try_begin_frame(estimate).is_ok() {
+            return true;
         }
+        self.ctx.begin_frame();
+        !self.ctx.skip_over_budget(estimate)
     }
 
     /// What this frame is expected to hold on the card at its **peak** — not

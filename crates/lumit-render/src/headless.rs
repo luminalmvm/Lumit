@@ -1559,6 +1559,7 @@ impl HeadlessRenderer {
             // everything downstream sees one shape.
             let roi = self.region_px(cw, ch);
             let _ = crate::cancel::drawn_short();
+            let over_before = self.gpu.frames_over_budget();
             let linear = realiser.realise_region(
                 Some(crate::track::camera_pose(doc, comp, t)),
                 cw,
@@ -1568,6 +1569,9 @@ impl HeadlessRenderer {
                 roi,
                 self.ground,
             );
+            if let Some(over) = self.skipped_over_budget(over_before) {
+                break 'frame Err(over.to_string());
+            }
             // A trail that stopped short is never shown. Any other picture is
             // whole, even when a newer one is waiting. Dropping it left its
             // work queued on the card under the next frame's.

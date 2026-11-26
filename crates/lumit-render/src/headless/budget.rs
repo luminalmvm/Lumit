@@ -43,4 +43,41 @@ impl HeadlessRenderer {
     pub fn vram_overdrawn(&self) -> u64 {
         self.gpu.last_frame_overdrawn()
     }
+
+    /// Skip, rather than draw, a frame that can never fit the budget. See
+    /// [`lumit_gpu::GpuContext::refuse_frames_over_budget`].
+    pub fn refuse_frames_over_budget(&self, on: bool) {
+        self.gpu.refuse_frames_over_budget(on);
+    }
+
+    /// Whether those are skipped, which is also whether the video memory
+    /// budget is one this machine is held to.
+    #[must_use]
+    pub fn refuses_frames_over_budget(&self) -> bool {
+        self.gpu.refuses_frames_over_budget()
+    }
+
+    /// How many frames so far could never fit the budget. Read it either side
+    /// of a render to tell whether that one was one of them.
+    #[must_use]
+    pub fn frames_over_budget(&self) -> u64 {
+        self.gpu.frames_over_budget()
+    }
+
+    /// The last frame that could never fit the budget.
+    #[must_use]
+    pub fn over_budget(&self) -> Option<lumit_gpu::frame_budget::OverBudget> {
+        self.gpu.over_budget()
+    }
+
+    /// The frame just made, if it could never fit and was skipped rather than
+    /// drawn. `before` is [`Self::frames_over_budget`] from before it.
+    pub(super) fn skipped_over_budget(
+        &self,
+        before: u64,
+    ) -> Option<lumit_gpu::frame_budget::OverBudget> {
+        (self.refuses_frames_over_budget() && self.frames_over_budget() != before)
+            .then(|| self.over_budget())
+            .flatten()
+    }
 }
