@@ -130,7 +130,6 @@ impl<'a> Placed<'a> {
         self
     }
 
-    /// The same cut across the other way: only rows `top..bottom` drawn.
     #[must_use]
     pub fn clipped_y(mut self, [top, bottom]: [f32; 2]) -> Self {
         let whole = |v: f32| v.clamp(-1e9, 1e9) as i64;
@@ -266,13 +265,8 @@ mod tests {
     use super::{composite, LabelDrawing, Placed};
     use crate::fx::effects::label_points::{Label, Tint};
 
-    /// The drawing of labels: a label lands where it is asked, between
-    /// pixels when it sits between them, turns about its anchor, shrinks from
-    /// its drawing and takes its tint. Guards labels drawn in the wrong
-    /// place, snapped back to whole pixels or never turned.
     #[test]
     fn labels_are_drawn_between_pixels_turned_and_tinted() {
-        // A 4 x 2 white bar.
         let bar = LabelDrawing {
             width: 4,
             height: 2,
@@ -286,7 +280,6 @@ mod tests {
             tint,
         };
         let alpha = |px: &[f32], x: usize, y: usize| px[(y * 10 + x) * 4 + 3];
-        // Centred on (5, 5): it covers x 3..7 and y 4..6, nothing above.
         let flat = label([5.0, 5.0], 0.0, None);
         let px = composite(
             &[Placed::new(&bar, &flat, 1.0, [0.5, 0.5]).unwrap()],
@@ -295,7 +288,6 @@ mod tests {
         );
         assert!(alpha(&px, 4, 4) > 0.99 && alpha(&px, 5, 5) > 0.99);
         assert!(alpha(&px, 5, 2) == 0.0 && alpha(&px, 1, 5) == 0.0);
-        // Half a pixel across, the edge pixels are half covered.
         let half = label([5.5, 5.0], 0.0, None);
         let px = composite(
             &[Placed::new(&bar, &half, 1.0, [0.5, 0.5]).unwrap()],
@@ -307,7 +299,6 @@ mod tests {
             "{}",
             alpha(&px, 3, 4)
         );
-        // Turned a quarter, it stands up: y 3..7, x 4..6.
         let up = label([5.0, 5.0], 90.0, None);
         let px = composite(
             &[Placed::new(&bar, &up, 1.0, [0.5, 0.5]).unwrap()],
@@ -316,7 +307,6 @@ mod tests {
         );
         assert!(alpha(&px, 4, 3) > 0.99 && alpha(&px, 5, 6) > 0.99);
         assert!(alpha(&px, 2, 5) == 0.0 && alpha(&px, 7, 5) == 0.0);
-        // Drawn twice as big as it is shown, it covers half as far.
         let small = label([5.0, 5.5], 0.0, Some(Tint::Multiply([1.0, 0.5, 0.0, 1.0])));
         let placed = Placed::new(&bar, &small, 2.0, [0.5, 0.5]).unwrap();
         let px = composite(&[placed], [0, 0], [10, 10]);

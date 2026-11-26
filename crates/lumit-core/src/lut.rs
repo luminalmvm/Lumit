@@ -50,7 +50,6 @@ pub struct Lut1d {
     pub data: Vec<[f32; 3]>,
 }
 
-/// A parsed `.cube` LUT — either a 3D cube or a 1D curve.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Lut {
     Cube3d(Lut3d),
@@ -58,7 +57,6 @@ pub enum Lut {
 }
 
 impl Lut {
-    /// Apply the LUT to one colour, dispatching to the 3D or 1D sampler.
     pub fn sample(&self, rgb: [f32; 3]) -> [f32; 3] {
         match self {
             Lut::Cube3d(lut) => lut.sample(rgb),
@@ -122,7 +120,7 @@ pub fn parse_cube(text: &str) -> Result<Lut, LutError> {
 
         if starts_alpha(first) {
             match first.to_ascii_uppercase().as_str() {
-                "TITLE" => { /* metadata, ignored */ }
+                "TITLE" => {}
                 "DOMAIN_MIN" => domain_min = parse_triple(&mut tokens, line_no)?,
                 "DOMAIN_MAX" => domain_max = parse_triple(&mut tokens, line_no)?,
                 "LUT_3D_SIZE" => {
@@ -165,7 +163,7 @@ pub fn parse_cube(text: &str) -> Result<Lut, LutError> {
                     }
                     size_1d = Some(n);
                 }
-                _ => { /* unknown metadata keyword, ignored for forward compatibility */ }
+                _ => {}
             }
         } else {
             // A data row: its first token is numeric (leading digit/sign/dot).
@@ -287,7 +285,6 @@ impl LutSpace {
         }
     }
 
-    /// This space's wire code — the inverse of [`Self::from_code`].
     #[must_use]
     pub fn code(self) -> u32 {
         match self {
@@ -386,7 +383,6 @@ impl Lut3d {
         let c011 = self.at(r0, g1, b1);
         let c111 = self.at(r1, g1, b1);
 
-        // Blend along red, then green, then blue.
         let c00 = lerp3(c000, c100, fr);
         let c10 = lerp3(c010, c110, fr);
         let c01 = lerp3(c001, c101, fr);
@@ -464,7 +460,6 @@ fn axis(value: f32, lo: f32, hi: f32, max_idx: usize) -> (usize, usize, f32) {
     (i0, i1, frac)
 }
 
-/// Linear blend of two colours, component-wise.
 fn lerp3(a: [f32; 3], b: [f32; 3], t: f32) -> [f32; 3] {
     [
         a[0] + (b[0] - a[0]) * t,
@@ -547,16 +542,15 @@ mod tests {
 
     #[test]
     fn trilinear_midpoint_matches_hand_computed_lerp() {
-        // Arbitrary, non-separable corner values (red-fastest, r + 2g + 4b).
         let corners: [[f32; 3]; 8] = [
-            [0.10, 0.20, 0.30], // 000
-            [0.90, 0.15, 0.05], // 100
-            [0.40, 0.80, 0.10], // 010
-            [0.55, 0.35, 0.95], // 110
-            [0.05, 0.60, 0.70], // 001
-            [0.25, 0.45, 0.85], // 101
-            [0.65, 0.05, 0.15], // 011
-            [1.00, 0.90, 0.20], // 111
+            [0.10, 0.20, 0.30],
+            [0.90, 0.15, 0.05],
+            [0.40, 0.80, 0.10],
+            [0.55, 0.35, 0.95],
+            [0.05, 0.60, 0.70],
+            [0.25, 0.45, 0.85],
+            [0.65, 0.05, 0.15],
+            [1.00, 0.90, 0.20],
         ];
         let mut text = String::from("LUT_3D_SIZE 2\n");
         for c in &corners {
@@ -564,12 +558,9 @@ mod tests {
         }
         let lut = expect_3d(&text);
 
-        // With size 2 the grid coordinate equals the input, so (fr, fg, fb) are
-        // the sample coordinates directly.
         let (fr, fg, fb) = (0.25_f32, 0.75_f32, 0.5_f32);
         let got = lut.sample([fr, fg, fb]);
 
-        // Independently interpolate red-fastest by hand.
         let l = |a: [f32; 3], b: [f32; 3], t: f32| {
             [
                 a[0] + (b[0] - a[0]) * t,
@@ -591,7 +582,6 @@ mod tests {
         );
     }
 
-    // A small 1D curve with a distinct column per channel.
     const CURVE_1D: &str = "\
 LUT_1D_SIZE 3
 0.0 0.0 1.0
@@ -604,9 +594,7 @@ LUT_1D_SIZE 3
         let lut = expect_1d(CURVE_1D);
         assert!(close(lut.sample([0.0, 0.0, 0.0]), [0.0, 0.0, 1.0], 1e-6));
         assert!(close(lut.sample([1.0, 1.0, 1.0]), [1.0, 1.0, 0.0], 1e-6));
-        // Value 0.5 lands exactly on the middle sample.
         assert!(close(lut.sample([0.5, 0.5, 0.5]), [0.5, 0.25, 0.5], 1e-6));
-        // Value 0.25 sits halfway between the first two samples.
         assert!(close(
             lut.sample([0.25, 0.25, 0.25]),
             [0.25, 0.125, 0.75],
@@ -640,29 +628,24 @@ LUT_3D_SIZE 2
 
     #[test]
     fn malformed_inputs_error_without_panicking() {
-        // Missing size (data with no declaration, and metadata-only).
         assert!(parse_cube("0.0 0.0 0.0\n1.0 1.0 1.0\n").is_err());
         assert!(parse_cube("TITLE \"x\"\n# nothing else\n").is_err());
 
-        // Wrong row count: size 2 needs 8 rows, only 7 given.
         let short = "LUT_3D_SIZE 2\n0 0 0\n1 0 0\n0 1 0\n1 1 0\n0 0 1\n1 0 1\n0 1 1\n";
         assert!(matches!(
             parse_cube(short),
             Err(LutError::WrongRowCount { .. })
         ));
 
-        // Non-numeric data.
         let bad = "LUT_3D_SIZE 2\n0 0 0\n1 foo 0\n0 1 0\n1 1 0\n0 0 1\n1 0 1\n0 1 1\n1 1 1\n";
         assert!(matches!(parse_cube(bad), Err(LutError::BadNumber { .. })));
 
-        // Too many values in a row.
         let extra = "LUT_1D_SIZE 2\n0 0 0 0\n1 1 1\n";
         assert!(matches!(
             parse_cube(extra),
             Err(LutError::MalformedRow { .. })
         ));
 
-        // Size 0 and 1.
         assert!(matches!(
             parse_cube("LUT_3D_SIZE 0\n"),
             Err(LutError::SizeTooSmall { .. })
@@ -672,7 +655,6 @@ LUT_3D_SIZE 2
             Err(LutError::SizeTooSmall { .. })
         ));
 
-        // Unreasonably large size: rejected before any allocation.
         assert!(matches!(
             parse_cube("LUT_3D_SIZE 9999\n"),
             Err(LutError::SizeTooLarge { .. })
@@ -682,17 +664,12 @@ LUT_3D_SIZE 2
             Err(LutError::SizeTooLarge { .. })
         ));
 
-        // Duplicate size.
         assert!(matches!(
             parse_cube("LUT_3D_SIZE 2\nLUT_3D_SIZE 2\n"),
             Err(LutError::DuplicateSize { .. })
         ));
     }
 
-    /// The Input space. Linear is the exact identity in both directions
-    /// and `sample_in` through it is bit-for-bit `sample`, which is the whole
-    /// compatibility promise; the other two are real, invertible curves
-    /// that leave a negative working-space value finite rather than NaN.
     #[test]
     fn input_space_linear_is_the_identity_and_the_curves_invert() {
         // A red/blue swap, so a dropped transfer cannot hide behind symmetry.
@@ -741,8 +718,6 @@ LUT_3D_SIZE 2
             }
         }
 
-        // The two curves are genuinely different, and both differ from linear:
-        // mid-grey in scene-linear light lands well above itself in either.
         let srgb = LutSpace::Srgb.from_linear([0.18; 3]);
         let r709 = LutSpace::Rec709.from_linear([0.18; 3]);
         assert!(
@@ -754,7 +729,6 @@ LUT_3D_SIZE 2
             "Rec. 709(0.18) is about 0.409"
         );
 
-        // The wire codes round-trip, and an unknown one degrades to Linear.
         for space in [LutSpace::Linear, LutSpace::Srgb, LutSpace::Rec709] {
             assert_eq!(LutSpace::from_code(space.code()), space);
         }

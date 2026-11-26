@@ -1,7 +1,3 @@
-// Writes the blockmap the updater patches from beside each file it is given.
-// The release pipeline runs it on the Windows installer and the macOS zip.
-//
-//   dart run tool/blockmap.dart <file>...
 
 import 'dart:io';
 

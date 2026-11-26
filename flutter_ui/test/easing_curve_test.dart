@@ -9,7 +9,6 @@ import 'package:lumit_flutter/panels/easing_curve.dart';
 import 'package:lumit_flutter/panels/graph_maths.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 
-/// The (speed, influence) of a side, or null where it is not a bezier.
 ({double speed, double influence})? bez(BridgeSideInterp side) =>
     switch (side) {
       BridgeSideInterp_Bezier(:final field0) => (
@@ -58,8 +57,6 @@ void main() {
     });
 
     test('a shape put on a span reads back off it', () {
-      // The panel's Read is sidesFor run backwards: what Apply stamped on two
-      // keys must come back as the shape that was drawn.
       final curve = EasingCurve(0.2, 1.3, 0.6, 0.9);
       final sides = curve.sidesFor((140 - 20) / 2);
       final keys = [

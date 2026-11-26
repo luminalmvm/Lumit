@@ -84,7 +84,6 @@ class _GraphBoxLanesState extends State<GraphBoxLanes> {
         }
       }
     } catch (_) {
-      // The comp or the box has gone; there is nothing to draw.
       boxes = [];
     }
     setState(() {
@@ -145,7 +144,6 @@ class _GraphBoxLanesState extends State<GraphBoxLanes> {
   Widget build(BuildContext context) {
     final rows = [for (final box in _boxes) ..._keyedRows(box)];
     if (rows.isEmpty) return const SizedBox.shrink();
-    // With nothing picked each lane says whose it is.
     String label(BridgeEffectInstanceInfo box, BridgeParamInfo param) {
       final own = engineLabel(param.label);
       return _picked

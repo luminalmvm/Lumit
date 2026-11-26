@@ -34,33 +34,23 @@ use crate::scenarios::{elapsed_ms, p95, scatter, Measurement};
 /// The rate the sound is mixed at: the fixture's own, so nothing is resampled
 /// that a sound card at the usual rate would not resample either.
 const RATE: u32 = 48_000;
-/// Plans built for B25.
 const PLAN_SAMPLES: usize = 20;
-/// Places a second is mixed at for B26, spread over the two hours.
 const MIX_SAMPLES: usize = 20;
-/// Frames to a buffer, as a sound card at [`RATE`] asks for ten milliseconds.
 const BUFFER_FRAMES: usize = 480;
-/// How long B28 plays for, in seconds.
 const PLAY_SECONDS: usize = 60;
-/// Cold peak builds timed for B29, of which the fastest is kept, as B18 keeps
-/// the fastest of its opens.
 const PEAK_REPEATS: usize = 3;
 /// How long a block the scenarios have had decoded stays wanted, in
 /// milliseconds on [`stream::now`]'s clock: the filling thread's own figure.
 const HOLD_MS: u64 = 2_000;
 
-/// The long-form comp's sound, ready to be driven by any scenario.
 pub struct SoundHarness {
     doc: Arc<Document>,
     comp: Uuid,
-    /// One file of the comp, for the peaks.
     file: PathBuf,
     scratch: PathBuf,
 }
 
 impl SoundHarness {
-    /// Generate (or reuse) the media in `media_dir` and build the long-form
-    /// comp over it. `Err` when the media cannot be made.
     pub fn new(media_dir: &Path) -> Result<Self, String> {
         let media = crate::media::generate_long(media_dir)?;
         let (doc, comp) = long_comp::build(&media)?;
@@ -77,7 +67,6 @@ impl SoundHarness {
         })
     }
 
-    /// Every scenario in order, each reported to `progress` as it lands.
     pub fn all(&self, progress: &mut dyn FnMut(Measurement)) -> Result<Vec<Measurement>, String> {
         let mut out = Vec::new();
         let mut land = |ms: Vec<Measurement>| {
@@ -108,7 +97,6 @@ impl SoundHarness {
         Ok(jobs)
     }
 
-    /// The live plan for `jobs`, its files read through `pool`.
     fn plan(&self, pool: &Arc<Pool>, jobs: &[AudioJob]) -> Arc<MixPlan> {
         let seconds = FRAMES as f64 / FPS as f64;
         let never = std::sync::atomic::AtomicBool::new(false);

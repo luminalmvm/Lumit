@@ -1,14 +1,9 @@
-//! Where each fader is now, so the mixer's faders move with the automation
-//! while the comp plays.
-
 use super::automation::{held_now, layer_in, layer_of, master_at};
 use super::{heard, lock};
 use crate::api::mixer::BridgeMixTarget;
 use uuid::Uuid;
 
-/// One strip's controls, or the master's, at the clock.
 pub(crate) struct Position {
-    /// The layer, or None for the master.
     pub layer: Option<Uuid>,
     pub volume_db: f64,
     pub pan: f64,

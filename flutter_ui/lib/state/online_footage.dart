@@ -30,13 +30,9 @@ import 'workspace.dart';
 import 'package:lumit_flutter/state/platform.dart'
     if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
-/// Where one file has got to.
 enum MoveStage { waiting, working, failed }
 
-/// One file on its way to Lumit's server or back, for the Shared project
-/// window to list.
 class OnlineMove {
-  /// The footage item, what the server files it under, and its name.
   final FootageReference item;
   final String key, name;
 
@@ -65,7 +61,6 @@ class OnlineMove {
   String get _id => '$key/$_kind';
 }
 
-/// A move that stopped, and this file's own word for why.
 class _Stopped implements Exception {
   final String code;
   const _Stopped(this.code);
@@ -77,14 +72,8 @@ class _Stopped implements Exception {
 int sealedSize(int bytes) =>
     23 + bytes + 16 * max(1, (bytes + (1 << 20) - 1) >> 20);
 
-/// How often a mover that stopped because the host's storage was full asks
-/// whether there is room again.
 const Duration _roomBeat = Duration(minutes: 5);
 
-/// How often the server is asked what it holds.
-// ponytail: asked on a timer, so footage someone else has just put online
-// shows up within half a minute and not at once. A note from whoever stored
-// it would be quicker, if the wait ever shows.
 const Duration _beat = Duration(seconds: 30);
 
 class OnlineFootage extends ChangeNotifier {
@@ -210,7 +199,6 @@ class OnlineFootage extends ChangeNotifier {
   int? originalOnline(FootageReference item) =>
       _held['${_keys['${item.internalid}']}/original'];
 
-  /// Whether the server has a stand-in of [item].
   bool standInOnline(FootageReference item) =>
       _held.containsKey('${_keys['${item.internalid}']}/standin');
 
@@ -273,7 +261,6 @@ class OnlineFootage extends ChangeNotifier {
     }
   }
 
-  /// Try a [move] that failed again.
   void retry(OnlineMove move) {
     if (move.stage != MoveStage.failed) return;
     move
@@ -356,7 +343,6 @@ class OnlineFootage extends ChangeNotifier {
     try {
       keeping = online.host && prefs.shareOriginals.contains(project.shareId());
     } catch (_) {
-      // Closed.
     }
     final now = DateTime.now();
     // What would be sent next were it not for [full].
@@ -419,9 +405,6 @@ class OnlineFootage extends ChangeNotifier {
     if (moves.isEmpty) finished = 0;
     moves.addAll(wanted.values);
     _tell();
-    // ponytail: one file up and one down at a time, which is what holds
-    // each to its limit and keeps two encodes off the machine at once. A
-    // shared allowance would let several go together.
     _up ??= _lane(true).whenComplete(() => _up = null);
     _down ??= _lane(false).whenComplete(() => _down = null);
   }
@@ -470,8 +453,6 @@ class OnlineFootage extends ChangeNotifier {
     }
   }
 
-  /// What becomes of [move] now that it has ended, with [failed] when it
-  /// did not get there.
   void _settle(OnlineMove move, Object? failed) {
     final code = switch (failed) {
       null => null,
@@ -561,7 +542,6 @@ class OnlineFootage extends ChangeNotifier {
   Never _refused(int stops, String code) =>
       throw _Stopped(stops == _stops ? code : 'stopped');
 
-  /// Seal what this machine has of [move] and send it.
   Future<void> _give(ProjectReference project, OnlineMove move) async {
     final source = await move.item.onlineGive(original: move.original);
     _check(move);

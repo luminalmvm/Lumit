@@ -52,7 +52,6 @@ const PEAK_DETECTOR: f64 = 0.0;
 const LOOKAHEAD_MS: f64 = 0.0;
 const WET_PCT: f64 = 100.0;
 
-/// The Compressor's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "audio_compressor",
@@ -105,7 +104,6 @@ impl EffectDef for AudioCompressorDef {
         &<AudioCompressor as EffectMetadata>::SCHEMA
     }
 
-    /// It processes sound and touches no pixel, so the render path skips it.
     fn is_image_op(&self) -> bool {
         false
     }
@@ -121,8 +119,6 @@ impl EffectDef for AudioCompressorDef {
     }
 }
 
-/// One open compressor: the lookahead it was built for, and everything that
-/// changes as it runs.
 struct Compressor {
     /// Frames of lookahead, fixed for the run. The chain reads
     /// [`AudioProcessor::latency`] once, so a row moved by hand mid-run cannot
@@ -133,7 +129,6 @@ struct Compressor {
     state: Mutex<State>,
 }
 
-/// Everything the block loop carries from one block to the next.
 struct State {
     rate: f64,
     left: DelayLine,
@@ -270,7 +265,6 @@ mod tests {
 
     const RATE: u32 = 48_000;
 
-    /// A stereo tone, the right channel a little quieter than the left.
     fn tone(frames: usize, freq: f64, amp: f32) -> Vec<f32> {
         (0..frames)
             .flat_map(|n| {
@@ -286,7 +280,6 @@ mod tests {
             .unwrap()
     }
 
-    /// Every whole block of `input`, from block `first`, through `p`.
     fn run(
         p: &dyn AudioProcessor,
         input: &[f32],
@@ -323,8 +316,6 @@ mod tests {
         ]
     }
 
-    /// The loudest sample of the last block, which is the one the ballistics
-    /// have settled in.
     fn settled_peak(samples: &[f32]) -> f32 {
         samples
             .chunks_exact(AUDIO_BLOCK_SAMPLES)
@@ -345,8 +336,6 @@ mod tests {
         assert_eq!(bits(&whole), bits(&halves));
     }
 
-    /// **Plan 3**: a loud burst comes back quieter, and a quiet one is not
-    /// touched at all.
     #[test]
     fn it_holds_a_loud_sound_down_and_leaves_a_quiet_one_alone() {
         let values = knobs(0.0);
@@ -354,15 +343,11 @@ mod tests {
         let loud = tone(AUDIO_BLOCK_FRAMES * 8, 220.0, 1.0);
         let out = run(&*open(&values), &loud, &values, 0);
         let peak = settled_peak(&out);
-        // Four to one over a threshold of -18 dB puts full scale at about
-        // -13.5 dB, which is a fifth of the way up rather than all of it.
         assert!(
             (0.1..0.4).contains(&peak),
             "a full scale tone came back at {peak}"
         );
 
-        // Twenty two dB under the threshold: nothing to do, and the arithmetic
-        // says so exactly rather than nearly.
         let quiet = tone(AUDIO_BLOCK_FRAMES * 4, 220.0, 0.01);
         let out = run(&*open(&values), &quiet, &values, 0);
         assert_eq!(bits(&out), bits(&quiet));

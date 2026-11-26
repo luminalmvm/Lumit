@@ -42,8 +42,6 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('open-history')));
       await tester.pump();
 
-      // One row per step, plus the row above them all for where the list
-      // begins.
       expect(find.byType(MenuRow),
           findsNWidgets(project.historyEntries().length + 1));
 
@@ -65,7 +63,6 @@ void main() {
           (layer.getTransform().positionX as BridgeScalar_Static).field0;
       final was = x();
 
-      // The middle half of the frame, as the Viewer hands its region over.
       comp.cropToRegion(region: const [0.25, 0.25, 0.75, 0.75]);
       final cropped = comp.getSettings();
       expect(cropped.width, settings.width ~/ 2);

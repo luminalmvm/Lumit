@@ -33,12 +33,9 @@ use fillers::Filler;
 /// can play a comp that plays a comp, and a cycle must stop somewhere.
 const DEPTH: u8 = 8;
 
-/// One word as the composition says it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Heard {
-    /// The footage item whose transcript holds the word.
     pub item: Uuid,
-    /// The word's place in that transcript.
     pub index: usize,
     /// The top-level layer it is heard through.
     pub row: Uuid,
@@ -49,12 +46,10 @@ pub struct Heard {
     pub end: Rational,
 }
 
-/// How the panel looks at the words.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Look {
     /// The shortest silence shown as a pause or a break.
     pub pause: Rational,
-    /// Show the words a delete or a lift took out, at the edit point.
     pub show_removed: bool,
 }
 
@@ -67,10 +62,8 @@ impl Default for Look {
     }
 }
 
-/// What a token is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TokenKind {
-    /// A word.
     Word,
     /// A silence between two words of one clip.
     Pause,
@@ -82,14 +75,12 @@ pub enum TokenKind {
     Removed,
 }
 
-/// A word in a transcript, by item and place.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WordAt {
     pub item: Uuid,
     pub index: usize,
 }
 
-/// One piece of the transcript as the panel shows it and an edit takes it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Token {
     pub kind: TokenKind,
@@ -108,11 +99,9 @@ pub struct Token {
     pub filler: Option<Filler>,
     /// Removing this token would cut into a neighbouring word.
     pub tight: bool,
-    /// An edit point falls between this token and the one before.
     pub edit_before: bool,
 }
 
-/// One word read off some composition's rows, before it is heard further up.
 #[derive(Debug, Clone, Copy)]
 struct Said {
     item: Uuid,
@@ -261,7 +250,6 @@ fn gather(doc: &Document, comp: &Composition, depth: u8, out: &mut Vec<Uuid>) {
                 for clip in clips.iter().filter(|c| c.audible) {
                     match clip.source {
                         ClipSource::Footage(item) if !out.contains(&item) => out.push(item),
-                        // Through its angle, when the clip is a multicam one.
                         ClipSource::Comp(_) if depth < DEPTH => {
                             if let Some(nested) = crate::multicam::nested_for(doc, clip) {
                                 gather(doc, &nested, depth + 1, out);
@@ -686,7 +674,6 @@ pub fn source_tokens(doc: &Document, item: Uuid, rate: FrameRate, look: &Look) -
     let Some(last) = heard.last().map(|h| h.end) else {
         return Vec::new();
     };
-    // The whole file is speech, so every silence between words is a pause.
     let whole = [(Rational::ZERO, last)];
     let mut tokens = layout::lay_out(doc, &heard, (Rational::ZERO, last), &[], &whole, rate, look);
     for token in &mut tokens {
@@ -732,7 +719,6 @@ fn spans(
     }
 }
 
-/// The frame edge nearest `t` on `rate`.
 fn edge(rate: FrameRate, t: Rational) -> Rational {
     rate.time_of_frame(rate.nearest_frame_at(CompTime(t)))
         .map_or(t, |at| at.0)
@@ -797,7 +783,6 @@ pub fn shorten_pauses(
     out
 }
 
-/// `spans` in order, with any that touch or overlap made one.
 #[must_use]
 pub fn merged(mut spans: Vec<(Rational, Rational)>) -> Vec<(Rational, Rational)> {
     spans.retain(|(a, b)| a < b);

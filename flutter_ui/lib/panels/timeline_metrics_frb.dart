@@ -1,14 +1,3 @@
-// The Timeline's shared numbers: the column and keyframe metrics, the zoom
-// step, the layer-drag model and the row list both halves of the table are
-// built from.
-//
-// The sampled-scalar cache moved to state/comp_time.dart, beside the frame↔time
-// memory it was always modelled on — the Effect controls panel's rows want the
-// same batching, and reaching into the Timeline's own metrics for it would have
-// been the wrong way round.
-//
-// Split out of timeline_panel_frb.dart, which the outline, the lanes and the
-// panel itself all read these from.
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
@@ -23,8 +12,6 @@ import 'timeline_group_row_frb.dart';
 import 'timeline_layer_drag.dart';
 import 'package:lumit_flutter/src/rust/api/retime.dart';
 
-// The layer drag's own file, re-exported so everything that reads the
-// Timeline's shared numbers still finds the drag among them.
 export 'timeline_layer_drag.dart';
 
 /// The layer-number column, shared by the column header's `#` and the muted
@@ -115,7 +102,6 @@ Path keyHalfPath(KeyShape shape, double x, double mid, double half,
       ..lineTo(x + w, mid)
       ..lineTo(x, mid + half)
       ..close(),
-    // A square stood square, not on its corner.
     KeyShape.square => Path()
       ..addRect(Rect.fromLTRB(
           left ? x + w : x, mid - half, left ? x : x + w, mid + half)),
@@ -135,7 +121,6 @@ Path keyHalfPath(KeyShape shape, double x, double mid, double half,
   };
 }
 
-/// Half a key's width, per shape: only the diamond is as wide as it is tall.
 double _keyHalfWidth(KeyShape shape, double half) =>
     shape == KeyShape.diamond ? half : half * 8 / 11;
 
@@ -254,7 +239,6 @@ class LayerRow {
   /// wanted it.
   final String id;
 
-  /// Twirled open — whether [foldRows] are **drawn**.
   final bool open;
 
   /// The rows this layer's fold-out has, open or shut.
@@ -267,8 +251,6 @@ class LayerRow {
   /// sites.
   final List<LayerFoldRow> foldRows;
 
-  /// The rows the table draws under this layer: its fold-out when it is
-  /// twirled open, nothing when it is not.
   List<LayerFoldRow> get drawnRows => open ? foldRows : const [];
 
   /// How much taller an open Sequence view makes this row, or null
@@ -325,8 +307,6 @@ class LayerRow {
   /// and for a header with an empty wardrobe.
   final List<LayerFoldRow> groupFoldRows;
 
-  /// The header rows the table draws: its fold-out when the fx tick is
-  /// twirled open, nothing when it is not — [drawnRows]'s twin.
   List<LayerFoldRow> get drawnGroupRows =>
       (groupHeader?.fxOpen ?? false) ? groupFoldRows : const [];
 
@@ -350,9 +330,6 @@ class LayerRow {
   /// fold-out are what the fold hid, along with the members below it.
   bool get bodyDrawn => !(groupHeader?.folded ?? false);
 
-  /// This block's height: the group header it carries with whatever lanes its
-  /// fx twirl shows, then — unless the fold is shut — its own row, the rows
-  /// it draws, and its open view.
   double get height =>
       (groupHeader == null ? 0 : rowHeight * (1 + drawnGroupRows.length)) +
       (bodyDrawn
@@ -687,11 +664,8 @@ class LazyBlocks extends StatefulWidget {
   /// anything at all.
   final ScrollController controller;
 
-  /// Every block's height, in order — [LayerRow.height], which both halves
-  /// already hand down as `blockHeights`.
   final List<double> heights;
 
-  /// The viewport's height, from the half's own `LayoutBuilder`.
   final double viewport;
 
   final Widget Function(BuildContext context, int index) builder;
@@ -739,10 +713,8 @@ class _LazyBlocksState extends State<LazyBlocks> {
   /// a screenful away from being seen.
   bool _sliding = false;
 
-  /// Which way the last scroll went, so the blocks it is heading for fill first.
   bool _down = true;
 
-  /// A frame is already asked for to build the blocks still waiting.
   bool _fillAsked = false;
 
   /// **How many off-screen blocks one frame builds after a scroll.** A wheel
@@ -756,7 +728,6 @@ class _LazyBlocksState extends State<LazyBlocks> {
   /// at once again.
   static const int marginBlocksPerFrame = 2;
 
-  /// The blocks a viewport scrolled to [_offset] shows, as `[first, last)`.
   (int, int) _inView() {
     final top = _offset;
     final bottom = _offset + widget.viewport;
@@ -821,7 +792,6 @@ class _LazyBlocksState extends State<LazyBlocks> {
     // which blocks are in view, so take the window again rather than hold one
     // measured against heights that have gone.
     _window = _windowNow();
-    // A rebuild from above builds its whole window, as it always has.
     _sliding = false;
   }
 

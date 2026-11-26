@@ -1,12 +1,7 @@
-//! Denoise's kernels against `lumit_core::fx::denoise`, the whole pipeline at
-//! once: into Y'CbCr, the neighbours moved along a field and averaged in, the
-//! four bands shrunk, Grain and back.
-
 use super::common::*;
 use super::denoise::*;
 use lumit_core::fx::denoise::{self as cpu, temporal::Field, DenoiseParams};
 
-/// A small deterministic noise, -0.5..0.5.
 fn noise(i: u32) -> f32 {
     let mut x = i.wrapping_mul(0x9E37_79B9) ^ 0x85EB_CA6B;
     x ^= x >> 16;
@@ -17,8 +12,6 @@ fn noise(i: u32) -> f32 {
     (x as f32 / u32::MAX as f32) - 0.5
 }
 
-/// A picture with edges, a ramp, a soft alpha edge and noise, at fp16, its
-/// content moved `shift` pixels, with noise seeded by `seed`.
 fn picture(w: u32, h: u32, shift: [f32; 2], seed: u32) -> Vec<f32> {
     let mut out = Vec::with_capacity((w * h * 4) as usize);
     for y in 0..h {
@@ -97,8 +90,6 @@ fn wgsl_denoise_matches_the_cpu_oracle_and_is_bit_stable() {
     let (fw, fh) = (w / 2, h / 2);
     let current = picture(w, h, [0.0, 0.0], 0);
     let cur_t = upload_linear_f32(&ctx, &current, w, h);
-    // Four neighbours, each the content moved on by its offset, and a field
-    // at half size that says so, trusted a little less towards the right.
     let offsets = [-2i32, -1, 1, 2];
     let frames: Vec<Vec<f32>> = offsets
         .iter()
@@ -158,7 +149,6 @@ fn wgsl_denoise_matches_the_cpu_oracle_and_is_bit_stable() {
             field: Some(field),
         })
         .collect();
-    // Follow motion off: every neighbour read where it is.
     let still: Vec<Vec<f32>> = frames
         .iter()
         .map(|f| cpu::temporal::warp(f, w, h, None))
@@ -171,8 +161,6 @@ fn wgsl_denoise_matches_the_cpu_oracle_and_is_bit_stable() {
             field: None,
         })
         .collect();
-    // A matte that runs from black on the left to white on the right, with a
-    // tint so each channel's weight counts.
     let matte: Vec<f32> = (0..w * h)
         .flat_map(|i| {
             let t = (i % w) as f32 / (w - 1) as f32;
@@ -181,7 +169,6 @@ fn wgsl_denoise_matches_the_cpu_oracle_and_is_bit_stable() {
         .collect();
     let matte_t = upload_linear_f32(&ctx, &matte, w, h);
 
-    // (frames, view, motion, matte)
     let cases = [
         (0u32, 0u32, true, false),
         (2, 0, true, false),
@@ -223,7 +210,6 @@ fn wgsl_denoise_matches_the_cpu_oracle_and_is_bit_stable() {
             worst < 1.5e-2 * gain && mean < 1e-3 * gain,
             "{case}: worst {worst}, mean {mean}"
         );
-        // The same frame twice is the same bits.
         let again = run();
         assert!(
             got.iter()

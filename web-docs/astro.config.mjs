@@ -137,6 +137,7 @@ set()})})`,
                         "use/lottie-and-svg",
                         "use/remote-export",
                         "use/review-links",
+                        "use/resolve-link",
                       ],
                     },
                     {

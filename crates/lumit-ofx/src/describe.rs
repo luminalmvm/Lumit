@@ -42,11 +42,8 @@ use crate::schema::schema_of;
 use crate::status::Status;
 use lumit_core::fx::schema::EffectSchema;
 
-/// One clip a plugin defined, on a descriptor or on an instance.
 pub struct ClipRef {
-    /// The name the plugin gave it: `Source`, `Output`, `Mask`.
     pub name: String,
-    /// Its property set.
     pub props: Handle,
     /// The `OfxImageClipHandle` the plugin holds, on an **instance**. A
     /// descriptor's clip has none: a clip handle names a live image input, and
@@ -55,15 +52,10 @@ pub struct ClipRef {
     pub handle: Option<Handle>,
 }
 
-/// One parameter a plugin defined, on a descriptor or on an instance.
 pub struct ParamRef {
-    /// The name the plugin gave it, which is also its stable id.
     pub name: String,
-    /// One of [`crate::ffi::param_types`].
     pub param_type: String,
-    /// The handle the plugin holds.
     pub handle: Handle,
-    /// Its property set.
     pub props: Handle,
 }
 
@@ -74,21 +66,14 @@ pub struct ParamRef {
 /// from: it is handed one parameter handle and must find the **instance's**
 /// snapshot value for it (docs/12 §2.2).
 pub struct ParamRecord {
-    /// The parameter's property set.
     pub props: Handle,
-    /// The effect or instance it belongs to.
     pub effect: Handle,
-    /// Its name, which is its key in the snapshot.
     pub name: String,
 }
 
-/// What an `OfxImageClipHandle` names in the host's registry.
 pub struct ClipBinding {
-    /// The instance it belongs to.
     pub effect: Handle,
-    /// Which clip of that instance it is.
     pub name: String,
-    /// The clip's property set.
     pub props: Handle,
 }
 
@@ -97,23 +82,17 @@ pub struct ClipBinding {
 /// of object in OFX (both are an `OfxImageEffectHandle` with a property set,
 /// clips and parameters), so they are one kind of object here.
 pub struct EffectDescriptor {
-    /// The effect's own property set.
     pub props: Handle,
-    /// The clips it defined, in definition order.
     pub clips: Vec<ClipRef>,
     /// The parameters it defined, in definition order. **Order is a promise**
     /// (docs/impl/effect-registry.md §5): it is the order the panel draws.
     pub params: Vec<ParamRef>,
-    /// The live half, present only on an instance ([`crate::instance`]).
     pub instance: Option<crate::instance::InstanceState>,
 }
 
-/// The context this host drives a plugin in.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub enum Context {
-    /// One input, one output: the shape of nearly every effect.
     Filter,
-    /// As many inputs as the plugin asked for.
     General,
     /// No input: the plugin makes the picture, which replaces the layer's.
     Generator,
@@ -124,7 +103,6 @@ pub enum Context {
 }
 
 impl Context {
-    /// The OFX name.
     #[must_use]
     pub const fn ofx_name(self) -> &'static str {
         match self {
@@ -135,8 +113,6 @@ impl Context {
         }
     }
 
-    /// The context that OFX name means, or `None` for one this package does
-    /// not drive.
     #[must_use]
     pub fn from_ofx_name(name: &str) -> Option<Self> {
         match name {
@@ -167,20 +143,14 @@ const PREFERRED_CONTEXTS: [Context; 4] = [
 /// spelled twice.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ParamDescription {
-    /// The plugin's name for it, which becomes the schema id.
     pub name: String,
-    /// One of [`crate::ffi::param_types`].
     pub param_type: String,
-    /// Everything else it said.
     pub props: PropertySet,
 }
 
-/// One clip, as an owned copy.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ClipDescription {
-    /// `Source`, `Output`, `Mask`, or whatever the plugin called it.
     pub name: String,
-    /// Everything the plugin said about it.
     pub props: PropertySet,
 }
 
@@ -188,21 +158,16 @@ pub struct ClipDescription {
 /// describe conversation is over and the plugin may be unloaded.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PluginDescriptor {
-    /// The reverse-domain identifier, e.g. `net.sf.openfx.invertPlugin`.
     pub identifier: String,
-    /// Major and minor, as the plugin declares them.
     pub version: (u32, u32),
     /// The plugin's own menu path, e.g. `Filter/Blur`. Effects & Presets shows
     /// discovered effects under it (docs/12 §2.6).
     pub grouping: String,
-    /// The name a person sees.
     pub label: String,
     /// The contexts this host can drive it in, best first. `params` and `clips`
     /// come from the first.
     pub contexts: Vec<Context>,
-    /// Its parameters, in definition order.
     pub params: Vec<ParamDescription>,
-    /// Its clips, in definition order.
     pub clips: Vec<ClipDescription>,
     /// Whether it declared that it reads frames other than the current one —
     /// `kOfxImageEffectPropTemporalClipAccess`, which is what a retimer must
@@ -248,34 +213,19 @@ impl PluginDescriptor {
 /// a rejection is never a silence (docs/12 §2.1).
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum Rejection {
-    /// The plugin refused to load, so there is nothing to describe.
     #[error("the plugin did not load ({0:?})")]
     NotLoaded(Status),
-    /// `kOfxActionDescribe` came back with a failure.
     #[error("describe failed ({0:?})")]
     DescribeFailed(Status),
-    /// The plugin works only in contexts this host does not drive yet.
     #[error("it works only in {}, which this host does not drive", .declared.join(", "))]
-    NoDrivenContext {
-        /// What it did declare, verbatim, so the report can name it.
-        declared: Vec<String>,
-    },
-    /// `kOfxImageEffectActionDescribeInContext` came back with a failure.
+    NoDrivenContext { declared: Vec<String> },
     #[error("describe in the {context} context failed ({status:?})")]
     DescribeInContextFailed {
-        /// The context we asked for.
         context: &'static str,
-        /// What the plugin answered.
         status: Status,
     },
-    /// Two parameters would land on the same [`ParamId`](lumit_core::fx::params::ParamId).
     #[error("two parameters share the id {first:?} (the second is {second:?})")]
-    DuplicateParamId {
-        /// The parameter that got there first.
-        first: String,
-        /// The one that collided with it.
-        second: String,
-    },
+    DuplicateParamId { first: String, second: String },
     /// The host itself ran out of something. Not the plugin's fault, and
     /// reported as itself rather than blamed on it.
     #[error("the host could not describe it ({0:?})")]
@@ -288,21 +238,14 @@ impl From<Status> for Rejection {
     }
 }
 
-/// One plugin that described itself, and what Lumit made of it.
 pub struct DescribedPlugin {
-    /// What the plugin said.
     pub descriptor: PluginDescriptor,
-    /// The same declaration a built-in effect carries.
     pub schema: EffectSchema,
 }
 
-/// One plugin that did not.
 pub struct Rejected {
-    /// Its identifier, so the report can name it.
     pub identifier: String,
-    /// Its version.
     pub version: (u32, u32),
-    /// Why.
     pub reason: Rejection,
 }
 
@@ -313,7 +256,6 @@ pub struct Rejected {
 pub struct ScanReport {
     /// The effects, in the order the bundle declares them.
     pub effects: Vec<DescribedPlugin>,
-    /// The ones that were turned away, and why.
     pub rejected: Vec<Rejected>,
 }
 
@@ -343,12 +285,6 @@ pub fn describe_bundle(bundle: &Bundle) -> ScanReport {
     report
 }
 
-/// Run the describe sequence at one plugin, in the first context this host can
-/// drive.
-///
-/// # Errors
-///
-/// A [`Rejection`] naming why this plugin is not an effect Lumit can offer.
 pub fn describe(plugin: &PluginRef) -> Result<PluginDescriptor, Rejection> {
     describe_in(plugin, None)
 }
@@ -443,7 +379,6 @@ pub fn describe_in(
     })
 }
 
-/// `kOfxActionDescribe`, and what the plugin left in the descriptor.
 fn describe_base(plugin: &PluginRef, handle: Handle) -> Result<PropertySet, Rejection> {
     // No lock is held here; the plugin is about to re-enter the suites.
     let status = plugin.action(actions::DESCRIBE, Some(handle), None, None);
@@ -456,7 +391,6 @@ fn describe_base(plugin: &PluginRef, handle: Handle) -> Result<PropertySet, Reje
     Ok(snapshot_of(handle)?)
 }
 
-/// `kOfxImageEffectActionDescribeInContext`.
 fn describe_in_context(
     plugin: &PluginRef,
     handle: Handle,
@@ -488,7 +422,6 @@ fn describe_in_context(
     Ok(())
 }
 
-/// Copy a finished descriptor's parameters and clips out of the host state.
 fn gather(handle: Handle) -> Result<(Vec<ParamDescription>, Vec<ClipDescription>), Rejection> {
     let state = state();
     let descriptor = state.effects.get(handle)?;
@@ -524,7 +457,6 @@ fn label_of(props: &PropertySet, identifier: &str) -> String {
     identifier.to_owned()
 }
 
-/// Every element of a string property, or nothing.
 fn strings(props: &PropertySet, key: &str) -> Vec<String> {
     match props.get(key) {
         Ok(PropValue::String(values)) => values
@@ -574,7 +506,6 @@ pub(crate) fn base_property_set(identifier: &str) -> PropertySet {
     set
 }
 
-/// Mint a descriptor and the property set that goes with it.
 pub(crate) fn new_descriptor(props: PropertySet) -> Result<Handle, Status> {
     let mut state = state();
     let props = state.props.insert(props)?;
@@ -586,7 +517,6 @@ pub(crate) fn new_descriptor(props: PropertySet) -> Result<Handle, Status> {
     })
 }
 
-/// A copy of a descriptor's own property set.
 fn snapshot_of(handle: Handle) -> Result<PropertySet, Status> {
     let state = state();
     let props = state.effects.get(handle)?.props;

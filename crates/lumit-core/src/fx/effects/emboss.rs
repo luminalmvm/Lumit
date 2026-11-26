@@ -17,7 +17,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Emboss's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "emboss",
@@ -56,8 +55,6 @@ pub struct Emboss {
     #[slider(min = 0.0, max = 200.0, default = 100.0, hard_min = 0.0, unit = Percent)]
     pub contrast: f32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
-    /// This is AE's "Blend With Original".
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -87,7 +84,6 @@ impl Emboss {
     }
 }
 
-/// Emboss's behaviour.
 pub struct EmbossDef;
 
 impl EffectDef for EmbossDef {

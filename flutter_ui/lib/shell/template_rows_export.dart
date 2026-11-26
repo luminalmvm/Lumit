@@ -39,15 +39,11 @@ import 'export_dialog_frb.dart'
 import 'export_queue_frb.dart' show showExportQueueFrb;
 import 'status_line_frb.dart';
 
-/// A selected copy of a template: its layer, its clip when it is one in Cut,
-/// and what it says of itself.
 typedef CopyHost = ({LayerReference layer, UuidValue? clip, BridgeCopy copy});
 
 const double _width = 520;
 const String _tokenRow = '{row}';
 
-/// How long typing in the pattern settles before the names are asked again,
-/// and how often a run of stills is asked how far it has got.
 const Duration _settle = Duration(milliseconds: 150);
 const Duration _poll = Duration(milliseconds: 200);
 
@@ -65,7 +61,6 @@ Future<void> showTemplateRowsExport({
   try {
     project = context.read<LumitState>().project?.path();
   } catch (_) {
-    // No project to ask, which leaves the folder to be chosen.
   }
   return showLumitModal<void>(
     context: context,
@@ -120,8 +115,6 @@ class _RowsExportState extends State<_RowsExport> {
   final TextEditingController _pattern = TextEditingController();
   final FocusNode _patternFocus = FocusNode(debugLabel: 'rows-pattern');
 
-  /// Whether the composition the copy sits in is exported, with the copy
-  /// following each row, rather than the template on its own.
   bool _inHost = false;
 
   /// The preset, or null for a still of each row.
@@ -129,7 +122,6 @@ class _RowsExportState extends State<_RowsExport> {
   String _folder = '';
   bool _skip = true;
 
-  /// The rows with a fault, and the first names the queue will write.
   int _faulty = 0;
   List<String> _names = const [];
 
@@ -137,8 +129,6 @@ class _RowsExportState extends State<_RowsExport> {
   Timer? _polling;
   BridgeStillsProgress? _progress;
 
-  /// What the footer says once something has been tried: how many stills
-  /// were written, or why nothing went.
   String? _outcome;
   bool _busy = false;
 
@@ -160,7 +150,6 @@ class _RowsExportState extends State<_RowsExport> {
           .faulty
           .length;
     } catch (_) {
-      // The template went under the dialogue. Nothing is counted.
     }
     _askNames();
   }
@@ -274,8 +263,6 @@ class _RowsExportState extends State<_RowsExport> {
     }
   }
 
-  /// One still for each row at the poster frame, with how far it has got
-  /// beside a Stop.
   Future<void> _stills(CopyHost? host) async {
     setState(() {
       _busy = true;
@@ -286,7 +273,6 @@ class _RowsExportState extends State<_RowsExport> {
       try {
         setState(() => _progress = dataStillsProgress());
       } catch (_) {
-        // No answer this time. The next one may have it.
       }
     });
     String outcome;
@@ -436,7 +422,6 @@ class _RowsExportState extends State<_RowsExport> {
         gap: exportRowGap,
       );
 
-  /// The template on its own, or the composition the selected copy sits in.
   Widget _composition(LumitTheme t) {
     final hostComp = widget.hostComp;
     if (widget.host == null || hostComp == null) {
@@ -456,7 +441,6 @@ class _RowsExportState extends State<_RowsExport> {
     );
   }
 
-  /// The pattern, and the menu that puts a token in at the cursor.
   Widget _fileName(LumitTheme t) => Row(children: [
         Expanded(
           child: SizedBox(
@@ -538,8 +522,6 @@ class _RowsExportState extends State<_RowsExport> {
         ),
       ]);
 
-  /// How many rows have a fault, and whether they are left out or use the
-  /// template's values where they will not read.
   Widget _faults(LumitTheme t) => Row(children: [
         Text(l10n.templateDataRows(_faulty),
             key: const ValueKey('template-rows-faulty'),

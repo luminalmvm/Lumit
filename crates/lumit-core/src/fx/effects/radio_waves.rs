@@ -21,21 +21,18 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// A star's depth means nothing until the star is switched on — §3.71's row.
 pub const RADIO_WAVES_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
     param: "star_depth",
     on: "star",
     cond: EnabledCond::BoolIs(true),
 }];
 
-/// Radio waves' controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "radio_waves",
     label = "Radio waves",
     version = 1,
     category = Generate,
-    // One `atan2` and up to 32 cheap rings a pixel — §3.71's admission again.
     cost = Cheap,
     roi = Exact,
     premultiplied = true,
@@ -55,7 +52,6 @@ pub struct RadioWaves {
     #[slider(label = "Producer x", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
     pub centre_x: f32,
 
-    /// px@comp; see [`centre_x`](Self::centre_x).
     #[slider(label = "Producer y", min = 0.0, max = 2160.0, default = 540.0, unit = Px)]
     pub centre_y: f32,
 
@@ -64,7 +60,6 @@ pub struct RadioWaves {
     #[slider(min = 0.0, max = 10.0, default = 3.0, hard_min = 0.0, unit = Seconds)]
     pub time: f32,
 
-    /// Waves a second.
     #[slider(min = 0.1, max = 20.0, default = 2.0, hard_min = 0.01, unit = Raw)]
     pub frequency: f32,
 
@@ -72,7 +67,6 @@ pub struct RadioWaves {
     #[slider(min = 0.0, max = 1000.0, default = 260.0, hard_min = 0.0, unit = Px)]
     pub expansion: f32,
 
-    /// How long a wave lives, seconds.
     #[slider(min = 0.1, max = 10.0, default = 2.0, hard_min = 0.02, unit = Seconds)]
     pub lifespan: f32,
 
@@ -81,11 +75,9 @@ pub struct RadioWaves {
     #[counter(min = 3, max = 64, default = 32, hard_min = 3, hard_max = 64, unit = Raw)]
     pub sides: i32,
 
-    /// Put every second vertex on an inner radius, making a star of the polygon.
     #[toggle(default = false)]
     pub star: bool,
 
-    /// How deep the star's notches go, per cent of the radius.
     #[slider(
         label = "Star depth",
         min = 0.0,
@@ -107,7 +99,6 @@ pub struct RadioWaves {
     #[dial(default = 0.0, step = 15.0)]
     pub spin: f32,
 
-    /// How thick the outline is, px@comp.
     #[slider(
         label = "Stroke width",
         min = 0.0,
@@ -122,7 +113,6 @@ pub struct RadioWaves {
     #[colour(default = [0.25, 0.70, 1.0, 1.0], max = 4.0)]
     pub colour: [f32; 4],
 
-    /// How strong the outline is, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -133,7 +123,6 @@ pub struct RadioWaves {
     )]
     pub opacity: f32,
 
-    /// How much of a wave's life it spends fading up, per cent.
     #[slider(
         label = "Fade in",
         min = 0.0,
@@ -145,7 +134,6 @@ pub struct RadioWaves {
     )]
     pub fade_in: f32,
 
-    /// How much of a wave's life it spends fading out, per cent.
     #[slider(
         label = "Fade out",
         min = 0.0,
@@ -162,7 +150,6 @@ pub struct RadioWaves {
     #[toggle(label = "Composite on original", default = true)]
     pub composite_on_original: bool,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -196,7 +183,6 @@ impl RadioWaves {
         };
         let a = [1.0f32, 0.0];
         let b = [radius_b * angle_b.cos(), radius_b * angle_b.sin()];
-        // §3.71's outward normal, on the unit shape.
         let normal = [b[1] - a[1], a[0] - b[0]];
         let inv_len = 1.0
             / (normal[0] * normal[0] + normal[1] * normal[1])
@@ -232,7 +218,6 @@ impl RadioWaves {
     }
 }
 
-/// Radio waves' behaviour.
 pub struct RadioWavesDef;
 
 impl EffectDef for RadioWavesDef {

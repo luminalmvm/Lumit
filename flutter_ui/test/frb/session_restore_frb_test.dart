@@ -26,7 +26,6 @@ import 'package:lumit_flutter/state/workspace.dart';
 
 import 'frb_test_support.dart';
 
-/// The panel arrangement as one comparable string.
 String layoutOf(Workspace workspace) => jsonEncode(workspace.dock.toJson());
 
 void main() {
@@ -54,8 +53,6 @@ void main() {
     await settleFrb(tester, until: () => saved);
     expect(File(path).existsSync(), isTrue, reason: 'nothing to reopen');
 
-    // Where the user got to: both comps open, Scene fronted, playhead at 12,
-    // the solid selected, and the panels dragged to a shape of their own.
     ui.setSelectedComp(titles);
     ui.setSelectedComp(scene);
     ui.setSelection([layer]);
@@ -64,9 +61,6 @@ void main() {
     final arranged = layoutOf(workspace);
     ui.rememberSession();
 
-    // A different document, then the saved one opened over the top of it. The
-    // layout is dragged somewhere else in between, standing in for the user
-    // having been in another project with an arrangement of its own.
     state.newProject();
     expect(ui.openComps, isEmpty, reason: 'a new project starts on nothing');
     expect(ui.selectedComp, isNull);
@@ -119,7 +113,6 @@ void main() {
     expect(ui.playheadFrame.value, 30,
         reason: 'an unmoved, unretimed precomp maps frame for frame');
 
-    // Standing past the layer's end opens the nested comp at its own end.
     ui.setSelectedComp(outer);
     ui.playheadFrame.value = outer.durationFrames() - 1;
     ui.openNestedComp(layer, inner);
@@ -140,8 +133,6 @@ void main() {
     state.project!.save(path: path).then((_) => saved = true);
     await settleFrb(tester, until: () => saved);
 
-    // A session written by an older sitting, naming a comp and a layer that
-    // the saved document does not contain.
     workspace.rememberSession(
       path,
       const SavedSession(
@@ -186,8 +177,6 @@ void main() {
     expect(authorState.project!.isDirty(), isFalse,
         reason: 'recording the arrangement is not an edit');
 
-    // A machine that has never seen it, so the arrangement comes out of the
-    // file and every restore step runs.
     final other = Workspace();
     final otherState = LumitState()..newProject();
     final otherUi = LumitUiState(otherState, workspace: other);

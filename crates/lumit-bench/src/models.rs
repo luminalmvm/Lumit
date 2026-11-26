@@ -22,15 +22,11 @@ use std::time::Instant;
 const SIZE: (u32, u32) = (1920, 1080);
 const RUNS: u32 = 20;
 const WARMUP: u32 = 4;
-/// The fastest of these is kept, as for Particulate's three.
 const REPEATS: u32 = 3;
 
-/// Measure B30, B33, B34, B35 and B36. `Err` when there is no graphics adapter.
 pub fn budgets(progress: &mut dyn FnMut(Measurement)) -> Result<Vec<Measurement>, String> {
     let ctx = lumit_gpu::GpuContext::headless().map_err(|e| format!("no GPU adapter: {e}"))?;
     let fx = lumit_gpu::fx::FxEngine::new(&ctx);
-    // A ball of 1000 by 500 squares, two triangles each, filling half the
-    // frame's height.
     let scene = Arc::new(fixtures::scene(
         vec![(fixtures::sphere(0.5, 1000, 500, Some(0)), [0.0; 3])],
         vec![Material {
@@ -79,7 +75,6 @@ pub fn budgets(progress: &mut dyn FnMut(Measurement)) -> Result<Vec<Measurement>
         shutter: &[],
         shutter_scenes: &[],
         lights: &lights,
-        // A new layer's Material options.
         material: LightingMaterial {
             eye,
             specular: 0.5,
@@ -182,8 +177,6 @@ pub fn budgets(progress: &mut dyn FnMut(Measurement)) -> Result<Vec<Measurement>
             .map(drop)
             .map_err(|e| e.to_string())
     })?;
-    // A character's worth: 100,000 vertices on 64 bones, swelling as it bends,
-    // posed afresh on the processor and on the card each frame.
     let rig = Arc::new(fixtures::bending(316, 316, 64));
     let take = rig.clips.first().map(|clip| (clip, 0.7));
     let b36 = time(&|| {

@@ -1,13 +1,3 @@
-// The Timeline's selection model (docs/impl/timeline-interaction.md §2).
-//
-// One model for Layers mode's lanes, Keys mode and the graph, and every
-// sentence of §2 is a claim here: a marquee starts from any ground in either
-// mode, `Shift` and `Ctrl` make it additive, a property's name is its row's
-// "select all", a lane key carries the graph key's menu, and `Ctrl`+click on a
-// keyed row plants a key.
-//
-// Written against the real engine like every other frb panel test: a selection
-// that does not reach the document is not a selection.
 
 import 'dart:math' as math;
 
@@ -49,8 +39,6 @@ void main() {
       await tester.pump();
     }
 
-    /// A solid whose [prop] is keyed at [frames], each key's value its own
-    /// frame number so a test can tell one from another.
     LayerReference keyedLayer(
       dynamic p, {
       List<int> frames = const [300, 1500],
@@ -80,8 +68,6 @@ void main() {
     Key laneKeyOf(LayerReference layer) =>
         ValueKey<String>('tl-keys-${opacityPath(layer)}');
 
-    /// Which of a lane's diamonds are drawn selected — the painter's own
-    /// answer, which is the one the block box, the badge and F9 all read.
     Set<int> selectedOn(WidgetTester tester, Key laneKey) {
       final paint = find.descendant(
         of: find.byKey(laneKey),
@@ -92,8 +78,6 @@ void main() {
           .cast<int>();
     }
 
-    /// Twirl a layer open in Layers mode and open its Transform group, which
-    /// is where the Opacity lane appears.
     Future<void> openTransform(
         WidgetTester tester, LayerReference layer) async {
       await tester.tap(
@@ -120,8 +104,6 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    /// Hold [key] down for the body of [run] — a modifier held across a whole
-    /// gesture, which is what "held when the drag starts" needs.
     Future<void> holding(
       WidgetTester tester,
       LogicalKeyboardKey key,
@@ -138,16 +120,6 @@ void main() {
     List<BridgeKeyframe> opacityKeys(LayerReference layer) =>
         (layer.getTransform().opacity as BridgeScalar_Keyframed).field0;
 
-    // ---------------------------------------------------------------------
-    // §2.1 — where a marquee may start, and what a modifier does to it.
-    // ---------------------------------------------------------------------
-
-    // ---------------------------------------------------------------------
-    // §2.1 — clicking keys.
-    // ---------------------------------------------------------------------
-
-    /// Clicking a key selects exactly that key and deselects the rest; `Shift`
-    /// and `Ctrl` toggle one in and out without touching the others.
     testWidgets('clicking a key replaces, Ctrl-clicking toggles',
         (tester) async {
       final p = withComp();
@@ -175,8 +147,6 @@ void main() {
       });
       expect(selectedOn(tester, lane), {1, 2}, reason: 'Ctrl added the other');
 
-      // The whole row, then a plain click on the middle key: exactly that key
-      // is left, and the rest are let go.
       await tester.tap(find.text('Opacity'));
       await tester.pumpAndSettle();
       expect(selectedOn(tester, lane), {0, 1, 2});
@@ -193,21 +163,6 @@ void main() {
           reason: 'Shift toggled the same key back out');
     });
 
-    // ---------------------------------------------------------------------
-    // §2.1 — a property's name is its row's "select all".
-    // ---------------------------------------------------------------------
-
-    // ---------------------------------------------------------------------
-    // §2.2 — letting go.
-    // ---------------------------------------------------------------------
-
-    // ---------------------------------------------------------------------
-    // §2.1 — the lane key's own menu, and planting one.
-    // ---------------------------------------------------------------------
-
-    /// **Right-clicking a lane key opens the graph key's menu** — Linear /
-    /// Easy ease / Hold / Ease… / Delete keyframe, and a right-click on an
-    /// unselected key selects it first, so the menu acts on what was clicked.
     testWidgets('a lane key\'s menu holds the key it was opened on',
         (tester) async {
       final p = withComp();
@@ -264,14 +219,6 @@ void main() {
       expect(frames[1], lessThan(1500));
     });
 
-    // ---------------------------------------------------------------------
-    // §4.4 — the catch walk steps by each layer's real block height.
-    // ---------------------------------------------------------------------
-
-    // ---------------------------------------------------------------------
-    // The easing claim: what a preset tile presses.
-    // ---------------------------------------------------------------------
-
     /// **An applied ease writes the drawn tangents, and however many layers
     /// the selection spans it is one undo step** (the rule is that a
     /// multi-selection edit is one edit). The write is one op per layer, so
@@ -294,7 +241,6 @@ void main() {
         await tester.pumpAndSettle();
       }
 
-      // One box round all four keys, across both lanes.
       final laneA = tester.getRect(find.byKey(laneKeyOf(a)));
       final laneB = tester.getRect(find.byKey(laneKeyOf(b)));
       await boxFrom(
@@ -304,8 +250,6 @@ void main() {
       expect(selectedOn(tester, laneKeyOf(a)), hasLength(2));
       expect(selectedOn(tester, laneKeyOf(b)), hasLength(2));
 
-      // The claim the Timeline publishes while it can take a shape — the very
-      // callback a preset tile presses.
       final apply = p.uiState.easingApply.value;
       expect(apply, isNotNull, reason: 'lane view publishes the claim');
       apply!(easingPresets.firstWhere((e) => e.id == 'sineIn').curve,
@@ -314,8 +258,6 @@ void main() {
 
       for (final layer in [a, b]) {
         final keys = opacityKeys(layer);
-        // Sine in (0.12, 0, 0.39, 0): flat out of the first key over 12% of
-        // the span, and into the second across the remaining 61%.
         final out = keys[0].interpOut;
         expect(out, isA<BridgeSideInterp_Bezier>());
         expect((out as BridgeSideInterp_Bezier).field0.speed,

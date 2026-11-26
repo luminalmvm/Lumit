@@ -1,6 +1,3 @@
-// The status line's Power saving word: shown while the system says it is on
-// battery or saving power, gone when it is not, and nothing when the question
-// cannot be answered.
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';

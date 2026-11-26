@@ -32,7 +32,6 @@ use crate::gpufx::AuxSlot;
 
 type Tex = wgpu::Texture;
 
-/// What a Particulate with Trails on, `e` on `layer`, carries to the card.
 pub(crate) fn carriage(
     doc: &Arc<lumit_core::model::Document>,
     comp: &lumit_core::model::Composition,
@@ -121,17 +120,13 @@ fn sprite_name(d: &DofInputDraw) -> Option<u128> {
     Some(u128::from_le_bytes(out))
 }
 
-/// How often a walk keeps its picture, in frames.
 const KEEP_EVERY: i64 = 8;
 
-/// The most bytes kept pictures hold between them, on the card.
 const KEPT_BYTES: usize = 512 << 20;
 
-/// Kept pictures, for the one card they are on.
 struct Store {
     ledger: Arc<lumit_budget::Ledger>,
     pictures: lumit_cache::ByteLru<u128, CachedTex>,
-    /// The latest frame kept of each walk.
     latest: HashMap<[u8; 32], i64>,
 }
 
@@ -164,12 +159,10 @@ fn name(walk: &[u8; 32], frame: i64) -> u128 {
     u128::from_le_bytes(out)
 }
 
-/// The furthest picture kept of `walk` from `from` to `frame`, and its frame.
 fn kept(ctx: &GpuContext, walk: &[u8; 32], frame: i64, from: i64) -> Option<(i64, Tex)> {
     with_store(ctx, |s| {
         let mut latest = s.latest.get(walk).copied().filter(|l| *l <= frame);
         let mut k = frame.div_euclid(KEEP_EVERY) * KEEP_EVERY;
-        // Furthest first: the latest where it is ahead, then every eighth.
         loop {
             let at = match latest {
                 Some(l) if l >= k => {
@@ -211,7 +204,6 @@ fn keep(ctx: &GpuContext, walk: &[u8; 32], frame: i64, tex: &Tex, sticky: bool) 
     }
 }
 
-/// One frame of the walk, as it is drawn.
 struct Frame {
     points: Vec<DrawPoint>,
     feather: f32,
@@ -221,7 +213,6 @@ struct Frame {
     carry: Option<(f32, [f32; 4], [f32; 2])>,
 }
 
-/// Frame `lt`'s particles and rows, everything read at that layer time.
 fn frame_at(
     trails: &Trails,
     effect: uuid::Uuid,
@@ -244,7 +235,6 @@ fn frame_at(
         inputs: None,
     });
     let audio = crate::audio_tap::DocumentAudio::new(doc, comp, tc);
-    // A wired row reads its wire, as the bag does.
     let row = |id: &str, or: f64| -> f32 {
         lumit_core::fx::drivers::driven_param(
             &layer.graph,
@@ -314,7 +304,6 @@ fn frame_at(
     })
 }
 
-/// A transparent picture the size of `like`.
 fn blank(fx: &FxEngine, ctx: &GpuContext, like: &Tex, w: u32, h: u32) -> Tex {
     fx.transform(
         ctx,
@@ -332,7 +321,6 @@ fn blank(fx: &FxEngine, ctx: &GpuContext, like: &Tex, w: u32, h: u32) -> Tex {
     )
 }
 
-/// `f`'s particles drawn over what `before` leaves of itself, or over nothing.
 #[allow(clippy::too_many_arguments)]
 fn one(
     fx: &FxEngine,
@@ -383,7 +371,6 @@ fn one(
     out
 }
 
-/// Particulate with Trails on, over `input`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn draw(
     fx: &FxEngine,
@@ -410,7 +397,6 @@ pub(crate) fn draw(
         return input.clone();
     };
     let dt = 1.0 / comp.frame_rate.fps().max(1.0);
-    // Before the in point there is nothing yet.
     if t.is_nan() || t < 0.0 {
         return input.clone();
     }
@@ -526,7 +512,6 @@ pub(crate) fn draw(
     let Some(mut shown) = picture.filter(|_| frame == target) else {
         return input.clone();
     };
-    // A time between frames draws its own particles over the frame before.
     if t - target as f64 * dt > 1e-9 {
         if let Some(made) = frame_at(trails, effect, t, dt, px_scale, streak) {
             let over = fx.points_draw(

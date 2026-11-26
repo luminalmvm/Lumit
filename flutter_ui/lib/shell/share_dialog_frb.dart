@@ -58,8 +58,6 @@ import 'welcome_frb.dart' show projectDisplayName;
 import 'package:lumit_flutter/state/platform.dart'
     if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
-/// The width both take, the column their labels sit in, and how tall the list
-/// of conflicts and the list of footage grow before they scroll.
 const double shareDialogWidth = 460;
 const double _labelColumn = 100;
 const double _conflictListHeight = 320;
@@ -82,7 +80,6 @@ const int _activityShown = 12;
 const double _leadGlyph = 14;
 const double _leadGap = 6;
 
-/// How wide a glyph to press is, and the room one takes inside a field.
 const double _glyphTarget = 22;
 const double _fieldEye = 22;
 
@@ -90,7 +87,6 @@ const double _fieldEye = 22;
 /// which the body of a project kept online is kept inside of.
 const double _aroundBody = 180;
 
-/// What Lumit's server said no with, about a project kept online, in words.
 String shareOnlineErrorText(String code) => switch (code) {
       'pro_required' => l10n.shareOnlineErrorPro,
       'too_many' => l10n.shareOnlineErrorTooMany,
@@ -300,7 +296,6 @@ Future<void> openReturnCopy(BuildContext context, LumitState app,
   try {
     path = app.project?.path();
   } catch (_) {
-    // Closed already.
   }
   String? target;
   try {
@@ -323,12 +318,9 @@ Future<void> openReturnCopy(BuildContext context, LumitState app,
   await app.openProject(target);
 }
 
-/// When a copy from before a return was kept.
 DateTime _copyAt(BridgeShareReturnCopy copy) =>
     DateTime.fromMillisecondsSinceEpoch(copy.at * 1000);
 
-/// Update Lumit by the road the Help menu has: one press checks, and goes
-/// straight on to offering what it found.
 Future<void> offerLumitUpdate(
     BuildContext context, LumitState app, LumitUiState ui) async {
   final updates = ui.updates;
@@ -347,7 +339,6 @@ Future<void> offerLumitUpdate(
   }
 }
 
-/// A text well at the dialog's control height, filling its row.
 Widget _field(
   LumitTheme t,
   String id,
@@ -373,14 +364,12 @@ Widget _field(
       ),
     );
 
-/// A quiet line of explanation, or what went wrong in the warning colour.
 Widget _line(LumitTheme t, String text, {bool warning = false}) => Padding(
       padding: const EdgeInsets.only(top: 6),
       child: Text(text,
           style: t.small.copyWith(color: warning ? t.warning : t.textMuted)),
     );
 
-/// The body between the title strip and the footer.
 Widget _body(List<Widget> children) => Padding(
       padding: const EdgeInsets.all(dialogPadding),
       child: Column(
@@ -389,8 +378,6 @@ Widget _body(List<Widget> children) => Padding(
         children: children,
       ),
     );
-
-// --- Shared project -------------------------------------------------------
 
 /// Open the Shared project window: share the open project, join somebody
 /// else's, or see who is here. [invite] is a link to open it on the Join
@@ -413,7 +400,6 @@ Future<void> showShareFrb(BuildContext context, LumitState app,
           onClose: () => close(null)),
     );
 
-/// The two things there are to do before a project is shared.
 enum _Page { share, join }
 
 class _ShareDialog extends StatefulWidget {
@@ -421,7 +407,6 @@ class _ShareDialog extends StatefulWidget {
   final String? invite;
   final String? relay;
 
-  /// Opened to see who changed what, which is brought into view.
   final bool activity;
 
   /// Stands in for the system's save window, as it does for saving.
@@ -452,26 +437,21 @@ class _ShareDialogState extends State<_ShareDialog> {
   /// knows of: a VPN's, or a port they forwarded by hand.
   final TextEditingController _address = TextEditingController();
 
-  /// What a guest pastes: the link to join by, and a fresh one for a host
-  /// that has moved.
   late final TextEditingController _joinInvite;
   final TextEditingController _newInvite = TextEditingController();
 
-  /// The password a host sets, or a guest gives with a link that needs one.
   final TextEditingController _password = TextEditingController();
 
   /// How fast this computer sends and takes footage, in kilobytes a second.
   late final TextEditingController _upLimit;
   late final TextEditingController _downLimit;
 
-  /// The link in the field wants a password with it.
   bool _needsPassword = false;
 
   /// The friend's invite whose link is in the Join field, put away once it
   /// has been joined by.
   ({String id, String link})? _fromFriend;
 
-  /// The password is being shown as it is typed.
   bool _passwordShown = false;
 
   _Page _page = _Page.share;
@@ -486,13 +466,10 @@ class _ShareDialogState extends State<_ShareDialog> {
   String? _projectId;
   String? _keptKey;
 
-  /// Whether sharing asks the router to open the port.
   late bool _outside;
 
-  /// The rows most people never need are showing.
   bool _advanced = false;
 
-  /// The invite link, while this machine hosts.
   String? _link;
 
   /// The person asked to see the links this window holds. Until then they
@@ -500,21 +477,14 @@ class _ShareDialogState extends State<_ShareDialog> {
   /// streams and in screenshots.
   bool _shown = false;
 
-  /// Where this machine keeps the footage of a project it is joining.
   String? _footage;
 
-  /// The host is being asked and the project fetched.
   bool _joining = false;
 
-  /// The invite that can only look is being shown, as [_shown] says of the
-  /// other.
   bool _shownLook = false;
 
-  /// Why the last thing asked for did not happen, to show under the fields.
   String? _error;
 
-  /// Lumit's server is being asked something that has not come back: to
-  /// keep the project, to take someone out, or to stop keeping it.
   bool _busy = false;
 
   /// The invite in hand wants a password with it. Read when the link is,
@@ -537,11 +507,8 @@ class _ShareDialogState extends State<_ShareDialog> {
   /// told at once that they have been looked at.
   final Set<String> _fresh = {};
 
-  /// Every sitting is listed, and not only the newest.
   bool _allActivity = false;
 
-  /// The Share page's tick: keep the project online, and not share it from
-  /// this machine.
   bool _online = false;
 
   /// The window is taller than the screen has room for, so its body scrolls
@@ -549,14 +516,12 @@ class _ShareDialogState extends State<_ShareDialog> {
   /// another. It stays so for as long as the window is open.
   bool _oneScroller = false;
 
-  /// Who is being taken out of a project kept online just now.
   int? _removing;
 
   /// What the host last asked the invite that can only look to be, until
   /// the server has said that it is.
   bool? _lookAsked;
 
-  /// The note being written.
   final TextEditingController _note = TextEditingController();
 
   /// The list of who changed what: the sittings and the notes together,
@@ -568,14 +533,10 @@ class _ShareDialogState extends State<_ShareDialog> {
   /// composition's clock, and its layer's name.
   final Map<String, ({String? timecode, String? layer})> _noteWhere = {};
 
-  /// Someone away has asked for the field a new invite goes in.
   bool _reinviteOpen = false;
 
-  /// The project an invite names is being moved forward to this Lumit.
   bool _moving = false;
 
-  /// How this Lumit stands to the project the last join found, when another
-  /// version keeps it and this machine cannot move it.
   BridgeShareVersions? _joinMet;
 
   final GlobalKey _activityKey = GlobalKey();
@@ -595,7 +556,6 @@ class _ShareDialogState extends State<_ShareDialog> {
         _ => 0,
       };
 
-  /// As much of the list as is drawn until all of it is asked for.
   List<Object> get _shownEntries =>
       _allActivity || _entries.length <= _activityShown
           ? _entries
@@ -619,7 +579,6 @@ class _ShareDialogState extends State<_ShareDialog> {
     unawaited(widget.app.activitySeen());
   }
 
-  /// Ask the engine where each note on show was written, once a note.
   void _readNoteWhere() {
     final rates = <String, BridgeCompSettings>{};
     for (final note in _shownEntries.whereType<BridgeShareNote>()) {
@@ -641,7 +600,6 @@ class _ShareDialogState extends State<_ShareDialog> {
     }
   }
 
-  /// Leave the note that was typed, about where this person is now.
   void _sendNote() {
     // Five hundred characters is what a note holds.
     final text = String.fromCharCodes(_note.text.trim().runes.take(500));
@@ -656,8 +614,6 @@ class _ShareDialogState extends State<_ShareDialog> {
     _note.clear();
   }
 
-  /// Go where a note was written: its composition, the frame the playhead
-  /// was on, and its layer chosen.
   void _goToNote(BridgeShareNote note) {
     final comp = note.comp?.comp;
     if (comp == null) return;
@@ -717,7 +673,6 @@ class _ShareDialogState extends State<_ShareDialog> {
     try {
       _projectId = widget.app.project?.shareId();
     } catch (_) {
-      // No project to share. The Join page needs none.
     }
     if (_prefs.shareHosted[_projectId] case final kept?
         when !kept.startsWith('online')) {
@@ -749,19 +704,14 @@ class _ShareDialogState extends State<_ShareDialog> {
     _address.addListener(_readLink);
     widget.app.share.roster.addListener(_readLink);
     _ui.friendInvites.addListener(_redraw);
-    // Opening the window is a fair moment to look for a friend's invite.
     unawaited(_ui.friendInvites.check());
     _link = _linkNow();
     _readLocked();
     widget.app.share.activityRead.addListener(_lookAtActivity);
     _lookAtActivity();
-    // What the host's storage holds, should the window come to say it is
-    // full.
     if (widget.app.share.online?.host ?? false) {
       unawaited(_ui.backup.refresh());
     }
-    // Opening the window is a fair moment to ask whether a full storage
-    // has room again.
     _ui.onlineFootage.recheck();
     // It says whatever the strip was saying of the project, so that has
     // been read. After this frame, since the strip is drawn from it.
@@ -797,8 +747,6 @@ class _ShareDialogState extends State<_ShareDialog> {
     if (mounted) setState(() {});
   }
 
-  /// Whether the link being pasted wants a password, which is what puts the
-  /// password row there.
   void _readInvite() {
     final pasted = widget.app.share.away ? _newInvite : _joinInvite;
     var locked = false;
@@ -820,7 +768,6 @@ class _ShareDialogState extends State<_ShareDialog> {
     }
   }
 
-  /// The password typed, or null for none.
   String? _passwordNow() => _password.text.isEmpty ? null : _password.text;
 
   /// The invite this project was last shared by had a password, which it
@@ -846,7 +793,6 @@ class _ShareDialogState extends State<_ShareDialog> {
   /// read again when the router or a relay answers, and when an address is
   /// typed.
   void _readLink() {
-    // The server has said what the invite to look was asked to be.
     if (_lookAsked == widget.app.share.online?.lookOn) _lookAsked = null;
     final link = _linkNow();
     if (link == _link || !mounted) return;
@@ -996,13 +942,11 @@ class _ShareDialogState extends State<_ShareDialog> {
     }
     setState(() {
       _joining = false;
-      // Another Lumit keeps it, and this machine waits or updates.
       if (outcome case BridgeJoinOutcome_Versions(:final versions)) {
         _joinMet = versions;
         return;
       }
       _error = switch (outcome) {
-        // Asked about the unsaved project in hand, and kept it.
         null => null,
         BridgeJoinOutcome_BadInvite() => l10n.shareBadInvite,
         BridgeJoinOutcome_PasswordNeeded() => l10n.sharePasswordNeeded,
@@ -1016,7 +960,6 @@ class _ShareDialogState extends State<_ShareDialog> {
             'not_found' => password != null
                 ? l10n.shareOnlineNotFoundOrPassword
                 : l10n.shareOnlineNotFound,
-            // The server knew the invite, and why it opens nothing now.
             'closed' => l10n.shareJoinClosed,
             'moved' => l10n.shareJoinMoved,
             'removed' => l10n.shareJoinRemoved,
@@ -1036,9 +979,6 @@ class _ShareDialogState extends State<_ShareDialog> {
     });
   }
 
-  /// The account's friends in a menu under [button], to send the invite to:
-  /// the one that can only look when [look] is set. Without a username there
-  /// are none, and the menu says so.
   Future<void> _pickFriend(BuildContext button, {bool look = false}) async {
     final account = _ui.account;
     await account.loadFriends();
@@ -1081,7 +1021,6 @@ class _ShareDialogState extends State<_ShareDialog> {
     }
   }
 
-  /// Join by a friend's invite, as if its link had been pasted.
   void _joinFromFriend(FriendInvite invite) {
     _joinInvite.text = invite.text.link;
     _password.text = invite.text.password ?? '';
@@ -1140,7 +1079,6 @@ class _ShareDialogState extends State<_ShareDialog> {
     share.forgetReturn();
   }
 
-  /// Look for a lost host by the invite just pasted.
   void _reinvite() {
     final needed = _needsPassword && _password.text.isEmpty;
     final taken = !needed &&
@@ -1297,8 +1235,6 @@ class _ShareDialogState extends State<_ShareDialog> {
               children: [_body(_onlineRows(t, share))],
             )
           else
-            // Keyed by the tab, so a new one comes up into place as a
-            // settings page does and the one left is gone at once.
             Entrance(
               key: ValueKey<_Page>(_page),
               spec: _pageTurns == 0
@@ -1325,7 +1261,6 @@ class _ShareDialogState extends State<_ShareDialog> {
           dialogFooter(
             t,
             keyPrefix: 'share',
-            // What ends it stands apart from the way out of the window.
             leading: switch (share.role) {
               ShareRole.none => null,
               // Not while the server is being asked something, or the
@@ -1379,8 +1314,6 @@ class _ShareDialogState extends State<_ShareDialog> {
     );
   }
 
-  /// What ends sharing, at the foot of the window: plain words, so that
-  /// Done is the one button there.
   Widget _ending(
           LumitTheme t, String id, String label, VoidCallback? onPressed) =>
       HouseButton(
@@ -1401,7 +1334,6 @@ class _ShareDialogState extends State<_ShareDialog> {
         labelColumn: _labelColumn,
       );
 
-  /// The fold the rows most people never need sit under.
   Widget _advancedFold(LumitTheme t) => Padding(
         padding: const EdgeInsets.only(top: 8),
         child: HoverMark(
@@ -1479,8 +1411,6 @@ class _ShareDialogState extends State<_ShareDialog> {
         ),
       );
 
-  /// A field whose text is hidden: typed and pasted into as usual, with the
-  /// letters not drawn and ink where they would be.
   Widget _veiledField(
     LumitTheme t,
     String id,
@@ -1506,7 +1436,6 @@ class _ShareDialogState extends State<_ShareDialog> {
                     color: t.textPrimary.withValues(alpha: 1 - hidden))),
       );
 
-  /// The eye that shows or hides what is in a field or a well.
   Widget _eye(LumitTheme t, String id, bool shown, VoidCallback? onTap) =>
       _glyphButton(
         t,
@@ -1517,7 +1446,6 @@ class _ShareDialogState extends State<_ShareDialog> {
         icon: shown ? LumitIcon.eye : LumitIcon.eyeClosed,
       );
 
-  /// A hidden field with its eye inside its far end.
   Widget _eyedField(
     LumitTheme t,
     String id,
@@ -1536,7 +1464,6 @@ class _ShareDialogState extends State<_ShareDialog> {
               hint: hint,
               onSubmitted: onSubmitted,
               endRoom: _fieldEye),
-          // Nothing to show in an empty field.
           if (controller.text.isNotEmpty)
             SizedBox(
               width: _fieldEye,
@@ -1561,12 +1488,9 @@ class _ShareDialogState extends State<_ShareDialog> {
         labelColumn: _labelColumn,
       );
 
-  /// Whether the field called [id] is being shown by its eye, and not merely
-  /// because there is nothing in it to hide.
   bool _shownOrPassword(String id) =>
       id == 'share-password' ? _passwordShown : _shown;
 
-  /// A tick box with what it means beside it.
   Widget _tick(LumitTheme t, String id, String text, bool on,
           ValueChanged<bool> onChanged) =>
       Padding(
@@ -1603,7 +1527,6 @@ class _ShareDialogState extends State<_ShareDialog> {
         labelColumn: _labelColumn,
       );
 
-  /// A speed limit: a number, and the unit it is in.
   Widget _limitRow(LumitTheme t, String label, String id,
           TextEditingController controller) =>
       dialogRow(
@@ -1673,7 +1596,6 @@ class _ShareDialogState extends State<_ShareDialog> {
         _limitRow(t, l10n.shareDownLimit, 'share-down-limit', _downLimit),
       ];
 
-  /// The footage crossing just now, each way, and how far along it is.
   List<Widget> _transfers(LumitTheme t, ShareState share) {
     final moving = share.transfers();
     if (moving.isEmpty) return const [];
@@ -1699,8 +1621,6 @@ class _ShareDialogState extends State<_ShareDialog> {
     ];
   }
 
-  /// Sharing the open project: who this person is, and under the fold where
-  /// to listen and how people far away get in.
   List<Widget> _startRows(LumitTheme t) => [
         _nameRow(t, _start),
         _passwordRow(
@@ -1796,7 +1716,6 @@ class _ShareDialogState extends State<_ShareDialog> {
         ),
       );
 
-  /// Lumit's own relay, which a project kept online has no use for.
   Widget _cloudRow(LumitTheme t) => _proRow(t, 'share-cloud', l10n.shareCloud,
       use: l10n.shareCloudUse,
       pro: l10n.shareCloudPro,
@@ -1813,7 +1732,6 @@ class _ShareDialogState extends State<_ShareDialog> {
           value: _online,
           onChanged: (on) => setState(() => _online = on));
 
-  /// Joining somebody else's: their link, and where the footage is here.
   List<Widget> _joinRows(LumitTheme t) => [
         for (final invite in _ui.friendInvites.waiting)
           dialogRow(
@@ -1861,7 +1779,6 @@ class _ShareDialogState extends State<_ShareDialog> {
               onSubmitted: _join),
           labelColumn: _labelColumn,
         ),
-        // What came of the link, under the link.
         ...switch (_joinMet) {
           // Waiting on the host is not something wrong with the link.
           BridgeShareVersions_HostFirst() => [
@@ -1903,8 +1820,6 @@ class _ShareDialogState extends State<_ShareDialog> {
         if (_advanced) ..._footageRows(t),
       ];
 
-  /// A sentence about what is in the way, with the one thing to press about
-  /// it at its end.
   Widget _actionLine(LumitTheme t, String text, Widget? action) => Padding(
         padding: const EdgeInsets.only(top: 6),
         child: Row(
@@ -1917,7 +1832,6 @@ class _ShareDialogState extends State<_ShareDialog> {
         ),
       );
 
-  /// The way to a newer Lumit, saying what the Help menu's own row says.
   Widget _updateButton(LumitTheme t) => ListenableBuilder(
         listenable: _ui.updates,
         builder: (context, _) => HouseButton(
@@ -1930,8 +1844,6 @@ class _ShareDialogState extends State<_ShareDialog> {
         ),
       );
 
-  /// Who the link works for, in a sentence: the router's answer and the
-  /// relay's, read together.
   Widget _reachLine(LumitTheme t, ShareState share) {
     final relay = share.relayed;
     final open = share.reach is BridgeShareReach_Open;
@@ -1948,7 +1860,6 @@ class _ShareDialogState extends State<_ShareDialog> {
     return _line(t, l10n.shareOpenLocalOff, warning: true);
   }
 
-  /// While hosting: the link to send, and who it works for.
   List<Widget> _inviteRows(LumitTheme t, ShareState share) => [
         _linkRow(t,
             look: false,
@@ -1971,8 +1882,6 @@ class _ShareDialogState extends State<_ShareDialog> {
         const SizedBox(height: dialogGroupGap),
       ];
 
-  /// The lock on an invite that wants a password as well, which says so on
-  /// hover.
   Widget _lock(LumitTheme t, String says) => Padding(
         padding: const EdgeInsetsDirectional.only(start: 6),
         child: LumitTooltip(
@@ -2051,8 +1960,6 @@ class _ShareDialogState extends State<_ShareDialog> {
     );
   }
 
-  /// While a guest: what wants doing about a host out of reach, and about
-  /// conflicts a merge left.
   List<Widget> _guestRows(LumitTheme t, ShareState share) => [
         if (share.away) ...[
           Text(l10n.shareHostUnreachable,
@@ -2144,7 +2051,6 @@ class _ShareDialogState extends State<_ShareDialog> {
                         : l10n.shareReturnCopyKept(1),
                     style: lost ? t.body.copyWith(color: t.warning) : t.body,
                     overflow: TextOverflow.ellipsis),
-                // Each as the step it was, then what it was to.
                 for (final (at, one) in what.indexed)
                   Text.rich(
                     TextSpan(
@@ -2188,7 +2094,6 @@ class _ShareDialogState extends State<_ShareDialog> {
               ],
             ),
           ),
-          // One way to be done with them all, on the first.
           if (earlier)
             const SizedBox(width: dialogCloseGlyph + 10)
           else
@@ -2210,8 +2115,6 @@ class _ShareDialogState extends State<_ShareDialog> {
         : l10n.backupDayTime(writtenDay(at), backupTime(at));
   }
 
-  /// A small glyph to press at the end of a row, with what it does on hover.
-  /// [mark] is one of the set's, or [icon] one of the panels'.
   Widget _glyphButton(LumitTheme t, String id, String? mark, String says,
           VoidCallback? onTap,
           {Color? colour, LumitIcon? icon}) =>
@@ -2244,7 +2147,6 @@ class _ShareDialogState extends State<_ShareDialog> {
         ),
       );
 
-  /// Where someone away pastes a new invite to look by.
   List<Widget> _reinviteRows(LumitTheme t) => [
         dialogRow(
           t,
@@ -2274,7 +2176,6 @@ class _ShareDialogState extends State<_ShareDialog> {
         if (_needsPassword) _passwordRow(t, l10n.sharePasswordTheirs, _reinvite),
       ];
 
-  /// How many conflicts a merge left, and the way to them.
   Widget _conflictsRow(LumitTheme t, ShareState share) => dialogRow(
         t,
         l10n.shareConflictsTitle,
@@ -2295,9 +2196,6 @@ class _ShareDialogState extends State<_ShareDialog> {
         labelColumn: _labelColumn,
       );
 
-  /// While the project is kept online: that it is, the link to send, how
-  /// this machine stands with Lumit's server, who is here and what footage
-  /// is crossing.
   List<Widget> _onlineRows(LumitTheme t, ShareState share) {
     final hosting = _hosting(share);
     final trouble = shareTrouble(share);
@@ -2305,12 +2203,9 @@ class _ShareDialogState extends State<_ShareDialog> {
     final looking = share.online?.look ?? false;
     final lookLink = share.online?.lookLink ?? '';
     final lookOn = _lookAsked ?? share.online?.lookOn ?? false;
-    // A guest away from the server with nothing else in the way.
     final lost =
         share.away && share.writable && share.versions == null && !hosting;
     return [
-      // How it stands comes first: that it is kept online, and opposite it
-      // whether this machine is in step.
       Row(
         children: [
           SizedBox(
@@ -2348,7 +2243,6 @@ class _ShareDialogState extends State<_ShareDialog> {
                 key: const ValueKey('share-online-in-step'),
                 style: t.small.copyWith(color: t.textSecondary)),
           ] else
-            // What is behind the word is there for whoever stops on it.
             LumitTooltip(
               message: trouble.line,
               maxWidth: 320,
@@ -2359,7 +2253,6 @@ class _ShareDialogState extends State<_ShareDialog> {
             ),
         ],
       ),
-      // The one thing to do about what is in the way, under the word for it.
       if (trouble != null && !share.forwarding)
         if (_troubleAction(t, share, hosting, lost) case final action?)
           Padding(
@@ -2393,7 +2286,6 @@ class _ShareDialogState extends State<_ShareDialog> {
             look: true,
             label: l10n.shareLinkLook,
             link: lookLink,
-            // Someone looking is in by it.
             on: looking || lookOn,
             turns: hosting,
             lockRoom: _linkLocked && !looking),
@@ -2515,13 +2407,9 @@ class _ShareDialogState extends State<_ShareDialog> {
     );
   }
 
-  /// Who changed what and the notes people left, newest first: what a
-  /// person who was not there reads to catch up. Over it, where a note is
-  /// written.
   Widget _activity(LumitTheme t, ShareState share) {
     final all = _entries;
     final returned = share.dropped > 0 || share.returnCopies.isNotEmpty;
-    // Someone who can only look reads the notes and leaves none.
     final writes = !(share.online?.look ?? false);
     final write = Padding(
       padding: const EdgeInsets.only(bottom: 4),
@@ -2613,9 +2501,6 @@ class _ShareDialogState extends State<_ShareDialog> {
     ], key: _activityKey);
   }
 
-  /// Who and when, at the head of a sitting or a note. This machine's own
-  /// are drawn more quietly. A note still [waiting] to be sent says so where its time
-  /// would be.
   Widget _whoRow(LumitTheme t, ShareState share,
       {required String name,
       required bool mine,
@@ -2680,8 +2565,6 @@ class _ShareDialogState extends State<_ShareDialog> {
     widget.app.takeNoteDown(note.id);
   }
 
-  /// One note: who and when, as a sitting says them, then its words, and
-  /// under them where it was written. A press on that goes there.
   Widget _noteRow(LumitTheme t, ShareState share, BridgeShareNote note) {
     final quiet = t.small.copyWith(color: t.textMuted);
     final where = _noteWhere[note.id];
@@ -2785,8 +2668,6 @@ class _ShareDialogState extends State<_ShareDialog> {
     );
   }
 
-  /// One sitting: who and when, then how many edits and in which
-  /// compositions. A composition's name opens it.
   Widget _sittingRow(
       LumitTheme t, ShareState share, BridgeShareSitting sitting) {
     final quiet = t.small.copyWith(color: t.textMuted);
@@ -2842,7 +2723,6 @@ class _ShareDialogState extends State<_ShareDialog> {
     );
   }
 
-  /// A composition's name, which opens it when it is still in the project.
   Widget _compName(LumitTheme t, BridgeSittingComp comp,
       {required bool quiet}) {
     final name = Text(comp.name,
@@ -2864,8 +2744,6 @@ class _ShareDialogState extends State<_ShareDialog> {
     );
   }
 
-  /// The footage of a project kept online: the host's choice to keep the
-  /// originals there too, and every file on its way up or down.
   Widget _onlineFootage(LumitTheme t, bool hosting) {
     final footage = _ui.onlineFootage;
     final id = _projectId;
@@ -2890,8 +2768,6 @@ class _ShareDialogState extends State<_ShareDialog> {
                 },
               ),
               const SizedBox(width: 6),
-              // Unticked, the label says what ticking it would send. Ticked,
-              // what the server holds is said beside it.
               Expanded(
                 child: Text(
                     !keeping && footage.originalsBytes > 0
@@ -2955,7 +2831,6 @@ class _ShareDialogState extends State<_ShareDialog> {
         ),
     ]);
     if (footage.moves.isEmpty) return group;
-    // How far along it all is, opposite the group's name on its top edge.
     final total = footage.finished + footage.moves.length;
     return Stack(
       children: [
@@ -2986,7 +2861,6 @@ class _ShareDialogState extends State<_ShareDialog> {
     unawaited(_ui.backup.refresh());
   }
 
-  /// One file on its way: its name, how it is getting on, and a way out.
   Widget _moveRow(LumitTheme t, OnlineFootage footage, OnlineMove move) {
     final percent =
         move.total == 0 ? 0 : (move.done * 100 / move.total).floor();
@@ -3073,9 +2947,6 @@ class _ShareDialogState extends State<_ShareDialog> {
     );
   }
 
-  /// Everyone in the project: who is this person, who is the host, where
-  /// each is, and for anyone else a way to follow them. The host also has a
-  /// way to take a guest out, which shows when a row is pointed at.
   Widget _people(LumitTheme t, ShareState share) {
     final online = share.online != null;
     final hosting = online ? _hosting(share) : share.role == ShareRole.host;
@@ -3136,8 +3007,6 @@ class _ShareDialogState extends State<_ShareDialog> {
     ]);
   }
 
-  /// All there is to do about [person]: their composition, following them, and
-  /// for the host taking them out.
   void _personMenu(BuildContext row, Offset at, ShareState share,
       BridgeSharePerson person,
       {required bool mayRemove}) {
@@ -3192,9 +3061,6 @@ class _ShareDialogState extends State<_ShareDialog> {
   }
 }
 
-// --- The lists ------------------------------------------------------------
-
-/// A small mono word after a name: you, host.
 Widget _tag(LumitTheme t, String word) => Text(
       t.kickerCase(word),
       style: t.mono.copyWith(
@@ -3216,15 +3082,12 @@ class _PersonRow extends StatefulWidget {
   /// their initial.
   final String letters;
 
-  /// They can look at the project and not change it.
   final bool look;
   final bool host, stale, followed, removing, busy;
 
-  /// The composition they have open, by name.
   final String? comp;
   final VoidCallback? onOpenComp, onFollow, onRemove;
 
-  /// Their own menu, from this row at a place on the screen.
   final void Function(BuildContext row, Offset at) onMenu;
 
   const _PersonRow({
@@ -3287,7 +3150,6 @@ class _PersonRowState extends State<_PersonRow> {
                     letters: widget.letters,
                     stale: stale),
                 const SizedBox(width: 8),
-                // Who, with what they are set apart from it.
                 Expanded(
                   child: Row(
                     children: [
@@ -3338,7 +3200,6 @@ class _PersonRowState extends State<_PersonRow> {
                     ],
                   ),
                 ),
-                // Where, which opens it.
                 if (place != null) ...[
                   const SizedBox(width: 8),
                   ConstrainedBox(
@@ -3357,8 +3218,6 @@ class _PersonRowState extends State<_PersonRow> {
                     },
                   ),
                 ],
-                // Following: quiet until the row is pointed at, and theirs
-                // while it is on.
                 SizedBox(
                   width: 22,
                   child: follow == null
@@ -3409,7 +3268,6 @@ class _ScrollList extends StatefulWidget {
   final bool free;
   final double gutter;
 
-  /// Told when there is more than fits.
   final VoidCallback? onScrolls;
   final List<Widget> children;
 
@@ -3441,7 +3299,6 @@ class _ScrollListState extends State<_ScrollList> {
     super.dispose();
   }
 
-  /// Which edges have more past them, as the list is laid out now.
   void _read() {
     if (!mounted || !_scroll.hasClients) return;
     final at = _scroll.position;
@@ -3516,8 +3373,6 @@ class _ScrollListState extends State<_ScrollList> {
   }
 }
 
-// --- Exporting for someone ------------------------------------------------
-
 /// Ask whether this computer should do the export someone else asked of it.
 /// Yes puts it in the queue here and sends them the file when it is done.
 Future<void> showExportAskFrb(BuildContext context, LumitState app,
@@ -3543,7 +3398,6 @@ Future<void> showExportAskFrb(BuildContext context, LumitState app,
 class _Question extends StatelessWidget {
   final String title;
 
-  /// What can't be told from the title. Most questions need nothing.
   final String? body;
   final String no;
   final String yes;
@@ -3575,14 +3429,9 @@ class _Question extends StatelessWidget {
       );
 }
 
-// --- Showing a link -------------------------------------------------------
-
-/// How much room one speck of ink has to itself, in square logical pixels,
-/// and how far it wanders from where it sits.
 const double _inkRoom = 7;
 const double _inkDrift = 1.6;
 
-/// How long the ink takes to come back round to where it started.
 const Duration _inkLoop = Duration(seconds: 7);
 
 /// Something shown only when the person asks: a link, a password. While it
@@ -3705,16 +3554,13 @@ class _InkPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty) return;
-    // The ink sits where the letters would, not edge to edge of the line.
     final band = math.min(size.height * 0.6, 11.0);
     final middle = size.height / 2;
     final each = (size.width * band / _inkRoom).round().clamp(8, 1500);
     final phase = loop.value;
-    // Three weights of speck, each brightening and dimming in its own time.
     final specks = List.generate(3, (_) => <double>[]);
     for (var speck = 0; speck < each; speck++) {
       final turn = 2 * math.pi * (phase * (1 + speck % 2) + _unit(speck, 3));
-      // Going, each speck lifts by its own amount and spreads.
       final going = (1 - amount) * (2 + 6 * _unit(speck, 4));
       specks[speck % 3]
         ..add(_unit(speck, 1) * size.width +
@@ -3740,10 +3586,7 @@ class _InkPainter extends CustomPainter {
       old.amount != amount || old.colour != colour;
 }
 
-/// Asked before a hidden link is shown: what it gives away, and to whom.
 class _ShowLinkQuestion extends StatelessWidget {
-  /// The link is to a project kept online, which names no machine, and
-  /// with [look] it is the invite that can only look.
   final bool online, look;
   final ValueChanged<bool?> onChoose;
 
@@ -3764,10 +3607,6 @@ class _ShowLinkQuestion extends StatelessWidget {
       );
 }
 
-// --- Conflicts ------------------------------------------------------------
-
-/// Open the Conflicts window: this guest's changes that touched something
-/// another person changed while the host was out of reach.
 Future<void> showShareConflictsFrb(BuildContext context, LumitState app,
         {Future<String?> Function()? savePicker}) =>
     showLumitModal<void>(
@@ -3780,7 +3619,6 @@ Future<void> showShareConflictsFrb(BuildContext context, LumitState app,
 class _ConflictsDialog extends StatefulWidget {
   final LumitState app;
 
-  /// Stands in for the system's save window, as it does for saving.
   final Future<String?> Function()? savePicker;
   final VoidCallback onClose;
 
@@ -3812,7 +3650,6 @@ class _ConflictsDialogState extends State<_ConflictsDialog> {
     setState(() => _rows = left);
   }
 
-  /// Settle every one the same way.
   void _chooseAll({required bool mine}) {
     final share = widget.app.share;
     var refused = 0;
@@ -3894,7 +3731,6 @@ class _ConflictsDialogState extends State<_ConflictsDialog> {
     );
   }
 
-  /// One conflict: the step, where it was and how much, and the two answers.
   Widget _row(LumitTheme t, int index, BridgeShareConflict conflict) => Builder(
         builder: (row) => GestureDetector(
           behavior: HitTestBehavior.translucent,

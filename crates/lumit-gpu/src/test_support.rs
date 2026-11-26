@@ -37,10 +37,6 @@ static POOL: Mutex<Option<SharedGpu>> = Mutex::new(None);
 /// a message rather than a silent deadlock.
 static HOLDER: Mutex<Option<ThreadId>> = Mutex::new(None);
 
-/// The shared device and engines, borrowed for the rest of the test. Derefs
-/// to the [`GpuContext`], so `&lease` goes wherever `&GpuContext` went; the
-/// engines are [`Lease::fx`], [`Lease::colour`], [`Lease::compositor`] and
-/// [`Lease::scope`].
 pub struct Lease {
     guard: MutexGuard<'static, Option<SharedGpu>>,
 }

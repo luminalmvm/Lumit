@@ -42,14 +42,10 @@ pub mod graph;
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests;
 
-/// The prologue, with `//__LUMIT_PARAMS__` marking where the lifted `Params`
-/// struct goes (§1.3).
 const PROLOGUE: &str = include_str!("prologue.wgsl");
 
-/// Where the generated struct is spliced into [`PROLOGUE`].
 const PARAMS_MARKER: &str = "//__LUMIT_PARAMS__";
 
-/// Where an LFX effect's pass pictures are declared in [`PROLOGUE`].
 const PASSES_MARKER: &str = "//__LUMIT_PASSES__";
 
 /// The one line of [`EPILOGUE`] that names the user's function, which an LFX
@@ -101,13 +97,10 @@ pub const FIRST_PASS_BINDING: u32 = 7;
 /// What every pass picture's name begins with, so no user declaration may.
 pub const PASS_PREFIX: &str = "pass_";
 
-/// The epilogue: the entry point, the sanitise and the Mix (§1.3, §2.3).
 const EPILOGUE: &str = include_str!("epilogue.wgsl");
 
-/// The one function the contract asks the user for (§1.3).
 pub const ENTRY_FN: &str = "shade";
 
-/// The generated module's compute entry point, which the pipeline names.
 pub const ENTRY_POINT: &str = "lumit_shade";
 
 /// The host's own header, `LumitHeader` in [`PROLOGUE`], byte for byte.
@@ -136,7 +129,6 @@ pub struct ShaderHeader {
     pub raster_size: [u32; 2],
 }
 
-/// The size of [`ShaderHeader`] in bytes: 48, ten words and the raster's two.
 pub const HEADER_SIZE: usize = std::mem::size_of::<ShaderHeader>();
 
 /// The names the host owns at module scope. A user declaration of any of them
@@ -144,8 +136,6 @@ pub const HEADER_SIZE: usize = std::mem::size_of::<ShaderHeader>();
 /// parameters with nothing, and naga would not complain.
 pub const RESERVED: &[&str] = &["src", "orig", "dst", "matte", "input2", "lumit", "p"];
 
-/// The kinds of field the grammar accepts, and what each occupies in a uniform
-/// block (§1.4, §7).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WgslTy {
     F32,
@@ -158,7 +148,6 @@ pub enum WgslTy {
 }
 
 impl WgslTy {
-    /// The WGSL spelling.
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {
@@ -203,8 +192,6 @@ impl WgslTy {
     }
 }
 
-/// One field of the user's `Params` struct: where it sits in the uniform buffer,
-/// and the parameter row (or two, for a point) it derives.
 #[derive(Debug, Clone, Copy)]
 pub struct ShaderField {
     /// The WGSL field name, which is also the parameter id for every type but
@@ -218,7 +205,6 @@ pub struct ShaderField {
     /// that row and not the other eight). The bytes are still uploaded; a field
     /// with no rows uploads its declared default.
     pub params: &'static [ParamSchema],
-    /// The default the bytes fall back to, per component.
     pub default: [f64; 4],
     /// When its rows do anything (`@enabled_if`): every list must hold, each
     /// by any one of its terms. Empty is always. The panel greys the rows
@@ -226,7 +212,6 @@ pub struct ShaderField {
     pub enabled_if: &'static [&'static [RowTerm]],
 }
 
-/// One term of an `@enabled_if` annotation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RowTerm {
     /// `input` or `!input`: whether the second input gives a picture, that is
@@ -286,9 +271,7 @@ pub struct ShaderProgram {
     /// The whole module: prologue, generated struct, the user's text verbatim,
     /// epilogue.
     pub assembled: String,
-    /// Every derived row, in declaration order (§1.5).
     pub params: &'static [ParamSchema],
-    /// The fields behind them, with their uniform offsets.
     pub fields: &'static [ShaderField],
     /// The `Params` buffer's size in bytes, rounded up as a uniform block is.
     pub params_size: u32,
@@ -312,24 +295,19 @@ pub struct ShaderProgram {
 /// of the time they are typing, and it degrades to a badge.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ShaderRefusal {
-    /// The text declares its own `@group` or `@binding`.
     OwnBinding,
-    /// The text declares a module-scope name the host owns.
     ReservedName(String),
     /// No `fn shade(uv: vec2<f32>) -> vec4<f32>`.
     NoShadeFunction,
-    /// An LFX effect names a pass its shader has no function for.
     NoPassFunction(String),
-    /// An LFX shader declares a name starting `pass_`, which the pass
-    /// pictures use.
     PassPrefix(String),
-    /// This build's own wrapper no longer fits the pass swaps.
     HostOutOfStep,
     /// A `vec3<f32>` parameter — sixteen bytes wearing twelve bytes' name.
     Vec3Field(String),
-    /// A parameter field of a type the grammar does not carry.
-    UnknownType { field: String, ty: String },
-    /// Two parameters would answer to one id.
+    UnknownType {
+        field: String,
+        ty: String,
+    },
     DuplicateId(String),
     /// This session has already read [`MAX_CACHED_PROGRAMS`] distinct sources.
     ///
@@ -338,7 +316,6 @@ pub enum ShaderRefusal {
     /// [`program_for`]). It names a number and a remedy, which "the application
     /// is using eleven gigabytes" would not.
     TooManyPrograms {
-        /// The ceiling.
         limit: usize,
     },
 }
@@ -459,38 +436,6 @@ pub fn hash64(bytes: &[u8]) -> u64 {
     h
 }
 
-/// The read and wrapped form of `source`, built once per distinct text and kept
-/// for the session.
-///
-/// Memoised because the render path asks for it once per op per frame — the
-/// derived rows are part of resolving the stack — and a parse per frame per
-/// effect would be a parse nobody needs. The entries are `&'static`, which for
-/// a text somebody typed means leaked: the honest spelling of "lives as long as
-/// the session", and the same one a plugin's schema uses.
-///
-/// # Errors
-/// The §2.2 refusals — a shader that binds its own group, shadows a host name,
-/// declares no `shade`, or declares a parameter the grammar cannot carry.
-///
-/// # What this does not do, and what it does instead
-///
-/// It does not evict, and it cannot: the entries are `&'static`, the render
-/// path holds them across frames, and `EffectDef::derived` hands their
-/// `ParamSchema` rows straight out under the same lifetime. Dropping one would
-/// dangle. A real bounded cache here needs those to be owned — an `Arc` program
-/// and an owned mirror of `ParamSchema` — and that is a change to the
-/// `EffectDef` trait every effect implements, not to this function.
-///
-/// What it does do is **stop being unbounded**. The Custom shader draws as you
-/// type, so a long editing session asks for a new distinct source every time
-/// the typing settles: without a ceiling that is a slow leak with a person's
-/// keyboard on the other end of it. [`MAX_CACHED_PROGRAMS`] is far past any
-/// session's worth of distinct texts, and past it a new source is refused by
-/// name rather than quietly leaked — a refusal the user can act on (reopen the
-/// project) instead of a memory figure nobody can explain.
-///
-/// ponytail: the ownership refactor above, after which this becomes an ordinary
-/// LRU and the ceiling stops being a refusal.
 pub fn program_for(source: &str) -> Result<&'static ShaderProgram, ShaderRefusal> {
     program_in(cache(), source, MAX_CACHED_PROGRAMS)
 }
@@ -536,8 +481,6 @@ pub(crate) fn program_in(
 /// bounds the total at tens of megabytes rather than at nothing in particular.
 pub const MAX_CACHED_PROGRAMS: usize = 4_096;
 
-/// Every source this session has read, by its hash. Written once per distinct
-/// text and read on every frame that draws one.
 pub(crate) type ProgramCache = RwLock<HashMap<u64, Result<&'static ShaderProgram, ShaderRefusal>>>;
 
 fn cache() -> &'static ProgramCache {
@@ -564,26 +507,14 @@ pub fn program_by_hash(source_hash: u64) -> Option<&'static ShaderProgram> {
     cache().read().ok()?.get(&source_hash)?.clone().ok()
 }
 
-/// Read and wrap one source, without the cache. `program_for` is what callers
-/// want; this is the working half, and what the tests drive directly.
-///
-/// # Errors
-/// As [`program_for`].
 pub fn build(source: &str) -> Result<ShaderProgram, ShaderRefusal> {
     build_with(source, &[])
 }
 
-/// Read and wrap an LFX effect's shader: one module per pass, each calling
-/// that pass's own function, and every pass picture declared in all of them.
-///
-/// # Errors
-/// As [`build`], less the need for `shade`, plus a pass with no function and
-/// a declaration starting `pass_`.
 pub fn build_passes(source: &str, passes: &[&str]) -> Result<ShaderProgram, ShaderRefusal> {
     build_with(source, passes)
 }
 
-/// The Custom shader when `passes` is empty, an LFX effect otherwise.
 fn build_with(source: &str, passes: &[&str]) -> Result<ShaderProgram, ShaderRefusal> {
     // Comments blanked to spaces rather than removed, so every byte offset in
     // `code` is the same byte offset in `source` and the struct can be cut out
@@ -677,7 +608,6 @@ fn build_with(source: &str, passes: &[&str]) -> Result<ShaderProgram, ShaderRefu
     if !assembled.ends_with('\n') {
         assembled.push('\n');
     }
-    // Each pass is the same module with the epilogue calling its own function.
     let passes: Vec<(u64, String)> = passes
         .iter()
         .map(|name| {
@@ -780,17 +710,11 @@ impl ShaderProgram {
     }
 }
 
-// ---------------------------------------------------------------- the reader
-
-/// One module-scope declaration: what kind it is, what it is called, and — for a
-/// struct — where its braces are.
 struct Decl {
     kind: String,
     name: String,
-    /// Byte range of the whole declaration in the source.
     start: usize,
     end: usize,
-    /// Byte range of a struct's body, between its braces.
     body: std::ops::Range<usize>,
 }
 
@@ -877,7 +801,6 @@ fn module_scope_decls(code: &str) -> Vec<Decl> {
             i += 1;
             continue;
         }
-        // A word at module scope.
         let start = i;
         while i < chars.len() && is_ident(chars[i].1) {
             i += 1;
@@ -912,7 +835,6 @@ fn module_scope_decls(code: &str) -> Vec<Decl> {
         if name.is_empty() {
             continue;
         }
-        // A struct's body, and the end of the whole declaration.
         let mut body = 0usize..0usize;
         let mut end = j;
         if word == "struct" {
@@ -957,13 +879,11 @@ fn module_scope_decls(code: &str) -> Vec<Decl> {
     out
 }
 
-/// One annotation from a doc comment: `@slider(0, 200)`.
 struct Ann {
     name: String,
     args: Vec<String>,
 }
 
-/// The annotations on a doc block, and the label left when they are taken off.
 fn annotations(doc: &str) -> (Vec<Ann>, String) {
     let chars: Vec<char> = doc.chars().collect();
     let mut anns = Vec::new();
@@ -1027,7 +947,6 @@ fn annotations(doc: &str) -> (Vec<Ann>, String) {
     (anns, label.split_whitespace().collect::<Vec<_>>().join(" "))
 }
 
-/// `blend_point` to "Blend point" — what a line with nothing left on it gets.
 pub(crate) fn humanise(name: &str) -> String {
     let spaced = name.replace('_', " ");
     let mut chars = spaced.chars();
@@ -1041,8 +960,6 @@ fn num(args: &[String], i: usize) -> Option<f64> {
     args.get(i)?.trim().parse::<f64>().ok()
 }
 
-/// Read the fields of the `Params` body: the type chooses the family, the
-/// annotation refines it (§1.4).
 #[allow(clippy::type_complexity)]
 fn read_fields(body: &str) -> Result<(Vec<ShaderField>, Vec<String>), ShaderRefusal> {
     let mut fields = Vec::new();
@@ -1135,7 +1052,6 @@ fn leak(text: &str) -> &'static str {
     Box::leak(text.to_owned().into_boxed_str())
 }
 
-/// The rows one field derives, and the defaults its bytes fall back to.
 fn derive_rows(
     name: &str,
     ty: WgslTy,
@@ -1362,8 +1278,6 @@ fn derive_rows(
         }
     }
 }
-
-// ------------------------------------------------------------- the arithmetic
 
 /// The fields with their uniform offsets, and the buffer's size.
 ///

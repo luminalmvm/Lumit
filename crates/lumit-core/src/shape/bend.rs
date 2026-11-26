@@ -1,6 +1,3 @@
-//! What each modifier does to a polyline: the twist, the deform, the
-//! smooth, the offset, and one step of the repeater.
-
 use super::geometry::{
     arc_of, box_of, control_points, point_at, ring_of, shoelace, Affine, FINE_STEP, MAX_FINE_POINTS,
 };
@@ -78,7 +75,6 @@ impl Twist {
     }
 }
 
-/// The most places one contour reads a deform's field at.
 const MAX_FIELD_SAMPLES: f64 = 4096.0;
 
 impl Deform {
@@ -343,8 +339,6 @@ pub(super) fn offset_polyline(points: &[(f64, f64)], amount: f64, closed: bool) 
     };
     let d = amount * sign;
 
-    // The normal of the segment starting at `i`, or `None` where the segment
-    // has no length to take a direction from.
     let normal = |i: usize| -> Option<(f64, f64)> {
         let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
         let (dx, dy) = (b.0 - a.0, b.1 - a.1);
@@ -404,7 +398,6 @@ pub(super) fn repeat_step(
 ) -> Affine {
     let (sin, cos) = rotation.to_radians().sin_cos();
     let (a, b, c, d) = (cos * scale, sin * scale, -sin * scale, cos * scale);
-    // Move to the anchor, turn and scale there, move back, then translate.
     Affine([
         a,
         b,

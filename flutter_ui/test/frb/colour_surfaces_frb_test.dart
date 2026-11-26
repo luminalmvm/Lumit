@@ -67,15 +67,12 @@ void main() {
   setUp(() => dir = Directory.systemTemp.createTempSync('lumit-ocio-ui'));
   tearDown(() => dir.deleteSync(recursive: true));
 
-  /// Write the fixture and hand back its path.
   String writeConfig() {
     final file = File('${dir.path}${Platform.pathSeparator}config.ocio');
     file.writeAsStringSync(_config);
     return file.path;
   }
 
-  /// Point [p] at a config — or at a path with nothing behind it — and bring
-  /// the held summary into line the way a document change does.
   void useConfig(({LumitState state, LumitUiState uiState}) p, String? path) {
     p.state.project!.setColourConfig(path: path);
     p.state.notifyDocumentChanged();
@@ -148,7 +145,6 @@ void main() {
       expect(face(tester), 'Standard — sRGB',
           reason: 'the closed face names the view in force');
 
-      // And back: the built-in row is how a view is taken off again.
       await openPicker(tester);
       await tester.tap(find.byKey(const ValueKey('viewer-colour-transform')));
       await tester.pumpAndSettle();
@@ -303,8 +299,6 @@ void main() {
       expect(p.state.project!.colourSummary().loaded, isTrue,
           reason: 'the control writes through to the document');
 
-      // The working space is the project's choice once a config is loaded:
-      // the second entry names the config's scene-linear space.
       await tester
           .tap(find.byKey(const ValueKey('project-colour-working-space')));
       await tester.pumpAndSettle();
@@ -319,7 +313,6 @@ void main() {
       expect(pathWell(tester), 'None');
       expect(p.state.project!.colourSummary().path, '');
 
-      // Both are ordinary edits, so undo puts the config back.
       p.state.project!.undo();
       expect(p.state.project!.colourSummary().loaded, isTrue);
     });

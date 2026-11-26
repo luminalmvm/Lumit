@@ -74,7 +74,6 @@ bool get referenceHardware =>
     Platform.environment['LUMIT_REFERENCE_HW'] == '1' ||
     const bool.fromEnvironment('LUMIT_REFERENCE_HW');
 
-/// One measured gesture: the frames whose vsync fell inside it.
 class _Row {
   final String name;
   final int frames;
@@ -172,7 +171,6 @@ class _Harness with ProbeGestures {
   bool rowOpen(UuidValue id) =>
       outlineRows.any((r) => r.open && r.entry.layer.internallayerId == id);
 
-  /// The Timeline's clock, which is what a press on the ruler moves.
   int? readoutFrame() =>
       (byKey(const ValueKey('tl-timecode'))?.widget as TimeReadout?)?.frame;
 
@@ -254,7 +252,6 @@ void main() {
     addTearDown(
         () => SchedulerBinding.instance.removeTimingsCallback(h._onTimings));
 
-    // The Timeline is up when it has geometry and rows.
     TimelineGeometry? geometry;
     for (var i = 0; i < 60 && geometry == null; i++) {
       await Future<void>.delayed(const Duration(milliseconds: 500));
@@ -263,7 +260,6 @@ void main() {
     }
     expect(geometry, isNotNull, reason: 'the Timeline never came up');
     final (:panel, :ruler, :lanes, viewer: _, clamped: _) = geometry!;
-    // The same warm-up as the probe: zoom out to fit, rows to the top.
     final laneCentre =
         Offset(lanes.left + lanes.width * 0.55, lanes.top + lanes.height * 0.4);
     final outlineCentre = Offset(panel.left + (lanes.left - panel.left) * 0.5,
@@ -300,7 +296,6 @@ void main() {
           'layers: $layers, rows on screen: ${h.outlineRows.length}, '
           'wheel legs: $notches notches');
 
-    // ---- B1: the §2 gesture list ------------------------------------------
     await h.measure('idle 3 s', () async {
       await Future<void>.delayed(const Duration(seconds: 3));
     });

@@ -9,8 +9,6 @@ use lumit_audio::{AudioEngine, ClockHandle};
 use std::sync::mpsc::Receiver;
 use std::sync::Arc;
 
-/// What an engine that opened tells the rest: its clock, its meters and the
-/// rate media decodes at.
 type Opened = (ClockHandle, Arc<Meters>, u32);
 
 /// Open the engine on its own thread, which then lives on the commands from
@@ -30,7 +28,7 @@ pub(super) fn open(wanted: Option<String>, rx: Receiver<Cmd>) -> Option<Opened> 
             }
             Err(_) => {
                 let _ = ready_tx.send(None);
-                return; // no device: the thread ends, the state stays Unavailable
+                return;
             }
         };
         // The engine lives here for the session; each command is a plan swap
@@ -57,8 +55,6 @@ const QUIET_TURN: std::time::Duration = std::time::Duration::from_millis(40);
 #[cfg(target_arch = "wasm32")]
 const SOONEST_TURN: std::time::Duration = std::time::Duration::from_millis(4);
 
-/// Open the page's output, and give the engine turns of its own that take
-/// the commands from `rx` and keep the sound fed, until the sender goes.
 #[cfg(target_arch = "wasm32")]
 pub(super) fn open(wanted: Option<String>, rx: Receiver<Cmd>) -> Option<Opened> {
     let engine = AudioEngine::new_on(wanted.as_deref()).ok()?;

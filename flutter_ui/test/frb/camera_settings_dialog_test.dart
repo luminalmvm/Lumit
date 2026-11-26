@@ -24,8 +24,6 @@ void main() {
   setUpAll(initEngineForTests);
 
   group('the camera settings window', () {
-    /// A fresh project, a comp, and a camera in it - with the settings and
-    /// channels the window opens on.
     ({
       LayerReference layer,
       double width,

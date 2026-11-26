@@ -35,10 +35,8 @@ struct Params {
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
 
-// Rec. 709 luma weights, in linear light (== cpu::LUMA).
 const LUMA = vec3<f32>(0.2126, 0.7152, 0.0722);
 
-// The unpremultiplied colour of a premultiplied pixel (== cpu::unpremult).
 fn unpremult(c: vec4<f32>) -> vec3<f32> {
     if (c.a > 0.0) {
         return c.rgb / c.a;
@@ -76,7 +74,6 @@ fn recompose(primary: f32, c: vec3<f32>) -> vec3<f32> {
     return vec3<f32>(c.r, c.g, primary);
 }
 
-// Balance-weighted secondary reference of a colour (== cpu::matte_key_secref).
 fn secref(c: vec3<f32>) -> f32 {
     let s = axis_split(c);
     let lo = min(s.y, s.z);
@@ -84,7 +81,6 @@ fn secref(c: vec3<f32>) -> f32 {
     return p.balance * hi + (1.0 - p.balance) * lo;
 }
 
-// A colour's primary channel value (the screen axis).
 fn primary_of(c: vec3<f32>) -> f32 {
     return axis_split(c).x;
 }
@@ -116,29 +112,27 @@ fn shade(o: vec4<f32>, u: vec3<f32>, m: f32) -> vec4<f32> {
     let sd = max((primary_of(p.key.rgb) - secref(p.key.rgb)) - ab_off, 1e-6);
     let db_off = primary_of(p.despill_bias.rgb) - secref(p.despill_bias.rgb);
 
-    // Unspill: pull the primary down toward the (bias-shifted) reference.
     let spill_target = secref(u) + db_off;
     let removed = max(primary_of(u) - spill_target, 0.0);
     let despill = p.spill * removed;
     let despilled = recompose(primary_of(u) - despill, u);
 
-    // Replace method: recolour where spill was removed (`t_repl` = how much).
     let t_repl = clamp(despill / sd, 0.0, 1.0);
     let dl = dot(despilled, LUMA);
-    var rgb = despilled; // None
+    var rgb = despilled;
     if (p.replace_method == 0u) {
-        rgb = u; // Source
+        rgb = u;
     } else if (p.replace_method == 1u) {
-        rgb = mix(despilled, p.replace_colour.rgb, t_repl); // Hard colour
+        rgb = mix(despilled, p.replace_colour.rgb, t_repl);
     } else if (p.replace_method == 2u) {
-        rgb = mix(despilled, p.replace_colour.rgb * dl, t_repl); // Soft colour
+        rgb = mix(despilled, p.replace_colour.rgb * dl, t_repl);
     }
 
     // View select (all continuous in `m`, so the oracle holds).
     var proc_rgb = vec3<f32>(0.0);
     var proc_a = 0.0;
     if (p.view == 1u) {
-        proc_rgb = vec3<f32>(m); // Screen matte
+        proc_rgb = vec3<f32>(m);
         proc_a = 1.0;
     } else if (p.view == 2u) {
         // Status: greyscale matte tinted where the matte is uncertain.
@@ -146,13 +140,11 @@ fn shade(o: vec4<f32>, u: vec3<f32>, m: f32) -> vec4<f32> {
         proc_rgb = vec3<f32>(m) + warn * (vec3<f32>(1.0, 0.3, 0.3) - vec3<f32>(m));
         proc_a = 1.0;
     } else {
-        // Final: re-premultiply the keyed colour by the new alpha.
         let out_a = a * m;
         proc_rgb = rgb * out_a;
         proc_a = out_a;
     }
 
-    // Mix against the untouched premultiplied input; Mix 0 is the identity.
     let outv = o.rgb * (1.0 - p.mix_amt) + proc_rgb * p.mix_amt;
     let outa = a * (1.0 - p.mix_amt) + proc_a * p.mix_amt;
     return vec4<f32>(outv, outa);

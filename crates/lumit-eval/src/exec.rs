@@ -38,14 +38,9 @@ use crate::FrameKey;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FrameHandle(pub u64);
 
-/// Why a render did not produce a frame.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExecError {
-    /// The work was invalidated mid-flight (epoch bump) — unwind quietly,
-    /// nothing is wrong (docs/impl/playback-scheduler.md §1).
     Cancelled,
-    /// A node could not produce pixels; `message` is implementor-provided
-    /// (a decode error, a device error). Never a panic (docs/14 §4).
     Node { node: NodeId, message: String },
 }
 
@@ -79,9 +74,6 @@ pub trait FrameSource {
     ) -> Result<FrameHandle, ExecError>;
 }
 
-/// Runs one non-source node — a retime interpolation, a mask stack, a
-/// transform, a composite, an adjustment, the final comp output — over
-/// already-produced input frames.
 pub trait KernelExecutor {
     fn run(
         &mut self,
@@ -208,7 +200,6 @@ mod tests {
 
     type CallLog = Rc<RefCell<Vec<String>>>;
 
-    /// Mints sequential handles and logs every source fetch.
     struct FakeSource {
         log: CallLog,
         next: u64,
@@ -227,8 +218,6 @@ mod tests {
         }
     }
 
-    /// Logs every kernel run; optionally bumps an epoch after N runs to
-    /// simulate a scrub landing mid-render.
     struct FakeKernels {
         log: CallLog,
         next: u64,
@@ -304,10 +293,6 @@ mod tests {
         )
     }
 
-    /// Two layers sharing one solid source, hand-built exactly as
-    /// [`crate::graph::compile`] would lay it out: the shared Source node,
-    /// each layer's Transform, the bottom Composite, the top Composite over
-    /// it, then CompOutput.
     fn two_layer_shared_source() -> (EvalGraph, Uuid, Uuid) {
         let (l_top, l_bottom) = (Uuid::now_v7(), Uuid::now_v7());
         let solid = Uuid::now_v7();
@@ -360,20 +345,17 @@ mod tests {
         let token = Epoch::new().token();
         let out = render_frame(&graph, 0.5, None, &mut src, &mut ker, &mut cache, &token).unwrap();
         let log = log.borrow();
-        // The shared source is fetched exactly once, before anything uses it.
         assert_eq!(
             log.iter().filter(|l| l.starts_with("source")).count(),
             1,
             "shared source must be fetched once: {log:?}"
         );
         assert!(log[0].starts_with("source"), "source first: {log:?}");
-        // Every node's inputs run before it; bottom composite before top.
         let pos = |needle: &str| log.iter().position(|l| l.contains(needle)).unwrap();
         assert!(pos("transform n1") < pos("composite n2"), "{log:?}");
         assert!(pos("transform n3") < pos("composite n4"), "{log:?}");
         assert!(pos("composite n2") < pos("composite n4"), "{log:?}");
         assert!(pos("composite n4") < pos("output n5"), "{log:?}");
-        // The returned handle is the output node's product.
         assert!(log.last().unwrap().contains("output"), "{log:?}");
         assert!(out.0 >= 200, "output comes from the kernel executor");
     }
@@ -396,7 +378,6 @@ mod tests {
         )
         .unwrap();
         assert_eq!(cache.entries, vec![(key, out)]);
-        // And a second render of the same key is now a pure hit.
         let calls_before = log.borrow().len();
         let again = render_frame(
             &graph,
@@ -412,8 +393,6 @@ mod tests {
         assert_eq!(log.borrow().len(), calls_before, "hit does no new work");
     }
 
-    /// A scrub landing mid-render (epoch bump inside a kernel) abandons the
-    /// walk with Cancelled and leaves the cache untouched.
     #[test]
     fn an_epoch_bump_mid_render_cancels_and_caches_nothing() {
         let log: CallLog = CallLog::default();
@@ -436,18 +415,14 @@ mod tests {
             cache.entries.is_empty(),
             "a cancelled render caches nothing"
         );
-        // The walk stopped early: fewer kernel runs than the full graph.
         assert!(ker.runs < 5, "stopped after the bump, ran {}", ker.runs);
     }
 
-    /// The malformed-graph guards return typed errors instead of hanging or
-    /// panicking (docs/14 §4: engine code never crashes on bad input).
     #[test]
     fn malformed_graphs_error_instead_of_hanging_or_panicking() {
         let log: CallLog = CallLog::default();
         let (mut src, mut ker, mut cache) = fakes(&log);
         let token = Epoch::new().token();
-        // A self-referencing node (the cycle case push order forbids).
         let cyclic = EvalGraph {
             nodes: vec![Node {
                 kind: NodeKind::CompOutput {
@@ -463,7 +438,6 @@ mod tests {
             render_frame(&cyclic, 0.0, None, &mut src, &mut ker, &mut cache, &token),
             Err(ExecError::Node { .. })
         ));
-        // An output pointing past the node list.
         let dangling = EvalGraph {
             nodes: Vec::new(),
             output: 3,

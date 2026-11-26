@@ -12,8 +12,6 @@ use std::str::FromStr;
 /// the secret reaches no server.
 pub const LINK: &str = "https://lumitlab.com/join#";
 
-/// The same link as the system hands it to Lumit once the page is clicked
-/// through.
 pub const LINK_SCHEME: &str = "lumit://join/";
 
 /// The most addresses one invite carries, relays included. A guest tries
@@ -52,7 +50,6 @@ pub struct Lock {
 }
 
 impl Lock {
-    /// The lock for a password being set now.
     pub fn new(password: &str) -> Result<Lock, ShareError> {
         let mut salt = [0u8; 16];
         getrandom::fill(&mut salt).map_err(|e| ShareError::NoRandomness(e.to_string()))?;
@@ -72,13 +69,11 @@ impl Lock {
         Some(Lock { salt, key })
     }
 
-    /// As it is written, for a host to keep beside its invite's secret.
     #[must_use]
     pub fn text(&self) -> String {
         format!("{}{}", hex::encode(self.salt), hex::encode(self.key))
     }
 
-    /// The lock [`Self::text`] wrote, or `None` for anything else.
     #[must_use]
     pub fn from_text(text: &str) -> Option<Lock> {
         let mut bytes = [0u8; 48];
@@ -115,8 +110,6 @@ pub struct Invite {
     /// the one that holds the key is ever spoken to, so a wrong one costs
     /// nothing.
     pub addresses: Vec<String>,
-    /// Each `host:port` of a relay the host keeps a room at, for a guest no
-    /// address above lets in. See `lumit-relay`.
     pub relays: Vec<String>,
     /// The key the channel is opened with. For a [`Self::locked`] invite it
     /// is not that yet, and [`Self::unlocked`] makes it so.
@@ -130,7 +123,6 @@ pub struct Invite {
     /// The host set a password, which the guest has to give as well as
     /// holding the link. A link that leaks is then not enough to join by.
     pub locked: bool,
-    /// What the host's password is hashed with, for a locked invite.
     pub salt: [u8; 16],
     /// An invite to a project kept online that can only look: whoever joins
     /// by it sees the project and is seen, and changes nothing. Its key is
@@ -149,7 +141,6 @@ pub(crate) fn locked_key(link: &[u8; 32], lock: &Lock) -> [u8; 32] {
 }
 
 impl Invite {
-    /// An invite with no password, whose one secret is `key`.
     #[must_use]
     pub fn open(addresses: Vec<String>, relays: Vec<String>, key: [u8; 32]) -> Invite {
         Invite {
@@ -185,7 +176,6 @@ impl Invite {
         }
     }
 
-    /// Whether this is an invite to a project that is kept online.
     #[must_use]
     pub fn is_online(&self) -> bool {
         self.addresses.iter().any(|address| address == ONLINE)
@@ -207,14 +197,11 @@ impl Invite {
     }
 }
 
-/// An invite's secret as it is written, for a host to keep and share the
-/// same project by again.
 #[must_use]
 pub fn key_text(key: &[u8; 32]) -> String {
     hex::encode(key)
 }
 
-/// The secret [`key_text`] wrote, or `None` for anything else.
 #[must_use]
 pub fn key_from(text: &str) -> Option<[u8; 32]> {
     let mut key = [0u8; 32];
@@ -258,7 +245,6 @@ pub(crate) fn from_letters(text: &str) -> Option<Vec<u8>> {
     Some(bytes)
 }
 
-/// Added to the kind of an address that is a relay's.
 const RELAY: u8 = 0x10;
 
 /// An address as a link packs it: a number for which kind, the address, and
@@ -296,12 +282,10 @@ fn pack(address: &str, relay: bool, into: &mut Vec<u8>) -> Option<()> {
     Some(())
 }
 
-/// Whether `c` can be part of a name that is looked up.
 fn plain(c: char) -> bool {
     c.is_ascii_alphanumeric() || c == '.' || c == '-'
 }
 
-/// Take `n` bytes off the front of `bytes`.
 pub(crate) fn take<'a>(bytes: &mut &'a [u8], n: usize) -> Option<&'a [u8]> {
     let (front, rest) = bytes.split_at_checked(n)?;
     *bytes = rest;
@@ -340,7 +324,6 @@ fn unpack(mut bytes: &[u8]) -> Option<Invite> {
             0 => {
                 let length = usize::from(take(&mut bytes, 1)?[0]);
                 let name = std::str::from_utf8(take(&mut bytes, length)?).ok()?;
-                // A name is looked up, so it is only what a name can be.
                 if name.is_empty() || !name.chars().all(plain) {
                     return None;
                 }
@@ -426,9 +409,6 @@ impl FromStr for Invite {
 mod tests {
     use super::*;
 
-    /// A link holds every way to the host and the secret, whichever of its
-    /// forms comes back, and an invite typed the old way is still one.
-    /// Anything else is refused rather than half read.
     #[test]
     fn an_invite_survives_being_written_as_a_link() {
         let invite = Invite {
@@ -472,13 +452,9 @@ mod tests {
             assert!(bad.parse::<Invite>().is_err(), "{bad}");
         }
 
-        // With its password given, the key changes and the link's own secret
-        // is kept beside it, which is what a guest's copy holds.
         let opened = invite.clone().unlocked("correct horse");
         assert!(opened.key != invite.key && opened.link == invite.link);
         assert!(opened.to_string().parse::<Invite>().unwrap() == opened);
-        // A name reading the link back would refuse is left out of it, and
-        // the rest of the link still reads.
         let odd = Invite {
             addresses: vec![
                 "203.0.113.5:40000:47856".into(),

@@ -1,8 +1,3 @@
-//! Temporary by-hand probe: where does a played frame's time go at full scale
-//! vs quarter scale? Run with:
-//!   cargo run --release -p lumit-render --features shared-texture --example perf_probe
-//! Needs C:/tmp/test1080p60.mp4 (the playback bench's file). A by-hand probe,
-//! like the playback bench: panicking on a missing file is its job.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use lumit_core::anim::Property;
@@ -146,7 +141,6 @@ fn run_present(
 fn main() {
     let path = std::path::Path::new("C:/tmp/test1080p60.mp4");
 
-    // --- 1. Raw sequential decode, no GPU at all. ---
     for (label, tw) in [
         ("decode sequential, native width", None),
         ("decode sequential, 480 target", Some(480u32)),
@@ -161,7 +155,6 @@ fn main() {
         println!("{label:44} {ms:7.2} ms/frame  ({:.1} fps)", 1000.0 / ms);
     }
 
-    // --- 2. Composite-only: a full-frame solid, no decode anywhere. ---
     let mut r = HeadlessRenderer::new().expect("gpu");
     let solid_id = Uuid::now_v7();
     let solid = ProjectItem::Solid(SolidDef {
@@ -188,7 +181,6 @@ fn main() {
         0.25,
     );
 
-    // --- 3. Footage comp: first pass decodes, second pass hits the cache. ---
     let item_id = Uuid::now_v7();
     let footage = ProjectItem::Footage(FootageItem {
         sequence: None,
@@ -228,7 +220,6 @@ fn main() {
         0.25,
     );
 
-    // --- 4. Render + present (the whole per-frame pipeline). ---
     #[cfg(all(windows, feature = "shared-texture"))]
     {
         run_present(

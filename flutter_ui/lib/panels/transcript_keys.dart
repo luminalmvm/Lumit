@@ -25,8 +25,6 @@ final _smallerKeys = {
   LogicalKeyboardKey.numpadSubtract,
 };
 
-/// What [event] does in the Transcript panel: moves the caret, makes the
-/// text larger or smaller, or nothing the panel keeps.
 enum TranscriptKey { caret, larger, smaller }
 
 TranscriptKey? transcriptKeyOf(KeyEvent event) {
@@ -44,9 +42,7 @@ extension _TranscriptKeys on _TranscriptPanelFrbState {
   bool _key(KeyEvent event) {
     if (!mounted || event is KeyUpEvent) return false;
     if (lumitModalOpen || _ui.activePanel != Panel.transcript) return false;
-    // The busy card holds every key while it is up.
     if (_app.busy.value != null) return false;
-    // A focused control or field keeps its keys, as in the shell.
     final focus = FocusManager.instance.primaryFocus;
     if (focus is ControlFocusNode) return false;
     final focused = focus?.context;
@@ -125,8 +121,6 @@ extension _TranscriptKeys on _TranscriptPanelFrbState {
     return start ? first : math.min(lastOnLine + 1, tokens.length);
   }
 
-  /// The caret moves, extending the selection with Shift, and with nothing
-  /// playing the playhead goes with it.
   void _moveCaret(int to, {required bool extend}) {
     final from = _selection.caret ?? to;
     TranscriptSelection next;

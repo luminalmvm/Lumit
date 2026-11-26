@@ -1,11 +1,8 @@
-//! Gamma (docs/08 §3.15): the power curve, raising to 1/gamma.
-
 use crate::fx::{
     cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
 };
 use lumit_fx_macros::Effect;
 
-/// Gamma's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "gamma",
@@ -30,7 +27,6 @@ pub struct Gamma {
     #[slider(min = 0.1, max = 4.0, default = 1.0, hard_min = 0.01, unit = Raw)]
     pub gamma: f32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -53,7 +49,6 @@ impl Gamma {
     }
 }
 
-/// Gamma's behaviour.
 pub struct GammaDef;
 
 impl EffectDef for GammaDef {

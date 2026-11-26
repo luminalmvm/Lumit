@@ -104,7 +104,6 @@ struct Affine {
 }
 
 impl Affine {
-    /// Where this placement puts the point `p`.
     fn apply(self, p: (f64, f64)) -> (f64, f64) {
         (
             self.m[0][0] * p.0 + self.m[0][1] * p.1 + self.offset.0,
@@ -210,8 +209,6 @@ fn placement(layer: &Layer, lt: f64) -> Option<Affine> {
     })
 }
 
-/// Whether `layer` — a Solid — paints every pixel of `comp` opaquely at comp
-/// time `t`.
 fn covers_frame(doc: &Document, comp: &Composition, layer: &Layer, t: f64) -> bool {
     let LayerKind::Solid { def } = &layer.kind else {
         return false;
@@ -333,7 +330,6 @@ mod tests {
         }
     }
 
-    /// A 64×64 comp: a full-frame solid over a smaller solid.
     fn scene() -> (Document, Composition) {
         let mut doc = Document::new();
         let mut solid = |w: u32, h: u32| {
@@ -411,8 +407,6 @@ mod tests {
     fn anything_that_could_show_the_layers_below_refuses() {
         let disqualify: Vec<(&str, Box<dyn Fn(&mut Composition)>)> = vec![
             (
-                // A turn of one degree pulls a full-frame solid off the
-                // corners of the frame, so it stops covering it.
                 "rotation",
                 Box::new(|c| c.layers[0].transform.rotation = Property::fixed(1.0)),
             ),
@@ -491,9 +485,6 @@ mod tests {
                 Box::new(|c| c.layers.insert(0, layer(LayerKind::Adjustment, 1, 1))),
             ),
             (
-                // A live group header can thin its members' coverage
-                // — a blur's soft edge on a full-frame solid — so no header
-                // may be live anywhere while the cull stands.
                 "live group header",
                 Box::new(|c| {
                     let member = c.layers[0].id;

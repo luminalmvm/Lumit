@@ -27,8 +27,6 @@
 //! - **Nothing at all, for a layer with no styles.** The field's serde default
 //!   must leave the file and the picture as they were.
 
-// A test binary: a failed setup step should stop this test, loudly, and the
-// no-panic rule of docs/14 is about the engine's own paths.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use lumit_core::model::{
@@ -122,7 +120,6 @@ fn comp_of(name: &str, layers: Vec<Layer>) -> Composition {
     }
 }
 
-/// A fresh style with `edits` applied to its rows.
 fn style(name: &str, edits: &[(&str, f64)]) -> EffectInstance {
     let mut inst = lumit_core::fx::builtins::instantiate(name)
         .unwrap_or_else(|| panic!("{name} is a declared style"));
@@ -162,7 +159,6 @@ fn project(styles: Vec<EffectInstance>) -> (Arc<Document>, Uuid) {
     (Arc::new(doc), id)
 }
 
-/// The red channel at (x, y).
 fn px(rgba: &[u8], w: u32, x: u32, y: u32) -> u8 {
     rgba[((y * w + x) * 4) as usize]
 }
@@ -186,9 +182,6 @@ fn tint(inst: &mut EffectInstance, id: &str, colour: [f64; 4]) {
     }
 }
 
-/// **Nothing at all.** A layer that wears no styles saves without the key and
-/// renders the frame it always rendered — the whole cost of the new field,
-/// measured.
 #[test]
 fn a_layer_with_no_styles_is_the_file_and_the_frame_it_always_was() {
     let (doc, comp) = project(Vec::new());
@@ -197,7 +190,6 @@ fn a_layer_with_no_styles_is_the_file_and_the_frame_it_always_was() {
         !json.contains("styles"),
         "an empty style list must leave no trace in the file"
     );
-    // And a document written before the field existed loads to the same thing.
     let older: Document = serde_json::from_str(&json).unwrap();
     assert_eq!(&older, &*doc);
 
@@ -241,8 +233,6 @@ fn an_interior_style_does_not_paint_the_outer_style_it_sits_above() {
         lumit_gpu::no_adapter();
         return;
     };
-    // A green overlay over a red shadow: if the overlay flooded the shadow the
-    // shadow would come back green, which is a difference no tolerance hides.
     let mut overlay = style("style_colour_overlay", &[]);
     tint(&mut overlay, "colour", [0.0, 1.0, 0.0, 1.0]);
     let (shadow_only, comp_a) = project(vec![red_shadow()]);
@@ -263,7 +253,6 @@ fn an_interior_style_does_not_paint_the_outer_style_it_sits_above() {
         "the shadow at ({sx}, {sy}) must be the colour it was with the overlay on: \
          the interior style ran on the layer, not on the shadow"
     );
-    // The square, on the other hand, is now green.
     let inside = (BOX / 2, BOX / 2);
     let [_, g_before, _] = rgb(&a, w, inside.0, inside.1);
     let [_, g_after, _] = rgb(&b, w, inside.0, inside.1);
@@ -273,8 +262,6 @@ fn an_interior_style_does_not_paint_the_outer_style_it_sits_above() {
     );
 }
 
-/// **The name.** A style is picture: editing one has to rename the frame, and
-/// taking the last one off has to give the undressed name back.
 #[test]
 fn a_style_edit_renames_the_frame_and_removing_it_restores_the_name() {
     struct Stub;
@@ -308,10 +295,6 @@ fn a_style_edit_renames_the_frame_and_removing_it_restores_the_name() {
     );
 }
 
-/// **The two paths agree**, for every shipped style, through the real seam: the
-/// draw builder resolves them, `run_ops` runs the GPU kernels, `cpu::apply_stack`
-/// runs the references, and the two pictures are the same within the fp16
-/// working format's own tolerance.
 #[test]
 fn cpu_and_gpu_agree_on_every_shipped_style() {
     let Some(ctx) = lumit_gpu::test_support::lease() else {
@@ -320,8 +303,6 @@ fn cpu_and_gpu_agree_on_every_shipped_style() {
     };
     let fx = ctx.fx();
     let (w, h) = (32u32, 32u32);
-    // A premultiplied grey square on empty ground, so there is an alpha edge for
-    // the shadow to be cast from and empty ground for it to fall on.
     let mut source = vec![0.0f32; (w * h * 4) as usize];
     for y in 8..24 {
         for x in 8..24 {
@@ -333,8 +314,6 @@ fn cpu_and_gpu_agree_on_every_shipped_style() {
         }
     }
 
-    // One instance of each shipped style, each with its own controls off their
-    // defaults so the kernel is asked a real question rather than a neutral one.
     let inner_glow_centre = {
         let mut s = style("style_inner_glow", &[("softness", 5.0)]);
         choose(&mut s, "source", 1);
@@ -435,7 +414,6 @@ fn cpu_and_gpu_agree_on_every_shipped_style() {
 // a tolerance.
 // ---------------------------------------------------------------------------
 
-/// Set one of a style's Choice rows — Position, Source, the gradient's Type.
 fn choose(inst: &mut EffectInstance, id: &str, value: u32) {
     for p in &mut inst.params {
         if p.id == id {

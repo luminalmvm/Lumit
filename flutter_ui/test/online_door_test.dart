@@ -1,10 +1,3 @@
-// The door to a project that is kept online, between a made-up engine and a
-// made-up server.
-//
-// What this guards is people's work. An entry that reaches the engine out of
-// order, or not at all, is an edit lost. So it checks that what goes in at
-// one end comes out of the other whole and in order, and that nothing an
-// engine or a server does takes the door down.
 
 import 'dart:async';
 import 'dart:convert';
@@ -16,7 +9,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/state/account.dart';
 import 'package:lumit_flutter/state/online_door.dart';
 
-// The kinds of frame, as `online_door.dart` has them.
 const append = 0x01, hello = 0x10, entry = 0x11, ack = 0x13, stale = 0x14;
 const create = 0x20, meta = 0x21, getSnapshot = 0x22;
 const putSnapshot = 0x23, part = 0x24, end = 0x25, live = 0x26;
@@ -41,7 +33,6 @@ Uint8List u64(int n) =>
 int readU64(Uint8List from, [int at = 0]) =>
     ByteData.sublistView(from).getUint64(at, Endian.little);
 
-/// Bytes nobody could mistake for another lot: a sealed thing, to the door.
 Uint8List sealed(int length, int seed) {
   final random = Random(seed);
   return Uint8List.fromList(
@@ -56,7 +47,6 @@ bool same(List<int> a, List<int> b) {
   return true;
 }
 
-/// One batch of one edit, as the engine appends it.
 Uint8List batch(int base, Uint8List sealed) =>
     bytes([u64(base), u64(base + 100), u32(1), sealed]);
 
@@ -74,7 +64,6 @@ final asked = utf8.encode(jsonEncode(
 String error(Uint8List payload) =>
     (jsonDecode(utf8.decode(payload)) as Map)['error'] as String;
 
-/// An account that is signed in when it has a token, with no server asked.
 class _Account extends AccountState {
   final String? token;
   _Account(this.token);
@@ -83,7 +72,6 @@ class _Account extends AccountState {
   Future<String?> accessToken() async => token;
 }
 
-/// The engine's end of one connection to the door.
 class _Engine {
   final Socket socket;
   final StreamIterator<Uint8List> _said;
@@ -105,7 +93,6 @@ class _Engine {
         payload
       ]));
 
-  /// The next frame the door says, or null once it has closed.
   Future<(int, Uint8List)?> next() async {
     final head = await _take(5);
     if (head == null) return null;
@@ -114,14 +101,12 @@ class _Engine {
     return payload == null ? null : (head[0], payload);
   }
 
-  /// The payload of the next frame, which has to be of [kind].
   Future<Uint8List> take(int kind) async {
     final frame = await next();
     expect(frame?.$1, kind);
     return frame!.$2;
   }
 
-  /// The next entry: where it sits in the order, and what was sealed.
   Future<(int, Uint8List)> nextEntry() async {
     final payload = await take(entry);
     return (readU64(payload), Uint8List.sublistView(payload, 16));
@@ -173,8 +158,6 @@ class _Project {
   final sockets = <WebSocket>[];
 }
 
-/// Just enough of Lumit's server for the door to speak to: the calls it
-/// makes and the socket, with the append that only goes in at the head.
 class _Server {
   final HttpServer http;
   _Server(this.http) {
@@ -192,7 +175,6 @@ class _Server {
   /// had, the access it showed and who it said it was from.
   final calls = <(String, int, String?, String?)>[];
 
-  /// How long a blob takes to fetch.
   Duration slowBlobs = Duration.zero;
 
   /// How many bytes of a snapshot or a blob go out before the line is cut,
@@ -227,7 +209,6 @@ class _Server {
       answer.add(body);
       return answer.close();
     }
-    // Some of it, and then the line goes.
     final line = await answer.detachSocket();
     line.add(Uint8List.sublistView(body, 0, cut));
     await line.flush();
@@ -430,7 +411,6 @@ void main() {
       host.send(end);
     }
 
-    // Any other snapshot says nothing, and the server is told nothing.
     put([]);
     await host.take(ok);
     expect(made.moved, (null, null));
@@ -441,7 +421,6 @@ void main() {
     // From the host, which is the only one the server takes it from.
     expect(server.calls.last.$4, 'Bearer mack');
 
-    // Half of it is none of it, and the server is not asked.
     put(utf8.encode(jsonEncode({'version': '0.8.0'})));
     expect(error(await host.take(failed)), 'malformed');
     expect(made.moved, ('0.7.0', '0.4.0'));
@@ -462,7 +441,6 @@ void main() {
     host.send(live, u64(0));
     await host.take(hello);
 
-    // Three edits, the second too big for one socket message.
     final edits = [
       sealed(300, 4),
       sealed(600 << 10, 5),
@@ -509,8 +487,6 @@ void main() {
       expect(same(what, edits[i]), isTrue);
     }
 
-    // Both there at once. An append on a head that has moved is told so,
-    // after the entry that moved it, and goes in on the new one.
     host.send(append, batch(3, edits[3]));
     expect(readU64(await host.take(ack)), 4);
     guest.send(append, batch(3, edits[4]));
@@ -520,7 +496,6 @@ void main() {
     expect(readU64(await guest.take(ack)), 5);
     expect(same((await host.nextEntry()).$2, edits[4]), isTrue);
 
-    // A big one and a small one straight after it arrive in that order.
     host.send(append, batch(5, edits[5]));
     expect(readU64(await host.take(ack)), 6);
     host.send(append, batch(6, edits[6]));
@@ -544,8 +519,6 @@ void main() {
     expect(await host.take(lost), [0x39, 0x11]);
     await host.close();
 
-    // The engine dials again and is answered. Then the server goes
-    // altogether, and that is an answer too.
     final again = await _Engine.dial(one, line(a));
     again.send(meta);
     await again.take(metaIs);
@@ -571,8 +544,6 @@ void main() {
     expect(error(await vast.take(failed)), 'too_large');
     expect(await vast.next(), isNull);
 
-    // What the server refuses is passed on, and the connection goes on to
-    // the next thing asked. So does the door.
     final nobody = await _Engine.dial(one, line(a));
     nobody.send(meta);
     expect(error(await nobody.take(failed)), 'not_found');
@@ -606,8 +577,6 @@ void main() {
     first.send(append, batch(1, edits[2]));
     expect(readU64(await first.take(ack)), 2);
 
-    // The other person in the first project hears both of its edits and
-    // nothing of the second project's.
     expect(same((await watching.nextEntry()).$2, edits[0]), isTrue);
     expect(same((await watching.nextEntry()).$2, edits[2]), isTrue);
     expect(server.projects[a]!.entries.length, 2);
@@ -649,16 +618,12 @@ void main() {
       }
     }
 
-    // Cut twice. Each time the door asks for the rest, and the engine gets
-    // every byte once.
     final guest = await _Engine.dial(door(), line(a, token: 8));
     server.cuts.addAll([300 << 10, 200 << 10]);
     var (got, seq, again) = await fetch(guest);
     expect((same(got, first), seq, again), (true, 0, 0));
     expect(server.from, [0, 300 << 10, 500 << 10]);
 
-    // Cut, and a newer snapshot has taken its place before the rest is
-    // asked for. The engine is told to start again and gets the newer whole.
     final second = sealed(400 << 10, 22);
     server
       ..from.clear()
@@ -673,7 +638,6 @@ void main() {
     expect((same(got, second), seq, again), (true, 5, 1));
     expect(server.from, [0, 0]);
 
-    // A big batch on its way down, cut the same way.
     host.send(live, u64(5));
     await host.take(hello);
     made.head = 5;

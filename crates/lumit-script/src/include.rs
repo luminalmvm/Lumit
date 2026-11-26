@@ -15,16 +15,12 @@ use std::path::{Path, PathBuf};
 use crate::reach::{self, Reach};
 use crate::ScriptError;
 
-/// How deep includes may go, and how much text they may come to.
 const MAX_DEPTH: usize = 16;
 const MAX_BYTES: usize = 16 << 20;
 
-/// A script with its includes read in.
 pub(crate) struct Source {
     pub(crate) text: String,
-    /// Where each run of lines in `text` came from, in order.
     pieces: Vec<Piece>,
-    /// Lines written so far.
     lines: usize,
 }
 
@@ -34,14 +30,12 @@ struct Piece {
     spot: Spot,
 }
 
-/// A line in the script or one of its includes.
 #[derive(Clone, Default)]
 struct Spot {
     /// The included file, as a path from the script's folder. `None` is the
     /// script itself.
     file: Option<String>,
     line: usize,
-    /// The script's own line the include came in on.
     top: usize,
 }
 
@@ -86,7 +80,6 @@ impl Source {
 }
 
 impl Spot {
-    /// `error` at this spot, and the script's own line to show it on.
     fn say(self, error: ScriptError) -> (ScriptError, usize) {
         let Some(file) = self.file else {
             return (error, self.line);
@@ -136,16 +129,12 @@ pub(crate) fn expand(
 struct Splicer<'a> {
     folder: Option<&'a Path>,
     out: Source,
-    /// Files read in so far, as real paths.
     seen: Vec<PathBuf>,
-    /// Where `#includepath` says to look.
     paths: Vec<PathBuf>,
-    /// What the includes have added, in bytes.
     bytes: usize,
 }
 
 impl Splicer<'_> {
-    /// Write `text`, from `file` in folder `here`, with its includes read in.
     fn splice(
         &mut self,
         text: &str,

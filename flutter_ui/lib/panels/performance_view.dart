@@ -37,8 +37,6 @@ class PerformanceMonitor extends StatefulWidget {
 /// drawing of the answer is paced.
 const Duration _refreshEvery = Duration(milliseconds: 200);
 
-/// How many recent frames the average and the strip cover — a second of them
-/// at 60 fps.
 const int _maxFrames = 60;
 
 class _PerformanceMonitorState extends State<PerformanceMonitor> {
@@ -50,10 +48,8 @@ class _PerformanceMonitorState extends State<PerformanceMonitor> {
   double average = 0.0;
   double averageFrameTime = 0;
 
-  /// When the previous reported frame began, for the interval between them.
   Duration? previousVsync;
 
-  /// When the numbers were last redrawn, for [_refreshEvery].
   DateTime lastRefresh = DateTime.fromMillisecondsSinceEpoch(0);
 
   @override
@@ -70,7 +66,6 @@ class _PerformanceMonitorState extends State<PerformanceMonitor> {
     super.dispose();
   }
 
-  /// One batch of finished frames, as the engine reports them.
   void onTimings(List<FrameTiming> frames) {
     if (!mounted) {
       return;
@@ -111,7 +106,6 @@ class _PerformanceMonitorState extends State<PerformanceMonitor> {
   Widget build(BuildContext context) {
     final theme = ThemeScope.of(context).theme;
 
-    // The label quiet and the figure bright, unless the figure is the news.
     Widget reading(String label, double rate, double ms) => Row(
           mainAxisSize: MainAxisSize.min,
           children: [

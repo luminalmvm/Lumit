@@ -1,7 +1,3 @@
-// The Viewer's preview progress bar decides one thing: when there is something
-// to draw. Both halves of that are behaviour worth pinning — a bar that never
-// appeared would be pointless, and a bar that appeared for every frame of a
-// drag would be worse than none.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/src/rust/api/state.dart';

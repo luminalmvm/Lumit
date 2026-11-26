@@ -59,7 +59,6 @@ void main() {
       await tester.pump();
     }
 
-    /// Open [menu], step through [under] when there is one, and click [item].
     Future<void> choose(WidgetTester tester, String menu, String item,
         {String? under}) async {
       await tester.tap(find.byKey(ValueKey<String>('menu-$menu')));
@@ -124,7 +123,6 @@ void main() {
       expect(staticOf(after.opacity), 100);
     });
 
-    /// A row invoked on a selection runs on every layer in it.
     testWidgets('Layer ▸ Transform ▸ Flip horizontally flips all of them',
         (tester) async {
       final p = withComp();
@@ -190,7 +188,6 @@ void main() {
         (tester) async {
       final p = withComp();
       final layer = p.comp.addSolidLayer();
-      // A keyed property, with the playhead between its two keys.
       layer.setTransform(
         prop: BridgeTransformProp.positionX,
         value: BridgeScalar.keyframed([
@@ -255,7 +252,6 @@ void main() {
 
       await choose(tester, 'Animation', 'Keyframe interpolation…');
       await tester.pumpAndSettle();
-      // The Out side becomes a hold; the In side is left as it opened.
       await tester.tap(find.byKey(const ValueKey('key-interp-out')));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Hold').last);
@@ -268,7 +264,6 @@ void main() {
       expect(keys.first.interpOut, isA<BridgeSideInterp_Hold>());
     });
 
-    // The editor's text, and Ctrl+Enter, which keeps what was typed.
     final editorText = find.descendant(
         of: find.byKey(const ValueKey('expression-editor-text')),
         matching: find.byType(EditableText));
@@ -342,7 +337,6 @@ void main() {
           reason: 'Rhai divides whole numbers to a whole one; JavaScript '
               'gives 3.5');
 
-      // Reopened on a row that has one, the editor shows that row's own.
       p.uiState.model.refresh();
       await tester.pumpAndSettle();
       await choose(tester, 'Animation', 'Add expression');
@@ -352,7 +346,6 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
 
-      // A saved expression keeps its language, through a file and back.
       final ws = p.uiState.workspace;
       ws.saveExpression(
           'Wobble', 'wiggle(2, 30)', BridgeExpressionLanguage.javaScript);
@@ -363,7 +356,6 @@ void main() {
       expect(ws.savedExpressionLanguage('Wobble'),
           BridgeExpressionLanguage.javaScript);
       expect(ws.savedExpressionLanguage('Spin'), BridgeExpressionLanguage.rhai);
-      // The same name and text in another language is another expression.
       ws.saveExpression('Wobble', 'wiggle(2, 30)');
       ws.importExpressions(file);
       expect(ws.savedExpressionLanguage('Wobble'), BridgeExpressionLanguage.rhai);
@@ -390,10 +382,6 @@ void main() {
       expect(p.state.project!.getItems(), isEmpty);
     });
 
-    /// The two preset rows are a second door onto the `.lumfx` the Effects &
-    /// presets panel writes and reads, so what is worth asserting is
-    /// that the menu reaches the same document — and that Apply reaches every
-    /// selected layer.
     group('Animation ▸ preset rows', () {
       late Directory dir;
 

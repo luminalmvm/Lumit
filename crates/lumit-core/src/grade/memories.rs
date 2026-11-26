@@ -10,15 +10,11 @@ use serde::{Deserialize, Serialize};
 use crate::model::Document;
 use crate::ops::Op;
 
-/// The slots there are, numbered from 1.
 pub const SLOTS: u8 = 8;
 
-/// One kept grade.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GradeMemory {
-    /// Which slot, 1 to [`SLOTS`].
     pub slot: u8,
-    /// The grade, as the effects text Copy grade writes.
     pub grade: String,
     /// A small PNG of the shot it came from, base64, or empty.
     #[serde(default, skip_serializing_if = "String::is_empty")]

@@ -49,7 +49,6 @@ String lumitProductVersion() =>
     'Lumit ${versionFromBootLine(lumitVersion()) ?? '?'}';
 
 class _AboutWindow extends StatelessWidget {
-  /// The boot log, read once by the opener.
   final List<String> log;
   final VoidCallback onClose;
   const _AboutWindow({required this.log, required this.onClose});
@@ -91,7 +90,6 @@ class _AboutWindow extends StatelessWidget {
         dialogFooter(
           t,
           keyPrefix: 'about',
-          // The boot log is what goes in a bug report.
           leading: log.isEmpty
               ? null
               : HouseButton(

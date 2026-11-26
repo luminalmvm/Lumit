@@ -46,7 +46,7 @@ struct Params {
     randomness: f32,        // 0..1
     seed: u32,
     mix_amt: f32,           // 0..1, blended against the unprocessed input
-    matte_on: f32,          // 1 = the matte scales Completion per pixel
+    matte_on: f32,
     _pad1: f32,
     _pad2: f32,
 };
@@ -165,8 +165,6 @@ fn card_wipe(@builtin(global_invocation_id) gid: vec3<u32>) {
             dir_sign = select(-1.0, 1.0, nc_hash01(p.seed, 2u, i, j, 0) < 0.5);
         }
 
-        // The flip coordinate and the one across it, with the card's
-        // half-extent on each.
         var f = ly;
         var g = lx;
         var hf = hy;

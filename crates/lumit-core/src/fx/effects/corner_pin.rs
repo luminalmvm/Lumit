@@ -88,7 +88,6 @@ pub struct CornerPin {
     #[choice(label = "Edges", options = *EDGE_OPTIONS, default = 0)]
     pub edge: u32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -152,7 +151,6 @@ impl CornerPin {
         // The adjugate: the inverse up to the determinant, which cancels in the
         // perspective divide the kernel takes anyway.
         let mut inv = adjugate(m);
-        // A quad with no area maps everything onto a line: no inverse.
         let det = m[0][0] * inv[0][0] + m[0][1] * inv[1][0] + m[0][2] * inv[2][0];
         if !det.is_finite() || det.abs() < 1e-6 {
             return cpu::CornerPinParams {
@@ -164,7 +162,13 @@ impl CornerPin {
         }
         // Sign-normalised so the horizon test in the kernel is a plain `w > 0`
         // on both paths, whichever way round the four points were dragged.
-        if inv[2][2] < 0.0 {
+        // The sign is taken at the quad's own centre, which is always in front:
+        // `m` takes the unit square's centre to (X, Y, W), and `inv` takes that
+        // point back to `det` times the centre over `W`, so its `w` is
+        // `det / W`. The frame's top-left pixel would not do: when the horizon
+        // ran between it and the quad, the whole quad came out transparent.
+        let centre_w = 0.5 * g + 0.5 * h + 1.0;
+        if det * centre_w < 0.0 {
             for row in &mut inv {
                 for v in row.iter_mut() {
                     *v = -*v;
@@ -198,7 +202,6 @@ impl CornerPin {
     }
 }
 
-/// `m`'s adjugate: its inverse times its determinant.
 fn adjugate(m: [[f32; 3]; 3]) -> [[f32; 3]; 3] {
     [
         [
@@ -219,7 +222,6 @@ fn adjugate(m: [[f32; 3]; 3]) -> [[f32; 3]; 3] {
     ]
 }
 
-/// Corner pin's behaviour.
 pub struct CornerPinDef;
 
 impl EffectDef for CornerPinDef {
@@ -298,9 +300,6 @@ mod tests {
         p
     }
 
-    /// Pulled out past the frame, a node graph box gives it room out to
-    /// the corners. On a raster grown past the frame, the frame is what is
-    /// pinned, so a pin onto the frame's own corners leaves every pixel be.
     #[test]
     fn a_pin_reaches_its_corners_and_pins_the_frame() {
         let out = pin(
@@ -334,5 +333,23 @@ mod tests {
             .map(|(a, b)| (a - b).abs())
             .fold(0.0, f32::max);
         assert!(worst < 1e-3, "{worst}");
+    }
+
+    #[test]
+    fn a_pin_whose_horizon_passes_the_top_left_corner_still_draws() {
+        let n = 64u32;
+        let floor = pin(
+            [28.0, 32.0, 36.0, 32.0, 0.0, 64.0, 64.0, 64.0],
+            [0.0, 0.0, 64.0, 64.0],
+        );
+        let c = CornerPin::read(Params::new(&floor)).packed();
+        let w_at = |x: f32, y: f32| c.inv[2][0] * x + c.inv[2][1] * y + c.inv[2][2];
+        assert!(w_at(32.0, 48.0) > 0.0, "{:?}", c.inv);
+        assert!(w_at(0.5, 0.5) < 0.0, "{:?}", c.inv);
+        let mut rgba = vec![1.0f32; (n * n * 4) as usize];
+        CornerPinDef.apply_cpu(&mut rgba, n, n, Params::new(&floor));
+        let alpha = |x: u32, y: u32| rgba[((y * n + x) * 4 + 3) as usize];
+        assert!(alpha(32, 48) > 0.99, "{}", alpha(32, 48));
+        assert!(alpha(1, 1) < 0.01, "{}", alpha(1, 1));
     }
 }

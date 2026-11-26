@@ -47,13 +47,10 @@ use thiserror::Error;
 use crate::image::{Frame16, RectI, CHANNELS};
 use crate::ipc::proto::RingSpec;
 
-/// The control block before the first slot.
 const CONTROL_BYTES: usize = 64;
 
-/// The bytes at the head of every slot.
 pub const HEADER_BYTES: usize = 64;
 
-/// The four bytes that say a slot has been written by this protocol at all.
 const HEADER_MAGIC: u32 = 0x4c4f_4658;
 
 /// How much memory one bundle's ring may take. A budget, chosen rather than
@@ -67,43 +64,30 @@ const HEADER_MAGIC: u32 = 0x4c4f_4658;
 /// preference and a bigger number here, not a change of design.
 pub const RING_BUDGET_BYTES: u64 = 512 * 1024 * 1024;
 
-/// The note's triple buffering, as the floor it is.
 pub const RING_MIN_SLOTS: u32 = 3;
 
 /// The ceiling, so that a tiny frame does not mint a hundred thousand slots
 /// nobody will ever use.
 pub const RING_MAX_SLOTS: u32 = 64;
 
-/// What can go wrong with the ring.
 #[derive(Debug, Error)]
 pub enum ShmError {
-    /// The backing file.
     #[error("the frame ring could not be opened: {0}")]
     Io(#[from] std::io::Error),
-    /// A slot number that is not in the ring.
     #[error("slot {0} is not in the frame ring")]
     NoSuchSlot(u32),
     /// A frame bigger than a slot. The broker regrows its ring before a
     /// render, so this is a frame that arrived by another road.
     #[error("a {needed}-byte frame does not fit a {slot_bytes}-byte ring slot")]
-    TooBig {
-        /// What the frame needs, header included.
-        needed: u64,
-        /// What a slot holds.
-        slot_bytes: u64,
-    },
-    /// A slot that was never written, or was written by something else.
+    TooBig { needed: u64, slot_bytes: u64 },
     #[error("the frame ring slot holds no frame")]
     Empty,
-    /// The hash in the header does not match the bytes after it.
     #[error("a frame crossed the ring and arrived changed")]
     Corrupt,
 }
 
-/// One slot's header, as values rather than bytes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FrameHeader {
-    /// The rectangle the pixels cover.
     pub bounds: RectI,
     /// How far apart the rows are in the ring's own block: always positive and
     /// always tight, because this describes the ring.
@@ -113,14 +97,12 @@ pub struct FrameHeader {
     /// that crosses a process boundary carrying an assumption is a frame that
     /// will one day carry the wrong one.
     pub premultiplied: bool,
-    /// How many bytes of pixels follow the header.
     pub payload_bytes: u64,
     /// FNV-1a over exactly those bytes.
     pub hash: u64,
 }
 
 impl FrameHeader {
-    /// The header as the sixty-four bytes that go at the head of a slot.
     fn to_bytes(self) -> [u8; HEADER_BYTES] {
         let mut out = [0_u8; HEADER_BYTES];
         let mut put = |offset: usize, bytes: &[u8]| {
@@ -141,8 +123,6 @@ impl FrameHeader {
         out
     }
 
-    /// The header a slot begins with, or [`ShmError::Empty`] if it begins with
-    /// anything else.
     fn from_bytes(bytes: &[u8]) -> Result<Self, ShmError> {
         let u32_at = |offset: usize| -> Option<u32> {
             let slice: [u8; 4] = bytes.get(offset..offset + 4)?.try_into().ok()?;
@@ -197,11 +177,8 @@ pub fn hash_bytes(bytes: &[u8]) -> u64 {
     hash
 }
 
-/// How many values the ring widens or narrows at a time, through a block on
-/// the stack.
 const BLOCK: usize = 1024;
 
-/// How many bytes one frame of this size needs in a slot.
 #[must_use]
 pub fn slot_bytes_for(width: usize, height: usize) -> u64 {
     let pixels = (width as u64).saturating_mul(height as u64);
@@ -211,7 +188,6 @@ pub fn slot_bytes_for(width: usize, height: usize) -> u64 {
     payload.saturating_add(HEADER_BYTES as u64)
 }
 
-/// The ring, mapped into this process.
 pub struct Ring {
     spec: RingSpec,
     map: MmapMut,
@@ -243,12 +219,6 @@ impl Drop for Ring {
 }
 
 impl Ring {
-    /// Make a ring for a comp of this frame size and map it. Called once, when
-    /// a broker is spawned.
-    ///
-    /// # Errors
-    ///
-    /// [`ShmError::Io`].
     pub fn create(path: &Path, width: usize, height: usize) -> Result<Self, ShmError> {
         let slot_bytes = slot_bytes_for(width, height).max(HEADER_BYTES as u64);
         let slots = (RING_BUDGET_BYTES / slot_bytes.max(1))
@@ -330,15 +300,9 @@ impl Ring {
         let Some(path) = self.owned.take() else {
             return;
         };
-        // The handle stays open and the mapping stays live; only the name goes.
         let _ = std::fs::remove_file(path);
     }
 
-    /// Map a ring somebody else made. Called once, in the broker.
-    ///
-    /// # Errors
-    ///
-    /// [`ShmError::Io`].
     pub fn open(spec: &RingSpec) -> Result<Self, ShmError> {
         let file = OpenOptions::new().read(true).write(true).open(&spec.path)?;
         let map = map_file(&file)?;
@@ -350,13 +314,11 @@ impl Ring {
         })
     }
 
-    /// The layout, to send to the other side.
     #[must_use]
     pub const fn spec(&self) -> &RingSpec {
         &self.spec
     }
 
-    /// How many slots there are.
     #[must_use]
     pub const fn slots(&self) -> u32 {
         self.spec.slots
@@ -375,28 +337,24 @@ impl Ring {
         Some(unsafe { &*self.map.as_ptr().cast::<AtomicU32>() })
     }
 
-    /// Clear the cancel word, before a render.
     pub fn clear_cancel(&self) {
         if let Some(word) = self.cancel_word() {
             word.store(0, Ordering::Release);
         }
     }
 
-    /// Raise the cancel word: the frame in flight is no longer wanted.
     pub fn raise_cancel(&self) {
         if let Some(word) = self.cancel_word() {
             word.store(1, Ordering::Release);
         }
     }
 
-    /// Whether the host has raised the cancel word.
     #[must_use]
     pub fn cancel_raised(&self) -> bool {
         self.cancel_word()
             .is_some_and(|word| word.load(Ordering::Acquire) != 0)
     }
 
-    /// Where one slot starts and ends.
     fn range(&self, slot: u32) -> Result<(usize, usize), ShmError> {
         if slot >= self.spec.slots {
             return Err(ShmError::NoSuchSlot(slot));
@@ -533,7 +491,6 @@ impl Ring {
     }
 }
 
-/// Map a file into this process, shared with everyone else who maps it.
 fn map_file(file: &File) -> Result<MmapMut, ShmError> {
     // SAFETY: the file is one this process just made or was told the name of by
     // the process that made it; nothing else writes it except the broker at the

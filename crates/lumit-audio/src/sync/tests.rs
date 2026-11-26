@@ -4,7 +4,6 @@ use std::cell::Cell;
 
 const SR: f64 = RATE as f64;
 
-/// A fixed sequence of roughly normal numbers.
 struct Noise(u64);
 
 impl Noise {
@@ -23,7 +22,6 @@ impl Noise {
     }
 }
 
-/// Speech-like sound: noise under a level that jumps every 50 to 250 ms.
 fn speech(seconds: f64, seed: u64) -> Vec<f32> {
     let mut noise = Noise(seed);
     let (mut level, mut left) = (0.0, 0);
@@ -120,8 +118,6 @@ fn finds_offsets_through_gain_noise_filtering_and_drift() {
     assert_at(&placed[1], 60.0, 1.0 / (1.0 + 50e-6));
     assert_at(&placed[2], 150.0, 1.0);
 
-    // As a recorder that runs longest, against a camera that keeps its own
-    // speed: the camera sets the clock and the recorder takes the drift.
     let curves = [onsets_of(&reference), onsets_of(&fast)];
     let inputs = [
         Input {
@@ -223,7 +219,6 @@ fn two_hours_solve_quickly() {
         feature: base[..frames].iter().map(|v| v + noise.normal()).collect(),
         seconds: 3600.0,
     };
-    // Sound to match: the second starts 123.4 s before the first.
     struct Hashed;
     impl Windows for Hashed {
         fn window(&self, input: usize, start: f64, frames: usize) -> Option<Vec<f32>> {

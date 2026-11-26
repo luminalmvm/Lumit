@@ -52,8 +52,6 @@ pub fn model_pack(index: u32) -> &'static str {
         .unwrap_or(MODEL_PACKS[0])
 }
 
-/// What the effect draws, in index order. **Composite** is the layer with its
-/// background cut away; **Matte** is the coverage itself as a grey picture.
 pub const VIEW_OPTIONS: &[&str] = &["Composite", "Matte"];
 
 /// How much of the frame Robust Video Matting works at, in index order.
@@ -66,7 +64,6 @@ pub const DETAIL_OPTIONS: &[&str] = &["Portrait", "Full body"];
 /// draw without a string lookup per op.
 pub const VIEW_ID: crate::fx::params::ParamId = crate::fx::params::ParamId::new("view");
 
-/// The **Invert** row's resolved id.
 pub const INVERT_ID: crate::fx::params::ParamId = crate::fx::params::ParamId::new("invert");
 
 /// Detail is Robust Video Matting's own control and means nothing to BiRefNet,
@@ -78,7 +75,6 @@ pub const REMOVE_BACKGROUND_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
     cond: EnabledCond::ChoiceIs(0),
 }];
 
-/// The Remove background effect's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "remove_background",
@@ -98,7 +94,6 @@ pub const REMOVE_BACKGROUND_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
     enabled_when = REMOVE_BACKGROUND_ENABLED_WHEN,
 )]
 pub struct RemoveBackground {
-    /// Read the shot and file its matte. A button, not a value.
     #[action(label = "Analyse")]
     pub analyse: (),
     /// Stop a running analysis. **Robust Video Matting starts again**: it

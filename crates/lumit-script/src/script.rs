@@ -48,22 +48,16 @@ use crate::include;
 use crate::reach::{self, Reach};
 use crate::{commands, commands::COMMANDS, one_step, Host, ScriptError};
 
-/// The `lumit` object, built in JavaScript over the runner's own functions.
 const LUMIT_JS: &str = include_str!("lumit.js");
-/// After Effects' scripting objects, built over `lumit`.
 const AE_JS: &str = include_str!("ae.js");
-/// After Effects' ScriptUI windows, which the interface draws.
 const SCRIPTUI_JS: &str = include_str!("scriptui.js");
 
 /// The most memory a script's values may take. Stop is what ends a script
 /// that runs away; this keeps one nobody is watching, on the command line,
 /// from eating the machine.
 const MAX_MEMORY: usize = 1 << 30;
-/// The most a script may read from one file.
 const MAX_READ_BYTES: u64 = 64 << 20;
-/// The most a script may write to files in one run.
 const MAX_WRITE_BYTES: u64 = 64 << 20;
-/// The most entries a script is told of in one folder.
 const MAX_LISTED: usize = 100_000;
 /// Lines of `print` kept. A loop printing for ever stops being heard here.
 const MAX_LOG_LINES: usize = 10_000;
@@ -71,23 +65,17 @@ const MAX_LOG_LINES: usize = 10_000;
 /// holds, so a script cannot fill the interface or a reply with text.
 const MAX_LINE_BYTES: usize = 4 << 10;
 const MAX_LOG_BYTES: usize = 1 << 20;
-/// The most a window's description may come to.
 const MAX_DIALOG_BYTES: usize = 1 << 20;
 /// The script thread's stack, and how much of it the engine may use, which
 /// leaves room for the runner's own frames under a deeply recursive script.
 const STACK_BYTES: usize = 16 << 20;
 const ENGINE_STACK_BYTES: usize = 8 << 20;
 
-/// What a run needs besides the host and the script.
 pub struct RunOptions<'a> {
-    /// The script's name, its file name for one read from a file.
     pub name: String,
     /// Set it and the script stops at its next step, as if it had failed.
     pub stop: Arc<AtomicBool>,
-    /// Files the script may read without asking, such as those passed on the
-    /// command line.
     pub readable: Vec<PathBuf>,
-    /// Text the caller hands the script, read as `lumit.args`.
     pub args: BTreeMap<String, String>,
     /// Ask the person for a file: a title and the extensions it may have.
     /// `None` when they cancel, or when there is nobody to ask.
@@ -103,25 +91,21 @@ pub struct RunOptions<'a> {
     /// they closed it. Handed `None`, take it down. With none, as on the
     /// command line, a window is cancelled as soon as it is shown.
     pub dialog: Option<&'a Dialog<'a>>,
-    /// How far the script's saves, footage and exports may go.
     pub limits: Limits,
 }
 
-/// How far a script's saves, footage and exports may go.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum Limits {
     /// Saves and exports into the project's folder or the script's, and
     /// footage from the files the script may read, as File > Run script.
     #[default]
     Script,
-    /// The project's folder only, footage included, as over MCP.
     Project,
     /// Wherever the script says, as on the command line, whose caller is
     /// the person.
     Off,
 }
 
-/// What shows a script's window. See [`RunOptions::dialog`].
 pub type Dialog<'a> = dyn Fn(Option<&str>) -> Option<String> + 'a;
 
 fn nobody_to_ask(_: &str, _: &[String]) -> Option<PathBuf> {
@@ -144,16 +128,12 @@ impl Default for RunOptions<'_> {
     }
 }
 
-/// What a run did.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RunReport {
-    /// Every line the script printed, in order.
     pub log: Vec<String>,
-    /// The script's last value, or why it did not finish.
     pub result: Result<Value, RunError>,
 }
 
-/// Why a run did not finish, and where in the script, when the engine says.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RunError {
     pub error: ScriptError,
@@ -173,10 +153,8 @@ impl fmt::Display for RunError {
 
 impl std::error::Error for RunError {}
 
-/// A line and column in the script.
 type Place = Option<(usize, usize)>;
 
-/// Run `source` against `host`'s project as one undo step.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn run(host: &dyn Host, source: &str, options: RunOptions<'_>) -> RunReport {
     let log = Arc::new(Mutex::new(Log::default()));
@@ -291,8 +269,6 @@ pub fn run(host: &dyn Host, source: &str, options: RunOptions<'_>) -> RunReport 
     }
 }
 
-/// The browser build has no JavaScript engine of its own yet, so a script
-/// cannot run there.
 #[cfg(target_arch = "wasm32")]
 pub fn run(_host: &dyn Host, _source: &str, _options: RunOptions<'_>) -> RunReport {
     RunReport {
@@ -305,39 +281,28 @@ pub fn run(_host: &dyn Host, _source: &str, _options: RunOptions<'_>) -> RunRepo
     }
 }
 
-/// What the script thread is handed besides the source.
 struct Setup {
     name: String,
     args: BTreeMap<String, String>,
-    /// The script's own file, as `$.fileName` gives it.
     path: Option<PathBuf>,
 }
 
-/// A job the script hands back to the caller's thread.
 type Job = Box<dyn FnOnce(&Desk<'_>) -> Result<Value, ScriptError> + Send>;
 
-/// The caller's side of a run: the host, and what the script may read.
 struct Desk<'a> {
     host: &'a dyn Host,
     choose_file: &'a dyn Fn(&str, &[String]) -> Option<PathBuf>,
     alert: Option<&'a dyn Fn(&str)>,
     dialog: Option<&'a Dialog<'a>>,
     log: Arc<Mutex<Log>>,
-    /// What the script may read, and where its saves, footage and exports
-    /// may go.
     reach: RefCell<Reach>,
-    /// Whether its saves, footage and exports keep to the reach.
     limited: bool,
-    /// Whether a command changed the document.
     edited: Cell<bool>,
-    /// What the script has written to files so far, in bytes.
     written: Cell<u64>,
-    /// The first name the script gave its undo group.
     step: RefCell<Option<String>>,
 }
 
 impl Desk<'_> {
-    /// Run the script's jobs until it finishes, which drops its end.
     fn serve(&self, asked: Receiver<(Job, SyncSender<Result<Value, ScriptError>>)>) {
         for (job, answer) in asked {
             // A script that has gone is not waiting for the answer.
@@ -403,7 +368,6 @@ impl Desk<'_> {
         Ok(full)
     }
 
-    /// Write `text` to `path`, after what is there when `append`.
     fn write(&self, path: &Path, text: &str, append: bool) -> Result<Value, ScriptError> {
         let full = self.may_write(path)?;
         let total = self.written.get() + text.len() as u64;
@@ -428,7 +392,6 @@ impl Desk<'_> {
         Ok(Value::Null)
     }
 
-    /// Make folder `path`, and any above it that are missing.
     fn make_folder(&self, path: &Path) -> Result<Value, ScriptError> {
         let full = self.may_write(path)?;
         std::fs::create_dir_all(&full).map_err(|e| {
@@ -503,14 +466,12 @@ impl Desk<'_> {
     }
 }
 
-/// The script thread's way back to the caller's.
 #[derive(Clone)]
 struct Lumit {
     ask: SyncSender<(Job, SyncSender<Result<Value, ScriptError>>)>,
 }
 
 impl Lumit {
-    /// Run `job` on the caller's thread and wait for its answer.
     fn ask(
         &self,
         job: impl FnOnce(&Desk<'_>) -> Result<Value, ScriptError> + Send + 'static,
@@ -543,7 +504,6 @@ impl Lumit {
     }
 }
 
-/// What a script printed, and how many bytes of it.
 #[derive(Default)]
 struct Log {
     lines: Vec<String>,
@@ -560,7 +520,6 @@ fn keep(log: &Mutex<Log>, line: String) {
     }
 }
 
-/// `text` cut to [`MAX_LINE_BYTES`], with an ellipsis where it was cut.
 fn cut(text: String) -> String {
     let mut end = MAX_LINE_BYTES;
     if text.len() <= end {
@@ -572,7 +531,6 @@ fn cut(text: String) -> String {
     format!("{}…", text.get(..end).unwrap_or_default())
 }
 
-/// Run the script on this thread, and answer its last value.
 #[cfg(not(target_arch = "wasm32"))]
 fn evaluate(
     source: &str,
@@ -643,7 +601,6 @@ fn options(file: &str) -> EvalOptions {
     o
 }
 
-/// The functions `lumit.js` builds the `lumit` object over.
 #[cfg(not(target_arch = "wasm32"))]
 fn natives<'js>(
     ctx: &Ctx<'js>,
@@ -806,7 +763,6 @@ fn frame_on(seconds: f64, num: u32, den: u32) -> Result<i64, ScriptError> {
     Ok(rate.nearest_frame_at(CompTime(t)))
 }
 
-/// Throw `error` into the script as an `Error` carrying its `code`.
 #[cfg(not(target_arch = "wasm32"))]
 fn throw(
     ctx: &Ctx<'_>,

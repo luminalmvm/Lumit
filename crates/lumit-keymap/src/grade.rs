@@ -1,7 +1,3 @@
-//! What the Colour workspace's actions are called in Settings → Keymap: the
-//! grade nodes, the shots and the grade clipboard.
-
-/// The words for a grading action, or `None` for an action that isn't one.
 pub(crate) fn description(id: &str) -> Option<&'static str> {
     Some(match id {
         "grade.copy" => "Copy the shot's grade",

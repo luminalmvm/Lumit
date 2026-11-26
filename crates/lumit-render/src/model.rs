@@ -1,6 +1,3 @@
-//! Model layers on the way to the mesh pass: each file's scene, read once and
-//! kept, and the draw that carries it.
-
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -15,7 +12,6 @@ use lumit_gpu::mesh::display::ModelDisplay;
 use lumit_scene::{Bounds, ModelScene};
 use uuid::Uuid;
 
-/// One Model layer, as the mesh pass draws it.
 pub struct ModelDraw {
     pub item: Uuid,
     pub scene: Arc<ModelScene>,
@@ -29,11 +25,7 @@ pub struct ModelDraw {
     /// `placement` at each shutter sample when the layer blurs, empty when
     /// it doesn't.
     pub shutter: Vec<[[f32; 4]; 4]>,
-    /// The scene at each of those samples, where its shape moves across the
-    /// shutter. Empty when it holds still.
     pub shutter_scenes: Vec<Arc<ModelScene>>,
-    /// Where its nodes are, one for each of `shutter` or one for the frame.
-    /// Empty when it draws as its file has it.
     pub poses: Vec<lumit_scene::pose::Pose>,
     pub opacity: f32,
     pub casts_shadows: ShadowMode,
@@ -51,23 +43,17 @@ pub struct ModelDraw {
 }
 
 impl ModelDraw {
-    /// Whether it cuts through to what is under its run. A view showing the
-    /// models themselves draws a holdout like any other.
     pub(crate) fn holds_out(&self) -> bool {
         self.holdout && display().takes_shadows()
     }
 }
 
-/// What a model's glass bends.
 pub(crate) enum Behind {
     Unset,
-    /// Left out of its run while the picture it bends is made.
     LeftOut,
-    /// The comp under its run with the run drawn over it, glass left out.
     Bends(wgpu::Texture),
 }
 
-/// The most bytes kept scenes hold between them, in memory.
 const KEPT_BYTES: usize = 2 << 30;
 
 /// A file by its path, the stamp it had when it was read and the Blender
@@ -94,11 +80,8 @@ static MISSING: Mutex<Option<HashMap<Key, Vec<String>>>> = Mutex::new(None);
 /// while the file saved over is read again.
 static LAST: Mutex<Option<HashMap<PathBuf, std::sync::Weak<ModelScene>>>> = Mutex::new(None);
 
-/// The files being read beside the frame.
 static READING: Mutex<Option<HashSet<Key>>> = Mutex::new(None);
-/// Moves when a read beside the frame starts or lands.
 static READS: AtomicU64 = AtomicU64::new(0);
-/// Moves each time a frame leaves out a model that is still being read.
 static LEFT_OUT: AtomicU64 = AtomicU64::new(0);
 
 thread_local! {
@@ -106,7 +89,6 @@ thread_local! {
     /// frame and left out of it until it lands. Export never sets it, so it
     /// waits for every model.
     static ASIDE: Cell<bool> = const { Cell::new(false) };
-    /// What stops a read on this thread part way: an export's cancel.
     static STOP: RefCell<Option<Arc<AtomicBool>>> = const { RefCell::new(None) };
     /// How the Viewer's view being drawn on this thread shows models. Export
     /// never sets it, so it draws them as they are.
@@ -118,12 +100,10 @@ thread_local! {
     };
 }
 
-/// Show models on this thread `display`'s way from now on.
 pub fn show_models(display: ModelDisplay) {
     DISPLAY.with(|d| d.set(display));
 }
 
-/// How models are shown on this thread.
 pub(crate) fn display() -> ModelDisplay {
     DISPLAY.with(Cell::get)
 }
@@ -144,7 +124,6 @@ pub(crate) fn named_as_shown(base: u128) -> u128 {
     u128::from_le_bytes(k)
 }
 
-/// Stop any model this thread reads from now on when `flag` is raised.
 pub(crate) fn stop_reads_with(flag: Arc<AtomicBool>) {
     STOP.with(|s| *s.borrow_mut() = Some(flag));
 }
@@ -155,29 +134,24 @@ pub(crate) fn stop_flag() -> Option<Arc<AtomicBool>> {
     STOP.with(|s| s.borrow().clone())
 }
 
-/// Read models beside the frame on this thread from now on, or not.
 pub fn read_aside(on: bool) {
     ASIDE.with(|a| a.set(on));
 }
 
-/// A number that moves when a read beside the frame starts or lands.
 pub fn reads() -> u64 {
     READS.load(Ordering::Relaxed)
 }
 
-/// How many frames have left out a model still being read.
 pub fn left_out() -> u64 {
     LEFT_OUT.load(Ordering::Relaxed)
 }
 
-/// Whether a model is being read beside the frame right now.
 pub fn reading() -> bool {
     READING
         .lock()
         .is_ok_and(|r| r.as_ref().is_some_and(|r| !r.is_empty()))
 }
 
-/// Count kept scenes against the governor's `ledger` from here on.
 pub(crate) fn account_against(ledger: &Arc<lumit_budget::Ledger>) {
     crate::extrude::account_against(ledger);
     if let Ok(mut slot) = KEPT.lock() {
@@ -206,8 +180,6 @@ pub(crate) fn scene(doc: &Document, item: Uuid) -> Option<Arc<ModelScene>> {
     read_and_keep(key.clone()).or_else(|| last_read(&key))
 }
 
-/// How a Model layer's rows fetch a layer's picture: at this frame, and at
-/// another comp time for a held projection.
 pub(crate) type Pictures<'a> = (
     &'a dyn Fn(&lumit_core::model::EffectInstance, &str) -> Option<crate::draw::DofInputDraw>,
     &'a dyn Fn(&lumit_core::model::EffectInstance, &str, f64) -> Option<crate::draw::DofInputDraw>,
@@ -238,7 +210,6 @@ pub(crate) fn draw(
             let looks = crate::model_material::looks(settings, &scene, lt, context, &picture);
             (*item, scene, to_comp, looks)
         }
-        // A solid's mesh is in the layer's own pixels already.
         _ => {
             let made = crate::extrude::made(layer, lt, context, &picture)?;
             tinted = Some(made.tinted);
@@ -248,7 +219,6 @@ pub(crate) fn draw(
     };
     let material = &layer.transform.material;
     let placed = |t: f64| {
-        // Each shutter sample reads `time` at its own moment.
         let context = Arc::new(ExpressionContext {
             comp_time: t,
             ..(**context).clone()
@@ -265,7 +235,6 @@ pub(crate) fn draw(
         .iter()
         .map(|off| placed(t_comp + off * dt))
         .collect();
-    // A solid whose letters or outline move has a scene for each sample.
     let mut shutter_scenes = Vec::new();
     if let Some(tinted) =
         tinted.filter(|_| !offsets.is_empty() && crate::extrude::may_change(layer, lt, context))
@@ -287,7 +256,6 @@ pub(crate) fn draw(
             shutter_scenes.clear();
         }
     }
-    // A Model layer's moving parts have a pose for each.
     let settings = match &layer.kind {
         LayerKind::Model { settings, .. } => Some(settings),
         _ => None,
@@ -324,7 +292,6 @@ pub(crate) fn draw(
         poses = frame_pose.iter().cloned().collect();
         shutter_scenes.clear();
     }
-    // A model that stays put over the shutter is drawn once.
     if shutter_scenes.is_empty()
         && shutter.iter().all(|s| *s == placement)
         && poses.iter().all(|p| Some(p) == frame_pose.as_ref())
@@ -356,13 +323,11 @@ pub(crate) fn draw(
     })
 }
 
-/// The scene every card draws, which is never read from anywhere.
 fn card() -> Arc<ModelScene> {
     static SCENE: std::sync::OnceLock<Arc<ModelScene>> = std::sync::OnceLock::new();
     Arc::clone(SCENE.get_or_init(|| Arc::new(lumit_scene::card())))
 }
 
-/// What reading model item `item` has come to so far, as [`kept`] answers.
 fn read_so_far(doc: &Document, item: Uuid) -> Option<Option<Arc<ModelScene>>> {
     match item == CARD {
         true => Some(Some(card())),
@@ -370,7 +335,6 @@ fn read_so_far(doc: &Document, item: Uuid) -> Option<Option<Arc<ModelScene>>> {
     }
 }
 
-/// The key model item `item`'s file is kept under, as it is on disk now.
 fn key_of(doc: &Document, item: Uuid) -> Option<Key> {
     let Some(ProjectItem::Footage(f)) = doc.item(item) else {
         return None;
@@ -393,7 +357,6 @@ fn kept(key: &Key) -> Option<Option<Arc<ModelScene>>> {
     Some(scene.or_else(|| last_read(key)))
 }
 
-/// The last scene read from `key`'s file, while it lives.
 fn last_read(key: &Key) -> Option<Arc<ModelScene>> {
     LAST.lock().ok()?.as_ref()?.get(&key.0)?.upgrade()
 }
@@ -439,8 +402,6 @@ pub fn layer_box(
     }))
 }
 
-/// The pictures model item `item` names that are missing or won't read, as
-/// it names them. Reads the file if nothing has yet.
 pub fn missing(doc: &Document, item: Uuid) -> Vec<String> {
     let known = key_of(doc, item).and_then(|key| MISSING.lock().ok()?.as_ref()?.get(&key).cloned());
     let mut names =
@@ -452,10 +413,8 @@ pub fn missing(doc: &Document, item: Uuid) -> Vec<String> {
     names
 }
 
-/// What the missing list says of a model too large for this card to move.
 pub const TOO_LARGE_TO_MOVE: &str = "Skins and morph targets, too large for this graphics card";
 
-/// Whether model item `item` has been read and holds no takes.
 pub fn known_still(doc: &Document, item: Uuid) -> bool {
     key_of(doc, item)
         .and_then(|key| kept(&key))
@@ -509,18 +468,14 @@ pub fn scene_hit(
             None => scene.node_world(k),
         };
         let mover = pose.map(|p| p.mover(scene, k));
-        // The ray in the node's own space, which keeps its parts of direction.
         let back = (placed * world).inverse();
         let (o, d) = (
             back.transform_point3(origin),
             back.transform_vector3(direction),
         );
-        // ponytail: a layer mirrored by a negative Scale isn't seen here, so
-        // its single-sided parts are culled from the wrong side.
         let whole = pose.map_or(world, |p| p.worlds.get(k).copied().unwrap_or(world));
         let mirrored = (placed * whole).determinant() < 0.0;
         for p in &mesh.primitives {
-            // Parts the pass leaves out: cut out or see-through all over.
             let m = p.material.and_then(|m| scene.materials.get(m));
             let gone = m.is_some_and(|m| match m.alpha_mode {
                 lumit_scene::AlphaMode::Mask => m.base_colour[3] < m.alpha_cutoff,
@@ -580,7 +535,6 @@ pub fn scene_hit(
     nearest
 }
 
-/// Read the file `key` names and keep what comes of it.
 fn read_and_keep(key: Key) -> Option<Arc<ModelScene>> {
     let stop = STOP.with(|s| s.borrow().clone()).unwrap_or_default();
     let cache = lumit_project::cache_dir()
@@ -660,13 +614,11 @@ pub fn model_to_comp(settings: &ModelSettings, bounds: &Bounds, comp: (f32, f32)
     .to_cols_array_2d()
 }
 
-/// The turn `model_to_comp` gives a model, without its size.
 pub(crate) fn up_right(up: UpAxis) -> glam::Quat {
     let flip = glam::Mat4::from_rotation_x(std::f32::consts::PI);
     glam::Quat::from_mat4(&(flip * up_turn(up)))
 }
 
-/// A Z-up file turned so its Z is our Y.
 fn up_turn(up: UpAxis) -> glam::Mat4 {
     match up {
         UpAxis::Y => glam::Mat4::IDENTITY,
@@ -686,8 +638,6 @@ fn fitted(up: UpAxis, bounds: &Bounds, comp: (f32, f32)) -> Option<f32> {
     (size.x > 0.0 && size.y > 0.0).then(|| fit(comp.0, size.x).min(fit(comp.1, size.y)) * 0.9)
 }
 
-/// What [`fitted`] gives model item `item` turned by `up` in a comp `comp`
-/// pixels in size, once its file has been read, which this never does.
 pub fn fitted_units(doc: &Document, item: Uuid, up: UpAxis, comp: (f32, f32)) -> Option<f32> {
     fitted(up, &read_so_far(doc, item)??.bounds, comp)
 }

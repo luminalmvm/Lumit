@@ -14,11 +14,8 @@ pub mod audio_spectrum;
 pub mod blur;
 pub mod colour;
 pub mod common;
-/// The Correction's passes, built on first use.
 pub mod correction;
-/// The Custom shader's GPU half: validate, compile, cache, dispatch.
 pub mod custom_shader;
-/// Denoise's passes, built on first use.
 pub mod denoise;
 pub mod depth_points;
 pub mod distort;
@@ -26,12 +23,10 @@ pub mod dof;
 pub mod energy_line;
 mod engine;
 pub mod environment;
-/// Film's passes, built on first use.
 pub mod film;
 pub mod flicker;
 mod gaussian;
 pub mod generate;
-/// CDL and the colour warper, built on first use.
 pub mod grade_fx;
 pub mod grid_lines;
 pub mod ground;
@@ -54,7 +49,6 @@ pub mod slices;
 pub mod smoke;
 pub mod split;
 pub mod sprite_flare;
-/// Stabilise's warp: the frame drawn through the map its analysis made.
 pub mod stabilise;
 pub mod stylise;
 pub mod temporal;
@@ -69,8 +63,6 @@ mod denoise_tests;
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests;
 
-/// The effect-pass engine: compiled kernels plus their layouts, one per
-/// device (owned alongside the Compositor by whoever renders).
 pub struct FxEngine {
     /// The Custom shader (docs/08 §3.95): its own seven-entry bind group
     /// layout, and one compiled pipeline per distinct source. Its own layout
@@ -83,21 +75,12 @@ pub struct FxEngine {
     radial_blur: wgpu::ComputePipeline,
     sharpen_unpremultiply: wgpu::ComputePipeline,
     sharpen_combine: wgpu::ComputePipeline,
-    /// Plain 3×3 sharpen (docs/08 §3.9): a single-pass high-pass
-    /// convolution, the radius-free sibling of the Unsharp mask's two-entry
-    /// kernel above.
     sharpen_simple: wgpu::ComputePipeline,
-    /// Sprite flare, built the first time one is drawn.
     sprite_flare: sprite_flare::LazySpriteFlare,
-    /// Energy line, compiled in the background as the engine starts.
     energy_line: energy_line::LazyEnergyLine,
     audio_spectrum: audio_spectrum::LazyAudioSpectrum,
-    /// The mesh pass, built the first time a model is drawn.
     pub(crate) mesh: std::sync::OnceLock<crate::mesh::MeshFx>,
-    /// The Environment light's passes, built the first time a comp has one.
     pub(crate) environment: std::sync::OnceLock<environment::EnvironmentFx>,
-    /// Light wrap (docs/08 §3.28): the two passes that fold the
-    /// background's blur and the foreground's softened matte into the edge.
     light_wrap_pack: wgpu::ComputePipeline,
     light_wrap_combine: wgpu::ComputePipeline,
     rgb_split: wgpu::ComputePipeline,
@@ -108,16 +91,10 @@ pub struct FxEngine {
     saturation: wgpu::ComputePipeline,
     vibrancy: wgpu::ComputePipeline,
     matte_key: wgpu::ComputePipeline,
-    /// The spatial keyer's stages: the screen matte on its own, the
-    /// separable shrink/grow, the despot, one garbage mask, and the pass that
-    /// spends the finished matte on the original colour.
     matte_key_screen: wgpu::ComputePipeline,
     matte_key_combine: wgpu::ComputePipeline,
     matte_morph: wgpu::ComputePipeline,
     matte_despot: wgpu::ComputePipeline,
-    /// Stroke (**style**): the separable pass that carries the fattened
-    /// and thinned copies of the layer's alpha together, and the combine that
-    /// cuts the band between them.
     stroke_morph: wgpu::ComputePipeline,
     stroke_combine: wgpu::ComputePipeline,
     matte_mask: wgpu::ComputePipeline,
@@ -127,10 +104,7 @@ pub struct FxEngine {
     /// it directly, between a layer's effect stack and its composite. Its own
     /// layout, for the shadow casters it reads.
     pub(crate) lighting: lighting::LightingFx,
-    /// Volumetric light, waited for the first time a comp shows a light in
-    /// the air.
     haze: volumetric::HazeSlot,
-    /// A 3D viewport's ground, drawn over its frame. Not an effect either.
     ground: wgpu::ComputePipeline,
     temperature: wgpu::ComputePipeline,
     invert: wgpu::ComputePipeline,
@@ -158,7 +132,6 @@ pub struct FxEngine {
     /// Threshold (docs/08 §3.59): every pixel to black or to white, across a
     /// crossing that is never a bare step.
     threshold: wgpu::ComputePipeline,
-    /// Tritone (docs/08 §3.60): three colours mapped onto the tone range.
     tritone: wgpu::ComputePipeline,
     /// Photo filter (docs/08 §3.61): a coloured glass in front of the lens,
     /// with the exposure optionally put back afterwards.
@@ -171,19 +144,13 @@ pub struct FxEngine {
     /// [`Self::blur`], reused for the third time — after §3.43's softening and
     /// §3.57's distance field — and here it is a *question*, never a colour.
     shadow_highlight: wgpu::ComputePipeline,
-    /// Fill (docs/08 §3.34): the layer's own coverage flooded with one
-    /// colour.
     fill: wgpu::ComputePipeline,
-    /// Gradient (docs/08 §3.35): the linear or radial two-colour ramp.
     gradient: wgpu::ComputePipeline,
-    /// Noise (docs/08 §3.36): per-pixel uniform or gaussian grain.
     noise: wgpu::ComputePipeline,
     /// Fractal noise (docs/08 §3.37): the seeded multi-octave generator, and
     /// the WGSL twin of the shared `lumit_core::fx::noise` core the
     /// displacement family will reuse.
     fractal_noise: wgpu::ComputePipeline,
-    /// Beam (docs/08 §3.73): a tapered shaft of light between two points. One
-    /// capsule a pixel.
     beam: wgpu::ComputePipeline,
     /// Lightning (docs/08 §3.74): a forked bolt. The first kernel in the
     /// catalogue whose *geometry* arrives in the uniform, already built — the
@@ -192,8 +159,6 @@ pub struct FxEngine {
     /// Radio waves (docs/08 §3.75): shapes emitted from a point and expanding.
     /// §3.71's sector solve, done once for a unit shape and scaled per wave.
     radio_waves: wgpu::ComputePipeline,
-    /// Grid's Lines type: a line grid on its own plane, seen through its own
-    /// camera.
     grid_lines: wgpu::ComputePipeline,
     /// Vegas (docs/08 §3.76): marching lights along the picture's contours. The
     /// contour is a level set rather than an edge detector's output, which is
@@ -207,22 +172,15 @@ pub struct FxEngine {
     /// One pipeline for three effects, because what differs between them is
     /// where the line goes and that is decided on the CPU.
     path_draw: wgpu::ComputePipeline,
-    /// Add grain (docs/08 §3.77): film grain laid on by tone. The fourth reader
-    /// of the shared `fx_noise_core.wgsl`.
     add_grain: wgpu::ComputePipeline,
     /// Turbulent displace (docs/08 §3.38): the fractal-driven warp, and the
     /// second reader of the shared `fx_noise_core.wgsl`. One of the kernels that
     /// claim the matte inside their own maths — it scales the
     /// displacement.
     turbulent_displace: wgpu::ComputePipeline,
-    /// Tile (docs/08 §3.39): one rectangle of the picture stamped across the
-    /// frame.
     tile: wgpu::ComputePipeline,
-    /// Offset (docs/08 §3.40): the frame slid, wrapping round.
     offset: wgpu::ComputePipeline,
-    /// Mirror (docs/08 §3.41): one half reflected onto the other.
     mirror: wgpu::ComputePipeline,
-    /// Lens distort (docs/08 §3.42): barrel and pincushion by field of view.
     lens_distort: wgpu::ComputePipeline,
     /// Corner pin (docs/08 §3.48): the picture pulled onto four points, through
     /// the inverse of the homography they define.
@@ -230,7 +188,6 @@ pub struct FxEngine {
     /// Stabilise: each frame drawn through the map its analysis made, with
     /// a bicubic tap.
     stabilise: wgpu::ComputePipeline,
-    /// Stabilise's Fill: one frame of the fill laid over what is under it.
     stabilise_fill: wgpu::ComputePipeline,
     /// Displacement map (docs/08 §3.49): another layer's channels push this one.
     /// The seventh kernel to claim the matte inside its own maths, and the
@@ -239,13 +196,9 @@ pub struct FxEngine {
     /// Polar coordinates (docs/08 §3.50): the frame bent into a circle, and the
     /// exact inverse map back.
     polar_coordinates: wgpu::ComputePipeline,
-    /// Twirl (docs/08 §3.51): the picture wrung round a point.
     twirl: wgpu::ComputePipeline,
-    /// Spherize (docs/08 §3.52): a glass ball held over the picture.
     spherize: wgpu::ComputePipeline,
-    /// Ripple (docs/08 §3.53): rings spreading from a point.
     ripple: wgpu::ComputePipeline,
-    /// Wave warp (docs/08 §3.54): a travelling wave across the frame.
     wave_warp: wgpu::ComputePipeline,
     /// Bezier warp (docs/08 §3.55): the frame's four edges bent, inverted per
     /// pixel by Newton's method — the first kernel in the catalogue to *solve*
@@ -254,7 +207,6 @@ pub struct FxEngine {
     /// Mesh warp: the picture bent by a grid of points, inverted per pixel
     /// by Newton's method as Bezier warp is.
     mesh_warp: wgpu::ComputePipeline,
-    /// Warp (docs/08 §3.56): the thirteen bend presets, one kernel.
     warp: wgpu::ComputePipeline,
     /// Roughen edges (docs/08 §3.57), the second pass: the blurred alpha re-cut
     /// at a threshold the §3.37 fractal field wobbles. The blur itself is
@@ -273,7 +225,6 @@ pub struct FxEngine {
     /// Find edges (docs/08 §3.66): a Sobel gradient per channel, taken on the
     /// perceptual value so the lines land where a person would draw them.
     find_edges: wgpu::ComputePipeline,
-    /// Emboss (docs/08 §3.67): the picture as grey relief, lit from Direction.
     emboss: wgpu::ComputePipeline,
     /// Texturize (docs/08 §3.68): §3.67's relief taken from another layer and
     /// multiplied into this one. The second kernel after Light wrap to read a
@@ -306,11 +257,8 @@ pub struct FxEngine {
     /// modifier of it.
     set_matte: wgpu::ComputePipeline,
     set_channels: wgpu::ComputePipeline,
-    /// Linear wipe (docs/08 §3.46): a straight edge swept across the frame.
     linear_wipe: wgpu::ComputePipeline,
-    /// Crop: the picture taken away past four edges.
     crop: wgpu::ComputePipeline,
-    /// Radial wipe (docs/08 §3.47): a wedge swept round a centre.
     radial_wipe: wgpu::ComputePipeline,
     /// Venetian blinds (docs/08 §3.70): §3.46's straight edge, folded into one
     /// slat so that one edge becomes a rank of them.
@@ -323,9 +271,7 @@ pub struct FxEngine {
     /// The first kernel to put a camera in front of a pixel, and it *inverts*
     /// the projection rather than drawing it — Lumit's effects gather.
     card_wipe: wgpu::ComputePipeline,
-    /// Luma fade: the picture goes away in order of brightness.
     luma_fade: wgpu::ComputePipeline,
-    /// sRGB curve: onto the sRGB curve, or back off it.
     srgb_curve: wgpu::ComputePipeline,
     transform: wgpu::ComputePipeline,
     /// The shake's own motion blur (docs/08 §3.4, T18): averages the
@@ -333,17 +279,13 @@ pub struct FxEngine {
     /// than the Transform kernel because it reads the input at several affines
     /// in one pass; it uses the shared two-input layout all the same.
     shake_mb: wgpu::ComputePipeline,
-    /// Jolt: a hit scaled, slid, split, tinted and lit in one pass.
     jolt: wgpu::ComputePipeline,
-    /// Light leak: a band of drifting light screened on in one pass.
     light_leak: wgpu::ComputePipeline,
     /// Flicker: this frame's gains on the picture in one pass.
     flicker: wgpu::ComputePipeline,
-    /// Slices: strips read back along their length, one pass.
     slices: wgpu::ComputePipeline,
     glow_bright: wgpu::ComputePipeline,
     glow_combine: wgpu::ComputePipeline,
-    /// The three passes of a glow's exponential halo, see `fx_glow_exp.wgsl`.
     glow_exp_down: wgpu::ComputePipeline,
     glow_exp_conv: wgpu::ComputePipeline,
     glow_exp_up: wgpu::ComputePipeline,
@@ -410,10 +352,7 @@ pub struct FxEngine {
     /// time: Timewarp's motion measurement. Taken out while in use, so no
     /// lock is held across a dispatch, and dropped with the engine.
     kept: std::sync::Mutex<Vec<Box<dyn std::any::Any + Send>>>,
-    /// Depth of field pro: its own layouts, pipelines and traced lenses, built
-    /// the first time one is drawn.
     lens_blur: lens_blur::LazyLensBlur,
-    /// Lens dirt, built the first time one is drawn.
     lens_dirt: lens_dirt::LazyLensDirt,
     /// Holographic foil, built the first time one is drawn.
     holographic_foil: holographic_foil::LazyHolographicFoil,
@@ -435,15 +374,10 @@ pub struct FxEngine {
     particulate_blocks: wgpu::ComputePipeline,
     particulate_scatter: wgpu::ComputePipeline,
     particulate_draw: wgpu::RenderPipeline,
-    /// Particle blend's passes, beside the draw they stand in for.
     particulate_blend: particulate::ParticulateBlendPipelines,
-    /// Particles in the 3D scene, built the first time some are.
     particulate_scene: std::sync::OnceLock<particulate_scene::ScenePipelines>,
-    /// Particles worked out step by step, built the first time some are.
     particulate_sim: std::sync::OnceLock<particulate_sim::SimPipelines>,
-    /// Smoke and fire, built the first time some are.
     smoke: std::sync::OnceLock<smoke::SmokePipelines>,
-    /// Depth points, built the first time a shot is drawn as them.
     depth_points: std::sync::OnceLock<depth_points::Pipeline>,
     /// Points field: the nearest point to every pixel, found by jump
     /// flooding. Its three passes share one layout of their own.
@@ -560,8 +494,6 @@ impl FxEngine {
         self.lens_flare.get().warm(key, bake)
     }
 
-    /// Take what a pass keeps here of type `T`, or `None` the first time.
-    /// Hand it back with [`Self::keep`] when done.
     pub fn take_kept<T: std::any::Any + Send>(&self) -> Option<Box<T>> {
         let mut kept = self
             .kept
@@ -571,7 +503,6 @@ impl FxEngine {
         kept.swap_remove(at).downcast().ok()
     }
 
-    /// Keep `value` here for the next [`Self::take_kept`].
     pub fn keep<T: std::any::Any + Send>(&self, value: Box<T>) {
         self.kept
             .lock()
@@ -579,8 +510,6 @@ impl FxEngine {
             .push(value);
     }
 
-    /// One compute pass: `src` and `orig` sampled, `dst` written, `params`
-    /// as the uniform — the shared plumbing every kernel dispatch uses.
     #[allow(clippy::too_many_arguments)]
     fn dispatch(
         &self,
@@ -743,8 +672,6 @@ pub fn fit_at(
         return tex;
     }
     let out = work_texture(ctx, nw, nh, "fx-fit-centred");
-    // The overlap, on each axis: where it starts in the old picture and in the
-    // new one, and how long it is.
     let span = |at: i32, old: u32, n: u32| {
         let src = at.min(0).unsigned_abs();
         let dst = at.max(0) as u32;

@@ -1,6 +1,3 @@
-//! Making what a peer sent fit this machine: refusing what it will not hold,
-//! and pointing footage at its own copy. Any thread.
-
 use crate::{Dropped, MAX_DROPPED};
 use lumit_core::model::{MediaRef, ProjectItem};
 use lumit_core::{model::Document, ops::Op};
@@ -12,7 +9,6 @@ use uuid::Uuid;
 /// largest real one is a paste of a few thousand layers.
 const MAX_BATCHED: usize = 100_000;
 
-/// How many edits `op` is, batches opened out, counted no further than `room`.
 fn weight(op: &Op, room: usize) -> usize {
     match op {
         Op::Batch { ops } => ops.iter().fold(1, |so_far, op| {
@@ -48,7 +44,6 @@ fn sized(op: &Op) -> bool {
     }
 }
 
-/// [`sane`] for a whole document.
 pub(crate) fn sane_document(doc: &Document) -> bool {
     doc.items.iter().all(|item| match item {
         ProjectItem::Composition(comp) => comp_size_is_sane(comp.width, comp.height),
@@ -140,7 +135,6 @@ fn find(media: &mut MediaRef, had: Option<&MediaRef>, root: Option<&Path>) {
     }
 }
 
-/// The file `have` reads the proxy of the footage item `id` from.
 fn proxy_of(have: &Document, id: Uuid) -> Option<&MediaRef> {
     have.proxy(id).map(|proxy| &proxy.media)
 }
@@ -174,8 +168,6 @@ pub(crate) fn settle(doc: &mut Document, have: Option<&Document>, root: Option<&
     }
 }
 
-/// Point `doc`'s footage and proxies at the files `have` reads the same
-/// ones from.
 pub(crate) fn carry(doc: &mut Document, have: &Document) {
     for item in &mut doc.items {
         if let ProjectItem::Footage(footage) = item {

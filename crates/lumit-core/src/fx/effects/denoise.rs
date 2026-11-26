@@ -24,7 +24,6 @@ use crate::fx::{
 use crate::model::{EffectInstance, EffectValue};
 use lumit_fx_macros::Effect;
 
-/// Denoise's groups, in the order its rows run.
 pub const DENOISE_GROUPS: &[ParamGroup] = &[
     ParamGroup {
         label: "Noise by size",
@@ -79,10 +78,8 @@ pub const DENOISE_GROUPS: &[ParamGroup] = &[
     },
 ];
 
-/// The most frames either side Denoise reads.
 pub const MAX_FRAMES: i32 = 5;
 
-/// Denoise's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "denoise",
@@ -105,8 +102,6 @@ pub const MAX_FRAMES: i32 = 5;
     ),
 )]
 pub struct Denoise {
-    /// What the effect shows: the result, what it took away, or how many
-    /// frames went into each pixel.
     #[choice(options = ["Result", "Removed noise", "Frames blended"], default = 0)]
     pub view: u32,
 
@@ -115,15 +110,12 @@ pub struct Denoise {
     #[action(label = "Learn")]
     pub learn: (),
 
-    /// The centre of the patch the noise is measured on.
     #[slider(label = "Sample x", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
     pub sample_x: f32,
 
-    /// See [`sample_x`](Self::sample_x).
     #[slider(label = "Sample y", min = 0.0, max = 2160.0, default = 540.0, unit = Px)]
     pub sample_y: f32,
 
-    /// The side of the patch.
     #[slider(
         label = "Sample size",
         min = 16.0,
@@ -223,7 +215,6 @@ pub struct Denoise {
     #[slider(min = 0.0, max = 100.0, default = 0.0, hard_min = 0.0, hard_max = 100.0, unit = Percent)]
     pub grain: f32,
 
-    /// The host-uniform Mix every effect ends with, per cent.
     #[slider(min = 0.0, max = 100.0, default = 100.0, hard_min = 0.0, hard_max = 100.0, unit = Percent)]
     pub mix: f32,
 }
@@ -304,7 +295,6 @@ impl Denoise {
     }
 }
 
-/// Denoise's behaviour.
 pub struct DenoiseDef;
 
 impl EffectDef for DenoiseDef {

@@ -1,9 +1,6 @@
-//! A Light layer as a file holds it, old keys and new.
-
 use super::{LightDef, LightFalloff, LightKind};
 use crate::anim::Property;
 
-/// [`LightDef`] as a file holds it, old keys and new.
 #[derive(serde::Deserialize)]
 pub(super) struct LightDefFile {
     #[serde(default)]
@@ -87,7 +84,6 @@ impl From<LightDefFile> for LightDef {
     }
 }
 
-/// Every value of `p` times `by`, keys and their speeds with them.
 fn scaled(mut p: Property, by: f64) -> Property {
     use crate::anim::{Animation, SideInterp};
     let side = |s: SideInterp| match s {

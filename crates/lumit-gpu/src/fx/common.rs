@@ -1,16 +1,9 @@
-//! Shared GPU input/output helpers for the effect kernels: uploading images,
-//! LUT cubes, flow fields and depth maps into the textures the kernels sample,
-//! reading a working texture back to linear f32, and the fp16 conversions the
-//! oracle tests round-trip through.
-
 use half::slice::HalfFloatSliceExt;
 
 use crate::{GpuContext, GpuError};
 
 use super::new_work_texture;
 
-/// Upload a linear f32 RGBA image as a working (fp16) texture — test and
-/// tooling support for effect kernels.
 pub fn upload_linear_f32(ctx: &GpuContext, rgba: &[f32], w: u32, h: u32) -> wgpu::Texture {
     // The whole plane in one call. `half` narrows eight values an instruction
     // where the card's host has F16C, and rounds to nearest even either way, so
@@ -128,7 +121,6 @@ pub fn upload_flow_field(
     for i in 0..n {
         interleaved[i * 4] = u.get(i).copied().unwrap_or(0.0);
         interleaved[i * 4 + 1] = v.get(i).copied().unwrap_or(0.0);
-        // Absent confidence reads as full (no streak scaling).
         interleaved[i * 4 + 2] = conf.get(i).copied().unwrap_or(1.0);
     }
     upload_flow_texels(ctx, &interleaved, w, h)
@@ -239,8 +231,6 @@ pub fn upload_depth_map(ctx: &GpuContext, depth: &[f32], w: u32, h: u32) -> wgpu
     tex
 }
 
-/// Read a working (fp16) texture back as linear f32 RGBA — the exact-linear
-/// counterpart of `ColourEngine::readback8`, for oracle tests.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn readback_linear_f32(
     ctx: &GpuContext,
@@ -337,12 +327,10 @@ pub fn readback_linear_f32(
         .collect())
 }
 
-/// f32 → IEEE 754 half bits (the working format's texel channel).
 pub fn f16_bits(v: f32) -> u16 {
     half::f16::from_f32(v).to_bits()
 }
 
-/// IEEE 754 half bits → f32.
 pub fn f16_to_f32(bits: u16) -> f32 {
     half::f16::from_bits(bits).to_f32()
 }

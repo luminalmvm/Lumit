@@ -70,7 +70,6 @@ fn sharpen_simple(@builtin(global_invocation_id) gid: vec3<u32>) {
     let left = tap(xy.x - r, xy.y, size);
     let right = tap(xy.x + r, xy.y, size);
     let hp = 4.0 * c - up - down - left - right;
-    // The matte scales Amount per pixel.
     var amount = p.amount;
     if (p.matte_on != 0.0) {
         amount = amount * matte_k(xy);

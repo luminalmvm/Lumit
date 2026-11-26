@@ -48,7 +48,6 @@ void main() {
     Rect laneBar(WidgetTester tester, LayerReference l) =>
         tester.getRect(find.byKey(ValueKey<String>('tl-bar-${idOf(l)}')));
 
-    /// Ctrl and the wheel zoom time, so the lanes have somewhere to scroll.
     Future<void> zoomIn(WidgetTester tester, Offset at) async {
       final pointer = TestPointer(1, PointerDeviceKind.mouse);
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
@@ -61,8 +60,6 @@ void main() {
       await tester.pump();
     }
 
-    /// Desk's zoom is a dial with its reading beside it, and turning it
-    /// writes the same zoom the slider does.
     testWidgets('Desk turns the zoom on a dial and reads a tick in frames',
         (tester) async {
       final p = withComp();
@@ -79,8 +76,6 @@ void main() {
       expect(readout.data, matches(RegExp(r'^1 tick = \d+ f$')),
           reason: 'the reading says what one ruler tick spans');
 
-      // Round the dial from its start at the bottom left to its end at the
-      // bottom right: the whole comp, then twenty frames across the lanes.
       final centre = tester.getCenter(dial);
       final before = laneBar(tester, layer).width;
       final gesture = await tester.startGesture(centre + const Offset(-5, 5));
@@ -97,8 +92,6 @@ void main() {
       expect(TimelineZoomDial.valueAt(const Offset(5, 5)), closeTo(1, 0.01));
     });
 
-    /// Lantern's minimap under the lanes: a 10px strip that scrolls the lanes
-    /// when its window is dragged.
     testWidgets('Lantern draws a minimap that scrolls the lanes',
         (tester) async {
       final p = withComp();
@@ -120,8 +113,6 @@ void main() {
           reason: 'it stands under the lanes, above the foot');
 
       await zoomIn(tester, laneBar(tester, layer).center);
-      // A press on the strip brings the window to the pointer, at the
-      // comp's start; dragging it on from there scrolls the lanes on.
       final gesture =
           await tester.startGesture(Offset(strip.left + 10, strip.center.dy));
       await tester.pump();

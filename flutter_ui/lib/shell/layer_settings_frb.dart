@@ -101,7 +101,6 @@ Future<LayerReference?> newSolidFrb({
 }) async {
   final project = Provider.of<LumitState>(context, listen: false).project;
   final size = comp.getSettings();
-  // The name the engine would give it, as New composition suggests "Comp 3".
   final next = project?.nextSolidName() ?? '';
   final picked = await showLumitModal<(String, BridgeSolidDef?)>(
     context: context,
@@ -145,9 +144,6 @@ Future<LayerReference?> newSolidFrb({
   return solid;
 }
 
-/// The engine's name for a new solid, [made], for one of [colour].
-// ponytail: the engine names every new solid "White solid N", so a coloured
-// one loses the word. A name per colour wants the engine to take the colour.
 String _solidName(String made, BridgeColourRgba colour) =>
     colour.r == 1 && colour.g == 1 && colour.b == 1
         ? made
@@ -163,7 +159,6 @@ class _LayerSettingsBody extends StatefulWidget {
   /// change is for this layer alone or for all of them.
   final int sharedBy;
 
-  /// A solid that does not exist yet: the window is New solid, not its settings.
   final bool fresh;
 
   /// The name New solid suggests for a colour, which the field follows until

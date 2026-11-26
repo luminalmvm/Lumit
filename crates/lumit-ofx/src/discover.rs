@@ -61,30 +61,21 @@ use crate::schema::schema_of;
 /// take that room.
 pub const SCAN_FRAME: (usize, usize) = (1, 1);
 
-/// Which side of a process boundary a discovered plugin runs on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Hosting {
-    /// One broker process per bundle — the shipping arrangement.
     Broker,
-    /// Loaded into this process. For tests, and for a bundle Lumit ships.
     InProcess,
 }
 
-/// What a scan was asked to do.
 pub struct ScanOptions {
-    /// The directories to look in. [`ScanOptions::standard`] fills this from
-    /// the platform's own folders plus `OFX_PLUGIN_PATH`.
     pub paths: Vec<PathBuf>,
     /// Plugin identifiers the user has switched off (docs/12 §2.6). Consulted
     /// before a plugin is described, so a disabled plugin's code never runs.
     pub disabled: BTreeSet<String>,
-    /// Which arrangement to host what is found in.
     pub hosting: Hosting,
 }
 
 impl ScanOptions {
-    /// The standard search paths, nothing disabled, hosted in brokers — what
-    /// start-up asks for before the preferences are read into it.
     #[must_use]
     pub fn standard() -> Self {
         Self {
@@ -95,25 +86,19 @@ impl ScanOptions {
     }
 }
 
-/// One plugin that became an effect.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DiscoveredPlugin {
     /// The name the catalogue answers to — `ofx:` and the plugin's identifier.
     pub match_name: String,
-    /// The plugin's own reverse-domain identifier, which is what the
-    /// switched-off list names and what [`set_enabled`] takes.
     pub identifier: String,
-    /// The name a person sees.
     pub label: String,
     /// The plugin's own menu path, e.g. `Filter/Blur`. Effects & presets shows
     /// it under this rather than under one of Lumit's own categories, because
     /// none of those is a claim about somebody else's effect (docs/12 §2.6).
     pub grouping: String,
-    /// Which bundle binary it came out of.
     pub bundle: PathBuf,
 }
 
-/// What one scan did.
 #[derive(Debug, Default)]
 pub struct ScanOutcome {
     /// The plugins registered **by this scan**. A rescan that finds nothing new
@@ -124,7 +109,6 @@ pub struct ScanOutcome {
     pub skipped: Vec<String>,
 }
 
-/// Everything discovered this session, by match name.
 static DISCOVERED: Mutex<BTreeMap<String, DiscoveredPlugin>> = Mutex::new(BTreeMap::new());
 
 /// The plugins switched off, by identifier — the running copy of the
@@ -132,7 +116,6 @@ static DISCOVERED: Mutex<BTreeMap<String, DiscoveredPlugin>> = Mutex::new(BTreeM
 /// next launch.
 static DISABLED: Mutex<BTreeSet<String>> = Mutex::new(BTreeSet::new());
 
-/// Every bundle's broker this session started, by its binary.
 static BROKERS: Mutex<Vec<(PathBuf, Arc<SharedBroker>)>> = Mutex::new(Vec::new());
 
 /// End the brokers of every bundle at or below `folder`, after the frame each
@@ -187,7 +170,6 @@ fn renote_paths() {
     }
 }
 
-/// Every plugin this session has registered, in registration order.
 #[must_use]
 pub fn discovered() -> Vec<DiscoveredPlugin> {
     DISCOVERED
@@ -196,7 +178,6 @@ pub fn discovered() -> Vec<DiscoveredPlugin> {
         .unwrap_or_default()
 }
 
-/// What a registered plugin declared, by the catalogue name it answers to.
 #[must_use]
 pub fn plugin_of(match_name: &str) -> Option<DiscoveredPlugin> {
     DISCOVERED.lock().ok()?.get(match_name).cloned()
@@ -219,7 +200,6 @@ pub fn set_enabled(identifier: &str, enabled: bool) {
     }
 }
 
-/// Whether `identifier` is switched off right now.
 #[must_use]
 pub fn is_disabled(identifier: &str) -> bool {
     DISABLED
@@ -228,8 +208,6 @@ pub fn is_disabled(identifier: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// Seed the running switched-off list from the stored preference, before a
-/// scan reads it.
 pub fn set_disabled(list: &BTreeSet<String>) {
     if let Ok(mut disabled) = DISABLED.lock() {
         *disabled = list.clone();
@@ -318,8 +296,6 @@ pub fn scan(
     scan_reporting(options, register, &mut |_, _, _| {})
 }
 
-/// [`scan`], saying which bundle it is about to open, how many came before it
-/// and how many there are, so the splash can name what it is waiting on.
 pub fn scan_reporting(
     options: &ScanOptions,
     register: &mut dyn FnMut(&'static dyn EffectDef) -> bool,
@@ -352,8 +328,6 @@ pub fn scan_reporting(
     outcome
 }
 
-/// Where the bundles that held nothing this host can drive are remembered
-/// between sessions, once the frontend has said ([`remember_empty_bundles_in`]).
 static EMPTY_FILE: Mutex<Option<PathBuf>> = Mutex::new(None);
 
 /// Remember the bundles a scan found holding no effect this host can drive
@@ -438,7 +412,6 @@ fn stamp(binary: &std::path::Path) -> Option<(u64, u128)> {
     Some((meta.len(), written))
 }
 
-/// One bundle, hosted in a broker process of its own.
 fn scan_through_broker(
     binary: &std::path::Path,
     options: &ScanOptions,
@@ -556,7 +529,6 @@ fn scan_in_process(
     }
 }
 
-/// The host for a bundle that vanished between the scan and the render.
 struct Absent;
 
 impl PluginHost for Absent {
@@ -659,7 +631,6 @@ fn offer(
     outcome.registered.push(found);
 }
 
-/// Whether this session already registered that name.
 fn known(match_name: &str) -> bool {
     DISCOVERED
         .lock()
@@ -667,7 +638,6 @@ fn known(match_name: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// One line of the scan report: which bundle, and what happened.
 fn skip_line(binary: &std::path::Path, why: &str) -> String {
     format!("{}: {why}", binary.display())
 }
@@ -677,8 +647,6 @@ fn skip_line(binary: &std::path::Path, why: &str) -> String {
 mod known_empty_tests {
     use super::KnownEmpty;
 
-    /// A bundle remembered as empty is skipped while it is unchanged, asked
-    /// again once it changes, and the list is dropped by another version.
     #[test]
     fn a_remembered_bundle_is_known_until_it_changes() {
         let dir = tempfile::tempdir().unwrap();

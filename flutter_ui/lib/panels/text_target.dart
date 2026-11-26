@@ -25,16 +25,13 @@ import '../widgets/controls.dart';
 import 'text_animation_presets.dart' show textPresetRows;
 import 'timeline_extras_frb.dart' show showMenuAt;
 
-/// One change to a text document: the document in, the changed one out.
 typedef TextChange = BridgeTextDocument Function(BridgeTextDocument document);
 
-/// What a panel is editing this build.
 class TextTarget {
   /// The selected text layers, top first. Empty when the panel is editing
   /// what new text is set in.
   final List<LayerReference> layers;
 
-  /// The first layer's name, or null with no text layer selected.
   final String? name;
 
   /// The document the controls show: the first layer's, or one made of the
@@ -42,7 +39,6 @@ class TextTarget {
   /// the drag has reached, so the number under the pointer moves.
   final BridgeTextDocument document;
 
-  /// The document as it is held, which every change starts from.
   final BridgeTextDocument held;
 
   const TextTarget({
@@ -53,15 +49,12 @@ class TextTarget {
   });
 }
 
-/// The reading and writing both panels share.
 mixin TextTargetState<T extends StatefulWidget> on State<T> {
   final PreviewThrottle _throttle = PreviewThrottle();
 
-  /// The style Copy style last took, shared by both panels.
   static BridgeTextStyle? _copiedStyle;
   static BridgeParagraphStyle? _copiedParagraph;
 
-  /// The text panel's menu, around [child].
   Widget styleMenu(LumitUiState ui, TextTarget target, Widget child) =>
       textPanelMenu(
         context,
@@ -76,7 +69,6 @@ mixin TextTargetState<T extends StatefulWidget> on State<T> {
         child: child,
       );
 
-  /// The paragraph panel's menu, around [child].
   Widget paragraphMenu(LumitUiState ui, TextTarget target, Widget child) =>
       textPanelMenu(
         context,
@@ -90,7 +82,6 @@ mixin TextTargetState<T extends StatefulWidget> on State<T> {
         child: child,
       );
 
-  /// Where a drag has got to, between its first tick and its end.
   BridgeTextDocument? _staged;
 
   @override
@@ -99,8 +90,6 @@ mixin TextTargetState<T extends StatefulWidget> on State<T> {
     super.dispose();
   }
 
-  /// What the panel is editing. Read each build, so it follows the selection
-  /// and anything else that changes the layer.
   TextTarget targetOf(LumitUiState ui) {
     final selected = ui.selectedLayerIds;
     final layers = <LayerReference>[];
@@ -121,7 +110,6 @@ mixin TextTargetState<T extends StatefulWidget> on State<T> {
         name ??= entry.info.name;
         layers.add(entry.layer);
       } catch (_) {
-        // The layer went away between the model being read and this call.
       }
     }
     final held = document ?? _newText(ui.tools);
@@ -166,8 +154,6 @@ mixin TextTargetState<T extends StatefulWidget> on State<T> {
     });
   }
 
-  /// Put the picture back to what the layer holds, after a drag that came to
-  /// nothing.
   void cancelTextPreview(LumitUiState ui, TextTarget target) {
     _throttle.cancel();
     setState(() => _staged = null);
@@ -182,7 +168,6 @@ mixin TextTargetState<T extends StatefulWidget> on State<T> {
         document: target.held,
       );
     } catch (_) {
-      // The layer went away mid-drag, there is nothing to put back.
     }
   }
 
@@ -210,7 +195,6 @@ mixin TextTargetState<T extends StatefulWidget> on State<T> {
           final current = layer.getText();
           if (current != null) layer.setText(document: change(current));
         } catch (_) {
-          // The layer was deleted while the panel still showed it.
         }
       }
     } finally {
@@ -220,11 +204,9 @@ mixin TextTargetState<T extends StatefulWidget> on State<T> {
   }
 }
 
-/// Changes to the style alone, which is most of what the Text panel writes.
 TextChange restyle(BridgeTextStyle Function(BridgeTextStyle style) change) =>
     (document) => document.copyWith(style: change(document.style));
 
-/// Changes to the paragraph alone.
 TextChange reflow(
         BridgeParagraphStyle Function(BridgeParagraphStyle paragraph) change) =>
     (document) => document.copyWith(paragraph: change(document.paragraph));
@@ -244,8 +226,6 @@ Widget textTargetHeading(LumitTheme t, String? label) => Padding(
             ),
     );
 
-/// What a right press on either panel's ground offers: take this style, put
-/// one on, or go back to plain.
 Widget textPanelMenu(
   BuildContext context, {
   required VoidCallback onCopy,
@@ -265,7 +245,6 @@ Widget textPanelMenu(
             act?.call();
           }
 
-          // Reset leads, as on every value field and well.
           return [
             MenuRow(
               key: const ValueKey('text-menu-reset'),
@@ -299,7 +278,6 @@ Widget textPanelMenu(
       child: child,
     );
 
-/// A label and its control, as one cell of a panel's grid.
 Widget textCell(LumitTheme t, String label, Widget control) => SizedBox(
       height: t.density.propertyRow,
       child: Row(
@@ -324,8 +302,6 @@ Widget textCell(LumitTheme t, String label, Widget control) => SizedBox(
 /// label.
 const double _textColumn = 210;
 
-/// The panels' cells laid out in two columns where there is room for two, and
-/// one where there isn't, and held to the panel's left however wide it gets.
 Widget textGrid(List<Widget> cells) => LayoutBuilder(
       builder: (context, constraints) {
         final columns = constraints.maxWidth >= 2 * _textColumn ? 2 : 1;

@@ -35,27 +35,19 @@ use std::sync::Arc;
 /// against it.
 pub const MATCH_NAME: &str = "stabilise";
 
-/// Mode's option labels: take the shake out, or put another layer's back.
 pub const MODE_OPTIONS: &[&str] = &["Stabilise", "Reverse"];
-/// The Mode index meaning Reverse.
 pub const MODE_REVERSE: u32 = 1;
 
-/// Result's option labels.
 pub const RESULT_OPTIONS: &[&str] = &["Smooth motion", "No motion"];
-/// The Result index meaning No motion.
 pub const RESULT_NO_MOTION: u32 = 1;
 
-/// Method's option labels: what the frame's motion is fitted as.
 pub const METHOD_OPTIONS: &[&str] = &["Position", "Scale and rotation", "Perspective"];
 /// The default Method: a slide, a turn and a growth. On ordinary shake it is
 /// steadier than the four-corner fit, and on hard footage it holds on longer.
 pub const METHOD_DEFAULT: u32 = 1;
 
-/// Edges' option labels.
 pub const EDGES_OPTIONS: &[&str] = &["Show", "Crop", "Crop and scale", "Fill"];
-/// The default Edges: scale up until the moving edges are out of frame.
 pub const EDGES_DEFAULT: u32 = 2;
-/// The Edges index meaning Fill: the edges filled from the frames either side.
 pub const EDGES_FILL: u32 = 3;
 
 /// Rolling shutter's option labels. Off is the default: the read time is
@@ -77,7 +69,6 @@ const fn group(
     }
 }
 
-/// Reverse shows the layer it reverses; Stabilise shows everything else.
 pub const STABILISE_GROUPS: &[ParamGroup] = &[
     group("", &["stabilised"], Some(("mode", &[MODE_REVERSE])), false),
     group(
@@ -128,7 +119,6 @@ pub const STABILISE_GROUPS: &[ParamGroup] = &[
     ),
 ];
 
-/// Rows that grey out while another says they do nothing.
 pub const STABILISE_ENABLED_WHEN: &[EnabledWhen] = &[
     EnabledWhen {
         param: "analyse",
@@ -188,7 +178,6 @@ pub const STABILISE_ENABLED_WHEN: &[EnabledWhen] = &[
     },
 ];
 
-/// A row that only does anything while the edges are filled.
 const fn filled(param: &'static str) -> EnabledWhen {
     EnabledWhen {
         param,
@@ -197,7 +186,6 @@ const fn filled(param: &'static str) -> EnabledWhen {
     }
 }
 
-/// Stabilise's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "stabilise",
@@ -223,11 +211,9 @@ pub struct Stabilise {
     /// Analyse the clip again. A fresh effect starts one by itself.
     #[action(label = "Analyse")]
     pub analyse: (),
-    /// Stop a running analysis.
     #[action(label = "Cancel")]
     pub cancel: (),
 
-    /// Take the shake out, or put another layer's shake back on this one.
     #[choice(label = "Mode", options = MODE_OPTIONS, default = 0)]
     pub mode: u32,
 
@@ -258,11 +244,9 @@ pub struct Stabilise {
     #[slider(label = "Reference", min = 0.0, max = 60.0, default = 0.0, hard_min = 0.0, unit = Seconds)]
     pub reference: f32,
 
-    /// Hold the shot on the frame the playhead is on.
     #[action(label = "Use this frame")]
     pub use_frame: (),
 
-    /// What the frame's motion is fitted as.
     #[choice(label = "Method", options = METHOD_OPTIONS, default = METHOD_DEFAULT)]
     pub method: u32,
 
@@ -276,11 +260,9 @@ pub struct Stabilise {
     #[choice(label = "Rolling shutter", options = ROLLING_SHUTTER_OPTIONS, default = 0)]
     pub rolling_shutter: u32,
 
-    /// What the edges dragged into view become.
     #[choice(label = "Edges", options = EDGES_OPTIONS, default = EDGES_DEFAULT)]
     pub edges: u32,
 
-    /// The most the picture is scaled up to push the edges out of frame.
     #[slider(
         label = "Maximum scale",
         min = 100.0,
@@ -358,23 +340,18 @@ pub struct Stabilise {
     #[slider(label = "Trim bottom", min = 0.0, max = 200.0, default = 0.0, hard_min = 0.0, unit = Px)]
     pub trim_bottom: f32,
 
-    /// How many features the analysis follows. The trackers' row.
     #[choice(options = DENSITY_OPTIONS, default = DENSITY_DEFAULT, label = "Feature density")]
     pub density: u32,
 
-    /// Whether the layer's masks are left out of the analysis.
     #[toggle(default = true, label = "Use masks")]
     pub use_masks: bool,
 
-    /// Which frames Analyse reads - see [`crate::planes::FRAMES_OPTIONS`].
     #[choice(options = *crate::planes::FRAMES_OPTIONS, default = 0, label = "Frames")]
     pub frames: u32,
 
-    /// Draw the followed points over the picture.
     #[toggle(default = false, label = "Show points")]
     pub show_points: bool,
 
-    /// How big the points are drawn.
     #[slider(
         label = "Point size",
         min = 25.0,
@@ -442,8 +419,6 @@ pub fn dropped(inst: &EffectInstance, points: &[u8; 32]) -> Vec<u32> {
     out
 }
 
-/// `inst` with its dropped list set to `ids`, kept against the analysis whose
-/// points key is `points`.
 #[must_use]
 pub fn with_dropped(inst: &EffectInstance, ids: &[u32], points: &[u8; 32]) -> EffectInstance {
     let mut out = inst.clone();
@@ -463,7 +438,6 @@ pub fn with_dropped(inst: &EffectInstance, ids: &[u32], points: &[u8; 32]) -> Ef
     out
 }
 
-/// What a layer shows: a footage item, or a Precomp layer's nested comp.
 #[must_use]
 pub fn source_of(layer: &Layer) -> Option<Uuid> {
     match layer.kind {
@@ -510,8 +484,6 @@ fn push_map(
     );
 }
 
-/// What a Stabilise draws with: the plan, the analysis and the rows the plan
-/// was made from, and the rate the layer's source plays at now.
 pub(crate) struct Planned {
     pub plan: Arc<Plan>,
     pub filed: Filed,
@@ -545,21 +517,15 @@ pub(crate) fn planned(r: &Reader<'_>) -> Option<Planned> {
     })
 }
 
-/// What a read that never makes a plan finds: the answer from the plan in
-/// hand, the plan being made on a worker, or no analysis for what the layer
-/// shows.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Held<T> {
-    /// The answer, from the plan in hand.
     Ready(T),
     /// The plan is being made on a worker: ask again shortly.
     Making,
-    /// Nothing analysed for what the layer shows.
     Nothing,
 }
 
 impl<T> Held<T> {
-    /// The answer turned into another, the other two kept.
     pub fn map<U>(self, f: impl FnOnce(T) -> U) -> Held<U> {
         match self {
             Held::Ready(t) => Held::Ready(f(t)),
@@ -607,9 +573,6 @@ pub(crate) fn frame_at(r: &Reader<'_>, lt: f64) -> Option<(FrameMap, Shown, Plan
     Some((fm, s, p))
 }
 
-/// What a frame `inst` draws on `layer` of `comp` at layer time `lt` reads
-/// beyond its own rows, for the frame key: see
-/// [`crate::stabilise::resolve::stamp`].
 #[must_use]
 pub fn stamp(
     doc: &Arc<Document>,
@@ -621,9 +584,6 @@ pub fn stamp(
     crate::stabilise::resolve::stamp(doc, comp, layer, inst, lt)
 }
 
-/// The points `inst` followed on `layer`, showing at comp time `t`, where the
-/// stabilised picture draws them, with the analysis's generation: see
-/// [`crate::stabilise::points::points_at`].
 #[must_use]
 pub fn points_at(
     doc: &Arc<Document>,
@@ -701,7 +661,6 @@ pub fn dropping(
     out.dedup();
     Some((out, p.filed.points))
 }
-/// Stabilise's behaviour.
 pub struct StabiliseDef;
 
 impl EffectDef for StabiliseDef {
@@ -758,7 +717,6 @@ impl EffectDef for StabiliseDef {
         &[]
     }
 
-    /// The frames a Fill reads either side; nothing for any other setting.
     fn frames_needed_at(&self, inst: &EffectInstance, frame: f64, fps: f64) -> Option<Vec<i32>> {
         Some(crate::stabilise::fill::reads(inst, frame, fps))
     }
@@ -877,9 +835,6 @@ pub(crate) fn blend(map: &Mat3, amount: f64) -> Mat3 {
 mod tests {
     use super::*;
 
-    /// A dropped list is kept against the analysis it was made under: under
-    /// any other, as a copied effect, a layer re-analysed under other rows or
-    /// a Precomp rendered again has, it reads as empty.
     #[test]
     fn a_dropped_list_from_another_analysis_reads_as_empty() {
         let inst = crate::fx::builtins::instantiate(MATCH_NAME).unwrap();

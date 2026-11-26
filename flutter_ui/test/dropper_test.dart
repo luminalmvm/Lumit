@@ -81,7 +81,6 @@ void main() {
     /// moving the pointer inside one costs no engine call and still samples the
     /// right pixel.
     test('reads around the pointer, not around the window centre', () {
-      // White left of x = 40, black from there on.
       final w = windowOf((x, y) => x < 40 ? [255, 255, 255] : [0, 0, 0]);
       expect(sampleFromWindow(w, 1, 40, 20).r, closeTo(0.0, 1e-9));
       expect(sampleFromWindow(w, 1, 39, 20).r, closeTo(1.0, 1e-9),
@@ -91,8 +90,6 @@ void main() {
   });
 
   group('a part pick', () {
-    // A click on a part's blended edge names no part, and landing there used
-    // to let every pick go.
     test('takes the nearest part when the pixel under it names none', () {
       final window = windowOf((x, y) => x < 38 ? [0, 0, 7] : [9, 9, 9]);
       String? known(int part) => part == 7 ? 'Visor' : null;
@@ -110,14 +107,11 @@ void main() {
     /// composition's put every index outside the window, every cell clamped to
     /// the same edge pixel, and the magnifier showed a flat colour.
     test('a point becomes a pixel of the reply raster, not of the comp', () {
-      // A 1920x1080 comp read at half resolution: the reply is 960x540.
       final half = windowOf((x, y) => [0, 0, 0],
           side: 129, cx: 480, cy: 270, width: 960, height: 540);
 
       expect(windowPixelAt(half, 0.5, 0.5), (480, 270),
           reason: 'the middle of the picture is the middle of THIS raster');
-      // The comp-pixel answer would have been (960, 540) — which is not even
-      // inside the picture, let alone inside the window.
       expect(windowCovers(half, 960, 540), isFalse);
       expect(windowCovers(half, 480, 270), isTrue);
     });
@@ -133,16 +127,10 @@ void main() {
 
   group('the viewfinder', () {
   group('where it sits', () {
-    // A window with plenty of room, and one with the pointer hard against its
-    // far corner.
     const window = Rect.fromLTWH(0, 0, 1000, 800);
     final w = dropperViewfinderSize.width;
     final h = dropperViewfinderSize.height;
 
-    /// The window's edge is the one it must answer to — an application cannot
-    /// paint outside its own window. It answers the way a tooltip does: the
-    /// same distance on the *other* side of the pointer, so it never creeps
-    /// over the pixel being read.
     test('flips to the other side of the pointer at the window edge', () {
       const at = Offset(990, 790);
       final origin = dropperViewfinderOrigin(at, window);
@@ -150,7 +138,6 @@ void main() {
       expect(origin.dy, at.dy - dropperViewfinderOffset.dy - h);
       expect(origin.dx + w, lessThanOrEqualTo(window.right));
       expect(origin.dy + h, lessThanOrEqualTo(window.bottom));
-      // The gap from the pointer is the one it has everywhere else.
       expect(at.dx - (origin.dx + w), dropperViewfinderOffset.dx);
       expect(at.dy - (origin.dy + h), dropperViewfinderOffset.dy);
     });

@@ -223,8 +223,6 @@ pub struct ShapeItem {
     pub fill_hidden: bool,
     #[serde(default, skip_serializing_if = "is_shown")]
     pub stroke_hidden: bool,
-    /// Unknown fields from newer Lumit versions, preserved on load/save
-    /// (docs/10-FILE-FORMAT.md §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -258,8 +256,6 @@ fn half() -> Property {
     Property::fixed(50.0)
 }
 
-/// A colour part way along a gradient, between the fill at its start and the
-/// gradient colour at its end.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GradientStop {
     /// How far along the ramp it sits, per cent. Two stops at one place make
@@ -291,7 +287,6 @@ pub(super) fn is_shown(hidden: &bool) -> bool {
 }
 
 impl ShapeItem {
-    /// A filled item with no outline — what a shape tool makes.
     pub fn filled(name: impl Into<String>, path: BezierPath, fill: LinearColour) -> Self {
         Self {
             id: Uuid::now_v7(),
@@ -326,13 +321,10 @@ impl ShapeItem {
         }
     }
 
-    /// The fill as it is drawn: `None` when there is none or its eye is off.
     pub fn fill_shown(&self) -> Option<&[Property; 4]> {
         self.fill.as_ref().filter(|_| !self.fill_hidden)
     }
 
-    /// The outline's colour as it is drawn: `None` when there is none or its
-    /// eye is off.
     pub fn stroke_shown(&self) -> Option<&[Property; 4]> {
         self.stroke.as_ref().filter(|_| !self.stroke_hidden)
     }
@@ -350,8 +342,6 @@ impl ShapeItem {
         }
     }
 
-    /// Whether this item's shape moves: keyframed, or made from numbers that
-    /// move.
     pub fn path_is_animated(&self) -> bool {
         match &self.primitive {
             Some(p) => p.is_animated(),
@@ -720,9 +710,6 @@ pub fn rasterise_contents_in(
                     &joined
                 };
                 let coverage = crate::mask::rasterise_paths(filled, w, h, sx, sy, true);
-                // A gradient fill is the same coverage painted with a
-                // colour that changes across it; the flat fill is the same
-                // walk with the colour worked out once.
                 match item.ramp_at(t, &to_box, (sx, sy), display) {
                     None => {
                         let colour = crate::pixels::solid_rgba(fill);
@@ -788,13 +775,7 @@ pub fn rasterise_contents_in(
                         // half a pixel of falloff whatever this says, which is the
                         // anti-aliasing rather than a soft brush.
                         hardness: 1.0,
-                        // A vector outline is round-capped and round-joined, which
-                        // is what the round brush already draws.
                         shape: crate::paint::BrushShape::Round,
-                        // The item's own opacity, faded by this copy's share of the
-                        // repeater's ramp — the same number the fill above
-                        // multiplied its coverage by, in the per cent the brush
-                        // reads it in.
                         opacity: item.opacity.value_at(t) * ramp,
                         // A vector outline is drawn whole; a shape item's own trim
                         // paths are a shape-layer feature, not the brush's,

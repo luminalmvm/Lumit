@@ -22,7 +22,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Smooth's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "smooth",
@@ -53,22 +52,8 @@ pub struct Smooth {
     pub time: f32,
 }
 
-/// The port the smoothed number leaves by, and the input port it reads.
 pub const VALUE_PORT: &str = "value";
 
-/// How many times the input is read across the window.
-///
-/// ponytail: a fixed nine-tap box average, and a box is a blunt filter. Nine
-/// taps is cheap enough to run per frame, but fixed taps across a window the
-/// user sets means the sampling thins as the window opens: the taps sit
-/// `time / 8` apart, so anything past `8 / fps` seconds — 0.13 s at 60 —
-/// samples wider than a frame and the average starts skipping detail rather
-/// than averaging it. At the slider's own maximum of 2 s the taps are a
-/// quarter of a second apart. The trigger is the symptom that comes with it:
-/// a driven parameter that steps or jitters at a long Time where the input is
-/// moving fast, which a user meets by turning Time up and getting *less*
-/// smooth, not more. The fix is to weight the taps — a triangle or Gaussian
-/// over the same nine — before it is to read the input more times.
 const TAPS: u32 = 9;
 
 /// Smooth's behaviour.
@@ -96,7 +81,6 @@ impl EffectDef for SmoothDef {
     }
 
     fn driver_window(&self, p: crate::fx::params::Params<'_>) -> f64 {
-        // Centred, so it reaches half the window either side of the frame.
         f64::from(Smooth::read(p).time.max(0.0)) / 2.0
     }
 
@@ -113,7 +97,7 @@ impl EffectDef for SmoothDef {
         let mut sum = 0.0f64;
         let mut n = 0u32;
         for i in 0..TAPS {
-            let f = f64::from(i) / f64::from(TAPS - 1); // 0..=1
+            let f = f64::from(i) / f64::from(TAPS - 1);
             let t = cx.lt - half + f * 2.0 * half;
             match (cx.sample_input)(VALUE_PORT, t) {
                 Some(v) => {

@@ -1,5 +1,3 @@
-//! Particulate's groups of rows and when each row is live.
-
 use crate::fx::schema::{EnabledCond, EnabledWhen, ParamGroup};
 
 const fn group(label: &'static str, params: &'static [&'static str]) -> ParamGroup {
@@ -333,7 +331,6 @@ pub const PARTICULATE_ENABLED_WHEN: &[EnabledWhen] = &[
         on: "ground",
         cond: EnabledCond::BoolIs(true),
     },
-    // Each burst row means something only in the bursts that read it.
     EnabledWhen {
         param: "burst_count",
         on: "burst",
@@ -354,7 +351,6 @@ pub const PARTICULATE_ENABLED_WHEN: &[EnabledWhen] = &[
         on: "edge",
         cond: EnabledCond::ChoiceIsNot(0),
     },
-    // Following the shape leaves no mask to choose.
     EnabledWhen {
         param: "mask_path",
         on: "path_from",
@@ -484,7 +480,6 @@ pub const PARTICULATE_ENABLED_WHEN: &[EnabledWhen] = &[
         on: "on_contact",
         cond: EnabledCond::ChoiceIs(0),
     },
-    // Only a particle that carries on along the surface slows on it.
     EnabledWhen {
         param: "friction",
         on: "on_contact",
@@ -497,8 +492,6 @@ pub const PARTICULATE_ENABLED_WHEN: &[EnabledWhen] = &[
     },
 ];
 
-/// Whether `inst` is a Particulate drawn on its layer rather than in the
-/// scene: the only place the older walk and Persistence apply.
 #[must_use]
 pub fn on_its_layer(inst: &crate::model::EffectInstance) -> bool {
     inst.effect.match_name == "particulate"
@@ -508,8 +501,6 @@ pub fn on_its_layer(inst: &crate::model::EffectInstance) -> bool {
         )
 }
 
-/// Whether `e` draws in the comp's scene: a Particulate with its particles
-/// there, or Depth points, which is never anywhere else.
 #[must_use]
 pub fn is_scene(e: &crate::model::EffectInstance) -> bool {
     e.enabled
@@ -567,7 +558,6 @@ mod tests {
     use crate::model::{EffectValue, LayerKind};
     use crate::ops::Op;
 
-    /// In the scene arriving by any route turns a 2D layer's 3D switch on, once.
     #[test]
     fn in_the_scene_puts_a_2d_layer_in_3d() {
         let layer = crate::edits::base_layer(
@@ -588,7 +578,6 @@ mod tests {
             panic!("a 2D layer was left flat");
         };
         assert!(matches!(ops[1], Op::SetLayerThreeD { three_d: true, .. }));
-        // Already on the layer, it doesn't turn 3D back on.
         let mut had = layer.clone();
         had.effects = vec![fx.clone()];
         assert!(matches!(

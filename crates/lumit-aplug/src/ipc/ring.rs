@@ -32,17 +32,14 @@ use thiserror::Error;
 use crate::ipc::proto::RingSpec;
 use crate::process::INTERLEAVED_LEN;
 
-/// The bytes at the head of every slot.
 pub const HEADER_BYTES: usize = 32;
 
-/// The four bytes that say a slot has been written by this protocol at all.
 const HEADER_MAGIC: u32 = 0x4c41_5544;
 
 /// The header layout's own version, so a slot written by another build of the
 /// protocol reads as empty rather than as plausible.
 const HEADER_VERSION: u32 = 1;
 
-/// How many bytes one slot is: a whole block, header included.
 pub const SLOT_BYTES: u64 =
     HEADER_BYTES as u64 + (INTERLEAVED_LEN * std::mem::size_of::<f32>()) as u64;
 
@@ -54,27 +51,20 @@ pub const SLOT_BYTES: u64 =
 /// kilobytes.
 pub const RING_SLOTS: u32 = 32;
 
-/// What can go wrong with the ring.
 #[derive(Debug, Error)]
 pub enum RingError {
-    /// The backing file.
     #[error("the block ring could not be opened: {0}")]
     Io(#[from] std::io::Error),
-    /// A slot number that is not in the ring.
     #[error("slot {0} is not in the block ring")]
     NoSuchSlot(u32),
-    /// More samples than a slot holds.
     #[error("a {0}-sample block does not fit a ring slot")]
     TooBig(usize),
-    /// A slot that was never written, or was written by something else.
     #[error("the block ring slot holds no block")]
     Empty,
-    /// The hash in the header does not match the bytes after it.
     #[error("a block crossed the ring and arrived changed")]
     Corrupt,
 }
 
-/// One slot's header, as values rather than bytes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct BlockHeader {
     /// How many interleaved samples follow the header. A short block is the
@@ -86,7 +76,6 @@ pub struct BlockHeader {
 }
 
 impl BlockHeader {
-    /// The header as the bytes that go at the head of a slot.
     fn to_bytes(self) -> [u8; HEADER_BYTES] {
         let mut out = [0_u8; HEADER_BYTES];
         let mut put = |offset: usize, bytes: &[u8]| {
@@ -101,8 +90,6 @@ impl BlockHeader {
         out
     }
 
-    /// The header a slot begins with, or [`RingError::Empty`] if it begins with
-    /// anything else.
     fn from_bytes(bytes: &[u8]) -> Result<Self, RingError> {
         let u32_at = |offset: usize| -> Option<u32> {
             let slice: [u8; 4] = bytes.get(offset..offset + 4)?.try_into().ok()?;
@@ -135,7 +122,6 @@ pub fn hash_bytes(bytes: &[u8]) -> u64 {
     hash
 }
 
-/// The ring, mapped into this process.
 pub struct Ring {
     spec: RingSpec,
     map: MmapMut,
@@ -166,11 +152,6 @@ impl Drop for Ring {
 }
 
 impl Ring {
-    /// Make a ring and map it. Called once, when a broker is spawned.
-    ///
-    /// # Errors
-    ///
-    /// [`RingError::Io`].
     pub fn create(path: &Path) -> Result<Self, RingError> {
         let spec = RingSpec {
             path: path.to_string_lossy().into_owned(),
@@ -234,11 +215,6 @@ impl Ring {
         let _ = std::fs::remove_file(path);
     }
 
-    /// Map a ring somebody else made. Called once, in the broker.
-    ///
-    /// # Errors
-    ///
-    /// [`RingError::Io`].
     pub fn open(spec: &RingSpec) -> Result<Self, RingError> {
         let file = OpenOptions::new().read(true).write(true).open(&spec.path)?;
         let map = map_file(&file)?;
@@ -250,19 +226,16 @@ impl Ring {
         })
     }
 
-    /// The layout, to send to the other side.
     #[must_use]
     pub const fn spec(&self) -> &RingSpec {
         &self.spec
     }
 
-    /// How many slots there are.
     #[must_use]
     pub const fn slots(&self) -> u32 {
         self.spec.slots
     }
 
-    /// Where one slot starts and ends.
     fn range(&self, slot: u32) -> Result<(usize, usize), RingError> {
         if slot >= self.spec.slots {
             return Err(RingError::NoSuchSlot(slot));
@@ -281,12 +254,6 @@ impl Ring {
         Ok((start, start.saturating_add(length)))
     }
 
-    /// Put one block of interleaved stereo in a slot.
-    ///
-    /// # Errors
-    ///
-    /// [`RingError::TooBig`] for more samples than a block, and
-    /// [`RingError::NoSuchSlot`] for a slot that is not there.
     pub fn write_block(&mut self, slot: u32, samples: &[f32]) -> Result<BlockHeader, RingError> {
         if samples.len() > INTERLEAVED_LEN {
             return Err(RingError::TooBig(samples.len()));
@@ -366,7 +333,6 @@ impl Ring {
     }
 }
 
-/// Map a file into this process, shared with everyone else who maps it.
 fn map_file(file: &File) -> Result<MmapMut, RingError> {
     // SAFETY: the file is one this process just made or was told the name of by
     // the process that made it; nothing else writes it except the broker at the

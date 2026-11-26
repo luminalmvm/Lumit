@@ -1,17 +1,11 @@
-//! Models built in code, for tests and the bench: a box, a ball and a
-//! chequered picture to wrap round them.
-
 use crate::{
     Bounds, Channel, Clip, Image, Interpolation, Material, Mesh, ModelScene, MorphTarget, Node,
     Path, Primitive, Skin, Texture,
 };
 
-/// A box `size` metres on a side round the origin, one picture square to a
-/// face.
 #[must_use]
 pub fn cube(size: f32, material: Option<usize>) -> Primitive {
     let h = size * 0.5;
-    // Each face's normal, the way its pictures run across, and up it.
     let faces: [[f32; 9]; 6] = [
         [1., 0., 0., 0., 0., -1., 0., 1., 0.],
         [-1., 0., 0., 0., 0., 1., 0., 1., 0.],
@@ -81,7 +75,6 @@ pub fn bending(segments: u32, rings: u32, joints: usize) -> ModelScene {
     let joints = joints.max(2);
     let mut ball = sphere(1.0, segments, rings, None);
     let step = 2.0 / (joints - 1) as f32;
-    // Each vertex hangs from the two bones either side of it.
     for q in &ball.positions {
         let along = ((q[1] + 1.0) / step).clamp(0.0, (joints - 1) as f32);
         let low = (along as usize).min(joints - 2);
@@ -101,7 +94,6 @@ pub fn bending(segments: u32, rings: u32, joints: usize) -> ModelScene {
         scale: [1.0; 3],
         ..Node::default()
     };
-    // The mesh's node, then the bones in a chain, each a step up from the last.
     let mut nodes = vec![Node {
         mesh: Some(0),
         skin: Some(0),
@@ -173,7 +165,6 @@ pub fn bending(segments: u32, rings: u32, joints: usize) -> ModelScene {
     scene
 }
 
-/// A `size` pixel square of `cells` by `cells` squares, white and `ink`.
 #[must_use]
 pub fn chequer(size: u32, cells: u32, ink: [u8; 4]) -> Image {
     let cell = (size / cells.max(1)).max(1);
@@ -191,8 +182,6 @@ pub fn chequer(size: u32, cells: u32, ink: [u8; 4]) -> Image {
     }
 }
 
-/// A model of `parts`, each its own mesh and node placed at its offset in
-/// metres.
 #[must_use]
 pub fn scene(
     parts: Vec<(Primitive, [f32; 3])>,

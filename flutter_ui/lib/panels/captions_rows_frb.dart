@@ -17,8 +17,6 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'caption_layers.dart';
 
-/// One caption as the list draws it: the caption, where it sits in frames,
-/// and its words cut into the lines it reads in.
 class CaptionRow {
   final BridgeCue cue;
   final int start;
@@ -53,7 +51,6 @@ class CaptionRow {
   int get index => cue.index;
 }
 
-/// The room a row's text and times take.
 const double captionLineHeight = 15;
 const double _pad = 5;
 
@@ -67,7 +64,6 @@ class CaptionRowHeights {
   TextStyle? _style;
   TextScaler _scaler = TextScaler.noScaling;
 
-  /// The words' column is [width] wide, in [style] at [scaler].
   void lay(double width, TextStyle style, TextScaler scaler) {
     if (width == _width && style == _style && scaler == _scaler) return;
     _known.clear();
@@ -107,9 +103,6 @@ class CaptionRowHeights {
   }
 }
 
-/// A caption's words as its row draws them: the speaker label in [label],
-/// emphasised words in [accent], a line to a line, and what a find has found
-/// under [wash].
 TextSpan captionRowSpan(CaptionRow row, TextStyle style,
     {required TextStyle label,
     required TextStyle accent,
@@ -130,8 +123,6 @@ TextSpan captionRowSpan(CaptionRow row, TextStyle style,
         offset++;
       }
       final base = word.emphasis ? accent : style;
-      // A found stretch is washed letter by letter, so a find across two
-      // words or inside one reads as it was typed.
       var run = StringBuffer();
       bool? washed;
       void flush() {
@@ -180,11 +171,9 @@ int? captionWordAt(RenderParagraph paragraph, CaptionRow row, Offset global) {
   return null;
 }
 
-/// The times' face: mono, small and quiet.
 TextStyle captionTimeStyle(LumitTheme t) =>
     t.mono.copyWith(fontSize: 10, color: t.textMuted, height: 1.5);
 
-/// Where a find term falls in [text], as start offsets.
 List<int> captionMatches(String text, String find,
     {required bool matchCase, required bool wholeWord}) {
   if (find.isEmpty) return const [];
@@ -207,7 +196,6 @@ List<int> captionMatches(String text, String find,
   return out;
 }
 
-/// One caption's row.
 class CaptionRowView extends StatefulWidget {
   final CaptionRow row;
   final (int, int) fps;
@@ -223,19 +211,14 @@ class CaptionRowView extends StatefulWidget {
   final bool matchCase;
   final bool wholeWord;
 
-  /// The field typed into in place of the words, when this row is being
-  /// typed into, and the one for a time being changed.
   final Widget? typing;
   final Widget? timing;
 
-  /// Which time [timing] stands in for: the end, or the start.
   final bool timingEnd;
   final void Function(TapDownDetails) onTapDown;
   final VoidCallback onDoubleTap;
   final void Function(bool end) onTimeDoubleTap;
 
-  /// A right press at [at], over word [word] of the caption's words or off
-  /// them.
   final void Function(Offset at, int? word) onMenu;
 
   const CaptionRowView({
@@ -265,7 +248,6 @@ class CaptionRowView extends StatefulWidget {
 }
 
 class _CaptionRowViewState extends State<CaptionRowView> {
-  /// The words as drawn, to find the one under a right press.
   final GlobalKey _words = GlobalKey();
 
   String _time(int frame) => timecodeOfRate(
@@ -345,7 +327,6 @@ class _CaptionRowViewState extends State<CaptionRowView> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // The caption being said, marked down its edge.
               Container(
                 width: 2,
                 margin: const EdgeInsets.symmetric(vertical: 2),
@@ -395,7 +376,6 @@ class _CaptionRowViewState extends State<CaptionRowView> {
   }
 }
 
-/// The words' face, in a row and in the field a caption is typed into.
 TextStyle captionWordStyle(LumitTheme t) =>
     t.body.copyWith(color: t.textPrimary, height: 15 / 11);
 

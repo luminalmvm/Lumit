@@ -1,5 +1,3 @@
-//! Particulate's GPU pass, kept beside the dispatch table rather than in it.
-
 use lumit_core::fx::effects::particulate::sprite_shape::{self, SpriteShape};
 use lumit_core::fx::params::Params;
 use lumit_core::fx::registry::EffectMetadata;
@@ -198,8 +196,6 @@ impl Particulate {
         (Some(tex), true)
     }
 
-    /// The GPU op this frame's Particulate draws, handed to `f` with the
-    /// sprite it stamps, if any.
     pub(crate) fn with_op<R>(
         gpu: Option<(&FxEngine, &GpuContext)>,
         p: Params<'_>,

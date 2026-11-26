@@ -61,28 +61,20 @@ use lumit_core::fx::audio_chain::Denormals;
 /// calm badge on the layer.
 #[derive(Debug, Error)]
 pub enum HostError {
-    /// The `.clap` file itself was the problem.
     #[error(transparent)]
     Module(#[from] ModuleError),
-    /// The module has no plugin under that id.
     #[error("the module has no plugin called {0:?}")]
     NoSuchPlugin(String),
-    /// The plugin id holds a nul byte, so it cannot cross the C boundary.
     #[error("the plugin id is not a C string")]
     BadId,
-    /// The factory would not build it.
     #[error("the factory would not create the plugin")]
     NotCreated,
-    /// `clap_plugin.init` answered false.
     #[error("the plugin refused to initialise")]
     InitRefused,
-    /// The plugin does not offer an extension this host needs.
     #[error("the plugin implements no {0} extension")]
     NoExtension(&'static str),
-    /// `activate` answered false.
     #[error("the plugin refused to activate in blocks of {BLOCK_FRAMES}")]
     ActivateRefused,
-    /// `start_processing` answered false.
     #[error("the plugin refused to start processing")]
     StartRefused,
     /// A VST3 plugin would not take a stereo pair on its main buses. v1 hosts
@@ -90,20 +82,14 @@ pub enum HostError {
     /// a guess (docs/impl/audio-plugins.md §4).
     #[error("the plugin would not take a stereo bus arrangement")]
     BusRefused,
-    /// `process` answered `CLAP_PROCESS_ERROR`.
     #[error("the plugin answered its block with an error")]
     ProcessFailed,
-    /// `state.load` answered false — a blob from another version, most likely.
     #[error("the plugin refused the saved state")]
     StateRefused,
-    /// `state.save` answered false.
     #[error("the plugin would not save its state")]
     StateUnsaved,
-    /// A call that must happen while deactivated was made while processing
-    /// (§9: never call state or describe functions while processing).
     #[error("that call may not be made while the plugin is processing")]
     WhileProcessing,
-    /// A block was asked for before `start_processing`.
     #[error("the plugin is not processing")]
     NotProcessing,
     /// The block did not come back at all: the plugin crashed, hung past its
@@ -126,9 +112,7 @@ pub struct HostFlags {
     /// The plugin wants to be deactivated and activated again — how CLAP says
     /// "my latency changed" (§4). AP3 acts on it; AP1 records it.
     pub restart: AtomicBool,
-    /// The plugin wants `process` called even though it said it was asleep.
     pub wants_process: AtomicBool,
-    /// The plugin wants `on_main_thread` called.
     pub wants_callback: AtomicBool,
 }
 
@@ -142,7 +126,6 @@ pub struct HostBox {
 }
 
 impl HostBox {
-    /// A host to hand one plugin.
     fn new() -> Box<Self> {
         let mut boxed = Box::new(Self {
             host: clap_host {
@@ -163,7 +146,6 @@ impl HostBox {
         boxed
     }
 
-    /// What the plugin has asked for since it was created.
     #[must_use]
     pub fn flags(&self) -> &HostFlags {
         &self.flags
@@ -223,12 +205,10 @@ unsafe extern "C" fn host_request_callback(host: *const clap_host) {
     }
 }
 
-/// One live plugin.
 pub struct Instance {
     /// Kept so the module outlives the plugin: unloading a library with a live
     /// plugin in it is the crash nobody can read a stack trace for.
     module: Arc<Module>,
-    /// Kept so the host structure outlives the plugin.
     host: Box<HostBox>,
     plugin: *const clap_plugin,
     activated: bool,
@@ -247,13 +227,6 @@ pub struct Instance {
 unsafe impl Send for Instance {}
 
 impl Instance {
-    /// Create one plugin from a module and initialise it.
-    ///
-    /// # Errors
-    ///
-    /// [`HostError::NoSuchPlugin`] when the module does not declare that id,
-    /// [`HostError::NotCreated`] when the factory refuses, and
-    /// [`HostError::InitRefused`] when the plugin will not start.
     pub fn create(module: Arc<Module>, plugin_id: &str) -> Result<Self, HostError> {
         if !module.entries().iter().any(|entry| entry.id == plugin_id) {
             return Err(HostError::NoSuchPlugin(plugin_id.to_owned()));
@@ -282,19 +255,16 @@ impl Instance {
         Ok(instance)
     }
 
-    /// The flags this plugin has raised.
     #[must_use]
     pub fn host_flags(&self) -> &HostFlags {
         self.host.flags()
     }
 
-    /// The module this plugin came out of.
     #[must_use]
     pub fn module(&self) -> &Arc<Module> {
         &self.module
     }
 
-    /// The plugin's own vtable.
     fn vtable(&self) -> &clap_plugin {
         // SAFETY: the factory answered with a live plugin and nothing has
         // destroyed it: `destroy` runs in `Drop` and nulls nothing after,
@@ -302,7 +272,6 @@ impl Instance {
         unsafe { &*self.plugin }
     }
 
-    /// One extension, or null.
     fn extension(&self, id: &CStr) -> *const c_void {
         let Some(get) = self.vtable().get_extension else {
             return std::ptr::null();
@@ -312,7 +281,6 @@ impl Instance {
         unsafe { get(self.plugin, id.as_ptr()) }
     }
 
-    /// The plugin's audio ports, both directions.
     #[must_use]
     pub fn ports(&self) -> Ports {
         let table = self
@@ -356,7 +324,6 @@ impl Instance {
         ports
     }
 
-    /// Every parameter the plugin declares, in its own order.
     #[must_use]
     pub fn params(&self) -> Vec<ParamDescription> {
         let table = self.extension(CLAP_EXT_PARAMS).cast::<clap_plugin_params>();
@@ -392,7 +359,6 @@ impl Instance {
         params
     }
 
-    /// One parameter's live value, straight from the plugin.
     #[must_use]
     pub fn param_value(&self, id: u32) -> Option<f64> {
         let table = self.extension(CLAP_EXT_PARAMS).cast::<clap_plugin_params>();
@@ -458,13 +424,6 @@ impl Instance {
         unsafe { set(self.plugin, mode) }
     }
 
-    /// Hand the plugin the blob the project saved.
-    ///
-    /// # Errors
-    ///
-    /// [`HostError::WhileProcessing`] if the plugin is mid-stream — the trap
-    /// §9 names — [`HostError::NoExtension`] if it saves no state, and
-    /// [`HostError::StateRefused`] if it will not take this blob.
     pub fn load_state(&mut self, bytes: &[u8]) -> Result<(), HostError> {
         if self.processing {
             return Err(HostError::WhileProcessing);
@@ -582,12 +541,6 @@ impl Instance {
         Ok(())
     }
 
-    /// Enter the processing state.
-    ///
-    /// # Errors
-    ///
-    /// [`HostError::StartRefused`], including when the plugin was never
-    /// activated.
     pub fn start_processing(&mut self) -> Result<(), HostError> {
         if self.processing {
             return Ok(());
@@ -653,8 +606,6 @@ impl Instance {
         let call = clap_process {
             steady_time: steady,
             frames_count: u32::try_from(BLOCK_FRAMES).unwrap_or(u32::MAX),
-            // No transport in v1: tempo is supplied only where the comp has a
-            // confirmed BPM grid (§3), and that grid arrives with the mix seam.
             transport: std::ptr::null(),
             audio_inputs: &incoming_audio,
             audio_outputs: &mut outgoing_audio,
@@ -678,7 +629,6 @@ impl Instance {
         Ok(())
     }
 
-    /// Leave the processing state.
     pub fn stop_processing(&mut self) {
         if !self.processing {
             return;
@@ -720,7 +670,6 @@ impl Drop for Instance {
     }
 }
 
-/// An empty port description for the plugin to fill in.
 fn blank_port() -> clap_audio_port_info {
     clap_audio_port_info {
         id: 0,
@@ -732,7 +681,6 @@ fn blank_port() -> clap_audio_port_info {
     }
 }
 
-/// An empty parameter description for the plugin to fill in.
 fn blank_param() -> clap_param_info {
     clap_param_info {
         id: 0,
@@ -746,9 +694,6 @@ fn blank_param() -> clap_param_info {
     }
 }
 
-// ---------------------------------------------------------------- streams --
-
-/// Where a state load has got to in the blob.
 struct ReadCursor<'a> {
     bytes: &'a [u8],
     read: usize,

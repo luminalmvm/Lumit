@@ -29,52 +29,34 @@ use clap_sys::plugin::clap_plugin;
 use clap_sys::version::clap_version_is_compatible;
 use thiserror::Error;
 
-/// Why a `.clap` file could not be opened, or held nothing usable.
 #[derive(Debug, Error)]
 pub enum ModuleError {
-    /// The operating system would not load the library at all.
     #[error("the module did not load ({0})")]
     NotLoaded(String),
-    /// The library loaded but exports no `clap_entry`, so it is not a CLAP
-    /// plugin however it is named.
     #[error("the module exports no clap_entry")]
     NoEntry,
-    /// The entry declares a CLAP version this host cannot speak.
     #[error("the module declares CLAP {major}.{minor}.{revision}, which this host cannot speak")]
     Incompatible {
-        /// The major version it declared.
         major: u32,
-        /// The minor version it declared.
         minor: u32,
-        /// The revision it declared.
         revision: u32,
     },
     /// `clap_entry.init` answered false. The plugin has refused to start, and
     /// per the spec nothing else in the module may be called.
     #[error("the module refused to initialise")]
     InitRefused,
-    /// The entry has no plugin factory — a preset-provider-only module, or a
-    /// broken one.
     #[error("the module offers no plugin factory")]
     NoFactory,
-    /// The path is not valid for the platform's loader.
     #[error("the module path cannot be passed to the loader")]
     BadPath,
 }
 
-/// What one plugin in a module calls itself.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ModuleEntry {
-    /// The plugin's own stable identifier — the key everything else uses.
     pub id: String,
-    /// The name a person sees.
     pub name: String,
-    /// Who wrote it.
     pub vendor: String,
-    /// Its own version string, verbatim. CLAP does not say what shape it takes.
     pub version: String,
-    /// The feature words it declares (`audio-effect`, `instrument`, `stereo`,
-    /// …), which is how a plugin says what family it belongs to.
     pub features: Vec<String>,
 }
 
@@ -106,14 +88,6 @@ unsafe impl Send for Module {}
 unsafe impl Sync for Module {}
 
 impl Module {
-    /// Open a `.clap` file, start it, and read its plugin list.
-    ///
-    /// # Errors
-    ///
-    /// Every way a third party's file can disappoint us: it will not load, it
-    /// is not a CLAP module, it speaks a CLAP we do not, it refuses to start,
-    /// or it offers no plugins. All of them are report lines, never dialogues
-    /// (docs/12 §2.6).
     pub fn open(path: &Path) -> Result<Self, ModuleError> {
         // SAFETY: loading a library runs its initialisers, which is inherently
         // third-party code. There is no safe spelling of this; the isolation
@@ -180,13 +154,11 @@ impl Module {
         Ok(module)
     }
 
-    /// The plugins this module declares, in the factory's own order.
     #[must_use]
     pub fn entries(&self) -> &[ModuleEntry] {
         &self.entries
     }
 
-    /// The file this module came out of.
     #[must_use]
     pub fn path(&self) -> &Path {
         &self.path
@@ -213,7 +185,6 @@ impl Module {
         (!plugin.is_null()).then_some(plugin)
     }
 
-    /// Walk the factory's list once.
     fn read_entries(&self) -> Vec<ModuleEntry> {
         // SAFETY: as `create`.
         let factory = unsafe { &*self.factory };
@@ -314,10 +285,6 @@ unsafe fn texts(list: *const *const c_char) -> Vec<String> {
         // SAFETY: a non-null entry in that array is a nul-terminated string.
         out.push(unsafe { text(item) });
         index = index.saturating_add(1);
-        // A plugin with a missing terminator would walk us off the end. Stop
-        // at a number no honest plugin reaches.
-        // ponytail: a fixed cap rather than a length the API does not carry;
-        // there is no better answer available at this boundary.
         if index > 64 {
             return out;
         }

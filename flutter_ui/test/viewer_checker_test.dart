@@ -14,13 +14,10 @@ import 'package:lumit_flutter/panels/viewer_panel_frb.dart';
 void main() {
   const panel = Size(900, 600);
 
-  /// Roughly how many 8-pixel squares an area of this size costs to paint.
   double squares(Rect area) => area.isEmpty ? 0 : (area.width / 8) * (area.height / 8);
 
   group('The transparency board', () {
     test('a picture larger than the panel is painted only where it shows', () {
-      // 800 % on an HD composition, centred: the picture is far bigger than the
-      // panel in both directions.
       final huge = const Rect.fromLTWH(-7000, -4000, 15360, 8640);
       final area = checkerArea(huge, panel);
       expect(area, Offset.zero & panel,

@@ -41,7 +41,6 @@ pub(super) fn path(
             lumit_core::shape::outline_at(contents, lt)
         }
         (SOURCE_TEXT, LayerKind::Text { document }) => {
-            // The words and the path the layer's own picture is drawn with.
             let words = document.resolved_text(Arc::new(ExpressionContext {
                 document: doc.clone(),
                 comp: Some(comp.id),

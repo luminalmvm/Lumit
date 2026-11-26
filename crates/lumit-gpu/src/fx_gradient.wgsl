@@ -12,7 +12,7 @@
 struct Params {
     start_axis: vec4<f32>,  // xy = start (raster px), zw = end − start
     c0: vec4<f32>,          // start colour, straight alpha
-    c1: vec4<f32>,          // end colour
+    c1: vec4<f32>,
     inv_len2: f32,          // 1 ÷ |axis|², floored
     inv_len: f32,           // 1 ÷ |axis|, floored
     scatter: f32,           // 0..1 dither of t
@@ -74,8 +74,6 @@ fn back(c: vec4<f32>) -> vec4<f32> {
     return vec4<f32>(select(hi, c.rgb / 12.92, c.rgb <= vec3<f32>(0.04045)), c.a);
 }
 
-// == lumit_core::fx::cpu::gradient::gradient_ramp: Start colour, the colours in
-// between that are in use, End colour.
 fn ramp(t: f32) -> vec4<f32> {
     var at = 0.0;
     var prev = shown(p.c0);

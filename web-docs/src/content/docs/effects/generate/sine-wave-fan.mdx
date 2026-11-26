@@ -1,0 +1,53 @@
+---
+title: Sine wave fan
+description: "Rays fanning out from a centre, bent by a wave."
+---
+
+Sine wave fan is a **Textures** effect.
+
+## What it does
+
+Draws rays fanning out from **Centre**, each bent from side to side by a sine wave that runs
+outward. **Movement** slides the wave outward, and comes back to the start every 360°.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Rays** | Slider, whole numbers | 1 to 128 | 16 | - |
+| **Rotation** | Dial | Any angle | 0° | Degrees |
+| **Wave amount** | Slider | 0 to 100 | 30 | - |
+| **Wave length** | Slider | 4 to 4000; any value by typing | 300 | Pixels at composition size |
+| **Stripes** | Slider | 0.25 to 16; any value by typing | 1 | - |
+| **Movement** | Dial | Any angle | 0° | Degrees |
+| **Intensity** | Slider | 0 to 100 | 50 | - |
+| **Colour** | Colour | Each channel 0 to 1 | 1, 0.85, 0.3 | - |
+| **Background colour** | Colour | Each channel 0 to 1 | 0.006, 0.003, 0.015 | - |
+| **Centre** | Point | Any position | 960, 540 | Pixels at composition size |
+| **Paint** | Dropdown | Inside layer · Whole frame | Inside layer | - |
+
+## What each control does
+
+- **Rays**: how many rays there are.
+- **Rotation**: turns the fan.
+- **Wave amount**: how far the wave bends each ray, up to half a ray's width either way.
+- **Wave length**: the distance from Centre that Stripes is counted over.
+- **Stripes**: how many waves fit along Wave length.
+- **Movement**: slides the wave outward.
+- **Intensity**: narrows the rays, from soft bands to thin lines.
+- **Colour**: the colour of the rays.
+- **Background colour**: the colour between them.
+- **Centre**: the point the rays fan out from.
+- **Paint**: **Inside layer** paints only where the layer draws, and **Whole frame** fills
+  the whole of the layer's picture.
+- **Mix**: how much of the result replaces the original.
+- **Blend**: the blend mode the result is laid over the original with.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
+
+## Related
+
+- [Wave pattern](/effects/generate/wave-pattern/)
+- [Sweep gradient](/effects/generate/sweep-gradient/)
+- [Textures](/effects/#textures)
+- [Effects](/use/effects/)

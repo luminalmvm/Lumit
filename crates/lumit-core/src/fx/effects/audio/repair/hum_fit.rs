@@ -33,40 +33,30 @@ use realfft::num_complex::Complex;
 use crate::fx::audio_chain::{Denormals, AUDIO_BLOCK_FRAMES, AUDIO_CHANNELS};
 use crate::fx::effects::audio::dsp::biquad::Coeffs;
 
-/// Points per second in the table.
 pub const POINTS_PER_S: f64 = 100.0;
 
-/// Harmonics the refinement listens to.
 const REFINE_HARMONICS: usize = 8;
 
-/// The refinement's measuring band, in hertz either side of a harmonic.
 const REFINE_HALF_HZ: f64 = 1.0;
 
 /// How fast the correction may move, in hertz: the mains wanders over
 /// seconds, not tenths of one.
 const CORRECTION_HZ: f64 = 0.2;
 
-/// Rounds of refinement.
 const ROUNDS: usize = 2;
 
-/// How many points at each end a filter is started from, half a second.
 const SETTLE_POINTS: usize = 50;
 
-/// Points handed to one rayon task.
 const CHUNK: usize = 512;
 
-/// A sample this quiet or quieter is digital silence, -120 dBFS.
 const SILENT: f32 = 1e-6;
 
-/// The table a block reads.
 pub struct HumTable {
-    /// Samples between points.
     pub step: usize,
     /// The fundamental at each point, in hertz.
     pub f0: Vec<f64>,
     /// The fundamental's phase at each point, in radians.
     pub phase: Vec<f64>,
-    /// Harmonics held per point and channel.
     pub harmonics: usize,
     /// Each harmonic's complex level, point by point, `[k][c][h]`, scaled so
     /// the harmonic is `Re(a e^(i h phase))`.
@@ -104,7 +94,6 @@ impl HumTable {
     }
 }
 
-/// The phase at sample `t` from points `step` apart.
 fn phase_at(f0: &[f64], phase: &[f64], step: usize, rate: f64, t: usize) -> f64 {
     let step = step.max(1);
     let last = f0.len().saturating_sub(1);
@@ -131,7 +120,6 @@ fn phases(f0: &[f64], step: usize, rate: f64) -> Vec<f64> {
     out
 }
 
-/// What [`fit`] is asked to do.
 pub struct Ask<'a> {
     /// The rough track, one value every `coarse_hop` frames, block `j`
     /// centred on frame `j coarse_hop`; empty for none.
@@ -140,15 +128,12 @@ pub struct Ask<'a> {
     /// The fundamental where there is no track, one value per block of
     /// [`AUDIO_BLOCK_FRAMES`], the last held past the end.
     pub fallback: &'a [f64],
-    /// Refine the track from the harmonics' own turning.
     pub refine: bool,
-    /// Harmonics to measure, the fundamental counted.
     pub harmonics: usize,
     /// How wide each is measured, in hertz.
     pub width: f64,
 }
 
-/// Fit the hum in `interleaved` (stereo) at `rate`, as `ask` says.
 #[must_use]
 pub fn fit(interleaved: &[f32], rate: u32, ask: &Ask<'_>) -> HumTable {
     let Ask {
@@ -165,7 +150,6 @@ pub fn fit(interleaved: &[f32], rate: u32, ask: &Ask<'_>) -> HumTable {
     let points = frames / step + 2;
     let point_rate = rate_f / step as f64;
 
-    // The rough track at every point, held flat past its ends.
     let mut f0: Vec<f64> = (0..points)
         .map(|k| {
             let block = (k * step) / AUDIO_BLOCK_FRAMES;
@@ -293,7 +277,6 @@ pub fn fit(interleaved: &[f32], rate: u32, ask: &Ask<'_>) -> HumTable {
     }
 }
 
-/// The runs of at least `least` frames where every sample is digital silence.
 fn silence(interleaved: &[f32], least: usize) -> Vec<(usize, usize)> {
     let mut runs = Vec::new();
     let mut start = None;
@@ -430,8 +413,6 @@ fn demodulate(
             let k1 = k0 + slice.len() / lanes.max(1);
             let mut weights = vec![0.0f64; k1 - k0];
             let mut turn = vec![Complex::new(0.0f64, 0.0); harmonics];
-            // The samples that reach these points: from a step before the
-            // first to the step after the last.
             let first = k0.saturating_sub(1) * step;
             let last = ((k1) * step).min(frames);
             for t in first..last {

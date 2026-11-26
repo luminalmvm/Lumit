@@ -36,13 +36,11 @@ void addShape3d(LumitUiState ui, CompositionReference comp, ToolMode tool,
 }
 
 class ViewerShape3dLayer extends StatelessWidget {
-  /// Whether a 3D shape tool is armed. Inert otherwise.
   final bool active;
   final ToolMode tool;
   final CompositionReference comp;
   final LumitUiState uiState;
 
-  /// Where the picture sits on screen, and the comp's size in its own pixels.
   final Rect fitted;
   final Size compSize;
   final VoidCallback onChanged;

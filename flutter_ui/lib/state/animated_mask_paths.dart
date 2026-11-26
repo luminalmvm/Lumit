@@ -21,8 +21,6 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:uuid/uuid.dart';
 
-/// The evaluated shapes of a composition's animated masks, held per document
-/// revision and per frame.
 class AnimatedMaskPaths {
   /// Vertices by layer id, then mask id — empty, which is the ordinary case,
   /// meaning no mask on the composition is animated.

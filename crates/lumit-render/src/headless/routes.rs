@@ -14,7 +14,6 @@ use lumit_core::model::{Composition, Document, Layer};
 use std::sync::Arc;
 use uuid::Uuid;
 
-/// One Bus layer of the comp being walked, as its jobs need it.
 pub(super) struct Bus {
     id: Uuid,
     carrier: Carrier,
@@ -78,8 +77,6 @@ pub(super) fn route(
     }
     let bus = |id: Uuid| buses.iter().find(|b| b.id == id);
     let offset_s = layer.start_offset.0.to_f64() + base_s;
-    // The layer's own sound stays where it was in the list, and its sends
-    // follow it.
     let own: Vec<AudioJob> = jobs.drain(from..).collect();
     match routes.output.and_then(bus) {
         Some(bus) if bus.heard => {
@@ -94,9 +91,7 @@ pub(super) fn route(
                 jobs.push(job);
             }
         }
-        // Into a bus that is switched off: nothing.
         Some(_) => {}
-        // To a layer that is gone or is not a bus: the master.
         None => jobs.extend(own.iter().cloned()),
     }
     for send in routes.sends.iter().filter(|s| !s.muted) {
@@ -190,8 +185,6 @@ mod tests {
     use std::sync::Arc;
     use uuid::Uuid;
 
-    /// A comp of `layers` footage layers and `buses` Bus layers after them,
-    /// every footage layer playing the same file.
     fn desk(layers: usize, buses: usize) -> (Document, Uuid, Vec<Uuid>) {
         let mut doc = Document::new();
         let song = push_footage_item(&mut doc, "song.wav");
@@ -213,8 +206,6 @@ mod tests {
         (doc, comp, ids)
     }
 
-    /// The level the master hears a second of steady 0.1 at, half way in,
-    /// with every layer playing it.
     fn heard(doc: &Document, comp: Uuid) -> f32 {
         let doc = Arc::new(doc.clone());
         let c = doc.comp(comp).unwrap().clone();
@@ -248,9 +239,6 @@ mod tests {
         (a - b).abs() < 1e-5
     }
 
-    /// One layer goes out through a bus, another stays on the master and sends
-    /// to it from before its Volume. Each reaches the master at the gain the
-    /// routing says, and a bus switched off silences what goes into it.
     #[test]
     fn output_and_sends_reach_the_master_through_the_bus() {
         let (mut doc, comp, ids) = desk(2, 1);
@@ -270,13 +258,10 @@ mod tests {
                 muted: false,
             }],
         };
-        // Out through the bus at -6, the dry sound at -20, and the send
-        // skipping the -20 for -6 and the bus's -6.
         let want = 0.1 * (db(-6.0) + db(-20.0) + db(-12.0));
         let got = heard(&doc, comp);
         assert!(near(got, want), "{got} for {want}");
 
-        // The send muted sends nothing, and the rest is as it was.
         let ProjectItem::Composition(c) = doc.item_mut(comp).unwrap() else {
             unreachable!()
         };
@@ -300,12 +285,6 @@ mod tests {
         );
     }
 
-    /// **A bus feeds a bus, and a solo keeps the paths it needs.** A layer
-    /// goes through one bus into another and on to the master, at each
-    /// fader's gain. Soloing it, and a layer that sends to a third bus, keeps
-    /// both of their buses heard and silences a layer that only goes
-    /// straight to the master. That third bus solo safe keeps its own way
-    /// out, but lets in nothing that is not soloed.
     #[test]
     fn a_bus_feeds_a_bus_and_a_solo_keeps_its_buses() {
         let (mut doc, comp, ids) = desk(3, 3);
@@ -313,13 +292,11 @@ mod tests {
         let ProjectItem::Composition(c) = doc.item_mut(comp).unwrap() else {
             unreachable!()
         };
-        // Layer 0 through X into Z, every fader at -6.
         c.layers[0].volume_db = Property::fixed(-6.0);
         c.layers[0].audio_routes.output = Some(x);
         c.layers[3].volume_db = Property::fixed(-6.0);
         c.layers[3].audio_routes.output = Some(z);
         c.layers[4].volume_db = Property::fixed(-6.0);
-        // Layer 1 straight out; layer 2 straight out and sending to Y at -12.
         c.layers[2].audio_routes.sends = vec![AudioSend {
             bus: y,
             level_db: Property::fixed(-12.0),

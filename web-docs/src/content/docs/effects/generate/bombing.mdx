@@ -1,0 +1,62 @@
+---
+title: Bombing
+description: "Scatters copies of a picture over the layer."
+---
+
+Bombing is a **Textures** effect.
+
+## What it does
+
+Cuts the layer into cells and draws a copy of a picture in each. The picture is a square of
+the layer picked in **Bullet layer**. With none picked, a soft round dot is drawn.
+
+Copies overlap in an order set by **Seed**. No more than four are drawn over one another at
+any pixel, and a copy reaches three cells from its own at most.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Bullet layer** | Layer | Any layer in the composition | None | - |
+| **Spacing** | Slider | 8 to 2000; any value by typing | 160 | Pixels at composition size |
+| **Bullet size** | Slider | 4 to 2000; any value by typing | 120 | Pixels at composition size |
+| **Density** | Slider | 0 to 100 | 100 | - |
+| **Jitter** | Slider | 0 to 100 | 100 | - |
+| **Scale variation** | Slider | 0 to 100 | 50 | - |
+| **Random rotation** | Checkbox | On or off | On | - |
+| **Source centre** | Point | Any position | 960, 540 | Pixels at composition size |
+| **Source size** | Slider | 4 to 4000; any value by typing | 400 | Pixels at composition size |
+| **Dot colour** | Colour | Each channel 0 to 1 | 0.9, 0.3, 0.03 | - |
+| **Composite** | Dropdown | Over layer · Bullets only | Over layer | - |
+| **Rotation** | Dial | Any angle | 0° | Degrees |
+| **Centre** | Point | Any position | 960, 540 | Pixels at composition size |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+
+## What each control does
+
+- **Bullet layer**: the layer the copies are cut from.
+- **Spacing**: how big the cells are.
+- **Bullet size**: how wide each copy is drawn.
+- **Density**: how many of the cells hold a copy.
+- **Jitter**: how far each copy strays from the middle of its cell.
+- **Scale variation**: how much smaller than Bullet size a copy may be.
+- **Random rotation**: turns each copy its own way.
+- **Source centre** and **Source size**: the middle and the width of the square of the
+  Bullet layer that is copied.
+- **Dot colour**: the colour of the dot drawn with no Bullet layer.
+- **Composite**: **Over layer** draws the copies over the layer's picture, and **Bullets
+  only** draws the copies alone.
+- **Rotation**: turns the grid of cells.
+- **Centre**: the point the grid is laid out from and turns about.
+- **Seed**: which cells hold a copy, and each copy's place, size, turn and order.
+- **Mix**: how much of the result replaces the original.
+- **Blend**: the blend mode the result is laid over the original with.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
+
+## Related
+
+- [Clone to points](/effects/points/clone-to-points/)
+- [Scatter](/effects/points/scatter/)
+- [Textures](/effects/#textures)
+- [Effects](/use/effects/)

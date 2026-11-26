@@ -48,8 +48,6 @@ const fn group(label: &'static str, params: &'static [&'static str]) -> ParamGro
     }
 }
 
-/// Two kickers, as the other generators have: where the points come from, and
-/// what one looks like.
 pub const EMIT_FROM_IMAGE_GROUPS: &[ParamGroup] = &[
     group(
         "Source",
@@ -58,11 +56,8 @@ pub const EMIT_FROM_IMAGE_GROUPS: &[ParamGroup] = &[
     group("Point", &["size", "feather", "colour", "max_points"]),
 ];
 
-/// Which per-candidate draw is being made.
 mod attr {
-    /// Where across the frame the candidate falls.
     pub const PLACE_U: u32 = 0;
-    /// Where down it falls.
     pub const PLACE_V: u32 = 1;
     /// **The acceptance die** — the number the field under the candidate has to
     /// beat. The same id Scatter's is (`A_ACCEPT` in `fx_particulate.wgsl`),
@@ -71,7 +66,6 @@ mod attr {
     pub const ACCEPT: u32 = 16;
 }
 
-/// Emit from image's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "emit_from_image",
@@ -124,7 +118,6 @@ pub struct EmitFromImage {
     #[slider(min = 0.0, max = 200.0, default = 6.0, hard_min = 0.0, unit = Px)]
     pub size: f32,
 
-    /// How soft that disc's edge is, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -181,7 +174,6 @@ impl EmitFromImage {
     /// against whatever raster is previewing.
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
 
-    /// This instance's raster factor, read back out of a resolved bag.
     #[must_use]
     pub fn px_scale_of(p: Params<'_>) -> f32 {
         p.float(Self::DERIVED_PX_SCALE, 1.0)
@@ -321,7 +313,6 @@ impl EmitFromImage {
         out
     }
 
-    /// How the stream is drawn — a feathered disc per point, and the host Mix.
     #[must_use]
     pub fn draw_style(self) -> DrawStyle {
         DrawStyle {

@@ -1,7 +1,3 @@
-//! The mixer's ops: a layer's gain, automation mode, solo safe and lower
-//! behind, and a comp's master keys, master automation mode and loudness
-//! target. Each writes one value and answers the one it replaced.
-
 use super::{Op, OpError};
 use crate::model::{Document, Layer};
 use uuid::Uuid;

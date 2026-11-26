@@ -1,6 +1,3 @@
-//! What either computer does to a remote export it has: list it, cancel
-//! it, hold it, or forget it.
-
 use lumit_share::bulk::Wanted;
 use serde_json::{json, Value};
 use uuid::Uuid;
@@ -27,7 +24,6 @@ impl Remote {
         jobs.iter().map(|j| j.bridge(self.rate(j.job))).collect()
     }
 
-    /// Stop `job` here, and with `tell` on the other computer too.
     pub(super) fn cancel_here(&self, id: Uuid, tell: bool) {
         let Some(job) = self.job(id).filter(|j| !j.stage.ended()) else {
             return;

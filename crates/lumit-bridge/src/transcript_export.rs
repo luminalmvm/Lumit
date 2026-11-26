@@ -18,20 +18,16 @@ use uuid::Uuid;
 
 mod docx;
 
-/// One word to write.
 pub(crate) struct Said {
     pub text: String,
     /// When it is said, in the time the transcript counts in.
     pub start: Rational,
     pub end: Rational,
     pub speaker: Option<String>,
-    /// Who said it, for subtitles, which name a speaker at each change.
     pub who: Option<Uuid>,
-    /// It starts a paragraph or somebody's turn.
     pub paragraph: bool,
 }
 
-/// The kinds of file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Form {
     Text,
@@ -44,31 +40,19 @@ pub(crate) enum Form {
     WebVtt,
 }
 
-/// What every writer is told.
 pub(crate) struct Options<'a> {
-    /// The page's title, where the file has one: the composition or the
-    /// item's name.
     pub title: &'a str,
     pub language: &'a str,
-    /// The speaker's name at each turn.
     pub speakers: bool,
-    /// A timecode at each paragraph, on `rate`'s frames.
     pub timecodes: bool,
-    /// For subtitles: the most characters on a line, and lines on screen.
     pub chars_per_line: u32,
     pub lines: u32,
-    /// The frames subtitles keep apart and paragraph timecodes count.
     pub rate: FrameRate,
-    /// What a paragraph's timecode reads at the first frame: the
-    /// composition's Start timecode, or the file's own.
     pub start: StartTimecode,
 }
 
-/// The rate a paragraph's timecode counts at, and what it reads at the first
-/// frame.
 pub(crate) type Clock = (FrameRate, StartTimecode);
 
-/// The words as `form`'s bytes.
 pub(crate) fn write(form: Form, options: &Options<'_>, words: &[Said]) -> io::Result<Vec<u8>> {
     let speakers = options.speakers;
     let timecodes = options.timecodes.then_some((options.rate, options.start));
@@ -123,7 +107,6 @@ fn subtitles(options: &Options<'_>, words: &[Said]) -> Vec<cues::Cue> {
     cues::build(&said, &limits, &names)
 }
 
-/// A run of words between two turns or paragraph breaks.
 struct Paragraph<'a> {
     speaker: Option<&'a str>,
     start: Rational,
@@ -177,8 +160,6 @@ fn timecode_ms(t: Rational) -> String {
     )
 }
 
-/// The line that heads a paragraph, or `None` with nothing asked for.
-/// `timecodes` is the clock a paragraph's timecode reads, when it has one.
 fn heading(
     p: &Paragraph<'_>,
     speakers: bool,
@@ -255,7 +236,6 @@ fn md_escaped(text: &str) -> String {
     out
 }
 
-/// `text` safe inside HTML or XML.
 fn escaped(text: &str) -> String {
     text.replace('&', "&amp;")
         .replace('<', "&lt;")
@@ -381,9 +361,6 @@ mod tests {
         }
     }
 
-    /// Every format writes every word, in order, and a Word document opens
-    /// as a zip holding the three parts Word needs. A writer that dropped a
-    /// word would hand over a transcript with a hole in it.
     #[test]
     fn every_format_writes_every_word() {
         let words = [

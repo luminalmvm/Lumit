@@ -15,21 +15,18 @@
 
 use crate::{decode::DecodedFrame, decode::PixelFormat};
 
-/// What a file's alpha channel means.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Alpha {
     /// The colour channels are whole and the alpha cuts them out. What every
     /// file is read as until someone says otherwise.
     #[default]
     Straight,
-    /// There is no transparency, whatever the channel holds.
     Ignore,
     /// The colour was saved already mixed into this matte colour, sRGB bytes.
     /// Reading it as straight leaves a fringe of that colour round every edge.
     Premultiplied([u8; 3]),
 }
 
-/// Whether a frame is two fields woven together, and which one came first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Fields {
     #[default]
@@ -57,11 +54,9 @@ pub enum Pulldown {
     Advanced(u8),
 }
 
-/// How one file is read. The default reads it exactly as it is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Interpretation {
     pub alpha: Alpha,
-    /// Swap what the alpha calls opaque and clear.
     pub invert_alpha: bool,
     /// Play the file's frames at this rate instead of its own. The same
     /// frames, so a clip conformed to half its rate lasts twice as long.
@@ -83,16 +78,19 @@ pub struct Interpretation {
     pub linear: Option<bool>,
 }
 
-/// Which of the file's own frames make one interpreted frame.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Pick {
-    /// One frame as it is.
     Whole(usize),
-    /// One field of a frame, its other rows filled in.
-    Field { frame: usize, second: bool },
+    Field {
+        frame: usize,
+        second: bool,
+    },
     /// The earlier field of one frame with the later field of another: a film
     /// frame that pulldown split across two.
-    Weave { first: usize, second: usize },
+    Weave {
+        first: usize,
+        second: usize,
+    },
 }
 
 /// For each film frame of a cadence, the video frame its earlier field is in
@@ -103,7 +101,6 @@ const THREE_TWO: Cadence = [(0, 0), (1, 1), (3, 2), (4, 4)];
 const ADVANCED: Cadence = [(0, 0), (1, 1), (3, 3), (4, 4)];
 
 impl Interpretation {
-    /// Whether this reads the file exactly as it is.
     #[must_use]
     pub fn is_plain(&self) -> bool {
         *self == Self::default()
@@ -128,10 +125,8 @@ impl Interpretation {
         }
     }
 
-    /// How many frames one play-through has, given the file's own count.
     #[must_use]
     pub fn frames_per_pass(&self, raw: usize) -> usize {
-        // One picture is a still, which has no fields or cadence to read.
         if raw <= 1 {
             return raw;
         }
@@ -185,7 +180,6 @@ impl Interpretation {
         }
     }
 
-    /// How long the picture lasts, given the file's own length and rate.
     #[must_use]
     pub fn duration(&self, raw_seconds: f64, native: (i32, i32)) -> f64 {
         let conformed = match self.conform_fps {
@@ -198,7 +192,6 @@ impl Interpretation {
         conformed * f64::from(self.loops.max(1))
     }
 
-    /// How wide the picture is once its pixels are square.
     #[must_use]
     pub fn width(&self, raw: u32) -> u32 {
         match self.pixel_aspect {
@@ -305,7 +298,6 @@ impl Sample for Float {
     }
 }
 
-/// Call a function generic over [`Sample`] at the frame's own sample width.
 macro_rules! by_format {
     ($format:expr, $call:ident($($arg:expr),*)) => {
         match $format {
@@ -351,8 +343,6 @@ fn alpha_pixels<S: Sample>(rgba: &mut [u8], alpha: Alpha, matte: Option<[f32; 3]
     }
 }
 
-/// Everything an interpretation does to one frame's pixels once its rows
-/// and its size are settled: the alpha, then what the numbers mean.
 #[must_use]
 pub fn finish(mut frame: DecodedFrame, it: &Interpretation) -> DecodedFrame {
     // What the numbers are said to be, which the sample width only suggests.
@@ -429,15 +419,12 @@ fn fill_rows<S: Sample>(rgba: &mut [u8], w: usize, h: usize, parity: usize, edge
                     }
                 }
             }
-            // The top or bottom row has one neighbour, so it is that row.
             (Some(only), None) | (None, Some(only)) => this.copy_from_slice(&only[..row]),
             (None, None) => {}
         }
     }
 }
 
-/// The pixel above and the pixel below that agree best across `x`: straight
-/// down, or along either diagonal.
 fn edge_pair<S: Sample>(up: &[u8], down: &[u8], x: usize, w: usize) -> (usize, usize) {
     let px = S::BYTES * 4;
     let apart = |a: usize, b: usize| {
@@ -460,9 +447,6 @@ fn edge_pair<S: Sample>(up: &[u8], down: &[u8], x: usize, w: usize) -> (usize, u
     best
 }
 
-/// One field's rows, converted as a picture of their own, set back on the
-/// rows of `parity` in a frame `height` tall. The rows between are left for
-/// [`fill_field`].
 #[must_use]
 pub fn spread_field(field: DecodedFrame, height: u32, parity: usize) -> DecodedFrame {
     let row = field.width as usize * field.format.bytes_per_px();
@@ -498,9 +482,6 @@ pub fn weave(first: &DecodedFrame, mut second: DecodedFrame, parity: usize) -> D
     second
 }
 
-/// Stretch or shrink a frame to `width` by `height`.
-// ponytail: bilinear, so a field-separated clip previewed far below full size
-// aliases a little. Averaging the pixels each one covers is the upgrade.
 #[must_use]
 pub fn resize(frame: DecodedFrame, width: u32, height: u32) -> DecodedFrame {
     if (width, height) == (frame.width, frame.height) || width == 0 || height == 0 {
@@ -530,8 +511,6 @@ fn resize_pixels<S: Sample>(src: &[u8], sw: usize, sh: usize, dw: usize, dh: usi
     if sw == 0 || sh == 0 || src.len() < sw * sh * px {
         return out;
     }
-    // Where an output pixel's centre lands in the source, and the two source
-    // pixels it sits between.
     let place = |i: usize, from: usize, to: usize| {
         let at = ((i as f32 + 0.5) * from as f32 / to as f32 - 0.5).clamp(0.0, (from - 1) as f32);
         let lo = at.floor() as usize;
@@ -680,9 +659,6 @@ mod tests {
         }
     }
 
-    /// The frame arithmetic is what every layer's timing hangs off, so a
-    /// conformed, field-separated or looped clip must count its frames and
-    /// name the right ones.
     #[test]
     fn fields_loops_and_conform_count_and_pick_the_right_frames() {
         let fields = Interpretation {
@@ -698,7 +674,6 @@ mod tests {
                 second: true
             }
         );
-        // Lower first: the earlier field is the odd rows.
         assert_eq!((fields.parity(false), fields.parity(true)), (1, 0));
 
         let looped = Interpretation {
@@ -709,7 +684,6 @@ mod tests {
         assert_eq!(looped.frame_count(10), 30);
         assert_eq!(looped.pick(13, 10), Pick::Whole(3));
         assert_eq!(looped.pick(99, 10), Pick::Whole(9));
-        // A still is one picture whatever it is told: no fields, no loop.
         let all = Interpretation {
             fields: Fields::Upper,
             pulldown: Pulldown::ThreeTwo(2),
@@ -719,16 +693,11 @@ mod tests {
         assert_eq!((all.frame_count(1), all.pick(3, 1)), (1, Pick::Whole(0)));
         assert_eq!(all.frame_count(0), 0);
         assert_eq!(looped.fps((24, 1)), (12, 1));
-        // The same frames at half the rate last twice as long, three times over.
         assert!((looped.duration(2.0, (24, 1)) - 12.0).abs() < 1e-9);
     }
 
-    /// Removing 3:2 pulldown must hand back the four film frames in order,
-    /// whichever frame of the cadence the file starts on.
     #[test]
     fn pulldown_removal_finds_each_film_frame_at_every_phase() {
-        // Video frame `v` of an unbroken WWSSW cadence: which film frame its
-        // earlier and later fields show.
         let fields_of = |v: usize| {
             let (cycle, i) = (v / 5, v % 5);
             let (a, b) = [(0, 0), (1, 1), (1, 2), (2, 3), (3, 3)][i];
@@ -740,7 +709,6 @@ mod tests {
                 pulldown: Pulldown::ThreeTwo(at),
                 ..Default::default()
             };
-            // The file's frame r is cadence frame r + at.
             let film_of = |pick: Pick| match pick {
                 Pick::Whole(r) => {
                     let (a, b) = fields_of(r + usize::from(at));
@@ -766,13 +734,8 @@ mod tests {
         }
     }
 
-    /// A premultiplied picture read as straight keeps a fringe of its matte
-    /// colour. Unmatting must give the true colour back, and ignore and invert
-    /// must do what they say.
     #[test]
     fn alpha_is_unmatted_ignored_and_inverted() {
-        // Pure red at half alpha, saved over white: 255 red, and green and
-        // blue showing half the white through.
         let saved = || frame(1, 1, |_, _| [255, 128, 128, 128]);
         let mut f = saved();
         interpret_alpha(&mut f, Alpha::Premultiplied([255; 3]), false, false);
@@ -792,11 +755,8 @@ mod tests {
         assert_eq!(f.rgba, [255, 128, 128, 127]);
     }
 
-    /// A field keeps its own rows untouched and fills the rest from them, and
-    /// a woven frame takes each half from the frame it was asked to.
     #[test]
     fn a_field_fills_its_missing_rows_and_a_weave_takes_both_halves() {
-        // Even rows 100, odd rows 200: two different moments woven together.
         let woven = || frame(4, 4, |_, y| [if y % 2 == 0 { 100 } else { 200 }; 4]);
         let mut upper = woven();
         fill_field(&mut upper, 0, false);
@@ -814,7 +774,6 @@ mod tests {
         assert!(comb_score(&frame(4, 8, |_, y| [(y * 20) as u8; 4])) < 1.5);
     }
 
-    /// The guesses are only worth having if they name the right answer.
     #[test]
     fn the_guesses_name_the_matte_and_the_cadence() {
         let over_black = frame(2, 1, |x, _| {
@@ -840,8 +799,6 @@ mod tests {
         assert_eq!(guess_alpha(&straight), Some(Alpha::Straight));
         assert_eq!(guess_alpha(&frame(1, 1, |_, _| [9, 9, 9, 255])), None);
 
-        // WSSWW from the file's first frame is the cadence one frame in. The
-        // scores start at the file's frame 3.
         let scores: Vec<f64> = (3..18)
             .map(|r| {
                 if [2, 3].contains(&((r + 1) % 5)) {
@@ -855,8 +812,6 @@ mod tests {
         assert_eq!(guess_pulldown(&[1.0; 15], 0), Pulldown::Off);
     }
 
-    /// Linear light is a statement about what the numbers mean, so the
-    /// numbers must come through unchanged in the form that says so.
     #[test]
     fn linear_numbers_go_on_as_they_are() {
         let it = Interpretation {

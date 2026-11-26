@@ -1,9 +1,3 @@
-// The shared chrome primitives, held to docs/15-DESIGN.md's redesign rules:
-// the kicker every container label is set in, the inset well an editable
-// number sits in, and the one filled button a surface is allowed.
-//
-// These are the pieces every panel inherits, so they are asserted here on the
-// primitives themselves rather than once per panel.
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -89,8 +83,6 @@ void main() {
     expect(picks, 1, reason: 'the null row answered');
     expect(chosen, isNull);
 
-    // And dismissing still writes nothing, which is the reason the two were
-    // ever confused.
     await tester.tap(find.byType(BareDropdown<String?>));
     await tester.pumpAndSettle();
     await tester.tapAt(const Offset(5, 5));

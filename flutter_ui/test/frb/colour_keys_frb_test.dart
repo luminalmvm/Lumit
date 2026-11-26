@@ -58,7 +58,6 @@ void main() {
 
     expect(laneKeysOf(row()).length, 2, reason: 'the keys show on the lane');
 
-    // Dragging the second diamond to 2 s moves it on every channel.
     expect(
         moveLaneKeys(
             entry: entry(),
@@ -77,7 +76,6 @@ void main() {
           const BridgeRational(num: 2, den: 1));
     }
 
-    // The graph draws one curve per channel and writes one back alone.
     final path = '${effectsPath(id)}/${fx.id}/colour';
     final channels = graphChannels(layers: [entry()], selected: [path]);
     expect(channels.map((c) => c.component), [0, 1, 2, 3]);
@@ -90,8 +88,6 @@ void main() {
         reason: 'the other channels kept');
   });
 
-  /// Type fill's rows read as columns once its Direction is Columns: the
-  /// rows are the same, only their names follow what they do.
   testWidgets('Type fill in Columns names its rows as columns', (tester) async {
     final p = freshProject();
     final comp = p.state.project!.newComposition(name: 'Scene');

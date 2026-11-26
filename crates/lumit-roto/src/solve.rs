@@ -1,6 +1,3 @@
-//! One frame's matte, end to end: the geodesic segmentation, then the refine
-//! band (docs/impl/roto.md §2 and §4).
-
 use crate::gdt;
 use crate::guided::{box_mean, BoxScratch, Guided};
 use crate::{
@@ -36,8 +33,6 @@ pub struct RotoSolver {
     hard: Vec<f32>,
     boxes: BoxScratch,
     guided: Guided,
-    /// The averaged-down picture, seeds and answer of the distance step, on a
-    /// frame large enough to be averaged down.
     small_rgb: Vec<f32>,
     small_seeds: Option<Seeds>,
     small_alpha: Vec<f32>,
@@ -276,7 +271,6 @@ fn grow(small: &[f32], (sw, sh): (u32, u32), k: u32, seeds: &Seeds, out: &mut [f
     let (w, h) = (seeds.width() as usize, seeds.height() as usize);
     let k = k as f32;
     let at = |x: usize, y: usize| small.get(y * sw + x).copied().unwrap_or(0.5);
-    // Where a pixel centre falls between the small cells' centres.
     let place = |p: usize, side: usize| {
         let s = ((p as f32 + 0.5) / k - 0.5).clamp(0.0, (side - 1) as f32);
         let lo = s.floor() as usize;

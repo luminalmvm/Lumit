@@ -1,6 +1,3 @@
-//! Radial blur (docs/08 §3.8): arcs (Spin), rays (Zoom) or one-way fading
-//! streaks (Rays) about a centre.
-
 use crate::fx::{
     cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EdgesMode,
     schema::EffectSchema,
@@ -55,16 +52,12 @@ pub struct RadialBlur {
     #[slider(label = "Centre X", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
     pub centre_x: f32,
 
-    /// px@comp; see [`centre_x`](Self::centre_x).
     #[slider(label = "Centre Y", min = 0.0, max = 2160.0, default = 540.0, unit = Px)]
     pub centre_y: f32,
 
-    /// Spin (arcs about Centre), Zoom (rays through it) or Rays (streaks away
-    /// from it that fade as they go, as light through an edge).
     #[choice(label = "Type", options = ["Spin", "Zoom", "Rays"], default = 0)]
     pub radial_type: u32,
 
-    /// The reusable Edges control (P3).
     #[choice(
         label = "Edges",
         options = *crate::fx::builtins::EDGE_OPTIONS,
@@ -73,7 +66,6 @@ pub struct RadialBlur {
     )]
     pub edge: u32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -159,7 +151,6 @@ pub fn rays(rgba: &mut [f32], w: u32, h: u32, centre: [f32; 2], amount: f32, edg
     }
 }
 
-/// Radial blur's behaviour.
 pub struct RadialBlurDef;
 
 impl EffectDef for RadialBlurDef {

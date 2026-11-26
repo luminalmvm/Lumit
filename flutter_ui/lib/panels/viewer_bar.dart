@@ -1,9 +1,3 @@
-// The Viewer's **bottom bar**: the ways of looking, the snapshot pair,
-// the transport with its clock, and the composition's own reading — plus the
-// shedding ladder that decides which of them a narrow Viewer keeps.
-//
-// Split out of viewer_panel_frb.dart. The sizes and the mark it is
-// drawn with are viewer_strips.dart's, shared with the header strip.
 
 import 'dart:math' as math;
 
@@ -38,13 +32,6 @@ import 'viewer_progress_bar.dart';
 import 'viewer_stage.dart';
 import 'viewer_strips.dart';
 
-/// The Viewer's **bottom bar** (§12A.6: 22 tall).
-///
-/// Left to right, and this is the drawing's own order: the ways of *looking* —
-/// the transparency board, the view menu, the channel, the exposure — then a
-/// hairline seam and the snapshot; the transport with its clock in the middle;
-/// and at the right-hand end the composition's own reading, which says what is
-/// being shown, at how many pixels, and how big.
 class ViewerBar extends StatelessWidget {
   final ViewerChannel channel;
   final bool grid;
@@ -63,7 +50,6 @@ class ViewerBar extends StatelessWidget {
   final BridgeCompSettings settings;
   final CompositionReference comp;
 
-  /// The comp's own pixel size, off the panel's held facts.
   final BridgeCompSize compSize;
 
   /// The preview tier the last frame was made at, off the frame itself. Given
@@ -87,12 +73,10 @@ class ViewerBar extends StatelessWidget {
   final VoidCallback onPlayPause;
   final ValueChanged<int> onSeek;
 
-  /// Whether a snapshot has been taken — what makes a hold do anything.
   final bool hasSnapshot;
   final VoidCallback onSnapshotTake;
   final ValueChanged<bool> onSnapshotHold;
 
-  /// What the marks' right clicks open.
   final ViewerMenuHost host;
 
   /// Drawn as a tile of its own under Round, rather than a strip welded to the
@@ -109,11 +93,8 @@ class ViewerBar extends StatelessWidget {
   /// deck under the picture carries them instead.
   final bool transport;
 
-  /// Whether the bar is above the picture, the pane's top line.
   final bool top;
 
-  /// What playback does at the end of the work area, and how to change it:
-  /// the mark beside the transport. Handed in, like everything else here.
   final LoopMode loop;
   final ValueChanged<LoopMode> onLoop;
 
@@ -199,14 +180,12 @@ class ViewerBar extends StatelessWidget {
           // needs more room before it can spread.
           final loose = width >=
               _barMinimum + (t.shape == ThemeShape.desk ? 60 : 0);
-          // The rungs, in the order the owner ruled them (see [_barMinimum]).
           final keepsReading = width >= _barKeepsReading;
           final keepsLoop = width >= _barKeepsLoop;
           final keepsLooking = width >= _barKeepsLooking;
           final keepsClock = width >= _barKeepsClock;
           final reading = _Readout(
             comp: comp,
-            // The header says the name, where there is a header.
             name: leading.isEmpty ? null : settings.name,
             compSize: compSize,
             tier: tier,
@@ -354,8 +333,6 @@ class ViewerBar extends StatelessWidget {
           _ViewPicker(viewId: viewId),
         ],
         const _BarSeam(),
-        // Snapshots (§2.2 item 14): take one, and once there is one, a second
-        // mark puts it back over the picture while held.
         ViewerRightClick(
           rows: (close) => viewerSnapshotRows(host, close),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -373,7 +350,6 @@ class ViewerBar extends StatelessWidget {
             ],
           ]),
         ),
-        // A grade's reference and the matte view, while either is on.
         const ViewerGradeChips(),
         const _BarSeam(),
         // The exposure (docs/07 §2.2 item 12), at the end of the run because
@@ -386,7 +362,6 @@ class ViewerBar extends StatelessWidget {
             always: folded),
       ];
 
-  /// A spot above this bar's mark, for what opens from its menu.
   Offset _above(BuildContext context) {
     final box = context.findRenderObject();
     return box is RenderBox ? box.localToGlobal(Offset.zero) : Offset.zero;
@@ -457,7 +432,6 @@ class _Exposure extends StatefulWidget {
   final ValueChanged<double> onStops;
   final ValueChanged<double> onLive;
 
-  /// The number stays up at nought too.
   final bool always;
 
   const _Exposure(
@@ -547,8 +521,6 @@ List<Widget> viewerTransportMarks(
   bool playFilled = false,
   int startFrame = 0,
 }) {
-  // The one lit mark on the bar: the control the eye goes to without
-  // looking for it (the drawing's own `.ico.on`).
   final play = viewerBarMark(
     key: const ValueKey('viewer-play'),
     icon: playing ? LumitIcon.pause : LumitIcon.play,
@@ -712,10 +684,8 @@ Widget viewerLoopMark(
       ),
     );
 
-/// The width of the deck's accent play capsule under Lantern (12B.4).
 const double viewerPlayCapsuleWidth = 34;
 
-/// The least the transport keeps from what's either side of it.
 const double _barSideGap = 16;
 
 /// **The bar's shedding ladder, and what is left at the end of it** (§12A.6
@@ -809,17 +779,12 @@ class _SpreadBar extends MultiChildLayoutDelegate {
   bool shouldRelayout(_SpreadBar old) => old.direction != direction;
 }
 
-/// Below this the bar drops the reading and keeps the controls.
 const double _barKeepsReading = 560;
 
-/// Below this the loop mark goes: it no longer fits beside the ways of
-/// looking, the transport and the clock.
 const double _barKeepsLoop = 530;
 
-/// Below this the ways of looking fold into the overflow mark.
 const double _barKeepsLooking = 500;
 
-/// Below this the clock goes and the transport stands alone.
 const double _barKeepsClock = 280;
 
 /// The exposure box. A scrub only tells the engine, so the number it shows
@@ -1125,7 +1090,6 @@ class _ViewPicker extends StatelessWidget {
                         final slot => 'viewer.3d.slot.${slot + 1}',
                       }),
             ),
-          // Back to where this view started, where it can move at all.
           if (view != ViewerView.activeCamera) ...[
             const MenuDivider(),
             viewerRow(
@@ -1135,7 +1099,6 @@ class _ViewPicker extends StatelessWidget {
                 id: 'viewer-view-reset',
                 action: ViewerCameraCommand.reset.action),
           ],
-          // How models show, only where there are any to show.
           if (models) ...[
             const MenuDivider(),
             for (final d in BridgeModelDisplay.values)
@@ -1274,7 +1237,6 @@ class ChannelFacePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // The set's own 16 grid, scaled to whatever the bar renders the mark at.
     final k = size.width / 16;
     final one = single(theme, channel);
     if (one != null) {
@@ -1350,8 +1312,6 @@ class _SnapshotShowButton extends StatelessWidget {
   }
 }
 
-/// `HH:MM:SS:FF` for `frame` at the comp's rate — the shared clock face in
-/// state/timecode.dart, bound to this comp's settings.
 String timecodeOf(int frame, BridgeCompSettings settings) =>
     timecodeOfRate(frame, settings.fpsNum, settings.fpsDen);
 
@@ -1367,7 +1327,6 @@ int durationFramesOf(BridgeCompSettings settings) {
   return settings.duration.num.toInt() * settings.fpsNum ~/ den;
 }
 
-/// The last frame of a comp, on the same terms.
 int _lastFrameOf(BridgeCompSettings settings) {
   final frames = durationFramesOf(settings);
   return frames > 0 ? frames - 1 : 0;

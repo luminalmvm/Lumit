@@ -55,10 +55,7 @@ pub struct LensFlareOp {
     pub manual_lights: Vec<[f32; 7]>,
     /// Master gain; 0 short-circuits to the identity.
     pub intensity: f32,
-    /// Traced wavelength bands with their radiometric sub-samples
-    /// (lumit_core `spectral_bands`).
     pub bands: Vec<FlareBand>,
-    /// How many ranked ghosts render.
     pub max_ghosts: u32,
     /// 0..1 coating blend.
     pub coating: f32,
@@ -68,7 +65,6 @@ pub struct LensFlareOp {
     /// Working f-stop: the stop-down scale derives from it and the
     /// bake's native f-number inside the apply.
     pub fstop: f32,
-    /// Iris blade count for the in-shader pupil mask.
     pub blades: u32,
     /// Iris rotation, degrees.
     pub aperture_rotation_deg: f32,
@@ -78,7 +74,6 @@ pub struct LensFlareOp {
     pub aperture_softness: f32,
     /// Ghost blur radius in raster pixels (px@comp).
     pub ghost_softness: f32,
-    /// Pupil-grid side for this quality.
     pub grid: u32,
     /// Flare-buffer divisor (2 on Draft, else 1).
     pub flare_div: u32,
@@ -86,7 +81,6 @@ pub struct LensFlareOp {
     /// `screen_transform(w)`); the flare buffer's own transform scales by
     /// its divisor.
     pub screen_transform: f32,
-    /// Starburst gain.
     pub starburst_intensity: f32,
     /// Whole-flare scale about the optical centre (ghosts and starbursts).
     pub scale: f32,
@@ -97,7 +91,6 @@ pub struct LensFlareOp {
     pub source: u32,
     /// Matte mode's soft luma gate (lumit_core `threshold_gate`).
     pub threshold: f32,
-    /// See `threshold`.
     pub threshold_softness: f32,
     /// Scene-linear RGB multiplying every light's colour.
     pub light_tint: [f32; 3],
@@ -165,7 +158,6 @@ pub struct FlareBakeData {
     pub reflectance: Vec<f32>,
     /// Starburst sprite, `sb_fields × sb_res²` RGB triplets, slice-major.
     pub starburst: Vec<f32>,
-    /// See `starburst`.
     pub sb_res: u32,
     /// Field-angle slices in `starburst`: the sprite is baked at
     /// several field angles, because the mechanical stops clip the iris
@@ -188,7 +180,6 @@ pub struct FlareProbeBake<'a> {
     pub sensor_z_mm: f32,
     /// Focal length, mm.
     pub focal_mm: f32,
-    /// Native f-number.
     pub native_fstop: f32,
     /// Pupil spray radius, mm.
     pub pupil_mm: f32,
@@ -201,11 +192,8 @@ pub struct FlareProbeBake<'a> {
     pub pair_count: usize,
 }
 
-/// One cached GPU-side bake: uploaded textures and the surface buffer.
 struct GpuBaked {
     surfaces: wgpu::Buffer,
-    /// The baked reflectance table, as the trace kernel's storage
-    /// binding.
     reflectance: wgpu::Buffer,
     surface_count: u32,
     /// The raw surface rows, retained for [`FlareProbeBake`] —
@@ -245,11 +233,7 @@ struct Scratch {
     accum_bytes: u64,
 }
 
-/// The lens flare's pipelines, its bake cache and its scratch pool, one field
-/// on [`FxEngine`].
 pub struct LensFlareFx {
-    /// The lights-against-depth pass, built the first time a flare has a
-    /// depth to read.
     depth_pass: OnceLock<(wgpu::BindGroupLayout, wgpu::ComputePipeline)>,
     trace: wgpu::ComputePipeline,
     build_splats: wgpu::ComputePipeline,
@@ -288,7 +272,6 @@ pub struct LensFlareFx {
     /// The key of the last bake a frame actually drew with, which is what a
     /// frame whose own bake is not ready falls back to.
     last_drawn: Mutex<Option<u64>>,
-    /// Bakes handed to the baker and not yet collected.
     in_flight: Mutex<HashSet<u64>>,
     /// Bakes the thread has finished that no frame has uploaded yet. Filled
     /// by [`Self::poll_landed`] — which any thread may call, no device needed
@@ -316,7 +299,6 @@ pub struct LensFlareFx {
     pub(super) substitutions: AtomicU64,
 }
 
-/// The bake thread and its two channels.
 struct Baker {
     jobs: Sender<BakeJob>,
     done: Mutex<Receiver<(u64, Option<FlareBakeData>)>>,
@@ -377,7 +359,7 @@ impl Baker {
             }
             let data = (wanted.bake)();
             if finished.send((wanted.key, Some(data))).is_err() {
-                return; // nobody is collecting any more
+                return;
             }
         }
     }
@@ -394,7 +376,6 @@ impl Baker {
 /// never depends on the cache (docs/14 §5): a miss is a rebake, nothing more.
 pub(super) struct BakeCache<T> {
     by_key: HashMap<u64, T>,
-    /// Insertion order, oldest first.
     order: std::collections::VecDeque<u64>,
     cap: usize,
 }
@@ -733,7 +714,6 @@ pub(super) struct LazyFlare {
     /// The working format this set is built for — held for the fallback build,
     /// which happens too late to ask a context.
     format: wgpu::TextureFormat,
-    /// The background build, taken and joined by the first [`Self::get`].
     building: Mutex<Option<std::thread::JoinHandle<LensFlareFx>>>,
     ready: OnceLock<LensFlareFx>,
     /// [`FxEngine::set_deferred_flare_bakes`] can be answered before there is
@@ -866,8 +846,6 @@ impl LensFlareFx {
                 storage_entry(4, false, c),
                 uniform_entry(5, c),
                 storage_entry(6, true, c),
-                // The spectral pair: the baked reflectance table and
-                // the frame's band sub-samples.
                 storage_entry(7, true, c),
                 storage_entry(8, true, c),
                 // Binding 9 held the ring masks until a closed form
@@ -887,7 +865,6 @@ impl LensFlareFx {
         let deposit_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("fx-lens-flare-deposit-layout"),
             entries: &[
-                // The splats, their f32 accumulator, the dims, and the flare it resolves into.
                 storage_entry(0, true, c),
                 storage_entry(1, false, c),
                 uniform_entry(2, c),
@@ -1144,8 +1121,6 @@ impl LensFlareFx {
         self.cache.lock().ok().and_then(|cache| cache.get(previous))
     }
 
-    /// Note which bake a frame drew with, so the next frame has something to
-    /// fall back on while its own is being made.
     fn remember_drawn(&self, key: u64) {
         if let Ok(mut held) = self.last_drawn.lock() {
             *held = Some(key);
@@ -1344,7 +1319,6 @@ impl LensFlareFx {
         }
     }
 
-    /// Hand the scratch back for the next frame.
     fn put_scratch(&self, scratch: Scratch) {
         if let Ok(mut slot) = self.scratch.lock() {
             if slot.is_none() {
@@ -1449,17 +1423,11 @@ pub fn flare_pad_dims_of(fw: u32, fh: u32, squeeze: f32, scale: f32) -> (u32, u3
 /// share a pupil grid, and a chunk of the frame's lights.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct Batch {
-    /// The pupil grid every combo in the batch traces at.
     pub(super) grid: u32,
-    /// First combo of the batch in the frame's combo table.
     pub(super) combo_offset: u32,
-    /// How many combos it covers.
     pub(super) combos: u32,
-    /// First light.
     pub(super) light_offset: u32,
-    /// How many lights.
     pub(super) lights: u32,
-    /// Scratch the batch needs: ray landings and their splats.
     pub(super) ray_bytes: u64,
     pub(super) splat_bytes: u64,
 }
@@ -1615,7 +1583,6 @@ pub(super) fn plan_batches(
     plan
 }
 
-/// Upload one bake's buffers as GPU resources.
 fn upload_bake(ctx: &GpuContext, data: &FlareBakeData) -> GpuBaked {
     use wgpu::util::DeviceExt;
     let rows: Vec<GpuSurface> = data
@@ -1814,11 +1781,6 @@ impl FxEngine {
                 usage: wgpu::BufferUsages::STORAGE,
             });
 
-        // Flare buffer (half size on Draft), and its 4x multisample target:
-        // the ghost raster draws into the multisampled texture and
-        // resolves into `flare_tex`, which everything downstream (blur,
-        // combine) reads exactly as before. The multisample texture exists
-        // only while a live frame draws.
         let div = op.flare_div.max(1);
         let (fw, fh) = ((w / div).max(1), (h / div).max(1));
         // The buffer renders PADDED for Squeeze/Scale under 1: the
@@ -1827,7 +1789,6 @@ impl FxEngine {
         // is centred; the screen transform stays derived from the base.
         let (fpw, fph) = flare_pad_dims_of(fw, fh, op.anamorphic, op.scale);
         let flare_tex = work_texture(ctx, fpw, fph, "fx-lens-flare-buffer");
-        // No multisample target — the raster antialiases itself.
         let _ = live;
 
         let mut encoder = ctx.encoder("fx-lens-flare-enc");
@@ -2097,7 +2058,6 @@ impl FxEngine {
 
                 // The resolve writes it once, at the end.
                 let flare_view = flare_tex.create_view(&Default::default());
-                // Where the frame breaks its work into separate submissions.
                 let flushes = plan_flushes(&plan, baked.surface_count, &combo_costs);
                 for (bi, job) in plan.iter().enumerate() {
                     let Batch {
@@ -2130,7 +2090,6 @@ impl FxEngine {
                                 coating: op.coating,
                                 aspect: h as f32 / w.max(1) as f32,
                                 focal_mm: baked.focal_mm,
-                                // Project into the flare buffer's raster.
                                 screen_transform: st_flare,
                                 raster_w: fpw as f32,
                                 raster_h: fph as f32,
@@ -2141,7 +2100,6 @@ impl FxEngine {
                                 sensor_z_mm: baked.sensor_z_mm,
                                 stop_scale,
                                 cell_area_px: cell_mm * cell_mm * st_flare * st_flare,
-                                // This batch's own stride.
                                 ray_stride: batch_rays,
                                 _pad_stride: 0,
                                 blades: op.blades.clamp(3, 16),
@@ -2709,7 +2667,6 @@ impl FxEngine {
 /// `lens_flare::SENSOR_MM[0]`.
 const SENSOR_MM_W: f32 = 36.0;
 
-/// Build the lights-against-depth pass: the depth, the lights, its numbers.
 fn depth_pass(device: &wgpu::Device) -> (wgpu::BindGroupLayout, wgpu::ComputePipeline) {
     let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("fx-lens-flare-depth"),

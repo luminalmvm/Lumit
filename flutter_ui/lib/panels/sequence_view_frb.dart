@@ -75,10 +75,8 @@ const double sequenceGraphMax = sequenceRow * 16;
 /// of it, and survives a row being closed and another opened.
 String? sequenceShapeClipboard;
 
-/// How near an edge counts as grabbing it rather than the clip's body.
 const double _edgeGrab = 7;
 
-/// A Sequence layer's clips and their speed envelope, under its bar.
 class SequenceViewFrb extends StatefulWidget {
   final BridgeLayerEntry entry;
 
@@ -126,7 +124,6 @@ class SequenceViewFrb extends StatefulWidget {
   final double graphHeight;
   final ValueChanged<double>? onGraphHeight;
 
-  /// Committed a gesture; the panel refreshes its read model.
   final VoidCallback onChanged;
 
   /// Show `clip` playing under a map it has not been given yet — the live
@@ -189,7 +186,6 @@ class _SequenceViewFrbState extends State<SequenceViewFrb>
     });
   }
 
-  /// Anything else picked lets the clip go.
   void _onLayersPicked() {
     if (!_picking && _pickIsOurs) sequenceClipPick.value = null;
   }
@@ -335,8 +331,6 @@ class _SequenceViewFrbState extends State<SequenceViewFrb>
 
   double _xOf(int frame) => widget.axis.xOf(frame);
 
-  /// The frames a drag has travelled, snapped to whole frames — the row edits
-  /// in frames, like everything else on the timeline.
   int _draggedFrames(double dx) {
     final perFrame = widget.axis.perFrame;
     return perFrame <= 0 ? 0 : (dx / perFrame).round();
@@ -371,14 +365,10 @@ class _SequenceViewFrbState extends State<SequenceViewFrb>
                 return;
               }
               widget.onSelect?.call();
-              // Double-clicking the region shuts it again, the same gesture
-              // that opened it.
               if (_stripTaps.tap()) widget.onClose?.call();
             },
             child: Stack(
               children: [
-                // The region's own ground, so three rows of it read as one
-                // block rather than as empty lane.
                 Positioned.fill(
                   child: IgnorePointer(
                     child: ColoredBox(color: t.surface1),
@@ -619,8 +609,6 @@ class _SequenceViewFrbState extends State<SequenceViewFrb>
                   .withValues(alpha: 0.25),
               width: 1,
             ),
-            // The clip's own ends, because this *is* the clip drawn as far as
-            // its source goes.
             borderRadius: BorderRadius.circular(clipRadius(t)),
           ),
         ),
@@ -628,8 +616,6 @@ class _SequenceViewFrbState extends State<SequenceViewFrb>
     );
   }
 
-  /// One clip: a box where it sits, saying how fast it plays. Its body drags
-  /// it along the row and its edges trim it.
   Widget _clip(LumitTheme t, BridgeClip clip) {
     _wantThumb(clip);
     final drag = _drag;
@@ -692,10 +678,6 @@ class _SequenceViewFrbState extends State<SequenceViewFrb>
           onHorizontalDragCancel: () => setState(() => _drag = null),
           child: Container(
             decoration: BoxDecoration(
-              // Desaturated, exactly as a layer bar is (§12A.1): the label's
-              // own colour thinned over the ground, with the solid leading
-              // edge below carrying it at full strength. Computed from the
-              // token, so a recoloured layer recolours its clips too.
               color: t
                   .labelColour(widget.entry.info.label)
                   .withValues(alpha: clipFillAlpha),
@@ -718,8 +700,6 @@ class _SequenceViewFrbState extends State<SequenceViewFrb>
             clipBehavior: Clip.hardEdge,
             child: Stack(
               children: [
-                // The clip's leading edge: where this cut begins, at full
-                // strength, so a run of clips reads as a run of beginnings.
                 Positioned(
                   key: ValueKey<String>('seq-clip-edge-${clip.id}'),
                   left: 0,
@@ -780,7 +760,6 @@ class _SequenceViewFrbState extends State<SequenceViewFrb>
     );
   }
 
-  /// One row of a menu here, answering with [answer].
   MenuRow _menuRow(void Function(String) close, String answer, String label,
           {bool enabled = true, String? action}) =>
       MenuRow(
@@ -855,7 +834,6 @@ class _SequenceViewFrbState extends State<SequenceViewFrb>
     if (_pickIsOurs) sequenceClipPick.value = null;
   }
 
-  /// The tracks and their links as the read model has them now.
   void _readTracks(LumitUiState ui) {
     _cutTracks = cutTimelineTracks(ui.model.layers);
     final of = <String, int>{};
@@ -929,7 +907,6 @@ class _SequenceViewFrbState extends State<SequenceViewFrb>
     widget.onChanged();
   }
 
-  /// The held clips landed at [frame] on this row.
   void _pasteAt(int frame) {
     final comp = widget.comp;
     if (comp == null) return;
@@ -939,8 +916,6 @@ class _SequenceViewFrbState extends State<SequenceViewFrb>
     });
   }
 
-  /// A right click on the row's empty ground: what can land here, closing the
-  /// room, and closing the view.
   Future<void> _groundMenu(Offset at, double x) async {
     final comp = widget.comp;
     final frame = widget.axis.frameAt(x);
@@ -980,7 +955,6 @@ class _SequenceViewFrbState extends State<SequenceViewFrb>
     }
   }
 
-  /// Write the drag: a body grab slides the clip, an edge grab trims it.
   void _commitDrag() {
     final drag = _drag;
     setState(() => _drag = null);
@@ -1016,7 +990,6 @@ class _SequenceViewFrbState extends State<SequenceViewFrb>
   }
 }
 
-/// What a clip drag has hold of.
 enum _Grab { body, start, end }
 
 /// The opposed-fades pair over one overlap: the outgoing clip's ramp falls,
@@ -1043,7 +1016,6 @@ class _CrossfadePainter extends CustomPainter {
   bool shouldRepaint(_CrossfadePainter old) => old.line != line;
 }
 
-/// How much of the view's height the divider itself takes.
 const double _dividerHeight = 5;
 
 /// The grab bar along the bottom of a sequence view.

@@ -37,7 +37,6 @@ pub const DESTINATION_ASK: &str = "ask";
 /// Write beside the project file. Falls back to asking when the project has
 /// never been saved and so has no folder of its own.
 pub const DESTINATION_PROJECT: &str = "project";
-/// Always write into [`ExportDefaults::folder`].
 pub const DESTINATION_FOLDER: &str = "folder";
 
 /// Where the defaults are kept. `None` only when the platform has no home
@@ -98,12 +97,10 @@ impl ExportDefaults {
             .unwrap_or_default()
     }
 
-    /// Read from [`default_path`], or the built-in answers when there is none.
     pub fn load_default() -> Self {
         default_path().map(|p| Self::load(&p)).unwrap_or_default()
     }
 
-    /// Write the defaults to `path`, creating the directory.
     pub fn save(&self, path: &Path) -> Result<(), String> {
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir).map_err(|e| format!("export defaults: {e}"))?;
@@ -113,8 +110,6 @@ impl ExportDefaults {
         std::fs::write(path, text).map_err(|e| format!("export defaults: {e}"))
     }
 
-    /// Save to [`default_path`]; a platform with no home directory keeps the
-    /// answers for the session and says so calmly.
     pub fn save_default(&self) -> Result<(), String> {
         match default_path() {
             Some(path) => self.save(&path),
@@ -138,8 +133,6 @@ mod tests {
         }
     }
 
-    /// Every answer survives a save and a reload — the round trip the export
-    /// dialogue's opening state depends on.
     #[test]
     fn the_defaults_round_trip_through_the_file() {
         let dir = tempfile::tempdir().unwrap();

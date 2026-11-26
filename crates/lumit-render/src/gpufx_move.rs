@@ -1,5 +1,3 @@
-//! Move's GPU pass: Shake's averaging kernel, then an opacity.
-
 use lumit_core::fx::effects::move_transition::MoveTransition;
 use lumit_core::fx::params::Params;
 use lumit_core::fx::registry::EffectMetadata;

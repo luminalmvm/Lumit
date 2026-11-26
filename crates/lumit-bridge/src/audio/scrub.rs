@@ -1,6 +1,3 @@
-//! Hearing the mix with the transport stopped: a burst for a click, and the
-//! jog for a drag.
-
 use super::{forget, kick_prepare, lock, send, Cmd};
 use lumit_core::model::Document;
 use std::sync::Arc;
@@ -96,7 +93,6 @@ pub(crate) fn jog(comp: Uuid, frame: f64, doc: Arc<Document>) {
     }
 }
 
-/// The drag is over: the jog fades out.
 pub(crate) fn jog_end() {
     let st = lock();
     send(&st, Cmd::JogEnd);

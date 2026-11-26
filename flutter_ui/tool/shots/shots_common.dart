@@ -84,7 +84,6 @@ Directory get _flutterUi {
   return dir;
 }
 
-/// Where a finished shot goes.
 String get shotsOut =>
     Platform.environment['LUMIT_SHOTS_OUT'] ??
     '${_flutterUi.parent.path}/web-docs/src/assets/shots';
@@ -129,7 +128,6 @@ Future<(LumitState, LumitUiState)> bootLumit() async {
   return (state, ui);
 }
 
-/// The boundary [captureUi] photographs. Wrap the app in it: `runApp(shotRoot(…))`.
 final shotRootKey = GlobalKey();
 
 Widget shotRoot(Widget child) =>
@@ -178,8 +176,6 @@ Future<bool> tapKey(String key, {double settle = 0.6}) async {
   return true;
 }
 
-/// Double-click whatever carries [key] — how a Sequence layer's view is
-/// opened, among other things.
 Future<bool> doubleTapKey(String key, {double settle = 1}) async {
   final box = elementByKey(key)?.renderObject;
   if (box is! RenderBox || !box.attached) {
@@ -193,8 +189,6 @@ Future<bool> doubleTapKey(String key, {double settle = 1}) async {
   return true;
 }
 
-/// Right-click whatever carries [key] — the second of the two routes a
-/// toolbar group's flyout opens by (the other is a press and hold).
 Future<bool> rightTapKey(String key, {double settle = 1}) async {
   final box = elementByKey(key)?.renderObject;
   if (box is! RenderBox || !box.attached) {
@@ -213,7 +207,6 @@ Future<bool> rightTapKey(String key, {double settle = 1}) async {
   return true;
 }
 
-/// Click a point in window coordinates.
 Future<void> tapAt(Offset at, {double settle = 0.6}) async {
   final id = ++_pointer;
   GestureBinding.instance
@@ -238,9 +231,6 @@ Rect? boxOf(String key) {
   return render.localToGlobal(Offset.zero) & render.size;
 }
 
-/// Where the first widget of [type] sits, for the panels that carry no key of
-/// their own — the Viewer's picture area is worked out from its panel, and a
-/// panel is a class rather than a `ValueKey`.
 Rect? boxOfType(Type type) => boxOfTypeNamed('$type');
 
 /// The same, given the class's *name* rather than the class — for the widgets a
@@ -341,7 +331,6 @@ Rect? spanOfTypeNamed(String name, {String? under}) {
   return spanOfElement(found);
 }
 
-/// [spanOfTypeNamed] for a class the sweep can write down.
 Rect? spanOfType(Type type) => spanOfTypeNamed('$type');
 
 /// A **docked** panel's rectangle: everything it draws, bounded by the pane
@@ -384,7 +373,6 @@ Rect? dockedPanelBox(Type type) {
   return span.intersect(pane!);
 }
 
-/// The first widget of [name] in the tree, as an [Element].
 Element? elementOfTypeNamed(String name, {String? under}) {
   Element? find(Element root, String wanted) {
     Element? found;
@@ -406,8 +394,6 @@ Element? elementOfTypeNamed(String name, {String? under}) {
   return root == null ? null : find(root, name);
 }
 
-/// The union of every attached [RenderBox] in [root]'s subtree, [root]'s own
-/// included.
 Rect? spanOfElement(Element root) {
   Rect? all;
   void visit(Element el) {
@@ -500,8 +486,6 @@ Future<void> captureUi(String name, {Rect? crop, double scale = 1}) async {
   final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
   final out = File('$shotsOut/$name')
     ..writeAsBytesSync(bytes!.buffer.asUint8List());
-  // `LUMIT_SHOTS_NOCROP=1` keeps the whole window, so a first pass can be
-  // looked at and the crops worked out from what is actually there.
   if (Platform.environment['LUMIT_SHOTS_NOCROP'] == '1') crop = null;
   String? cut;
   if (crop != null) {

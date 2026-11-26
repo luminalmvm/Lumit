@@ -24,18 +24,13 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Pixel sort's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "pixel_sort",
     label = "Pixel sort",
     version = 1,
     category = Stylise,
-    // Every pixel reads its own span to find its place in it, so the cost is
-    // Maximum span length taps a pixel rather than one.
     cost = Heavy,
-    // A pixel can be drawn from anywhere in its own span, and a span can start
-    // a thousand pixels away.
     roi = FullFrame,
     // §2.2: the whole texel travels, alpha with it. Nothing here grades a
     // colour, so there is nothing to unpremultiply for — the key is worked out
@@ -122,7 +117,6 @@ pub struct PixelSort {
     #[seed(label = "Random span offsets")]
     pub seed: u32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -165,7 +159,6 @@ impl PixelSort {
     }
 }
 
-/// Pixel sort's behaviour.
 pub struct PixelSortDef;
 
 impl EffectDef for PixelSortDef {

@@ -1,6 +1,3 @@
-//! Keyframes: the `lhd3` header and the `ldat` records under a property, and
-//! the eases After Effects works out from them.
-
 use super::*;
 
 /// The `lhd3` header and the `ldat` records it describes, as an iterator over
@@ -357,7 +354,6 @@ pub(super) fn axes_of(value: Option<&serde_json::Value>) -> Vec<f64> {
     }
 }
 
-/// Which shape a keyframe record takes, once its size has said so.
 #[derive(Debug, Clone, Copy)]
 enum Layout {
     /// R, G, B, A after the ease.
@@ -367,8 +363,6 @@ enum Layout {
     Spatial(usize),
     /// The ordinary case: `axes` values, then `axes` of each ease number.
     Plain(usize),
-    /// A key with no value of its own — a mask path's, whose value lives
-    /// elsewhere, or a marker's.
     Valueless,
 }
 

@@ -1,22 +1,10 @@
-// The block tools' arithmetic: what a selection measures, where a
-// stretch handle puts each key, and what Reverse and Stagger do to a time.
-//
-// Pure, so none of it needs a widget tree or the engine — the same bargain
-// `easing_curve_test.dart` and `graph_maths_test.dart` strike. The gestures
-// that stand on this are tested through the panel in
-// `test/frb/timeline_panel_frb_test.dart`; what is claimed here is the
-// arithmetic they all share.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/key_block.dart';
 
 void main() {
   group('KeyStretch', () {
-    /// The claim the whole gesture rests on: the anchored end does not move,
-    /// the dragged end lands where it was put, and everything between keeps
-    /// its share of the span.
     test('scales every key proportionally between the two ends', () {
-      // 0 … 100, dragged from 100 out to 200: everything doubles.
       const s = KeyStretch(keys: {}, anchor: 0, from: 100, to: 200);
       expect(s.frameOf(0, whole: false), 0, reason: 'the anchor stays put');
       expect(s.frameOf(100, whole: false), 200,
@@ -26,8 +14,6 @@ void main() {
           reason: 'a key a quarter along is still a quarter along');
     });
 
-    /// Whole-frame snapped exactly as a single key's drag is with the magnet
-    /// on: the block is a gesture on keys, not a new kind of thing.
     test('lands on whole frames when the magnet is on', () {
       const s = KeyStretch(keys: {}, anchor: 0, from: 30, to: 41);
       final loose = s.frameOf(10, whole: false);
@@ -35,8 +21,6 @@ void main() {
       expect(s.frameOf(10, whole: true), 14, reason: 'rounded with it');
     });
 
-    /// A block whose ends started on one frame has no span to scale, and
-    /// dividing by it is how a stretch becomes infinities.
     test('a zero-span block scales by one rather than by infinity', () {
       const s = KeyStretch(keys: {}, anchor: 40, from: 40, to: 90);
       expect(s.scale, 1);
@@ -58,8 +42,6 @@ void main() {
   });
 
   group('reversedFrames', () {
-    /// Returned in the order it was given, so each new time pairs with the key
-    /// it belongs to — which is what makes the value travel with its key.
     test('answers in the order it was asked', () {
       expect(reversedFrames([40, 10, 20]), [10, 40, 30]);
     });

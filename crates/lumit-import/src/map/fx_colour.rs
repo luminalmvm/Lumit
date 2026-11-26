@@ -52,11 +52,6 @@ use super::props::{display_name, find, from_node, match_name_of, ramp};
 use super::table::Row;
 use super::{srgb_to_linear, Conv};
 
-/// This half of the table's claim on a match name.
-///
-/// `Some` when the effect maps; `None` sends the instance down the placeholder
-/// road, which is what an unrecognised match name — and the three rows docs/11
-/// §5 places there deliberately — are meant to do.
 pub(super) fn claim(
     conv: &mut Conv<'_>,
     path: &ItemPath,
@@ -96,7 +91,6 @@ fn build(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Effect
         return None;
     }
     match row.conversion.as_str() {
-        // --- Blur and sharpen -------------------------------------------
         "gaussian_blur" => gaussian_blur(conv, path, node, row),
         "directional_blur" => directional_blur(conv, path, node, row),
         "radial_blur" => radial_blur(conv, path, node, row),
@@ -104,7 +98,6 @@ fn build(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Effect
         "unsharp_mask" => unsharp_mask(conv, path, node, row),
         "glow" => glow(conv, path, node, row),
 
-        // --- Colour ------------------------------------------------------
         "curves" => curves(conv, path, node, row),
         "levels" => levels(conv, path, node, row),
         "hue_saturation" => hue_saturation(conv, path, node, row),
@@ -121,7 +114,6 @@ fn build(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Effect
         "exposure" => exposure(conv, path, node, row),
         "apply_colour_lut" => apply_colour_lut(conv, path, node, row),
 
-        // --- Generate ----------------------------------------------------
         "fill" => fill(conv, path, node, row),
         "gradient" => gradient(conv, path, node, row),
         "noise" => noise(conv, path, node, row),
@@ -137,7 +129,6 @@ fn build(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Effect
         "audio_spectrum" => super::fx_audio::audio_spectrum(conv, path, node, row),
         "audio_waveform" => super::fx_audio::audio_waveform(conv, path, node, row),
 
-        // --- Temporal ----------------------------------------------------
         "echo" => echo(conv, path, node, row),
         "posterize_time" => posterize_time(conv, path, node, row),
 
@@ -145,8 +136,6 @@ fn build(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Effect
     }
 }
 
-/// A row on a match name the table places at a placeholder on purpose, naming
-/// what does the job instead (docs/11 §5's two "placeholder + report" rows).
 fn suggest(conv: &mut Conv<'_>, path: &ItemPath, node: &Property, instead: &str) {
     let match_name = match_name_of(node).to_string();
     conv.report.row(
@@ -159,18 +148,9 @@ fn suggest(conv: &mut Conv<'_>, path: &ItemPath, node: &Property, instead: &str)
     );
 }
 
-// ---------------------------------------------------------------------------
-// The builder
-// ---------------------------------------------------------------------------
-
-/// One instance under construction: the capture node on one side, a Lumit
-/// instance carrying its schema defaults on the other, and a report to write
-/// the difference into.
 pub(super) struct Fx<'a> {
-    /// After Effects' name for the effect, as the report row says it.
     ae: &'static str,
     node: &'a Property,
-    /// Where a row about this effect is filed.
     here: ItemPath,
     /// Where a row about one of its parameters is filed — the layer, because
     /// [`from_node`] narrows it to the leaf's own name itself.
@@ -185,7 +165,6 @@ impl<'a> Fx<'a> {
     /// is a placeholder rather than a panic when it does (docs/14 §4).
     pub(super) fn new(path: &ItemPath, node: &'a Property, row: &'static Row) -> Option<Fx<'a>> {
         let mut inst = lumit_core::fx::builtins::instantiate(&row.lumit)?;
-        // An effect switched off in After Effects imports switched off.
         inst.enabled = node.enabled.unwrap_or(true);
         Some(Fx {
             ae: &row.name,
@@ -211,7 +190,6 @@ impl<'a> Fx<'a> {
         lumit: &str,
     ) -> Option<Fx<'a>> {
         let mut inst = lumit_core::fx::builtins::instantiate(lumit)?;
-        // A style switched off in After Effects imports switched off.
         inst.enabled = node.enabled.unwrap_or(true);
         Some(Fx {
             ae,
@@ -230,8 +208,6 @@ impl<'a> Fx<'a> {
         find(self.node.children(), ae_id)
     }
 
-    /// A parameter's still value, for the switches and option lists that do
-    /// not animate in Lumit.
     pub(super) fn still(&mut self, conv: &mut Conv<'_>, ae_id: &str) -> Option<f64> {
         let node = self.leaf(ae_id)?;
         let (value, keyed) = super::props::starting_value(node);
@@ -263,8 +239,6 @@ impl<'a> Fx<'a> {
         self.float_axis(conv, ae_id, 0, lumit_id, k, c);
     }
 
-    /// The same, from one axis of a multi-dimensional AE parameter — a point's
-    /// x or y.
     pub(super) fn float_axis(
         &mut self,
         conv: &mut Conv<'_>,
@@ -365,7 +339,6 @@ impl<'a> Fx<'a> {
         }
     }
 
-    /// An AE Random Seed onto a Lumit Seed.
     pub(super) fn seed(&mut self, conv: &mut Conv<'_>, ae_id: &str, lumit_id: &str) {
         if let Some(v) = self.still(conv, ae_id) {
             let v = if v.is_finite() {
@@ -400,9 +373,6 @@ impl<'a> Fx<'a> {
             .or_else(|| conv.masks.first().map(|(_, p)| *p))
     }
 
-    // --- report rows ----------------------------------------------------
-
-    /// An After Effects control with no Lumit counterpart.
     pub(super) fn drop_param(&mut self, conv: &mut Conv<'_>, param: &str) {
         conv.report.row(
             self.here.clone(),
@@ -414,7 +384,6 @@ impl<'a> Fx<'a> {
         );
     }
 
-    /// Several of them at once — an After Effects group Lumit has nothing for.
     pub(super) fn drop_params(&mut self, conv: &mut Conv<'_>, params: &[&str]) {
         for param in params {
             self.drop_param(conv, param);
@@ -446,7 +415,6 @@ impl<'a> Fx<'a> {
         );
     }
 
-    /// The effect mapped whole and evaluates differently by construction.
     pub(super) fn differs(&mut self, conv: &mut Conv<'_>, detail: &str) {
         conv.report.row(
             self.here.clone(),
@@ -458,7 +426,6 @@ impl<'a> Fx<'a> {
         );
     }
 
-    /// An After Effects control that read the clock, become keyframes.
     pub(super) fn clock(&mut self, conv: &mut Conv<'_>, param: &str) {
         conv.report.row(
             self.here.clone(),
@@ -540,10 +507,6 @@ pub(super) fn map_values(p: LumProperty, f: impl Fn(f64) -> f64) -> (LumProperty
         left_behind,
     )
 }
-
-// ---------------------------------------------------------------------------
-// Blur and sharpen
-// ---------------------------------------------------------------------------
 
 /// "Gaussian Blur" → **Gaussian blur** (docs/08 §3.8). One control carries the
 /// look — AE's pixels are Lumit's px@comp, so the number is the same — and
@@ -710,10 +673,6 @@ fn glow(
     );
     fx.done()
 }
-
-// ---------------------------------------------------------------------------
-// Colour
-// ---------------------------------------------------------------------------
 
 /// The channel group an AE picker selects, as Lumit's parameter prefix.
 /// 1 RGB, 2 Red, 3 Green, 4 Blue, 5 Alpha — After Effects' own channel order,
@@ -1243,10 +1202,6 @@ fn apply_colour_lut(
     fx.done()
 }
 
-// ---------------------------------------------------------------------------
-// Generate
-// ---------------------------------------------------------------------------
-
 /// "Fill" → **Fill** (docs/08 §3.34). Exact for a whole-alpha fill; a
 /// mask-targeted one, with its Invert and the two Feather controls, is
 /// reported rather than approximated.
@@ -1329,8 +1284,8 @@ const AE_FRACTAL_SCALE_BASE: f64 = 2.0;
 
 /// "Fractal Noise" → **Fractal noise** (docs/08 §3.37). Contrast, brightness,
 /// the transform, the sub settings and the evolution cycle convert directly;
-/// Scale converts through AE's own base, and AE's dozen fractal types and four
-/// noise types collapse onto the two apiece Lumit ships.
+/// Scale converts through AE's own base. Every one of AE's fifteen fractal types
+/// and four noise types has its own entry in Lumit, under the same name.
 fn fractal_noise(
     conv: &mut Conv<'_>,
     path: &ItemPath,
@@ -1338,23 +1293,30 @@ fn fractal_noise(
     row: &'static Row,
 ) -> Option<EffectInstance> {
     let mut fx = Fx::new(path, node, row)?;
-    // 1 is Basic on both sides; every other fold is the turbulent sum.
-    fx.choice(conv, "ADBE Fractal Noise-0001", "fractal_type", |v| {
-        if v == 1 {
-            (0, None)
-        } else {
-            (
-                1,
-                Some("Turbulent, the folded sum being the nearer of the two Lumit ships"),
-            )
-        }
-    });
-    // 1 Block, 2 Linear, 3 Soft Linear, 4 Spline — Block is the lattice's own
-    // value, everything smoother is Perlin.
+    // AE's menu, 1-based: Basic, Turbulent Smooth, Turbulent Basic, Turbulent
+    // Sharp, Dynamic, Dynamic Progressive, Dynamic Twist, Max, Smeary, Swirly,
+    // Rocky, Cloudy, Terrain, Subscale, Strings. Lumit keeps Basic and Turbulent
+    // (AE's Turbulent Basic) first and the rest in AE's order after them.
+    fx.choice(
+        conv,
+        "ADBE Fractal Noise-0001",
+        "fractal_type",
+        |v| match v {
+            1 => (0, None),
+            2 => (2, None),
+            3 => (1, None),
+            4..=15 => ((v - 1) as u32, None),
+            _ => (1, Some("Turbulent, the type this one is nearest to")),
+        },
+    );
+    // 1 Block, 2 Linear, 3 Soft Linear, 4 Spline. Soft Linear is Lumit's Value:
+    // the lattice values blended with a smoothstep.
     fx.choice(conv, "ADBE Fractal Noise-0002", "noise_type", |v| match v {
-        1 => (0, None),
-        3 => (1, None),
-        _ => (1, Some("Perlin, the smoother of the two bases Lumit ships")),
+        1 => (2, None),
+        2 => (3, None),
+        3 => (0, None),
+        4 => (4, None),
+        _ => (1, Some("Perlin, the smoothest of the bases")),
     });
     fx.toggle(conv, "ADBE Fractal Noise-0003", "invert");
     fx.float(conv, "ADBE Fractal Noise-0004", "contrast", 1.0, 0.0);
@@ -1882,12 +1844,6 @@ fn stroke(
     fx.done()
 }
 
-// ---------------------------------------------------------------------------
-// Temporal
-// ---------------------------------------------------------------------------
-
-/// "Echo" → **Echo** (docs/08 §3.25). Every row carries: Echo Time, the count,
-/// Starting Intensity, the decay and the operator, Blend included.
 fn echo(
     conv: &mut Conv<'_>,
     path: &ItemPath,

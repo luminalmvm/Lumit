@@ -111,14 +111,9 @@ pub fn linear(samples: &[(f64, Vec<f64>)], tolerance: &[f64]) -> Track {
 /// How finely each kind of number is kept when it is sampled: what can't be
 /// seen at the size it is drawn.
 pub mod tolerance {
-    /// Pixels: a hundredth of one.
     pub const PIXELS: f64 = 0.01;
-    /// Degrees.
     pub const DEGREES: f64 = 0.01;
-    /// Per cent.
     pub const PERCENT: f64 = 0.01;
-    /// A colour channel from 0 to 1: half a step of eight bits.
     pub const CHANNEL: f64 = 0.5 / 255.0;
-    /// Seconds (a Retime's source time): a tenth of a millisecond.
     pub const SECONDS: f64 = 1e-4;
 }

@@ -46,10 +46,8 @@ import 'timeline_extras_frb.dart' show DoubleTap, Segment, SegmentOption;
 
 const double _tileW = 96, _plainH = 56;
 
-/// How much taller a tile grows to show its node's picture.
 const double _pictureH = 48;
 
-/// The wire's run between two columns, and the room a split or mixer takes.
 const double _gap = 36, _joint = 22;
 const double _rowGap = 12;
 
@@ -60,22 +58,17 @@ class GradeNodesPanelFrb extends StatefulWidget {
   State<GradeNodesPanelFrb> createState() => _GradeNodesPanelFrbState();
 }
 
-/// One node as drawn: its effect and where its tile sits on the canvas.
 typedef _Tile = ({BridgeEffectInstanceInfo info, Rect rect, int? number});
 
-/// The canvas laid out: tiles, the joints of each run, and the two ends.
 class _Layout {
   final List<_Tile> tiles = [];
 
-  /// Each run's split and mixer points, with the mixer's kind.
   final List<(Offset split, Offset mixer, bool layer)> runs = [];
 
-  /// Where the line leaves each column and where it comes in.
   final List<(Offset from, Offset to)> links = [];
   Offset source = Offset.zero, out = Offset.zero;
   Size size = Size.zero;
 
-  /// Each tile's column and its place in that column, for a drop.
   final List<(int column, int row)> places = [];
   final List<(double left, double right)> columns = [];
 }
@@ -92,7 +85,6 @@ class _GradeNodesPanelFrbState extends State<GradeNodesPanelFrb> {
   ({double zoom, Offset at})? _view;
   String? _viewOf;
 
-  /// The node being dragged to a new place, and where the pointer is.
   UuidValue? _dragging;
   Offset _dragAt = Offset.zero;
 
@@ -105,18 +97,14 @@ class _GradeNodesPanelFrbState extends State<GradeNodesPanelFrb> {
 
   double get _tileH => _thumbnails ? _plainH + _pictureH : _plainH;
 
-  // --- Node pictures -------------------------------------------------------
-
   /// Each node's picture and what it was made from; the old one stays up
   /// until its replacement is in.
   final Map<UuidValue, (String, dui.Image)> _pictures = {};
 
-  /// The pictures wanted, the newest last, by node.
   final Map<UuidValue, (String, GradeShot, int)> _wanted = {};
   bool _making = false;
   Timer? _settle;
 
-  /// The longest edge a node's picture is made at.
   static const int _pictureEdge = 192;
 
   /// What node [i] of [nodes] puts out depends on: the shot, the frame, and
@@ -192,7 +180,6 @@ class _GradeNodesPanelFrbState extends State<GradeNodesPanelFrb> {
     _making = false;
   }
 
-  /// Let go of the pictures, all of them or those of nodes not in [keep].
   void _dropPictures([Set<UuidValue>? keep]) {
     final gone = [
       for (final id in _pictures.keys)
@@ -205,7 +192,6 @@ class _GradeNodesPanelFrbState extends State<GradeNodesPanelFrb> {
     if (keep == null) _wanted.clear();
   }
 
-  /// A moved playhead asks for new pictures once it rests.
   void _playheadMoved() {
     if (!_thumbnails) return;
     _settle?.cancel();
@@ -221,8 +207,6 @@ class _GradeNodesPanelFrbState extends State<GradeNodesPanelFrb> {
     super.initState();
     _playhead.addListener(_playheadMoved);
   }
-
-  // --- What is shown -------------------------------------------------------
 
   GradeShot? get _shot => ui.gradeShot.value;
 
@@ -262,7 +246,6 @@ class _GradeNodesPanelFrbState extends State<GradeNodesPanelFrb> {
 
   (int?, String, List<BridgeEffectInstanceInfo>)? _partRead;
 
-  /// The nodes in view: the shot's stack, or one of its group's grades.
   List<BridgeEffectInstanceInfo> _nodes(GradeShot s) {
     final part = _part;
     final group = part == null ? null : _group(s);
@@ -289,7 +272,6 @@ class _GradeNodesPanelFrbState extends State<GradeNodesPanelFrb> {
     return read;
   }
 
-  /// Fresh handles of the nodes in view, for an edit.
   List<BridgeEffectInstance> _handles(GradeShot s) {
     final part = _part;
     final group = part == null ? null : _group(s);
@@ -331,13 +313,10 @@ class _GradeNodesPanelFrbState extends State<GradeNodesPanelFrb> {
         }
       }
     } catch (_) {
-      // The layer went; no wires to draw.
     }
     _keysRead = (revision, s.key, read, mattes);
     return (read, mattes);
   }
-
-  // --- Key wires -------------------------------------------------------------
 
   /// A key wire being drawn: from which node's key, the node it fed when an
   /// end was picked up, and where the pointer is on the canvas.
@@ -388,7 +367,6 @@ class _GradeNodesPanelFrbState extends State<GradeNodesPanelFrb> {
       v.value is BridgeEffectValue_Bool &&
       (v.value as BridgeEffectValue_Bool).field0);
 
-  /// [to] takes the opposite of the key it is fed, or the key itself again.
   void _invertKey(BridgeEffectInstanceInfo to) {
     final s = _shot;
     if (s == null) return;
@@ -404,7 +382,6 @@ class _GradeNodesPanelFrbState extends State<GradeNodesPanelFrb> {
         }
         s.layer.setEffects(effects: handles);
       } catch (_) {
-        // A locked layer refuses.
       }
     }, name: 'Invert key');
     _tell();
@@ -433,7 +410,6 @@ class _GradeNodesPanelFrbState extends State<GradeNodesPanelFrb> {
     final to = _wireTarget(l, w.at, w.from, nodes, mattes);
     if (to == w.was) return;
     if (to == null) {
-      // An end picked up and let go over nothing: the wire goes.
       if (w.was != null) _rewire(null, null, drop: w.was, name: 'Remove key wire');
       return;
     }
@@ -464,21 +440,17 @@ class _GradeNodesPanelFrbState extends State<GradeNodesPanelFrb> {
   static int _combine(BridgeEffectInstanceInfo e) =>
       e.name == correctionName ? _choice(e, 'combine') : 0;
 
-  /// The node in view the Grade panel edits.
   UuidValue? _current(List<BridgeEffectInstanceInfo> nodes) {
     final want = ui.gradeNode.value;
     if (nodes.any((e) => e.id == want)) return want;
     return nodes.where((e) => e.name == correctionName).lastOrNull?.id;
   }
 
-  // --- Layout --------------------------------------------------------------
-
   _Layout _layout(List<BridgeEffectInstanceInfo> nodes) {
     final l = _Layout();
     final numbers = {
       for (final (i, e) in gradeNumberedOf(nodes).indexed) e.id: i + 1,
     };
-    // Columns: a node, and the nodes that join its run.
     final columns = <List<BridgeEffectInstanceInfo>>[];
     for (final (i, e) in nodes.indexed) {
       if (i > 0 && _combine(e) != 0) {
@@ -529,7 +501,6 @@ class _GradeNodesPanelFrbState extends State<GradeNodesPanelFrb> {
     return l;
   }
 
-  /// The zoom and origin that fit [size] in [pane].
   ({double zoom, Offset at}) _fit(Size size, Size pane) {
     const pad = 16.0;
     final zoom = math.min(
@@ -543,8 +514,6 @@ class _GradeNodesPanelFrbState extends State<GradeNodesPanelFrb> {
           (pane.height - size.height * z) / 2),
     );
   }
-
-  // --- Edits ---------------------------------------------------------------
 
   void _tell() {
     app.notifyDocumentChanged();
@@ -575,7 +544,6 @@ class _GradeNodesPanelFrbState extends State<GradeNodesPanelFrb> {
     _tell();
   }
 
-  /// [run] on the handle of node [id], as one step named [name].
   void _onNode(UuidValue id, String name,
       void Function(GradeShot s, BridgeEffectInstance h) run) {
     final s = _shot;
@@ -613,7 +581,6 @@ class _GradeNodesPanelFrbState extends State<GradeNodesPanelFrb> {
           s.layer.setEffects(effects: handles);
         }
       } catch (_) {
-        // A locked layer refuses.
       }
     }, name: 'Reset node');
     _tell();
@@ -631,7 +598,6 @@ class _GradeNodesPanelFrbState extends State<GradeNodesPanelFrb> {
         resetNodesOnHandles(handles, {effect});
         s.layer.setEffects(effects: handles);
       } catch (_) {
-        // A locked layer refuses.
       }
     }, name: 'Reset node');
     _tell();
@@ -646,7 +612,6 @@ class _GradeNodesPanelFrbState extends State<GradeNodesPanelFrb> {
       try {
         app.project?.renameGradeGroup(group: shared.id, name: name.trim());
       } catch (_) {
-        // Gone under the field.
       }
       _tell();
       return;
@@ -658,7 +623,6 @@ class _GradeNodesPanelFrbState extends State<GradeNodesPanelFrb> {
       }
       s.layer.setEffects(effects: handles, clip: _part == null ? s.clip : null);
     } catch (_) {
-      // The stack moved under the field.
     }
     _tell();
   }
@@ -685,7 +649,6 @@ class _GradeNodesPanelFrbState extends State<GradeNodesPanelFrb> {
     try {
       ui.copyEffectsToClipboard(s.layer.copyEffects(effects: [id]));
     } catch (_) {
-      // Gone; the clipboard keeps what it had.
     }
   }
 
@@ -694,7 +657,6 @@ class _GradeNodesPanelFrbState extends State<GradeNodesPanelFrb> {
       ui.clipboard.kind == ClipboardKind.effects &&
       ui.clipboard.text != null;
 
-  /// The clipboard's effects as nodes after [after], or at the end.
   void _paste(UuidValue? after) {
     final s = _shot;
     final text = ui.clipboard.text;
@@ -714,7 +676,6 @@ class _GradeNodesPanelFrbState extends State<GradeNodesPanelFrb> {
           s.layer.reorderEffect(effect: h, newIndex: at++);
         }
       } catch (_) {
-        // Not effects this stack can take.
       }
     }, name: 'Paste node');
     _tell();
@@ -730,8 +691,6 @@ class _GradeNodesPanelFrbState extends State<GradeNodesPanelFrb> {
     ui.activePane.value = Panel.effectControls.pane();
     ui.workspace.touch();
   }
-
-  // --- Menus ---------------------------------------------------------------
 
   MenuRow _row(String key, String label, VoidCallback close, VoidCallback run,
           {bool enabled = true, bool? ticked, String? action}) =>
@@ -951,8 +910,6 @@ class _GradeNodesPanelFrbState extends State<GradeNodesPanelFrb> {
     ]);
   }
 
-  // --- Keys and pointer ----------------------------------------------------
-
   KeyEventResult _key(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent || !node.hasPrimaryFocus) {
       return KeyEventResult.ignored;
@@ -974,7 +931,6 @@ class _GradeNodesPanelFrbState extends State<GradeNodesPanelFrb> {
       setState(() => _renaming = current);
       return KeyEventResult.handled;
     }
-    // Left and right walk the nodes, round from either end.
     if (nodes.isNotEmpty &&
         (key == LogicalKeyboardKey.arrowLeft ||
             key == LogicalKeyboardKey.arrowRight)) {
@@ -995,7 +951,6 @@ class _GradeNodesPanelFrbState extends State<GradeNodesPanelFrb> {
     setState(() => _view = (zoom: zoom, at: at));
   }
 
-  /// The stack place a drop at canvas point [p] lands on.
   int _dropIndex(_Layout l, Offset p, UuidValue dragged) {
     var column = l.columns.length;
     for (final (i, (_, right)) in l.columns.indexed) {
@@ -1016,8 +971,6 @@ class _GradeNodesPanelFrbState extends State<GradeNodesPanelFrb> {
     }
     return index;
   }
-
-  // --- Drawing -------------------------------------------------------------
 
   @override
   void dispose() {
@@ -1184,7 +1137,6 @@ class _GradeNodesPanelFrbState extends State<GradeNodesPanelFrb> {
       onPointerSignal: (e) => _wheel(e, view),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        // Dragging the ground pans; a double-click fits the nodes again.
         onPanUpdate: (d) =>
             setState(() => _view = (zoom: view.zoom, at: view.at + d.delta)),
         onTapUp: (_) {
@@ -1258,8 +1210,6 @@ class _GradeNodesPanelFrbState extends State<GradeNodesPanelFrb> {
                             top: l.size.height / 2 - 10,
                             child: _plus(t, usable),
                           ),
-                        // The key dots over the tiles' edges, and a wire on
-                        // its way.
                         Positioned.fill(
                           child: IgnorePointer(
                             child: CustomPaint(
@@ -1276,9 +1226,6 @@ class _GradeNodesPanelFrbState extends State<GradeNodesPanelFrb> {
                             ),
                           ),
                         ),
-                        // Drag from a key out to a later node to wire it;
-                        // drag a wire's end to another node, or off to
-                        // remove it.
                         if (wireable)
                           for (final x in outs)
                             _dotHandle('grade-nodes-key-${x.info.id}',
@@ -1324,8 +1271,6 @@ class _GradeNodesPanelFrbState extends State<GradeNodesPanelFrb> {
     );
   }
 
-  /// A grab spot over a key dot at canvas point [dot]. A drag from it draws
-  /// the wire [start] begins.
   Widget _dotHandle(
       String key,
       Offset dot,
@@ -1360,7 +1305,6 @@ class _GradeNodesPanelFrbState extends State<GradeNodesPanelFrb> {
     );
   }
 
-  /// Where a drop at stack place [index] would go, as a short upright line.
   (Offset, Offset)? _dropMark(_Layout l, int index, UuidValue dragged) {
     final others = [
       for (final tile in l.tiles)
@@ -1535,7 +1479,6 @@ class _GradeNodesPanelFrbState extends State<GradeNodesPanelFrb> {
     );
   }
 
-  /// What the node puts out, between its number and its name.
   Widget _picture(LumitTheme t, BridgeEffectInstanceInfo e) {
     final s = _shot;
     final image = s == null || !_usable ? null : _pictureOf(s, _nodes(s), e);
@@ -1564,8 +1507,6 @@ class _GradeNodesPanelFrbState extends State<GradeNodesPanelFrb> {
   static String effectLabelOf(String name) => _labels[name] ?? name;
 }
 
-/// The picture's line through the nodes, the runs' splits and mixers, the
-/// key wires dashed under the tiles, and where a dragged node would land.
 class _WirePainter extends CustomPainter {
   final LumitTheme t;
   final _Layout layout;
@@ -1602,7 +1543,6 @@ class _WirePainter extends CustomPainter {
     for (final (a, b) in layout.links) {
       curve(a, b);
     }
-    // Each run: the split fans out to its tiles and the mixer gathers them.
     for (final (split, mixer, isLayer) in layout.runs) {
       for (final tile in layout.tiles) {
         final r = tile.rect;
@@ -1620,19 +1560,15 @@ class _WirePainter extends CustomPainter {
       void bar(Offset a, Offset b) =>
           canvas.drawLine(mixer + a, mixer + b, g);
       if (isLayer) {
-        // Layer: two stacked bars.
         bar(const Offset(-4, -2), const Offset(4, -2));
         bar(const Offset(-4, 2), const Offset(4, 2));
       } else {
-        // Parallel: a plus, the changes added.
         bar(const Offset(-4, 0), const Offset(4, 0));
         bar(const Offset(0, -4), const Offset(0, 4));
       }
     }
     canvas.drawCircle(layout.source, 5, dot);
     canvas.drawCircle(layout.out, 5, dot);
-    // Key wires: from one tile's key out to another's Matte in, dipping
-    // below both.
     final key = Paint()
       ..color = portColour(t, BridgePortType.matte)
       ..strokeWidth = 1.2
@@ -1661,7 +1597,6 @@ const double _dotSpread = 14;
 Offset _keyOut(Rect r) => r.bottomCenter + const Offset(_dotSpread, 0);
 Offset _keyIn(Rect r) => r.bottomCenter - const Offset(_dotSpread, 0);
 
-/// A key wire from tile [a]'s key out to tile [b]'s Matte in.
 Path _keyPath(Rect a, Rect b) {
   final from = _keyOut(a), to = _keyIn(b);
   final depth = math.max(from.dy, to.dy) + 20;
@@ -1678,7 +1613,6 @@ void _dashed(Canvas canvas, Path path, Paint paint) {
   }
 }
 
-/// The key dots and the wire being drawn, over the tiles.
 class _DotPainter extends CustomPainter {
   final LumitTheme t;
   final List<Offset> outs, ins;
@@ -1746,7 +1680,6 @@ class _WireHit extends CustomPainter {
   bool shouldRepaint(_WireHit old) => old.path != path;
 }
 
-/// A bypassed node's slash, corner to corner.
 class _SlashPainter extends CustomPainter {
   final Color colour;
   _SlashPainter(this.colour);

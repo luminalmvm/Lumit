@@ -14,7 +14,6 @@ use super::{AudioSpectrum, SHAPE_LINE, SHAPE_RING, SHAPE_WAVEFORM};
 /// row reaches, and a bar lands on it wherever it falls.
 const CIRCLE_SIDES: usize = 180;
 
-/// One frame's drawing.
 #[derive(Debug, Clone, Default)]
 pub struct Laid {
     /// Three per piece: `(ax, ay, bx, by)`, `(r, g, b at a, 0)`, `(r, g, b at b, 0)`.
@@ -28,7 +27,6 @@ pub struct Laid {
     pub mix: f32,
 }
 
-/// A straight run from `a` to `b`.
 fn line(a: [f32; 2], b: [f32; 2]) -> MaskPolyline {
     MaskPolyline {
         points: vec![a, b],
@@ -86,8 +84,6 @@ fn mixed(a: [f32; 3], b: [f32; 3], t: f32) -> [f32; 3] {
     ]
 }
 
-/// One band's place on the base: the point, the way out from it, and how far
-/// round the base it is.
 pub(super) struct Place {
     pub point: [f32; 2],
     pub out: [f32; 2],
@@ -267,7 +263,6 @@ pub fn tips(
     out
 }
 
-/// The piece that covers the pixel most, its coverage and its colour.
 fn covered(laid: &Laid, x: u32, y: u32) -> (f32, [f32; 3]) {
     let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
     let (mut best, mut colour) = (0.0f32, [0.0f32; 3]);

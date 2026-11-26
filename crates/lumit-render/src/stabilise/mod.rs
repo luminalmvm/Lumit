@@ -49,21 +49,13 @@ use crate::track::{
 /// then has another name and is never asked for.
 const FORMAT_VERSION: u16 = 3;
 
-/// `LUMSTB\0`, read before anything is deserialised.
 const MAGIC: &[u8; 7] = b"LUMSTB\0";
 
-/// What one analysis is filed under, and what the effect's freshness reading
-/// compares with.
 pub type Key = [u8; 32];
 
-/// One analysis, as handed to the job thread.
 pub struct Job {
-    /// The Stabilise instance it is for: what progress is read by and the
-    /// answer filed under.
     pub effect: Uuid,
-    /// The footage item or nested comp it reads.
     pub source: Uuid,
-    /// What it is called: the content and the rows that change what is found.
     pub key: Key,
     /// Whether the key names a file's content, so the answer can go in the
     /// sidecar. A nested comp's picture is the whole document beneath it, so
@@ -72,18 +64,14 @@ pub struct Job {
     pub settings: AnalysisSettings,
     /// Regions no speck may be born in or wander into, in layer pixels.
     pub masks: MaskTrack,
-    /// Opens the frames, on the decode thread.
     pub open: Box<dyn FnOnce() -> Option<Box<dyn LumaFrames>> + Send>,
     /// A press of Analyse: the clip is analysed again even when the sidecar
     /// has an answer. Every automatic start reads the sidecar first.
     pub fresh: bool,
-    /// The source seconds to read, or the whole clip.
     pub range: Option<(f64, f64)>,
     /// The rate the source plays at now where the item sets one over the
     /// file's own, which the range's seconds are counted in.
     pub rate: Option<f64>,
-    /// Analysed frames per frame of the item's rate: see
-    /// [`Analysis::rate_scale`].
     pub rate_scale: f64,
 }
 
@@ -117,8 +105,6 @@ pub fn key_for(
     *h.finalize().as_bytes()
 }
 
-/// The first enabled Stabilise on `layer` taking the shake out, which is the
-/// one that analyses.
 #[must_use]
 pub fn stabilise_effect(layer: &Layer) -> Option<&EffectInstance> {
     forward(layer)
@@ -142,7 +128,6 @@ pub fn job_for(
     let mut path: lumit_media::sequence::MediaSource = path.into();
     let set = path.interpret.conform_fps.or(path.sequence_fps);
     path.interpret.conform_fps = None;
-    // Frames per frame of the rate: what fields or a pulldown make of it.
     const BASE: i32 = 1_000_000;
     let (n, d) = path.interpret.fps((BASE, 1));
     let rate_scale = if n > 0 && d > 0 {
@@ -170,8 +155,6 @@ pub fn job_for(
     })
 }
 
-/// The job for `fx` on Precomp layer `layer`: the nested comp's frames are
-/// rendered rather than decoded, at the trackers' analysis size.
 #[must_use]
 pub fn job_for_precomp(
     doc: &Arc<Document>,
@@ -214,9 +197,6 @@ pub fn job_for_precomp(
     })
 }
 
-/// The job for `fx` on `layer` of `doc`, read from the footage item's own
-/// file or the nested comp: what every automatic start asks for. `None` for
-/// footage that is offline, or a layer showing neither.
 fn job_in(
     doc: &Arc<Document>,
     comp: &lumit_core::model::Composition,
@@ -246,10 +226,6 @@ fn job_in(
     }
 }
 
-// ---------------------------------------------------------------------------
-// The queue
-// ---------------------------------------------------------------------------
-
 #[derive(Default)]
 struct Queue {
     /// Whether the runner thread is alive. Set under the lock by the request
@@ -257,11 +233,9 @@ struct Queue {
     /// finds nothing waiting, or by its guard when it dies: so two requests
     /// never start two runners, and a dead one never stops the next.
     runner: bool,
-    /// The job running, by effect, and the flag Cancel raises.
     running: Option<(Uuid, Arc<AtomicBool>)>,
     /// Jobs waiting their turn, oldest first. One per effect at most.
     waiting: VecDeque<Job>,
-    /// The last reading of every effect asked about this session.
     progress: HashMap<Uuid, Progress>,
     /// The key each effect was last asked for under, so asking again for the
     /// same thing does nothing.
@@ -280,8 +254,6 @@ fn queue() -> MutexGuard<'static, Queue> {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
-/// How far the analysis for `effect` has got, or `None` when nothing has been
-/// asked for it this session.
 #[must_use]
 pub fn progress(effect: Uuid) -> Option<Progress> {
     queue().progress.get(&effect).cloned()
@@ -301,7 +273,6 @@ pub fn request(job: Job) {
         q.asked.insert(job.effect, job.key);
         if let Some((running, flag)) = &q.running {
             if *running == job.effect {
-                // Running already: the new job replaces it once it stops.
                 flag.store(true, Ordering::Relaxed);
             }
         }
@@ -367,7 +338,6 @@ pub fn forget(keep: impl Fn(&Uuid) -> bool) {
     lumit_core::stabilise::rows::retain(&keep);
 }
 
-/// Every Stabilise instance in `doc`, either way round.
 fn instances(doc: &Document) -> Vec<Uuid> {
     let mut out = Vec::new();
     for item in &doc.items {
@@ -404,8 +374,6 @@ pub fn opened(doc: &Arc<Document>) {
     }
 }
 
-/// What a frame calls when it draws a Stabilise with nothing filed: the job
-/// for it, asked for once.
 fn wanted(effect: Uuid, doc: &Arc<Document>, comp: Uuid, layer: Uuid) {
     // A run in hand, or one that ended without filing anything, is not asked
     // for again by a frame. Cheap, because every frame of a running analysis
@@ -455,7 +423,6 @@ fn drawn(doc: &Document, comp: Option<Uuid>) -> Vec<(Uuid, Uuid)> {
     let mut layers: Vec<(Uuid, Uuid)> = Vec::new();
     let mut seen = Vec::new();
     loop {
-        // Every comp entered shows its visible layers that are not guides.
         while let Some(id) = comps.pop() {
             if seen_comps.contains(&id) {
                 continue;
@@ -495,7 +462,6 @@ fn drawn(doc: &Document, comp: Option<Uuid>) -> Vec<(Uuid, Uuid)> {
         if forward(l).is_some() {
             out.push((cid, lid));
         }
-        // A track matte is drawn, whether or not it is shown itself.
         if let Some(m) = &l.matte {
             layers.push((cid, m.layer));
         }
@@ -530,8 +496,6 @@ fn drawn(doc: &Document, comp: Option<Uuid>) -> Vec<(Uuid, Uuid)> {
     out
 }
 
-/// How many of the Stabilise layers `of` are still waiting for their
-/// analysis: running, and with nothing filed for what the layer shows.
 fn pending(doc: &Document, of: &[(Uuid, Uuid)]) -> usize {
     of.iter()
         .filter(|(comp, layer)| {
@@ -554,9 +518,6 @@ fn pending(doc: &Document, of: &[(Uuid, Uuid)]) -> usize {
         .count()
 }
 
-/// What an export of `comp` does before its first frame: wait for every
-/// Stabilise it draws to have its analysis, giving up when `cancel` is
-/// raised.
 pub fn hold_export(doc: &Arc<Document>, comp: Uuid, cancel: &AtomicBool) {
     let _ = wait_for(doc, Some(comp), &|| cancel.load(Ordering::Relaxed));
 }
@@ -608,8 +569,6 @@ impl Drop for Runner {
     }
 }
 
-/// The one runner thread: takes the oldest waiting job, runs it, and carries
-/// on until nothing waits. `false` when the thread could not be started.
 fn spawn_runner() -> bool {
     std::thread::Builder::new()
         .name("lumit-stabilise".into())
@@ -684,8 +643,6 @@ pub fn tracker_settings(density: u32) -> TrackSettings {
     }
 }
 
-/// The source frames, first and last, a `range` of source seconds covers in a
-/// clip of `clip` frames at `fps`, picked as a layer picks the frame it shows.
 fn frames_in(range: Option<(f64, f64)>, fps: f64, clip: usize) -> (usize, usize) {
     let pick = |t| lumit_core::pixels::frame_pick(t, fps, clip, false, None).0;
     range.map_or((0, clip.saturating_sub(1)), |(a, b)| (pick(a), pick(b)))
@@ -788,10 +745,6 @@ fn analyse(
     Ok((found, done == total))
 }
 
-// ---------------------------------------------------------------------------
-// The sidecar
-// ---------------------------------------------------------------------------
-
 #[derive(serde::Deserialize)]
 struct Record {
     /// Repeated inside the file as well as in its name, so a renamed file is
@@ -817,8 +770,6 @@ fn file_name(key: &Key) -> String {
     name
 }
 
-/// The analysis filed under `key`, if its file is there, is the one named and
-/// holds together ([`Analysis::is_sound`]). A damaged file is read as none.
 fn read_sidecar(dir: &std::path::Path, key: &Key) -> Option<Analysis> {
     let bytes = std::fs::read(dir.join(file_name(key))).ok()?;
     let body = crate::sidecar::unframe(&bytes, MAGIC, FORMAT_VERSION)?;
@@ -839,10 +790,6 @@ fn write_sidecar(dir: &std::path::Path, key: &Key, found: &Analysis) {
         &crate::sidecar::frame(MAGIC, FORMAT_VERSION, &body),
     );
 }
-
-// ---------------------------------------------------------------------------
-// Opening a project
-// ---------------------------------------------------------------------------
 
 /// Every Stabilise in `doc` as a job, or only those on the layers `of`:
 /// footage ones read from the sidecar, and analysed if the sidecar has

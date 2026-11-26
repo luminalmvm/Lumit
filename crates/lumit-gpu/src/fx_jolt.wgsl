@@ -49,7 +49,6 @@ fn tap(x: i32, y: i32, size: vec2<i32>) -> vec4<f32> {
     return select(textureLoad(src, c, 0), vec4<f32>(0.0), xi < 0 || yi < 0);
 }
 
-// == cpu::bilinear_edge, same arithmetic order.
 fn bilinear_edge(q: vec2<f32>, size: vec2<i32>) -> vec4<f32> {
     let f = q - vec2<f32>(0.5);
     let f0 = floor(f);

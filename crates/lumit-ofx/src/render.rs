@@ -77,13 +77,9 @@ pub const RENDER_ACTIONS: [&str; 8] = [
     actions::END_SEQUENCE_RENDER,
 ];
 
-/// The name every filter's output clip goes by.
 pub const OUTPUT_CLIP: &str = "Output";
-/// The one input clip this host drives, by the name OFX gives a filter's input.
 pub const SOURCE_CLIP: &str = "Source";
-/// A transition's two inputs: the picture it leaves, and the one it arrives at.
 pub const SOURCE_FROM_CLIP: &str = "SourceFrom";
-/// See [`SOURCE_FROM_CLIP`].
 pub const SOURCE_TO_CLIP: &str = "SourceTo";
 
 /// The clip the layer's picture goes in as: a transition's is the one it
@@ -129,22 +125,15 @@ fn in_context(
     }))
 }
 
-/// What went wrong, as a value.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum RenderError {
-    /// The epoch turned over: this frame is nobody's frame any more.
     #[error("the render was cancelled")]
     Cancelled,
-    /// The plugin answered an action with a failure.
     #[error("the plugin answered {status:?} to {action}")]
     Plugin {
-        /// Which action.
         action: &'static str,
-        /// What it said.
         status: Status,
     },
-    /// The host could not set the render up. Not the plugin's fault, and
-    /// reported as itself rather than blamed on it.
     #[error("the host could not render ({0:?})")]
     Host(Status),
     /// The graphics card would not take the frame, or give it back. The broker
@@ -165,19 +154,15 @@ impl From<Cancelled> for RenderError {
     }
 }
 
-/// One frame's worth of question: when, how big, and what to work from.
 #[derive(Clone)]
 pub struct RenderRequest {
-    /// The frame being asked for.
     pub time: f64,
-    /// The rectangle to render, in pixels.
     pub bounds: RectI,
     /// Which way up the pictures are handed over. Both are legal and the tests
     /// render the same frame through both, but what a plugin is actually sent
     /// is bottom-up with positive row bytes: a shipped plugin (ntsc-rs) applies
     /// a negative stride in the wrong units and writes past the block.
     pub order: RowOrder,
-    /// One picture per input clip, by the name the plugin gave the clip.
     pub inputs: BTreeMap<String, Frame16>,
     /// The Source clip at other times, by source-relative frame offset: the
     /// frames either side that a motion blur or a retimer reads, decoded by
@@ -223,11 +208,8 @@ impl RenderRequest {
     }
 }
 
-/// What one render produced, and what the plugin said along the way.
 pub struct Rendered {
-    /// The picture.
     pub frame: Frame16,
-    /// `getRegionOfDefinition`'s answer, in pixels.
     pub region_of_definition: RectI,
     /// `getFramesNeeded`'s answer: per clip, the first and last frame the
     /// plugin wants to see. The evaluation graph's temporal edges are made from
@@ -256,8 +238,6 @@ thread_local! {
     static CANCEL_TOKEN: Cell<usize> = const { Cell::new(0) };
 }
 
-/// Sets the thread's cancellation token for as long as it is alive, and puts
-/// back whatever was there before.
 struct CancelScope {
     previous: usize,
 }
@@ -293,7 +273,6 @@ pub struct HostCancelScope {
 }
 
 impl HostCancelScope {
-    /// Read `word` until dropped.
     #[must_use]
     pub fn new(word: &AtomicU32) -> Self {
         let previous = HOST_CANCEL.with(|slot| slot.replace(std::ptr::from_ref(word) as usize));
@@ -307,7 +286,6 @@ impl Drop for HostCancelScope {
     }
 }
 
-/// Whether the host has asked for the frame in flight to stop.
 fn host_cancelled() -> bool {
     let address = HOST_CANCEL.with(Cell::get);
     // SAFETY: the address was written by a live `HostCancelScope` on this
@@ -315,7 +293,6 @@ fn host_cancelled() -> bool {
     address != 0 && unsafe { &*(address as *const AtomicU32) }.load(Ordering::Acquire) != 0
 }
 
-/// The driver's check between steps: the token, or the host's word.
 fn check(token: &EpochToken) -> Result<(), RenderError> {
     if token.cancelled() || host_cancelled() {
         return Err(RenderError::Cancelled);
@@ -323,8 +300,6 @@ fn check(token: &EpochToken) -> Result<(), RenderError> {
     Ok(())
 }
 
-/// Whether the render on this thread has been cancelled — what the image effect
-/// suite's `abort` answers.
 #[must_use]
 pub fn render_is_cancelled() -> bool {
     if host_cancelled() {
@@ -408,11 +383,6 @@ pub(crate) fn offsets_of(frames: &BTreeMap<String, (f64, f64)>, time: f64) -> Op
     (offsets.len() > 1).then_some(offsets)
 }
 
-/// Render one frame through one instance of one plugin.
-///
-/// # Errors
-///
-/// [`RenderError`] — cancelled, the plugin's own failure, or the host's.
 pub fn render(
     plugin: &PluginRef,
     instance: &Instance,
@@ -424,11 +394,6 @@ pub fn render(
     })
 }
 
-/// Render one frame, fetching the other frames the plugin declares it needs.
-///
-/// # Errors
-///
-/// [`RenderError`] — cancelled, the plugin's own failure, or the host's.
 pub fn render_with_prefetch(
     plugin: &PluginRef,
     instance: &Instance,
@@ -534,7 +499,6 @@ pub fn render_with_prefetch(
     })
 }
 
-/// What the plugin said on the way to a frame, and nothing it drew.
 struct Answers {
     region_of_definition: RectI,
     frames_needed: BTreeMap<String, (f64, f64)>,
@@ -682,8 +646,6 @@ fn render_sequence(
     Ok(())
 }
 
-/// Dispatch one action with an optional `inArgs`, and turn a failure into a
-/// [`RenderError`] naming which action it was.
 fn dispatch(
     plugin: &PluginRef,
     handle: Handle,
@@ -730,7 +692,6 @@ fn dispatch_for_answer(
     Ok((status, answer))
 }
 
-/// `kOfxImageEffectActionGetRegionOfDefinition`.
 fn get_region_of_definition(
     plugin: &PluginRef,
     handle: Handle,
@@ -806,7 +767,6 @@ fn get_regions_of_interest(
     Ok(())
 }
 
-/// `kOfxImageEffectActionGetFramesNeeded`.
 fn get_frames_needed(
     plugin: &PluginRef,
     handle: Handle,
@@ -842,7 +802,6 @@ fn get_frames_needed(
     Ok(needed)
 }
 
-/// `kOfxImageEffectActionIsIdentity`, and which clip the plugin named.
 fn is_identity(
     plugin: &PluginRef,
     handle: Handle,
@@ -909,7 +868,6 @@ fn sequence_args(request: &RenderRequest, device: Option<&DeviceImages>) -> Prop
     args
 }
 
-/// The `inArgs` of the render itself.
 fn render_args(request: &RenderRequest, device: Option<&DeviceImages>) -> PropertySet {
     let mut args = PropertySet::new();
     args.seed(keys::TIME, PropValue::double(request.time));
@@ -928,7 +886,6 @@ fn render_args(request: &RenderRequest, device: Option<&DeviceImages>) -> Proper
     args
 }
 
-/// A pixel rectangle as the doubles the region actions speak in.
 fn rect_as_doubles(rect: RectI) -> PropValue {
     PropValue::Double(vec![
         f64::from(rect.x1),

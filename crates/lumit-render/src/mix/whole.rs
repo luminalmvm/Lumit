@@ -20,8 +20,6 @@ use super::graph::Cancelled;
 use super::jobs::AudioChain;
 use super::live::{Baked, RackBakes, WholeKey};
 
-/// How many frames of a node's input are mixed between looks at the cancel
-/// flag.
 const STEP_FRAMES: usize = 64 * SCRATCH_FRAMES;
 
 /// Bake every node rack in `whole` (node index and its chain, in node order)
@@ -53,8 +51,6 @@ pub(super) fn bake_all(
     Ok(plan)
 }
 
-/// Node `node`'s whole input, mixed through `plan`, and the rack's bake of it
-/// (from the bakes when it heard the same before).
 fn bake_one(
     plan: &MixPlan,
     node: usize,
@@ -122,9 +118,6 @@ fn bake_one(
     Ok((key, Some((source, latency))))
 }
 
-/// `plan` with node `node` playing `baked`, whose input started at
-/// `start_frame` (placed its latency early, so the wet lands where the dry
-/// did), in place of its own clips, its inputs and its rack.
 fn replace(mut plan: MixPlan, node: usize, baked: &Baked, start_frame: i64) -> MixPlan {
     let n = node as u16;
     plan.clips.retain(|c| c.node != n);
@@ -190,8 +183,6 @@ fn feeders(plan: &MixPlan, n: usize) -> Vec<bool> {
     needed
 }
 
-/// A fingerprint of a node's input, to tell whether the rack heard the same
-/// sound last time.
 fn fingerprint(samples: &[f32]) -> [u8; 32] {
     let mut h = blake3::Hasher::new();
     let mut bytes = Vec::with_capacity(samples.len().min(1 << 14) * 4);

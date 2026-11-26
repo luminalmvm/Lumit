@@ -1,6 +1,3 @@
-// A shared project as the interface sees it: which end this is, who else is
-// here and what they are looking at, and whether the host can be reached.
-// LumitState owns one and drives it. Panels listen and draw.
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart' show StringCharacters;
@@ -17,7 +14,6 @@ import 'package:lumit_flutter/state/updates.dart' show versionFromBootLine;
 
 import 'preview_throttle.dart';
 
-/// Why a guest was turned away or sharing ended, as a sentence to show.
 String shareEndingText(BridgeShareEnding reason) => switch (reason) {
       BridgeShareEnding_Closed() => l10n.shareEndedClosed,
       BridgeShareEnding_VersionMismatch(:final host) =>
@@ -39,7 +35,6 @@ String shareActivityText(List<String> names, int edits, Set<String> comps) =>
       _ => l10n.shareActivityMany(names.first, names.length - 1, edits),
     };
 
-/// The version of this Lumit as it is written, such as 0.7.0.
 String shareThisLumit() => versionFromBootLine(lumitVersion()) ?? '';
 
 /// Why moving a project kept online forward to this Lumit did not happen, in
@@ -81,13 +76,11 @@ String personLetters(String name, Iterable<String> here) {
   return first;
 }
 
-/// Which end of a shared project this is.
 enum ShareRole { none, host, guest }
 
 class ShareState extends ChangeNotifier {
   ShareRole role = ShareRole.none;
 
-  /// The port this machine listens on while it hosts.
   int? port;
 
   /// Everyone in the project, this person included. This notifier fires on
@@ -189,7 +182,6 @@ class ShareState extends ChangeNotifier {
   bool get outOfStep =>
       forwarding || versions != null || (online != null && !writable) || away;
 
-  /// The Lumit that keeps the project, when it is not this one.
   String? get versionsOf => switch (versions) {
         BridgeShareVersions_Update(:final version) ||
         BridgeShareVersions_Movable(:final version) ||
@@ -198,7 +190,6 @@ class ShareState extends ChangeNotifier {
         null => null,
       };
 
-  /// The project is being moved forward to this Lumit just now.
   bool forwarding = false;
 
   /// How many of this person's changes were dropped the last time the
@@ -241,8 +232,6 @@ class ShareState extends ChangeNotifier {
   /// to do either in.
   VoidCallback? showForward, showUpdate;
 
-  /// Opens the window that settles conflicts, and the Shared project
-  /// window itself.
   VoidCallback? showConflicts, showWindow;
 
   void setVersions(BridgeShareVersions? now) {
@@ -282,10 +271,8 @@ class ShareState extends ChangeNotifier {
   /// For a host: whether people outside its network can get in.
   BridgeShareReach reach = const BridgeShareReach.off();
 
-  /// For a host: whether it has a room at a relay.
   BridgeShareRelayed relayed = BridgeShareRelayed.off;
 
-  /// How many conflicts a merge has left waiting to be chosen between.
   int held = 0;
 
   /// Moves on whenever anything about the project's footage changes: who has
@@ -330,7 +317,6 @@ class ShareState extends ChangeNotifier {
     }
   }
 
-  /// How fetching what an export lacks is getting on.
   BridgeShareFetching fetching() {
     try {
       return _project?.shareFetching() ?? const BridgeShareFetching.idle();
@@ -347,7 +333,6 @@ class ShareState extends ChangeNotifier {
     }
   }
 
-  /// How the export asked of someone else's computer is getting on.
   BridgeShareAsking asking() {
     try {
       return _project?.shareAsking() ?? const BridgeShareAsking.idle();
@@ -356,7 +341,6 @@ class ShareState extends ChangeNotifier {
     }
   }
 
-  /// Answer an export someone asked this computer to do.
   void answerExport(String job, {required bool yes}) {
     exportAsks.removeWhere((ask) => ask.job == job);
     try {
@@ -374,10 +358,8 @@ class ShareState extends ChangeNotifier {
 
   bool get active => role != ShareRole.none;
 
-  /// Everyone but this person, which is who the panels draw.
   Iterable<BridgeSharePerson> get others => people.where((p) => !p.me);
 
-  /// The others who have [comp] open.
   Iterable<BridgeSharePerson> inComp(CompositionReference? comp) =>
       comp == null
           ? const []
@@ -458,7 +440,6 @@ class ShareState extends ChangeNotifier {
     _send();
   }
 
-  /// Sharing is over, or the project it was for has gone.
   void end() {
     if (!active) return;
     _pointing.cancel();
@@ -589,7 +570,6 @@ class ShareState extends ChangeNotifier {
     }
   }
 
-  /// The conflicts waiting, to list in the dialogue that settles them.
   List<BridgeShareConflict> conflicts() =>
       _project?.shareConflicts() ?? const [];
 

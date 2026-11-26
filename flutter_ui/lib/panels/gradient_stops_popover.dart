@@ -60,7 +60,6 @@ class GradientRamp {
   });
 }
 
-/// A stop's colour as the screen shows it, at the opacity it carries.
 Color _shown(BridgeColourRgba c, double opacity) => documentColour(
       (c.r.clamp(0.0, 1.0) * 255).round(),
       (c.g.clamp(0.0, 1.0) * 255).round(),
@@ -68,7 +67,6 @@ Color _shown(BridgeColourRgba c, double opacity) => documentColour(
       (c.a.clamp(0.0, 1.0) * opacity.clamp(0.0, 100.0) / 100 * 255).round(),
     );
 
-/// The ramp over a chequered ground, so a faded stop reads as clear.
 class GradientRampPainter extends CustomPainter {
   final GradientRamp ramp;
   final LumitTheme theme;
@@ -197,8 +195,6 @@ const double _barHeight = 22;
 const double _handleHeight = 14;
 const double _stripHeight = _barTop + _barHeight + _handleHeight + 8;
 
-/// How near the pointer must come to take hold of a handle, and how far from
-/// the ramp a stop is pulled before it comes off.
 const double _grabRadius = 8;
 const double _pullOff = 34;
 
@@ -229,14 +225,11 @@ class _GradientStopsPopoverState extends State<_GradientStopsPopover> {
       _Stop(s.id, s.position, s.colour, s.opacity),
   ];
 
-  /// The id the next stop made here takes, past every one handed in.
   late int _nextId = widget.ramp.between
           .fold(-1, (most, s) => math.max(most, s.id)) +
       1;
   late _Stop _selected = _start;
 
-  /// The stop the pointer has hold of, whether it has been pulled far enough
-  /// to come off, and whether the press has changed anything yet.
   _Stop? _dragging;
   bool _pulledOff = false;
   bool _dirty = false;
@@ -248,7 +241,6 @@ class _GradientStopsPopoverState extends State<_GradientStopsPopover> {
 
   double _xOf(_Stop s) => _bar.left + s.position / 100 * _bar.width;
 
-  /// The ramp as it stands, leaving out a stop that is being pulled off.
   GradientRamp get _ramp {
     return GradientRamp(
       startColour: _start.colour,
@@ -267,7 +259,6 @@ class _GradientStopsPopoverState extends State<_GradientStopsPopover> {
     );
   }
 
-  /// What the ramp reads at [position], for a stop put down there.
   _Stop _sampled(double position) {
     final stops = [_start, ..._between, _end]
       ..sort((a, b) => a.position.compareTo(b.position));
@@ -313,7 +304,6 @@ class _GradientStopsPopoverState extends State<_GradientStopsPopover> {
       });
       return;
     }
-    // Nothing under the pointer: a press on the ramp puts a stop there.
     if (local.dx < _bar.left ||
         local.dx > _bar.right ||
         _between.length >= maxGradientStops) {
@@ -359,7 +349,6 @@ class _GradientStopsPopoverState extends State<_GradientStopsPopover> {
     _dirty = false;
   }
 
-  /// The stop within reach of [local], or null.
   _Stop? _stopAt(Offset local) {
     _Stop? best;
     var bestD = _grabRadius;
@@ -372,7 +361,6 @@ class _GradientStopsPopoverState extends State<_GradientStopsPopover> {
     return best;
   }
 
-  /// A stop put down at [local] and committed, from the menu.
   void _addAt(Offset local) {
     final made = _sampled(
         ((local.dx - _bar.left) / _bar.width * 100).clamp(0.0, 100.0));
@@ -383,7 +371,6 @@ class _GradientStopsPopoverState extends State<_GradientStopsPopover> {
     widget.onCommit(_ramp);
   }
 
-  /// The whole ramp the other way round.
   void _reverse() {
     setState(() {
       final colour = _start.colour, opacity = _start.opacity;
@@ -402,7 +389,6 @@ class _GradientStopsPopoverState extends State<_GradientStopsPopover> {
     widget.onCommit(_ramp);
   }
 
-  /// The stops between the ends, the same distance apart.
   void _spaceEvenly() {
     final ordered = [..._between]
       ..sort((a, b) => a.position.compareTo(b.position));
@@ -414,8 +400,6 @@ class _GradientStopsPopoverState extends State<_GradientStopsPopover> {
     widget.onCommit(_ramp);
   }
 
-  /// The ramp's right-click menu: the stop under the pointer or a new one
-  /// there, then the ramp as a whole.
   void _menu(Offset local, Offset global) {
     final stop = _stopAt(local);
     if (stop != null) setState(() => _selected = stop);
@@ -549,7 +533,6 @@ class _GradientStopsPopoverState extends State<_GradientStopsPopover> {
     );
   }
 
-  /// The selected stop's colour and numbers, each under its own label.
   Widget _controls(LumitTheme t) {
     final stop = _selected;
     final end = _isEnd(stop);
@@ -678,7 +661,6 @@ class _GradientStopsPopoverState extends State<_GradientStopsPopover> {
   }
 }
 
-/// The handles under the ramp, one per stop.
 class _HandlesPainter extends CustomPainter {
   final Rect bar;
   final List<({double x, Color colour, bool selected, bool leaving})> handles;

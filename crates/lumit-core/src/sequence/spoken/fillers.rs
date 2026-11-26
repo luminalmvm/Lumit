@@ -7,7 +7,6 @@ use super::Heard;
 use crate::model::Document;
 use crate::time::Rational;
 
-/// Why a word is a filler.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Filler {
     /// A sound and not a word: "um", "uh", or a sound the model heard and did
@@ -32,7 +31,6 @@ pub fn fold(text: &str) -> String {
         .collect()
 }
 
-/// The language part of a tag: `en` of `en-GB`.
 pub(super) fn base(language: &str) -> String {
     let base = language.split(['-', '_']).next().unwrap_or_default();
     match base.to_lowercase().as_str() {
@@ -131,15 +129,12 @@ pub(super) fn phrases(language: &str) -> &'static [&'static str] {
     }
 }
 
-/// What a word ending a sentence ends with.
 const SENTENCE_ENDS: [char; 6] = ['.', '?', '!', '。', '？', '！'];
 
-/// How far apart a word said twice may be and still be a restart.
 fn restart() -> Rational {
     Rational::ONE
 }
 
-/// One word as fillers are found among them.
 struct Read<'a> {
     folded: String,
     text: &'a str,
@@ -190,7 +185,6 @@ pub(super) fn mark(doc: &Document, heard: &[Heard], pause: Rational) -> Vec<Opti
         _ => false,
     };
     let comma = |i: usize| at(i).is_some_and(|w| w.text.ends_with([',', '，', '、']));
-    // Each language's phrases split into their words, once.
     let mut split: Vec<(&str, Vec<Vec<&str>>)> = Vec::new();
     for word in words.iter().flatten() {
         if !split.iter().any(|(language, _)| *language == word.language) {
@@ -234,7 +228,6 @@ pub(super) fn mark(doc: &Document, heard: &[Heard], pause: Rational) -> Vec<Opti
             latest
         })
         .collect();
-    // Whether a pause follows word `i`, or no word does.
     let paused_after = |i: usize| match (ends.get(i).copied().flatten(), at(i + 1)) {
         (Some(end), Some(next)) => next.start.checked_sub(end).is_ok_and(|gap| gap >= pause),
         _ => true,
@@ -272,7 +265,6 @@ pub(super) fn mark(doc: &Document, heard: &[Heard], pause: Rational) -> Vec<Opti
     out
 }
 
-/// How soon a sentence has to be said again to be a retake of it.
 fn retake_window() -> Rational {
     Rational::new(30, 1).unwrap_or(Rational::ONE)
 }
@@ -294,7 +286,6 @@ const RETAKE_SHARE: usize = 7;
 /// attempt, matched word by word as a script line is. What was said between
 /// the two, an apology or a "one more time", is left as it is.
 fn retakes(words: &[Option<Read<'_>>], out: &mut [Option<Filler>]) {
-    // Each sentence as the range of words it spans.
     let mut sentences: Vec<std::ops::Range<usize>> = Vec::new();
     let mut from = 0;
     for (i, word) in words.iter().enumerate() {
@@ -338,8 +329,6 @@ fn retakes(words: &[Option<Read<'_>>], out: &mut [Option<Filler>]) {
             let soon = start
                 .checked_sub(end)
                 .is_ok_and(|gap| gap <= retake_window());
-            // Nobody else may have spoken since, and the speaker is known
-            // throughout.
             let one_run = (earlier.start..later.end)
                 .all(|i| at(i).is_some_and(|w| w.speaker == Some(speaker)));
             if !soon || !one_run {

@@ -8,6 +8,8 @@ packaging/flatpak/bundle/
 .flatpak-builder/
 flatpak-build/
 flatpak-repo/
+packaging/windows/dist/
+/work/
 
 
 # The OFX support library writes this beside whatever ran a plugin — a bare

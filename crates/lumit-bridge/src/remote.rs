@@ -56,13 +56,10 @@ mod worker;
 
 use job::{Job, Stage};
 
-/// How often the jobs are turned over.
 const TURN: Duration = Duration::from_millis(250);
 
-/// How long a job may go without ending before it is given up on.
 const WEEK: i64 = 7 * 24 * 60 * 60;
 
-/// What the jobs' thread is handed.
 enum Event {
     Heard(String),
     Command {
@@ -75,9 +72,7 @@ enum Event {
         body: String,
         error: String,
     },
-    /// A transfer of a job's moved on.
     Told(Uuid, News),
-    /// Whether the computers of a fit in hand can export a composition.
     Check {
         computer: String,
         comp: Uuid,
@@ -86,15 +81,10 @@ enum Event {
     },
 }
 
-/// What the disk thread is handed.
 enum Io {
-    /// Work out a sent job's files.
     Prepare(Uuid, sender::Snapshot),
-    /// A file of a job arrived at `path`.
     Arrived(Uuid, Uuid, PathBuf),
-    /// Work out which of a job's files the worker has.
     Gather(Uuid),
-    /// Delete what is left of a job.
     Forget(Uuid),
     /// Count, or with `true` empty, the store.
     Store(bool),
@@ -107,15 +97,12 @@ type Holding = HashMap<Uuid, (PathBuf, u64)>;
 type Say = Box<dyn Fn(BridgeRemoteSay) + Send + Sync>;
 type Tell = Box<dyn Fn(BridgeExportNews) + Send + Sync>;
 
-/// Transfers of one job: how much of each file has crossed, of how much, and
-/// the last few readings of the whole, for a rate.
 #[derive(Default)]
 struct Moving {
     files: HashMap<Uuid, (u64, u64)>,
     readings: Vec<(Instant, u64)>,
 }
 
-/// Remote exports on this computer.
 pub(crate) struct Remote {
     /// `<cache>/remote`: the jobs, the store and the hashes.
     root: PathBuf,
@@ -127,12 +114,10 @@ pub(crate) struct Remote {
     room: Mutex<room::Room>,
     said: Mutex<Vec<room::Said>>,
     jobs: Mutex<BTreeMap<Uuid, Job>>,
-    /// Jobs changed since they were last written.
     dirty: Mutex<HashSet<Uuid>>,
     /// Each job's link while it has one. Locked alone: a link calls back in.
     links: Mutex<HashMap<Uuid, Arc<lumit_share::remote::Link>>>,
     moving: Mutex<HashMap<Uuid, Moving>>,
-    /// The worker's side of each job's files while it gathers them.
     gathering: Mutex<HashMap<Uuid, worker::Gathering>>,
     /// The sender's files of each job by the item each is asked for as:
     /// where it is and its size.
@@ -141,9 +126,7 @@ pub(crate) struct Remote {
     /// asked how a job stands, by job.
     asked: Mutex<HashMap<Uuid, Instant>>,
     polled: Mutex<HashMap<Uuid, Instant>>,
-    /// Sent jobs whose files this process has begun to work out.
     job_started: Mutex<HashSet<Uuid>>,
-    /// Worker's jobs with an item in this process's export queue.
     queued: Mutex<HashSet<Uuid>>,
     /// What each computer said about each composition, by revision. Emptied
     /// when it grows past a few dozen.
@@ -157,7 +140,6 @@ pub(crate) struct Remote {
     awake: Mutex<Option<crate::awake::Awake>>,
 }
 
-/// The one for this process, started when first asked for.
 static HERE: OnceLock<Arc<Remote>> = OnceLock::new();
 
 fn here() -> &'static Arc<Remote> {
@@ -170,7 +152,6 @@ fn here() -> &'static Arc<Remote> {
 }
 
 impl Remote {
-    /// Start remote exports kept under `root`, with the jobs found there.
     pub(crate) fn start(root: PathBuf) -> Arc<Remote> {
         let (events, heard) = sync_channel(1024);
         let (io, work) = sync_channel(4096);
@@ -222,7 +203,6 @@ impl Remote {
         remote
     }
 
-    /// Stop every link and both threads. For a test, which starts its own.
     #[cfg(all(test, feature = "media"))]
     pub(crate) fn shut(&self) {
         self.stop.store(true, Ordering::Relaxed);
@@ -268,7 +248,6 @@ impl Remote {
         });
     }
 
-    /// A copy of `job` as it stands.
     fn job(&self, job: Uuid) -> Option<Job> {
         self.jobs.lock().ok()?.get(&job).cloned()
     }
@@ -300,12 +279,10 @@ impl Remote {
         self.jobs.lock().ok()?.get_mut(&job).map(change)
     }
 
-    /// The link of `job`, if it has one now.
     fn link(&self, job: Uuid) -> Option<Arc<lumit_share::remote::Link>> {
         self.links.lock().ok()?.get(&job).cloned()
     }
 
-    /// Stop the link of `job`, if it has one.
     fn unlink(&self, job: Uuid) {
         let link = self.links.lock().ok().and_then(|mut l| l.remove(&job));
         if let Some(link) = link {
@@ -316,7 +293,6 @@ impl Remote {
         }
     }
 
-    /// Tell the interface something about `job`.
     fn news(&self, kind: BridgeExportNewsKind, job: &Job) {
         let here = matches!(kind, BridgeExportNewsKind::Landed)
             || (!job.sent && job.lands == job::Lands::Worker);
@@ -343,7 +319,6 @@ impl Remote {
         }
     }
 
-    /// The jobs' thread.
     fn run(self: &Arc<Self>, heard: &Receiver<Event>) {
         let mut turned = Instant::now();
         while !self.stop.load(Ordering::Relaxed) {
@@ -448,7 +423,6 @@ impl Remote {
         }
     }
 
-    /// Turn every job over once.
     fn turn(self: &Arc<Self>) {
         self.resay();
         let account = self.account.lock().map(|a| a.clone()).unwrap_or_default();
@@ -496,7 +470,6 @@ impl Remote {
         self.write_down();
     }
 
-    /// Write the jobs changed since the last turn.
     fn write_down(&self) {
         let dirty: Vec<Uuid> = self
             .dirty
@@ -510,7 +483,6 @@ impl Remote {
         }
     }
 
-    /// End `job` here as failed with `why`, and tell the other computer.
     fn give_up(&self, job: Uuid, why: &str) {
         // One that ended meanwhile keeps the end it had.
         let Some(j) = self.job(job).filter(|j| !j.stage.ended()) else {
@@ -537,8 +509,6 @@ impl Remote {
         }
     }
 
-    /// What is left of an ended job's work here: its link, its commands and,
-    /// on the worker, its item in the queue and its files.
     fn stopped(&self, job: Uuid) {
         self.unlink(job);
         self.unsay(job);
@@ -555,7 +525,6 @@ impl Remote {
         }
     }
 
-    /// The disk thread.
     fn work(self: &Arc<Self>, work: &Receiver<Io>) {
         while !self.stop.load(Ordering::Relaxed) {
             let Ok(next) = work.recv_timeout(TURN) else {
@@ -599,7 +568,6 @@ impl Remote {
         }
     }
 
-    /// Hashes of the store's files a job that has not ended needs.
     fn store_needed(&self) -> HashSet<String> {
         let live: Vec<Uuid> = self.jobs.lock().map_or_else(
             |_| Vec::new(),
@@ -623,8 +591,6 @@ impl Remote {
     }
 }
 
-// --- What the interface calls -------------------------------------------
-
 pub(crate) fn heard(said: &str) {
     here().heard(said);
 }
@@ -642,7 +608,6 @@ pub(crate) fn outbox(sink: StreamSink<BridgeRemoteSay>) {
     remote.set_outbox(Box::new(move |say| {
         let _ = sink.add(say);
     }));
-    // What waited for a way out goes now.
     remote.resay();
 }
 
@@ -652,7 +617,6 @@ pub(crate) fn news(sink: StreamSink<BridgeExportNews>) {
     }));
 }
 
-/// An export this computer did for itself ended: written, or `error`.
 pub(crate) fn exported(comp_name: &str, path: &str, error: Option<&str>) {
     let Some(remote) = HERE.get() else {
         return;
@@ -768,7 +732,6 @@ pub(crate) fn kept_bytes() -> u64 {
     remote.kept.load(Ordering::Relaxed)
 }
 
-/// A remote export's document as this Lumit reads it, for its export.
 pub(crate) fn job_document(folder: &Path, schema: &str) -> Option<lumit_core::model::Document> {
     worker::read_job_document(folder, schema)
 }

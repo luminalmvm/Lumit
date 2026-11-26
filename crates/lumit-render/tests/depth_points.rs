@@ -1,7 +1,3 @@
-//! Depth points line up with the footage from the camera they came from: every
-//! point is on its pixel's ray, however deep the depth says it is, and from
-//! anywhere else they are not flat.
-
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use lumit_core::anim::Property;
@@ -35,7 +31,6 @@ fn float(v: f64) -> EffectValue {
     EffectValue::Float(Property::fixed(v))
 }
 
-/// A depth that varies a lot across the frame, with a hard step in it.
 fn publish_depth(effect: Uuid) {
     let (w, h) = (W as usize / 2, H as usize / 2);
     let mut data = Vec::with_capacity(w * h * 2);
@@ -63,10 +58,6 @@ struct Scene {
     comp: Uuid,
 }
 
-/// A 3D solid wearing busy noise so a pixel out of place shows, with Depth
-/// points of `size` on it when `points` is true, tilted by `tilt` degrees. A
-/// camera off to one side is named by Depth points' Camera row and is the
-/// active one only when `from_named` is true.
 fn scene(
     noise: &EffectInstance,
     points: bool,
@@ -158,7 +149,6 @@ fn render(r: &mut HeadlessRenderer, s: &Scene) -> Vec<u8> {
     r.render_rgba(&s.doc, s.comp, 0, 1.0).expect("a frame").0
 }
 
-/// The worst difference between `a` and `b` over the frame's green channel.
 fn worst(a: &[u8], b: &[u8]) -> u8 {
     a.iter()
         .zip(b)
@@ -169,8 +159,6 @@ fn worst(a: &[u8], b: &[u8]) -> u8 {
         .unwrap_or(0)
 }
 
-/// How far `a` sits from `b` in the tile with its corner at `(x0, y0)`, as the
-/// whole-pixel shift of `b` that matches it best.
 fn best_shift(a: &[u8], b: &[u8], (x0, y0): (i32, i32)) -> (i32, i32) {
     const TILE: i32 = 40;
     let at = |p: &[u8], x: i32, y: i32| i32::from(p[((y * W as i32 + x) * 4 + 1) as usize]);
@@ -183,7 +171,6 @@ fn best_shift(a: &[u8], b: &[u8], (x0, y0): (i32, i32)) -> (i32, i32) {
                     sum += (at(a, x, y) - at(b, x + dx, y + dy)).abs();
                 }
             }
-            // The smaller shift wins a tie.
             let key = sum * 8 + dx.abs() + dy.abs();
             if key < best.0 {
                 best = (key, (dx, dy));
@@ -193,7 +180,6 @@ fn best_shift(a: &[u8], b: &[u8], (x0, y0): (i32, i32)) -> (i32, i32) {
     best.1
 }
 
-/// How many tiles across the middle of the frame have moved from `flat`.
 fn moved(points: &[u8], flat: &[u8]) -> i32 {
     (20..W as i32 - 200)
         .step_by(40)
@@ -222,11 +208,8 @@ fn points_line_up_with_the_footage_from_their_camera_and_not_from_elsewhere() {
         )
     };
 
-    // A layer square on to the camera falls on whole pixels, so at Point size 1
-    // the points are the footage to the last pixel, however deep each one is.
     let square = draw(false, 1.0, false, true, 0.0);
     assert!(worst(&draw(true, 1.0, true, true, 0.0), &square) <= 1);
-    // With no depth yet they lie on the layer.
     assert!(worst(&draw(true, 1.0, false, true, 0.0), &square) <= 1);
 
     // Tilted, the compositor filters and the points read the nearest pixel, so
@@ -245,7 +228,6 @@ fn points_line_up_with_the_footage_from_their_camera_and_not_from_elsewhere() {
         }
     }
 
-    // Seen from the other camera the depth shows.
     let flat = draw(false, 1.0, false, false, 12.0);
     let points = draw(true, 1.0, true, false, 12.0);
     assert!(moved(&points, &flat) > 3, "flat from the other camera");
@@ -265,7 +247,6 @@ fn points_line_up_with_the_footage_from_their_camera_and_not_from_elsewhere() {
     let points = render(&mut r, &viewed);
     assert!(moved(&points, &flat) > 3, "flat in a 3D view");
 
-    // A Depth layer stands in for an analysis, its effects and all.
     let s = scene(&noise, true, 1.0, false, false, 12.0);
     let mut doc = Arc::unwrap_or_clone(s.doc);
     let comp = doc.comp_mut(s.comp).expect("the comp");
@@ -285,7 +266,6 @@ fn points_line_up_with_the_footage_from_their_camera_and_not_from_elsewhere() {
         "the Depth layer went unread"
     );
 
-    // The Viewer's present and an export's are the one picture.
     let s = scene(&noise, true, 2.0, true, false, 12.0);
     let q = Quality::default();
     let viewer = r
@@ -299,7 +279,6 @@ fn points_line_up_with_the_footage_from_their_camera_and_not_from_elsewhere() {
     }
 }
 
-/// Two keys on a property, across the comp's one second.
 fn keyed(from: f64, to: f64) -> Property {
     let side = lumit_core::anim::SideInterp::Linear;
     let key = |s: i64, value: f64| lumit_core::anim::Keyframe {
@@ -314,7 +293,6 @@ fn keyed(from: f64, to: f64) -> Property {
     }
 }
 
-/// `s` with its comp's top camera out of the way and its second changed by `set`.
 fn staged(s: Scene, set: impl FnOnce(&mut lumit_core::model::Layer)) -> Scene {
     let mut doc = Arc::unwrap_or_clone(s.doc);
     let comp = doc.comp_mut(s.comp).expect("the comp");
@@ -326,7 +304,6 @@ fn staged(s: Scene, set: impl FnOnce(&mut lumit_core::model::Layer)) -> Scene {
     }
 }
 
-/// Whether every tile is within a pixel of `flat` at frame `frame`.
 fn lined_up(points: &[u8], flat: &[u8], frame: u32) {
     for y0 in (60..H as i32 - 60).step_by(40) {
         for x0 in (60..W as i32 - 60).step_by(40) {
@@ -363,8 +340,6 @@ fn a_moving_camera_shows_the_depth_or_carries_the_shot() {
     let moving =
         |c: &mut lumit_core::model::Layer| c.transform.position_x = keyed(mid, mid + 300.0);
 
-    // The comp's own camera, keyed, with the row unset: lined up on the layer's
-    // first frame, and the depth shows once it has moved.
     let unset = |analysed| {
         let s = scene(&noise, true, 1.0, analysed, true, 0.0);
         let mut doc = Arc::unwrap_or_clone(s.doc);
@@ -386,8 +361,6 @@ fn a_moving_camera_shows_the_depth_or_carries_the_shot() {
         "no parallax from a moved comp camera"
     );
 
-    // Named, keyed and zooming, by the row's own route: through it the points
-    // are the plate on every frame.
     let named = |enabled| {
         let s = scene(&noise, true, 1.0, true, true, 0.0);
         let s = staged(s, moving);
@@ -428,9 +401,6 @@ fn a_moving_camera_shows_the_depth_or_carries_the_shot() {
         lined_up(&frame(&mut r, &points, at), &plate, at as u32);
     }
 
-    // A solved camera whose lens is nothing like the stored zoom, moving and
-    // turning. The row places the plate by the solve's zoom, so through it the
-    // points are the plate on every frame. Switching them off keeps it riding.
     let solved = |enabled| {
         let s = scene(&noise, true, 1.0, true, true, 0.0);
         let mut doc = Arc::unwrap_or_clone(s.doc);
@@ -485,7 +455,6 @@ fn a_moving_camera_shows_the_depth_or_carries_the_shot() {
                 notes: Vec::new(),
             },
         );
-        // The row, by the route the panel takes, and then the effect's switch.
         let shared = Arc::new(doc.clone());
         let comp = shared.comp(s.comp).expect("the comp").clone();
         let camera = comp.layers[1].id;
@@ -525,7 +494,6 @@ fn a_moving_camera_shows_the_depth_or_carries_the_shot() {
         lined_up(&frame(&mut r, &points, at), &plate, at as u32);
     }
 
-    // A collapsed precomp moved and turned takes its points with it.
     let collapsed = |enabled| {
         let s = scene(&noise, true, 1.0, true, true, 0.0);
         let mut doc = Arc::unwrap_or_clone(s.doc);
@@ -570,7 +538,6 @@ fn a_moving_camera_shows_the_depth_or_carries_the_shot() {
         }
     }
 
-    // A hidden parent moving the named camera renames the frame.
     let key = |x: f64| {
         let s = scene(&noise, true, 1.0, true, false, 0.0);
         let mut doc = Arc::unwrap_or_clone(s.doc);

@@ -54,7 +54,6 @@ class EffectCommands {
   final LayerReference layer;
   final CompositionReference comp;
 
-  /// The list changed, so it needs reading again.
   final VoidCallback onStackChanged;
 
   /// A layer style, which keeps a fixed place in a fixed list.
@@ -63,17 +62,13 @@ class EffectCommands {
   /// A placed graph's Inputs: its rows and a Reset, nothing else.
   final bool inputs;
 
-  /// One of a Model layer's materials.
   final bool material;
 
-  /// The group header or the clip whose stack this effect is on, if any.
   final UuidValue? group;
   final UuidValue? clip;
 
-  /// Whether it's on the layer's own stack, the only list a paste lands on.
   bool get onStack => !style && !inputs && group == null && clip == null;
 
-  /// The list this effect is on.
   List<BridgeEffectInstance> instances() {
     if (clip case final c?) {
       return layer.getClipEffects(clip: c, onCompClock: true);
@@ -111,7 +106,6 @@ class EffectCommands {
         info.rowOptions,
       );
 
-  /// Whether every row stands at what the schema declares.
   bool get atDefault {
     final held = {for (final v in info.values) v.id: v.value};
     for (final param in rows) {
@@ -184,7 +178,6 @@ class EffectCommands {
           ? {for (final v in layer.seededDefaults(name: name)) v.id: v.value}
           : const <String, BridgeEffectValue>{};
       for (final param in params) {
-        // A button has no value to put back.
         if (seeded[param.id] ?? defaultEffectValue(param.kind)
             case final value?) {
           instance.setValue(id: param.id, value: value);
@@ -199,7 +192,6 @@ class EffectCommands {
     onStackChanged();
   }
 
-  /// The handles off their list.
   void remove(BuildContext context) {
     final names = [
       for (final e in _handles(context))
@@ -210,8 +202,6 @@ class EffectCommands {
     onStackChanged();
   }
 
-  /// Set this effect, and any picked effect of the same kind, to its
-  /// [preset]-th built-in preset, keyframes from the playhead.
   void _applyPreset(BuildContext context, int preset) {
     final at = Provider.of<LumitUiState>(context, listen: false)
         .playheadFrame
@@ -223,8 +213,6 @@ class EffectCommands {
     onStackChanged();
   }
 
-  /// Set this effect, and any picked effect of the same kind, to the one a
-  /// saved preset at [path] holds, keyframes from the playhead.
   Future<void> _applySavedEffect(BuildContext context, String path) async {
     final app = Provider.of<LumitState>(context, listen: false);
     final at = Provider.of<LumitUiState>(context, listen: false)
@@ -247,7 +235,6 @@ class EffectCommands {
     onStackChanged();
   }
 
-  /// Set this material to the one saved in the preset at [path].
   Future<void> _applySaved(LumitState app, String path, int at) async {
     try {
       final text = await readEffectPreset(path: path);
@@ -257,15 +244,12 @@ class EffectCommands {
         }
       }
     } catch (_) {
-      // A file that has gone or isn't a material; nothing changes.
       app.postNotice(l10n.presetFileNotPreset, error: true);
       return;
     }
     onStackChanged();
   }
 
-  /// Put this effect on the clipboard, with the rest of the picked run when
-  /// it's part of one.
   void _copy(BuildContext context) {
     final ui = Provider.of<LumitUiState>(context, listen: false);
     try {
@@ -273,12 +257,9 @@ class EffectCommands {
         layer.copyEffects(effects: ui.effectsToCopy(layer, info.id)),
       );
     } catch (_) {
-      // The effect is gone; the clipboard keeps whatever it had.
     }
   }
 
-  /// Save this effect alone as a preset in the library, named after the effect
-  /// to begin with.
   Future<void> _savePreset(BuildContext context) async {
     final ui = Provider.of<LumitUiState>(context, listen: false);
     final kind = material ? 'lummat' : 'lumfx';
@@ -296,8 +277,6 @@ class EffectCommands {
               name: name)
           : layer.savePreset(name: name, only: info.id));
     } catch (_) {
-      // A folder that will not take the file, or an effect that went away
-      // under the open dialogue. The document is untouched either way.
       return;
     }
     ui.presetsChanged.value++;
@@ -330,20 +309,16 @@ class EffectCommands {
         }
       });
     } catch (_) {
-      // Not a stack this layer can take, or the layer has gone.
     }
     onStackChanged();
   }
 
-  /// Duplicate this effect in place, with the rest of the picked run when it
-  /// is part of one, and pick the copies.
   void duplicate(BuildContext context) {
     final ui = Provider.of<LumitUiState>(context, listen: false);
     try {
       ui.setEffectSelection(layer,
           layer.duplicateEffects(effects: ui.effectsToCopy(layer, info.id)));
     } catch (_) {
-      // The effect is gone.
       return;
     }
     onStackChanged();
@@ -378,7 +353,6 @@ class EffectCommands {
       for (final instance in stack)
         if (instance.id() == info.id) ...instance.presetNames(),
     ];
-    // And any of its kind the user has saved. Read here, as the menu opens.
     final saved = material
         ? listMaterialPresets()
         : style || inputs
@@ -399,7 +373,6 @@ class EffectCommands {
             info.customName ?? effectLabelOf(info.name),
             owner: info.id);
     final isControl = onOff != null && controls.controlFor(onOff) != null;
-    // A style, the Inputs and a material have no clipboard.
     final copies = !style && !inputs && !material;
     final effectInfo = inputs
         ? null
@@ -447,10 +420,7 @@ class EffectCommands {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: menuGroups([
-              // What the effect is doing, first.
               [
-                // Bypass, ticked while off: the word the Grade panel uses
-                // for the same switch.
                 if (!inputs)
                   row('bypass', l10n.fxBypass,
                       () => setEnabled(context, !info.enabled),
@@ -474,7 +444,6 @@ class EffectCommands {
                       ticked: isControl),
               ],
               extra?.own ?? const [],
-              // A clip's or a group's stack is not a layer's to paste onto.
               [
                 if (copies) ...[
                   row('cut', l10n.menuCut, () {
@@ -543,8 +512,6 @@ class EffectCommands {
                 ...?extra?.arrange,
               ],
               [
-                // The presets this effect ships with. Each sets the whole
-                // effect, with any keyframes starting at the playhead.
                 if ((presets.isNotEmpty || saved.isNotEmpty) && !locked)
                   SubmenuRow(
                     key: ValueKey<String>('fx-menu-presets-$id'),
@@ -591,8 +558,6 @@ class EffectCommands {
                       child: Text(l10n.effectPresets),
                     ),
                   ),
-                // This one effect as a preset, settings and keyframes and all.
-                // A group header's stack is not a layer's to save from.
                 if ((!style || material) &&
                     !inputs &&
                     group == null &&
@@ -609,9 +574,6 @@ class EffectCommands {
                     }
                   }, ticked: false),
               ],
-              // The same effect seen the other way: its box on the layer's
-              // graph, or from the box its heading in Effect controls. A
-              // style, a clip's or a group's effect has no box.
               [
                 ...?extra?.view,
                 if (onStack && !style && !material && !inputs)
@@ -626,7 +588,6 @@ class EffectCommands {
                           () => ui.revealEffectCard(layer, info.id),
                           ticked: false),
               ],
-              // How this surface draws the effect.
               [
                 if (compositing case final fold?)
                   row(
@@ -643,8 +604,6 @@ class EffectCommands {
                 ],
                 ...?extra?.look,
               ],
-              // Last, on its own: the one row that takes the effect away. A
-              // material goes back to its file's own values instead.
               [
                 if (!inputs)
                   row(

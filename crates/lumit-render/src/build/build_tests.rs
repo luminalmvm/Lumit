@@ -1,10 +1,3 @@
-//! Draw-building tests: layer geometry under reduced-resolution decode,
-//! collapsed Precomps, the live value patch, and adjustment staging.
-//!
-//! These moved out of the egui shell with the pixel pass — they always
-//! tested the builder, not the interface, and they now guard it for both
-//! frontends at once.
-
 use crate::build::{build_comp_draws, patch_layer_prop};
 use crate::decode::CompLayerPixels;
 use crate::draw::DrawSource;
@@ -88,7 +81,6 @@ fn footage_geometry_uses_native_size_not_decoded_size() {
         motion_blur: Default::default(),
         extra: serde_json::Map::new(),
     };
-    // Native 1920x1080, decoded 480x270 (zoomed out, quarter res).
     let lp = CompLayerPixels {
         layer: layer.id,
         at: 0.0,
@@ -119,18 +111,13 @@ fn footage_geometry_uses_native_size_not_decoded_size() {
     );
 
     assert_eq!(draws.len(), 1);
-    // Geometry uses native size (zoom-independent), not the 480x270 decode.
     assert_eq!(draws[0].natural_size, (1920.0, 1080.0));
-    // The texture still carries the decoded dimensions.
     match &draws[0].source {
         DrawSource::Pixels { tex_w, tex_h, .. } => assert_eq!((*tex_w, *tex_h), (480, 270)),
         _ => panic!("expected a pixel source for a footage layer"),
     }
 }
 
-// Collapse (docs/06 §1.4): a collapsed Precomp splices its inner draws
-// into the parent list with the parent's placement multiplied in front —
-// no Nested intermediate. Off (or forced by a mask) renders Nested.
 #[test]
 fn collapsed_precomp_splices_inner_draws_with_parent_placement() {
     use lumit_core::model::{ProjectItem, TextDocument};
@@ -252,8 +239,6 @@ fn collapsed_precomp_splices_inner_draws_with_parent_placement() {
         &map,
         &mut visited,
     );
-    // Spliced: one draw, pixel source (the inner text), pre = the parent
-    // Precomp layer's placement matrix — exactly the compositor's maths.
     assert_eq!(draws.len(), 1);
     // Its words are drawn as large as the collapsed layer shows them.
     let DrawSource::Pixels { tex_w, .. } = &draws[0].source else {
@@ -303,8 +288,6 @@ fn collapsed_precomp_splices_inner_draws_with_parent_placement() {
     assert_eq!(*background, [0.0, 0.0, 0.0, 0.0]);
     assert!(draws[0].pre.is_none());
 
-    // A mask on the Precomp layer forces the intermediate (§1.4) even
-    // with the switch set.
     let mut forced = parent.clone();
     forced.layers[0]
         .masks
@@ -346,11 +329,6 @@ fn collapsed_precomp_splices_inner_draws_with_parent_placement() {
     assert_eq!(paint.len(), 1, "the stroke travels with the draw");
 }
 
-/// An adjustment layer with a live stack emits an Adjust staging draw
-/// above the content beneath it (docs/06 §1.5), carrying its resolved
-/// effects, comp-sized geometry, and a comp-sized mask coverage; a dead
-/// stack (fx switch off, everything disabled, or no effects) emits
-/// nothing at all.
 #[test]
 fn a_live_adjustment_layer_emits_a_staging_draw() {
     let solid_def = Uuid::now_v7();
@@ -429,7 +407,6 @@ fn a_live_adjustment_layer_emits_a_staging_draw() {
         duration: Duration(Rational::new(10, 1).unwrap()),
         background: LinearColour::BLACK,
         work_area: None,
-        // Index 0 = top: the adjustment sits above the solid.
         layers: vec![adj.clone(), base.clone()],
         markers: Vec::new(),
         motion_blur: Default::default(),
@@ -444,7 +421,6 @@ fn a_live_adjustment_layer_emits_a_staging_draw() {
         &map,
         &mut visited,
     );
-    // Bottom-up: the solid first, then the staging point above it.
     assert_eq!(draws.len(), 2);
     assert!(matches!(draws[0].source, DrawSource::Pixels { .. }));
     assert!(matches!(draws[1].source, DrawSource::Adjust));
@@ -453,8 +429,6 @@ fn a_live_adjustment_layer_emits_a_staging_draw() {
     let (_, cov_w, cov_h) = draws[1].mask_cov.as_ref().unwrap();
     assert_eq!((*cov_w, *cov_h), (1920, 1080));
 
-    // Dead stacks emit nothing: fx switch off, all effects disabled,
-    // or an empty stack.
     for edit in [
         &(|l: &mut Layer| l.switches.fx = false) as &dyn Fn(&mut Layer),
         &|l: &mut Layer| l.effects[0].enabled = false,
@@ -476,8 +450,6 @@ fn a_live_adjustment_layer_emits_a_staging_draw() {
         assert!(matches!(draws[0].source, DrawSource::Pixels { .. }));
     }
 }
-
-// --- Settings → Export filename template -------------------------------
 
 /// A paint stroke is stamped into the layer's own pixels before its masks gate
 /// them — the render side of the feature, checked where the pixels are
@@ -637,7 +609,6 @@ fn a_puppet_pin_carries_the_layers_pixels() {
         switches: Switches::default(),
         extra: serde_json::Map::new(),
     };
-    // A red mark to follow, in a white square that is otherwise featureless.
     let mut stroke = lumit_core::paint::PaintStroke::new("Brush 1", vec![(20.0, 20.0)]);
     stroke.width = 6.0;
     stroke.colour = LinearColour([1.0, 0.0, 0.0, 1.0]);
@@ -657,7 +628,6 @@ fn a_puppet_pin_carries_the_layers_pixels() {
         20.0,
         20.0,
     );
-    // Placed at the reference time and dragged eight pixels down by one second.
     pin.y.animation = lumit_core::anim::Animation::Keyframed(vec![key(0, 20.0), key(1, 28.0)]);
     block.pins.push(pin);
     layer.puppet = Some(block);
@@ -721,8 +691,6 @@ fn a_puppet_pin_carries_the_layers_pixels() {
         }
     };
 
-    // At the reference time every pin is where it was placed, so the puppet is
-    // an identity and the picture is the one paint left (§2.3's early-out).
     let at_rest = one_second(0.0);
     assert_eq!(at_rest(20, 20), [255, 0, 0, 255], "the mark, unmoved");
 
@@ -819,7 +787,6 @@ fn the_matte_list_is_one_slot_per_resolved_op() {
     layer.effects = vec![
         lumit_core::fx::builtins::instantiate("blur").unwrap(),
         bypassed,
-        // Orchestration-only: a Matte row, but no op to hang it on.
         lumit_core::fx::builtins::instantiate("posterize_time").unwrap(),
         pointed,
         // Claims the matte under its own older id: still one slot on
@@ -855,14 +822,10 @@ fn the_matte_list_is_one_slot_per_resolved_op() {
     let mut visited = vec![comp.id];
     let draws = build_comp_draws(&std::sync::Arc::new(doc), &comp, 0.0, &map, &mut visited);
     let held = draws.first().expect("one layer, one draw");
-    // The Posterize time holds the whole layer, so the layer is drawn,
-    // effects and all, inside the held picture.
     let DrawSource::Nested { draws: inside, .. } = &held.source else {
         panic!("a held layer is drawn as a picture");
     };
     let drawn = inside.first().expect("the layer, inside");
-    // The consumption side's own rule, spelled here: `run_ops` advances its
-    // matte counter for exactly the ops whose role names a parameter.
     let want = drawn
         .fx
         .iter()
@@ -895,11 +858,6 @@ fn the_matte_list_is_one_slot_per_resolved_op() {
         drawn.fx.len()
     );
 }
-
-// ---------------------------------------------------------------------------
-// Effects on a layer group (docs/impl/group-effects.md §2): the wrap,
-// asserted on the draw list itself so it runs on CI machines with no GPU.
-// ---------------------------------------------------------------------------
 
 // Regression: a Blend or Flow in-between read the plane of its first source
 // frame alone, so Depth stepped while the picture moved smoothly.

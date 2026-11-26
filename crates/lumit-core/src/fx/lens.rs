@@ -9,10 +9,8 @@
 
 use crate::model::EffectInstance;
 
-/// Where an instance keeps its own lens.
 pub const EXTRA_KEY: &str = "lens";
 
-/// One surface of a `.lens` prescription, as the file says it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LensRow {
     /// Signed radius in mm, 0 for flat.
@@ -27,11 +25,9 @@ pub struct LensRow {
     pub semi_ap_mm: f32,
     /// The coating column: 0 bare, 1 single layer, 2 and up multicoat.
     pub coating: f32,
-    /// The aperture stop.
     pub stop: bool,
 }
 
-/// A whole `.lens` file.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LensRows {
     pub name: String,
@@ -100,7 +96,6 @@ pub fn rows(text: &str) -> Option<LensRows> {
     })
 }
 
-/// Write a lens back out in the format [`rows`] reads.
 pub fn write(lens: &LensRows) -> String {
     let mut out = format!(
         "# {}\n\nname: {}\nfocal_length: {:.2}\n\nsurfaces:\n# radius       thickness    ior      abbe     semi_ap   coating\n",
@@ -122,7 +117,6 @@ pub fn write(lens: &LensRows) -> String {
     out
 }
 
-/// The lens an instance keeps, as `(name, text)`.
 pub fn embedded(e: &EffectInstance) -> Option<(&str, &str)> {
     let lens = e.extra.get(EXTRA_KEY)?.as_object()?;
     let text = lens.get("text")?.as_str()?;
@@ -144,7 +138,6 @@ pub fn front_curvature(text: &str) -> f32 {
     (0.5 * front.semi_ap_mm / front.radius_mm).clamp(-0.95, 0.95)
 }
 
-/// Keep `text` in the instance, or forget the kept lens with `None`.
 pub fn set_embedded(e: &mut EffectInstance, lens: Option<(&str, &str)>) {
     match lens {
         Some((name, text)) => {
@@ -159,17 +152,14 @@ pub fn set_embedded(e: &mut EffectInstance, lens: Option<(&str, &str)>) {
     }
 }
 
-/// The effects that take a lens.
 pub fn takes_a_lens(match_name: &str) -> bool {
     matches!(match_name, "lens_flare" | "dof_pro")
 }
 
-/// Where the render finds an effect's lens when it is not the Lens row's.
 #[derive(Debug, Clone, PartialEq)]
 pub enum LensSource {
     /// A `.lens` file on disk, the flare's older Lens file row.
     File(String),
-    /// A lens kept in the effect.
     Text(String),
 }
 

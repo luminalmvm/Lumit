@@ -1,6 +1,3 @@
-// Lower behind: a layer's sound brought down while another layer, or a bus,
-// is heard. The popover the Audio panel opens from its button, and the list
-// the shared sound menu offers.
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -32,7 +29,6 @@ Future<List<BridgeLayerEntry>> duckSources(
         out.add(entry);
       }
     } catch (_) {
-      // The layer has gone.
     }
   }
   return out;
@@ -70,8 +66,6 @@ Widget duckSourceLabel(LumitTheme t, BridgeLayerEntry source,
       ),
     ]);
 
-/// **Lower behind ▸**: the sources, as a flyout. The comp's layers are probed
-/// as it opens, and a pick lowers [targets] behind it with the usual settings.
 class LowerBehindFlyout extends StatefulWidget {
   final BridgeLayerEntry entry;
   final List<BridgeLayerEntry> targets;
@@ -114,7 +108,6 @@ class _LowerBehindFlyoutState extends State<LowerBehindFlyout> {
         try {
           t.layer.setDuck(duck: duckBehind(behind: id));
         } catch (_) {
-          // A locked layer refuses quietly, and the rest still take it.
           if (!t.info.switches.locked) refused = true;
         }
       }
@@ -158,10 +151,6 @@ class _LowerBehindFlyoutState extends State<LowerBehindFlyout> {
   }
 }
 
-/// Open the Lower behind popover under [anchor]'s own box: what [entry] is
-/// lowered behind, by how much, how loud the source must be, how quickly it
-/// goes down and comes back, and Remove. [sources] is what it can be lowered
-/// behind.
 Future<void> showLowerBehind({
   required BuildContext anchor,
   required BridgeLayerEntry entry,
@@ -206,7 +195,6 @@ class _LowerBehindPopoverState extends State<_LowerBehindPopover> {
   /// this popover.
   late BridgeDuck? _duck = widget.entry.info.duck;
 
-  /// The value a drag has in hand, by row, until it is let go.
   final Map<String, double> _staged = {};
 
   void _write(BridgeDuck? next) {

@@ -1,6 +1,3 @@
-//! The shape tests that bend, cut and repeat: twist, deform, smooth, the
-//! taper, the box round them, and the older file pinned pixel for pixel.
-
 use super::bend::smoothed;
 use super::geometry::dist;
 use super::modifier::{self, Deform, ModifierKind, ShapeEntry, Smooth, Twist};
@@ -32,7 +29,6 @@ fn drawn(contents: &[ShapeEntry]) -> Vec<u8> {
     rasterise_contents(contents, 100, 100, 0.0, 0.0, 100.0, 100.0, 0.0)
 }
 
-/// The farthest and nearest any point is from the circle's centre.
 fn radii(points: &[(f64, f64)]) -> (f64, f64) {
     points
         .iter()
@@ -58,18 +54,14 @@ fn a_twist_of_0_does_nothing_and_a_half_turn_makes_a_circle_a_figure_eight() {
         )
         .unwrap()
     };
-    // At 0 and 0 every point is where it was, wherever the axis is.
     same(&flatten_fine(&circle()), &turned(0.0, 0.0));
-    // A full turn of the rotation comes back to where it started.
     same(&turned(180.0, 0.0), &turned(180.0, 360.0));
 
-    // At 180 the middle is pinched to nothing, with a lobe either side.
     let eight = drawn(&twisted(180.0, 0.0, (50.0, 50.0)));
     assert_eq!(alpha_at(&eight, 100, 50, 25), 0, "the eight crosses here");
     assert_eq!(alpha_at(&eight, 100, 30, 50), 255, "a lobe either side");
     assert_eq!(alpha_at(&eight, 100, 70, 50), 255);
 
-    // An upright axis pinches across the other way.
     let upright = drawn(&twisted(180.0, 90.0, (50.0, 50.0)));
     assert_eq!(alpha_at(&upright, 100, 25, 50), 0);
     assert_eq!(alpha_at(&upright, 100, 50, 30), 255);
@@ -94,7 +86,6 @@ fn deformed(mode: u32, amount: f64, seed: f64, evolution: f64, detail: f64) -> V
     )
 }
 
-/// How many times the distance from the centre turns round along `points`.
 fn bends(points: &[(f64, f64)]) -> usize {
     let r: Vec<f64> = points.iter().map(|&p| dist(p, (50.0, 50.0))).collect();
     r.windows(3)
@@ -109,19 +100,16 @@ fn a_deform_moves_the_outline_no_further_than_its_amount_and_repeats_itself() {
     assert!(points_of(&none, 0.0).is_none(), "nothing to bend");
     assert_eq!(drawn(&none), plain);
 
-    // Displace pushes along the normal by up to the amount in pixels.
     let pushed = points_of(&deformed(0, 8.0, 1.0, 0.0, 4.0), 0.0).unwrap();
     let (lo, hi) = radii(&pushed);
     assert!(lo < 39.0 && hi > 41.0, "moved both ways: {lo}..{hi}");
     assert!(lo > 31.9 && hi < 48.1, "and within the amount: {lo}..{hi}");
 
-    // Scale moves each point from the middle by up to the amount per cent.
     let scaled = points_of(&deformed(1, 50.0, 1.0, 0.0, 4.0), 0.0).unwrap();
     let (lo, hi) = radii(&scaled);
     assert!(lo < 39.0 && hi > 41.0, "moved both ways: {lo}..{hi}");
     assert!(lo > 19.9 && hi < 60.1, "and within the amount: {lo}..{hi}");
 
-    // The same seed and evolution are the same outline every time.
     let again = points_of(&deformed(0, 8.0, 1.0, 0.0, 4.0), 0.0).unwrap();
     assert_eq!(pushed, again);
     assert_ne!(
@@ -133,7 +121,6 @@ fn a_deform_moves_the_outline_no_further_than_its_amount_and_repeats_itself() {
         points_of(&deformed(0, 8.0, 1.0, 90.0, 4.0), 0.0).unwrap()
     );
 
-    // Little detail bends the outline broadly; more bends it often.
     let broad = points_of(&deformed(0, 8.0, 1.0, 0.0, 0.1), 0.0).unwrap();
     assert!(
         bends(&broad) * 4 < bends(&pushed),
@@ -167,7 +154,6 @@ fn a_smooth_rounds_the_path_inside_its_points_and_an_open_one_keeps_its_ends() {
         .fold(f64::MAX, f64::min);
     assert!(corner > 2.0, "the corner is rounded off: {corner}");
 
-    // An open zigzag smooths towards a line and keeps both its ends.
     let zigzag: Vec<(f64, f64)> = (0..=10)
         .map(|i| (i as f64 * 10.0, if i % 2 == 0 { 0.0 } else { 10.0 }))
         .collect();
@@ -196,14 +182,11 @@ fn a_taper_never_crosses_its_ends_and_runs_per_path_or_along_the_whole_shape() {
     let line = vec![(0.0, 0.0), (100.0, 0.0)];
     let width = |taper: Taper| taper.applied(vec![line.clone()], 0.0).remove(0).1;
 
-    // Start only: a point at the start, full width at the end.
     let mut start_only = taper(50.0, 50.0, 0);
     start_only.end = Property::zero();
     let w = width(start_only);
     assert!(w[0] <= TAPER_TIP && (w[w.len() - 1] - 1.0).abs() < 1e-9);
 
-    // Two lengths of 80 are 160 per cent of the line, shrunk to half each,
-    // so the line still reaches full width in the middle and nowhere else.
     let w = width(taper(80.0, 80.0, 0));
     let widest = w.iter().copied().fold(0.0, f64::max);
     assert!((widest - 1.0).abs() < 1e-6, "full width once: {widest}");
@@ -211,8 +194,6 @@ fn a_taper_never_crosses_its_ends_and_runs_per_path_or_along_the_whole_shape() {
     let peak = w.iter().position(|&x| x == widest).unwrap() as f64 / w.len() as f64;
     assert!((peak - 0.5).abs() < 0.05, "in the middle: {peak}");
 
-    // Two squares joined into one shape: each path tapers on its own, or
-    // one taper runs along both.
     let lines = |scope: u32| {
         let mut a = item(square(0.0, 0.0, 20.0));
         a.stroke = Some(colour::still(LinearColour([0.0, 1.0, 0.0, 1.0])));
@@ -239,7 +220,6 @@ fn a_taper_never_crosses_its_ends_and_runs_per_path_or_along_the_whole_shape() {
     assert!((a - 1.0).abs() < 1e-6 && b <= TAPER_TIP, "{a}..{b}");
 }
 
-/// The layer's box has to hold everything a twist or a deform draws.
 #[test]
 fn the_box_holds_a_twisted_or_deformed_shape() {
     let inside = |contents: &[ShapeEntry]| {
@@ -258,7 +238,6 @@ fn the_box_holds_a_twisted_or_deformed_shape() {
         );
         (x0, y0, x1, y1)
     };
-    // A square twisted on a slant reaches past its own corners.
     let slant = with(
         item(square(0.0, 0.0, 20.0)),
         vec![twist(30.0, 0.0, 45.0, (10.0, 10.0))],
@@ -271,7 +250,6 @@ fn the_box_holds_a_twisted_or_deformed_shape() {
     let (x0, _, x1, _) = inside(&deformed(1, 50.0, 1.0, 0.0, 4.0));
     assert!(x0 <= -10.0 && x1 >= 110.0, "grown by the scale");
 
-    // Twisted and then deformed, the deform grows the twist's box.
     let both = with(
         item(circle()),
         vec![
@@ -313,7 +291,6 @@ fn an_older_files_modifiers_draw_as_they_did() {
         current_depth: 0,
         inputs: None,
     });
-    // (time, box, picture, outline)
     type Pinned = (f64, (f64, f64, f64, f64), u64, u64);
     let expected: [Pinned; 2] = [
         (
@@ -330,7 +307,6 @@ fn an_older_files_modifiers_draw_as_they_did() {
         ),
     ];
     for (t, bounds, picture, outline) in expected {
-        // The renderer's own route: the art settled at `t`, then its box.
         let settled = contents_at(&contents, t, &context);
         let (x0, y0, x1, y1) = contents_bounds(&settled, t).expect("a box");
         let (w, h) = ((x1 - x0).round() as u32, (y1 - y0).round() as u32);

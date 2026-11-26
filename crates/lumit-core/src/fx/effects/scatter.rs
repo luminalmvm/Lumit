@@ -34,8 +34,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Scatter's declared **data** output — the same port Particulate and Grid
-/// declare.
 const POINTS_OUT: &[Port] = &[Port::new("points", "Points", PortType::Points)];
 
 const fn group(label: &'static str, params: &'static [&'static str]) -> ParamGroup {
@@ -48,7 +46,6 @@ const fn group(label: &'static str, params: &'static [&'static str]) -> ParamGro
     }
 }
 
-/// Two kickers, as Grid has: how many points, and what one looks like.
 pub const SCATTER_GROUPS: &[ParamGroup] = &[
     group("Scatter", &["density"]),
     group("Point", &["size", "feather", "colour", "max_points"]),
@@ -62,11 +59,8 @@ pub const SCATTER_GROUPS: &[ParamGroup] = &[
 /// composition's size.
 pub const DENSITY_CELL: f32 = 100.0 * 100.0;
 
-/// Which per-candidate draw is being made.
 mod attr {
-    /// Where across the frame the candidate falls.
     pub const PLACE_U: u32 = 0;
-    /// Where down it falls.
     pub const PLACE_V: u32 = 1;
     /// **The acceptance die** — the number the alpha under the candidate has
     /// to beat. Deliberately 16 and not 2: it is the one die the WGSL draw
@@ -75,7 +69,6 @@ mod attr {
     pub const ACCEPT: u32 = 16;
 }
 
-/// Scatter's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "scatter",
@@ -170,7 +163,6 @@ impl Scatter {
     /// against whatever raster is previewing.
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
 
-    /// This instance's raster factor, read back out of a resolved bag.
     #[must_use]
     pub fn px_scale_of(p: Params<'_>) -> f32 {
         p.float(Self::DERIVED_PX_SCALE, 1.0)
@@ -308,7 +300,6 @@ impl Scatter {
         out
     }
 
-    /// How the stream is drawn — a feathered disc per point, and the host Mix.
     #[must_use]
     pub fn draw_style(self) -> DrawStyle {
         DrawStyle {

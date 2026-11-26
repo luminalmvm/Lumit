@@ -18,17 +18,13 @@ import '../panels/extension_page.dart';
 import '../widgets/controls.dart';
 import 'web_player_page.dart';
 
-/// The bundled player script, listed in pubspec under `assets/players/`.
 const String _playerScript = 'assets/players/lottie/lottie_svg.min.js';
 
-/// What the window tells the page, and what the page tells it.
 class WebPlayerController {
   WebPlayerController({required this.onFrame, this.onEnded});
 
-  /// The frame the page is on.
   final ValueChanged<int> onFrame;
 
-  /// A file that doesn't loop has played to its end.
   final VoidCallback? onEnded;
 
   _WebPlayerState? _page;
@@ -74,7 +70,6 @@ class WebPlayerController {
     _page?._post({'event': 'seek', 'data': {'frame': frame}});
   }
 
-  /// What the page shows behind the picture, as a CSS background.
   void setGround(String css) {
     _ground = css;
     _page?._post({'event': 'ground', 'data': {'css': css}});
@@ -96,7 +91,6 @@ class WebPlayer extends StatefulWidget {
 }
 
 class _WebPlayerState extends State<WebPlayer> {
-  /// The folder the page is served from, made once the script is copied.
   Directory? _folder;
   late final ExtensionPageLink _link = ExtensionPageLink(
     onMessage: _message,
@@ -106,7 +100,6 @@ class _WebPlayerState extends State<WebPlayer> {
   );
   String? _failed;
 
-  /// The page has run its script and is listening.
   bool _up = false;
 
   /// Counts the files written, so each is served under a new name and the
@@ -159,8 +152,6 @@ class _WebPlayerState extends State<WebPlayer> {
 
   void _post(Map<String, Object?> message) => _link.post?.call(message);
 
-  /// Write the controller's file beside the page and tell the page to show
-  /// it where the transport is.
   void _load() {
     final folder = _folder;
     final c = widget.controller;

@@ -21,12 +21,8 @@ import 'review_link_parts.dart';
 
 const double _labelColumn = 110;
 
-/// How many of the people who opened a link are listed before the rest are
-/// only counted.
 const int _viewsShown = 6;
 
-/// The page of a link's own settings: what reviewers may do, who has opened
-/// it, its versions, and the way to delete it.
 class ReviewLinkPage extends StatefulWidget {
   final ReviewsState reviews;
   final Review review;
@@ -34,7 +30,6 @@ class ReviewLinkPage extends StatefulWidget {
   /// Run something the server may refuse, and say why if it does.
   final Future<void> Function(Future<void> Function() call) run;
 
-  /// Say what is wrong with something typed here.
   final ValueChanged<String> onRefused;
   final ValueChanged<ReviewVersion> onDeleteVersion;
   final VoidCallback onDeleteLink;
@@ -71,13 +66,11 @@ class _ReviewLinkPageState extends State<ReviewLinkPage> {
   @override
   void initState() {
     super.initState();
-    // The button beside the field says Set or Clear by what is typed.
     _password.addListener(() => setState(() {}));
     // Asked as the page opens, and not again while it is up.
     unawaited(widget.reviews.views(widget.review).then((views) {
       if (mounted) setState(() => _views = views);
     }, onError: (Object _) {
-      // The rest of the page does not wait on it.
     }));
   }
 
@@ -335,8 +328,6 @@ class _ReviewLinkPageState extends State<ReviewLinkPage> {
                 Expanded(
                   child: Row(
                     children: [
-                      // The dot their comments have, for one who gave a
-                      // name, and its room kept for one who did not.
                       SizedBox(
                         width: 14,
                         child: view.name.isEmpty
@@ -367,7 +358,6 @@ class _ReviewLinkPageState extends State<ReviewLinkPage> {
               ],
             ),
           ),
-        // The rest of them, shown in place when asked for.
         if (views.length > _viewsShown && !_allViews)
           Align(
             alignment: AlignmentDirectional.centerStart,
@@ -414,7 +404,6 @@ class _ReviewLinkPageState extends State<ReviewLinkPage> {
       cursor: MouseCursor.defer,
       builder: (row, lit) => GestureDetector(
         behavior: HitTestBehavior.translucent,
-        // What the row's two words do, for a right click too.
         onSecondaryTapDown: compare == null && delete == null
             ? null
             : (press) => reviewRowMenu(row, press.globalPosition, [
@@ -473,12 +462,9 @@ class _ReviewLinkPageState extends State<ReviewLinkPage> {
                       ],
                     ),
                   ),
-                  // The time, and under the pointer what can be done in its
-                  // place, as a comment's row has it.
                   if (lit == 0)
                     Text(reviewWhen(v.created), style: t.small)
                   else ...[
-                    // Beside the one it took over from, in the browser.
                     if (compare != null)
                       reviewAction(t, 'compare-${v.n}',
                           Text(l10n.reviewCompare, style: t.small), compare),

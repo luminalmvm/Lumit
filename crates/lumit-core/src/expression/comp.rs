@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use rhai::plugin::*;
-use uuid::Uuid; // a "prelude" import for macros
+use uuid::Uuid;
 
 use crate::comp_graph::InputKind;
 use crate::expression::layer::Layer;

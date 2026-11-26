@@ -18,7 +18,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Find edges' controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "find_edges",
@@ -45,8 +44,6 @@ pub struct FindEdges {
     #[toggle(label = "Invert edges", default = false)]
     pub invert: bool,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
-    /// This is AE's "Blend With Original".
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -70,7 +67,6 @@ impl FindEdges {
     }
 }
 
-/// Find edges' behaviour.
 pub struct FindEdgesDef;
 
 impl EffectDef for FindEdgesDef {

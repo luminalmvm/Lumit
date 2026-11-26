@@ -1,10 +1,3 @@
-// The Viewer's armed dropper: the magnifier over the picture, the sample-size
-// wheel, and the drag that picks a colour or a point.
-//
-// Split out of viewer_panel_frb.dart, which had grown past the length anyone
-// can hold in their head. Nothing here changed in the move: it is the
-// same widget, with the same state, called from the same one place — the
-// Viewer's stage, which is the only thing that knows where the picture is.
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart' show HardwareKeyboard;
@@ -44,7 +37,6 @@ class DropperLayer extends StatefulWidget {
   final CompositionReference comp;
   final LumitUiState uiState;
 
-  /// Where the picture is drawn in this panel, at the current magnification.
   final Rect fitted;
 
   /// Every layer's box as the gizmo has it, asked for only when a point pick
@@ -107,7 +99,6 @@ class _DropperLayerState extends State<DropperLayer> {
   /// what makes a press on a picture nothing has been read of commit nothing.
   DropperSample? _staged;
 
-  /// Whether a press is down and the pick is being dragged.
   bool _dragging = false;
 
   /// The box of the layer a point pick is in, read once when the press lands
@@ -177,7 +168,6 @@ class _DropperLayerState extends State<DropperLayer> {
     if (old.fitted != widget.fitted) _refreshViewfinderAfterFrame();
   }
 
-  /// Redraw the magnifier once this frame is over.
   void _refreshViewfinderAfterFrame() {
     if (_viewfinderEntry == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -185,7 +175,6 @@ class _DropperLayerState extends State<DropperLayer> {
     });
   }
 
-  /// How to stand down from the ladder.
   VoidCallback? _escapeRelease;
 
   bool _escape() {
@@ -473,7 +462,6 @@ class _DropperLayerState extends State<DropperLayer> {
     _staged = null;
     if (staged == null) return;
     arm.onPick(staged);
-    // Shift picks another part after this one.
     if (arm.reads == DropperReads.part &&
         HardwareKeyboard.instance.isShiftPressed) {
       return;
@@ -495,7 +483,6 @@ class _DropperLayerState extends State<DropperLayer> {
       ? 0
       : ((local.dy - widget.fitted.top) / widget.fitted.height).clamp(0.0, 1.0);
 
-  /// Ask the engine for a window around the point under `local`.
   void _request(Offset local) =>
       widget.uiState.requestDropperSample(_u(local), _v(local));
 }

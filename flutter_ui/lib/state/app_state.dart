@@ -1,6 +1,3 @@
-// The open document and the shell's view of it: LumitState, its status-bar
-// notice, and the two small helpers that name the window and read a project
-// path off the command line. Lifted out of main.dart unchanged.
 
 import 'dart:async';
 import 'dart:io' show Directory, File, exit;
@@ -27,6 +24,7 @@ import 'package:lumit_flutter/state/settings.dart';
 import 'package:lumit_flutter/state/share.dart';
 import 'package:lumit_flutter/state/transcription.dart';
 import 'package:lumit_flutter/state/ui_state.dart';
+import 'package:lumit_flutter/state/usage_data.dart' show UsageData;
 import 'package:lumit_flutter/state/workspace.dart';
 import 'package:provider/provider.dart';
 
@@ -60,26 +58,16 @@ String? projectNameFor(String? path) {
 /// same launcher line also takes an invite link.
 String? projectPathFromArgs(List<String> args) => _fileFromArgs(args, '.lum');
 
-/// The `.lfx` extension package a double-click asked Lumit to install, read
-/// as [projectPathFromArgs] reads a project.
 String? packagePathFromArgs(List<String> args) => _fileFromArgs(args, '.lfx');
 
-/// The style a double-click or a drop asked Lumit to take in, read as
-/// [projectPathFromArgs] reads a project.
 String? stylePathFromArgs(List<String> args) =>
     _fileFromArgs(args, '.lumstyle');
 
-/// The effect preset a double-click asked Lumit to apply, read as
-/// [projectPathFromArgs] reads a project.
 String? presetPathFromArgs(List<String> args) => _fileFromArgs(args, '.lumfx');
 
-/// The theme a double-click asked Lumit to take in, read as
-/// [projectPathFromArgs] reads a project.
 String? themePathFromArgs(List<String> args) =>
     _fileFromArgs(args, '.lumtheme');
 
-/// The graphics template a double-click or a drop asked Lumit to add to its
-/// library, read as [projectPathFromArgs] reads a project.
 String? templatePathFromArgs(List<String> args) =>
     _fileFromArgs(args, '.lumt');
 
@@ -97,8 +85,6 @@ String? _fileFromArgs(List<String> args, String ending) {
   return null;
 }
 
-/// The invite link Lumit was started with, as a click on one in a browser
-/// starts it: the first argument that holds an invite, or null.
 String? inviteFromArgs(List<String> args) {
   for (final a in args) {
     // Only what could be one is put to the engine: a path is not.
@@ -116,14 +102,12 @@ String? inviteFromArgs(List<String> args) {
 class LumitState extends ChangeNotifier {
   ProjectReference? project;
 
-  /// The open project's transcription, wherever it was started.
   final TranscriptionState transcription = TranscriptionState();
 
   /// Closes an undo step left open across time, a camera's run of wheel
   /// notches, so Undo, Redo and the History window never land inside it.
   VoidCallback? closeOpenStep;
 
-  /// Close any undo step still open, before the history moves.
   void settleHistory() {
     final close = closeOpenStep;
     closeOpenStep = null;
@@ -144,6 +128,7 @@ class LumitState extends ChangeNotifier {
   /// The graphics template Lumit was started with, until it is in the
   /// library.
   String? launchTemplate;
+  List<String>? launchResolve;
 
   StreamSubscription? currentDocumentStream;
 
@@ -283,7 +268,6 @@ class LumitState extends ChangeNotifier {
           return _adopt(made);
         }
       } catch (_) {
-        // Falls through to an empty project, with the notice below.
       }
       if (!identical(project, was) || opening.value) return;
       postNotice(l10n.templateNotOpened, error: true);
@@ -291,7 +275,6 @@ class LumitState extends ChangeNotifier {
     _adopt(LumitBridgeState.newProject(onChangeStream: _changeSink()));
   }
 
-  /// The shared project this is one end of, when it is.
   final ShareState share = ShareState();
 
   StreamSubscription<BridgeShareEvent>? _shareEvents;
@@ -434,7 +417,6 @@ class LumitState extends ChangeNotifier {
     return outcome;
   }
 
-  /// How this machine last said it stands to a project on another Lumit.
   Type? _versionsSaid;
 
   /// The host agreed: move the open project forward from the older Lumit
@@ -466,7 +448,6 @@ class LumitState extends ChangeNotifier {
     }
   }
 
-  /// The same for the project [invite] names, before it is joined.
   Future<BridgeOnlineForward> forwardInvite(
       {required String invite, required String name, String? password}) async {
     try {
@@ -509,7 +490,6 @@ class LumitState extends ChangeNotifier {
     shareWatchedRecent = const {};
   }
 
-  /// The wait before the activity list is read again.
   Timer? _activitySoon;
 
   /// How many edits of each sitting this machine has had in front of it, by
@@ -532,7 +512,6 @@ class LumitState extends ChangeNotifier {
   void _tellActivity() =>
       _tellUntil = DateTime.now().add(const Duration(seconds: 3));
 
-  /// Read who changed what, and the notes people left.
   void _readActivity() {
     _activitySoon?.cancel();
     _activitySoon = null;
@@ -675,7 +654,6 @@ class LumitState extends ChangeNotifier {
     if (identical(project, open)) _readActivity();
   }
 
-  /// What the line last said of how the shared project stands.
   LumitNotice? _shareSaid;
 
   /// Say how the shared project stands. The strip's own button carries the
@@ -790,7 +768,6 @@ class LumitState extends ChangeNotifier {
         // as one fact. The engine says it once for a run of edits.
         _sayShare(l10n.shareLookJoined);
       case BridgeShareEvent_LookInvite():
-        // The invite that can only look was turned on or off.
         share.onlineSaid();
       case BridgeShareEvent_TooLarge(:final tooLarge):
         // This machine went to store the project and it did not fit, or
@@ -869,7 +846,6 @@ class LumitState extends ChangeNotifier {
   /// fills what is left of it.
   double _previewFrom = 0;
 
-  /// How long the first frame has been reporting.
   final Stopwatch _firstFrame = Stopwatch();
 
   /// The first frame saying how far it has got, 0..1.
@@ -992,7 +968,6 @@ class LumitState extends ChangeNotifier {
   /// button then says.
   bool openIsImport = false;
 
-  /// Whether the open in flight was asked to stop.
   bool _openCancelled = false;
 
   /// How the open in flight is stopped, or null while it cannot be: before it
@@ -1037,6 +1012,7 @@ class LumitState extends ChangeNotifier {
     if (opening.value) return;
     opening.value = true;
     openIsImport = false;
+    final clock = Stopwatch()..start();
     final offer = _offerOpenCancel();
     // Determinate from the first frame, before the engine has had a turn to
     // say so: the card must not flip from a sweeping bar to a filling one a
@@ -1088,6 +1064,7 @@ class LumitState extends ChangeNotifier {
     final opened = outcome.project;
     // Deliberately still `opening`: the document is in, the picture is not.
     _adopt(opened);
+    UsageData.took('open', clock.elapsed);
     // A guest's own copy, closed while its host was away, opens still a guest
     // and still looking. What it has found since comes down the events. A
     // copy of a project kept online opens a member of it however it was
@@ -1381,6 +1358,9 @@ class LumitState extends ChangeNotifier {
         after: const Duration(milliseconds: 300),
       );
       if (imported.cancelled) return false;
+      for (final path in paths) {
+        UsageData.note('import', UsageData.extensionOf(path));
+      }
       if (imported.leftOut > 0) {
         postNotice(l10n.importLayersLeftOut(imported.leftOut));
       }
@@ -1391,7 +1371,6 @@ class LumitState extends ChangeNotifier {
     return true;
   }
 
-  /// An import of files is running.
   bool _importing = false;
 
   /// Make a composition, asking for its settings first.
@@ -1509,10 +1488,8 @@ class LumitNotice {
   /// next quiet thing said. For the few a person must not miss.
   final bool sticky;
 
-  /// What a press on its words does, for a notice that leads somewhere.
   final VoidCallback? onTap;
 
-  /// A button beside the words that does the same, for where it leads.
   final String? action;
   const LumitNotice(this.message,
       {this.error = false, this.sticky = false, this.action, this.onTap});

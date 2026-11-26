@@ -1,8 +1,3 @@
-// Which curve a selected property row resolves to on the graph. The Volume
-// row used to resolve to nothing: its keys drew as lane diamonds and on the
-// rubber band, but the graph had no channel for them, so Delete, the eases
-// and the block tools all fell through with the keys still there. Pure, so it
-// is checked against a stub entry rather than the engine.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/graph_channels.dart';
@@ -21,7 +16,6 @@ BridgeKeyframe key(int seconds, double value) => BridgeKeyframe(
       interpOut: const BridgeSideInterp.linear(),
     );
 
-/// A layer entry with only the fields the channel builder reads filled in.
 BridgeLayerEntry entry({required BridgeScalar volumeDb}) {
   final id = UuidValue.fromString(const Uuid().v4());
   return BridgeLayerEntry(

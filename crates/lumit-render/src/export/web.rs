@@ -24,13 +24,10 @@ use crate::headless::HeadlessRenderer;
 use crate::mix::jobs::AudioJob;
 use crate::mix::mixdown::audio_samples_through;
 
-/// Frames composited and on their way off the card at once.
 const IN_FLIGHT: usize = 2;
 
-/// How long to leave it when there is nothing to do but wait.
 const WAIT: Duration = Duration::from_millis(4);
 
-/// An export in progress, moved on by [`Self::step`].
 pub struct WebExport {
     doc: Arc<Document>,
     comp: Uuid,
@@ -42,9 +39,7 @@ pub struct WebExport {
     name: PathBuf,
     sound: Option<Vec<f32>>,
     channels: usize,
-    /// Samples a channel handed to the page.
     fed: usize,
-    /// Frames started, and frames handed to the page.
     started: usize,
     written: usize,
     coming: VecDeque<lumit_gpu::PendingReadback>,
@@ -52,15 +47,11 @@ pub struct WebExport {
     /// footage the page was still decoding. It is drawn again once that moves.
     landed: Option<u64>,
     finishing: bool,
-    /// The caption files that go with the video, by name, downloaded once it
-    /// is written.
     captions: Vec<(PathBuf, String)>,
     tx: Sender<ExportEvent>,
     cancel: Arc<AtomicBool>,
 }
 
-/// Start exporting `comp` of `doc` as `codec`, one of
-/// [`lumit_media::web::export::codecs`], to a file called `name`.
 pub fn start(
     doc: Arc<Document>,
     comp: Uuid,
@@ -187,7 +178,6 @@ impl WebExport {
             State::Done => return Ok(None),
             State::Failed(error) => return Err(error),
         };
-        // What has come off the card, in order, to the page.
         while let Some(coming) = self.coming.front_mut() {
             let Some(rgba) = self.renderer.poll_read(coming) else {
                 break;
@@ -195,8 +185,6 @@ impl WebExport {
             self.coming.pop_front();
             self.page.frame(&self.pack.frame(rgba?), self.written)?;
             self.written += 1;
-            // After each picture, the sound that covers it, so the two are
-            // written together.
             let rate = self.spec.audio_rate;
             self.feed(audio_samples_through(self.written, self.span.out_fps, rate))?;
             let _ = self.tx.send(ExportEvent::Progress {
@@ -252,7 +240,6 @@ impl WebExport {
         Ok(())
     }
 
-    /// The sound up to `through` samples a channel, that has not gone yet.
     fn feed(&mut self, through: usize) -> Result<(), String> {
         let Some(sound) = &self.sound else {
             return Ok(());

@@ -28,57 +28,31 @@ use crate::handles::Handle;
 use crate::host::host;
 use crate::status::Status;
 
-/// The directory inside a bundle that holds the binary for this platform.
 #[cfg(target_os = "windows")]
 pub const BUNDLE_ARCH_DIR: &str = "Win64";
-/// See above.
 #[cfg(target_os = "macos")]
 pub const BUNDLE_ARCH_DIR: &str = "MacOS";
-/// See above.
 #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
 pub const BUNDLE_ARCH_DIR: &str = "Linux-x86-64";
 
-/// What can go wrong before a plugin has said a word.
 #[derive(Debug, Error)]
 pub enum BundleError {
-    /// The library would not load: missing, wrong architecture, or missing a
-    /// dependency of its own.
     #[error("the plugin binary at {path} could not be opened: {source}")]
     Open {
-        /// The binary we tried.
         path: PathBuf,
-        /// What the loader said.
         source: libloading::Error,
     },
-    /// A `.ofx` binary without both exports is not an OFX plugin.
     #[error("{path} does not export {export}, so it is not an OFX plugin")]
-    MissingExport {
-        /// The binary we tried.
-        path: PathBuf,
-        /// Which export was missing.
-        export: &'static str,
-    },
-    /// `OfxGetNumberOfPlugins` answered something impossible.
+    MissingExport { path: PathBuf, export: &'static str },
     #[error("{path} says it holds {count} plugins")]
-    ImplausiblePluginCount {
-        /// The binary we tried.
-        path: PathBuf,
-        /// What it said.
-        count: c_int,
-    },
+    ImplausiblePluginCount { path: PathBuf, count: c_int },
 }
 
-/// One plugin inside a bundle.
 pub struct PluginRef {
-    /// The plugin's own identifier, e.g. `net.sf.openfx.invertPlugin`.
     pub identifier: String,
-    /// Major and minor version, as the plugin declares them.
     pub version: (u32, u32),
-    /// Which API it claims, e.g. `OfxImageEffectPluginAPI`.
     pub api: String,
-    /// The version of that API it was written against.
     pub api_version: c_int,
-    /// What `kOfxActionLoad` answered, once [`Bundle::load`] has run.
     pub load_status: Option<Status>,
     /// The plugin's own struct, inside the loaded library. Valid only while
     /// the owning [`Bundle`] holds the library open.
@@ -98,7 +72,6 @@ unsafe impl Send for PluginRef {}
 unsafe impl Sync for PluginRef {}
 
 impl PluginRef {
-    /// Whether this is an image effect of the API version this host speaks.
     #[must_use]
     pub fn is_supported_image_effect(&self) -> bool {
         self.api == K_OFX_IMAGE_EFFECT_PLUGIN_API
@@ -160,12 +133,6 @@ pub struct Bundle {
 }
 
 impl Bundle {
-    /// Open a bundle binary and read the plugins it declares. Nothing is
-    /// called on the plugins yet.
-    ///
-    /// # Errors
-    ///
-    /// [`BundleError`] if the library will not load or is not an OFX plugin.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, BundleError> {
         let path = path.as_ref().to_path_buf();
         // SAFETY: loading a library runs its initialisers, which is arbitrary
@@ -249,13 +216,11 @@ impl Bundle {
         })
     }
 
-    /// Where the binary came from.
     #[must_use]
     pub fn path(&self) -> &Path {
         &self.path
     }
 
-    /// The plugins this bundle declares.
     #[must_use]
     pub fn plugins(&self) -> &[PluginRef] {
         &self.plugins
@@ -271,8 +236,6 @@ impl Bundle {
         self.load_with(&crate::quirks::QuirksTable::shipped());
     }
 
-    /// [`Bundle::load`] with a quirks table of the caller's choosing: the
-    /// shipped one in the app, a made-up one in a test.
     pub fn load_with(&mut self, quirks: &crate::quirks::QuirksTable) {
         if self.loaded {
             return;
@@ -377,8 +340,6 @@ unsafe fn read_c_string(ptr: *const std::ffi::c_char) -> Option<String> {
         .map(str::to_owned)
 }
 
-/// The directories OFX plugins live in, per docs/12 §2.6: the standard
-/// location for the platform, plus anything in `OFX_PLUGIN_PATH`.
 #[must_use]
 pub fn search_paths() -> Vec<PathBuf> {
     let mut paths = Vec::new();
@@ -440,7 +401,6 @@ fn is_bundle(path: &Path) -> bool {
         .is_some_and(|name| name.ends_with(".ofx.bundle"))
 }
 
-/// The binaries a bundle holds for this platform.
 fn binaries_of(bundle: &Path, found: &mut Vec<PathBuf>) {
     let binaries = bundle.join("Contents").join(BUNDLE_ARCH_DIR);
     for binary in std::fs::read_dir(binaries).into_iter().flatten().flatten() {
@@ -451,8 +411,6 @@ fn binaries_of(bundle: &Path, found: &mut Vec<PathBuf>) {
     }
 }
 
-/// One directory's worth of the walk: the bundles in it, then the folders
-/// under it, until [`MAX_BUNDLE_DEPTH`].
 fn collect_bundles(dir: &Path, depth: usize, found: &mut Vec<PathBuf>) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
@@ -471,7 +429,6 @@ fn collect_bundles(dir: &Path, depth: usize, found: &mut Vec<PathBuf>) {
     }
 }
 
-/// Every bundle binary in every search path.
 #[must_use]
 pub fn discover() -> Vec<PathBuf> {
     search_paths()

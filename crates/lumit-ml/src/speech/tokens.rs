@@ -18,7 +18,6 @@ use serde::Deserialize;
 
 use crate::error::MlError;
 
-/// The word pieces of one pack.
 #[derive(Debug)]
 pub struct Tokens {
     /// Each id's bytes. Specials carry their own text.
@@ -27,7 +26,6 @@ pub struct Tokens {
     ids: HashMap<String, u32>,
     /// A pair of pieces to how early it merges.
     ranks: HashMap<(String, String), usize>,
-    /// Special token text to id.
     specials: HashMap<String, u32>,
 }
 
@@ -250,7 +248,6 @@ fn byte_to_unicode() -> Vec<char> {
     out
 }
 
-/// The inverse of [`byte_to_unicode`].
 fn unicode_to_byte() -> HashMap<char, u8> {
     byte_to_unicode()
         .into_iter()

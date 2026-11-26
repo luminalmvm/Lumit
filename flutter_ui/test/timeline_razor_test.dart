@@ -16,8 +16,6 @@ import 'package:lumit_flutter/src/rust/api/orient.dart';
 import 'package:uuid/uuid.dart';
 
 void main() {
-  /// A layer entry spanning `[inFrame, outFrame)`, with only the fields the
-  /// razor reads filled in.
   BridgeLayerEntry entry(String name, int inFrame, int outFrame,
       {BridgeLayerKind kind = BridgeLayerKind.solid}) {
     final id = UuidValue.fromString(const Uuid().v4());

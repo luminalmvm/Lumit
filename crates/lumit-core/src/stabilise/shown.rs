@@ -14,7 +14,6 @@ use crate::retime::Interpolation;
 /// analysis's first: one, or two the layer blends.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Shown {
-    /// The frame shown, or the first of the two blended.
     pub at: usize,
     /// The second of two blended frames, and how far towards it the picture
     /// is, above nought and below one.
@@ -22,13 +21,11 @@ pub struct Shown {
 }
 
 impl Shown {
-    /// One frame, alone.
     #[must_use]
     pub fn single(at: usize) -> Shown {
         Shown { at, blend: None }
     }
 
-    /// The one frame nearest what is shown.
     #[must_use]
     pub fn nearest(&self) -> usize {
         match self.blend {
@@ -37,7 +34,6 @@ impl Shown {
         }
     }
 
-    /// `f` of the shown frame, or of the two mixed by the same weight.
     pub fn mix<T>(&self, f: impl Fn(usize) -> T, lerp: impl Fn(T, T, f64) -> T) -> T {
         match self.blend {
             Some((b, w)) => lerp(f(self.at), f(b), w),
@@ -186,7 +182,6 @@ mod tests {
         let s = shown(&layer, 24.0, lt, 30.0, &a).unwrap();
         assert_eq!(s, Shown::single(3));
         assert_eq!(plan.at(s).unwrap().map, slide(3));
-        // Blended, the two frames either side, half and half.
         layer.interpolation = Interpolation::Blend;
         let s = shown(&layer, 24.0, lt, 30.0, &a).unwrap();
         assert_eq!(s.at, 2);

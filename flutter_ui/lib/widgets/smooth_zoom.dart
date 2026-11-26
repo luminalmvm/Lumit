@@ -95,14 +95,12 @@ class SmoothZoom extends ChangeNotifier {
   Curve _curve = Curves.linear;
   Duration? _lastNudge;
 
-  /// The magnification to draw at, this frame.
   double get value => _value;
 
   /// Where the flight in progress is heading — what a readout showing "the
   /// zoom" should say, since that is the number the user has asked for.
   double get target => _target;
 
-  /// Whether a flight is in progress.
   bool get moving => _controller.isAnimating;
 
   void _tick() {
@@ -155,8 +153,6 @@ class SmoothZoom extends ChangeNotifier {
     goTo(_target * math.pow(factorPerNotch, boost).toDouble(), motion: motion);
   }
 
-  /// Put the zoom at [to] with no flight — for the caller that is restoring a
-  /// remembered value rather than performing a gesture.
   void jumpTo(double to) => goTo(to, motion: MotionSpec.still);
 
   @override
@@ -182,7 +178,6 @@ double zoomSliderPosition(double zoom, double maxZoom) {
   return t.clamp(0.0, 1.0);
 }
 
-/// The inverse of [zoomSliderPosition]: the zoom a handle at [t] means.
 double zoomForSliderPosition(double t, double maxZoom) {
   if (maxZoom <= 1) return 1;
   return math.pow(maxZoom, t.clamp(0.0, 1.0)).toDouble();

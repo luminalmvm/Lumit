@@ -21,12 +21,10 @@ use crate::model::{Document, EffectInstance, LayerKind, ProjectItem};
 use crate::ops::Op;
 use crate::time::Rational;
 
-/// Every shared node, in the order they were made.
 pub fn nodes(doc: &Document) -> impl Iterator<Item = &GradeGroup> {
     doc.grade_groups.iter().filter(|g| g.shared)
 }
 
-/// Whether `e` is a reference to shared node `id`.
 fn refers(e: &EffectInstance, id: Uuid) -> bool {
     is_shared(e) && group_of(e) == Some(id)
 }
@@ -51,14 +49,11 @@ fn clock(doc: &Document, shot: Shot) -> Result<Rational, GradeError> {
     Ok(at)
 }
 
-/// `list` with its keys moved by `by`.
 fn shifted(mut list: Vec<EffectInstance>, by: Rational) -> Vec<EffectInstance> {
     crate::preset::shift_keys(&mut list, by);
     list
 }
 
-/// Where a reference goes in a stack that doesn't name a place: after its
-/// last grade node, or at the end.
 fn after_grade(stack: &[EffectInstance]) -> usize {
     stack
         .iter()
@@ -66,7 +61,6 @@ fn after_grade(stack: &[EffectInstance]) -> usize {
         .map_or(stack.len(), |i| i + 1)
 }
 
-/// Every shot that uses shared node `id`, comp by comp, layer by layer.
 #[must_use]
 pub fn users(doc: &Document, id: Uuid) -> Vec<Shot> {
     let mut out = Vec::new();
@@ -94,7 +88,6 @@ pub fn users(doc: &Document, id: Uuid) -> Vec<Shot> {
     out
 }
 
-/// The id of every reference to shared node `id`, in every shot's stack.
 #[must_use]
 pub fn references(doc: &Document, id: Uuid) -> Vec<Uuid> {
     let mut out = Vec::new();
@@ -196,8 +189,6 @@ pub fn add_ref(
     })
 }
 
-/// Stop sharing node `id`: every shot that uses it gets its own copy where
-/// the reference was, and the shared node goes.
 pub fn unshare(doc: &Document, id: Uuid) -> Result<Op, GradeError> {
     let g = nodes(doc)
         .find(|g| g.id == id)
@@ -241,8 +232,6 @@ mod tests {
     use super::*;
     use crate::fx::builtins::instantiate;
 
-    /// A comp of `layers` adjustment layers, each starting a second later
-    /// than the last and graded by one Correction.
     fn doc_with(layers: usize) -> (Document, Vec<Shot>) {
         use crate::model::{Composition, LinearColour, MotionBlur, TransformGroup};
         use crate::time::{Duration, FrameRate};
@@ -298,9 +287,6 @@ mod tests {
         read(doc, shot).unwrap().0.to_vec()
     }
 
-    /// A node shared from one shot reaches the others, an edit to it is one
-    /// edit for all, a shared reference is not the shot's group, and
-    /// unsharing hands each shot its own copy back.
     #[test]
     fn a_shared_node_is_one_node_in_every_shot() {
         let (mut doc, shots) = doc_with(3);

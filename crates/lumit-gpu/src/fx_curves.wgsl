@@ -12,12 +12,11 @@
 // Channel 0 is Master, 1..3 are R/G/B, 4 is Alpha. The per-channel curve runs
 // first, then Master — Photoshop's and AE's order. Master never touches alpha.
 
-// 257 entries a channel, 65 vec4s a channel, five channels.
 const N = 257;
 const V = 65;
 
 struct Params {
-    t: array<vec4<f32>, 5 * V>,  // the five tables, four entries a vec4
+    t: array<vec4<f32>, 5 * V>,
     mix_amt: f32,                // 0..1, blended against the unprocessed input
     neutral: u32,                // every channel is the identity diagonal
     _pad0: f32,
@@ -29,7 +28,6 @@ struct Params {
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
 
-// The unpremultiplied colour of a premultiplied pixel (== cpu::unpremult).
 fn unpremult(c: vec4<f32>) -> vec3<f32> {
     if (c.a > 0.0) {
         return c.rgb / c.a;
@@ -37,7 +35,6 @@ fn unpremult(c: vec4<f32>) -> vec3<f32> {
     return vec3<f32>(0.0);
 }
 
-// Entry i of channel c (== cpu's `t[c][i]`).
 fn tab(c: i32, i: i32) -> f32 {
     let v = p.t[c * V + (i >> 2)];
     return v[i & 3];
@@ -66,8 +63,6 @@ fn curves(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let o = textureLoad(src, xy, 0);
-    // Neutral short-circuit (== the CPU reference's early return): the
-    // identity curve on all five channels, decided host-side.
     if (p.neutral != 0u) {
         textureStore(dst, xy, o);
         return;

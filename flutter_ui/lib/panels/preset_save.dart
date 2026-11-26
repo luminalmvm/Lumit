@@ -39,7 +39,6 @@ Future<bool> saveLayerPreset(
   try {
     hasKeys = layer.revealGroups(kind: BridgeRevealKind.animated).transform;
   } catch (_) {
-    // The layer has gone; the write below says so.
   }
   final ws = ui.workspace;
   final choice =
@@ -91,14 +90,12 @@ bool isOwnPreset(BridgePresetInfo preset) {
       preset.path.toLowerCase().startsWith(library.toLowerCase());
 }
 
-/// Rename a saved preset: the name in the file, and the file with it.
 Future<void> renamePreset(
     BuildContext context, LumitUiState ui, BridgePresetInfo preset) async {
   final name = await askThemeName(context,
       title: l10n.rename, suggested: preset.name, confirm: l10n.rename);
   if (name == null || name == preset.name || !context.mounted) return;
   final from = File(preset.path);
-  // The name can hold what a file's name can't.
   final stem = name.replaceAll(RegExp(r'[/\\:*?"<>|]'), '-');
   await renamePresetFile(ui.workspace, preset.path,
       '${from.parent.path}${Platform.pathSeparator}$stem.lumfx',
@@ -138,7 +135,6 @@ Future<bool> renamePresetFile(Workspace workspace, String path, String target,
   return true;
 }
 
-/// Delete a saved preset's file, asking first as it can't be undone.
 Future<void> deletePreset(
     BuildContext context, LumitUiState ui, BridgePresetInfo preset) async {
   if (!await askBefore(
@@ -154,8 +150,6 @@ Future<void> deletePreset(
   ui.presetsChanged.value++;
 }
 
-/// Move to ▸ on a saved preset's menu: the library's groups, each indented
-/// by [indent] a level, with the one the preset is in picked.
 Widget presetMoveToRow({
   required BridgePresetInfo preset,
   required List<String> groups,
@@ -168,7 +162,6 @@ Widget presetMoveToRow({
       closeParent: closeParent,
       submenu: (dismiss) => FloatSurface(
         width: 220,
-        // A big library has dozens of groups, so the list scrolls.
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxHeight: 400),
           child: SingleChildScrollView(
@@ -211,7 +204,6 @@ Future<String?> presetPathFor(BuildContext context, String name,
   if (library == null) {
     return pickPresetSaveLocation('$name.$extension', material: material);
   }
-  // The name can hold what a file's name can't.
   final stem = name.replaceAll(RegExp(r'[/\\:*?"<>|]'), '-');
   final file = File('$library${Platform.pathSeparator}$stem.$extension');
   if (file.existsSync() &&
@@ -222,8 +214,6 @@ Future<String?> presetPathFor(BuildContext context, String name,
   return file.path;
 }
 
-/// A name for a preset of one effect or a material: the same window with no
-/// ticks. Null when it was closed.
 Future<String?> askPresetName(
         BuildContext context, Workspace ws, String suggested) async =>
     (await _ask(context, ws, suggested,

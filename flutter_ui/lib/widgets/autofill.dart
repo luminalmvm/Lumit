@@ -8,9 +8,6 @@ class ExpressionsSuggestion {
   ExpressionsSuggestion(this.function);
 }
 
-/// Completion for the expression editor: suggests the API's functions for the
-/// word under the cursor, and knows how to draw and apply one. The one
-/// autofill source there is — [HouseTextField] takes it directly.
 class ExpressionAutofillGenerator {
   void applySuggestion(
       ExpressionsSuggestion suggestion, TextEditingController controller) {

@@ -25,7 +25,6 @@ File _scratch(String name) {
   return File('${dir.path}${Platform.pathSeparator}$name');
 }
 
-/// A widget that cannot be built, which is the whole subject here.
 class _Broken extends StatelessWidget {
   const _Broken();
 

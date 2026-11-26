@@ -15,7 +15,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Spherize's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "spherize",
@@ -73,7 +72,6 @@ pub struct Spherize {
     #[slider(label = "Centre Y", min = 0.0, max = 2160.0, default = 540.0, unit = Px)]
     pub centre_y: f32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -105,7 +103,6 @@ impl Spherize {
     }
 }
 
-/// Spherize's behaviour.
 pub struct SpherizeDef;
 
 impl EffectDef for SpherizeDef {

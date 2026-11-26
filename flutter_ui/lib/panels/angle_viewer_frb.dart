@@ -52,13 +52,10 @@ import 'viewer_picture.dart'
 /// The longest side the grid is asked for, in pixels.
 const int _mostPixels = 2048;
 
-/// The band under each angle's picture that carries its number and name.
 const double _bandHeight = 18;
 
-/// How wide the header has to be to show the pager's numbers.
 const double _roomForPageNumbers = 360;
 
-/// The speaker in the corner of an angle that is heard.
 const double _speakerSize = 14;
 
 class AngleStageFrb extends StatefulWidget {
@@ -165,7 +162,6 @@ class _AngleStageFrbState extends State<AngleStageFrb>
     if ((ui.anglesFollowing(view) != null) != _wasFollowing) _rebuild();
   }
 
-  /// Another comp in the view is another set of angles to read.
   void _onViews() {
     if (_infoFor != view.itemId) _readInfo();
   }
@@ -302,7 +298,6 @@ class _AngleStageFrbState extends State<AngleStageFrb>
     final ui = Provider.of<LumitUiState>(context);
     final info = _info;
     final grid = _grid;
-    // Gone from the project, or not a multicam comp any more.
     if (info == null || grid == null || info.width <= 0 || info.height <= 0) {
       return const EmptyStageFrb();
     }
@@ -344,7 +339,6 @@ class _AngleStageFrbState extends State<AngleStageFrb>
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            // Which halves a click switches: both, the picture, the sound.
             modeMark(BridgeAngleSwitch.both, LumitIcon.footage,
                 l10n.multicamBoth, 'multicam.mode.both'),
             viewerBarGapBox(viewerHeaderGap),
@@ -389,7 +383,6 @@ class _AngleStageFrbState extends State<AngleStageFrb>
                 action: 'multicam.page.next',
               ),
             ],
-            // Let the angles go and the composition has the pane back.
             if (ui.sourceBesideComposition(view)) ...[
               const SizedBox(width: viewerBarGap),
               LumitTooltip(
@@ -453,7 +446,6 @@ class _AngleStageFrbState extends State<AngleStageFrb>
         key: const ValueKey('angles-view-picture'),
         builder: (context, box) {
           final size = Size(box.maxWidth, box.maxHeight);
-          // The grid fills the area, drawn at the area's own pixels, capped.
           final ratio = MediaQuery.devicePixelRatioOf(context);
           var w = size.width * ratio, h = size.height * ratio;
           final longer = math.max(w, h);
@@ -632,7 +624,6 @@ class _AngleStageFrbState extends State<AngleStageFrb>
       ),
     );
 
-    // The multicam comp's own rows, then the source side's.
     Widget menu(Widget child) => ViewerRightClick(
           rows: (close) => [
             viewerRow(l10n.multicamOpen, () {
@@ -642,7 +633,6 @@ class _AngleStageFrbState extends State<AngleStageFrb>
             viewerRow(l10n.anglesTimecode, () {
               final timecodes = ui.multicam.timecodes;
               timecodes.value = !timecodes.value;
-              // The clip under the playhead is read again with the times.
               ui.multicam.follow();
             }, close,
                 id: 'angles-menu-timecode',
@@ -702,12 +692,10 @@ class _AngleStageFrbState extends State<AngleStageFrb>
   }
 }
 
-/// Which angles the marks go on, as the overlay reads them when it paints.
 class _Marks {
   final UuidValue? picture;
   final UuidValue? sound;
 
-  /// Angles heard as well as [sound].
   final List<UuidValue> also;
 
   /// Whether the clip under the playhead is ordinary footage that one angle
@@ -715,7 +703,6 @@ class _Marks {
   final bool plain;
   final bool following;
 
-  /// Each angle's own time at the moment shown, when asked for.
   final Map<UuidValue, BridgeAngleTime> times;
 
   const _Marks({
@@ -742,7 +729,6 @@ List<Rect> _cellsOf(Size size, BridgeAngleGrid grid) {
   ];
 }
 
-/// Where the comp's picture lands inside [cell], its shape kept.
 Rect _letterbox(Rect cell, int width, int height) {
   final scale = math.min(cell.width / width, cell.height / height);
   if (!scale.isFinite || scale <= 0) return cell;
@@ -807,8 +793,6 @@ class _AngleGridPainter extends CustomPainter {
       if (angle.sound) {
         canvas.drawRect(cell, Paint()..color = t.surface0);
       }
-      // The band, the number in its cap, then the name in what is left, and
-      // the angle's own time at the right when asked and there is room.
       final band = Rect.fromLTRB(
           box.left, math.max(box.top, box.bottom - _bandHeight), box.right,
           box.bottom);

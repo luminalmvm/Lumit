@@ -1,6 +1,3 @@
-//! The puppet warp at the paint and masks seam, and the shared mesh cache it
-//! builds through.
-
 use super::LayerPixels;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -42,21 +39,6 @@ pub(super) fn warp_puppet(
     }
     let nw = natural.0.round().max(1.0) as u32;
     let nh = natural.1.round().max(1.0) as u32;
-    // ponytail: the layer is rendered solo at the reference time on every
-    // frame, only to be thrown away when the mesh cache hits on its alpha. The
-    // upgrade is a per-layer memo of that alpha's hash, keyed on the layer's
-    // own content stamp. Observable trigger: a puppeted footage or text layer
-    // showing up in a docs/13 B3/B6 trace, where the doubled source cost is
-    // what the trace names.
-    //
-    // ponytail: and a **footage** layer's pixels here are this frame's decoded
-    // ones, not the reference time's — the decode planner schedules one frame
-    // per layer per rendered frame, and asking it for a second moment is a
-    // change to the plan rather than to this seam (docs/impl/puppet.md §1.1).
-    // Every self-rasterising kind is exact; footage whose silhouette does not
-    // move is exact too. Observable trigger: a mesh that visibly follows the
-    // shot instead of holding still — pins going inert as a figure walks out of
-    // where it stood at the reference time.
     let Some((reference, rw, rh, _, rfmt)) = solo_at(layer, block.reference_time.to_f64()) else {
         return;
     };

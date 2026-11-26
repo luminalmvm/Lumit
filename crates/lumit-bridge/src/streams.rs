@@ -23,7 +23,6 @@ use uuid::Uuid;
 
 use crate::api::state::LumitBridgeState;
 
-/// What a file says of one of its audio streams.
 pub(crate) struct Stream {
     pub codec: String,
     pub channels: u32,
@@ -61,7 +60,6 @@ pub(crate) fn of_item(state: &LumitBridgeState, footage: &FootageItem) -> Vec<St
     }
 }
 
-/// Every stream of a file with `count` of them, mixed.
 pub(crate) fn all(count: usize) -> AudioStreams {
     AudioStreams::of(&(0..count as u32).collect::<Vec<_>>())
 }
@@ -206,7 +204,6 @@ pub(crate) fn merge_layer(comp: &Composition, layer: &Layer, count: usize) -> Op
             .filter(beside)
             .find(|l| !l.audio_only && l.switches.audible)
     };
-    // An Audio layer beside this one that is heard, for a layer that is not.
     let sounding = || {
         let mut heard = comp.layers.iter().filter(beside);
         heard.find(|l| l.audio_only && l.switches.audible)
@@ -267,7 +264,6 @@ mod tests {
         }
     }
 
-    /// A comp holding one footage layer of a file with three audio streams.
     fn recording() -> (Document, Uuid, Uuid) {
         let mut doc = Document::new();
         let item = Uuid::now_v7();
@@ -311,10 +307,6 @@ mod tests {
         lumit_core::ops::apply(doc, &Op::Batch { ops }).unwrap();
     }
 
-    /// **A split and a merge are each other's way back.** Three streams become
-    /// three rows, one stream each and none twice, named for what the file
-    /// calls them; merging from any of the rows leaves one row sounding all
-    /// three, and it is the row with the picture.
     #[test]
     fn splitting_gives_each_stream_a_row_and_merging_folds_them_back() {
         let streams = [stream(None), stream(Some("Microphone")), stream(None)];
@@ -344,10 +336,8 @@ mod tests {
             ]
         );
         assert_eq!(made, [comp.layers[1].id, comp.layers[2].id]);
-        // One stream to a row is nothing more to split.
         assert!(split_layer(&comp, &comp.layers[1], &streams).is_none());
 
-        // Asked of a row that was split off, the picture's row is the one kept.
         let ops = merge_layer(&comp, &comp.layers[2], streams.len()).unwrap();
         apply(&mut doc, ops);
         let comp = doc.comp(comp_id).unwrap().clone();
@@ -356,15 +346,11 @@ mod tests {
         assert_eq!(comp.layers[0].audio_streams.places(), [0, 1, 2]);
         assert!(merge_layer(&comp, &comp.layers[0], streams.len()).is_none());
 
-        // And a row sounding all three splits into the same three again.
         let (ops, _) = split_layer(&comp, &comp.layers[0], &streams).unwrap();
         apply(&mut doc, ops);
         assert_eq!(doc.comp(comp_id).unwrap().layers.len(), 3);
     }
 
-    /// After *Detach audio* the picture's row is silent and its sound is on
-    /// the Audio layer below. A split asked of either is a split of the one
-    /// that is heard, and neither changes which stream it had.
     #[test]
     fn a_detached_picture_is_split_through_its_sound() {
         let streams = [stream(None), stream(None), stream(None)];
@@ -403,7 +389,6 @@ mod tests {
             ]
         );
 
-        // And merged through it: the row that is heard takes them back.
         let comp = doc.comp(comp_id).unwrap().clone();
         let ops = merge_layer(&comp, &comp.layers[0], streams.len()).unwrap();
         apply(&mut doc, ops);
@@ -413,8 +398,6 @@ mod tests {
         assert_eq!(layers[1].audio_streams.places(), [0, 1, 2]);
     }
 
-    /// A layer that was never split merges to every stream of its file, and a
-    /// layer of a file with one stream has nothing to split or merge.
     #[test]
     fn a_layer_alone_merges_to_every_stream_of_its_file() {
         let (mut doc, comp_id, _) = recording();

@@ -41,10 +41,8 @@ use serde::{Deserialize, Serialize};
 /// boundary is a fact about the layer, not about the playhead.
 pub const BLOCK_FRAMES: usize = 512;
 
-/// Channels. v1 hosts stereo effect plugins only (§4).
 pub const CHANNELS: usize = 2;
 
-/// Samples in one interleaved block: every frame's channels, back to back.
 pub const INTERLEAVED_LEN: usize = BLOCK_FRAMES * CHANNELS;
 
 /// One parameter value, at one moment inside a block.
@@ -54,7 +52,6 @@ pub const INTERLEAVED_LEN: usize = BLOCK_FRAMES * CHANNELS;
 /// the envelope precedent delivers.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 pub struct ParamEvent {
-    /// Frames from the start of the block.
     pub time: u32,
     /// The plugin's own stable parameter id — never an index (§4).
     pub id: u32,
@@ -71,7 +68,6 @@ pub struct ParamEvent {
 pub struct Block {
     /// Planar input: channel 0's frames, then channel 1's.
     input: Vec<f32>,
-    /// Planar output, same layout.
     output: Vec<f32>,
     /// The events for this block, time-sorted. CLAP calls an unsorted list
     /// undefined, and real plugins crash on one (§9).
@@ -85,7 +81,6 @@ impl Default for Block {
 }
 
 impl Block {
-    /// Every buffer this block will ever need.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -113,7 +108,6 @@ impl Block {
         }
     }
 
-    /// Write the output back out as interleaved stereo.
     pub fn store(&self, dst: &mut [f32]) {
         for (frame, samples) in dst
             .chunks_exact_mut(CHANNELS)
@@ -141,13 +135,11 @@ impl Block {
         self.events.sort_by_key(|event| event.header.time);
     }
 
-    /// The input, planar, as the plugin will see it.
     #[must_use]
     pub fn input(&self) -> &[f32] {
         &self.input
     }
 
-    /// The output, planar.
     #[must_use]
     pub fn output(&self) -> &[f32] {
         &self.output
@@ -168,7 +160,6 @@ impl Block {
     }
 }
 
-/// One Lumit parameter event, in CLAP's own shape.
 pub(crate) fn to_clap(event: &ParamEvent) -> clap_event_param_value {
     clap_event_param_value {
         header: clap_event_header {
@@ -191,8 +182,6 @@ pub(crate) fn to_clap(event: &ParamEvent) -> clap_event_param_value {
         value: event.value,
     }
 }
-
-// ------------------------------------------------------------ event lists --
 
 /// The `clap_input_events` a block's events are read through.
 ///
@@ -258,5 +247,3 @@ unsafe extern "C" fn sink_push(
 ) -> bool {
     true
 }
-
-// -------------------------------------------------------------- denormals --

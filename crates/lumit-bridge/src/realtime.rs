@@ -105,8 +105,6 @@ pub(crate) fn drag_tier(width: u32, height: u32, scale: f32) -> u32 {
 /// the controller is measuring.
 static FULL_RES_DRAGS: AtomicBool = AtomicBool::new(false);
 
-/// Set the [`FULL_RES_DRAGS`] preference. Called at boot with what the settings
-/// file held, and again whenever the switch is thrown.
 pub(crate) fn set_full_res_drags(on: bool) {
     FULL_RES_DRAGS.store(on, Ordering::Relaxed);
 }
@@ -147,10 +145,8 @@ static DRAG_EXTRA: AtomicU32 = AtomicU32::new(1);
 /// A drag frame slower than this coarsens the next one: the 50 ms a drag
 /// tick has (docs/13 §2, budget B3).
 const SLOW_DRAG: f64 = 0.050;
-/// A drag frame quicker than this sharpens the next one back.
 const QUICK_DRAG: f64 = 0.020;
 
-/// The coarsest divisor Auto goes to.
 const AUTO_LIMIT: u32 = 8;
 
 /// Set the adaptive resolution limit: 0 for Auto, else 2, 4, 8 or 16. A new
@@ -324,9 +320,6 @@ pub(crate) fn reset() {
 mod tests {
     use super::{adaptive_divisor, drag_tier, next_extra, DRAG_PIXEL_BUDGET};
 
-    /// Whatever tier is picked, the raster it implies is inside the budget —
-    /// unless the floor was hit, in which case it is the floor's fault and not
-    /// the search's.
     #[test]
     fn the_chosen_tier_is_the_finest_one_inside_the_budget() {
         for &(w, h) in &[
@@ -370,8 +363,6 @@ mod tests {
         assert_eq!(drag_tier(1920, 1080, 4.0), 3);
     }
 
-    /// A machine fast enough for the drag budget stays at its tier; a slow
-    /// one goes coarser up to the limit, and comes back once drags are quick.
     #[test]
     fn slow_drags_go_coarser_up_to_the_limit_and_come_back() {
         assert_eq!(

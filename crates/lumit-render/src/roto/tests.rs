@@ -1,11 +1,3 @@
-//! The propagation job, the `roto/` tier and the store, asserted against a
-//! **synthetic shot with a known matte** (docs/impl/roto.md §10) — a bright disc
-//! translating over textured ground, rendered by the test so every claim is an
-//! assertion rather than a look.
-//!
-//! No encoder and no asset: the frames arrive through [`RotoFrames`], which is
-//! the seam `LumaFrames` already is on the tracking side.
-
 use super::*;
 use lumit_core::roto::{RotoStroke as DocStroke, RotoStrokeKind};
 
@@ -31,12 +23,10 @@ impl Disc {
         }
     }
 
-    /// Where the disc's centre is on frame `n`.
     fn centre(n: i64) -> (f32, f32) {
         (24.0 + 4.0 * n as f32, 36.0)
     }
 
-    /// The matte the test knows to be right.
     fn truth(n: i64) -> Vec<bool> {
         let (cx, cy) = Self::centre(n);
         (0..H)
@@ -88,8 +78,6 @@ fn stroke(frame: i64, kind: RotoStrokeKind, from: (f32, f32), to: (f32, f32)) ->
     }
 }
 
-/// A block that cuts the disc out on frame `base`: one stroke through it, and
-/// the border ring answering for the background.
 fn block_at(base: i64) -> RotoBlock {
     let (cx, cy) = Disc::centre(base);
     RotoBlock {
@@ -104,8 +92,6 @@ fn block_at(base: i64) -> RotoBlock {
     }
 }
 
-/// The same shot seeded by a tap in the middle of the disc instead: no stroke
-/// at all, one prompt, and the seed row saying so.
 fn prompted_at(base: i64) -> (RotoBlock, RotoSettings) {
     let (cx, cy) = Disc::centre(base);
     (
@@ -135,11 +121,7 @@ fn prompted_at(base: i64) -> (RotoBlock, RotoSettings) {
 /// between the two thresholds is what [`lumit_roto::warp::mask_seeds`] declines to
 /// seed and what the solve then decides from the frame's own colours.
 struct FakeModel {
-    /// Where the tap the model was asked about landed, so the test can assert
-    /// the prompt reached it in source pixels.
     asked: std::sync::Arc<std::sync::Mutex<Vec<(f32, f32)>>>,
-    /// How many frames it was handed, which is what makes "the encoder runs
-    /// once" an assertion.
     reads: std::sync::Arc<std::sync::atomic::AtomicUsize>,
 }
 
@@ -160,7 +142,6 @@ impl RotoModel for FakeModel {
             .find(|(_, label)| **label == 1)
             .map(|(point, _)| *point)
             .ok_or(RotoFailure::ModelFailed)?;
-        // Which frame's disc the tap is inside, by where its centre would be.
         let frame = ((positive.0 - 24.0) / 4.0).round() as i64;
         let (cx, cy) = Disc::centre(frame);
         Ok((0..H)
@@ -169,7 +150,6 @@ impl RotoModel for FakeModel {
                 let dx = x as f32 + 0.5 - cx;
                 let dy = y as f32 + 0.5 - cy;
                 let away = (dx * dx + dy * dy).sqrt();
-                // Sure inside, sure outside, unsure across the rim.
                 (1.0 - (away - (R - 1.0)) / 2.0).clamp(0.0, 1.0)
             })
             .collect())
@@ -196,7 +176,6 @@ fn job(block: RotoBlock, frames: usize) -> RotoJob {
     }
 }
 
-/// Intersection over union of a stored matte against the analytic disc.
 fn iou(run: &RotoRun, frame: i64) -> f64 {
     let truth = Disc::truth(frame);
     let plane = run.matte(frame).expect("a matte for this frame");
@@ -224,14 +203,6 @@ fn never() -> AtomicBool {
     AtomicBool::new(false)
 }
 
-/// The same claim for a **prompted** base (docs/impl/addons.md §6.2, §11 test
-/// 10): the model proposes the subject, the seeds come off its answer, and the
-/// solve cuts the same disc out of the same frame.
-///
-/// What is asserted about the model is that it was handed the frame once and
-/// the tap in source pixels, which is the whole of the seam; what its answer
-/// looks like is the test's own arithmetic, so nothing here depends on a pack
-/// being installed.
 #[test]
 fn the_base_frame_is_cut_from_a_prompt_when_the_seed_row_asks() {
     let _guard = serially();
@@ -266,8 +237,6 @@ fn the_base_frame_is_cut_from_a_prompt_when_the_seed_row_asks() {
         run.made_with
     );
 
-    // With no model on the machine the run is a refusal that names the reason,
-    // and never a matte cut some other way (docs/impl/addons.md §9).
     let (block, settings) = prompted_at(0);
     let mut j = job(block, 1);
     j.settings = settings;
@@ -276,9 +245,6 @@ fn the_base_frame_is_cut_from_a_prompt_when_the_seed_row_asks() {
         RotoFailure::ModelMissing
     );
 
-    // And a brush carrying a prompt with the seed row back on its strokes never
-    // opens one at all: the job's opener refuses, and the run comes back
-    // anyway, cut from the strokes as it always was.
     let (prompted, _) = prompted_at(0);
     let mut block = block_at(0);
     block.prompts = prompted.prompts;
@@ -290,8 +256,6 @@ fn the_base_frame_is_cut_from_a_prompt_when_the_seed_row_asks() {
     assert!(iou(&run, 0) >= 0.95, "stroked base IoU {}", iou(&run, 0));
 }
 
-/// §10 item 2: the disc translating, strokes on the base only, both directions
-/// from a base in the middle.
 #[test]
 fn the_matte_is_carried_both_ways_from_the_base() {
     let _guard = serially();
@@ -305,9 +269,6 @@ fn the_matte_is_carried_both_ways_from_the_base() {
     }
 }
 
-/// §10 item 6: the sidecar's whole contract — round trip, a rebuild identical
-/// to the hit, a wrong key refused, a newer version refused, a deleted file
-/// rebuilt to the identical bytes.
 #[test]
 fn the_sidecar_round_trips_and_refuses_what_it_cannot_vouch_for() {
     let _guard = serially();
@@ -326,26 +287,20 @@ fn the_sidecar_round_trips_and_refuses_what_it_cannot_vouch_for() {
     let (run, _) = propagate(j, &never(), &|_| {}).expect("a run");
     let bytes = encode(key, &run).expect("encodes");
 
-    // Round trip.
     let back = decode(&bytes, Some(key)).expect("decodes");
     assert_eq!(back.frames, run.records);
 
-    // A wrong key is refused rather than believed.
     let other = RotoKey::new(&fingerprint, &block_at(1), RotoSettings::default());
     assert!(decode(&bytes, Some(other)).is_none());
 
-    // A version from the future is refused before the body is parsed.
     let mut newer = bytes.clone();
     newer[7] = FORMAT_VERSION.saturating_add(1) as u8;
     assert!(decode(&newer, Some(key)).is_none());
 
-    // A file that is not one of ours never reaches a deserialiser.
     let mut alien = bytes.clone();
     alien[0] = b'X';
     assert!(decode(&alien, Some(key)).is_none());
 
-    // Delete-safe, and the rebuild is byte-identical to what was deleted: the
-    // whole determinism claim, asserted rather than assumed (§8).
     write_sidecar(dir.path(), key, &run);
     let path = dir.path().join(key.file_name());
     assert!(path.exists());
@@ -361,16 +316,8 @@ fn the_sidecar_round_trips_and_refuses_what_it_cannot_vouch_for() {
     );
 }
 
-/// A sidecar is Lumit's own writing, but it lives in a cache directory on an
-/// ordinary disk: it can be truncated by a full disk, corrupted by a failing
-/// drive, carried between machines in a project folder, or simply edited. Every
-/// number in it decides an allocation, so every number is checked.
-///
-/// A refused sidecar costs a re-propagation, which is what happens when there is
-/// no sidecar at all — so the whole file is refused rather than salvaged.
 #[test]
 fn a_sidecar_whose_numbers_do_not_hold_together_is_refused() {
-    /// One valid record, then whatever the caller wants changed about it.
     fn framed(edit: impl FnOnce(&mut Record)) -> Vec<u8> {
         let boxed = vec![7_u8; 4];
         let mut record = Record {
@@ -392,14 +339,11 @@ fn a_sidecar_whose_numbers_do_not_hold_together_is_refused() {
         crate::sidecar::frame(MAGIC, FORMAT_VERSION, &body)
     }
 
-    // The shape itself is sound, or none of the rest would mean anything.
     assert!(
         decode(&framed(|_| {}), None).is_some(),
         "the fixture decodes"
     );
 
-    // A raster no picture has. `expand` would allocate width x height from
-    // these, which is the whole reason they are checked here instead.
     for (what, edit) in [
         (
             "zero width",
@@ -415,8 +359,6 @@ fn a_sidecar_whose_numbers_do_not_hold_together_is_refused() {
         );
     }
 
-    // A rate that is not a positive finite number reaches the retime maths,
-    // where an infinity or a NaN spreads quietly rather than failing.
     for (what, edit) in [
         (
             "a NaN rate",
@@ -432,8 +374,6 @@ fn a_sidecar_whose_numbers_do_not_hold_together_is_refused() {
         );
     }
 
-    // A box that leaves the raster: the row arithmetic in `expand` would be
-    // writing somewhere the picture is not.
     for (what, edit) in [
         (
             "a box past the right edge",
@@ -460,10 +400,6 @@ fn a_sidecar_whose_numbers_do_not_hold_together_is_refused() {
         );
     }
 
-    // The payload's own announcement. `decompress_size_prepended` reads this
-    // four-byte prefix and allocates it before it decompresses anything, so a
-    // ten-byte payload announcing four gigabytes is four gigabytes — unless the
-    // announcement is checked against the box first, which is what this is.
     let lying = framed(|r| {
         if let Some(f) = r.frames.first_mut() {
             if let Some(head) = f.lz4.get_mut(..4) {
@@ -476,7 +412,6 @@ fn a_sidecar_whose_numbers_do_not_hold_together_is_refused() {
         "an LZ4 payload claiming more than its box holds must be refused"
     );
 
-    // An empty box carries no pixels; one that does is not the file it says.
     let stowaway = framed(|r| {
         if let Some(f) = r.frames.first_mut() {
             f.bbox = [0, 0, 0, 0];
@@ -487,8 +422,6 @@ fn a_sidecar_whose_numbers_do_not_hold_together_is_refused() {
         "an empty box with a payload must be refused"
     );
 
-    // Ascending by frame is what makes a lookup a binary search. Out of order
-    // is a wrong matte rather than a slow one, which is worse.
     let unsorted = framed(|r| {
         let Some(first) = r.frames.first().cloned() else {
             return;
@@ -501,9 +434,6 @@ fn a_sidecar_whose_numbers_do_not_hold_together_is_refused() {
     );
 }
 
-/// §10 item 8, and §6's fifth step: a cancel **finalises rather than discards**.
-/// The frames already solved are kept, correctly named, and the span says how
-/// far it got.
 #[test]
 fn a_cancel_keeps_the_prefix_it_finished() {
     let _guard = serially();
@@ -519,10 +449,6 @@ fn a_cancel_keeps_the_prefix_it_finished() {
     assert!(run.is_partial());
 }
 
-/// A Propagate over a partial run **carries on from it** rather than
-/// reading it back as the whole answer — the resume §6 promises. The partial
-/// run here is a release-time solo; a cancelled run resumes the same way, the
-/// two being the same shape of sidecar.
 #[test]
 fn a_propagate_resumes_from_its_own_partial_run() {
     let _guard = serially();
@@ -539,8 +465,6 @@ fn a_propagate_resumes_from_its_own_partial_run() {
     let key = RotoKey::new(&fingerprint, &block, RotoSettings::default());
     let instance = uuid::Uuid::now_v7();
 
-    // The release-time solo, through the whole job path: solved, filed in the
-    // sidecar, published as the one-frame span it honestly is.
     let mut solo = job(block.clone(), frames);
     solo.instance = instance;
     solo.key = Some(key);
@@ -549,9 +473,6 @@ fn a_propagate_resumes_from_its_own_partial_run() {
     let partial = propagated(instance).expect("the solo run is in the store");
     assert_eq!((partial.first_frame, partial.last_frame), (0, 0));
 
-    // The same key lends its own file back (the `lendable` half of the
-    // resume): the base is **copied** out of it rather than solved again —
-    // counted, never timed (§5).
     let mut counted = job(block.clone(), frames);
     counted.key = Some(key);
     let last = std::sync::Mutex::new(Progress::Queued);
@@ -567,8 +488,6 @@ fn a_propagate_resumes_from_its_own_partial_run() {
     };
     assert_eq!(reused, 1, "the solo base was lent, not re-solved");
 
-    // The press of Propagate, through the whole job path: the same key finds
-    // the partial file and falls through instead of answering Done at it.
     let mut full = job(block, frames);
     full.instance = instance;
     full.key = Some(key);
@@ -729,7 +648,6 @@ fn a_document(
     }
 }
 
-/// A block on frame 0 carrying `strokes` and `prompts` and nothing else.
 fn block_of(strokes: Vec<DocStroke>, prompts: Vec<lumit_core::roto::RotoPrompt>) -> RotoBlock {
     RotoBlock {
         base_frame: Some(0),
@@ -738,10 +656,7 @@ fn block_of(strokes: Vec<DocStroke>, prompts: Vec<lumit_core::roto::RotoPrompt>)
     }
 }
 
-/// The two names the same frame of two documents is filed under, asserted the
-/// same way for a stroke edit and for a prompt edit.
 fn renames_from(before: RotoBlock, after: RotoBlock, edited: usize) {
-    // The names read the store, which the test below fills.
     let _guard = serially();
     let (doc_a, comp_a, item) = a_document(before, 0);
     let (doc_b, comp_b, _) = a_document(after, 0);

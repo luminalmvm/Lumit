@@ -15,17 +15,14 @@ use lumit_fx_macros::Effect;
 use std::sync::Arc;
 use uuid::Uuid;
 
-/// What [`ModelMaterial`] is known by.
 pub const MATCH_NAME: &str = "model_material";
 
 /// The file extension a saved material preset uses, so the effect presets
 /// never list one.
 pub const PRESET_EXTENSION: &str = "lummat";
 
-/// Whether a projection follows the playhead or stops at its Hold frame.
 const PROJECTION_TIME: &[&str] = &["Follow", "Hold"];
 
-/// Hold frame only shows while the projection holds.
 const GROUPS: &[ParamGroup] = &[ParamGroup {
     label: "",
     params: &["hold_frame"],
@@ -49,7 +46,6 @@ const ENABLED_WHEN: &[EnabledWhen] = &[
     },
 ];
 
-/// One material's rows.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "model_material",
@@ -75,7 +71,6 @@ pub struct ModelMaterial {
     pub camera: bool,
     #[choice(label = "Projection time", options = *PROJECTION_TIME, default = 0)]
     pub projection_time: u32,
-    /// The comp frame the camera and its picture stop at.
     #[counter(min = 0, max = 300, default = 0, hard_min = 0, unit = Frames, label = "Hold frame")]
     pub hold_frame: i32,
     #[slider(min = 0.0, max = 100.0, default = 0.0, hard_min = 0.0, hard_max = 100.0, unit = Percent)]
@@ -95,7 +90,6 @@ pub struct ModelMaterial {
     pub opacity_layer: bool,
     #[slider(min = 0.0, max = 2.0, default = 1.0, hard_min = 0.0, unit = Raw)]
     pub normal_strength: f32,
-    /// A layer's picture as the normal map.
     #[layer(self_default = false, label = "Normal layer")]
     pub normal_layer: bool,
     /// Whether the file's base colour and metal-rough pictures still show
@@ -107,7 +101,6 @@ pub struct ModelMaterial {
     pub transmission: f32,
     #[slider(min = 1.0, max = 2.5, default = 1.5, hard_min = 1.0, hard_max = 3.0, unit = Raw, label = "IOR")]
     pub ior: f32,
-    /// A clear varnish over the rest, with a highlight of its own.
     #[slider(min = 0.0, max = 100.0, default = 0.0, hard_min = 0.0, hard_max = 100.0, unit = Percent, label = "Coat")]
     pub clearcoat: f32,
     #[slider(min = 0.0, max = 100.0, default = 0.0, hard_min = 0.0, hard_max = 100.0, unit = Percent, label = "Coat roughness")]
@@ -233,7 +226,6 @@ const PRESETS: [EffectPreset; 8] = [
 /// over its layer's id, so the id says which material of which layer it is.
 const MARK: u128 = 0x6d61_7465_7269_616c_7320_6f66_0000_0000;
 
-/// The id of material `index`'s rows on Model layer `layer`.
 #[must_use]
 pub fn material_id(layer: Uuid, index: usize) -> Uuid {
     Uuid::from_u128(layer.as_u128() ^ (MARK | (index as u128 + 1)))
@@ -283,19 +275,15 @@ pub fn stored(layer: &Layer) -> Vec<EffectInstance> {
     rows_kept(layer).iter().flatten().cloned().collect()
 }
 
-/// Where a material's base colour layer is projected from.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Projection {
-    /// The Camera layer.
     pub camera: Uuid,
-    /// The layer it projects.
     pub picture: Uuid,
     /// The comp time it holds at, `None` when it follows the playhead.
     pub held: Option<f64>,
 }
 
 impl Projection {
-    /// The comp time the camera and its picture are read at, for a frame at `t`.
     #[must_use]
     pub fn time_at(&self, t: f64) -> f64 {
         self.held.unwrap_or(t)
@@ -436,8 +424,6 @@ pub fn projection_source(
     Some((camera.map(|c| c.id), picture))
 }
 
-/// Set material rows `rows` to project `picture` from `camera`, held at comp
-/// frame `hold` or following the playhead.
 pub fn set_projection(rows: &mut EffectInstance, picture: Uuid, camera: Uuid, hold: Option<i64>) {
     for p in &mut rows.params {
         match p.id.as_str() {
@@ -462,8 +448,6 @@ mod tests {
     use crate::model::Document;
     use crate::ops::apply;
 
-    /// A comp holding a Model layer holding rows, over two pictures, with a
-    /// camera above them, each named as the test wants it.
     fn set(hold: bool) -> (Composition, [Uuid; 4]) {
         let mut doc = Document::new();
         let (id, ops) = new_comp_ops(&doc, CompSettings::default(), None);
@@ -495,8 +479,6 @@ mod tests {
         (comp, ids)
     }
 
-    /// Project from camera takes a selected camera and picture over the comp's
-    /// own, and a solve's shot over either.
     #[test]
     fn project_from_camera_picks_what_it_should() {
         let (mut comp, [camera, model, near, far]) = set(false);
@@ -514,8 +496,6 @@ mod tests {
         assert_eq!(pick(&comp, &[]), None, "no picture, nothing to project");
     }
 
-    /// A hidden picture only a held projection reads is fetched at the frame
-    /// it holds, and named by that frame alone.
     #[test]
     fn a_held_picture_is_read_at_the_held_frame() {
         let (comp, [_, _, near, far]) = set(true);
@@ -538,7 +518,6 @@ mod tests {
         assert_eq!(named[0].layer_ref("camera"), rows[0].layer_ref("camera"));
         assert_ne!(far, near);
 
-        // Read by anything else too, it's fetched at the playhead after all.
         let mut read_twice = comp.clone();
         let mut other = crate::fx::builtins::instantiate(MATCH_NAME).unwrap();
         set_projection(&mut other, near, near, None);

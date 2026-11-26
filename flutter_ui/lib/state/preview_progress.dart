@@ -40,15 +40,12 @@ String previewStageLabel(int stage) => switch (stage) {
       _ => l10n.previewRendering,
     };
 
-/// Follows the engine's progress reports for the frame the Viewer is waiting
-/// on, and decides what — if anything — the Viewer should draw.
 class PreviewProgressTracker extends ChangeNotifier {
   /// How long a render must have been outstanding before a bar appears. Long
   /// enough that an ordinary frame never shows one, short enough that a frame
   /// worth waiting for says so before the wait feels like a fault.
   static const Duration appearsAfter = Duration(milliseconds: 150);
 
-  /// The frame being waited on, or null when nothing is.
   int? _frame;
   int _stage = 0;
   double _fraction = 0;
@@ -56,7 +53,6 @@ class PreviewProgressTracker extends ChangeNotifier {
   bool _visible = false;
   Timer? _timer;
 
-  /// True when a bar should be on screen.
   bool get visible => _visible;
 
   /// True when nothing is being waited on: no render outstanding, and so no
@@ -72,13 +68,10 @@ class PreviewProgressTracker extends ChangeNotifier {
   /// How far the frame has got, 0..1 — the engine's own estimate.
   double get fraction => _fraction;
 
-  /// Which frame is being waited for, or null when nothing is.
   int? get frame => _frame;
 
-  /// What the engine is doing, in words.
   String get label => previewStageLabel(_stage);
 
-  /// One report from the engine.
   void report(BridgeRenderProgress p) {
     if (p.done) {
       _finish();

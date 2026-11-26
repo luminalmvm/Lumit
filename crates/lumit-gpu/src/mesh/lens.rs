@@ -8,7 +8,6 @@ use crate::fx::FxEngine;
 use crate::GpuContext;
 use wgpu::util::DeviceExt;
 
-/// How one picture is blurred.
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct ModelLens {
@@ -22,7 +21,6 @@ pub struct ModelLens {
     pub z_per_w: f32,
 }
 
-/// The passes, made the first time a model is blurred.
 pub(super) struct LensPasses {
     layout: wgpu::BindGroupLayout,
     spread: wgpu::RenderPipeline,
@@ -102,7 +100,6 @@ impl LensPasses {
     }
 }
 
-/// One full-picture pass of `pipeline` over `a` and `b`, into a new picture.
 fn pass(
     ctx: &GpuContext,
     fx: &LensPasses,

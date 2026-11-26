@@ -1,5 +1,3 @@
-// Ports of the Rust theme tests (crates/lumit-ui/src/theme.rs) so the Dart
-// tables cannot silently drift from the Rust ones.
 
 import 'dart:io';
 import 'dart:ui';
@@ -33,7 +31,6 @@ void main() {
       LumitColorScheme.giltLight,
       LumitColorScheme.greyRoom,
     ];
-    // Seven from the Rust frontend, twelve pairs, and Desk's two rooms.
     expect(LumitColorScheme.values, hasLength(7 + 12 * 2 + 2));
     for (final scheme in LumitColorScheme.values) {
       expect(scheme.build().mode, scheme.mode);

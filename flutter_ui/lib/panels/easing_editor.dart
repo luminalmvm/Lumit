@@ -66,10 +66,8 @@ String easingPresetName(String id) => switch (id) {
       _ => l10n.easingBackInOut,
     };
 
-/// The house shapes, one row along the top of the library.
 const _basics = ['easy', 'slowStart', 'slowFinish', 'heavy', 'snap'];
 
-/// The families, one row each, with their in, out and in out shapes across.
 const _families = ['sine', 'quad', 'cubic', 'quart', 'expo', 'back'];
 
 EasingCurve _presetCurve(String id) =>
@@ -78,7 +76,6 @@ EasingCurve _presetCurve(String id) =>
 /// Side room: enough for a knob at x = 0 or x = 1 to be drawn whole.
 const double _marginX = 14;
 
-/// How near the pointer must come to a handle to take hold of it.
 const double _grabRadius = 14;
 
 /// The unit box is wider than it is tall, as a graph is. Its height is this
@@ -86,17 +83,14 @@ const double _grabRadius = 14;
 const double _boxAspect = 0.55;
 const double _boxMinHeight = 56;
 
-/// The popup's content width.
 const double _popupWidth = 236;
 
-/// The strip under the box that plays the shape.
 const double _previewHeight = 16;
 
 /// A panel shorter than this scrolls as one, rather than squeezing the
 /// library to nothing under a box that will not shrink.
 const double _pinnedMinHeight = 380;
 
-/// Wide enough, and wide rather than tall: the library goes beside the box.
 const double _sideBySideMinWidth = 520;
 
 const double _gap = 6;
@@ -205,7 +199,6 @@ class _EasingEditorState extends State<EasingEditor>
 
   final TextEditingController _nameField = TextEditingController();
 
-  /// The preview: one pass of the shape, 0 to 1 in time.
   late final AnimationController _play = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 900),
@@ -213,10 +206,8 @@ class _EasingEditorState extends State<EasingEditor>
 
   _Geometry _geom = _Geometry.fit(_popupWidth, 200);
 
-  /// The name of the tile under the pointer, shown beside Apply.
   final ValueNotifier<String?> _hoveredTile = ValueNotifier(null);
 
-  /// The name of the shape in the box, when it is one of the library's.
   String? get _curveName {
     for (final id in [
       ..._basics,
@@ -239,7 +230,6 @@ class _EasingEditorState extends State<EasingEditor>
     super.dispose();
   }
 
-  /// A new shape in the box, played once so it can be seen moving.
   void _show(EasingCurve curve) {
     setState(() => _curve = curve);
     if (ThemeScope.of(context).animationLevel != AnimationLevel.none) {
@@ -247,7 +237,6 @@ class _EasingEditorState extends State<EasingEditor>
     }
   }
 
-  /// The box's shape sent to the keys, when Apply as you shape is on.
   void _applyIfLive() {
     if (_live) widget.onApply?.call(_curve, EaseSides.both);
   }
@@ -257,7 +246,6 @@ class _EasingEditorState extends State<EasingEditor>
         _nameField.text = forName;
       });
 
-  /// Enter, or a click away: keep what was typed. A blank name keeps nothing.
   void _commitName() {
     final job = _naming;
     if (job == null) return;
@@ -323,7 +311,6 @@ class _EasingEditorState extends State<EasingEditor>
     _applyIfLive();
   }
 
-  /// The four numbers as CSS writes them, which is what most tools paste.
   String _cssOf(EasingCurve c) => 'cubic-bezier(${[
         c.x1,
         c.y1,
@@ -349,7 +336,6 @@ class _EasingEditorState extends State<EasingEditor>
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     return LayoutBuilder(builder: (context, c) {
-      // The popup: no height to fill, so a fixed width and a short library.
       if (!c.hasBoundedHeight) {
         return Padding(
           padding: const EdgeInsets.all(8),
@@ -424,8 +410,6 @@ class _EasingEditorState extends State<EasingEditor>
           ),
         );
       }
-      // Tall: the box and its buttons stay put, and the selected key and the
-      // library scroll under them.
       return Padding(
         padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
         child: Column(
@@ -452,7 +436,6 @@ class _EasingEditorState extends State<EasingEditor>
     });
   }
 
-  /// The box, the preview under it, the four numbers and the buttons.
   List<Widget> _editor(LumitTheme t, double width, double maxHeight) {
     final g = _geom = _Geometry.fit(width, maxHeight);
     final apply = widget.onApply;
@@ -557,8 +540,6 @@ class _EasingEditorState extends State<EasingEditor>
           ),
         ),
       ),
-      // The shape played: the accent dot eases, the faint one keeps time.
-      // Hovering it plays it again.
       MouseRegion(
         onEnter: (_) => _play.forward(from: 0),
         child: AnimatedBuilder(
@@ -625,8 +606,6 @@ class _EasingEditorState extends State<EasingEditor>
               onPressed: () => _showMore(t, button),
             ),
           ),
-          // The name of the tile under the pointer, else of the shape in the
-          // box. A narrow panel leaves it out: the picked tile says it.
           if (width < 280)
             const Spacer()
           else
@@ -686,7 +665,6 @@ class _EasingEditorState extends State<EasingEditor>
     ];
   }
 
-  /// Import and export: a collection of shapes is a file to pass round.
   void _showMore(LumitTheme t, BuildContext button) {
     final box = button.findRenderObject();
     if (box is! RenderBox) return;
@@ -832,9 +810,6 @@ class _EasingEditorState extends State<EasingEditor>
     );
   }
 
-  /// The house shapes along the top, then each family as a row with its in,
-  /// out and in out shapes across. The curves say which is which, the columns
-  /// keep to one order, and a tile's name comes up beside Apply.
   Widget _builtIn(LumitTheme t, double width) {
     final cell = (width - 2 * 3) / 3;
     final thumb = (cell * 0.34).clamp(22.0, 38.0).toDouble();
@@ -877,8 +852,6 @@ class _EasingEditorState extends State<EasingEditor>
     );
   }
 
-  /// The person's own shapes, named: a name is all that tells two of them
-  /// apart, as nothing else here is drawn by anyone else.
   Widget _saved(LumitTheme t, double width, List<SavedEasing> saved) {
     final cell = (width - 2 * 3) / 3;
     final thumb = (cell * 0.34).clamp(22.0, 38.0).toDouble();
@@ -896,8 +869,6 @@ class _EasingEditorState extends State<EasingEditor>
     );
   }
 
-  /// A tile's menu: what a click does and its two one-sided forms, then the
-  /// shape as a shape, then what can be done to one of the person's own.
   List<Widget> _tileRows(
       String name, EasingCurve curve, String? saved, VoidCallback close) {
     final apply = widget.onApply;

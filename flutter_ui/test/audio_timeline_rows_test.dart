@@ -26,7 +26,6 @@ void main() {
   /// Volume band's own mapping read from 0 dB down, so a clip at unity draws
   /// its line at the top of its box and a silent one at the foot.
   group('the gain line maps dB down the box', () {
-    // A track two lane rows tall, and the box inset two pixels either side.
     const strip = 60.0;
     const box = strip - 4;
 
@@ -38,7 +37,6 @@ void main() {
     });
   });
 
-  /// A layer entry with only the fields the view rule reads filled in.
   BridgeLayerEntry entry(String name,
       {BridgeLayerKind kind = BridgeLayerKind.footage, bool audible = true}) {
     final id = UuidValue.fromString(const Uuid().v4());
@@ -119,9 +117,6 @@ void main() {
 
   String idOf(BridgeLayerEntry e) => e.layer.internallayerId.toString();
 
-  // A stack of one of everything: a title, footage with picture and sound,
-  // the same detached (muted picture over an Audio layer), a music track,
-  // a muted music track, and a precomp that sounds.
   final title = entry('Title', kind: BridgeLayerKind.text);
   final clip = entry('Clip');
   final detached = entry('Detached clip', audible: false);
@@ -193,9 +188,6 @@ void main() {
   });
 
   group('Where a dragged clip lands', () {
-    // Three tracks, each two 20px lane rows tall and none of them open: the
-    // bands are 0 to 40, 40 to 80 and 80 to 120, and the middle one is a faded
-    // picture row.
     AudioTrackRow row(BridgeLayerEntry e, {bool dimmed = false}) =>
         AudioTrackRow(
           entry: e,
@@ -215,7 +207,6 @@ void main() {
     });
   });
 
-  /// A clip with only the fields the geometry reads filled in.
   BridgeClip clipAt(String id, int start, int end) => BridgeClip(
         id: UuidValue.fromString(id),
         audible: true,
@@ -245,10 +236,6 @@ void main() {
       );
 
   group('Which clip a press takes hold of', () {
-    // A hundred frames over a thousand pixels, so a frame is ten wide and the
-    // eight-pixel trim zone is most of one. Two clips laid across each other:
-    // 0 to 40 with 30 to 70 over it, so the overlap runs from frame 30 to 40
-    // and the earlier clip's tail zone is inside it.
     const axis = TimelineAxis(frames: 100, width: 1012);
     final early = clipAt('11111111-1111-1111-1111-111111111111', 0, 40);
     final later = clipAt('22222222-2222-2222-2222-222222222222', 30, 70);

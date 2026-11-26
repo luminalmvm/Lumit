@@ -35,8 +35,6 @@ pub(super) fn markers_json(markers: &[Marker], rate: FrameRate, offset: Rational
         .collect()
 }
 
-/// The transform and camera properties `layer.keys` and `layer.get` know, and
-/// the channels each is stored as.
 pub(super) const PROPERTIES: &[(&str, &[TransformProp])] = &[
     ("anchor", &[TransformProp::AnchorX, TransformProp::AnchorY]),
     (
@@ -109,7 +107,6 @@ fn side_json(side: SideInterp) -> Value {
     }
 }
 
-/// A property's value on the wire: one number, or one per axis.
 #[derive(Deserialize, Clone)]
 #[serde(untagged)]
 pub(super) enum Values {
@@ -211,7 +208,6 @@ pub(super) fn keyed(
     offset: Rational,
     axes: impl Fn(&Values) -> Result<usize, ScriptError>,
 ) -> Result<Vec<Animation>, ScriptError> {
-    // One list of keys per axis, all at the same times.
     let mut keyed: Vec<Vec<Keyframe>> = Vec::new();
     for key in keys {
         let time = key.time.at(rate)?;

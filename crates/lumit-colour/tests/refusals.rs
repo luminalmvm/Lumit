@@ -21,8 +21,6 @@ fn corpus() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/refusals")
 }
 
-/// Every refusal a config produces, from parsing it right through to walking
-/// every space and every view. One of them must name the expected thing.
 fn refusals(dir: &Path, text: &str) -> Vec<String> {
     let config = match Config::parse(dir, text) {
         Ok(config) => config,

@@ -1,0 +1,48 @@
+---
+title: Chainmail
+description: "Interlocking metal rings."
+---
+
+Chainmail is a **Textures** effect.
+
+## What it does
+
+Draws rings on a square grid, and on a second grid half a step over. Where two rings cross,
+one passes over at the first crossing and under at the second. Each ring is brightest along
+the middle of its wire.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Ring radius** | Slider | 4 to 500; any value by typing | 40 | Pixels at composition size |
+| **Ring width** | Slider | 1 to 100; any value by typing | 8 | Pixels at composition size |
+| **Metal colour** | Colour | Each channel 0 to 1 | 0.75, 0.76, 0.78 | - |
+| **Background colour** | Colour | Each channel 0 to 1 | 0.05, 0.05, 0.06 | - |
+| **Shading** | Slider | 0 to 100 | 60 | - |
+| **Rotation** | Dial | Any angle | 0° | Degrees |
+| **Centre** | Point | Any position | 960, 540 | Pixels at composition size |
+| **Paint** | Dropdown | Inside layer · Whole frame | Inside layer | - |
+
+## What each control does
+
+- **Ring radius**: the size of each ring. The rings of one grid sit 2.2 radii apart.
+- **Ring width**: how thick the wire is.
+- **Metal colour**: the colour of the rings.
+- **Background colour**: the colour behind them.
+- **Shading**: how much the wire darkens toward its edges.
+- **Rotation**: turns the pattern.
+- **Centre**: the point the pattern is laid out from and turns about.
+- **Paint**: **Inside layer** paints only where the layer draws, and **Whole frame** fills
+  the whole of the layer's picture.
+- **Mix**: how much of the result replaces the original.
+- **Blend**: the blend mode the result is laid over the original with.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
+
+## Related
+
+- [Weave](/effects/generate/weave/)
+- [Tile patterns](/effects/generate/tile-patterns/)
+- [Textures](/effects/#textures)
+- [Effects](/use/effects/)

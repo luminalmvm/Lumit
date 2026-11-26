@@ -1,5 +1,3 @@
-//! Files refused rather than opened.
-
 use super::*;
 
 /// A `.lum` is a ZIP, and a ZIP entry's compressed size says nothing about
@@ -19,7 +17,6 @@ fn a_project_entry_that_decompresses_without_end_is_refused() {
     }
     impl std::io::Read for Liar {
         fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-            // Endless, like a decompressor fed a bomb.
             buf.fill(b'x');
             self.produced = self.produced.saturating_add(buf.len());
             Ok(buf.len())
@@ -31,8 +28,6 @@ fn a_project_entry_that_decompresses_without_end_is_refused() {
         }
     }
 
-    // Honest and over the ceiling: refused from the header, having read
-    // nothing.
     let out = entry_text(
         Liar {
             claims: 1 << 40,
@@ -45,8 +40,6 @@ fn a_project_entry_that_decompresses_without_end_is_refused() {
         "{out:?}"
     );
 
-    // Understating its size and then never stopping: refused on the byte
-    // past the ceiling, rather than read until the memory ran out.
     let out = entry_text(
         Liar {
             claims: 8,
@@ -59,7 +52,6 @@ fn a_project_entry_that_decompresses_without_end_is_refused() {
         "a stream that lied about its size must be caught by what it produced: {out:?}"
     );
 
-    // And an ordinary entry is unaffected.
     let honest = entry_text(
         {
             struct Short(&'static [u8]);
@@ -137,7 +129,6 @@ fn a_composition_no_picture_could_be_is_refused_rather_than_opened() {
     for (w, h) in [
         (u32::MAX, 1080),
         (1920, u32::MAX),
-        // Each side inside the ceiling, the product far past it.
         (65_536, 65_536),
         (0, 1080),
         (1920, 0),
@@ -150,7 +141,6 @@ fn a_composition_no_picture_could_be_is_refused_rather_than_opened() {
         );
     }
 
-    // And the predicate agrees with the sizes people actually work at.
     for (w, h) in [(1920, 1080), (3840, 2160), (15_360, 8640), (1, 1)] {
         assert!(comp_size_is_sane(w, h), "{w} by {h} is an ordinary comp");
     }

@@ -85,8 +85,6 @@ pub fn schema_of(plugin: &PluginDescriptor) -> Result<EffectSchema, Rejection> {
     let groups = group_owners(&plugin.params);
     let pages = page_owners(&plugin.params);
 
-    // Each row with the group it belongs to (`None` at the top level), the
-    // plugin's name for it, and its place in the plugin's order.
     let mut entries: Vec<(usize, ParamSchema, Option<Owner>, &str)> = Vec::new();
     for param in &plugin.params {
         let owner = owner_of(param, &groups, &pages);
@@ -187,18 +185,13 @@ pub fn schema_of(plugin: &PluginDescriptor) -> Result<EffectSchema, Rejection> {
 /// and nothing has to guess at the reverse of a suffix rule.
 #[derive(Clone, Debug)]
 pub struct ValueRoute {
-    /// The row, as the bag keys it.
     pub id: ParamId,
-    /// The same row by its schema id, which is how the document names it.
     pub row: &'static str,
-    /// The plugin's own name for the parameter this row is part of.
     pub name: String,
-    /// One of [`crate::ffi::param_types`] — what shape the value crosses in.
     pub param_type: String,
     /// Which component of the plugin's parameter this row is; nought for the
     /// scalar kinds, which is most of them.
     pub component: usize,
-    /// How many components the plugin's parameter has in all.
     pub dimension: usize,
 }
 
@@ -267,15 +260,12 @@ pub fn owner_names(plugin: &PluginDescriptor) -> BTreeMap<String, String> {
     owners
 }
 
-/// What a group or page is called, and whether it starts closed.
 #[derive(Clone, PartialEq, Eq)]
 struct Owner {
     /// The parameter name of the group, or the page. The identity, not the
     /// label: two groups may share a label.
     name: String,
-    /// The twirl header.
     label: String,
-    /// Whether the twirl starts closed.
     collapsed: bool,
 }
 
@@ -297,7 +287,6 @@ fn group_owners(params: &[ParamDescription]) -> Vec<Owner> {
         .collect()
 }
 
-/// Which page lists each name, as that page's place in the plugin's order.
 fn page_ranks(params: &[ParamDescription]) -> BTreeMap<String, usize> {
     let mut ranks = BTreeMap::new();
     for (rank, page) in params
@@ -312,7 +301,6 @@ fn page_ranks(params: &[ParamDescription]) -> BTreeMap<String, usize> {
     ranks
 }
 
-/// Which page lists each parameter, by parameter name.
 fn page_owners(params: &[ParamDescription]) -> Vec<(String, Owner)> {
     let mut owners = Vec::new();
     for page in params
@@ -400,7 +388,6 @@ fn rows_of(param: &ParamDescription) -> Vec<ParamSchema> {
     let axes: &[&str] = &["x", "y", "z"];
     let axis_labels: &[&str] = &["X", "Y", "Z"];
 
-    /// One row per component, `foo_x` / `foo_y` / `foo_z`.
     fn spread(
         name: &str,
         label: &str,
@@ -526,17 +513,13 @@ fn rows_of(param: &ParamDescription) -> Vec<ParamSchema> {
                 Unit::Raw,
             )
         }
-        param_types::STRING if string_is_path(props) => {
-            // A path is a path: Lumit already draws one, with a dialog behind
-            // it.
-            one(
-                ParamKind::File {
-                    filter: &[],
-                    filter_name: "All files",
-                },
-                Unit::Raw,
-            )
-        }
+        param_types::STRING if string_is_path(props) => one(
+            ParamKind::File {
+                filter: &[],
+                filter_name: "All files",
+            },
+            Unit::Raw,
+        ),
         param_types::PUSH_BUTTON => one(ParamKind::Action, Unit::Raw),
         // Group and page are layout, not values; custom is an opaque vendor
         // blob (docs/12 §2.2); a string that is not a path is text, and Lumit
@@ -546,8 +529,6 @@ fn rows_of(param: &ParamDescription) -> Vec<ParamSchema> {
     }
 }
 
-/// Whether a string parameter is a path, and therefore a
-/// [`ParamKind::File`] rather than text.
 pub(crate) fn string_is_path(props: &PropertySet) -> bool {
     let mode = string_at(props, keys::PARAM_STRING_MODE, 0).unwrap_or_default();
     mode == string_modes::FILE_PATH || mode == string_modes::DIRECTORY_PATH
@@ -574,7 +555,6 @@ fn double_kind(props: &PropertySet, index: usize) -> ParamKind {
     }
 }
 
-/// The same for a whole number.
 fn int_kind(props: &PropertySet, index: usize) -> ParamKind {
     let default = i64::from(int_at(props, keys::PARAM_DEFAULT, index).unwrap_or(0));
     let hard = (
@@ -596,7 +576,6 @@ fn int_kind(props: &PropertySet, index: usize) -> ParamKind {
     }
 }
 
-/// What a double *means*, and therefore what unit it is in.
 fn unit_of(props: &PropertySet) -> Unit {
     match string_at(props, keys::PARAM_DOUBLE_TYPE, 0)
         .unwrap_or_default()
@@ -615,8 +594,6 @@ fn unit_of(props: &PropertySet) -> Unit {
     }
 }
 
-/// The label a person sees, or the parameter's own name if the plugin gave it
-/// none.
 fn label_of(props: &PropertySet, name: &str) -> String {
     for key in [keys::LABEL, keys::LONG_LABEL, keys::SHORT_LABEL] {
         if let Ok(text) = props.get_string(key, 0) {
@@ -654,12 +631,10 @@ fn strings(props: &PropertySet, key: &str) -> Vec<String> {
     }
 }
 
-/// One string, for the session (see the module header).
 fn leak(text: &str) -> &'static str {
     Box::leak(text.to_owned().into_boxed_str())
 }
 
-/// One list, for the session.
 fn leak_slice<T>(values: Vec<T>) -> &'static [T] {
     Box::leak(values.into_boxed_slice())
 }

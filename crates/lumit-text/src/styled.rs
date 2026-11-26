@@ -32,7 +32,6 @@ mod wrap;
 use axes::{face_of, respace};
 use wrap::{breaks, lines_of};
 
-/// The largest a styled letter is set, in px.
 const MAX_SIZE: f32 = 2000.0;
 /// The most pixels a block is allowed to ask for, so a long title at a huge
 /// size can't ask for gigabytes (docs/14 §5).
@@ -41,14 +40,11 @@ const MAX_AREA: f64 = 8192.0 * 8192.0;
 /// the size off the baseline. After Effects' own numbers.
 const SCRIPT_SCALE: f32 = 0.583;
 const SCRIPT_SHIFT: f32 = 0.333;
-/// Small capitals are capitals at this much of the size.
 const SMALL_CAPS_SCALE: f32 = 0.7;
 /// How far faux italic leans: the tangent of 12 degrees.
 const FAUX_SLANT: f32 = 0.2126;
-/// Faux bold thickens every stem by this much of the size.
 const FAUX_BOLD: f32 = 0.04;
 
-/// One glyph, placed.
 struct Placed {
     glyph: u32,
     /// The character it came from, counted over the whole text. A ligature
@@ -78,7 +74,6 @@ struct Line {
     carets: Vec<f32>,
 }
 
-/// A block laid out, before any pixels.
 struct Laid {
     glyphs: Vec<Placed>,
     lines: Vec<Line>,
@@ -103,7 +98,6 @@ struct Laid {
     fit: f32,
     scale_x: f32,
     scale_y: f32,
-    /// The places on the font's axes the animators set letters at.
     places: Vec<harfrust::Font>,
 }
 
@@ -150,7 +144,6 @@ fn finite(v: f64) -> f32 {
     }
 }
 
-/// One line as it will be drawn, measured from its own left end.
 struct Row {
     /// The index of the line's first character in the whole text.
     start: usize,
@@ -189,7 +182,6 @@ fn lay_at(block: &TextBlock<'_>, face: &Face, shrink: Option<f32>) -> Laid {
     } else {
         72.0
     };
-    // Never under 1 px, however long the line.
     let size = (full * shrink.unwrap_or(1.0)).max(1.0);
     // What the style measures in px takes the same factor as the size, so
     // the words look the same, only smaller. The box and its indents stay.
@@ -266,7 +258,6 @@ fn lay_at(block: &TextBlock<'_>, face: &Face, shrink: Option<f32>) -> Laid {
         let backwards = buffer.direction() == harfrust::Direction::RightToLeft;
         let first = glyphs.len();
         let mut pen = 0.0f32;
-        // The x each cluster of characters starts and ends at.
         let mut spans: Vec<(usize, f32, f32)> = Vec::new();
         if !chars.is_empty()
             && harfrust::shape(
@@ -343,8 +334,6 @@ fn lay_at(block: &TextBlock<'_>, face: &Face, shrink: Option<f32>) -> Laid {
                 }
             }
         }
-        // ponytail: a right-to-left paragraph isn't wrapped, its carets run
-        // the other way.
         let cuts = match wrap {
             Some(w) if !backwards && shrink.is_none() => {
                 breaks(&chars, &carets, w - left - right, first_line, tracking)
@@ -410,7 +399,6 @@ fn lay_at(block: &TextBlock<'_>, face: &Face, shrink: Option<f32>) -> Laid {
         .iter()
         .map(|row| indent(row) + row.width + right)
         .fold(wrap.unwrap_or(0.0), f32::max);
-    // How much of its size the longest line can keep and still fit the box.
     let mut fit = 1.0f32;
     if let (Some(_), Some(w)) = (shrink, wrap) {
         for row in rows.iter().filter(|row| row.width > 0.0) {
@@ -605,7 +593,6 @@ fn animated(matrix: Transform, advance: f32, x: &GlyphXform) -> Transform {
         .then_translate(middle + x.position[0], x.position[1])
 }
 
-/// Where each glyph's pen sits and which way its line runs there.
 enum Run<'a> {
     Straight { origin: [f32; 2] },
     Along { path: &'a MaskPolyline, offset: f32 },
@@ -676,7 +663,7 @@ fn placements(
         }
         let (sx, sy) = (x.scale[0], x.scale[1]);
         if !(x.opacity > 0.0 && sx.abs() >= 1e-4 && sy.abs() >= 1e-4) {
-            continue; // scaled or faded to nothing
+            continue;
         }
         let Some(place) = run.place(laid, glyph, flat_x) else {
             continue;
@@ -715,7 +702,6 @@ fn over(px: &mut [u8], colour: [u8; 3], alpha: f32) {
     }
 }
 
-/// Draw one path into the raster, filled or stroked, in one colour.
 fn paint<'s>(
     rgba: &mut [u8],
     (w, h): (u32, u32),
@@ -936,7 +922,7 @@ pub(crate) fn rasterise_zoomed(
             (origin, (w + left + right, h + top + bottom))
         }
     };
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // px
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let (width, height) = (
         (width as f32 * zoom).round().max(1.0) as u32,
         (height as f32 * zoom).round().max(1.0) as u32,
@@ -960,7 +946,7 @@ pub(crate) fn rasterise_on_path(
     xforms: &[GlyphXform],
     zoom: f32,
 ) -> RasterText {
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // px
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let (w, h) = (
         (width.max(1) as f32 * zoom).round().max(1.0) as u32,
         (height.max(1) as f32 * zoom).round().max(1.0) as u32,

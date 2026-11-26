@@ -41,9 +41,7 @@ use web_time::{Duration, Instant};
 use interprocess::local_socket::Listener;
 use lumit_peer::Secret;
 
-/// How long a program has to prove itself once it has connected.
 const HANDSHAKE: Duration = Duration::from_secs(5);
-/// How often Lumit's side looks again when nothing has arrived.
 const TICK: Duration = Duration::from_millis(10);
 /// The longest line taken, room for a long script. Anything longer ends the
 /// connection, so a program cannot make Lumit hold more than this.
@@ -65,7 +63,6 @@ struct Answer {
     proof: Proof,
 }
 
-/// What a program is told when another is connected already.
 #[derive(Serialize, Deserialize)]
 struct Refused {
     refused: String,
@@ -126,7 +123,6 @@ pub fn remove(file: &Path, secret: &Secret) {
     }
 }
 
-/// Make `dir`, readable by this user only.
 fn private_folder(dir: &Path) -> io::Result<()> {
     #[cfg(unix)]
     {
@@ -198,7 +194,6 @@ fn socket_path(data: &Path, token: &str) -> io::Result<String> {
     Ok(path)
 }
 
-/// Write `text` to `file`, readable by this user only.
 fn write_private(file: &Path, text: &str) -> io::Result<()> {
     let _ = std::fs::remove_file(file);
     let mut options = std::fs::OpenOptions::new();
@@ -244,7 +239,6 @@ pub fn serve(
     }
 }
 
-/// Lumit's half of the challenge. An error means the program is let go.
 fn handshake(
     listener: &Listener,
     wire: &mut Wire,
@@ -272,8 +266,6 @@ fn handshake(
     wire.send(&json_line(&Answer { proof })?, gone)
 }
 
-/// The connected program's lines, each answered in turn, until it goes or is
-/// let go.
 fn attend(
     listener: &Listener,
     wire: &mut Wire,
@@ -295,8 +287,6 @@ fn attend(
     Ok(())
 }
 
-/// Tell any other program that has connected that one is here already, and
-/// let it go.
 fn refuse_others(listener: &Listener) {
     while let Ok(stream) = listener.accept() {
         let mut wire = Wire {
@@ -315,10 +305,8 @@ fn json_line(message: &impl Serialize) -> io::Result<String> {
     serde_json::to_string(message).map_err(io::Error::other)
 }
 
-/// One connection on Lumit's side, read a line at a time without waiting.
 struct Wire {
     stream: Stream,
-    /// What has come in past the last whole line.
     got: Vec<u8>,
 }
 
@@ -376,32 +364,21 @@ impl Wire {
     }
 }
 
-/// Why a program could not reach Lumit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Unreached {
     /// Lumit is not running, or the setting is off.
     Off,
-    /// Another program is connected.
     Busy,
     /// Lumit let go without answering, as it does a wrong secret.
     Denied,
-    /// What answered could not prove it is Lumit.
     NotLumit,
 }
 
-/// A program's connection to Lumit, once both ends have proved themselves.
 pub struct Link {
-    /// Lumit's lines.
     pub from: BufReader<RecvHalf>,
-    /// Lines for Lumit.
     pub to: SendHalf,
 }
 
-/// The program's side: read `file`, connect, and prove it holds the secret.
-///
-/// # Errors
-///
-/// [`Unreached`] says why.
 pub fn connect(file: &Path) -> Result<Link, Unreached> {
     let text = std::fs::read_to_string(file).map_err(|_| Unreached::Off)?;
     let (name, secret) = text.split_once('\n').ok_or(Unreached::Off)?;

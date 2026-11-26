@@ -64,7 +64,6 @@ use metal::foreign_types::ForeignType;
 use objc::{msg_send, sel, sel_impl};
 use std::ffi::c_void;
 
-/// An opaque `IOSurfaceRef`.
 type IOSurfaceRef = *const c_void;
 
 #[link(name = "IOSurface", kind = "framework")]
@@ -88,12 +87,9 @@ const SHARED_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
 /// so the id stays valid for the texture's lifetime; our own retain is released
 /// on drop.
 pub struct SharedIoSurface {
-    /// The copy destination the render path writes the finished frame into.
     pub texture: wgpu::Texture,
     /// The surface itself, retained by us (`IOSurfaceCreate` returns +1).
     surface: IOSurfaceRef,
-    /// `IOSurfaceGetID` — what crosses the bridge, and what the Swift side
-    /// passes to `IOSurfaceLookup`.
     id: u32,
     pub width: u32,
     pub height: u32,
@@ -263,16 +259,6 @@ unsafe fn texture_from_surface(
     descriptor.set_height(u64::from(height));
     descriptor.set_mipmap_level_count(1);
     descriptor.set_usage(metal::MTLTextureUsage::ShaderRead | metal::MTLTextureUsage::RenderTarget);
-    // ponytail: `Managed` on a discrete-GPU Mac is written by us and read by
-    // Flutter without an explicit `synchronizeResource` blit between the two.
-    // The ceiling is exactly the non-unified branch below: on Apple silicon and
-    // every unified-memory Intel Mac the storage mode is `Shared` and there is
-    // nothing to synchronise, so this can only bite on a discrete-GPU Intel
-    // Mac — a 2019-or-earlier MacBook Pro or iMac with an AMD card. The trigger
-    // there is visible and specific: the viewer showing the previous frame, or
-    // half of it, while the timeline says otherwise. The fix is a raw-Metal
-    // blit encoder issuing `synchronizeResource` after the copy, on this branch
-    // only.
     descriptor.set_storage_mode(if device.has_unified_memory() {
         metal::MTLStorageMode::Shared
     } else {
@@ -316,7 +302,6 @@ mod tests {
         fn IOSurfaceGetBaseAddress(buffer: IOSurfaceRef) -> *mut u8;
         fn IOSurfaceGetBytesPerRow(buffer: IOSurfaceRef) -> usize;
     }
-    /// `kIOSurfaceLockReadOnly`.
     const LOCK_READ_ONLY: u32 = 0x0000_0001;
 
     /// The whole point of the hand-off, proven end to end: bytes written through
@@ -330,10 +315,6 @@ mod tests {
             eprintln!("skipping: no Metal adapter");
             return;
         };
-        // A `Managed` texture on a discrete-GPU Mac needs an explicit
-        // synchronise before the CPU can read it (see the descriptor's ponytail
-        // note), which this path does not do — so only assert where the read is
-        // meaningful.
         let unified = unsafe {
             gpu.device.as_hal::<wgpu::hal::api::Metal, _, _>(|d| {
                 d.is_some_and(|d| d.raw_device().lock().has_unified_memory())
@@ -374,7 +355,6 @@ mod tests {
         gpu.submit([]);
         gpu.device.poll(wgpu::Maintain::Wait);
 
-        // Read it back as the consumer does: straight off the surface.
         let mut seed = 0u32;
         assert_eq!(
             unsafe { IOSurfaceLock(shared.surface, LOCK_READ_ONLY, &mut seed) },

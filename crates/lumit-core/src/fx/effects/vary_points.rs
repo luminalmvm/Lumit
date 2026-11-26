@@ -1,14 +1,3 @@
-//! Vary points makes a stream's points differ from one another.
-//!
-//! Each point gets a number from 0 to 1 from a pattern: its place in the
-//! stream, its own dice, a noise at its position, its distance from a centre,
-//! its age, where it is across, down or into depth, how bright a picture is
-//! under it, whether it is picked, the number it carries, or which stripe,
-//! square or wave of a drawn pattern it sits in. That number sets how much of
-//! each change the point takes.
-//! The changed stream goes out on the Points socket, and is drawn as discs
-//! unless Mix is 0. Nothing wired draws nothing.
-
 use crate::fx::cpu;
 use crate::fx::effects::point_pattern::{Pattern, PatternKind};
 use crate::fx::points::PointsStream;
@@ -20,11 +9,8 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// The wire-only data input.
 pub const POINTS_PORT: &str = "points";
 
-/// Group and Threshold do nothing while Apply to is All points. Every effect
-/// with an Apply to row lists these two.
 pub(crate) const APPLY_GROUP_WHEN: EnabledWhen = EnabledWhen {
     param: "apply_group",
     on: "apply_to",
@@ -36,10 +22,8 @@ pub(crate) const APPLY_THRESHOLD_WHEN: EnabledWhen = EnabledWhen {
     cond: EnabledCond::ChoiceIsNot(0),
 };
 
-/// What a modifier takes in.
 pub(crate) const POINTS_IN: &[Port] = &[Port::new(POINTS_PORT, "Points", PortType::Points)];
 
-/// What it hands on, the same port every producer declares.
 pub(crate) const POINTS_OUT: &[Port] = &[Port::new("points", "Points", PortType::Points)];
 
 const fn group(
@@ -56,7 +40,6 @@ const fn group(
     }
 }
 
-/// The pattern, the rows only some patterns read, and what it changes.
 pub const VARY_GROUPS: &[ParamGroup] = &[
     group("Pattern", &["pattern", "curve"], None),
     group("", &["noise_scale"], Some(("pattern", &[2]))),
@@ -129,9 +112,6 @@ const fn while_ramp(param: &'static str, on: bool) -> EnabledWhen {
     }
 }
 
-/// Number from and Number to do nothing until Set number is on, nor Middle
-/// colour until its own switch is. The ramp's three curves do nothing until
-/// Use colour ramp is on, and the three colours nothing while it is.
 pub const VARY_ENABLED_WHEN: &[EnabledWhen] = &[
     APPLY_GROUP_WHEN,
     APPLY_THRESHOLD_WHEN,
@@ -169,7 +149,6 @@ pub const VARY_ENABLED_WHEN: &[EnabledWhen] = &[
     },
 ];
 
-/// Vary points' controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "vary_points",
@@ -177,7 +156,6 @@ pub const VARY_ENABLED_WHEN: &[EnabledWhen] = &[
     version = 1,
     category = Points,
     cost = Moderate,
-    // A point may be anywhere, and may be moved anywhere.
     roi = FullFrame,
     premultiplied = true,
     // Seeded, since a Noise pattern with a speed moves under constant
@@ -187,7 +165,6 @@ pub const VARY_ENABLED_WHEN: &[EnabledWhen] = &[
     enabled_when = VARY_ENABLED_WHEN,
 )]
 pub struct VaryPoints {
-    /// Which points are changed. The rest pass through as they came.
     #[choice(
         label = "Apply to",
         options = ["All points", "Picked", "Not picked"],
@@ -206,7 +183,6 @@ pub struct VaryPoints {
     #[slider(label = "Threshold", min = 0.0, max = 1.0, default = 0.5, unit = Raw)]
     pub apply_threshold: f32,
 
-    /// What gives each point its number.
     #[choice(label = "Pattern", options = *PatternKind::OPTIONS, default = 1)]
     pub pattern: u32,
 
@@ -318,7 +294,6 @@ pub struct VaryPoints {
     )]
     pub band_width: f32,
 
-    /// The shape of each wave.
     #[choice(
         label = "Wave",
         options = ["Sine", "Triangle", "Square", "Sawtooth"],
@@ -326,7 +301,6 @@ pub struct VaryPoints {
     )]
     pub wave: u32,
 
-    /// The waves run out from Centre as rings, not across as bands.
     #[toggle(label = "Rings", default = false)]
     pub rings: bool,
 
@@ -335,8 +309,6 @@ pub struct VaryPoints {
     #[layer(label = "Image layer")]
     pub image_layer: bool,
 
-    /// Where the Image layer's picture sits on this one: as it sits in the
-    /// comp, stretched over the frame, or centred at its own size.
     #[choice(label = "Map placement", options = *MAP_PLACEMENT_OPTIONS, default = 0)]
     pub image_layer_placement: u32,
 
@@ -462,11 +434,9 @@ pub struct VaryPoints {
     #[curve(label = "Red", default = [[0.0, 1.0], [1.0, 1.0]])]
     pub red: CurvePoints,
 
-    /// The same for green. See [`red`](Self::red).
     #[curve(label = "Green", default = [[0.0, 1.0], [1.0, 1.0]])]
     pub green: CurvePoints,
 
-    /// The same for blue. See [`red`](Self::red).
     #[curve(label = "Blue", default = [[0.0, 1.0], [1.0, 1.0]])]
     pub blue: CurvePoints,
 
@@ -495,7 +465,6 @@ pub struct VaryPoints {
     #[slider(label = "Number to", min = 0.0, max = 100.0, default = 1.0, unit = Raw)]
     pub number_to: f32,
 
-    /// How soft the disc a point is drawn as is, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -506,7 +475,6 @@ pub struct VaryPoints {
     )]
     pub feather: f32,
 
-    /// Which dice, and which noise.
     #[seed]
     pub seed: u32,
 
@@ -527,7 +495,6 @@ impl VaryPoints {
     /// The raster factor, since a stream off a wire arrives in px@comp.
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
 
-    /// The pattern's own rows, for reading `s`.
     #[must_use]
     pub fn pattern(self, s: &PointsStream) -> Pattern {
         Pattern {
@@ -548,7 +515,6 @@ impl VaryPoints {
         }
     }
 
-    /// Whether these settings read the picture under the points.
     #[must_use]
     pub fn needs_picture(self) -> bool {
         self.image_colour || PatternKind::from_code(self.pattern) == PatternKind::Image
@@ -647,8 +613,6 @@ impl VaryPoints {
                     }
                     c[3] *= fade;
                 } else {
-                    // Which two colours it lies between, and how far from
-                    // the first to the second.
                     let (from, to, v) = if !self.use_colour_mid {
                         (tint_from, tint_to, v)
                     } else if v < 0.5 {
@@ -729,7 +693,6 @@ impl EffectDef for VaryPointsDef {
         &<VaryPoints as EffectMetadata>::SCHEMA
     }
 
-    /// A stream in and a stream out, beside the picture.
     fn signature(&self) -> Signature {
         Signature::Image {
             inputs: POINTS_IN,

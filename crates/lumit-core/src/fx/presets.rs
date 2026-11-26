@@ -12,7 +12,6 @@ use crate::anim::{Animation, Keyframe, Property, SideInterp, EASY_EASE};
 use crate::model::{EffectInstance, EffectValue};
 use crate::time::Rational;
 
-/// One built-in preset.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct EffectPreset {
     /// What the menu says. An engine label, so it is translated.
@@ -21,7 +20,6 @@ pub struct EffectPreset {
     pub values: &'static [(&'static str, PresetValue)],
 }
 
-/// One control's value in a preset.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PresetValue {
     Float(f64),
@@ -146,7 +144,6 @@ mod tests {
     #[test]
     fn every_preset_sets_rows_its_effect_has() {
         let materials = crate::model_material::MATERIAL_DEFS.builtins();
-        // And every look a transition kind offers.
         let looks = crate::sequence::transition::TABLE.iter().filter_map(|k| {
             let def = crate::fx::catalogue::BUILTIN_DEFS.get(k.name)?;
             Some((def, k.looks))

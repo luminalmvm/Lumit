@@ -1,6 +1,3 @@
-//! Audio spectrum's pass (`fx_audio_spectrum.wgsl`): the pieces the host laid out,
-//! drawn over the picture.
-
 use std::sync::OnceLock;
 
 use crate::GpuContext;
@@ -40,7 +37,6 @@ struct Params {
     _pad: [u32; 3],
 }
 
-/// The pipeline, built the first time one is drawn.
 #[derive(Default)]
 pub(super) struct LazyAudioSpectrum(OnceLock<(wgpu::BindGroupLayout, wgpu::ComputePipeline)>);
 

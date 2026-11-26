@@ -66,8 +66,6 @@ void main() {
 
   final row = find.byKey(const ValueKey('tl-sound-mix-row'));
 
-  /// Mark the comp mixed the way the Audio timeline does, and let the table
-  /// read the mark back.
   Future<void> mix(
       WidgetTester tester,
       ({

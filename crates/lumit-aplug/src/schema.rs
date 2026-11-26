@@ -78,10 +78,6 @@ pub fn match_name(plugin: &PluginDescriptor) -> String {
     format!("{}{}", plugin.abi.prefix(), plugin.id)
 }
 
-/// The schema row id one CLAP parameter mints.
-///
-/// `p` and the plugin's own stable id. See this module's note on why it is not
-/// the parameter's name.
 #[must_use]
 pub fn row_id(param: &ParamDescription) -> String {
     format!("p{}", param.id)
@@ -95,11 +91,8 @@ pub fn row_id(param: &ParamDescription) -> String {
 /// guess at the reverse of the spelling rule.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ValueRoute {
-    /// The row, as the bag keys it.
     pub id: ParamId,
-    /// The row's spelled id, for a report or a test to name.
     pub row: String,
-    /// The plugin's own stable parameter id.
     pub param: u32,
 }
 
@@ -133,7 +126,6 @@ pub fn value_routes(plugin: &PluginDescriptor) -> Vec<ValueRoute> {
 /// as one control quietly driving another.
 pub fn schema_of(plugin: &PluginDescriptor) -> Result<EffectSchema, Rejection> {
     let mut rows: Vec<ParamSchema> = Vec::new();
-    // The module path each row belongs to, in step with `rows`.
     let mut owners: Vec<String> = Vec::new();
 
     for param in plugin.rows() {
@@ -166,17 +158,10 @@ pub fn schema_of(plugin: &PluginDescriptor) -> Result<EffectSchema, Rejection> {
         match_name: leak(&match_name(plugin)),
         label: leak(&plugin.label),
         version: major_of(&plugin.version),
-        // None of Lumit's own categories is a claim about somebody else's
-        // effect, and the audio category the Effects & presets panel will show
-        // these under arrives with AP5's panel surface.
-        // ponytail: Utility until that category exists; adding a variant now
-        // would ripple into the label table and its translated strings for a
-        // menu nothing yet lists.
         category: FxCategory::Utility,
         traits: EffectTraits {
             cost: CostClass::Heavy,
             roi: Roi::FullFrame,
-            // An audio effect reads no other frame because it reads no frame.
             temporal: &[0],
             premultiplied: true,
             seeded: false,
@@ -192,7 +177,6 @@ pub fn schema_of(plugin: &PluginDescriptor) -> Result<EffectSchema, Rejection> {
     })
 }
 
-/// The row's label: the plugin's own name, or its id where it gave none.
 fn label_of(param: &ParamDescription) -> String {
     if param.name.trim().is_empty() {
         format!("Parameter {}", param.id)
@@ -201,7 +185,6 @@ fn label_of(param: &ParamDescription) -> String {
     }
 }
 
-/// What control the row draws.
 fn kind_of(param: &ParamDescription) -> ParamKind {
     let (min, max, default) = (param.min, param.max, param.default);
     if !min.is_finite() || !max.is_finite() || max <= min {
@@ -297,12 +280,10 @@ fn major_of(version: &str) -> u32 {
         .unwrap_or(1)
 }
 
-/// One string, for the session.
 fn leak(text: &str) -> &'static str {
     Box::leak(text.to_owned().into_boxed_str())
 }
 
-/// One list, for the session.
 fn leak_slice<T>(values: Vec<T>) -> &'static [T] {
     Box::leak(values.into_boxed_slice())
 }

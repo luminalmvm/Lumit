@@ -71,10 +71,6 @@ Future<void> main() async {
     ),
   );
 
-  // Bottom of the stack upwards — each call puts its layer on top of the last —
-  // so this reads as the running order of a title sequence: a music bed, a
-  // background, the gameplay, the card over it, the logo, the words, and a
-  // grade over the lot.
   final logoItem = project.importFootage(path: '$fixtures/Logo.png');
   for (final file in ['Music.wav']) {
     comp.addFootageLayer(
@@ -151,21 +147,15 @@ Future<void> main() async {
     ),
   );
 
-  // The title card sits over the footage at Screen, half up — a plausible
-  // reason for the blend column to be showing anything but Normal.
   card.setTransform(
       prop: BridgeTransformProp.opacity, value: const BridgeScalar.static_(55));
   card.setBlend(index: 8);
-  // Two switches away from their defaults, so the switches shot is a picture
-  // of switches rather than of one repeated default.
   card.setSwitch(switch_: BridgeLayerSwitch.motionBlur, on_: true);
-  // A music bed nobody wants to nudge by accident.
   music.setSwitch(switch_: BridgeLayerSwitch.locked, on_: true);
 
   ui.setSelectedComp(comp);
   ui.playheadFrame.value = 48;
 
-  // The sweeps photograph the shell; the welcome screen has its own sweep.
   runApp(shotRoot(LumitAppNew(state, ui, welcome: false)));
   await pause(2);
   await sizeWindow(1720, 1000);
@@ -175,9 +165,6 @@ Future<void> main() async {
   final cardId = card.internallayerId.toString();
   final musicId = music.internallayerId.toString();
 
-  /// Move the splitter between the upper band and the Timeline, and let the
-  /// relayout settle. A deep fold needs the room, and dragging this is what
-  /// anybody does when one will not fit.
   Future<void> timelineShare(double share) async {
     ui.workspace.dock.shares[0] = 1 - share;
     ui.workspace.dock.shares[1] = share;
@@ -191,9 +178,6 @@ Future<void> main() async {
   // ---- Shot: the Timeline, outline left and lanes right -------------------
   await captureUi('timeline.png', scale: 2, crop: timelinePanelBox());
 
-  // ---- Shot: the outline columns, left to right ---------------------------
-  // Cut at the seam: the caption is about the columns, so the lanes are not in
-  // the picture at all.
   await captureUi(
     'timeline-outline.png',
     scale: 2,
@@ -201,11 +185,6 @@ Future<void> main() async {
         boxOf('tl-rowbody-$musicId')!.bottom + 10),
   );
 
-  // ---- Shot: the switches on a layer's row --------------------------------
-  // Both blocks of them — the eye/speaker/solo/lock/shy group and the
-  // collapse/effects/motion-blur/3D group — with the column headers above and
-  // the neighbouring rows either side, so it reads as a row rather than as a
-  // strip of loose glyphs.
   final firstSwitch = boxOf('tl-visible-$cardId')!;
   await captureUi(
     'layer-switches.png',
@@ -235,12 +214,8 @@ Future<void> main() async {
           2, list.top, boxOf('tl-ruler')!.left + 40, list.bottom);
     }(),
   );
-  // Close it again — the click on empty ground a person would use.
   await tapAt(const Offset(240, 560), settle: 1.2);
 
-  // ---- Shots: a layer twirled open ----------------------------------------
-  // Thirteen rows do not fit the arrangement's Timeline, so the splitter moves
-  // first.
   await timelineShare(0.45);
   await tapKey('tl-twirl-$titleId');
   await tapKey('tl-twirl-${transformPath(titleId)}');
@@ -257,9 +232,6 @@ Future<void> main() async {
   );
   await captureUi('timeline-lanes.png', scale: 2, crop: timelinePanelBox());
 
-  // ---- Shot: keyframes on a property lane ---------------------------------
-  // The lanes half only, over the open property rows, so what fills the
-  // picture is diamonds on rows.
   final ruler = boxOf('tl-ruler')!;
   final position = boxOf('kf-stopwatch-tl-tf-positionX')!;
   await captureUi(
@@ -303,11 +275,9 @@ Future<void> main() async {
   );
   await tapKey('tl-twirl-$titleId');
 
-  // ---- Shot: a footage layer's waveform in its lane -----------------------
   await tapKey('tl-twirl-$musicId');
   await tapKey('tl-twirl-${audioPath(musicId)}');
   await tapKey('tl-twirl-${waveformPath(musicId)}');
-  // The peaks are fetched from the engine and arrive a moment later.
   await pause(5);
   final wave = boxOf('tl-wave-$musicId')!;
   await captureUi(

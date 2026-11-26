@@ -1,5 +1,3 @@
-// The easing editor's drawings: the box the shape is bent in, the strip that
-// plays it, and the library's thumbnails (see `easing_editor.dart`).
 
 import 'package:flutter/widgets.dart';
 
@@ -11,10 +9,8 @@ class EasingBoxPainter extends CustomPainter {
   final Rect box;
   final LumitTheme theme;
 
-  /// The handle under the pointer or in hand, drawn larger.
   final int? lit;
 
-  /// Where the preview is in time, while it plays.
   final double? playhead;
 
   const EasingBoxPainter({
@@ -37,8 +33,6 @@ class EasingBoxPainter extends CustomPainter {
       Paint()..color = t.surface0,
     );
 
-    // The grid: quarters faint, the start and end values across the whole
-    // width so the overshoot room reads as part of the graph.
     final faint = Paint()
       ..color = t.hairline.withValues(alpha: t.hairline.a * 0.5)
       ..strokeWidth = 1;
@@ -58,7 +52,6 @@ class EasingBoxPainter extends CustomPainter {
     canvas.drawLine(
         _at(1, -easingHandleReach), _at(1, 1 + easingHandleReach), line);
 
-    // The chord: no ease at all, what the shape is read against.
     _dashed(canvas, _at(0, 0), _at(1, 1), line);
 
     final p1 = _at(curve.x1, curve.y1);
@@ -93,7 +86,6 @@ class EasingBoxPainter extends CustomPainter {
           _at(time, curve.valueAt(time)), 3.5, Paint()..color = t.textPrimary);
     }
 
-    // The two ends are keys: small diamonds, as the Timeline draws them.
     final end = Paint()..color = t.textSecondary;
     for (final p in [_at(0, 0), _at(1, 1)]) {
       canvas.drawPath(
@@ -130,8 +122,6 @@ class EasingBoxPainter extends CustomPainter {
       old.playhead != playhead;
 }
 
-/// The strip under the box: a dot that moves with the shape, and a faint one
-/// that keeps plain time beside it.
 class EasingPreviewPainter extends CustomPainter {
   final EasingCurve curve;
   final Rect box;
@@ -172,8 +162,6 @@ class EasingPreviewPainter extends CustomPainter {
       old.time != time;
 }
 
-/// A tile's thumbnail: the chord as a hairline and the curve over it, walked
-/// by the same [EasingCurve.xAt] and [EasingCurve.yAt] the box walks.
 class EasingTilePainter extends CustomPainter {
   final EasingCurve curve;
   final LumitTheme theme;

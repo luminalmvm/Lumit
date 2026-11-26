@@ -1,0 +1,77 @@
+---
+title: Tile patterns
+description: "Tiles laid in one of ten patterns, with a line between them."
+---
+
+Tile patterns is a **Textures** effect.
+
+## What it does
+
+Lays tiles in one of ten patterns, with a line between them. Each tile takes a colour
+between **Tile colour 1** and **Tile colour 2** at random.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Type** | Dropdown | Bricks · Fancy tiles · Hexagons · Scales · Triangles · Flemish bond · English bond · Chain link · Herringbone · Basket weave | Bricks | - |
+| **Tile width** | Slider | 4 to 1000; any value by typing | 120 | Pixels at composition size |
+| **Row height** | Slider | 4 to 1000; any value by typing | 60 | Pixels at composition size |
+| **Row offset** | Slider | 0 to 100 | 50 | - |
+| **Offset frequency** | Slider, whole numbers | 1 to 10 | 2 | - |
+| **Squash** | Slider | 10 to 400; any value by typing | 100 | - |
+| **Squash frequency** | Slider, whole numbers | 1 to 10 | 2 | - |
+| **Line width** | Slider | 0 to 100; any value by typing | 4 | Pixels at composition size |
+| **Line softness** | Slider | 0 to 100 | 0 | - |
+| **Holes** | Slider | 0 to 100 | 0 | - |
+| **Edge roughness** | Slider | 0 to 100 | 0 | - |
+| **Tile colour 1** | Colour | Each channel 0 to 1 | 0.45, 0.12, 0.06 | - |
+| **Tile colour 2** | Colour | Each channel 0 to 1 | 0.3, 0.07, 0.035 | - |
+| **Line colour** | Colour | Each channel 0 to 1 | 0.65, 0.6, 0.55 | - |
+| **Rotation** | Dial | Any angle | 0° | Degrees |
+| **Centre** | Point | Any position | 960, 540 | Pixels at composition size |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Paint** | Dropdown | Inside layer · Whole frame | Inside layer | - |
+
+In the Effect Controls panel:
+
+- **Row height** is editable while **Type** is set to Bricks, Flemish bond, English bond,
+  Chain link, Herringbone or Basket weave.
+- **Row offset**, **Offset frequency**, **Squash** and **Squash frequency** are editable
+  while **Type** is set to Bricks.
+
+## What each control does
+
+- **Type**: the pattern.
+- **Tile width**: the length of a brick, the width of a hexagon or a scale, and the side of
+  a square tile or a triangle.
+- **Row height**: the height of a brick. On Herringbone a brick is never shorter than 1.05
+  times this. On Basket weave each square holds as many bricks as fit side by side at this
+  height.
+- **Row offset**: how far the shifted rows of Bricks slide, as a per cent of a brick.
+- **Offset frequency**: which rows are shifted: every one, every second, and so on.
+- **Squash**: the length of the bricks in the squashed rows, as a per cent of Tile width.
+- **Squash frequency**: which rows are squashed: every one, every second, and so on.
+- **Line width**: how wide the line between tiles is.
+- **Line softness**: how far the edge of the line fades, up to half its width.
+- **Holes**: the share of tiles left out. A missing tile shows Line colour.
+- **Edge roughness**: frays the edges of the tiles with noise.
+- **Tile colour 1** and **Tile colour 2**: the two colours each tile's own colour lies
+  between.
+- **Line colour**: the colour of the line.
+- **Rotation**: turns the pattern.
+- **Centre**: the point the pattern is laid out from and turns about.
+- **Seed**: which colour each tile takes, and which tiles are left out.
+- **Paint**: **Inside layer** paints only where the layer draws, and **Whole frame** fills
+  the whole of the layer's picture.
+- **Mix**: how much of the result replaces the original.
+- **Blend**: the blend mode the result is laid over the original with.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
+
+## Related
+
+- [Checkerboard](/effects/generate/checkerboard/)
+- [Voronoi](/effects/generate/voronoi/)
+- [Textures](/effects/#textures)
+- [Effects](/use/effects/)

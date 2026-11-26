@@ -1,5 +1,3 @@
-// The rows of the Graphics template panel: what it lists, and the value each
-// control shows, edited in place with the controls Effect controls uses.
 
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -24,48 +22,40 @@ import 'effect_param_row_frb.dart'
     show DropperButton, effectCellWidth, withUnitRider;
 import 'fx_section.dart' show fxRowHeight;
 
-/// One line of the panel's list.
 sealed class TemplateLine {
   const TemplateLine();
 }
 
-/// A group's folding heading.
 class TemplateGroupLine extends TemplateLine {
   final String name;
   final bool open;
   const TemplateGroupLine(this.name, {required this.open});
 }
 
-/// A control.
 class TemplateControlLine extends TemplateLine {
   final BridgeControl control;
   const TemplateControlLine(this.control);
 }
 
-/// What a copy may change about a text control beside its words.
 enum TemplateTextRow { font, size, colour }
 
-/// One of a text control's further rows, under it.
 class TemplateTextRowLine extends TemplateLine {
   final BridgeControl control;
   final TemplateTextRow which;
   const TemplateTextRowLine(this.control, this.which);
 }
 
-/// One option of a menu control, under it.
 class TemplateOptionLine extends TemplateLine {
   final BridgeControl control;
   final int option;
   const TemplateOptionLine(this.control, this.option);
 }
 
-/// The line under a menu's options that adds one.
 class TemplateAddOptionLine extends TemplateLine {
   final BridgeControl control;
   const TemplateAddOptionLine(this.control);
 }
 
-/// The groups of [controls], in the order each first appears.
 List<String> templateGroups(List<BridgeControl> controls) {
   final groups = <String>[];
   for (final control in controls) {
@@ -183,7 +173,6 @@ Widget templateSwatch(LumitTheme t, List<double> colour, {double lit = 0}) {
   );
 }
 
-/// A value shown and not edited: plain mono, in [ink].
 Widget templateReadout(LumitTheme t, String text, {Color? ink}) => Text(
       text,
       maxLines: 1,
@@ -192,7 +181,6 @@ Widget templateReadout(LumitTheme t, String text, {Color? ink}) => Text(
       style: t.mono.copyWith(fontSize: wellTextSize, color: ink ?? t.textMuted),
     );
 
-/// A well that names a picture and takes nothing: the glyph and [name].
 Widget templateWell(LumitTheme t, String name) => Container(
       height: wellHeight,
       padding: const EdgeInsets.symmetric(horizontal: 5),
@@ -330,7 +318,6 @@ class TemplateValue extends StatelessWidget {
       };
 
   Widget _number(BuildContext context, LumitTheme t, double value) {
-    // A range the wrong way round bounds nothing.
     final bounded = control.ranged && control.rangeMax >= control.rangeMin;
     final low = bounded ? control.rangeMin : -1000000.0;
     final high = bounded ? control.rangeMax : 1000000.0;
@@ -346,7 +333,6 @@ class TemplateValue extends StatelessWidget {
         value: value.clamp(low, high),
         min: low,
         max: high,
-        // Paced by the slider's travel, as an effect's number is.
         speed: span <= 0 ? 0.5 : span / 200,
         decimals: 2,
         onChanged: set,
@@ -376,7 +362,6 @@ class TemplateValue extends StatelessWidget {
         ),
       ],
     );
-    // Without room for both, the number stands alone.
     return withUnitRider(
       t,
       control.unit,
@@ -422,7 +407,6 @@ class TemplateValue extends StatelessWidget {
   }
 }
 
-/// An angle: turns and degrees, and the dial beside them when there is room.
 class _AngleValue extends StatefulWidget {
   final String id;
   final double degrees;
@@ -492,7 +476,6 @@ class _AngleValueState extends State<_AngleValue> {
   }
 }
 
-/// A colour: the swatch that opens the picker, and the dropper.
 class _ColourValue extends StatelessWidget {
   final String id;
   final String label;
@@ -610,7 +593,6 @@ class _TextValueState extends State<_TextValue> {
     final t = ThemeScope.of(context).theme;
     const padding = EdgeInsets.symmetric(horizontal: 6, vertical: 3);
     return LayoutBuilder(builder: (context, box) {
-      // As tall as the words are at this width, and never less than a line.
       final painter = TextPainter(
         text: TextSpan(
             text: _controller.text.isEmpty ? ' ' : _controller.text,
@@ -664,7 +646,6 @@ class _TextValueState extends State<_TextValue> {
   }
 }
 
-/// A font: the family and the face, as the Text panel picks them.
 class _FontValue extends StatefulWidget {
   final String id;
   final String family;
@@ -682,10 +663,8 @@ class _FontValue extends StatefulWidget {
 }
 
 class _FontValueState extends State<_FontValue> {
-  /// The installed families, once the engine has listed them.
   List<String>? _families;
 
-  /// The faces of each family asked about so far.
   final Map<String, List<String>> _faces = {};
 
   @override
@@ -727,7 +706,6 @@ class _FontValueState extends State<_FontValue> {
       orElse: () => faces.isEmpty ? l10n.textFaceRegular : faces.first,
     );
     final shown = widget.face.isEmpty ? regular : widget.face;
-    // Side by side with room, and one under the other without.
     return Wrap(
       spacing: 4,
       runSpacing: 2,
@@ -741,7 +719,6 @@ class _FontValueState extends State<_FontValue> {
             hint: l10n.textFontSearch,
             familyOf: (i) =>
                 i == 0 ? 'Inter' : (i <= installed.length ? names[i] : null),
-            // A new family starts on its regular face.
             onChanged: (i) => widget
                 .onSet(BridgeControlValue.font(family: names[i], face: '')),
           ),

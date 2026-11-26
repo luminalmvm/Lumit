@@ -62,8 +62,6 @@ class ViewerGuidesMenu extends StatelessWidget {
   final CompositionReference comp;
   final F32Array4? background;
 
-  /// The Viewer view this bar belongs to, whose own 3D ground and axes the
-  /// menu shows and switches.
   final int viewId;
   final ViewerMenuHost host;
 
@@ -193,7 +191,6 @@ class ViewerGuidesMenu extends StatelessWidget {
 /// outline turns to the warning colour where the picture reached as far as a
 /// box may keep, and was cut there.
 class ViewerReachPainter extends CustomPainter {
-  /// Where the frame is drawn in the panel.
   final Rect picture;
 
   /// The comp's own pixel size, which [reach] is measured in.
@@ -251,7 +248,6 @@ class ViewerReachPainter extends CustomPainter {
       ),
       textDirection: TextDirection.ltr,
     )..layout();
-    // Under the bottom right corner, or as near it as the panel shows.
     double within(double v, double room) => v > room ? room : (v < 2 ? 2 : v);
     final at = Offset(
       within(outline.right - text.width, size.width - text.width - 2),

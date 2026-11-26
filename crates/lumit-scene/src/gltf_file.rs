@@ -1,5 +1,3 @@
-//! glTF and GLB, read with the `gltf` crate.
-
 use gltf::animation::util::ReadOutputs;
 use gltf::mesh::Mode;
 use gltf::texture::{MagFilter, WrappingMode};
@@ -488,7 +486,6 @@ fn transform_json(value: Option<&serde_json::Value>) -> Option<UvTransform> {
     })
 }
 
-/// The files a glTF names by path that are there to be found.
 pub(crate) fn dependants(r: &mut Reader) -> Vec<std::path::PathBuf> {
     let Ok(bytes) = r.read_file(r.path) else {
         return Vec::new();

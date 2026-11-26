@@ -104,15 +104,6 @@ fn evict_to_budget(cache: &mut HashMap<SoundSource, Entry>, budget: usize) {
     }
 }
 
-/// The decoded track of `sound`, from the cache or by decoding it now.
-///
-/// ponytail: the decode happens on whichever thread asked, so the first frame
-/// that reads a driven parameter waits for the whole file — the same trade the
-/// media index makes, and the same one the mixer makes on its own thread. If
-/// opening a project whose parameters are audio-driven holds the first frame
-/// for more than a second on an ordinary track (a few minutes of stereo), hand
-/// `decoded` to the decode-ahead worker so the wait happens before the frame is
-/// asked for.
 fn decoded(sound: &SoundSource) -> Option<Arc<AudioBuffer>> {
     // The lock is never held across the decode (14-ENGINEERING-RULES §5): FFmpeg
     // is FFI and takes as long as the file is long. Two threads racing the same
@@ -201,7 +192,6 @@ impl<'a> DocumentAudio<'a> {
         }
     }
 
-    /// The comp's audio jobs, built once per tap.
     fn jobs(&self) -> &[crate::mix::jobs::AudioJob] {
         self.jobs.get_or_init(|| {
             let mut jobs =
@@ -215,16 +205,6 @@ impl<'a> DocumentAudio<'a> {
         })
     }
 
-    /// The whole of the mix [`Self::strip`] would filter to, analysed once and
-    /// kept.
-    ///
-    /// Summed as [`Self::strip`] sums a window, over the whole comp: the jobs
-    /// at their gains, racks not run.
-    ///
-    /// ponytail: the first frame that asks mixes and analyses the whole comp on
-    /// its own thread, uncancelled, as [`decoded`] decodes. A few hundred
-    /// milliseconds for a song; hand it to the decode-ahead worker if a long
-    /// comp ever holds the first frame for longer than that.
     fn analysed(&self, layer: Option<Uuid>, clip: Option<Uuid>) -> Option<Arc<BandAnalysis>> {
         let key = (
             mix_fingerprint(self.doc, self.comp),
@@ -258,8 +238,6 @@ impl<'a> DocumentAudio<'a> {
         analysed
     }
 
-    /// The file `layer` plays, if it is a footage layer whose item is still in
-    /// the project.
     fn sound_of(&self, layer: Uuid) -> Option<SoundSource> {
         let layer = self.comp.layers.iter().find(|l| l.id == layer)?;
         let LayerKind::Footage { item } = &layer.kind else {
@@ -301,8 +279,6 @@ impl DocumentAudio<'_> {
             &crate::mix::jobs::AudioJob,
         )> = jobs
             .iter()
-            // ponytail: a driver doesn't hear a retimed layer yet. Read it
-            // through its map, as the mix does, if one needs to.
             .filter(|job| {
                 job.retime.is_none()
                     && job.carriers.iter().all(|c| c.retime.is_none())
@@ -321,7 +297,6 @@ impl DocumentAudio<'_> {
                     buffer.frames(),
                     TAP_RATE,
                 )?;
-                // The overlap with the window, in output frames.
                 let from = start.max(first);
                 let to = (start + len as i64).min(last);
                 if to <= from {
@@ -381,42 +356,6 @@ impl lumit_core::fx::registry::AudioTap for DocumentAudio<'_> {
         Some(rate)
     }
 
-    /// The composition's own mix over a window centred on the frame, or the
-    /// part of it that one layer, or one clip of one layer, contributes.
-    ///
-    /// **The filters are on the mixer's job list, not on a second reading**
-    /// (docs/impl/audio-nodes.md §2). `layer` keeps the jobs filed under that
-    /// mixer strip and `clip` the ones a Sequence row made from that clip; with
-    /// neither of them set it is the whole mix, which is what
-    /// [`lumit_core::fx::registry::AudioTap::mix`] asks for. A job from a nested comp is
-    /// filed under the outer Precomp layer, as it is for the Mixer's own
-    /// strips, so a row that has become a row precomp still answers by the
-    /// layer standing where it stood.
-    ///
-    /// **The seam is the mixer's, not a second opinion.** What layers sound,
-    /// where they land, how loud they are and which of them a solo silences is
-    /// [`AudioJobsBuilder`]'s answer — the same list export, playback and beat
-    /// detection all mix from — and the summing is
-    /// [`lumit_audio::mix::mix_stereo`] over
-    /// [`place_on_timeline`](lumit_audio::mix::place_on_timeline) placements at
-    /// [`crate::mix::bake::volume_bake`] gains, which is exactly
-    /// `export::mix_decoded` restricted to a window. Preview and export read
-    /// the same numbers because they run this same function at the same
-    /// `t_comp`, with the master ceiling applied as the mixer applies it.
-    ///
-    /// Each clip is clipped to the window **before** its Volume is baked, so a
-    /// five-minute track costs a window's arithmetic per frame rather than a
-    /// track's. An animated Volume's control points therefore sit on a grid
-    /// starting at the window rather than at the clip — a hair off the sound
-    /// the file will carry, identical in every render of the picture, which is
-    /// the property that matters here.
-    ///
-    /// ponytail: the layers' **audio insert chains** are deliberately not run.
-    /// A driver reading the mix is asked once per picture frame, and a plugin
-    /// cannot answer a window of a track thousands of times in a render — so a
-    /// glow that follows the music follows the *dry* music. Bake each chain
-    /// once at control rate and read the tap off that, if a plugin ever changes
-    /// a level enough for the picture to notice.
     fn strip(
         &self,
         layer: Option<Uuid>,
@@ -449,7 +388,6 @@ impl lumit_core::fx::registry::AudioTap for DocumentAudio<'_> {
         let Some(analysed) = self.analysed(layer, clip) else {
             return false;
         };
-        // The sensitivity the Beats panel offers, read at each moment.
         let delta = |t: f64| {
             let percent = sensitivity(t).clamp(0.0, 100.0).round() as u8;
             lumit_audio::beat::delta_from_sensitivity(percent)
@@ -484,26 +422,6 @@ impl lumit_core::fx::registry::AudioTap for DocumentAudio<'_> {
     }
 }
 
-/// A fingerprint of what `comp`'s mix sounds like, for the frame key
-/// (docs/impl/audio-nodes.md §3).
-///
-/// A frame drawn through a driver reading *This comp* depends on the mix, and
-/// the mix is not in the picture's name: a Volume is a mixer control, so
-/// [`lumit_eval`] hashes no part of it and pulling a fader would hand back the
-/// frame drawn before the pull. This is the missing term: the same job list
-/// [`DocumentAudio::strip`] reads, folded down to eight bytes.
-///
-/// **What the reading uses, and nothing else**: each job's file, strip, clip
-/// and placement, the gains [`crate::mix::bake::volume_bake`] bakes (Volume, Pan,
-/// the carriers, a clip's fade and a *Duck under* wire) and the master fader.
-/// The layers' insert chains are left out because the reading does not run
-/// them (see [`DocumentAudio::strip`]), so a plugin knob that cannot change
-/// the number must not retire a frame.
-///
-/// ponytail: this builds the comp's job list a second time, next door to the
-/// tap's own. It runs once per frame key and only for a comp that actually
-/// reads its mix; memoise it on the walk if a project full of them ever shows
-/// up in a key-building profile.
 #[must_use]
 pub fn mix_fingerprint(doc: &Arc<Document>, comp: &Composition) -> u64 {
     let jobs = crate::headless::AudioJobsBuilder::folded().audio_jobs(doc, comp);
@@ -562,17 +480,12 @@ mod tests {
     use lumit_core::fx::registry::AudioTap;
     use std::path::{Path, PathBuf};
 
-    /// A document with one footage layer pointing at `path`: the document, its
-    /// composition's id, and the layer's id.
     fn doc_with_audio_layer(path: &Path) -> (Arc<Document>, Uuid, Uuid) {
         let (doc, comp, layers) = doc_with_audio_layers(path, 1);
         let layer = layers[0];
         (Arc::new(doc), comp, layer)
     }
 
-    /// The same document with `rows` layers on it, all playing `path`, and the
-    /// document left unwrapped so a test can set a Volume on a row before it
-    /// reads the mix.
     fn doc_with_audio_layers(path: &Path, rows: usize) -> (Document, Uuid, Vec<Uuid>) {
         use lumit_core::model::{FootageItem, Layer, LinearColour, MediaRef, Switches};
         use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
@@ -661,7 +574,6 @@ mod tests {
         (doc, comp_id, layer_ids)
     }
 
-    /// The tone fixture, or `None` on a machine with no FFmpeg CLI to make it.
     fn tone(dir: &Path) -> Option<PathBuf> {
         let path = lumit_media::index::tests_support::tone(dir);
         if path.is_none() {
@@ -670,14 +582,10 @@ mod tests {
         path
     }
 
-    /// The loudest sample in a run.
     fn loudest(samples: &[f32]) -> f32 {
         samples.iter().fold(0.0f32, |top, s| top.max(s.abs()))
     }
 
-    /// Two tracks under a budget with room for one: the one just read stays,
-    /// the one left behind goes. A comp driving two parameters from two long
-    /// tracks therefore alternates rather than re-decoding both every frame.
     #[test]
     fn the_least_recently_read_track_is_the_one_evicted() {
         let track = |seconds: usize| {
@@ -700,8 +608,6 @@ mod tests {
             "the track read last is the one kept"
         );
 
-        // Reading a again makes b the older of the two, and the next eviction
-        // reverses — which is the alternation, not the thrash.
         cache.insert(file("a.wav"), (2, track(1)));
         evict_to_budget(&mut cache, budget);
         assert_eq!(
@@ -710,14 +616,10 @@ mod tests {
             "and the one left behind is the one dropped"
         );
 
-        // Under budget, nothing is touched.
         evict_to_budget(&mut cache, budget);
         assert_eq!(cache.len(), 1, "a cache that fits is left alone");
     }
 
-    /// The tap is a pure function of the file, the layer and the window: two
-    /// reads of the same moment give the same samples, which is what makes the
-    /// preview and the export agree on the number.
     #[test]
     fn the_same_window_reads_the_same_samples_twice() {
         let dir = tempfile::tempdir().expect("temp dir");
@@ -743,8 +645,6 @@ mod tests {
             "and the samples are the sound, not zeroes"
         );
 
-        // A window reaching before the track's start returns the part that
-        // exists rather than nothing.
         let mut early = Vec::new();
         assert!(tap.samples(layer, -0.1, 0.02, &mut early).is_some());
         assert_eq!(
@@ -754,13 +654,6 @@ mod tests {
         );
     }
 
-    /// **One reading, three filters** (docs/impl/audio-nodes.md §2, plan 1).
-    ///
-    /// `strip` with neither filter set is the mix `mix` gives; filtered to a
-    /// row it is that row alone **at the row's own Volume**, which is the whole
-    /// difference between this and the raw `samples` read; and the rows sum
-    /// back to the mix, because a filter is a filter and not a second
-    /// arithmetic.
     #[test]
     fn strip_reads_the_whole_mix_and_one_row_of_it_post_fader() {
         let dir = tempfile::tempdir().expect("temp dir");
@@ -768,8 +661,6 @@ mod tests {
             return;
         };
         let (mut doc, comp_id, rows) = doc_with_audio_layers(&path, 2);
-        // The second row half as loud, so "post-fader" is a number and not a
-        // claim: half is exactly −6.02 dB.
         let half = 20.0 * 0.5f64.log10();
         doc.comp_mut(comp_id).expect("comp").layers[1].volume_db =
             lumit_core::anim::Property::fixed(half);
@@ -808,15 +699,11 @@ mod tests {
             );
         }
 
-        // A row nobody has is silence, not a fault: the documented degrade.
         let (missing, out) = read(Some(Uuid::now_v7()), None);
         assert_eq!(missing, None);
         assert!(out.is_empty());
     }
 
-    /// **The mix is in the frame's name** (docs/impl/audio-nodes.md §3, plan
-    /// 5). A fader the picture follows changes the fingerprint the key folds;
-    /// a name, which no listener hears, leaves it exactly where it was.
     #[test]
     fn the_mix_fingerprint_moves_with_a_fader_and_not_with_a_name() {
         let dir = tempfile::tempdir().expect("temp dir");

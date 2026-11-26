@@ -41,8 +41,6 @@ const MIN_AGREEING: usize = 12;
 /// between two frames.
 const REACH: i64 = 8;
 
-/// How many pixels wider on each side the window is for the second try at a
-/// track on a step that lost hold of the frame's motion.
 const WIDER: i64 = 2;
 
 /// One speck followed forward and back, where it was followed at all: where
@@ -260,8 +258,6 @@ impl Tracker {
                 measured = self.measure(frame, &|_| d);
             }
         }
-        // A step that lost hold of the frame's motion: the tracks that failed
-        // are tried once more, from the motion found again, in a wider window.
         if measuring && slide.is_some() {
             let half = self.settings.half_window as i64 + WIDER;
             for (i, l) in self.live.iter().enumerate() {

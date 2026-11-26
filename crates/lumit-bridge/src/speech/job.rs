@@ -1,8 +1,5 @@
-//! The work itself, on the `lumit-speech` thread.
-
 use super::*;
 
-/// One file to hear, read off the snapshot before any work starts.
 pub(super) struct Plan {
     pub(super) item: Uuid,
     // Only read where the build can decode sound.
@@ -236,7 +233,6 @@ fn plan(project: Uuid, items: &[Uuid], options: &BridgeTranscribeOptions) -> Vec
         .collect()
 }
 
-/// One item as the document has it, read under the lock.
 struct Found {
     item: Uuid,
     path: PathBuf,
@@ -266,7 +262,6 @@ fn source_of(
     None
 }
 
-/// How long the file's sound runs, from its probe.
 #[cfg(feature = "media")]
 fn seconds_of(source: Option<Source>) -> f64 {
     source
@@ -345,11 +340,9 @@ pub(super) enum Stop {
     #[cfg_attr(not(feature = "media"), allow(dead_code))]
     Cancelled,
     Failed,
-    /// The runtime or the pack would not open.
     Missing,
 }
 
-/// One file's words: from the cache when it has them, else heard.
 fn hear(
     plan: &Plan,
     speech: &mut Option<lumit_ml::speech::Speech>,
@@ -449,7 +442,6 @@ fn transcript_of_heard(
     } else {
         voices.speakers_for(heard.voices.clone(), count, &options.speaker_name)
     };
-    // One voice asked for: everybody is one speaker.
     let only = (options.speakers == 1).then(|| voices.only(&options.speaker_name));
     let grid = |t: f64| {
         SourceTime(

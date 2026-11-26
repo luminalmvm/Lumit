@@ -37,7 +37,6 @@ const SCRIPT_TIME: Duration = Duration::from_secs(60);
 
 pub struct Headless {
     store: Arc<DocumentStore>,
-    /// Where the project was opened from or last saved to.
     path: RefCell<Option<PathBuf>>,
     /// The file the project was opened from. A save copies the footage it
     /// packs out of this one.
@@ -62,12 +61,10 @@ struct Export {
     /// the comp.
     waiting: Option<(Arc<Document>, Uuid)>,
     status: ExportStatus,
-    /// The encoder the export settled on, once it has.
     encoder: Option<&'static str>,
 }
 
 impl Headless {
-    /// A new, empty project with no file yet.
     pub fn new_project() -> Self {
         Self::with(Document::new(), None, None)
     }
@@ -81,7 +78,6 @@ impl Headless {
         host
     }
 
-    /// A project from a document in hand, with no file.
     pub fn from_document(doc: Document) -> Self {
         Self::with(doc, None, None)
     }
@@ -161,7 +157,6 @@ impl Headless {
         Ok(())
     }
 
-    /// Where a save to `path`, or to the project's own file, would go.
     pub fn save_target(&self, path: Option<&Path>) -> Result<PathBuf, ScriptError> {
         let mut target = match path {
             Some(path) => std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf()),
@@ -229,7 +224,6 @@ impl Headless {
         Ok((found.id, found.name.clone()))
     }
 
-    /// Whether any export is still running or waiting its turn.
     pub fn exporting(&self) -> bool {
         self.next_in_turn();
         self.exports
@@ -238,13 +232,11 @@ impl Headless {
             .any(|e| drain(e, Duration::ZERO).state == ExportState::Running)
     }
 
-    /// The encoder export `job` settled on, once it has.
     pub fn export_encoder(&self, job: u64) -> Option<&'static str> {
         let mut exports = self.exports.borrow_mut();
         job_of(&mut exports, job).ok()?.encoder
     }
 
-    /// Hold export `job` between two frames, or let it go on.
     pub fn export_hold(&self, job: u64, on: bool) {
         let mut exports = self.exports.borrow_mut();
         if let Ok(Export {
@@ -256,14 +248,12 @@ impl Headless {
         }
     }
 
-    /// Stop every running export, and every one waiting its turn.
     pub fn cancel_exports(&self) {
         for export in self.exports.borrow_mut().iter_mut() {
             cancel(export);
         }
     }
 
-    /// Start the first export waiting its turn, once none is running.
     fn next_in_turn(&self) {
         let mut exports = self.exports.borrow_mut();
         let running = exports
@@ -281,8 +271,6 @@ impl Headless {
         }
     }
 
-    /// Start exporting `comp` to `out` with `spec`. Answers a number to ask
-    /// after it with, as [`Host::export_start`] does.
     pub fn start_export(
         &self,
         comp: Uuid,
@@ -315,7 +303,6 @@ impl Headless {
         Ok(exports.len() as u64)
     }
 
-    /// Start the exporter on `comp` of `doc`.
     fn launch(
         &self,
         doc: Arc<Document>,
@@ -378,8 +365,6 @@ impl Headless {
         crate::api::effect::rescan_plugins(None);
     }
 
-    /// The project as the bridge's own placement code reads it, with no
-    /// journal and no Viewer behind it.
     fn bridge_state(&self) -> LumitBridgeState {
         LumitBridgeState {
             store: Arc::clone(&self.store),
@@ -393,8 +378,6 @@ impl Headless {
         }
     }
 
-    /// Where an export of the comp called `name` goes when nobody says: the
-    /// comp's name beside the project, never over a file already there.
     fn export_path(&self, name: &str) -> PathBuf {
         let dir = self
             .path
@@ -446,8 +429,6 @@ fn read_out_packed(doc: &mut Document, archive: &Path, dir: &Path) -> Option<Fil
     held
 }
 
-/// Take in whatever `export` has said since it was last asked, waiting up
-/// to `wait` for something when it is running.
 fn drain(export: &mut Export, wait: Duration) -> &ExportStatus {
     let Some(handle) = &export.handle else {
         return &export.status;
@@ -485,7 +466,6 @@ fn drain(export: &mut Export, wait: Duration) -> &ExportStatus {
     &export.status
 }
 
-/// Stop `export`, or take it out of its turn when it is waiting.
 fn cancel(export: &mut Export) {
     if let Some(handle) = &export.handle {
         handle.cancel();
@@ -555,7 +535,6 @@ impl Host for Headless {
                 ProjectReference::footage_from_disk(&picked.to_string_lossy()).map_err(|_| {
                     ScriptError::Failed(format!("{} could not be imported.", path.display()))
                 })?;
-            // A second file of a run already in comes back as that item.
             let same = |f: &FootageItem| {
                 f.sequence.is_some() && f.media.absolute_path == item.media.absolute_path
             };
@@ -639,7 +618,6 @@ impl Host for Headless {
         let mut exports = self.exports.borrow_mut();
         let export = job_of(&mut exports, job)?;
         if export.waiting.is_some() {
-            // Not spinning a script that asks in a loop.
             std::thread::sleep(STATUS_WAIT);
         }
         Ok(drain(export, STATUS_WAIT).clone())
@@ -798,9 +776,6 @@ mod tests {
     use super::*;
     use lumit_core::model::MediaRef;
 
-    /// Footage packed into a project, whose original has gone, is still in
-    /// the file after the command line has opened it, changed it and saved
-    /// it over itself.
     #[test]
     fn a_save_keeps_the_footage_the_project_packs() {
         let dir = tempfile::tempdir().unwrap();
@@ -843,7 +818,6 @@ mod tests {
             _ => false,
         }));
         assert!(saved.packed.contains_key(&id));
-        // Its bytes are in the file, not only its entry.
         let out = dir.path().join("read-out");
         let restored = lumit_project::pack::restore_packed(
             &mut saved,
@@ -856,8 +830,6 @@ mod tests {
         assert_eq!(restored, (1, Vec::new()));
     }
 
-    /// `comp.frame` writes a PNG at the size asked for, and never over a
-    /// file already there.
     #[test]
     fn a_frame_is_a_png_of_the_size_asked_for() {
         let dir = tempfile::tempdir().unwrap();

@@ -27,14 +27,10 @@ enum EscapeRung {
   /// captured. Nothing was written yet, so cancelling writes nothing.
   gesture,
 
-  /// The open menu, dropdown or flyout chain (`closeLumitPopups`).
   popup,
 
-  /// A dialogue or a surface that has taken the window: a modal, the FX
-  /// console, the command palette, the welcome screen, the guided tour.
   dialog,
 
-  /// The finest selection held on screen.
   selection,
 
   /// The Viewer's 3D view, back to the last one: only once nothing above

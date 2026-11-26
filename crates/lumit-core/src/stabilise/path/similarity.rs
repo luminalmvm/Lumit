@@ -1,5 +1,3 @@
-//! The path of a slide, or of a slide, a turn and a growth.
-
 use super::{
     cmul, ends, finite, hops, place, segments, wanted, weighted, Hop, Kernel, Model, Placed, Pose,
     Smoothing,
@@ -57,8 +55,6 @@ pub(super) fn similarity_path(
     let mut near = Vec::new();
     let mut out = Vec::with_capacity(frames);
     for t in 0..frames {
-        // The smooth camera as frame t sees it: its growth and turn from
-        // frame t, and where it has the centre.
         let target = match &held {
             Some((anchor, x)) => {
                 let a = anchor[t];
@@ -73,7 +69,6 @@ pub(super) fn similarity_path(
                 smooth_pose(&hops, &turn, (seg[t], end[t]), t, (r, &kernel.w), &mut near)
             }
         };
-        // Output pixel y shows the input pixel the smooth camera has there.
         out.push(finite(wanted(target, s).matrix(c)));
     }
     out

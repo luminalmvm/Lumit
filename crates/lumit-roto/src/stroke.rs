@@ -18,15 +18,11 @@ const DAB_SPACING: f32 = 0.25;
 /// a hair-thin radius cannot ask for an unbounded walk (14 §5, budgeted).
 const MAX_DABS_PER_SEGMENT: usize = 4096;
 
-/// How wide the default background ring round the frame is, in pixels.
 const BORDER_RING_PX: u32 = 2;
 
-/// What a stroke claims about the pixels under it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StrokeKind {
-    /// These pixels are the subject.
     Foreground,
-    /// These pixels are not.
     Background,
     /// These pixels want the refine band, whatever the segmentation decided —
     /// the one lock of hair that needs more room than the automatic band.
@@ -43,7 +39,6 @@ pub enum StrokeKind {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RotoStroke {
     pub id: Uuid,
-    /// The pointer's path in source raster pixels, in the order it was drawn.
     pub points: Vec<(f32, f32)>,
     /// Half the brush's width, in source raster pixels.
     pub radius: f32,
@@ -52,10 +47,8 @@ pub struct RotoStroke {
     pub frame: i64,
 }
 
-/// What is known about one pixel before the solve runs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Seed {
-    /// Nothing is known; the solve decides.
     #[default]
     None,
     Foreground,
@@ -79,7 +72,6 @@ pub struct Seeds {
 }
 
 impl Seeds {
-    /// An empty seed field for a frame of this size.
     pub fn new(width: u32, height: u32) -> Result<Self, RotoError> {
         let n = pixel_count(width, height)?;
         Ok(Self {
@@ -99,7 +91,6 @@ impl Seeds {
         self.height
     }
 
-    /// Forget everything, keeping the buffers.
     pub fn clear(&mut self) {
         self.cells.fill(Seed::None);
         self.refine.fill(false);
@@ -111,7 +102,6 @@ impl Seeds {
         self.cells.get(i).copied().unwrap_or_default()
     }
 
-    /// Whether a `Refine` stroke painted this pixel.
     #[inline]
     pub fn refine_at(&self, i: usize) -> bool {
         self.refine.get(i).copied().unwrap_or(false)
@@ -166,7 +156,6 @@ impl Seeds {
         }
     }
 
-    /// Stamp one stroke: dabs along its polyline, the radius honoured.
     pub fn stamp(&mut self, stroke: &RotoStroke) {
         let radius = if stroke.radius.is_finite() {
             stroke.radius.max(0.5)

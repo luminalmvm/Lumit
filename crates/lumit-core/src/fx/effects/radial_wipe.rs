@@ -1,20 +1,10 @@
-//! Radial wipe (docs/08 §3.47): a wedge swept round a centre — AE's Radial
-//! Wipe.
-//!
-//! **In plain terms.** A hand sweeps round a clock face and takes the picture
-//! with it. Start angle is where the hand begins, Wipe which way it turns (or
-//! both ways at once, opening like a pair of curtains), Completion how far round
-//! it has got, and Feather how soft the trailing edge is.
-
 use crate::fx::{
     cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
 };
 use lumit_fx_macros::Effect;
 
-/// The three sweep directions, in schema order.
 pub const WIPE_OPTIONS: &[&str] = &["Clockwise", "Anticlockwise", "Both"];
 
-/// Radial wipe's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "radial_wipe",
@@ -42,7 +32,6 @@ pub struct RadialWipe {
     #[slider(label = "Wipe centre x", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
     pub centre_x: f32,
 
-    /// px@comp; see [`centre_x`](Self::centre_x).
     #[slider(label = "Wipe centre y", min = 0.0, max = 2160.0, default = 540.0, unit = Px)]
     pub centre_y: f32,
 
@@ -71,7 +60,6 @@ pub struct RadialWipe {
     #[slider(min = 0.0, max = 500.0, default = 0.0, hard_min = 0.0, unit = Px)]
     pub feather: f32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -107,7 +95,6 @@ impl RadialWipe {
     }
 }
 
-/// Radial wipe's behaviour.
 pub struct RadialWipeDef;
 
 impl EffectDef for RadialWipeDef {

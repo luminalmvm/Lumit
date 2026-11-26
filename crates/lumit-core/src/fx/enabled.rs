@@ -1,5 +1,3 @@
-//! Whether a row is live, by its effect's greying rules.
-
 use super::builtins::schema;
 use super::schema::EnabledCond;
 use crate::model::{EffectInstance, EffectValue};

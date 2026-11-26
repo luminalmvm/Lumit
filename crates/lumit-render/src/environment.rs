@@ -16,7 +16,6 @@ use uuid::Uuid;
 use crate::draw::{CompLayerDraw, DrawSource};
 use crate::realise::Realiser;
 
-/// An Environment light's picture and how it lights.
 pub struct EnvironmentDraw {
     /// The source layer's own draw, flat at its own size.
     pub source: CompLayerDraw,
@@ -146,7 +145,6 @@ fn picture_key(d: &CompLayerDraw, input: Option<u128>) -> Option<u128> {
     ))
 }
 
-/// The environment a draw list starts with, if it has one, and the rest.
 pub(crate) fn peel(layers: &[CompLayerDraw]) -> (Option<&EnvironmentDraw>, &[CompLayerDraw]) {
     match layers.split_first() {
         Some((

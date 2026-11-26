@@ -26,7 +26,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// A texture nobody has chosen has nothing to place, light or press.
 pub const TEXTURIZE_ENABLED_WHEN: &[EnabledWhen] = &[
     EnabledWhen {
         param: "light_direction",
@@ -55,7 +54,6 @@ pub const TEXTURIZE_ENABLED_WHEN: &[EnabledWhen] = &[
     },
 ];
 
-/// Texturize's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "texturize",
@@ -124,7 +122,6 @@ pub struct Texturize {
     #[slider(min = 10.0, max = 400.0, default = 100.0, hard_min = 1.0, unit = Percent)]
     pub scale: f32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,

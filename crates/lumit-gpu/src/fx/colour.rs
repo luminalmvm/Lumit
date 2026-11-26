@@ -1,7 +1,3 @@
-//! Colour and tone adjustment kernels (docs/08 §3.7, §3.10, §3.16–§3.20,
-//! §3.23–§3.24): flash, colour balance, saturation, exposure, temperature,
-//! invert, tint, contrast, gamma and hue shift.
-
 use crate::GpuContext;
 
 use super::{work_texture, FxEngine};
@@ -136,7 +132,6 @@ pub struct TemperatureOp {
     pub gain_r: f32,
     /// The scene-linear green gain, the tint.
     pub gain_g: f32,
-    /// The scene-linear blue gain.
     pub gain_b: f32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
@@ -381,9 +376,6 @@ struct HueParams {
 }
 
 impl FxEngine {
-    /// Apply one flash (docs/08 §3.7, manual form) to a linear working
-    /// texture, returning a new texture of the same size. One pointwise
-    /// pass; the trigger envelope arrives pre-evaluated in the op.
     pub fn flash(
         &self,
         ctx: &GpuContext,
@@ -847,9 +839,6 @@ impl FxEngine {
         out
     }
 
-    /// Apply one hue shift (docs/08 §3.17) to a linear working texture,
-    /// returning a new texture of the same size. One pointwise pass: RGB × the
-    /// host-computed colour matrix, alpha untouched.
     pub fn hue_shift(
         &self,
         ctx: &GpuContext,
@@ -924,7 +913,6 @@ struct ThresholdParams {
     matte_on: f32,
 }
 
-/// One resolved Tritone (docs/08 §3.60): the three stops of the ramp.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TritoneOp {
     pub shadows: [f32; 3],
@@ -1031,9 +1019,6 @@ struct ShadowHighlightParams {
     matte_on: f32,
 }
 
-/// Wave 2's Stylise I batch (docs/08 §3.58–§3.63): six tone and colour
-/// effects, five of them one pointwise pass and the sixth one gaussian plus a
-/// pointwise pass.
 impl FxEngine {
     /// Apply one Posterize (docs/08 §3.58) to a linear working texture,
     /// returning a new texture of the same size. One pointwise pass; the §2.2
@@ -1100,8 +1085,6 @@ impl FxEngine {
         out
     }
 
-    /// Apply one Tritone (docs/08 §3.60) to a linear working texture, returning
-    /// a new texture of the same size. One pointwise pass.
     pub fn tritone(
         &self,
         ctx: &GpuContext,
@@ -1164,8 +1147,6 @@ impl FxEngine {
         out
     }
 
-    /// Apply one Black and white (docs/08 §3.62) to a linear working texture,
-    /// returning a new texture of the same size. One pointwise pass.
     pub fn black_and_white(
         &self,
         ctx: &GpuContext,

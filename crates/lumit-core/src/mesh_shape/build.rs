@@ -17,13 +17,10 @@ use crate::model::{EffectInstance, EffectValue};
 /// shows a crease or flat facets, so 4 segments make a pyramid and 6 a hex
 /// prism. Below it they shade as one smooth curve.
 const SMOOTH: f64 = PI / 6.0;
-/// Below this a length is nothing.
 const TINY: f64 = 1e-6;
 
 type V3 = [f64; 3];
 
-/// `shape` as its rows `rows` have it, each number read by `read`, or as it
-/// starts with none.
 #[must_use]
 pub fn mesh(
     shape: MeshShape,
@@ -85,7 +82,6 @@ pub fn mesh(
         MeshShape::Torus => {
             let (ring, pipe) = (size("radius", 100.0), size("pipe_radius", 30.0));
             let m = count("pipe_segments", 24.0, 3.0);
-            // Round the pipe from its top, outside first, back to its top.
             let profile = (0..=m)
                 .map(|i| {
                     let (s, c) = (PI / 2.0 - TAU * f64::from(i) / f64::from(m)).sin_cos();
@@ -274,7 +270,6 @@ impl Builder {
         } else {
             0
         };
-        // Across a face's axis `a`, from one edge to the other.
         let across = |a: usize| -> Vec<f64> {
             let out = (0..=steps).map(|k| match steps {
                 0 => half[a],
@@ -287,8 +282,6 @@ impl Builder {
                 .chain(out.iter().copied())
                 .collect()
         };
-        // Each face's normal axis and sign, the way its pictures run across,
-        // and up it.
         let faces: [(usize, f64, usize, f64, usize, f64); 6] = [
             (0, 1.0, 2, -1.0, 1, 1.0),
             (0, -1.0, 2, 1.0, 1, 1.0),
@@ -464,7 +457,6 @@ impl Builder {
         for p in &ring {
             self.push(at(*p), normal, along, uv(*p));
         }
-        // The fan winds whichever way faces `normal`.
         let facing = dot3(
             cross3(sub3(at(ring[0]), at(mid)), sub3(at(ring[1]), at(mid))),
             normal,
@@ -559,8 +551,6 @@ mod tests {
             .sum()
     }
 
-    /// Every shape is closed and faces outward, whatever its rows: its
-    /// triangles enclose the volume it should have.
     #[test]
     fn every_shape_is_closed_and_faces_out() {
         let near = |got: f64, want: f64| (got - want).abs() / want < 0.02;
@@ -612,7 +602,6 @@ mod tests {
             let got = volume(shape, rows);
             assert!(near(got, want), "{shape:?} {rows:?}: {got} not {want}");
         }
-        // A plane is flat, and nought across is nothing at all.
         assert!(volume(MeshShape::Plane, &[("corner_radius", 50.0)]).abs() < 1e-3);
         assert_eq!(volume(MeshShape::Sphere, &[("radius", 0.0)]), 0.0);
     }

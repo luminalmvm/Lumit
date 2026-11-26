@@ -29,8 +29,6 @@ import 'dialog_frame.dart';
 List<String> modelLightNames() =>
     [l10n.lightLayerName(l10n.lightAmbient), l10n.keyLightName];
 
-/// The Model settings of the first Model layer in [placed], the layers a drop
-/// just made, if there is one.
 Future<void> showDroppedModelSettingsFrb(
     BuildContext context, List<LayerReference> placed) async {
   for (final layer in placed) {
@@ -101,7 +99,6 @@ class _ModelSettingsBodyState extends State<_ModelSettingsBody> {
   /// What Fit to comp makes a metre, null until the model has been read.
   late double? _fitted = _fittedFor(_s.upAxis);
 
-  /// Asks again until a model still being read has been.
   Timer? _waiting;
 
   @override

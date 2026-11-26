@@ -48,7 +48,6 @@ fn dp_mix(x: u32, y: u32) -> u32 {
     return ((x * 73856093u) ^ (y * 19349663u)) * 2654435769u;
 }
 
-// A number from 0 to 1 out of the top of a mixed word.
 fn dp_hash(mixed: u32) -> f32 {
     return f32(mixed >> 8u) / 16777216.0;
 }
@@ -56,7 +55,6 @@ fn dp_hash(mixed: u32) -> f32 {
 @vertex
 fn dp_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) i: u32) -> Vs {
     var out: Vs;
-    // Off the frame, which is how a point is left out.
     out.clip = vec4<f32>(2.0, 2.0, 0.0, 1.0);
     let x = (i % view.grid.x) * view.grid.y;
     let y = (i / view.grid.x) * view.grid.y;
@@ -108,7 +106,6 @@ fn dp_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) i: u32) -> Vs 
     out.clip = vec4<f32>(
         px.x / view.frame.x * 2.0 - 1.0,
         1.0 - px.y / view.frame.y * 2.0,
-        // Nearer is larger, as the compositor's depth goes.
         iw / (1.0 + iw),
         1.0,
     );

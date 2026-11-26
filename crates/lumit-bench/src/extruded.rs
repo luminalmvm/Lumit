@@ -23,7 +23,6 @@ fn ring(x: f64, y: f64, rx: f64, ry: f64, n: u32, hole: bool) -> Vec<[f64; 2]> {
         .collect()
 }
 
-/// Measure B39.
 pub fn budgets(progress: &mut dyn FnMut(Measurement)) -> Result<Vec<Measurement>, String> {
     // About an 8 at 200 pixels.
     let letter = vec![

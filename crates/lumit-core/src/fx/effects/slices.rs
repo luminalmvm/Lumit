@@ -22,10 +22,8 @@ use lumit_fx_macros::Effect;
 /// Taps in the smear. Both kernels average exactly this many.
 pub const SLICES_TAPS: usize = 16;
 
-/// The most strips, which is Count's hard limit.
 pub const SLICES_MAX: usize = 64;
 
-/// Slices' controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "slices",
@@ -45,11 +43,9 @@ pub struct Slices {
     #[bounded(min = 0.0, max = 100.0, default = 50.0, unit = Percent)]
     pub completion: f32,
 
-    /// Which picture this is.
     #[choice(options = *SIDE_OPTIONS, default = 0)]
     pub side: u32,
 
-    /// How many strips.
     #[counter(min = 2, max = 64, default = 8, hard_min = 2, hard_max = 64, unit = Raw)]
     pub count: i32,
 
@@ -72,11 +68,9 @@ pub struct Slices {
     )]
     pub stagger: f32,
 
-    /// The strips set off in a seeded order rather than one after another.
     #[toggle(label = "Random order", default = false)]
     pub random: bool,
 
-    /// How each strip gathers speed.
     #[choice(options = *EASE_OPTIONS, default = 1)]
     pub ease: u32,
 
@@ -91,11 +85,9 @@ pub struct Slices {
     )]
     pub smear: f32,
 
-    /// The order Random order takes.
     #[seed]
     pub seed: u32,
 
-    /// The host-uniform Mix every effect ends with, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -107,7 +99,6 @@ pub struct Slices {
     pub mix: f32,
 }
 
-/// One frame of Slices, as both render paths draw it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SlicesParams {
     /// How far through the cut, 0..1.
@@ -122,7 +113,6 @@ pub struct SlicesParams {
     pub stagger: f32,
     /// The Ease code: 0 Linear, 1 Smooth, 2 Sharp.
     pub ease: u32,
-    /// This is the incoming picture.
     pub incoming: bool,
     /// Half the widest smear window, in a strip's own time, 0..0.5.
     pub smear: f32,
@@ -141,7 +131,6 @@ impl SlicesParams {
 }
 
 impl Slices {
-    /// The numbers both kernels read.
     #[must_use]
     pub fn packed(self) -> SlicesParams {
         SlicesParams {
@@ -257,7 +246,6 @@ pub fn slices(rgba: &mut [f32], w: u32, h: u32, p: &SlicesParams) {
     }
 }
 
-/// Slices' looks, which the Transition menu offers too.
 pub const SLICES_LOOKS: &[EffectPreset] = &[
     EffectPreset {
         name: "Slices",
@@ -275,7 +263,6 @@ pub const SLICES_LOOKS: &[EffectPreset] = &[
     },
 ];
 
-/// Slices' behaviour.
 pub struct SlicesDef;
 
 impl EffectDef for SlicesDef {

@@ -121,7 +121,6 @@ fn convert(
 }
 
 impl Layer {
-    /// A reference to a layer by its comp's id and its own.
     pub(crate) fn of(ids: Option<(Uuid, Uuid)>) -> Layer {
         Layer { ids }
     }

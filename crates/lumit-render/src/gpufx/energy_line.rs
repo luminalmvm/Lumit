@@ -44,8 +44,6 @@ impl GpuEffect for EnergyLine {
     }
 }
 
-/// One frame's light on the card, from the pieces and tiles the CPU
-/// reference draws from.
 #[allow(clippy::too_many_arguments)]
 fn draw_on(
     fx: &FxEngine,
@@ -121,14 +119,10 @@ mod tests {
     use lumit_core::mask::MaskPolyline;
     use lumit_core::model::EffectValue;
 
-    /// The card draws what the CPU reference draws: a line, and a closed path
-    /// whose lit stretch is slid round past its join across two shutter
-    /// moments, both tapered, haloed, pushed about by the noise and
-    /// flickering, over a picture with some alpha.
     #[test]
     fn the_card_draws_what_the_cpu_reference_draws() {
         let Some(gpu) = lumit_gpu::test_support::lease() else {
-            return; // no GPU here
+            return;
         };
         let (w, h) = (160u32, 96u32);
         let mut e = lumit_core::fx::builtins::instantiate("energy_line").unwrap();
@@ -194,7 +188,6 @@ mod tests {
         for (name, poly) in [("line", s.line(1.0)), ("ring", ring)] {
             let (mut laid, mut tiles) = s.laid_out(&mut look, p, &poly, 1.0, w, h);
             if name == "ring" {
-                // A second shutter moment, the stretch a little further on.
                 let width = 2.0 * look.core_half;
                 laid.extend(el::geometry::pieces(
                     &poly,

@@ -20,25 +20,18 @@ import '../widgets/controls.dart';
 import 'effect_param_row_frb.dart' show newExpressionLanguage;
 import 'fx_section.dart' show FxRowHover, fxLinkMarkWidth;
 
-/// What Copy link on a row's menu put down: the row, waiting to be named from
-/// wherever Paste link is pressed.
 PropertyRef? Function(PropertyLink link)? copiedLink;
 
-/// What a link drag carries: where it began, so the drop can write there.
 class PropertyLink {
-  /// The layer the drag began on, for the short form of a reference.
   final UuidValue layer;
 
   /// The language the expression will be in, or null for a fresh one, which
   /// takes the language that can say the reference.
   final BridgeExpressionLanguage? language;
 
-  /// Write [reference] as the row's expression in [language] and open its
-  /// editor: a drag from a row.
   final void Function(String reference, BridgeExpressionLanguage language)?
       write;
 
-  /// Put [reference] at the caret: a drag from the editor's own mark.
   final void Function(String reference)? insert;
 
   /// The rows the drag began on, so a drop back on one of them is refused
@@ -70,12 +63,9 @@ class PropertyLink {
   }
 }
 
-/// The mark a link is dragged from. On a row it shows while the row is
-/// hovered; in the editor's footer it is always there.
 class LinkMark extends StatelessWidget {
   final PropertyLink link;
 
-  /// What the drag shows under the pointer.
   final String name;
   final bool always;
   const LinkMark(

@@ -142,43 +142,49 @@ install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
 # `broker_exe` (in each host crate) looks and where the Inno Setup script's
 # recursive copy of the runner directory picks them up.
 set(LUMIT_WORKSPACE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../..")
+set(LUMIT_CARGO_TARGET_DIR "${LUMIT_WORKSPACE_DIR}/target")
+if(DEFINED ENV{CARGO_TARGET_DIR})
+  set(LUMIT_CARGO_TARGET_DIR "$ENV{CARGO_TARGET_DIR}")
+endif()
 #
 # `--profile` rather than a conditional `--release`: the argument is always
 # present and always non-empty, which a generator expression that sometimes
 # expands to nothing is not. `dev` and `release` are Cargo's own names for the
 # two profiles, and they are what `target/debug` and `target/release` below are.
+if(NOT DEFINED ENV{LUMIT_PREBUILT_BRIDGE})
 add_custom_target(lumit_brokers ALL
   COMMAND cargo build -p lumit-ofx-broker -p lumit-aplug-broker -p lumit-media-broker -p lumit-cli --profile "$<IF:$<CONFIG:Debug>,dev,release>"
   WORKING_DIRECTORY "${LUMIT_WORKSPACE_DIR}"
   VERBATIM
   COMMENT "Building the plugin brokers")
 add_dependencies(${BINARY_NAME} lumit_brokers)
+endif()
 
 # Two rules per broker rather than a generator expression: `install` chooses by
 # configuration, and Cargo's own output directory is `debug` or `release` with
 # nothing in between (Flutter's Profile maps to Cargo's release, as it does for
 # the bridge).
-install(PROGRAMS "${LUMIT_WORKSPACE_DIR}/target/debug/lumit-ofx-broker.exe"
+install(PROGRAMS "${LUMIT_CARGO_TARGET_DIR}/debug/lumit-ofx-broker.exe"
   DESTINATION "${CMAKE_INSTALL_PREFIX}"
   CONFIGURATIONS Debug
   COMPONENT Runtime)
-install(PROGRAMS "${LUMIT_WORKSPACE_DIR}/target/release/lumit-ofx-broker.exe"
+install(PROGRAMS "${LUMIT_CARGO_TARGET_DIR}/release/lumit-ofx-broker.exe"
   DESTINATION "${CMAKE_INSTALL_PREFIX}"
   CONFIGURATIONS Profile;Release
   COMPONENT Runtime)
-install(PROGRAMS "${LUMIT_WORKSPACE_DIR}/target/debug/lumit-aplug-broker.exe"
+install(PROGRAMS "${LUMIT_CARGO_TARGET_DIR}/debug/lumit-aplug-broker.exe"
   DESTINATION "${CMAKE_INSTALL_PREFIX}"
   CONFIGURATIONS Debug
   COMPONENT Runtime)
-install(PROGRAMS "${LUMIT_WORKSPACE_DIR}/target/release/lumit-aplug-broker.exe"
+install(PROGRAMS "${LUMIT_CARGO_TARGET_DIR}/release/lumit-aplug-broker.exe"
   DESTINATION "${CMAKE_INSTALL_PREFIX}"
   CONFIGURATIONS Profile;Release
   COMPONENT Runtime)
-install(PROGRAMS "${LUMIT_WORKSPACE_DIR}/target/debug/lumit-media-broker.exe"
+install(PROGRAMS "${LUMIT_CARGO_TARGET_DIR}/debug/lumit-media-broker.exe"
   DESTINATION "${CMAKE_INSTALL_PREFIX}"
   CONFIGURATIONS Debug
   COMPONENT Runtime)
-install(PROGRAMS "${LUMIT_WORKSPACE_DIR}/target/release/lumit-media-broker.exe"
+install(PROGRAMS "${LUMIT_CARGO_TARGET_DIR}/release/lumit-media-broker.exe"
   DESTINATION "${CMAKE_INSTALL_PREFIX}"
   CONFIGURATIONS Profile;Release
   COMPONENT Runtime)
@@ -186,11 +192,11 @@ install(PROGRAMS "${LUMIT_WORKSPACE_DIR}/target/release/lumit-media-broker.exe"
 # The command line, lumit-cli, is built by the same command and goes in lib\
 # beside lumit_bridge.dll, which it runs from, so Windows finds FFmpeg there
 # too. It finds the brokers a folder up.
-install(PROGRAMS "${LUMIT_WORKSPACE_DIR}/target/debug/lumit-cli.exe"
+install(PROGRAMS "${LUMIT_CARGO_TARGET_DIR}/debug/lumit-cli.exe"
   DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   CONFIGURATIONS Debug
   COMPONENT Runtime)
-install(PROGRAMS "${LUMIT_WORKSPACE_DIR}/target/release/lumit-cli.exe"
+install(PROGRAMS "${LUMIT_CARGO_TARGET_DIR}/release/lumit-cli.exe"
   DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   CONFIGURATIONS Profile;Release
   COMPONENT Runtime)

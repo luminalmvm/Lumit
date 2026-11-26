@@ -39,15 +39,12 @@ const COLOUR: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 const DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 /// The depth the compositor reads: one over clip w, nought where empty.
 const INV_W: wgpu::TextureFormat = wgpu::TextureFormat::R32Float;
-/// The pipeline set that draws edges as lines.
 const WIRE: usize = 6;
-/// The card's slots each kept material holds, for its numbers and pictures.
 const MATERIAL_SLOTS: usize = 8;
 /// The most slots kept models hold between them: half of the million DirectX 12
 /// has, with the rest for what a frame binds.
 const KEPT_SLOTS: usize = 500_000;
 
-/// Why a model can't be drawn.
 #[derive(Debug, thiserror::Error)]
 pub enum MeshError {
     #[error("there isn't the video memory for this model: {0}")]
@@ -56,14 +53,11 @@ pub enum MeshError {
     TooLarge,
 }
 
-/// How one model is seen: through which camera, from where, with which
-/// lights.
 pub struct ModelView<'a> {
     /// The comp's size in pixels, and the share of that the picture is made
     /// at.
     pub comp: (u32, u32),
     pub render_scale: f32,
-    /// The comp's anti-aliasing, as the compositor takes it.
     pub samples: u32,
     /// The comp's camera, as [`crate::composite::camera_matrix`] makes it.
     pub camera: Mat4,
@@ -150,7 +144,6 @@ struct DrawUniform {
     rest: [[f32; 4]; 4],
 }
 
-/// One primitive where one node puts it.
 struct Part {
     first: u32,
     count: u32,
@@ -158,13 +151,10 @@ struct Part {
     material: usize,
     node: Mat4,
     centre: Vec3,
-    /// Which node draws it, and where it lands when it moves.
     index: usize,
     deform: Option<deform::Slot>,
 }
 
-/// A model on the graphics card: every primitive in one vertex and one index
-/// buffer, a bind group per material, and its charge on the ledger.
 pub(crate) struct GpuModel {
     vertices: wgpu::Buffer,
     indices: wgpu::Buffer,
@@ -176,13 +166,10 @@ pub(crate) struct GpuModel {
     /// Its edges as lines, made the first time a view draws them.
     edges: OnceLock<(wgpu::Buffer, lumit_budget::Reservation)>,
     kept: Vec<look::Kept>,
-    /// Its skins and morph targets, when it has any.
     deforms: Option<deform::Deforms>,
     _held: lumit_budget::Reservation,
 }
 
-/// The pass's shader, layouts and pipelines, and the models kept for the
-/// scenes still alive.
 pub(crate) struct MeshFx {
     shader: wgpu::ShaderModule,
     frame_layout: wgpu::BindGroupLayout,
@@ -191,11 +178,8 @@ pub(crate) struct MeshFx {
     samplers: samplers::Samplers,
     environment: environment::Fallback,
     layout: wgpu::PipelineLayout,
-    /// Draws a shadow map's view ([`shadow`]), made when first asked for.
     shadow: [std::sync::OnceLock<wgpu::RenderPipeline>; 2],
-    /// The camera's blur ([`lens`]), made when first asked for.
     lens: std::sync::OnceLock<lens::LensPasses>,
-    /// Writes a model's moving parts ([`deform`]), made when first asked for.
     deform: std::sync::OnceLock<(wgpu::BindGroupLayout, wgpu::ComputePipeline)>,
     depth_one: (wgpu::BindGroupLayout, wgpu::RenderPipeline),
     depth_many: (wgpu::BindGroupLayout, wgpu::RenderPipeline),
@@ -211,7 +195,6 @@ pub(crate) struct MeshFx {
     /// ([`WIRE`]). Each is made the first time a draw needs it, as making one
     /// takes a while.
     sets: Mutex<HashMap<(u32, usize), Arc<wgpu::RenderPipeline>>>,
-    /// Adds a shutter sample's picture to the rest ([`blur`]).
     add: wgpu::RenderPipeline,
     white: wgpu::Texture,
     shared: look::Shared,
@@ -220,10 +203,6 @@ pub(crate) struct MeshFx {
     passes: OnceLock<passes::PassFx>,
 }
 
-/// The pass's multisample colour and depth, kept from one draw to the next
-/// of the same size, as making them took longer than drawing into them.
-/// ponytail: held while the engine lives once a model has been drawn. Let it
-/// go when the comp has no model left if that memory is ever missed.
 struct Scratch {
     shape: (u32, u32, u32),
     msaa: Option<wgpu::Texture>,
@@ -232,8 +211,6 @@ struct Scratch {
 }
 
 impl MeshFx {
-    /// The mesh pipeline of kind `set` at `samples`, made the first time it
-    /// is asked for.
     fn pipeline(
         &self,
         device: &wgpu::Device,
@@ -464,8 +441,6 @@ impl MeshFx {
                 usage: wgpu::BufferUsages::UNIFORM,
             });
 
-        // Opaque first, by material, then what blends, farthest first.
-        // ponytail: blended parts sort by their middles, not per triangle.
         let posed = self.posed(ctx, model, view.poses);
         let world = |p: &Part| view.model_to_comp * posed.node(p, 0);
         let far = |p: &Part| (view.camera * world(p).transform_point3(p.centre).extend(1.0)).w;
@@ -495,7 +470,6 @@ impl MeshFx {
             size as u64,
             u64::from(ctx.device.limits().min_uniform_buffer_offset_alignment),
         );
-        // The frame's placement, or each shutter sample's.
         let placements = if view.shutter.is_empty() {
             std::slice::from_ref(&view.model_to_comp)
         } else {
@@ -537,9 +511,6 @@ impl MeshFx {
                 next += 1;
                 bytes[offset as usize..][..size].copy_from_slice(bytemuck::bytes_of(&uniform));
                 let (blend, double) = look(p);
-                // ponytail: a mirrored part is drawn from both sides rather than
-                // with its winding turned round.
-                // Tinted faces show their backs too.
                 let both = double || mirrored || view.display.faces;
                 let set = usize::from(blend) * 2 + usize::from(both);
                 these.push((p, offset as u32, set));
@@ -595,8 +566,6 @@ impl MeshFx {
         let view_of = |t: &wgpu::Texture| t.create_view(&Default::default());
         let (colour_view, z_view, depth_view) = (view_of(&colour), view_of(z), view_of(&depth));
         let msaa_view = msaa.as_ref().map(view_of);
-        // With motion blur each sample is drawn on its own and added to the
-        // picture at its share.
         let blurred = draws.len() > 1;
         // Depth alone never blends, and is culled as the part is.
         let depth_set = |set: usize| 4 + set % 2;
@@ -743,7 +712,6 @@ impl MeshFx {
 }
 
 impl MeshFx {
-    /// Let the older half of the kept models go.
     fn trim(&self) {
         if let Ok(mut models) = self.models.lock() {
             let half = models.len().div_ceil(2);

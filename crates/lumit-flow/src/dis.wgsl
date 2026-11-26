@@ -8,14 +8,14 @@
 // budget on any real GPU.
 
 struct Params {
-    w: u32,   // this level's width
-    h: u32,   // this level's height
+    w: u32,
+    h: u32,
     pw: u32,  // parent (finer) level's width  — downsample source
     ph: u32,  // parent (finer) level's height
     cw: u32,  // coarser level's width         — init upsample source
     ch: u32,  // coarser level's height
-    npx: u32, // patch grid columns
-    npy: u32, // patch grid rows
+    npx: u32,
+    npy: u32,
     iters: u32,       // inverse-search iteration cap (Vector detail)
     flow_sigma2: f32, // smoothing flow-range sigma² (Smoothness)
     pad0: u32,
@@ -23,11 +23,11 @@ struct Params {
 }
 
 @group(0) @binding(0) var<uniform> P: Params;
-@group(0) @binding(1) var<storage, read> luma_t: array<f32>;      // template
-@group(0) @binding(2) var<storage, read> luma_o: array<f32>;      // other
+@group(0) @binding(1) var<storage, read> luma_t: array<f32>;
+@group(0) @binding(2) var<storage, read> luma_o: array<f32>;
 @group(0) @binding(3) var<storage, read> grad_t: array<vec4f>;    // template Sobel (xy)
 @group(0) @binding(4) var<storage, read> flow_in: array<vec4f>;   // init / smooth input
-@group(0) @binding(5) var<storage, read> patch_in: array<vec4f>;  // patch results
+@group(0) @binding(5) var<storage, read> patch_in: array<vec4f>;
 @group(0) @binding(6) var<storage, read_write> out_vec: array<vec4f>;
 @group(0) @binding(7) var<storage, read_write> out_f32: array<f32>;
 
@@ -63,7 +63,6 @@ fn sample_t(xf: f32, yf: f32) -> f32 {
     return a * (1.0 - fy) + b * fy;
 }
 
-// Same, for the other frame.
 fn sample_o(xf: f32, yf: f32) -> f32 {
     let x = clamp(xf, 0.0, f32(P.w - 1u));
     let y = clamp(yf, 0.0, f32(P.h - 1u));
@@ -168,7 +167,6 @@ fn inverse_search(@builtin(global_invocation_id) gid: vec3u) {
     }
     let x0 = patch_origin_x(pi);
     let y0 = patch_origin_y(pj);
-    // Template Hessian, mean and energy.
     var h11 = 0.0;
     var h12 = 0.0;
     var h22 = 0.0;
@@ -240,7 +238,7 @@ fn inverse_search(@builtin(global_invocation_id) gid: vec3u) {
                 }
             }
             if (cost >= best) {
-                u = bu; // the last step made things worse: revert
+                u = bu;
                 v = bv;
                 break;
             }
@@ -320,7 +318,6 @@ fn densify(@builtin(global_invocation_id) gid: vec3u) {
         }
     }
     if (wsum <= 1e-12) {
-        // Second chance: borrow hypotheses from the wider 5×5 neighbourhood.
         for (var oj = -2; oj <= 2; oj++) {
             let cj = gj + oj;
             if (cj < 0 || cj >= i32(P.npy)) {
@@ -403,7 +400,6 @@ fn smooth_flow(@builtin(global_invocation_id) gid: vec3u) {
 // travel together.
 // ---------------------------------------------------------------------------
 
-// Bilinear sample of grad_t's xy at this level's dims.
 fn sample_grad(xf: f32, yf: f32) -> vec2f {
     let x = clamp(xf, 0.0, f32(P.w - 1u));
     let y = clamp(yf, 0.0, f32(P.h - 1u));
@@ -436,7 +432,6 @@ fn vr_warp(@builtin(global_invocation_id) gid: vec3u) {
     out_vec[i] = vec4f(bw - luma_t[i], bg.x, bg.y, 0.0);
 }
 
-// Seed the solver: the increment starts at zero, carrying the flow it refines.
 @compute @workgroup_size(8, 8)
 fn vr_init_duv(@builtin(global_invocation_id) gid: vec3u) {
     let x = gid.x;
@@ -496,7 +491,7 @@ fn vr_sor(x: u32, y: u32) {
     let psi_i = VR_SIGMA * n_i / (2.0 * sqrt(e_i * e_i + VR_EPS2));
 
     let w2 = patch_in[i];          // (bwxx, bwxy, bwyx, bwyy)
-    let ag = grad_t[i].xy;         // A's Sobel
+    let ag = grad_t[i].xy;
     let gzx = ix - ag.x;
     let gzy = iy - ag.y;
     let e_gx = gzx + w2.x * du + w2.y * dv;
@@ -567,7 +562,6 @@ fn vr_sor_black(@builtin(global_invocation_id) gid: vec3u) {
     vr_sor(gid.x, gid.y);
 }
 
-// Fold the solved increment back into the flow field.
 @compute @workgroup_size(8, 8)
 fn vr_apply(@builtin(global_invocation_id) gid: vec3u) {
     let x = gid.x;
@@ -576,7 +570,7 @@ fn vr_apply(@builtin(global_invocation_id) gid: vec3u) {
         return;
     }
     let i = y * P.w + x;
-    let d = flow_in[i]; // duv
+    let d = flow_in[i];
     out_vec[i] = vec4f(d.z + d.x, d.w + d.y, 0.0, 0.0);
 }
 

@@ -39,10 +39,8 @@ import 'grade_controls.dart';
 import 'grade_memories.dart';
 import 'timeline_extras_frb.dart' show DoubleTap;
 
-/// The album new stills go to while the library has none.
 String get _firstAlbum => l10n.galleryFirstAlbum;
 
-/// [still] as something the Viewer can compare against.
 GradeReference stillReference(BridgeStill still) => GradeReference.still(
     path: still.path, picture: still.pngPath, name: still.name);
 
@@ -66,7 +64,6 @@ class _GalleryPanelFrbState extends State<GalleryPanelFrb> {
   final Set<String> _picks = {};
   final DoubleTap _taps = DoubleTap();
 
-  /// The still under the pointer, and whether its grade is being shown.
   BridgeStill? _hover;
   bool _previewing = false;
 
@@ -104,7 +101,6 @@ class _GalleryPanelFrbState extends State<GalleryPanelFrb> {
       _shownAlbum = album;
       stills = album == null ? const [] : await listStills(album: album);
     } catch (_) {
-      // No library folder: nothing to list.
       albums = const [];
       stills = const [];
     }
@@ -168,7 +164,6 @@ class _GalleryPanelFrbState extends State<GalleryPanelFrb> {
     });
   }
 
-  /// The still's picture written where the user picks, as a PNG.
   Future<void> _exportPicture(BridgeStill still) async {
     final path = await pickExportSaveLocation(fileSafe(still.name),
         extension: 'png', label: l10n.formatPngPicker);
@@ -182,7 +177,6 @@ class _GalleryPanelFrbState extends State<GalleryPanelFrb> {
     app.postNotice(l10n.galleryStillExported);
   }
 
-  /// The still's grade baked into a `.cube` where the user picks.
   Future<void> _exportLut(BridgeStill still) async {
     final comp = ui.selectedComp;
     if (comp == null) return;
@@ -201,8 +195,6 @@ class _GalleryPanelFrbState extends State<GalleryPanelFrb> {
     }
     app.postNotice(l10n.gradeLutExported);
   }
-
-  // --- Holding Alt ---
 
   bool _onKey(KeyEvent e) {
     if (e.logicalKey == LogicalKeyboardKey.altLeft ||
@@ -245,8 +237,6 @@ class _GalleryPanelFrbState extends State<GalleryPanelFrb> {
     _preview();
   }
 
-  // --- What a still does ---
-
   void _compare(BridgeStill still) => ui.grade.compareWith(stillReference(still));
 
   Future<void> _apply(BridgeStill still, {required bool picked}) async {
@@ -283,7 +273,6 @@ class _GalleryPanelFrbState extends State<GalleryPanelFrb> {
       final moved = await moveStill(path: still.path, album: album);
       _follow(still, moved);
     } catch (_) {
-      // Left where it was.
     }
     _load();
   }
@@ -359,8 +348,6 @@ class _GalleryPanelFrbState extends State<GalleryPanelFrb> {
     _shownAlbum = null;
     _load();
   }
-
-  // --- Building ---
 
   @override
   Widget build(BuildContext context) {
@@ -494,8 +481,6 @@ class _GalleryPanelFrbState extends State<GalleryPanelFrb> {
 
   static const double _tileMin = 128;
   static const double _gap = 6;
-
-  // --- Memories ---
 
   /// The eight memories as a strip of slots: a filled one shows the shot it
   /// was kept from. A click lays it on the current shot; a right-click keeps

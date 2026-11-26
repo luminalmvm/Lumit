@@ -23,7 +23,6 @@ BridgeEffectInfo _entry(String name) => BridgeEffectInfo(
       otherNames: const [],
     );
 
-/// A catalogue the scan can add [_plugin] to, counting what is read from it.
 class _Catalogue {
   bool found = false;
   int reads = 0;
@@ -72,13 +71,11 @@ void main() {
     final scan = Completer<void>();
     final scanned = memo.scanned(() => scan.future);
 
-    // The project is opened straight away, with the plugin on a layer.
     expect(catalogue.listed('blur'), isTrue);
     expect(catalogue.listed(_plugin), isFalse);
     expect(memo.parameters(_plugin), isEmpty);
     expect(memo.groups(_plugin), isEmpty);
 
-    // The scan reaches it, and the cards have it without waiting for the end.
     catalogue.found = true;
     expect(catalogue.listed(_plugin), isTrue);
     expect(memo.parameters(_plugin), hasLength(1));

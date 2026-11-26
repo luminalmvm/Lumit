@@ -1,6 +1,3 @@
-// The shared clock face, and the two things added to it later: how wide a
-// timecode is at a given rate, and a timecode that can be negative (a Retime
-// asking for a moment before the start of its media).
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/state/timecode.dart';

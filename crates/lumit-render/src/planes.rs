@@ -55,11 +55,6 @@ use uuid::Uuid;
 use crate::frames::RotoFrames;
 use crate::sidecar;
 
-// ---------------------------------------------------------------------------
-// What an analysis is asked for
-// ---------------------------------------------------------------------------
-
-/// What one plane holds: one per effect on this tier (§6.1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum PlaneKind {
     /// How far away every pixel is: one little-endian `u16` per pixel, nearer
@@ -70,7 +65,6 @@ pub enum PlaneKind {
 }
 
 impl PlaneKind {
-    /// How many bytes one pixel of this kind takes.
     #[must_use]
     pub fn stride(self) -> usize {
         match self {
@@ -88,7 +82,6 @@ impl PlaneKind {
 /// code rather than its name: a `String` here would break both (§13).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PlaneSettings {
-    /// What the effect asks a model for.
     pub task: PlaneTask,
     /// Which architecture, as the effect's own model Choice index.
     pub arch: u32,
@@ -135,7 +128,6 @@ impl PlaneSettings {
         })
     }
 
-    /// Feed the settings into a hash, in a fixed order.
     fn feed(&self, h: &mut blake3::Hasher) {
         h.update(&[self.task.tag()]);
         h.update(&self.arch.to_le_bytes());
@@ -145,7 +137,6 @@ impl PlaneSettings {
     }
 }
 
-/// The tier's own copy of a task, in the crate that opens a model.
 #[must_use]
 pub fn ml_task(task: PlaneTask) -> lumit_ml::manifest::Task {
     match task {
@@ -197,7 +188,6 @@ pub(crate) const FORMAT_VERSION: u16 = 2;
 pub(crate) const MAGIC: &[u8; 7] = b"LUMPLN\0";
 
 impl PlaneKey {
-    /// The key for `fingerprint` analysed under `settings`.
     #[must_use]
     pub fn new(fingerprint: &Fingerprint, settings: PlaneSettings) -> Self {
         let mut h = blake3::Hasher::new();
@@ -251,7 +241,6 @@ impl PlaneKey {
     }
 }
 
-/// One analysis, as handed to the worker.
 pub struct PlaneJob {
     /// The **effect instance** the answer is filed under, and what
     /// [`progress`] is read by.
@@ -271,9 +260,6 @@ pub struct PlaneJob {
     /// instance ids out of the file, so one handing the slot back would let a
     /// second model job start on the same card (§9).
     pub owns_slot: bool,
-    /// Read no further than this frame. Nothing presses for it today; it is
-    /// here because the shape is the Roto brush's and a single frame's
-    /// feedback is the obvious next ask.
     pub stop_after: Option<i64>,
     /// The source frames to read, first and last, or `None` for all of them:
     /// the effect's Frames row, mapped onto the source by whoever pressed.
@@ -287,14 +273,11 @@ pub struct PlaneJob {
 /// samples it as it repaints, exactly as it samples the cache bar.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Progress {
-    /// Accepted, not started.
     Queued,
-    /// Reading: `done` of `total` frames.
     Solving {
         done: usize,
         total: usize,
     },
-    /// There is a run in the store for this instance.
     Done,
     /// Stopped between frames. **The finished prefix was kept.**
     Cancelled,
@@ -306,25 +289,18 @@ pub enum Progress {
 /// hands the interface a reason rather than an English sentence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum PlaneFailure {
-    /// No model runtime is installed, so nothing can run at all.
     #[error("no model runtime is installed")]
     RuntimeMissing,
-    /// Nothing installed does this task.
     #[error("no model pack is installed for this task")]
     PackMissing,
-    /// A pack that is there and would not open, or a run the model refused.
     #[error("the model would not run")]
     ModelFailed,
-    /// One model job at a time.
     #[error("another analysis is running")]
     Busy,
-    /// The media could not be opened, or carries no video.
     #[error("the media could not be read")]
     Unreadable,
-    /// Opened, but with no frames or no raster.
     #[error("the media has no frames to read")]
     NoFrames,
-    /// Stopped between frames.
     #[error("cancelled")]
     Cancelled,
 }
@@ -349,20 +325,12 @@ impl PlaneFailure {
     }
 }
 
-/// What happened when an analysis was asked for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Requested {
-    /// Accepted; watch [`progress`].
     Started,
-    /// Refused, with the reason. [`PlaneFailure::Busy`] is the ordinary one.
     Refused(PlaneFailure),
 }
 
-// ---------------------------------------------------------------------------
-// The model
-// ---------------------------------------------------------------------------
-
-/// One frame's answer, as a model hands it over.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlaneOut {
     pub width: u32,
@@ -380,7 +348,6 @@ pub struct PlaneOut {
 /// with a model the test wrote down, and none of it waits on a runtime nobody
 /// installed on a CI runner. The real one is [`open_model`].
 pub trait PlaneModel {
-    /// Read one frame of RGBA bytes at `w` by `h`.
     fn run(&mut self, rgba: &[u8], w: u32, h: u32) -> Result<PlaneOut, PlaneFailure>;
     /// What made these planes, for the record's provenance (§7): the provider
     /// first, then the pack and the runtime. The provider is read back off the
@@ -414,7 +381,6 @@ impl PlaneModel for DepthModel {
     }
 }
 
-/// The matte model, wrapped the same way.
 struct MatteModel(lumit_ml::matte::Matte);
 
 impl PlaneModel for MatteModel {
@@ -459,8 +425,6 @@ fn matte_arch(index: u32) -> lumit_ml::matte::MatteArch {
     }
 }
 
-/// How much of the frame Robust Video Matting works at, off the effect's own
-/// Detail row.
 fn matte_detail(index: u32) -> lumit_ml::tensor::Detail {
     match index {
         1 => lumit_ml::tensor::Detail::FullBody,
@@ -468,7 +432,6 @@ fn matte_detail(index: u32) -> lumit_ml::tensor::Detail {
     }
 }
 
-/// Open the model `settings` names, on the thread that will run it.
 fn open_model(settings: PlaneSettings) -> Result<Box<dyn PlaneModel>, PlaneFailure> {
     match settings.task {
         PlaneTask::Depth => lumit_ml::depth::Depth::open()
@@ -534,11 +497,6 @@ pub fn addon_missing(fx: &EffectInstance) -> Option<String> {
     }
 }
 
-// ---------------------------------------------------------------------------
-// What comes back
-// ---------------------------------------------------------------------------
-
-/// One frame's plane as the sidecar keeps it.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct FrameRecord {
     frame: i64,
@@ -558,12 +516,9 @@ struct FrameRecord {
     lz4: Vec<u8>,
 }
 
-/// One effect instance's analysis, as the render path wants it.
 #[derive(Debug)]
 pub struct PlaneRun {
     pub fps: f64,
-    /// How many frames the **clip** has, against which the analysed span is a
-    /// whole answer or a partial one.
     pub clip_frames: usize,
     /// The span actually analysed, inclusive. Outside it the effect is a
     /// passthrough - never a held neighbouring plane.
@@ -602,8 +557,6 @@ impl PlaneRun {
         self.records.binary_search_by_key(&frame, |r| r.frame).ok()
     }
 
-    /// Whether the clip runs on past what was analysed - cancelled part-way, or
-    /// the frames stopped decoding.
     #[must_use]
     pub fn is_partial(&self) -> bool {
         let clip = i64::try_from(self.clip_frames).unwrap_or(i64::MAX);
@@ -708,11 +661,6 @@ fn record_of(frame: i64, out: &PlaneOut) -> FrameRecord {
     }
 }
 
-// ---------------------------------------------------------------------------
-// The sidecar
-// ---------------------------------------------------------------------------
-
-/// What one `.lpln` file holds.
 #[derive(serde::Serialize, serde::Deserialize)]
 pub(crate) struct Record {
     /// Repeated inside the file as well as in its name, so a collision or a
@@ -731,7 +679,6 @@ fn key_bytes(key: PlaneKey) -> [u8; 32] {
     out
 }
 
-/// Serialise a run, in the crate's shared framing ([`crate::sidecar`]).
 fn encode(key: PlaneKey, run: &PlaneRun) -> Option<Vec<u8>> {
     let body = bincode::serialize(&Record {
         key: key_bytes(key),
@@ -779,11 +726,6 @@ pub(crate) fn write_sidecar(dir: &Path, key: PlaneKey, run: &PlaneRun) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// The folder
-// ---------------------------------------------------------------------------
-
-/// The effect's **Save to folder** row, or `None` while it is unset.
 fn folder_of(fx: &EffectInstance) -> Option<PathBuf> {
     match fx.param("folder") {
         Some(lumit_core::model::EffectValue::File(file)) => file.path_at(0.0).map(PathBuf::from),
@@ -802,7 +744,6 @@ fn png_path(dir: &Path, kind: PlaneKind, frame: i64) -> PathBuf {
     dir.join(format!("{name}_{frame:06}.png"))
 }
 
-/// One record's plane, out of the cache and whole again.
 fn plane_out(record: &FrameRecord) -> PlaneOut {
     PlaneOut {
         width: record.width,
@@ -894,7 +835,6 @@ fn test_cache_dir() -> Option<PathBuf> {
     TEST_CACHE_DIR.lock().ok().and_then(|dir| dir.clone())
 }
 
-/// Point the sidecar at a temporary folder for the length of a test.
 #[cfg(test)]
 pub(crate) fn set_test_cache_dir(dir: Option<PathBuf>) {
     if let Ok(mut held) = TEST_CACHE_DIR.lock() {
@@ -902,17 +842,11 @@ pub(crate) fn set_test_cache_dir(dir: Option<PathBuf>) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// The store
-// ---------------------------------------------------------------------------
-
-/// Every analysis Lumit has in hand, **by effect instance**.
 fn runs() -> &'static RwLock<HashMap<Uuid, Arc<PlaneRun>>> {
     static RUNS: OnceLock<RwLock<HashMap<Uuid, Arc<PlaneRun>>>> = OnceLock::new();
     RUNS.get_or_init(|| RwLock::new(HashMap::new()))
 }
 
-/// The one analysis in flight, and what every instance's last one did.
 struct Jobs {
     running: Option<(Uuid, Arc<AtomicBool>)>,
     progress: HashMap<Uuid, Progress>,
@@ -942,7 +876,6 @@ pub fn analysed(instance: Uuid) -> Option<Arc<PlaneRun>> {
     runs().read().ok()?.get(&instance).cloned()
 }
 
-/// The span `instance`'s planes cover, inclusive.
 #[must_use]
 pub fn span(instance: Uuid) -> Option<(i64, i64)> {
     let run = analysed(instance)?;
@@ -1007,13 +940,11 @@ fn content_of(records: &[FrameRecord], made_with: &str) -> u64 {
     u64::from_le_bytes(out)
 }
 
-/// How far `instance`'s analysis has got.
 #[must_use]
 pub fn progress(instance: Uuid) -> Option<Progress> {
     jobs().lock().ok()?.progress.get(&instance).cloned()
 }
 
-/// Put a run in the store: an analysis finishing, or a sidecar being read back.
 pub fn publish(instance: Uuid, run: PlaneRun) {
     steady::hold(instance, &run);
     if let Ok(mut held) = runs().write() {
@@ -1021,7 +952,6 @@ pub fn publish(instance: Uuid, run: PlaneRun) {
     }
 }
 
-/// Forget everything: what closing the last project does.
 pub fn clear() {
     if let Ok(mut held) = runs().write() {
         held.clear();
@@ -1098,10 +1028,6 @@ pub fn run_from_planes(
         warm: Mutex::new(Vec::new()),
     })
 }
-
-// ---------------------------------------------------------------------------
-// Asking for one
-// ---------------------------------------------------------------------------
 
 /// Start `job` on its own thread.
 ///
@@ -1190,8 +1116,6 @@ fn finish(instance: Uuid, outcome: Option<Progress>, owns_slot: bool) {
     }
 }
 
-/// The whole of one job, on the analysis thread: read the sidecar, and only if
-/// there is nothing there, open a model and read the clip.
 pub(crate) fn run(job: PlaneJob, cancel: &AtomicBool) {
     let instance = job.instance;
     let owns_slot = job.owns_slot;
@@ -1291,10 +1215,6 @@ fn resumes(settings: PlaneSettings) -> bool {
         PlaneTask::Matte => !matches!(matte_arch(settings.arch), lumit_ml::matte::MatteArch::Rvm),
     }
 }
-
-// ---------------------------------------------------------------------------
-// The work
-// ---------------------------------------------------------------------------
 
 /// Decode, read, record. The whole cost of an analysis.
 ///
@@ -1415,12 +1335,6 @@ pub fn analyse(
     ))
 }
 
-// ---------------------------------------------------------------------------
-// Reading a document
-// ---------------------------------------------------------------------------
-
-/// The job one planes-tier instance on one footage layer describes, or `None`
-/// when it is not one or there is nothing to key a cache with.
 #[must_use]
 pub fn job_for(
     fx: &EffectInstance,

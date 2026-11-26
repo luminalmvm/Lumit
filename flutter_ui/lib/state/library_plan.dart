@@ -59,8 +59,6 @@ bool sameFiles(List<LibraryFile> a, List<LibraryFile> b) {
   return true;
 }
 
-/// An item as the journal or the account has it: its id, where it is, the
-/// version and its files. [gone] while it is in Recently deleted.
 class LibraryItem {
   final String id;
   final LibraryKind kind;
@@ -72,7 +70,6 @@ class LibraryItem {
       {this.gone = false});
 }
 
-/// An item here, by its kind and its path inside the kind's folder.
 typedef LibraryKey = (LibraryKind, String);
 
 /// What a step does, in the order a pass carries them out: what only writes
@@ -151,7 +148,6 @@ List<PlanStep> planLibrary({
       !removed.contains(i.id);
   String at(LibraryKind kind, String path) =>
       foldCase ? _fold((kind, path)) : '${kind.name}/$path';
-  // The items here by the name this file system knows them by.
   final here = {for (final k in local.keys) at(k.$1, k.$2): k};
   // What the journal accounts for here is never taken for anything else.
   final claimed = {
@@ -179,7 +175,6 @@ List<PlanStep> planLibrary({
   for (final id in ids) {
     final j = journal[id]!;
     if (!kept(j) || held.contains(id)) continue;
-    // Where it is here, spelt as the file is.
     final found = here[at(j.kind, renamed[id] ?? j.path)];
     var lp = found?.$2 ?? renamed[id] ?? j.path;
     var l = local[found];
@@ -248,7 +243,6 @@ List<PlanStep> planLibrary({
     }
   }
 
-  // New in the account: not in the journal, so never met here before.
   final arriving = <String, LibraryItem>{
     for (final r in remote.values)
       if (!r.gone && !journal.containsKey(r.id) && kept(r))
@@ -333,7 +327,6 @@ List<PlanStep> guardPlan(List<PlanStep> steps,
   };
   String key(LibraryKind kind, String path) =>
       foldCase ? _fold((kind, path)) : '${kind.name}/$path';
-  // By the name the file system knows it by: its path as spelt, its files.
   final here = {
     for (final MapEntry(key: k, :value) in local.entries)
       key(k.$1, k.$2): (k.$2, value)

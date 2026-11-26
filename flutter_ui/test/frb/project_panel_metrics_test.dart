@@ -24,7 +24,6 @@ void main() {
   setUpAll(initEngineForTests);
 
   group('Project panel metrics (frb)', () {
-    /// A project with a comp (filed under its auto-folder) and one clip.
     ({LumitState state, LumitUiState uiState, String compId}) withItems() {
       final p = freshProject();
       final comp = p.state.project!.newComposition(name: 'Scene');
@@ -67,7 +66,6 @@ void main() {
           .getRect(find.descendant(of: header, matching: find.text(word)))
           .width;
 
-      // The seam right of Name, the one drawn before the Items column.
       final seam = find.byKey(const ValueKey<String>('project-seam-name'));
       expect(seam, findsOneWidget);
       await tester.drag(seam, const Offset(40, 0));
@@ -83,7 +81,6 @@ void main() {
           reason: 'Path gave up exactly what Name took, since it holds the '
               'panel\'s slack');
 
-      // Back past its minimum: the column stops there rather than vanishing.
       await tester.drag(seam, const Offset(-400, 0));
       await tester.pump();
       expect(heading('Name'), minProjectColumnWidth(ProjectColumn.name),

@@ -28,17 +28,11 @@ import 'timeline_snap.dart' show SnapTarget;
 /// its neighbours, which trim to keep against it.
 enum CutTool { select, razor, ripple, roll, slip, slide }
 
-/// Which side of the dividing line a track stands on, and how its bar draws.
 enum CutTrackKind {
-  /// A Sequence layer with a picture: boxes with a thumbnail and a name.
   picture,
 
-  /// An audio-only Sequence layer: boxes with a waveform, overlaps drawn as a
-  /// crossfade.
   sound,
 
-  /// Any other layer, a text or a solid or an uncut footage layer: one plain
-  /// bar from its in point to its out point.
   plain,
 
   /// The sound of an uncut footage layer, which also stands above the line
@@ -46,11 +40,9 @@ enum CutTrackKind {
   /// the same layer, so the document holds nothing new.
   layerSound,
 
-  /// A Bus layer: no clips, one bar across the comp with the mix it carries.
   bus,
 }
 
-/// One row of the Cut timeline.
 class CutTrack {
   final BridgeLayerEntry entry;
   final String id;
@@ -76,7 +68,6 @@ class CutTrack {
 
   bool get bus => kind == CutTrackKind.bus;
 
-  /// Whether the row stands below the dividing line.
   bool get below => sound || bus || kind == CutTrackKind.layerSound;
 
   /// Whether clips can land on the row. A plain bar is not a Sequence layer.
@@ -111,7 +102,6 @@ class CutTrack {
     return first < lo ? (first, lo) : (0, 0);
   }
 
-  /// The clip with this id, or null when the track no longer holds it.
   BridgeClip? clip(String id) {
     for (final clip in clips) {
       if (clip.id.toString() == id) return clip;
@@ -192,7 +182,6 @@ bool cutSameSide(CutTrack from, CutTrack to) =>
 /// reaches.
 Object? cutClipsCopiedIn;
 
-/// Whether a paste in [project] has clips to land.
 bool cutClipsHeld(Object? project) =>
     project != null && identical(project, cutClipsCopiedIn);
 
@@ -227,7 +216,6 @@ bool _cuttable(BridgeLayerEntry entry) => switch (entry.info.kind) {
       _ => true,
     };
 
-/// How many tracks stand above the dividing line.
 int cutPictureCount(List<CutTrack> tracks) {
   final at = tracks.indexWhere((track) => track.below);
   return at < 0 ? tracks.length : at;
@@ -275,7 +263,6 @@ int cutFilmFrames(double perFrame) {
 /// How many comp frames into its clip picture [k] along shows.
 int cutFilmOffset(int k, double perFrame) => k * cutFilmFrames(perFrame);
 
-/// The key a picture [offset] comp frames into [clip] is held under.
 String cutFilmKey(BridgeClip clip, int offset) =>
     '${cutThumbKey(clip)}+$offset';
 
@@ -568,7 +555,6 @@ BridgeClip? cutClipUnder(CutTrack track, int at) {
 int? cutEditPointNear(CutTrack track, int at, {required bool before}) {
   final clips = track.clips;
   if (clips.isEmpty) return null;
-  // The first clip starting after [at].
   var lo = 0;
   var hi = clips.length;
   while (lo < hi) {
@@ -618,8 +604,6 @@ BridgeClip? cutClipAcross(CutTrack track, BridgeClip clip,
   return null;
 }
 
-/// Whether [clip] overlaps a neighbour at one edge: a dissolve, or a
-/// crossfade, that is already there.
 bool cutEdgeOverlaps(CutTrack track, BridgeClip clip, {required bool endEdge}) {
   final other = cutClipAcross(track, clip, endEdge: endEdge);
   if (other == null) return false;
@@ -628,7 +612,6 @@ bool cutEdgeOverlaps(CutTrack track, BridgeClip clip, {required bool endEdge}) {
       : other.endFrame.toInt() > clip.startFrame.toInt();
 }
 
-/// The clip that starts where [clip] ends on the same track, or null.
 BridgeClip? cutClipAfter(CutTrack track, BridgeClip clip) {
   final end = clip.endFrame.toInt();
   final (lo, hi) = track.window(end, end);
@@ -712,7 +695,6 @@ int cutClampShift({
   return shift.clamp(lo, hi);
 }
 
-/// A button drawn on a clip, as Vegas puts its event buttons there.
 enum CutBadge { fx, panCrop }
 
 /// Where a clip's buttons sit in its [box]: fx at the top right of every

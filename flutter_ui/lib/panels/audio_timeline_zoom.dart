@@ -1,5 +1,3 @@
-// How far in the Audio timeline zooms, and which summary a wave asks for once
-// it is that far in.
 
 import 'dart:math' show max, min;
 import 'dart:typed_data';

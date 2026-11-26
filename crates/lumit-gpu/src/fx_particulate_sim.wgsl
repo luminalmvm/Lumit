@@ -75,7 +75,6 @@ struct Step {
     pose0: f32,
     pose1: f32,
 
-    // How much of its parent's speed a spark starts with.
     spark_inherit: f32,
     _d: f32,
     _e: f32,
@@ -94,7 +93,6 @@ struct Collider {
     from0: vec4<f32>,
     from1: vec4<f32>,
     from2: vec4<f32>,
-    // And back.
     to0: vec4<f32>,
     to1: vec4<f32>,
     to2: vec4<f32>,
@@ -153,7 +151,6 @@ fn c_keep_sums() -> u32 { return 2u * st.cap; }
 fn c_kid_sums() -> u32 { return 2u * st.cap + st.blocks; }
 fn c_ctl() -> u32 { return 2u * st.cap + 2u * st.blocks; }
 
-// The gradient of one channel of value noise at `q`.
 fn sim_grad(ch: u32, q: vec3<f32>) -> vec3<f32> {
     let f = floor(q);
     let x = q - f;
@@ -204,7 +201,6 @@ fn sim_cell(c: vec3<i32>) -> u32 {
     return (u32(m.x) + u32(m.y) * 64u + u32(m.z) * 4096u) * CELL_WORDS;
 }
 
-// Each free particle adds itself to the cell it is in.
 @compute @workgroup_size(64)
 fn sim_flock_add(@builtin(global_invocation_id) gid: vec3<u32>) {
     let i = gid.x;
@@ -290,7 +286,6 @@ fn sim_steer(at: vec3<f32>, vel: vec3<f32>) -> vec3<f32> {
         + st.together * 0.1 * STEER * STEER * (mid / total - at);
 }
 
-// How the fields and the flow push a particle at `at` going at `vel`.
 fn sim_push(at: vec3<f32>, vel: vec3<f32>) -> vec3<f32> {
     var a = vec3<f32>(0.0, 0.0, 0.0);
     if (p.turb != 0.0) {
@@ -314,7 +309,6 @@ fn sim_push(at: vec3<f32>, vel: vec3<f32>) -> vec3<f32> {
             let len = length(side);
             if (len > 1e-3) {
                 let round = side / len;
-                // Eased towards the sweep's speed, and held in on its circle.
                 let along = dot(vel, round);
                 let wants = st.vortex * fade;
                 let inward = cross(round, axis);
@@ -385,7 +379,6 @@ fn sim_inside(c: u32, x: f32, y: f32) -> bool {
     return odd;
 }
 
-// The collider's own place of a layer point, at `pose` through the frame.
 fn sim_own(c: u32, pose: f32, q: vec4<f32>) -> vec3<f32> {
     return vec3<f32>(
         dot(mix(colliders[c].was_from0, colliders[c].from0, pose), q),
@@ -394,7 +387,6 @@ fn sim_own(c: u32, pose: f32, q: vec4<f32>) -> vec3<f32> {
     );
 }
 
-// And a place on the collider back in this layer's pixels.
 fn sim_back(c: u32, pose: f32, own: vec3<f32>) -> vec3<f32> {
     let q = vec4<f32>(own, 1.0);
     return vec3<f32>(
@@ -418,7 +410,6 @@ fn sim_model(c: u32, pose_a: f32, a1: vec4<f32>, b1: vec4<f32>, best: ptr<functi
     let gb = sim_own(c, st.pose1, b1);
     let seg = gb - ga;
     let size = vec3<f32>(colliders[c].grid.yzw) - vec3<f32>(1.0, 1.0, 1.0);
-    // Only the part of the move inside its box.
     var t0 = 0.0;
     var t1 = 1.0;
     for (var k = 0u; k < 3u; k = k + 1u) {
@@ -473,7 +464,6 @@ fn sim_model(c: u32, pose_a: f32, a1: vec4<f32>, b1: vec4<f32>, best: ptr<functi
     (*best).out = select(0.0, -d * length(colliders[c].to0.xyz), t <= t0 && t0 == 0.0);
 }
 
-// The first thing the move from `a` to `b` meets.
 fn sim_first(a: vec3<f32>, b: vec3<f32>, pose_a: f32) -> SimHit {
     var best: SimHit;
     best.s = 2.0;
@@ -592,7 +582,6 @@ fn sim_move(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (age >= life) {
         q.flags = q.flags | F_DEAD;
     } else if ((q.flags & F_HELD) != 0u) {
-        // A particle that stuck goes where the surface goes.
         let c = q.flags >> 8u;
         if (c < st.colliders) {
             q.at = vec4<f32>(sim_back(c, st.pose1, q.vel.xyz), age);
@@ -616,7 +605,6 @@ fn sim_move(@builtin(global_invocation_id) gid: vec3<u32>) {
         var vel = m.vel;
         if (st.colliders > 0u) {
             for (var k = 0u; k < SIM_HITS; k = k + 1u) {
-                // After a bounce the move goes on from the end of the step.
                 let hit = sim_first(a, b, select(st.pose1, st.pose0, k == 0u));
                 if (hit.s > 1.0) {
                     break;
@@ -691,7 +679,6 @@ fn sim_move(@builtin(global_invocation_id) gid: vec3<u32>) {
     counts[c_kids() + i] = q.kids;
 }
 
-// Each block of 256 on one thread: its numbers become their places within it.
 @compute @workgroup_size(1)
 fn sim_scan(@builtin(workgroup_id) wid: vec3<u32>) {
     let n = sa.count;
@@ -713,7 +700,6 @@ fn sim_scan(@builtin(workgroup_id) wid: vec3<u32>) {
     counts[c_kid_sums() + wid.x] = kids;
 }
 
-// The block totals become running sums, and the whole step's numbers are set.
 @compute @workgroup_size(1)
 fn sim_sums() {
     var keep = 0u;
@@ -832,8 +818,6 @@ fn sim_birth(@builtin(global_invocation_id) gid: vec3<u32>) {
     sa.parts[slot - drop] = q;
 }
 
-// ---------------------------------------------------------------- the stream
-
 struct SimOut {
     // Raster pixels per px@comp, and a spark's size as a share of its parent's.
     px: f32,
@@ -872,14 +856,12 @@ fn sim_out(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (p.tail > 0.0) {
         tail = head - speed * p.tail;
     }
-    // A spark looks like the particle it came from, and smaller.
     var look = q.id;
     var scale = 1.0;
     if ((q.id.y & SPARK_HI) != 0u) {
         look = vec2<u32>(q.id.x, (q.id.y & BURST_HI) | (q.id.y & 0xfffffu));
         scale = so.spark_size;
     }
-    // Born with nowhere to be, or out of time: nothing to draw.
     if (age >= life) {
         scale = 0.0;
     }

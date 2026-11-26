@@ -44,8 +44,6 @@ void main() {
     expect(timings.layerMs('layer-b'), closeTo(2.25, 1e-9));
     expect(timings.effectMs('fx-blur'), closeTo(18.5, 1e-9));
     expect(timings.effectMs('fx-glow'), closeTo(4.0, 1e-9));
-    // A layer the measured frame did not draw — hidden, out of its span, or
-    // inside a Precomp — has no number rather than a wrong one.
     expect(timings.layerMs('layer-c'), isNull);
 
     timings.setMeasuring(false);
@@ -54,7 +52,6 @@ void main() {
         reason: 'a stale cost is worse than none');
     expect(timings.frame, isNull);
 
-    // Asking twice for the same state does not pester the engine.
     timings.setMeasuring(false);
     expect(asked, [true, false]);
   });

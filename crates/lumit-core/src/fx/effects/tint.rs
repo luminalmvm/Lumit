@@ -1,11 +1,8 @@
-//! Tint (docs/08 §3.23): black and white remapped to two chosen colours.
-
 use crate::fx::{
     cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
 };
 use lumit_fx_macros::Effect;
 
-/// Tint's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "tint",
@@ -26,7 +23,6 @@ pub struct Tint {
     #[colour(label = "Map white to", default = [1.0, 1.0, 1.0, 1.0], min = 0.0, max = 4.0)]
     pub white: [f32; 4],
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -52,7 +48,6 @@ impl Tint {
     }
 }
 
-/// Tint's behaviour.
 pub struct TintDef;
 
 impl EffectDef for TintDef {

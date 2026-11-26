@@ -40,14 +40,11 @@ import 'template_reveal.dart';
 import 'template_rows_frb.dart';
 import 'timeline_layer_menu_frb.dart' show showMenuEntriesAt;
 
-/// Controls being dragged to another place in the list, in the template's
-/// order.
 class TemplateControlsDrag {
   final List<String> ids;
   const TemplateControlsDrag(this.ids);
 }
 
-/// How far a control's further rows and a menu's options sit in from it.
 const double _indent = 14;
 
 class TemplatePanelFrb extends StatefulWidget {
@@ -62,17 +59,13 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
   late final LumitUiState _ui =
       Provider.of<LumitUiState>(context, listen: false);
 
-  /// The fronted composition, its name, and whether it is a node graph.
   CompositionReference? _comp;
   String _compName = '';
   bool _graph = false;
 
-  /// The composition and the revision the name and the text rows were read
-  /// at.
   UuidValue? _readComp;
   int? _readRevision;
 
-  /// The template as last read, and the list drawn from it.
   BridgeTemplate? _template;
   List<TemplateLine> _lines = const [];
 
@@ -80,8 +73,6 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
   /// effect.
   Set<String> _ownMenus = const {};
 
-  /// The Text layer behind each text control that shows further rows, by the
-  /// control's id.
   Map<String, BridgeTextDocument> _texts = const {};
 
   /// The controls picked, and the one the last plain or Ctrl click landed on,
@@ -89,23 +80,19 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
   final Set<String> _picked = {};
   String? _anchor;
 
-  /// The end of the pick that the arrows move.
   String? _lead;
 
   /// A picked row pressed with no modifier: the pick narrows to it on
   /// release, unless the press became a drag of all of them.
   String? _narrowTo;
 
-  /// Groups folded shut, and menus unfolded to their options.
   final Set<String> _shutGroups = {};
   final Set<String> _openMenus = {};
 
-  /// What is being renamed in place: a control, a group, or a menu's option.
   String? _renaming;
   String? _renamingGroup;
   (String, int)? _renamingOption;
 
-  /// Where a dragged set would land: the line it is over, and which edge.
   final ValueNotifier<({String line, bool below})?> _dropAt =
       ValueNotifier(null);
 
@@ -139,10 +126,6 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
     super.dispose();
   }
 
-  // --- Reading ----------------------------------------------------------------
-
-  /// Take the template the keeper holds for the fronted composition, and
-  /// read what the list needs beside it when the document has moved.
   void _sync() {
     if (!mounted) return;
     final comp = _ui.selectedComp;
@@ -163,7 +146,6 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
       try {
         name = comp?.getSettings().name ?? '';
       } catch (_) {
-        // The composition has gone. The next read shows none.
       }
     }
     if (moved || !identical(template, _template)) {
@@ -191,7 +173,6 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
               read[control.id] = text;
             }
           } catch (_) {
-            // The layer has gone. Its rows show a dash.
           }
         }
       }
@@ -221,7 +202,6 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
     });
   }
 
-  /// Lay the list out again from the template and the folds.
   void _relist() {
     final template = _template;
     _lines = template == null
@@ -229,7 +209,6 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
         : templateLines(
             template.controls,
             shutGroups: _shutGroups,
-            // The menu being recorded shows its options while it is.
             openMenus: {
               ..._openMenus,
               if (template.recording case final recording?) recording.menu,
@@ -240,16 +219,11 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
 
   List<BridgeControl> get _controls => _template?.controls ?? const [];
 
-  /// The controls on screen, in the list's order.
   List<BridgeControl> get _shown => [
         for (final line in _lines)
           if (line is TemplateControlLine) line.control,
       ];
 
-  // --- Editing ----------------------------------------------------------------
-
-  /// Run [edit], read it back, and say in the status line when the engine
-  /// turns it down.
   bool _try(void Function() edit, {String? refused}) {
     try {
       edit();
@@ -310,7 +284,6 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
     return true;
   }
 
-  /// Move [ids] to before [before], or last, and into [group].
   void _moveTo(Iterable<String> ids, {String? before, String? group}) {
     final comp = _comp;
     final moved = [
@@ -321,7 +294,6 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
     _try(() => comp.moveControls(ids: moved, before: before, group: group));
   }
 
-  /// A group nobody has named yet: the word, then the word and a number.
   String _freshGroup() {
     final taken = templateGroups(_controls);
     final base = l10n.templateGroup;
@@ -331,7 +303,6 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
     }
   }
 
-  /// Put [ids] in a new group and open its name for typing.
   void _newGroup(Iterable<String> ids) {
     final name = _freshGroup();
     _moveTo(ids, group: name);
@@ -344,9 +315,6 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
     }
   }
 
-  // --- Dropping ---------------------------------------------------------------
-
-  /// The first of [from] that is not among [moved].
   String? _firstStill(Iterable<BridgeControl> from, Set<String> moved) =>
       from.where((c) => !moved.contains(c.id)).firstOrNull?.id;
 
@@ -357,7 +325,6 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
     return last < 0 ? null : _firstStill(_controls.skip(last + 1), moved);
   }
 
-  /// A drop on [control]: above it, or below it, and into its group.
   void _dropOnControl(List<String> ids, BridgeControl control, bool below) {
     final moved = ids.toSet();
     final at = _controls.indexWhere((c) => c.id == control.id);
@@ -369,7 +336,6 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
     );
   }
 
-  /// A drop on a group's heading: first in the group.
   void _dropOnGroup(List<String> ids, String group) {
     final moved = ids.toSet();
     _moveTo(
@@ -380,11 +346,9 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
     );
   }
 
-  /// A drop above everything: first, and in no group.
   void _dropOnTop(List<String> ids) =>
       _moveTo(ids, before: _firstStill(_controls, ids.toSet()));
 
-  /// A drop under everything: after the last line there is.
   void _dropOnEnd(List<String> ids) {
     final last = _lines.lastWhere(
         (l) => l is TemplateControlLine || l is TemplateGroupLine,
@@ -399,15 +363,12 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
     }
   }
 
-  /// Whether a drag at [global] is over the lower half of [control]'s row.
   bool _below(String control, Offset global) {
     final box = _rowKeys[control]?.currentContext?.findRenderObject();
     if (box is! RenderBox || !box.hasSize) return false;
     return box.globalToLocal(global).dy > box.size.height / 2;
   }
 
-  /// A line that takes a dragged set of controls, with the drop line on the
-  /// edge they would land against.
   Widget _target(
     LumitTheme t, {
     required String line,
@@ -454,10 +415,6 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
     );
   }
 
-  // --- Picking ----------------------------------------------------------------
-
-  /// A press on a control's row: pick it, or add it or run to it with Ctrl
-  /// or Shift.
   void _press(String id) {
     final keys = HardwareKeyboard.instance;
     final order = [for (final c in _shown) c.id];
@@ -482,11 +439,9 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
     });
   }
 
-  /// The arrows: the pick moves a row, or grows with Shift.
   bool _step(int by) {
     final order = [for (final c in _shown) c.id];
     if (order.isEmpty) return false;
-    // From the end the last press or step left, or the pick's own end.
     var at = _lead != null && _picked.contains(_lead)
         ? order.indexOf(_lead!)
         : -1;
@@ -516,7 +471,6 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
     return true;
   }
 
-  /// Scroll a control's row into view, as little as it takes.
   void _bringIntoView(String id) {
     final row = _rowKeys[id]?.currentContext;
     if (row == null) return;
@@ -548,8 +502,6 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
       _renaming = control.id;
     });
   }
-
-  // --- Keys -------------------------------------------------------------------
 
   /// Whether the keyboard is in a text box, which keeps its own keys.
   bool get _typing {
@@ -588,7 +540,6 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
     return false;
   }
 
-  /// Escape while a menu's option is being recorded: stop, and keep nothing.
   bool _escape() {
     if (!mounted ||
         lumitModalOpen ||
@@ -600,8 +551,6 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
     _stopRecording(keep: false);
     return true;
   }
-
-  // --- Menus that set several rows --------------------------------------------
 
   void _addMenu() {
     final comp = _comp;
@@ -649,7 +598,6 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
     ]);
   }
 
-  /// Add an option, named by its place, and open its name for typing.
   void _addOption(BridgeControl control) {
     var n = control.options.length + 1;
     while (control.options.contains(l10n.templateMenuOption(n))) {
@@ -683,8 +631,6 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
     _try(() => comp.stopRecording(keep: keep));
   }
 
-  // --- The foot ---------------------------------------------------------------
-
   void _setMark(TemplateMark mark, int? frame) {
     final comp = _comp;
     final template = _template;
@@ -701,9 +647,6 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
     );
   }
 
-  // --- Right-click ------------------------------------------------------------
-
-  /// Select [control]'s layer and unfold the Timeline to the row it sets.
   void _reveal(BridgeControl control) {
     final entry = _ui.model.layers
         .where((e) => e.layer.internallayerId == control.row.layer)
@@ -736,7 +679,6 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
       });
     }
     final picked = _picked.toList();
-    // A control whose row has gone can only be removed.
     if (control.gone) {
       unawaited(showMenuEntriesAt(context, at, [
         MenuEntry(l10n.templateRemove, () => _remove(picked)),
@@ -803,8 +745,6 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
               : null),
     ]));
   }
-
-  // --- Drawing ----------------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
@@ -873,19 +813,15 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
     });
   }
 
-  /// The least room the list keeps when the panel is short, and the height
-  /// under which the panel scrolls whole.
   static const double _listFloor = 120;
   static const double _shortPanel = 300;
 
-  /// The mark that says a menu's option is being recorded.
   Widget _recordMark(LumitTheme t) => Container(
         width: 7,
         height: 7,
         decoration: BoxDecoration(color: t.error, shape: BoxShape.circle),
       );
 
-  /// A small word that is a button: Record, Stop.
   Widget _wordButton(LumitTheme t, String key, String word,
           VoidCallback? onPressed, {Color? ink}) =>
       HouseButton(
@@ -913,7 +849,6 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
             child: Text(_compName,
                 maxLines: 1, overflow: TextOverflow.ellipsis, style: t.small),
           ),
-          // Saved to the library once, and changed here since.
           if (template != null && template.id != null && template.changed) ...[
             const SizedBox(width: 6),
             Container(
@@ -959,7 +894,6 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Above everything: first, and out of every group.
               _target(
                 t,
                 line: 'top',
@@ -1003,8 +937,6 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
         TemplateAddOptionLine(:final control) => _addOptionLine(t, control),
       };
 
-  /// A line's box, as an Effect controls row has it: the hairline under it
-  /// and the same room either side.
   Widget _box(LumitTheme t, Widget child, {Key? key, bool picked = false}) =>
       Container(
         key: key,
@@ -1067,8 +999,6 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
     );
   }
 
-  /// What a control's row carries before its name: a menu's twirl, or the
-  /// mark of a row that is keyed.
   Widget? _mark(LumitTheme t, BridgeControl control) {
     if (control.gone) return null;
     if (control.kind == BridgeControlKind.menu) {
@@ -1106,7 +1036,6 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
     final picked = _picked.contains(id);
     final rowKey = _rowKeys.putIfAbsent(id, GlobalKey.new);
     final label = Text(
-      // In the case a property's name is drawn in, as a copy's row draws it.
       t.propertyCase(control.label),
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
@@ -1124,8 +1053,6 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
     } else if (control.gone) {
       name = label;
     } else {
-      // The name is the row's handle: it drags the row, and every picked row
-      // with it.
       final ids = picked
           ? [
               for (final c in _controls)
@@ -1170,7 +1097,6 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
       context: context,
       name: name,
       keyframeControls: _mark(t, control),
-      // The words and the two pickers of a font may take a second line.
       grows: control.kind == BridgeControlKind.text ||
           control.kind == BridgeControlKind.font,
       control: TemplateValue(
@@ -1217,7 +1143,6 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
     );
   }
 
-  /// One of the rows a copy shows under a text control, read and not set.
   Widget _textRowLine(LumitTheme t, TemplateTextRowLine line) {
     final text = _texts[line.control.id];
     final (label, value) = switch (line.which) {
@@ -1287,7 +1212,6 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
             onCancel: () => setState(() => _renamingOption = null),
           )
         : _DoubleClick(
-            // Only a menu made here names its own options.
             onDoubleClick: own
                 ? () => setState(() {
                       _renaming = null;
@@ -1342,12 +1266,9 @@ class _TemplatePanelFrbState extends State<TemplatePanelFrb> {
                       t,
                       'template-record-${control.id}-$option',
                       l10n.templateRecord,
-                      // One option is recorded at a time.
                       recording == null
                           ? () => _record(control, option)
                           : null),
-                // Kept in the row where there is nothing to remove, so the
-                // words before it line up down the menu.
                 SizedBox(
                   width: 18,
                   child: own && control.options.length > 1

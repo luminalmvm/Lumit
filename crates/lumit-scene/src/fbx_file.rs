@@ -1,5 +1,3 @@
-//! FBX and OBJ (with its MTL), read with `ufbx`.
-
 use std::sync::atomic::Ordering;
 
 use ufbx::{
@@ -61,7 +59,6 @@ pub(crate) fn read(r: &mut Reader) -> Result<ModelScene, SceneError> {
         let mut corners = vec![0u32; mesh.max_face_triangles * 3];
         let mut primitives = Vec::new();
         let skin = mesh.skin_deformers.iter().next();
-        // Each shape's offsets by vertex, read for each corner below.
         let offsets: Vec<_> = shapes(mesh).map(|c| shape_offsets(mesh, c)).collect();
         for part in &mesh.material_parts {
             if part.num_triangles == 0 {
@@ -116,8 +113,6 @@ pub(crate) fn read(r: &mut Reader) -> Result<ModelScene, SceneError> {
                     }
                 }
             }
-            // ponytail: every corner is its own vertex, three times the
-            // vertices a welded mesh has. ufbx::generate_indices welds them.
             p.indices = (0..p.positions.len() as u32).collect();
             p.material = mesh
                 .materials
@@ -313,7 +308,6 @@ pub(crate) fn read(r: &mut Reader) -> Result<ModelScene, SceneError> {
     Ok(scene)
 }
 
-/// The texture files an FBX or OBJ names that exist, and the OBJ's MTL files.
 pub(crate) fn dependants(r: &mut Reader) -> Vec<std::path::PathBuf> {
     let mut found = Vec::new();
     if is_obj(r) {
@@ -446,7 +440,6 @@ fn material(m: &ufbx::Material, id: &dyn Fn(&ufbx::Element) -> usize) -> Materia
         base_colour_texture: tex(&p.base_color),
         metallic: real(&p.metalness, 0.0),
         roughness: real(&p.roughness, 0.5),
-        // Filled in by pack_metal_rough once the pictures are read.
         metallic_roughness_texture: None,
         normal_texture: tex(&p.normal_map),
         normal_scale: 1.0,
@@ -471,7 +464,6 @@ fn material(m: &ufbx::Material, id: &dyn Fn(&ufbx::Element) -> usize) -> Materia
     }
 }
 
-/// The picture a material map reads, if it has one.
 fn texture_of(map: &MaterialMap, id: &dyn Fn(&ufbx::Element) -> usize) -> Option<TextureRef> {
     let t = map.texture.as_ref().filter(|_| map.texture_enabled)?;
     // A layered texture points at its file textures; the first stands in.

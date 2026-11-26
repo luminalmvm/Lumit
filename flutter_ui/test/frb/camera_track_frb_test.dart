@@ -25,7 +25,6 @@ void main() {
   setUpAll(initEngineForTests);
 
   group('Camera track (frb)', () {
-    /// A comp with one footage layer carrying an enabled Camera track, selected.
     ({LumitState state, LumitUiState uiState, LayerReference layer})
         withTrackedLayer() {
       final p = freshProject();
@@ -57,10 +56,8 @@ void main() {
       expect(analyse, findsOneWidget,
           reason: 'an Action parameter draws a button, not a value field');
       expect(cancel, findsOneWidget);
-      // The button says its own name; the row's name column is left empty.
       expect(find.text('Analyse'), findsOneWidget);
 
-      // The status line is there from the start, saying the truth.
       expect(
           find.byKey(const ValueKey('fx-camera-track-status')), findsOneWidget);
       expect(find.text('Not analysed yet'), findsOneWidget);
@@ -113,7 +110,6 @@ void main() {
           valueListenable: at,
           builder: (context, n, _) => Stack(
             children: [
-              // The panel places it; here the whole panel is the picture.
               Positioned.fill(
                   child: ViewerTrackLayer(
                 tracked: p.layer,
@@ -149,10 +145,8 @@ void main() {
       final painter = painted.painter! as TrackPointPainter;
       expect(painter.points.length, 3);
       expect(painter.points.where((p) => p.picked), isEmpty);
-      // The depth cue arrives from the engine and is drawn, not recomputed.
       expect(painter.points.first.depth, 1.0);
 
-      // Nothing is offered until something is picked.
       expect(
           find.byKey(const ValueKey('viewer-track-create-null')), findsNothing);
 
@@ -171,8 +165,6 @@ void main() {
       expect(find.byKey(const ValueKey('viewer-track-create-solid')),
           findsOneWidget);
 
-      // A click on empty picture clears, which is what a click on nothing
-      // means everywhere else.
       await tester.tapAt(const Offset(600, 40));
       await tester.pump();
       expect(
@@ -208,7 +200,6 @@ void main() {
       await tester.pump();
       expect(asked[0], 1, reason: 'a rebuild is not a new frame');
 
-      // A frame is: one move, one read.
       frame.value = 1;
       await tester.pump();
       expect(asked[0], 2);

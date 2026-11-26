@@ -1,6 +1,3 @@
-//! How a file a row reads is folded into a frame key: by its size and time,
-//! and by where it was found when that isn't where the document says.
-
 use crate::SourceStamper;
 
 /// The file a row names, as this machine reads it. A file found elsewhere,

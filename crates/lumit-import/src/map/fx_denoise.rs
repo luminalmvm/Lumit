@@ -15,8 +15,6 @@ use super::fx_colour::Fx;
 use super::props::match_name_of;
 use super::Conv;
 
-/// This file's claim on a match name: the row whose conversion is
-/// `remove_grain`.
 pub(super) fn claim(
     conv: &mut Conv<'_>,
     path: &ItemPath,

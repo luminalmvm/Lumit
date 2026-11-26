@@ -2,15 +2,12 @@ use super::*;
 use crate::bulk::News;
 use std::path::{Path, PathBuf};
 
-/// One machine's files for the tests: what it can give, by id, and a folder
-/// that what it is sent lands in.
 struct Shelf {
     folder: PathBuf,
     gives: Vec<(Uuid, PathBuf)>,
     arrived: Mutex<Vec<Wanted>>,
 }
 
-/// The item, or the job for an export.
 fn id(wanted: &Wanted) -> Option<Uuid> {
     match wanted {
         Wanted::Export { job } => Some(*job),
@@ -36,7 +33,6 @@ impl Footage for Shelf {
     }
 }
 
-/// A folder of the test's own under the system's temp folder, emptied first.
 fn folder(name: &str) -> PathBuf {
     let root =
         std::env::temp_dir().join(format!("lumit-remote-test-{}-{name}", std::process::id()));
@@ -80,7 +76,6 @@ fn limits() -> Arc<Limits> {
     Arc::new(Limits::default())
 }
 
-/// Wait for `done`, failing the test by `secs` seconds.
 fn until(what: &str, secs: u64, mut done: impl FnMut() -> bool) {
     let by = Instant::now() + Duration::from_secs(secs);
     while !done() {
@@ -89,8 +84,6 @@ fn until(what: &str, secs: u64, mut done: impl FnMut() -> bool) {
     }
 }
 
-/// The worker wants a file only the sender has, before the sender has even
-/// reached it, and it arrives whole over a direct connection.
 #[test]
 fn a_file_reaches_the_worker_directly() {
     let root = folder("direct");
@@ -145,8 +138,6 @@ fn a_file_reaches_the_worker_directly() {
     let _ = std::fs::remove_dir_all(root);
 }
 
-/// With no address of the worker's to reach, the two meet at a relay, and
-/// the export comes back to the sender through it.
 #[test]
 fn the_export_comes_back_through_a_relay() {
     let root = folder("relay");
@@ -196,8 +187,6 @@ fn the_export_comes_back_through_a_relay() {
     let _ = std::fs::remove_dir_all(root);
 }
 
-/// A link cut part-way through a file comes back by itself, and the file
-/// carries on from where it was cut instead of starting again.
 #[test]
 fn a_cut_link_comes_back_and_the_file_carries_on() {
     let root = folder("resume");
@@ -217,7 +206,6 @@ fn a_cut_link_comes_back_and_the_file_carries_on() {
     )
     .unwrap();
 
-    // Slow enough to be cut half way.
     let pace = limits();
     pace.set(128 << 10, 0);
     let held = Held {
@@ -268,8 +256,6 @@ fn a_cut_link_comes_back_and_the_file_carries_on() {
     let _ = std::fs::remove_dir_all(root);
 }
 
-/// A sender with the wrong key never links, and keeps trying no more often
-/// than its wait allows.
 #[test]
 fn the_wrong_key_never_links_and_tries_are_spaced() {
     let root = folder("wrong");

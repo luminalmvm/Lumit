@@ -16,32 +16,23 @@ use wasm_bindgen::prelude::wasm_bindgen;
 
 #[wasm_bindgen]
 extern "C" {
-    /// Open the page's output, and answer its rate.
     #[wasm_bindgen(catch, js_namespace = lumitSound, js_name = open)]
     fn open() -> Result<f64, wasm_bindgen::JsValue>;
-    /// How many frames have been written and not played yet.
     #[wasm_bindgen(js_namespace = lumitSound, js_name = queued)]
     fn queued() -> u32;
     /// Interleaved stereo, to play after what is queued.
     #[wasm_bindgen(js_namespace = lumitSound, js_name = write)]
     fn write(samples: &[f32]);
-    /// Drop what is queued.
     #[wasm_bindgen(js_namespace = lumitSound, js_name = flush)]
     fn flush();
 }
 
-/// How far ahead of the ear the mix is made, in seconds. Playing, it has to
-/// outlast the longest the page is busy with something else. Stopped, it is
-/// how late a scrub is heard.
-// ponytail: fixed. Make it follow how long the page's turns really stall if
-// a slow machine gaps.
 const PLAY_AHEAD_S: f64 = 0.15;
 const STOPPED_AHEAD_S: f64 = 0.05;
 
 /// How many blocks a turn decodes at most. Each is a copy out of memory here.
 const FILLS_A_TURN: usize = 8;
 
-/// What the callback keeps between buffers, kept between turns here.
 pub(crate) struct Output {
     scrub: Scrub,
     edge: Edge,
@@ -49,7 +40,6 @@ pub(crate) struct Output {
     work: block::MixWork,
     loudness: loudness::Loudness,
     buffer: Vec<f32>,
-    /// What the rack thread does on the desktop, done here a turn at a time.
     racks: rack_thread::RackThread,
 }
 

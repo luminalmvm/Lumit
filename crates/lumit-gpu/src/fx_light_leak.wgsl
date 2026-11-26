@@ -18,7 +18,6 @@ struct Params {
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
 
-// == light_leak_light.
 fn light(xy: vec2<i32>) -> f32 {
     let u = (f32(xy.x) + 0.5 - p.centre.x) * p.inv_h;
     let v = (f32(xy.y) + 0.5 - p.centre.y) * p.inv_h;

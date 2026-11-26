@@ -1,15 +1,9 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-//! Slices' kernel against its CPU oracle, both ways across, both sides, in
-//! order and at random, with and without the smear. The ends keep the picture
-//! exactly or leave nothing.
-
 use lumit_core::fx::effects::slices::{slices, SlicesParams};
 use lumit_gpu::fx::common::{readback_linear_f32, upload_linear_f32};
 use lumit_gpu::fx::slices::SlicesOp;
 
-/// A premultiplied picture with a gradient, a check, a value past 1 and a soft
-/// alpha edge.
 fn picture(w: u32, h: u32) -> Vec<f32> {
     let mut img = vec![0.0f32; (w * h * 4) as usize];
     for y in 0..h {

@@ -22,8 +22,6 @@ import '../panels/key_ease_fields.dart';
 import '../widgets/controls.dart';
 import 'dialog_frame.dart';
 
-/// What one side of a keyframe can be. The four the graph editor's own strip
-/// offers, named the way After Effects names them.
 enum KeyframeInterp { linear, bezier, hold, auto }
 
 String keyframeInterpLabel(KeyframeInterp interp) => switch (interp) {
@@ -194,7 +192,6 @@ Widget _dialogue(
       width: 320,
       children: [
         dialogTitleBar(t,
-            // The menu's word, without the dots that promise this window.
             title: title.replaceAll('…', ''),
             onClose: onCancel,
             keyPrefix: 'keyframe'),

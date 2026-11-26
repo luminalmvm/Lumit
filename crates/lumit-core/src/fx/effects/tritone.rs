@@ -1,16 +1,3 @@
-//! Tritone (docs/08 §3.60): three colours mapped onto the tone range — AE's
-//! Tritone.
-//!
-//! **In plain terms.** The picture's own colours are thrown away and replaced by
-//! a ramp of three the user chooses: the darkest pixels become the Shadows
-//! colour, the brightest the Highlights colour, and everything between is mixed
-//! through the Midtones colour. It is how a photograph becomes a cyanotype, a
-//! sepia print, or the two-colour title card of a trailer.
-//!
-//! §3.24 Tint is the same idea with two colours and stays. What this adds is the
-//! middle stop, which is what makes the look a *duotone print* rather than a
-//! straight fade between two ends.
-
 use crate::fx::{
     cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
 };
@@ -39,11 +26,9 @@ pub struct Tritone {
     #[colour(default = [1.0, 0.98, 0.90, 1.0], max = 4.0)]
     pub highlights: [f32; 4],
 
-    /// The colour mid-grey takes.
     #[colour(default = [0.45, 0.30, 0.22, 1.0], max = 4.0)]
     pub midtones: [f32; 4],
 
-    /// The colour the darkest pixels take.
     #[colour(default = [0.02, 0.03, 0.10, 1.0], max = 4.0)]
     pub shadows: [f32; 4],
 
@@ -74,7 +59,6 @@ impl Tritone {
     }
 }
 
-/// Tritone's behaviour.
 pub struct TritoneDef;
 
 impl EffectDef for TritoneDef {

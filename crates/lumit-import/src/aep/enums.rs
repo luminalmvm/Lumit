@@ -18,7 +18,6 @@
 //! is not exercised by the fixture — those are the ones a second fixture is
 //! owed for.
 
-/// Look a code up, or write the number out when nothing knows it.
 fn name(table: &[(u32, &'static str)], code: u32) -> String {
     table
         .iter()
@@ -28,7 +27,6 @@ fn name(table: &[(u32, &'static str)], code: u32) -> String {
 
 /// `idta`'s item type. All three are fixture-proven.
 pub const ITEM_FOLDER: u16 = 1;
-/// A composition item.
 pub const ITEM_COMP: u16 = 4;
 /// A footage item — which is also how a solid is stored.
 pub const ITEM_FOOTAGE: u16 = 7;
@@ -122,7 +120,6 @@ pub fn blend(code: u32, dancing: bool) -> String {
 /// reference (the run is contiguous from the ExtendScript constant base).
 const QUALITY: &[(u32, &str)] = &[(0, "WIREFRAME"), (1, "DRAFT"), (2, "BEST")];
 
-/// The layer's render quality switch.
 pub fn quality(code: u32) -> String {
     name(QUALITY, code)
 }
@@ -138,7 +135,6 @@ const MATTE: &[(u32, &str)] = &[
     (4, "LUMA_INVERTED"),
 ];
 
-/// The matte type.
 pub fn matte(code: u32) -> String {
     name(MATTE, code)
 }
@@ -181,7 +177,6 @@ const LIGHT: &[(u32, &str)] = &[
     (4, "ENVIRONMENT"),
 ];
 
-/// A light layer's type.
 pub fn light_type(code: u32) -> String {
     name(LIGHT, code)
 }
@@ -198,7 +193,6 @@ const MASK_MODE: &[(u32, &str)] = &[
     (6, "DIFFERENCE"),
 ];
 
-/// A mask's combine mode.
 pub fn mask_mode(code: u32) -> String {
     name(MASK_MODE, code)
 }
@@ -208,7 +202,6 @@ pub fn mask_mode(code: u32) -> String {
 /// eased pair and a hold.
 const INTERPOLATION: &[(u32, &str)] = &[(1, "LINEAR"), (2, "BEZIER"), (3, "HOLD")];
 
-/// One side of one keyframe.
 pub fn interpolation(code: u8) -> String {
     name(INTERPOLATION, u32::from(code))
 }
@@ -241,14 +234,6 @@ pub fn renderer(match_name: &str) -> String {
 mod tests {
     use super::*;
 
-    /// **The modes After Effects added after version 4 are the ones a real
-    /// project is full of, and the run reaches them.**
-    ///
-    /// The three names that appear twice are the point: 12, 23 and 24 are the
-    /// 4.x arithmetic, kept apart under `CLASSIC_` because the import flags
-    /// them, while 26, 27 and 28 are the modern ones every project since uses.
-    /// A table that stopped at 24 sent Difference, Vivid Light, Lighter Color
-    /// and Subtract to Normal.
     #[test]
     fn the_modern_blend_modes_are_in_the_table() {
         assert_eq!(blend(25, false), "EXCLUSION");

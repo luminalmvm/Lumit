@@ -1,5 +1,3 @@
-//! The byte a blend mode feeds into a frame key.
-
 /// Stable one-byte tag per blend mode (never reuse a value — the key must
 /// not change meaning across versions without an ALGO_VERSION bump).
 pub(super) fn blend_tag(b: lumit_core::model::BlendMode) -> u8 {

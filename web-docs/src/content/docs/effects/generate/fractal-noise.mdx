@@ -24,8 +24,9 @@ Normally used as a base for more complex effects or textures.
 
 | Parameter | Control | Range | Default | Unit |
 | --- | --- | --- | --- | --- |
-| **Noise type** | Dropdown | Value · Perlin | Perlin | - |
-| **Fractal type** | Dropdown | Basic · Turbulent | Turbulent | - |
+| **Fractal type** | Dropdown | Basic · Turbulent · Turbulent smooth · Turbulent sharp · Dynamic · Dynamic progressive · Dynamic twist · Max · Smeary · Swirly · Rocky · Cloudy · Terrain · Subscale · Strings | Turbulent | - |
+| **Noise type** | Dropdown | Value · Perlin · Block · Linear · Spline · Chips · Circular · Box · Buya · Cranal · Dents · Electric · Fire · Hama · Luka · Naki · Nutous · Ober · Pezo · Poxo · Sema · Stupl · Zada · Blistered turbulence · Displaced turbulence · Wavy turbulence · Displaced Voronoi · VL noise · Stucci · Stucci wall in · Stucci wall out · Windy · Billow · Waves | Perlin | - |
+| **Distortion** | Slider | 0 to 4; higher | 0 | - |
 | **Invert noise** | Checkbox | On or off | Off | - |
 | **Contrast** | Slider | 0 to 400; higher | 100 | Per cent |
 | **Brightness** | Slider | -200 to 200; any value by typing | 0 | Per cent |
@@ -64,9 +65,11 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Noise type**: **Perlin** is the smooth, cloud-like pattern. **Value** is cheaper
-  and squarer.
-- **Fractal type**: **Basic** adds layers as they are. **Turbulent** folds each layer about its middle.
+- **Fractal type**: how each layer of detail is shaped and how the layers are combined; see
+  [Fractal types](#fractal-types).
+- **Noise type**: the pattern each layer is drawn from; see [Noise types](#noise-types).
+- **Distortion**: how far a second noise pushes each point of the pattern before it is drawn,
+  in cells of the largest layer.
 - **Invert noise**: inverts the finished pattern.
 - **Contrast**: increases the difference between white and dark areas of the noise.
 - **Brightness**: lifts or darkens the noise after Contrast.
@@ -86,6 +89,54 @@ In the Effect Controls panel:
 - **Blend**: the blend mode the result is laid over the original with.
 - **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 - **Channel**: the channel of the Matte layer that is read.
+
+## Fractal types
+
+| Fractal type | What it does |
+| --- | --- |
+| **Basic** | Adds the layers as they are. |
+| **Turbulent** | Folds each layer about its middle. |
+| **Turbulent smooth** | Folds each layer and rounds the crease into a soft dark valley. |
+| **Turbulent sharp** | Folds each layer and narrows the crease into a thin dark line. |
+| **Dynamic** | Folds each layer into bright puffs with dark veins between them, and moves each layer along the slope of the one before. |
+| **Dynamic progressive** | As Dynamic, with the finer layers moving through **Evolution** faster. |
+| **Dynamic twist** | Adds the layers as they are, each moved across the slope of the one before. |
+| **Max** | Folds each layer and keeps the brightest in place of the sum. |
+| **Smeary** | Shapes the layers as Dynamic does, and moves every finer layer along the slope of the first. |
+| **Swirly** | Folds each layer as Turbulent does, each moved across the slope of the one before. |
+| **Rocky** | Steepens each layer and clips it at black and white. |
+| **Cloudy** | Lifts each layer towards white without folding it. |
+| **Terrain** | Draws a ridge along the middle of each layer, with each finer layer strongest on the ridges of the one before. |
+| **Subscale** | Adds the layers as they are, with the finer layers stronger where the pattern so far is bright. |
+| **Strings** | Draws a thin bright line along the middle of each layer, with the finer layers fading twice as fast. |
+
+## Noise types
+
+| Noise type | What it does |
+| --- | --- |
+| **Value** | Gives each cell corner a random value and blends between them with a soft curve. |
+| **Perlin** | Gives each cell corner a random slope and blends between them. The smooth, cloud-like pattern. |
+| **Block** | Holds one value across each cell. |
+| **Linear** | Blends the corner values in straight lines. |
+| **Spline** | Runs a curve through the sixteen nearest values. |
+
+The rest shape each layer further. The cells in the first group circle as **Evolution** turns.
+
+| Noise types | What they draw |
+| --- | --- |
+| **Chips** · **Circular** · **Cranal** · **Hama** · **Displaced Voronoi** · **Billow** | Scattered cells: flat greys, soft round dots, pale or glossy cells with dark borders, the distance to the nearest cell, and crowded round puffs. |
+| **Box** | Linear, held flat across the middle of each cell. |
+| **Buya** · **Fire** · **Pezo** · **Poxo** | Bright speckles, tongues, blobs and sparse dots on black. |
+| **Dents** · **Luka** · **Naki** · **Stupl** · **Blistered turbulence** · **Wavy turbulence** | Folded noise: lumps, crinkles and soft clouds parted by creases. |
+| **Nutous** · **Sema** · **Ober** · **Zada** · **Waves** | Lines: thin bright filaments, wiry white lines, contour bands, swirled stripes and three crossing sets of waves. |
+| **Electric** · **Displaced turbulence** · **VL noise** · **Windy** | Perlin pushed about by further noise: diagonal streaks, displaced patterns, and fine waves that die away in patches. |
+| **Stucci** · **Stucci wall in** · **Stucci wall out** | Relief lit from the top left: soft blobs, and creases cut into the surface or standing out of it. |
+
+## After Effects import
+
+After Effects' Fractal Noise imports as Fractal noise. Each of its fifteen fractal types and
+four noise types imports as the type of the same name. Its **Turbulent Basic** is
+**Turbulent** here, and its **Soft Linear** is **Value**.
 
 ## Related
 

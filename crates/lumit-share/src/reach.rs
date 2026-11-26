@@ -16,7 +16,6 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4, TcpStream, UdpSocket}
 use std::sync::atomic::{AtomicBool, Ordering};
 use web_time::{Duration, Instant};
 
-/// Where routers listen to be found.
 const SEARCH: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::new(239, 255, 255, 250), 1900);
 
 /// What a router that can pass a port on calls itself, in both versions.
@@ -37,10 +36,8 @@ const SERVICES: [&str; 2] = [
 const SEARCHING: Duration = Duration::from_secs(2);
 const STRAGGLERS: Duration = Duration::from_millis(300);
 
-/// How long a router has to answer one question.
 const PATIENCE: Duration = Duration::from_secs(2);
 
-/// The most of a router's answer that is read.
 const ANSWER_LIMIT: u64 = 256 << 10;
 
 /// How long a port is asked for at a time, in seconds. Asked for again well
@@ -48,13 +45,11 @@ const ANSWER_LIMIT: u64 = 256 << 10;
 /// most.
 const LEASE: u32 = 3600;
 
-/// How often an open port is asked for again.
 pub(crate) const RENEW: Duration = Duration::from_secs(20 * 60);
 
 /// What a router says when it only passes ports on for good.
 const ONLY_FOR_GOOD: u16 = 725;
 
-/// Why no port was opened.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Closed {
     /// No router answered, or the one that did would not.
@@ -63,7 +58,6 @@ pub(crate) enum Closed {
     Behind,
 }
 
-/// A router that is passing a port on to this machine.
 #[derive(Debug)]
 pub(crate) struct Mapping {
     router: SocketAddr,
@@ -71,7 +65,6 @@ pub(crate) struct Mapping {
     control: String,
     service: String,
     port: u16,
-    /// This machine's address on the router's network.
     here: IpAddr,
     lease: u32,
 }
@@ -94,7 +87,6 @@ pub(crate) fn open(port: u16, stop: &AtomicBool) -> Result<(Mapping, Ipv4Addr), 
     Err(why)
 }
 
-/// Ask the router at `router`, which describes itself at `description`.
 fn open_at(
     router: SocketAddr,
     description: &str,
@@ -146,7 +138,6 @@ fn open_at(
     Ok((mapping, outside))
 }
 
-/// The note that says a router was left passing a port on for good.
 fn left_open() -> Option<std::path::PathBuf> {
     Some(lumit_project::shared_dir()?.join("port-open"))
 }
@@ -186,7 +177,6 @@ pub(crate) fn take_back(stop: &AtomicBool) {
 }
 
 impl Mapping {
-    /// Ask the router to pass the port on, for the first time or again.
     fn add(&self) -> Result<(), u16> {
         let (port, here, lease) = (
             self.port.to_string(),
@@ -212,7 +202,6 @@ impl Mapping {
         self.add().is_ok()
     }
 
-    /// Have the router stop passing the port on.
     pub(crate) fn close(&self) {
         let port = self.port.to_string();
         let asked = [
@@ -317,7 +306,6 @@ fn search(stop: &AtomicBool) -> Vec<(SocketAddr, String)> {
     found
 }
 
-/// The address and the path of an `http://address:port/path`.
 fn place(url: &str) -> Option<(SocketAddr, String)> {
     let rest = url.strip_prefix("http://")?;
     let (host, path) = rest.split_once('/').unwrap_or((rest, ""));
@@ -328,8 +316,6 @@ fn place(url: &str) -> Option<(SocketAddr, String)> {
     Some((address, format!("/{path}")))
 }
 
-/// Read how a router describes itself, for where its port service is asked
-/// and what that service is called.
 fn describe(router: SocketAddr, description: &str) -> Option<(String, String)> {
     let (status, text) = http(router, "GET", description, "", "")?;
     if status != 200 {
@@ -369,7 +355,6 @@ fn describe(router: SocketAddr, description: &str) -> Option<(String, String)> {
     None
 }
 
-/// The words inside the first `<name>` anywhere in `xml`.
 fn field(xml: &str, name: &str) -> Option<String> {
     let Ok(document) = roxmltree::Document::parse(xml) else {
         // Some routers answer in XML that is not quite XML. The one plain
@@ -384,7 +369,6 @@ fn field(xml: &str, name: &str) -> Option<String> {
     found.text().map(str::to_owned)
 }
 
-/// One question to a router and its answer: the status and the body.
 fn http(
     router: SocketAddr,
     method: &str,
@@ -437,7 +421,6 @@ fn http(
                 break;
             }
             (&mut reader).take(size).read_to_end(&mut answer).ok()?;
-            // The line end after each piece.
             line.clear();
             let _ = reader.read_line(&mut line);
         }
@@ -460,9 +443,6 @@ mod tests {
     use std::net::TcpListener;
     use std::sync::Arc;
 
-    /// A router as this needs one: it describes itself, says what address
-    /// it has outside, and answers the two things asked of its ports. What
-    /// it was asked is kept.
     fn router(
         outside: &'static str,
         refuses_leases: bool,
@@ -524,9 +504,6 @@ mod tests {
         (at, asked)
     }
 
-    /// A router with a public address is asked for the port, to this
-    /// machine, and to close it again afterwards. One that only passes
-    /// ports on for good is asked again that way.
     #[test]
     fn a_router_is_asked_to_pass_the_port_on_and_to_stop() {
         for refuses_leases in [false, true] {
