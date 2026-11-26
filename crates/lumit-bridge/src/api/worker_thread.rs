@@ -536,7 +536,18 @@ fn sync_caches(state: &mut WorkerState) {
     // by content now (docs/06 §5.2), so an edit renames exactly the frames
     // it changed and leaves the rest addressable — which is what keeps the cache
     // bar green through a rename, and what makes an undo instantly valid.
-    let budget = crate::framecache::vram::budget();
+    // The card's cache never takes more than half of what the governor may
+    // spend on the card. The other half is for the frame being drawn: a heavy
+    // frame wants several gigabytes, and a cache that has taken the lot leaves
+    // it to spill into system memory or lose the device. The meter reads the
+    // figure that applies, not the one asked for.
+    // Only where that budget is one the machine can be held to.
+    let ceiling = if state.renderer.refuses_frames_over_budget() {
+        usize::try_from(state.renderer.governor().vram.budget / 2).unwrap_or(usize::MAX)
+    } else {
+        usize::MAX
+    };
+    let budget = crate::framecache::vram::budget().min(ceiling);
     if budget != state.applied_vram_budget {
         state.applied_vram_budget = budget;
         // One VRAM budget, shared: a quarter holds the per-effect and nested
