@@ -6893,6 +6893,28 @@
   "@graphicsDeviceReset": {
     "description": "Status line notice, shown once when the graphics card has been reset under Lumit (a driver update, a watchdog reset, a laptop switching GPUs) and the engine has already rebuilt its renderer. Nothing is lost and there is nothing for the user to do."
   },
+  "frameOverBudgetTitle": "Memory budget exceeded",
+  "@frameOverBudgetTitle": {
+    "description": "Title of the window shown when the frame the Viewer asked for needs more video memory than Lumit is allowed to use, so it was not drawn. Usually follows an edit that made the frame too heavy."
+  },
+  "frameOverBudgetFacts": "This frame needs {needed} of video memory. Lumit may use {allowed}.",
+  "@frameOverBudgetFacts": {
+    "description": "Body of the memory budget window: how much video memory the frame needs and how much Lumit is allowed to use, each a size with its unit.",
+    "placeholders": {
+      "needed": {
+        "type": "String",
+        "example": "14.2 GB"
+      },
+      "allowed": {
+        "type": "String",
+        "example": "11.4 GB"
+      }
+    }
+  },
+  "frameOverBudgetUndo": "Undo",
+  "@frameOverBudgetUndo": {
+    "description": "The only button in the memory budget window when an edit caused the frame to be too heavy. It undoes that edit, as Edit > Undo does, and closes the window."
+  },
   "importFootage": "Import footage",
   "@importFootage": {
     "description": "Button, menu item and tooltip: bring media files into the project."

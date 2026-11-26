@@ -44,6 +44,7 @@ import 'package:lumit_flutter/panels/caption_layers.dart'
 import 'package:lumit_flutter/shell/menu_animation_frb.dart';
 import 'package:lumit_flutter/shell/menu_bar_frb.dart';
 import 'package:lumit_flutter/shell/menu_layer_frb.dart';
+import 'package:lumit_flutter/shell/over_budget_window.dart';
 import 'package:lumit_flutter/shell/project_history_window.dart'
     show saveVersionFrb;
 import 'package:lumit_flutter/shell/project_settings_frb.dart';
@@ -455,6 +456,11 @@ class _LumitAppViewState extends State<LumitAppView> {
           sticky: true,
           action: l10n.friendInviteOpen,
           onTap: () => showShareFrb(context, app));
+    };
+    context.read<LumitUiState>().onFrameOverBudget = (over) {
+      if (mounted) {
+        showFrameOverBudget(context, context.read<LumitState>(), over);
+      }
     };
   }
 
