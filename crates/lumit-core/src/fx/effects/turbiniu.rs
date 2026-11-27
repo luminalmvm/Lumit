@@ -1,6 +1,5 @@
 mod geometry;
 mod noise;
-pub use geometry::TurbiniuVertex;
 
 use crate::fx::{
     params::{CurvePoints, ParamId, Value},
