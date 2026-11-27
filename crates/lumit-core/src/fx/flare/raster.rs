@@ -61,6 +61,14 @@ pub fn burnt(c: [f32; 3], burn: f32) -> [f32; 3] {
     [0, 1, 2].map(|k| c[k] + (m - c[k]) * if c[k] <= lo { t_lo } else { t_mid })
 }
 
+fn hot(l: &[f32]) -> f32 {
+    let m = l[0].max(l[1]).max(l[2]);
+    if m <= 0.25 {
+        return 0.0;
+    }
+    1.0 - (0.5 - 0.25 * (-4.0 * (m - 0.25)).exp()) / m
+}
+
 impl Frame {
     pub fn preview(w: u32, h: u32, light: [f32; 2], px_scale: f32) -> Self {
         Self {
@@ -435,14 +443,21 @@ pub fn draw_with(
                     splat_row(i, p, w, y as u32, row, layer.as_ref());
                 }
             });
-        let mut over: Vec<f32> = light.iter().map(|v| (v - 1.0).max(0.0)).collect();
+        let mut over: Vec<f32> = light
+            .chunks_exact(4)
+            .flat_map(|l| {
+                let k = hot(l);
+                l.iter().map(move |v| v * k)
+            })
+            .collect();
         crate::fx::cpu::blur_gaussian(&mut over, w, h, frame.defocus, 0, 1.0);
         for ((px, l), o) in rgba[..n]
             .chunks_exact_mut(4)
             .zip(light.chunks_exact(4))
             .zip(over.chunks_exact(4))
         {
-            let soft = [0, 1, 2].map(|k| l[k].min(1.0) + o[k]);
+            let k = hot(l);
+            let soft = [0, 1, 2].map(|c| l[c] * (1.0 - k) + o[c]);
             let b = burnt(soft, burn);
             for k in 0..3 {
                 px[k] += b[k];

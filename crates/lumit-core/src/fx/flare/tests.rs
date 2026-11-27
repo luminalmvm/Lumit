@@ -159,8 +159,8 @@ fn defocus_softens_the_hot_middle_and_leaves_faint_lines() {
         draw(&design, &f, w, h, &mut rgba);
         rgba
     };
-    let faint = draw_one(Kind::Streak, 0.3, 0.0);
-    let faint_soft = draw_one(Kind::Streak, 0.3, 8.0);
+    let faint = draw_one(Kind::Streak, 0.2, 0.0);
+    let faint_soft = draw_one(Kind::Streak, 0.2, 8.0);
     let gap = faint
         .iter()
         .zip(&faint_soft)

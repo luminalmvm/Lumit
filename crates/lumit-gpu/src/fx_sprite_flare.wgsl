@@ -499,7 +499,15 @@ fn sf_over(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     let at = vec2<i32>(gid.xy);
     let l = textureLoad(acc, at, 0);
-    textureStore(over_out, at, max(l - vec4<f32>(1.0), vec4<f32>(0.0)));
+    textureStore(over_out, at, l * hot(l.rgb));
+}
+
+fn hot(l: vec3<f32>) -> f32 {
+    let m = max(max(l.x, l.y), l.z);
+    if (m <= 0.25) {
+        return 0.0;
+    }
+    return 1.0 - (0.5 - 0.25 * exp(-4.0 * (m - 0.25))) / m;
 }
 
 @compute @workgroup_size(8, 8)
@@ -512,7 +520,7 @@ fn sf_add(@builtin(global_invocation_id) gid: vec3<u32>) {
     let base = textureLoad(src, at, 0);
     var l = textureLoad(acc, at, 0).rgb;
     if (frame.defocus > 0.0) {
-        l = min(l, vec3<f32>(1.0)) + textureLoad(soft, at, 0).rgb;
+        l = l * (1.0 - hot(l)) + textureLoad(soft, at, 0).rgb;
     }
     let light = burnt(l, frame.burn);
     textureStore(dst, at, vec4<f32>(base.rgb + light, base.a));
