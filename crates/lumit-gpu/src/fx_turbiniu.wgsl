@@ -11,7 +11,7 @@ struct Params {
 @group(0) @binding(0) var<uniform> params: Params;
 @group(0) @binding(1) var source: texture_2d<f32>;
 @group(0) @binding(2) var ink: texture_2d<f32>;
-@group(0) @binding(3) var output: texture_storage_2d<rgba16float, write>;
+@group(0) @binding(3) var dst: texture_storage_2d<rgba16float, write>;
 
 struct Vertex {
     @builtin(position) position: vec4<f32>,
@@ -63,5 +63,5 @@ fn resolve_ink(@builtin(global_invocation_id) id: vec3<u32>) {
     } else {
         out = ink_amount + original * (1.0 - ink_amount.a);
     }
-    textureStore(output, xy, out);
+    textureStore(dst, xy, out);
 }
