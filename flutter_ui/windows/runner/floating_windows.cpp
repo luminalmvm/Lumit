@@ -173,6 +173,11 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wparam,
         state->tell("windowMoved", window);
       }
       break;
+    case WM_INPUTLANGCHANGE:
+      if (state->tell) {
+        state->tell("keyboardLayoutChanged", window);
+      }
+      break;
     case WM_TIMER:
       if (wparam == kMovedTimer) {
         KillTimer(window, kMovedTimer);

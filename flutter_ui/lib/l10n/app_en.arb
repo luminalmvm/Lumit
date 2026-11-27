@@ -8213,6 +8213,50 @@
   "@keymapKeyboardPanel": {
     "description": "Settings window, Shortcuts: the legend under the keyboard picture for a key whose shortcut only works while one panel is in use. Its partner reads Anywhere."
   },
+  "keymapLayout": "Layout",
+  "@keymapLayout": {
+    "description": "Settings window, Shortcuts: the label beside the list under the keyboard picture that picks which keyboard layout the picture and the shortcut names follow."
+  },
+  "keymapLayoutAutomatic": "Automatic",
+  "@keymapLayoutAutomatic": {
+    "description": "Settings window, Shortcuts: the keyboard layout list entry that follows the layout the computer is using."
+  },
+  "keymapLayoutUs": "English (US)",
+  "@keymapLayoutUs": {
+    "description": "Settings window, Shortcuts: a keyboard layout in the layout list."
+  },
+  "keymapLayoutUk": "English (UK)",
+  "@keymapLayoutUk": {
+    "description": "Settings window, Shortcuts: a keyboard layout in the layout list."
+  },
+  "keymapLayoutGerman": "German",
+  "@keymapLayoutGerman": {
+    "description": "Settings window, Shortcuts: a keyboard layout in the layout list."
+  },
+  "keymapLayoutFrench": "French",
+  "@keymapLayoutFrench": {
+    "description": "Settings window, Shortcuts: a keyboard layout in the layout list."
+  },
+  "keymapLayoutSpanish": "Spanish",
+  "@keymapLayoutSpanish": {
+    "description": "Settings window, Shortcuts: a keyboard layout in the layout list."
+  },
+  "keymapLayoutItalian": "Italian",
+  "@keymapLayoutItalian": {
+    "description": "Settings window, Shortcuts: a keyboard layout in the layout list."
+  },
+  "keymapLayoutSwedish": "Swedish",
+  "@keymapLayoutSwedish": {
+    "description": "Settings window, Shortcuts: a keyboard layout in the layout list."
+  },
+  "keymapLayoutSwissGerman": "Swiss German",
+  "@keymapLayoutSwissGerman": {
+    "description": "Settings window, Shortcuts: a keyboard layout in the layout list."
+  },
+  "keymapLayoutRussian": "Russian",
+  "@keymapLayoutRussian": {
+    "description": "Settings window, Shortcuts: a keyboard layout in the layout list."
+  },
   "keymapPresetLoaded": "{name} loaded.",
   "@keymapPresetLoaded": {
     "description": "Settings window, Shortcuts: shown beside the Preset list after a choice in it. {name} is the choice's own label, such as Lumit default, After Effects, Vegas or the name of a saved set.",

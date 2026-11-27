@@ -1216,6 +1216,10 @@ class Workspace extends ChangeNotifier {
   /// or a saved set's file name. Null once a binding has changed since.
   String? keymapSet;
 
+  String? keyLayout;
+
+  bool keysByPlace = false;
+
   /// Store the engine's keymap text and write the file. Called after every
   /// binding change, which is rare and cheap — the file is a few kilobytes and
   /// a keymap edit is a deliberate act, not something that happens per frame.
@@ -2468,6 +2472,8 @@ class Workspace extends ChangeNotifier {
         'last_update_check_ms': lastUpdateCheckMs,
         'keymap': keymapJson,
         'keymap_set': keymapSet,
+        'key_layout': keyLayout,
+        'keys_by_place': keysByPlace,
         'audio_device': audioDevice,
         'audio_offset_ms': audioOffsetMs,
         'touch_return_ms': touchReturnMs,
@@ -2633,6 +2639,8 @@ class Workspace extends ChangeNotifier {
     lastUpdateCheckMs = j['last_update_check_ms'] as int? ?? 0;
     keymapJson = j['keymap'] is String ? j['keymap'] as String : null;
     keymapSet = j['keymap_set'] is String ? j['keymap_set'] as String : null;
+    keyLayout = j['key_layout'] is String ? j['key_layout'] as String : null;
+    keysByPlace = j['keys_by_place'] == true;
     // Absent, or empty from a hand-edited file, means follow the machine —
     // which is what every settings file written before this field existed was
     // already doing.
