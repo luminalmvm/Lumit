@@ -57,6 +57,7 @@ fn table(i: i32) -> f32 {
 }
 
 fn length_at(d: vec2<f32>) -> f32 {
+    if (d.x == 0.0 && d.y == 0.0) { return table(0); }
     let turn = atan2(d.y, d.x) / TAU;
     let x = (turn - floor(turn)) * f32(TABLE);
     let i = min(i32(floor(x)), TABLE - 1);
