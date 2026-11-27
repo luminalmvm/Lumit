@@ -22,8 +22,7 @@ outward that fades as it goes.
 
 The rays are gathered in four passes, each reaching eight times as far as the one before, so
 **Ray length** costs nothing: long rays take the same time to draw as short ones. The source point
-can sit off the layer, up to one layer's size beyond each edge, and it moves smoothly by fractions
-of a pixel.
+can sit off the layer, and it moves smoothly by fractions of a pixel.
 
 ## Parameters
 
@@ -68,10 +67,15 @@ of a pixel.
 
 In the Effect Controls panel:
 
-- **Threshold**, **Use mask**, **Mask radius** and **Mask feather** are under the **Pre-process** heading, folded.
-- **Amount**, **Detail**, **Phase**, **Source point affects shimmer**, **Radius**, **Reduce flicker**, **Use loop** and **Revolutions in loop** are under the **Shimmer** heading, folded.
-- **Colour** shows only for One colour; **Highlights**, **Midtones** and **Shadows** for the gradients and their colourings; **Mid-high** and **Mid-low** for the five-colour ones.
-- **Mask radius** and **Mask feather** answer to **Use mask**, **Radius** and **Reduce flicker** to **Source point affects shimmer**, **Revolutions in loop** to **Use loop**, **Based on** to any **Colourise** but None, and **Edge thickness** to **Based on** set to Alpha edges.
+- **Pre-process** groups **Threshold**, **Use mask**, **Mask radius**, **Mask feather**, and starts closed.
+- **Shimmer** groups **Amount**, **Detail**, **Phase**, **Source point affects shimmer**, **Radius**, **Reduce flicker**, **Use loop**, **Revolutions in loop**, and starts closed.
+- **Mask radius** is editable while **Use mask** is on.
+- **Mask feather** is editable while **Use mask** is on.
+- **Radius** is editable while **Source point affects shimmer** is on.
+- **Reduce flicker** is editable while **Source point affects shimmer** is on.
+- **Revolutions in loop** is editable while **Use loop** is on.
+- **Based on** is editable while **Colourise** is anything but None.
+- **Edge thickness** is editable while **Based on** is set to Alpha edges.
 - **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
 
 {/* END GENERATED */}
@@ -87,9 +91,9 @@ In the Effect Controls panel:
 
 ### Source point and Ray length
 
-- **Source point** is where the rays start. Drag it in the Viewer. It can lie off the layer, up to
-  one layer's size beyond each edge, which is how the light comes from behind a corner of the
-  frame.
+- **Source point** is where the rays start. Drag it in the Viewer. It can lie off the picture, as
+  far beyond each edge as the picture is wide or tall. The picture is the layer, and with
+  **Extend beyond layer** on the room round it too.
 - **Ray length** is how far the rays reach, in their own distance from the source: at 4, something
   bright throws its ray out to five times as far from the source as it is. It does not change how
   long a frame takes.
