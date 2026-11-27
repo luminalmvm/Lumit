@@ -26,16 +26,20 @@ impl CompositionReference {
     /// Place `footage` in this composition as new layers, the first given on
     /// top, as one undo step.
     ///
-    /// `end_to_end` lays them one after another, each starting where the one
-    /// before it ends, as Premiere and Vegas lay a multi-item drop. The
-    /// composition grows to the last one's end if it runs past it, as a cut
-    /// does. Without it they all start together, as After Effects stacks them.
+    /// They start at frame `start_frame`, the drop's time or the playhead, held
+    /// inside the comp; `None` is frame 0. `end_to_end` lays them one after
+    /// another from there, each starting where the one before it ends, as
+    /// Premiere and Vegas lay a multi-item drop. The composition grows to the
+    /// last one's end if it runs past it, as a cut does. Without it they all
+    /// start together, as After Effects stacks them. A still outside such a
+    /// run ends with the comp.
     ///
     /// Each layer is what [`Self::add_footage_layer`] makes of its item, with
     /// `as_sequence` and `arrival` as there. The first 3D model in a comp with
     /// no lights brings an Ambient light and a Key light with it, in the same
     /// undo step, named by `light_names` (ambient, then key) when given.
     /// Answers the layers made from the items.
+    #[allow(clippy::too_many_arguments)]
     #[frb(sync)]
     pub fn add_footage_layers(
         &self,
@@ -45,12 +49,19 @@ impl CompositionReference {
         arrival: Option<BridgeStreamsArrival>,
         end_to_end: bool,
         light_names: Option<Vec<String>>,
+        start_frame: Option<i64>,
     ) -> Result<Vec<LayerReference>, BridgeError> {
         let arrival = arrival.unwrap_or(BridgeStreamsArrival::First);
         let proj = self.project()?;
         let comp = self.composition()?;
         let mut index = insert_row(row, comp.layers.len());
-        let mut start = Rational::ZERO;
+        let last = comp.frame_rate.frame_at(CompTime(comp.duration.0)) - 1;
+        let origin = comp
+            .frame_rate
+            .time_of_frame(start_frame.unwrap_or(0).min(last).max(0))
+            .map_err(|_| BridgeError::InvalidTime)?
+            .0;
+        let mut start = origin;
         let five = Rational::new(STILL_SECONDS, 1).map_err(|_| BridgeError::InvalidTime)?;
         let still = comp
             .frame_rate
@@ -65,36 +76,39 @@ impl CompositionReference {
             for item in &footage {
                 let (layer, beside) =
                     Self::footage_layers(&p, &doc, &comp, item.id(), as_sequence, false, arrival)?;
-                // A still, or a file that will not probe, has no length of its
-                // own and would last the whole comp, pushing the next one past
-                // its end. In a run it takes what a still dropped in Cut takes.
-                let held = end_to_end
-                    && footage.len() > 1
-                    && match doc.item(item.id()) {
-                        Some(ProjectItem::Footage(f)) => {
-                            Self::has_picture(&p, f) && !Self::runs_as_video(&p, f)
-                        }
-                        _ => false,
-                    };
-                let length = if held {
-                    still
-                } else {
-                    layer
-                        .out_point
-                        .0
-                        .checked_sub(layer.in_point.0)
-                        .map_err(|_| BridgeError::InvalidTime)?
+                let fills = match doc.item(item.id()) {
+                    Some(ProjectItem::Footage(f)) => {
+                        lumit_scene::is_model(f.media.on_disk())
+                            || (Self::has_picture(&p, f) && !Self::runs_as_video(&p, f))
+                    }
+                    _ => false,
                 };
+                let held = end_to_end && footage.len() > 1 && fills;
+                let by = if end_to_end { start } else { origin };
+                let natural = layer
+                    .out_point
+                    .0
+                    .checked_sub(layer.in_point.0)
+                    .map_err(|_| BridgeError::InvalidTime)?;
+                let left = comp
+                    .duration
+                    .0
+                    .checked_sub(by)
+                    .map_err(|_| BridgeError::InvalidTime)?;
+                let trim = if held {
+                    Some(still)
+                } else {
+                    (fills && left > Rational::ZERO).then_some(left)
+                };
+                let length = trim.unwrap_or(natural);
                 for mut layer in std::iter::once(layer).chain(beside) {
-                    if held {
+                    if trim.is_some() {
                         layer.out_point = layer
                             .in_point
                             .add_dur(Duration(length))
                             .map_err(|_| BridgeError::InvalidTime)?;
                     }
-                    if end_to_end {
-                        shift(&mut layer, Duration(start))?;
-                    }
+                    shift(&mut layer, Duration(by))?;
                     placed.push(LayerReference::new(self.project, self.id, layer.id));
                     ops.push(Op::AddLayer {
                         comp: self.id,

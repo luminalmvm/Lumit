@@ -4410,6 +4410,7 @@ fn wire__crate__api__composition__composition_reference_add_footage_layers_impl(
                 <Option<crate::api::streams::BridgeStreamsArrival>>::sse_decode(&mut deserializer);
             let api_end_to_end = <bool>::sse_decode(&mut deserializer);
             let api_light_names = <Option<Vec<String>>>::sse_decode(&mut deserializer);
+            let api_start_frame = <Option<i64>>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, BridgeError>((move || {
                 let output_ok = crate::api::composition::CompositionReference::add_footage_layers(
@@ -4420,6 +4421,7 @@ fn wire__crate__api__composition__composition_reference_add_footage_layers_impl(
                     api_arrival,
                     api_end_to_end,
                     api_light_names,
+                    api_start_frame,
                 )?;
                 Ok(output_ok)
             })())

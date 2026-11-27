@@ -2279,6 +2279,15 @@ BridgeRational timeOfSubframe(double frame, int fpsNum, int fpsDen) {
   );
 }
 
+void startLayersAt(
+    CompositionReference comp, List<LayerReference> layers, int frame) {
+  if (frame <= 0 || layers.isEmpty) return;
+  comp.slideLayers(
+      layerIds: [for (final layer in layers) layer.internallayerId],
+      delta: frame,
+      nudgeTicks: 0);
+}
+
 /// Run [body] as **one undo step**, however many ops it commits.
 ///
 /// A gesture the model cannot say in a single op — stretching a block of
