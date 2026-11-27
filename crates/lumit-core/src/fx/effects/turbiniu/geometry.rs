@@ -9,14 +9,9 @@ use crate::mask::MaskPolyline;
 use super::noise::{random as hashed, Perlin};
 use super::Turbiniu;
 
-/// Pixel position and premultiplied scene-linear RGBA, interleaved for wgpu.
 pub type TurbiniuVertex = [f32; 6];
 
 const MAX_VERTICES: usize = 1_500_000;
-/// Set apart from the small salts the stroke variations use, so a marker
-/// place never shares a stroke variation's number. A place can be negative
-/// (a trim that starts before the path), which the XOR takes without
-/// overflowing.
 const MARKER_SALT: u64 = 0x4d41_524b_0000_0000;
 type Vec2 = [f32; 2];
 type Color = [f32; 4];
@@ -84,8 +79,6 @@ impl Ramp {
     }
 
     fn at(&self, t: f32) -> f32 {
-        // A negative span reads the profile backwards from its end, so -100%
-        // is the profile reversed rather than its first value held.
         let from_end = if self.scale < 0.0 { 1.0 } else { 0.0 };
         curve_at(
             wrap(t * self.scale - self.offset + from_end, self.looping),
@@ -121,9 +114,6 @@ struct Noise {
     evolution: f32,
     cycle: f32,
     line_offset: f32,
-    /// What the per-stroke step moves: the pattern's phase (Phase step per
-    /// stroke) or, for the path warp, its place across (Horizontal step per
-    /// stroke).
     line_steps_phase: bool,
     field: Perlin,
     ramp: Ramp,
@@ -204,10 +194,6 @@ impl Guide {
         let mut tangent = path.tangent_at(dist);
         let a = self.sines[0].at(t);
         let b = self.sines[1].at(t);
-        // The depths are raster pixels already (px@comp controls), so the push
-        // goes on after the path is scaled. Product multiplies the two waves'
-        // shapes; its depth is the geometric mean of the two depths, so it is
-        // pixels too.
         let displacement = if self.sine_operation == 1 {
             let (da, db) = (self.sines[0].amplitude, self.sines[1].amplitude);
             if da == 0.0 || db == 0.0 {
@@ -243,12 +229,6 @@ fn smoothstep(lo: f32, hi: f32, x: f32) -> f32 {
     t * t * (3.0 - 2.0 * t)
 }
 
-/// The brush texture's own patterns, read along a stroke in 0..1: `x` in
-/// grains along it, each stroke (and each `salt`) on a row of its own.
-///
-/// `lap` is how many grains a closed guide is round, 0 on an open one. On a
-/// closed guide the pattern is read round a circle of that length, so it
-/// meets itself where the guide starts and ends instead of jumping there.
 fn grain(field: &Perlin, x: f32, lap: f32, line: usize, salt: f32) -> f32 {
     let y = line as f32 * 3.71 + salt;
     let value = if lap > 0.0 {
@@ -266,8 +246,6 @@ fn grain(field: &Perlin, x: f32, lap: f32, line: usize, salt: f32) -> f32 {
     (value * 2.0 + 0.5).clamp(0.0, 1.0)
 }
 
-/// A station moved onto its stroke's middle along the strip's normal `n`,
-/// for a tip, which is drawn about `xy`.
 fn centred(s: Station, n: Vec2) -> Station {
     Station {
         xy: add(s.xy, scale(n, s.shift)),
@@ -279,8 +257,6 @@ fn centred(s: Station, n: Vec2) -> Station {
 #[derive(Clone, Copy)]
 struct Station {
     xy: Vec2,
-    /// How far the stroke's middle sits off `xy` along its normal: Edge
-    /// roughness eats its two sides by different amounts.
     shift: f32,
     half: f32,
     feather: f32,
@@ -375,8 +351,6 @@ impl Mesh {
     fn cap(&mut self, s: Station, outward: Vec2, kind: u32, size: f32, angle: f32) {
         match kind {
             1 | 2 if size > 0.0 => {
-                // The arms land on the line across the stroke's end, so the
-                // head sits on the stroke at any spread.
                 let wing = angle.to_radians();
                 let tip = add(s.xy, scale(outward, size * wing.cos()));
                 let arms = [-1.0, 1.0].map(|sign| {
@@ -389,8 +363,6 @@ impl Mesh {
                     )
                 });
                 if kind == 1 {
-                    // As faint as the stroke it ends: a stroke too thin to
-                    // see has no head either.
                     let alpha = s.opacity * (s.half * 2.0 / s.feather.max(0.5)).clamp(0.0, 1.0);
                     if alpha <= 0.0 {
                         return;
@@ -455,12 +427,6 @@ impl Turbiniu {
         let points = self.primitives == 1;
         let mut sides = self.point_segments.clamp(3, 128) as usize;
         let requested_steps = self.curve_segments.clamp(1, 10_000) as usize;
-        // A stroke covers the path at most once: a second lap would only draw
-        // the same outline over itself, harder-edged and, in Additive,
-        // brighter.
-        // Only Wrap trim goes round more than once; without it the span is
-        // clamped to the path, and a Trim in before the start must not pull
-        // Trim out back.
         let begin = self.stroke_begin / 100.0;
         let end = if self.stroke_loop {
             (self.stroke_end / 100.0).min(begin + 1.0)
@@ -505,7 +471,6 @@ impl Turbiniu {
                 .map(|(i, &(start, end))| {
                     let pieces = plan.pieces(start, end, steps);
                     if points {
-                        // One marker per grid place in the span.
                         (((end - start) * steps as f32).ceil() as usize + 1) * 9 * sides
                     } else {
                         18 * pieces
@@ -533,8 +498,6 @@ impl Turbiniu {
             let unit_cost = total(&plans, 1, 1).max(1);
             sides = sides.min((MAX_VERTICES / unit_cost).max(3));
         }
-        // Share the budget across the whole family. If even the coarsest
-        // geometry costs too much, retain complete strokes at even intervals.
         if total(&plans, 1, sides) > MAX_VERTICES {
             let max_cost = plans
                 .iter()
@@ -566,8 +529,6 @@ impl Turbiniu {
         };
         let mut stations = Vec::with_capacity(steps + 1);
         let size = dimensions.map(|x| x.max(1) as f32);
-        // The guides' length on the raster, which the brush texture's grains
-        // are counted along.
         let path_px = ((first.length() + second.length()) * 0.5 * raster_scale).max(1.0);
         for plan in plans {
             let line = plan.line;
@@ -579,8 +540,6 @@ impl Turbiniu {
             };
             let position =
                 look.distribution.at(across) + (random(9) - 0.5) * self.distribution_random / 100.0;
-            // Where the stroke lies between the guides decides its width,
-            // softness and coverage; Palette jitter moves only its colour.
             let between = position.clamp(0.0, 1.0);
             let shade = mix(position, random(1), self.gradient_random / 100.0).clamp(0.0, 1.0);
             let width_gain = mix(1.0, random(4) * 2.0, self.thickness_random / 100.0);
@@ -608,8 +567,6 @@ impl Turbiniu {
                     line,
                     line_count: count,
                     along: u,
-                    // Path resolution as set, not as the vertex budget cut
-                    // it, so more strokes do not change the pattern.
                     segments: requested_steps,
                 };
                 Sample {
@@ -632,9 +589,6 @@ impl Turbiniu {
                         color[channel] + cross[channel] * cross[3]
                     };
                 }
-                // Wave rate counts whole waves along the path, and the phases
-                // are in waves, so the wave does not depend on how finely
-                // the path is cut.
                 let sinus = self.alpha_sinus_amplitude
                     * ((u * self.alpha_sinus_frequency
                         + self.alpha_sinus_offset
@@ -646,9 +600,6 @@ impl Turbiniu {
                     + sinus
                     + self.alpha_sinus_constant)
                     .clamp(0.0, 1.0);
-                // Brush texture. Its patterns are laid along the stroke in
-                // pixels, so they stay put on the paper as a trim reveals
-                // them, and every control at 0 leaves the stroke as it was.
                 let hardness = (self.coverage_hardness / 100.0).clamp(0.0, 1.0);
                 let dry = (self.dry_brush / 100.0).clamp(0.0, 1.0) * look.dry_ramp.at(u);
                 if dry > 0.0 {
@@ -661,15 +612,10 @@ impl Turbiniu {
                         line,
                         0.0,
                     );
-                    // 0 keeps every grain, 1 none.
                     let level = dry * (1.0 + 2.0 * soft) - soft;
                     alpha *= smoothstep(level - soft, level + soft, n);
                 }
                 if hardness > 0.0 {
-                    // Pressed within the coverage the stroke has without any
-                    // texture, so a Base coverage lowered to see through the
-                    // strokes stays where it was: only what the texture, the
-                    // wave and Dry brush take away goes to on or off.
                     let ceiling =
                         (self.alpha_noise_brightness + self.alpha_sinus_constant).clamp(1e-3, 1.0);
                     let t = (alpha / ceiling).clamp(0.0, 1.0);
@@ -690,14 +636,10 @@ impl Turbiniu {
                     let lap = if closed { per_grain } else { 0.0 };
                     let x = u * per_grain;
                     if count > 1 {
-                        // The family's own outline torn: one tear pattern per
-                        // side, shared by every stroke on it, eats in from the
-                        // outer strokes, so neighbours cannot cover the tear.
                         let side = if between < 0.5 { 0.0 } else { 13.0 };
                         let inward = 2.0 * between.min(1.0 - between);
                         let tear =
                             rough * depth * 1.6 * grain(&look.rough_field, x, lap, 0, 40.0 + side);
-                        // Each stroke a little ahead or behind, for fibres.
                         let fibre =
                             (grain(&look.rough_field, x * 3.0, lap * 3.0, line, 70.0) - 0.5) * 0.08;
                         let w = (1.0 / count as f32).max(0.01);
@@ -742,10 +684,6 @@ impl Turbiniu {
             let joined =
                 closed && length(sub(warped_sample(0.0).point, warped_sample(1.0).point)) < 1e-3;
             if points {
-                // Markers sit on a fixed grid along the stroke, moved by its
-                // travel, and each grid place keeps its own chance to show:
-                // trimming uncovers or hides places without reshuffling the
-                // ones that stay, and travel carries them along.
                 let looping = self.stroke_loop;
                 let n = steps as f32;
                 let (lo, hi) = if looping {
@@ -777,9 +715,6 @@ impl Turbiniu {
                     mesh.disk(s, sides, rotation, TAU);
                 };
                 for k in first_k..=last_k {
-                    // On a joined guide a place a whole lap on is the same
-                    // place: drawn once, with one chance. With Wrap trim a
-                    // place keeps its chance whichever lap reaches it.
                     if joined && k - first_k >= steps as i64 {
                         break;
                     }
@@ -798,8 +733,6 @@ impl Turbiniu {
                         u = 0.0;
                     }
                     if u < 1e-5 && !joined {
-                        // An open guide's seam is two places, its end and its
-                        // start; each shows if the stroke reaches it.
                         if g > lo + 1e-5 {
                             marker(1.0, place);
                         }
@@ -826,8 +759,6 @@ impl Turbiniu {
                             before = Some(stations[last - 1].xy);
                             after = Some(stations[1].xy);
                         } else if plan.wraps {
-                            // The station beside the seam in the next or
-                            // previous span, so the join turns as one stroke.
                             if span_idx > 0 {
                                 let (a, b) = plan.spans[span_idx - 1];
                                 let at = plan.samples(a, b, steps);
@@ -843,9 +774,6 @@ impl Turbiniu {
                     if plan.leading(span_idx) {
                         let outward = unit(sub(stations[0].xy, stations[1].xy));
                         mesh.cap(
-                            // On the stroke's own middle, where Edge roughness
-                            // moved it: the strip's normal there runs along
-                            // the stroke, the other way from `outward`.
                             centred(stations[0], normal(scale(outward, -1.0))),
                             outward,
                             self.cap_begin,
@@ -872,7 +800,6 @@ impl Turbiniu {
 
 struct StrokePlan {
     line: usize,
-    /// Path travel with this stroke's jitter, as a share of the path.
     shift: f32,
     spans: Vec<(f32, f32)>,
     closed: bool,
@@ -880,17 +807,11 @@ struct StrokePlan {
 }
 
 impl StrokePlan {
-    /// The most pieces [`samples`](Self::samples) cuts a span into: the grid
-    /// places inside it plus the two trimmed ends.
     fn pieces(&self, start: f32, end: f32, steps: usize) -> usize {
         let minimum = if self.closed { 3 } else { 1 };
         (((end - start) * steps as f32).ceil() as usize + 1).max(minimum)
     }
 
-    /// Where along the path a span is sampled: its two ends and every place
-    /// of the path's own grid between them. The grid belongs to the path, not
-    /// to the span, so trimming or moving a stroke reveals the same outline
-    /// instead of sampling the curve afresh from wherever the trim starts.
     fn samples(&self, start: f32, end: f32, steps: usize) -> Vec<f32> {
         let n = steps as f32;
         let first = (start * n + 1e-3).ceil() as i64;
@@ -917,8 +838,6 @@ impl StrokePlan {
     }
 }
 
-/// A wrapped stroke has a real endpoint at each trim position. Split at every
-/// seam so an open guide never draws a line from its end back to its start.
 fn stroke_spans(begin: f32, end: f32, looping: bool) -> Vec<(f32, f32)> {
     if !looping {
         let (a, b) = (begin.clamp(0.0, 1.0), end.clamp(0.0, 1.0));
@@ -1125,8 +1044,6 @@ impl Turbiniu {
                 count: self.cross_colours_count.clamp(1, 5) as usize,
             },
             dry_ramp: Ramp::new(self.dry_brush_ramp, 0.0, 100.0, false),
-            // Variation seed moves the brush texture too; the two patterns
-            // are fields of their own so the tears do not follow the gaps.
             dry_field: Perlin::new(self.random_seed.clamp(0, 32768) as u32 ^ 0x0d12),
             rough_field: Perlin::new(self.random_seed.clamp(0, 32768) as u32 ^ 0x7a3e),
         }
@@ -1159,9 +1076,6 @@ mod tests {
         }
     }
 
-    /// Phase step per stroke moves the pattern's phase from stroke to stroke,
-    /// the same as Pattern phase does; Horizontal step per stroke moves it
-    /// across instead.
     #[test]
     fn a_phase_step_moves_the_phase() {
         let at = |line| Sample {

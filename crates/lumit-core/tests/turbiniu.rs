@@ -126,7 +126,6 @@ fn the_marker_budget_reaches_both_guides() {
     assert_eq!(vertices[vertices.len() - vertices_per_marker][1], 110.0);
 }
 
-/// The middle of every marker drawn, from the centre vertex its fan starts on.
 fn marker_centres(vertices: &[[f32; 6]], sides: usize) -> Vec<[f32; 2]> {
     vertices
         .chunks(9 * sides)
@@ -252,8 +251,6 @@ fn the_coverage_wave_does_not_follow_path_resolution() {
             ..controls()
         };
         let vertices = fx.geometry(&guide, &guide, 1.0, [200, 100]);
-        // The strip's inner vertices carry the coverage; read it at x = 50,
-        // 100, 150.
         [50.0f32, 100.0, 150.0].map(|x| {
             vertices
                 .iter()
@@ -278,9 +275,6 @@ fn a_guide_wave_pushes_by_its_depth_in_pixels() {
         mask_2_sine_1_amplitude: 30.0,
         ..controls()
     };
-    // Depth arrives in raster pixels (a px@comp control), so at half scale a
-    // depth of 30 still pushes 30: the stroke's middle a quarter along, at
-    // x = 25, sits 30 above the halved path's y = 25.
     let vertices = fx.geometry(&guide, &guide, 0.5, [100, 50]);
     let at_quarter: Vec<f32> = vertices
         .iter()
@@ -291,7 +285,6 @@ fn a_guide_wave_pushes_by_its_depth_in_pixels() {
     assert!((middle - (25.0 - 30.0)).abs() < 1e-3, "{middle}");
 }
 
-/// Distinct vertex positions, to compare outlines.
 fn outline(vertices: &[[f32; 6]]) -> Vec<[u32; 2]> {
     let mut at: Vec<[u32; 2]> = vertices
         .iter()
@@ -321,8 +314,6 @@ fn trimming_a_stroke_keeps_its_outline() {
         }
         .geometry(&guide, &guide, 1.0, [200, 100]),
     );
-    // Only the new end row and the row beside it, which turns towards it,
-    // are new; the rest of the outline is the untrimmed one.
     let new = trimmed
         .iter()
         .filter(|p| whole.binary_search(p).is_err())
@@ -445,7 +436,6 @@ fn a_wrapped_marker_keeps_its_chance_on_every_lap() {
     }
 }
 
-/// One straight stroke 400 px long, cut into 200 pieces.
 fn brush() -> (MaskPolyline, Turbiniu) {
     (
         path(&[[0.0, 50.0], [400.0, 50.0]], false),
@@ -456,8 +446,6 @@ fn brush() -> (MaskPolyline, Turbiniu) {
     )
 }
 
-/// The coverage at each cut along a stroke: the inner band's first corner,
-/// 18 vertices to a piece.
 fn coverages(vertices: &[[f32; 6]]) -> Vec<f32> {
     vertices.chunks(18).map(|piece| piece[6][5]).collect()
 }
@@ -466,7 +454,6 @@ fn coverages(vertices: &[[f32; 6]]) -> Vec<f32> {
 fn a_dry_brush_opens_gaps_that_grow_with_its_profile() {
     let (guide, fx) = brush();
     let at = |fx: Turbiniu| coverages(&fx.geometry(&guide, &guide, 1.0, [400, 100]));
-    // Nothing changes until Dry brush is raised.
     assert!(at(fx).iter().all(|&a| (a - 1.0).abs() < 1e-6));
     let flat = CurvePoints::sanitised(&[[0.0, 1.0], [1.0, 1.0]]);
     let all = at(Turbiniu {
@@ -481,7 +468,6 @@ fn a_dry_brush_opens_gaps_that_grow_with_its_profile() {
         ..fx
     });
     assert!(half.iter().any(|&a| a > 0.9) && half.iter().any(|&a| a < 0.1));
-    // The default profile dries towards the end.
     let ramped = at(Turbiniu {
         dry_brush: 100.0,
         ..fx
@@ -524,13 +510,11 @@ fn hardness_presses_coverage_to_on_or_off() {
             .geometry(&guide, &guide, 1.0, [400, 100]),
         )
     };
-    // A Base coverage lowered to see through the strokes is kept.
     for hardness in [0.0, 50.0, 100.0] {
         assert!(at(0.4, 0.0, hardness)
             .iter()
             .all(|&a| (a - 0.4).abs() < 1e-5));
     }
-    // What the wave takes away goes to on or off, under Base coverage.
     let soft = at(0.8, 0.6, 0.0);
     let hard = at(0.8, 0.6, 100.0);
     let between = |s: &[f32]| s.iter().filter(|&&a| a > 0.05 && a < 0.75).count();
@@ -636,7 +620,6 @@ fn a_tip_sits_on_a_torn_strokes_middle() {
         ..fx
     }
     .geometry(&guide, &guide, 1.0, [400, 100]);
-    // A round tip is 12 slices of 9 vertices, its centre first.
     let tip = vertices.len() - 108;
     let centre = vertices[tip];
     let last = &vertices[tip - 18..tip];

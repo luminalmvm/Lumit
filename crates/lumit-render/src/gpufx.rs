@@ -30,10 +30,10 @@ use crate::fxops::{ColourTable, LoadedLut, LoadedOcio};
 
 mod audio_spectrum;
 mod energy_line;
-mod turbiniu;
 pub mod lfx;
 pub mod ofx;
 mod stabilise;
+mod turbiniu;
 
 type Tex = wgpu::Texture;
 

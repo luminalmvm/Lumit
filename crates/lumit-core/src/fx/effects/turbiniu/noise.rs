@@ -1,6 +1,3 @@
-//! A 3D Perlin field with an MT19937-shuffled permutation.
-//! Its animation loop blends two depths a cycle apart.
-
 pub(super) struct Perlin([u8; 256]);
 
 impl Perlin {
@@ -45,8 +42,6 @@ impl Perlin {
         let phase = (depth / cycle).rem_euclid(1.0);
         let first = self.field(x, y, phase * cycle);
         let last = self.field(x, y, (phase - 1.0) * cycle);
-        // Two unrelated fields blended halfway have less contrast than either;
-        // dividing by the blend's spread keeps the pattern as strong all round.
         let spread = ((1.0 - phase).powi(2) + phase.powi(2)).sqrt();
         super::geometry::mix(first, last, phase) / spread
     }
@@ -81,11 +76,6 @@ impl Perlin {
     }
 }
 
-/// A number in 0..1 for one stroke's one variation, the same every frame.
-///
-/// Each of the seed, the stroke and the variation is mixed in on its own, so
-/// no seed narrows the values a variation can take and no stroke's variation
-/// repeats another stroke's different one.
 pub(super) fn random(seed: usize, line: usize, salt: usize) -> f32 {
     let mut x = (seed as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15)
         ^ (line as u64)
@@ -106,8 +96,6 @@ pub(super) fn random(seed: usize, line: usize, salt: usize) -> f32 {
 mod tests {
     use super::{random, Perlin};
 
-    /// No seed narrows a variation's values, and one stroke's variation is
-    /// not another stroke's different one.
     #[test]
     fn every_seed_varies_freely_and_strokes_do_not_echo() {
         for seed in [0, 1, 4999, 5000, 2499, 32768] {
@@ -124,8 +112,6 @@ mod tests {
         assert_eq!(echoes, 0);
     }
 
-    /// A looping pattern is as strong half way round its period as at its
-    /// start.
     #[test]
     fn a_looping_pattern_keeps_its_contrast() {
         let field = Perlin::new(3);

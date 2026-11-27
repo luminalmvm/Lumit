@@ -75,7 +75,6 @@ void main() {
       ),
     ));
     await tester.pump();
-    // The top-right knob's outer half: past the square, inside the widget.
     final topLeft = tester.getTopLeft(find.byType(CurveEditor));
     final grab = topLeft + const Offset(size - 3, 3);
     await tester.dragFrom(grab, const Offset(0, 40));
@@ -87,7 +86,6 @@ void main() {
 
   testWidgets('a drag redraws the plot while nothing else rebuilds it',
       (tester) async {
-    // As in the Timeline's popup: the points handed in never change.
     const size = 150.0;
     await tester.pumpWidget(host(
       CurveEditor(

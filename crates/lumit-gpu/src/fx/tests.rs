@@ -16643,9 +16643,6 @@ fn depth_of_field_pro_blurs_up_to_the_frame_edge() {
     }
 }
 
-/// Turbiniu draws its strokes over the layer: where there is no stroke the
-/// layer is untouched, a half-amount stroke covers half, and Additive adds
-/// its light to the layer's.
 #[test]
 fn turbiniu_draws_over_the_layer() {
     let Some(ctx) = crate::test_support::lease() else {
@@ -16656,7 +16653,6 @@ fn turbiniu_draws_over_the_layer() {
     let (w, h) = (16u32, 16u32);
     let img: Vec<f32> = (0..w * h).flat_map(|_| [0.25f32, 0.5, 0.75, 1.0]).collect();
     let tex = upload_linear_f32(&ctx, &img, w, h);
-    // An opaque white square over the left half, premultiplied.
     let white = |x: f32, y: f32| [x, y, 1.0, 1.0, 1.0, 1.0];
     let square = [
         white(0.0, 0.0),
@@ -16678,15 +16674,35 @@ fn turbiniu_draws_over_the_layer() {
 
     let full = fx.turbiniu(&ctx, &tex, &square, false, false, 1.0);
     let full = readback_linear_f32(&ctx, &full, w, h).unwrap();
-    assert!(close(px(&full, 4), [1.0, 1.0, 1.0, 1.0]), "{:?}", px(&full, 4));
-    assert!(close(px(&full, 12), [0.25, 0.5, 0.75, 1.0]), "{:?}", px(&full, 12));
+    assert!(
+        close(px(&full, 4), [1.0, 1.0, 1.0, 1.0]),
+        "{:?}",
+        px(&full, 4)
+    );
+    assert!(
+        close(px(&full, 12), [0.25, 0.5, 0.75, 1.0]),
+        "{:?}",
+        px(&full, 12)
+    );
 
     let half = fx.turbiniu(&ctx, &tex, &square, false, false, 0.5);
     let half = readback_linear_f32(&ctx, &half, w, h).unwrap();
-    assert!(close(px(&half, 4), [0.625, 0.75, 0.875, 1.0]), "{:?}", px(&half, 4));
-    assert!(close(px(&half, 12), [0.25, 0.5, 0.75, 1.0]), "{:?}", px(&half, 12));
+    assert!(
+        close(px(&half, 4), [0.625, 0.75, 0.875, 1.0]),
+        "{:?}",
+        px(&half, 4)
+    );
+    assert!(
+        close(px(&half, 12), [0.25, 0.5, 0.75, 1.0]),
+        "{:?}",
+        px(&half, 12)
+    );
 
     let added = fx.turbiniu(&ctx, &tex, &square, true, false, 1.0);
     let added = readback_linear_f32(&ctx, &added, w, h).unwrap();
-    assert!(close(px(&added, 4), [1.25, 1.5, 1.75, 1.0]), "{:?}", px(&added, 4));
+    assert!(
+        close(px(&added, 4), [1.25, 1.5, 1.75, 1.0]),
+        "{:?}",
+        px(&added, 4)
+    );
 }

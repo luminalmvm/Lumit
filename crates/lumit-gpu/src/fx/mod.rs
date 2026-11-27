@@ -21,7 +21,6 @@ pub mod depth_points;
 pub mod distort;
 pub mod dof;
 pub mod energy_line;
-pub mod turbiniu;
 mod engine;
 pub mod environment;
 pub mod film;
@@ -54,6 +53,7 @@ pub mod stabilise;
 pub mod stylise;
 pub mod temporal;
 pub mod timewarp;
+pub mod turbiniu;
 pub mod utility;
 pub mod volumetric;
 

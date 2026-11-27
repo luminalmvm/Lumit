@@ -195,12 +195,8 @@ class _CurveEditorState extends State<CurveEditor> {
     return live.length >= 2 ? live : curveIdentity;
   }
 
-  /// How far the square sits in from the widget's edge: a grab radius, so a
-  /// corner point's whole knob is inside what takes a press — or less on a
-  /// plot too small to spare it.
   double get _inset => math.min(_grabRadius, widget.size / 6);
 
-  /// The square's side.
   double get _side => widget.size - 2 * _inset;
 
   /// Widget coordinates → curve coordinates. y is flipped: up is more light.
@@ -392,10 +388,6 @@ class _CurveEditorState extends State<CurveEditor> {
     final lo = _held == 0 ? 0.0 : points[_held - 1][0] + _minGap;
     final hi =
         _held == points.length - 1 ? 1.0 : points[_held + 1][0] - _minGap;
-    // A new list each tick, never the old one changed in place: the painter
-    // compares what it drew with what it is given, and the same list compares
-    // equal to itself, so a popup's plot (which nothing else redraws) stood
-    // still through the whole drag and after it.
     final next = [
       for (var i = 0; i < points.length; i++)
         i == _held
@@ -468,10 +460,6 @@ class _CurveEditorState extends State<CurveEditor> {
       onHorizontalDragUpdate: update,
       onHorizontalDragEnd: (_) => _onPanEnd(_lastLocal),
       onHorizontalDragCancel: () => _onPanEnd(null),
-      // The square sits a grab radius in from every edge of the widget: the
-      // two end points live on its corners, and with the square flush to the
-      // edge half of each knob lay outside anything that takes a press, so
-      // grabbing it there fell through and scrolled the panel instead.
       child: SizedBox(
         width: widget.size,
         height: widget.size,
@@ -828,8 +816,6 @@ class _CurveChannelEditorState extends State<CurveChannelEditor> {
     final channels = Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // One curve has no channel to switch to, so its name is a plain label
-        // rather than a button that does nothing when pressed.
         if (widget.labels.length == 1)
           LumitTooltip(
             message: widget.labels.single,

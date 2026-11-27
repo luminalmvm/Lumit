@@ -3497,8 +3497,6 @@ fn comp_walk(
                         return audio_spectrum_levels::levels(doc, comp, e, layer, slt, t_comp);
                     }
                     "turbiniu" if param == "mask_2" && e.mask_ref(param).is_none() => {
-                        // An unset second slot repeats the first path. An explicit
-                        // reference that went missing keeps the usual empty slot.
                         return lumit_core::mask::effect_path_at(e, "mask_1", true, layer, slt);
                     }
                     _ => {}

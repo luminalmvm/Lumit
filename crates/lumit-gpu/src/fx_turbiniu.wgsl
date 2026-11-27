@@ -56,9 +56,6 @@ fn resolve_ink(@builtin(global_invocation_id) id: vec3<u32>) {
     } else {
         color = textureLoad(ink, xy, 0);
     }
-    // The strokes go over the layer, Effect amount fading only them: the
-    // layer shows wherever there is no stroke. Additive adds their light to
-    // the layer's instead of covering it.
     let ink_amount = color * params.mix_amount;
     var out: vec4<f32>;
     if params.additive != 0.0 {

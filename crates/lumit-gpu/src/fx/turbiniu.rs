@@ -1,5 +1,3 @@
-//! Rasterise Turbiniu's coloured triangles, then resolve their coverage.
-
 use super::lens_blur::{bind_layout, scratch, Slot};
 use super::{at_depth, work_texture, FxEngine};
 use crate::GpuContext;

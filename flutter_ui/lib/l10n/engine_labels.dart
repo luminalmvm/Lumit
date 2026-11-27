@@ -2465,7 +2465,6 @@ Map<String, String> get _built => {
       "Failing light": l10n.fxFailingLight,
       "Film projector": l10n.fxFilmProjector,
       "CRT": l10n.fxCrt,
-      // Turbiniu.
       "Turbiniu": l10n.fxTurbiniu,
       "Overlap mode": l10n.fxOverlapMode,
       "Source over": l10n.fxSourceOver,

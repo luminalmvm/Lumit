@@ -1213,10 +1213,6 @@ class EffectParamRowFrb extends StatelessWidget {
               cursor: SystemMouseCursors.click,
               child: GestureDetector(
                 key: ValueKey<String>('fx-curve-thumb-$id-${param.id}'),
-                // The plot under it ignores the pointer (it is a picture
-                // here), so the box itself has to take the press: deferring
-                // to a child that refuses every hit left the click to the
-                // Timeline row, which only selected itself.
                 behavior: HitTestBehavior.opaque,
                 onTap: () {
                   // The popup keeps what it last committed, so the plot
@@ -1253,9 +1249,6 @@ class EffectParamRowFrb extends StatelessWidget {
                     ),
                   );
                 },
-                // Square, as the plot it opens is: stretched to twice its
-                // width the curve read as a different shape from the
-                // Effect Controls one.
                 child: SizedBox(
                   width: side,
                   height: side,
