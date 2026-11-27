@@ -448,7 +448,7 @@ impl SpriteFlare {
             // The row arrives at the raster's size, the frame wants comp px.
             edge_fade: s.edge_fade.max(0.0) / px_scale,
             burn: (s.burn / 100.0).clamp(0.0, 1.0),
-            defocus: s.defocus.max(0.0),
+            defocus: s.defocus.max(0.0).min(500.0 * px_scale),
         }
     }
 
