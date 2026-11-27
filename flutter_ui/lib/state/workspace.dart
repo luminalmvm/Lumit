@@ -1080,6 +1080,8 @@ class Workspace extends ChangeNotifier {
   bool precomposeAdjustDuration = true;
   bool precomposeOpenNewComp = false;
 
+  Map<String, dynamic>? lastCompSettings;
+
   Map<String, dynamic> captionSettings = {};
 
   List<Map<String, dynamic>> captionStyles = [];
@@ -1970,6 +1972,11 @@ class Workspace extends ChangeNotifier {
     settingsChanged();
   }
 
+  void rememberCompSettings(Map<String, dynamic> settings) {
+    lastCompSettings = settings;
+    settingsChanged();
+  }
+
   void setCaptionSettings(Map<String, dynamic> settings) {
     captionSettings = settings;
     settingsChanged();
@@ -2528,6 +2535,7 @@ class Workspace extends ChangeNotifier {
         'precompose_move_attributes': precomposeMoveAttributes,
         'precompose_adjust_duration': precomposeAdjustDuration,
         'precompose_open_new_comp': precomposeOpenNewComp,
+        'last_comp_settings': lastCompSettings,
         'caption_settings': captionSettings,
         'caption_styles': captionStyles,
         'stagger_step': staggerStep,
@@ -2786,6 +2794,9 @@ class Workspace extends ChangeNotifier {
     precomposeMoveAttributes = j['precompose_move_attributes'] as bool? ?? true;
     precomposeAdjustDuration = j['precompose_adjust_duration'] as bool? ?? true;
     precomposeOpenNewComp = j['precompose_open_new_comp'] as bool? ?? false;
+    lastCompSettings = j['last_comp_settings'] is Map<String, dynamic>
+        ? j['last_comp_settings'] as Map<String, dynamic>
+        : null;
     captionSettings = j['caption_settings'] is Map<String, dynamic>
         ? j['caption_settings'] as Map<String, dynamic>
         : {};
