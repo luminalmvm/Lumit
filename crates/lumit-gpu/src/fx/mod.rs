@@ -62,6 +62,9 @@ pub mod volumetric;
 mod denoise_tests;
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod light_rays_tests;
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests;
 
 pub struct FxEngine {
