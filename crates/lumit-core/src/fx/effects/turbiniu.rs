@@ -278,7 +278,7 @@ pub struct Turbiniu {
     #[counter(label = "Stroke count", min = 1, max = 100, default = 3, hard_min = 1, hard_max = 10000, unit = Raw)]
     pub iterations: i32,
 
-    #[counter(label = "Path resolution", min = 1, max = 250, default = 250, hard_min = 0, hard_max = 10000, unit = Raw)]
+    #[counter(label = "Path resolution", min = 1, max = 250, default = 250, hard_min = 1, hard_max = 10000, unit = Raw)]
     pub curve_segments: i32,
 
     #[curve(label = "Spacing profile")]
