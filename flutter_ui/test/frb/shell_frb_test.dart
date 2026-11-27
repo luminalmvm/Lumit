@@ -744,7 +744,7 @@ void main() {
       expect(find.text('Frame rate'), findsOneWidget);
       expect(find.text('Composition · 60'), findsOneWidget,
           reason: "the rate starts as the comp's own 60");
-      expect(find.text('Work area · 60–180'), findsOneWidget,
+      expect(find.text('Work area · 60–179'), findsOneWidget,
           reason: 'the span starts as the work area the Timeline set');
       expect(find.textContaining('120 frames'), findsOneWidget,
           reason: 'and the footer counts exactly those frames');
