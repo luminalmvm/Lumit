@@ -615,10 +615,6 @@ void main() {
     });
   });
 
-  /// **The Ctrl+Shift+T box scales and moves the picked points too**: tight
-  /// round them in their layer's terms, a corner handle scales both ways about
-  /// the opposite corner, an edge only its own way, Alt about the middle and
-  /// Shift in proportion; two masks written in one go.
   group('pointsScaled', () {
     Set<String> keysOf(LayerBox b) => {
           for (final m in b.masks)
@@ -633,7 +629,6 @@ void main() {
       for (var i = 0; i < 4; i++) {
         expect((frame.corners[i] - at[i]).distance, lessThan(1e-6));
       }
-      // Half scale: one layer unit is half a screen pixel, along the turn.
       expect(frame.across.distance, closeTo(0.5, 1e-9));
       expect(frame.across.direction, closeTo(math.pi / 6, 1e-9));
       expect(frame.mirrored, isFalse);
@@ -644,7 +639,6 @@ void main() {
       final mask = b.masks.single;
       final frame = pickedPointsFrame([b], keysOf(b), b, 0)!;
       final before = [for (final p in pathPointsOf(b)) p.at];
-      // The bottom right corner (handle 2), pulled out by the square's side.
       final map = pointsScaled(
           frame, 2, before[2], before[2] + const Offset(60, 60));
       final after = pathPointsOf(
@@ -661,7 +655,6 @@ void main() {
       final b = box(masks: [squareMask()]);
       final frame = pickedPointsFrame([b], keysOf(b), b, 0)!;
       final c = frame.centre;
-      // The right edge (handle 5), 30 px further right, from the middle.
       final map = pointsScaled(
           frame, 5, frame.handles[5], frame.handles[5] + const Offset(30, 0),
           fromCentre: true);
@@ -685,7 +678,6 @@ void main() {
 
     test('points in a line still get a box and scale along it', () {
       final m = squareMask();
-      // Two points on one horizontal line: no height to the box.
       final b = box(masks: [m]);
       final keys = {maskPointKey(b.id, m.id, 0), maskPointKey(b.id, m.id, 1)};
       final frame = pickedPointsFrame([b], keys, b, 0)!;
@@ -701,7 +693,6 @@ void main() {
     test('a turned box scales along its own sides', () {
       final b = box(masks: [squareMask()]);
       final frame = pickedPointsFrame([b], keysOf(b), b, math.pi / 4)!;
-      // A square turned 45° in its box: the box is the diamond round it.
       final side = (frame.corners[1] - frame.corners[0]).distance;
       expect(side, closeTo(60 * math.sqrt2, 1e-6));
       expect(frame.across.direction, closeTo(math.pi / 4, 1e-9));

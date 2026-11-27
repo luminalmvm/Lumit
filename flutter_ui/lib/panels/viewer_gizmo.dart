@@ -1340,7 +1340,6 @@ VertexEdit pointsTurned(
         LayerBox box, Set<String> points, Offset centre, double angle) =>
     pointsMapped(box, points, turnedOnScreen(centre, angle));
 
-/// A turn of [angle] radians about [centre], on screen.
 Offset Function(Offset) turnedOnScreen(Offset centre, double angle) {
   final (s, c) = (math.sin(angle), math.cos(angle));
   return (p) {
@@ -1406,44 +1405,27 @@ Rect? pickedPointsBox(List<LayerBox> boxes, Set<String> points,
   return r;
 }
 
-/// How far the Ctrl+Shift+T box stands off the points it holds, in screen
-/// pixels, so its handles never sit on a point.
 const double pointsBoxMargin = 8;
 
-/// The Ctrl+Shift+T box round the picked path points, on screen.
-///
-/// It is worked out afresh from the points each time, tight round them in its
-/// layer's own terms, so it follows them through a move, a scale, an undo or a
-/// keyed path at another frame instead of staying where it was put up.
 class PointsFrame {
   const PointsFrame(this.corners, this.across, this.down);
 
-  /// Top left, top right, bottom right and bottom left, tight round the points.
   final List<Offset> corners;
 
-  /// One of the layer's units along the box's top edge and down its left
-  /// edge, on screen. Never both zero, so the box has sides to scale along
-  /// even round points in a line.
   final Offset across, down;
 
-  /// The point [u] across and [v] down the box, each from 0 to 1.
   Offset at(double u, double v) =>
       corners[0] + (corners[1] - corners[0]) * u + (corners[3] - corners[0]) * v;
 
   Offset get centre => at(0.5, 0.5);
 
-  /// Whether the box is drawn mirrored on screen: a turn on screen is then the
-  /// other way round in the layer.
   bool get mirrored => across.dx * down.dy - across.dy * down.dx < 0;
 
-  /// Where each of the eight handles sits across and down the box: the four
-  /// corners, then the middles of the top, right, bottom and left edges.
   static const handleUv = [
-    (0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), //
+    (0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0),
     (0.5, 0.0), (1.0, 0.5), (0.5, 1.0), (0.0, 0.5),
   ];
 
-  /// The box drawn [pointsBoxMargin] clear of the points: its four corners.
   List<Offset> get outline {
     Offset unit(Offset d) =>
         d.distance < 1e-9 ? Offset.zero : d / d.distance * pointsBoxMargin;
@@ -1456,7 +1438,6 @@ class PointsFrame {
     ];
   }
 
-  /// The eight handles on [outline], in [handleUv]'s order.
   List<Offset> get handles {
     final o = outline;
     return [
@@ -1465,7 +1446,6 @@ class PointsFrame {
     ];
   }
 
-  /// The handle within [reach] of [at], the nearest one, or null.
   int? handleAt(Offset at, double reach) {
     int? best;
     var bestDistance = reach;
@@ -1477,29 +1457,22 @@ class PointsFrame {
     return best;
   }
 
-  /// Whether [at] is inside the drawn box.
   bool contains(Offset at) {
     final o = outline;
     final path = Path()..addPolygon(o, true);
     return path.contains(at);
   }
 
-  /// This box taken through [map], a change made on screen: where it stands
-  /// while a drag is still in flight.
   PointsFrame mapped(Offset Function(Offset) map) {
     final c = [for (final p in corners) map(p)];
     final o = map(corners[0]);
     var a = map(corners[0] + across) - o, d = map(corners[0] + down) - o;
-    // Scaled flat to nothing, an edge still has a way to stand off.
     if (a.distance < 1e-9) a = across;
     if (d.distance < 1e-9) d = down;
     return PointsFrame(c, a, d);
   }
 }
 
-/// The Ctrl+Shift+T box round the picked path points of [boxes], laid out in
-/// [owner]'s own terms with its sides turned [angle] radians from the layer's
-/// x axis, or null when fewer than two points are picked.
 PointsFrame? pickedPointsFrame(
   List<LayerBox> boxes,
   Set<String> points,
@@ -1518,7 +1491,6 @@ PointsFrame? pickedPointsFrame(
       double.negativeInfinity, double.negativeInfinity);
   for (final p in at) {
     final l = owner.map.layerOf(p);
-    // In the box's own frame: the layer's turned back by the box's angle.
     final (x, y) = (l.dx * c + l.dy * s, -l.dx * s + l.dy * c);
     x0 = math.min(x0, x);
     y0 = math.min(y0, y);
@@ -1539,10 +1511,6 @@ PointsFrame? pickedPointsFrame(
   return PointsFrame(corners, across, down);
 }
 
-/// The scale a drag of [frame]'s handle [handle] from [from] to [to] makes, on
-/// screen: about the opposite corner or edge, or about the middle with
-/// [fromCentre]. A corner scales both ways, an edge only its own; [uniform]
-/// keeps the box's proportions. Dragged past the far side, the points flip.
 Offset Function(Offset) pointsScaled(
   PointsFrame frame,
   int handle,
@@ -1556,7 +1524,6 @@ Offset Function(Offset) pointsScaled(
   final a = frame.across, b = frame.down;
   final det = a.dx * b.dy - a.dy * b.dx;
   if (det.abs() < 1e-12) return (p) => p;
-  // Screen to the box's own units, about the pivot, and back.
   Offset local(Offset p) {
     final d = p - pivot;
     return Offset(
@@ -2113,8 +2080,6 @@ enum _GizmoDrag {
   anchor,
   points,
 
-  /// The picked path points turned round the Ctrl+Shift+T box, scaled from one
-  /// of its handles or moved from inside it.
   turnPoints,
   scalePoints,
   movePoints,
@@ -2549,9 +2514,6 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
         if (box.id != editing) box
     ];
     final frame = _pointsFrame;
-    // A box whose points are no longer picked is down for good: picking
-    // points again later does not bring it back, and Ctrl+Shift+T then puts
-    // up a new one rather than taking a hidden one down.
     if (frame == null && _turnBox != null) _turnBox = null;
     final boxMap = _boxMap();
     final soleHandles = selected.length == 1 && selected.single.scalable
@@ -3452,17 +3414,10 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   /// ([_pointsFrame]), so it never goes stale.
   ({UuidValue layer, double angle})? _turnBox;
 
-  /// How far the points have been turned on screen since the box went up,
-  /// which Shift holds to steps of 15°.
   double _turnAngle = 0;
 
-  /// The box handle a scale drag holds, in [PointsFrame.handleUv]'s order.
   int? _boxHandle;
 
-  /// Where the box's last drag left the picked points, in its layer's terms.
-  /// When they are found anywhere else (an undo, a keyed path at another
-  /// frame) the box stands straight again round them, rather than at a turn
-  /// that no longer fits them.
   List<Offset>? _boxPointsAt;
 
   /// Ctrl+Shift+T: put the box up round two or more picked path points, or
@@ -3470,8 +3425,6 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   /// picked, it goes round the whole path.
   void _onPointsTurnRequest() {
     if (!mounted || !_activeView || !_selectionTool) return;
-    // A box whose points have all gone is down already: the key puts up a new
-    // one rather than taking the old one down.
     if (_turnBox != null && _pointsFrame != null) {
       setState(() => _turnBox = null);
       return;
@@ -3500,8 +3453,6 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     });
   }
 
-  /// The layer the box is laid out in: [id] while it still has picked points,
-  /// else the first one that has.
   LayerBox? _pointsOwner(UuidValue? id) {
     final only = _pathBeingEdited;
     LayerBox? first;
@@ -3515,9 +3466,6 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     return first;
   }
 
-  /// The box round the picked points as they now stand, or null when it is
-  /// down or fewer than two points are picked in the layers that can be
-  /// edited — then it draws nothing and takes no drag.
   PointsFrame? get _pointsFrame {
     final turn = _turnBox;
     if (turn == null) return null;
@@ -3528,7 +3476,6 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
         only: _pathBeingEdited);
   }
 
-  /// The picked points in [owner]'s terms, in the order the box reads them.
   List<Offset> _pickedIn(LayerBox owner, [Offset Function(Offset)? map]) => [
         for (final box in _editablePointBoxes)
           for (final p in pathPointsOf(box, only: _pathBeingEdited))
@@ -3536,8 +3483,6 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
               owner.map.layerOf(map == null ? p.at : map(p.at)),
       ];
 
-  /// How far the box is turned in [owner]'s terms: as its drags left it while
-  /// the points are where the last one put them, else straight.
   double _boxAngle(LayerBox owner) {
     final turn = _turnBox;
     if (turn == null || owner.id != turn.layer) return 0;
@@ -3561,7 +3506,6 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     final from = _origin - c, to = _pointer - c;
     if (from.distance < 1 || to.distance < 1) return 0;
     var d = to.direction - from.direction;
-    // Across the left of the centre the angle wraps: the short way round.
     if (d > math.pi) d -= 2 * math.pi;
     if (d < -math.pi) d += 2 * math.pi;
     if (HardwareKeyboard.instance.isShiftPressed) {
@@ -3571,9 +3515,6 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     return d;
   }
 
-  /// What the drag in flight does to the box's points, on screen: a turn round
-  /// it, a scale from a handle, a move from inside. Null when no box drag is
-  /// in flight.
   Offset Function(Offset)? _boxMap() {
     final frame = _pointsFrame;
     if (frame == null) return null;
@@ -3597,7 +3538,6 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   VertexEdit _boxEdit(LayerBox box) =>
       pointsMapped(box, _points, _boxMap() ?? (p) => p);
 
-  /// Write the box drag that just ended, as one undo step.
   void _commitBoxDrag() {
     final frame = _pointsFrame;
     final map = _boxMap();
@@ -3609,11 +3549,8 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     final turn = _turnBox!;
     final owner = _pointsOwner(turn.layer);
     if (owner == null) return;
-    // The turn the box had while the drag ran: straight if the points had been
-    // moved from under it.
     final was = _boxAngle(owner);
     final left = _pickedIn(owner, map);
-    // The map as the drag left it: the handle it held is already let go.
     _commitEdit((box) => pointsMapped(box, _points, map));
     setState(() {
       _boxPointsAt = left;
@@ -3814,9 +3751,6 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     _acting = null;
     _handle = null;
 
-    // With the Ctrl+Shift+T box up, a drag on one of its handles scales the
-    // picked points, a drag inside it moves them and a drag outside it turns
-    // them about its middle.
     final frame =
         widget.showControls && _selectionTool ? _pointsFrame : null;
     if (frame != null) {
@@ -4559,8 +4493,6 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   /// point added, removed or converted. [editFor] gives the edit in each
   /// layer's own terms.
   void _commitEdit(VertexEdit Function(LayerBox box) editFor) {
-    // One gesture, one undo step: a drag across two masks writes each of them,
-    // and a single Ctrl+Z has to take both back.
     final project = Provider.of<LumitState>(context, listen: false).project;
     project?.beginUndoGroup();
     try {
@@ -5278,9 +5210,6 @@ class _GizmoPainter extends CustomPainter {
       }
     }
 
-    // The Ctrl+Shift+T box as the drag has it, clear of the points it holds,
-    // with its eight scale handles and a ring at its middle, which the points
-    // turn about.
     final frame = pointsBox;
     if (frame != null) {
       canvas.drawPath(
