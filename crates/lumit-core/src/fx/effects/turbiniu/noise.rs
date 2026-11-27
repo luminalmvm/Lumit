@@ -76,14 +76,12 @@ impl Perlin {
     }
 }
 
-pub(super) fn random(seed: usize, line: usize, salt: usize) -> f32 {
+pub(super) fn random(seed: usize, line: usize, salt: u64) -> f32 {
     let mut x = (seed as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15)
         ^ (line as u64)
             .wrapping_add(1)
             .wrapping_mul(0xbf58_476d_1ce4_e5b9)
-        ^ (salt as u64)
-            .wrapping_add(1)
-            .wrapping_mul(0x94d0_49bb_1331_11eb);
+        ^ salt.wrapping_add(1).wrapping_mul(0x94d0_49bb_1331_11eb);
     x ^= x >> 30;
     x = x.wrapping_mul(0xbf58_476d_1ce4_e5b9);
     x ^= x >> 27;

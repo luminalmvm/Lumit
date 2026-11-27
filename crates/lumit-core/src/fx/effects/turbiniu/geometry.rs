@@ -697,7 +697,7 @@ impl Turbiniu {
                 let first_k = ((lo - plan.shift) * n - 1e-4).ceil() as i64;
                 let last_k = ((hi - plan.shift) * n + 1e-4).floor() as i64;
                 let mut marker = |u: f32, place: i64| {
-                    if hashed(seed, line, (place as u64 ^ MARKER_SALT) as usize) * 100.0
+                    if hashed(seed, line, place as u64 ^ MARKER_SALT) * 100.0
                         >= self.visible_points as f32
                     {
                         return;
