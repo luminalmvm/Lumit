@@ -15,7 +15,7 @@ if(CUDAToolkit_FOUND)
     endif()
     set(ptx "${CMAKE_CURRENT_BINARY_DIR}/delivery.ptx")
     add_custom_command(OUTPUT "${ptx}"
-        COMMAND "${CUDAToolkit_NVCC_EXECUTABLE}" --ptx -arch=${arch} -allow-unsupported-compiler
+        COMMAND "${CUDAToolkit_NVCC_EXECUTABLE}" --ptx -arch=${arch}
             -ccbin "${CMAKE_CXX_COMPILER}" "${CMAKE_CURRENT_SOURCE_DIR}/delivery.cu" -o "${ptx}"
         DEPENDS delivery.cu VERBATIM)
     file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/gpu.rc" "102 RCDATA \"${ptx}\"\n")
