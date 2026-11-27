@@ -159,7 +159,7 @@ box away until another row is selected.
 | `Ctrl+Alt`-click a point | Turns a smooth point into a corner, or a corner into a smooth point. |
 | `Ctrl+Alt`-drag a point | Pulls a pair of handles out of it. |
 | `Delete` | Removes the selected points. |
-| `Ctrl+Shift+T` | Puts a box round two or more selected points. A drag turns them about its middle, in 15° steps with `Shift`. `Esc`, `Enter` or a click takes the box down. With a **Path** row selected and fewer than two points selected, the box goes round the whole path. |
+| `Ctrl+Shift+T` | Puts a box round two or more selected points. A corner handle scales them both ways from the opposite corner and an edge handle one way; `Shift` keeps their proportions and `Alt` scales from the middle. Drag past the far side to flip them. A drag inside the box moves them, and a drag outside it turns them about its middle, in 15° steps with `Shift`. The box follows the points, also after an undo. Each drag is one undo step, however many paths it changes. `Esc`, `Enter` or a click takes the box down. With a **Path** row selected and fewer than two points selected, the box goes round the whole path. |
 
 On a path that is keyframed, an edit sets a keyframe at the playhead.
 
