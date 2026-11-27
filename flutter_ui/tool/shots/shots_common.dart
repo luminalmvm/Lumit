@@ -113,8 +113,6 @@ Future<(LumitState, LumitUiState)> bootLumit() async {
     exit(0);
   }
   WidgetsFlutterBinding.ensureInitialized();
-  // As `main` does, so a part that fails in a shot draws Lumit's own box and
-  // not Flutter's red one.
   recordFaults();
   await BridgeLib.init();
   await ExpressionsMetadata.load();

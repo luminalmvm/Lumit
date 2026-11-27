@@ -13,8 +13,7 @@ import 'package:lumit_flutter/state/faults.dart';
 import 'package:lumit_flutter/state/platform.dart'
     if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
-/// A file of this test's own, never the diagnostics file a real session — or
-/// the developer running this — is writing to.
+/// A file of this test's own, never the real diagnostics file.
 File _scratch(String name) {
   final dir = Directory.systemTemp.createTempSync('lumit-faults');
   addTearDown(() {
@@ -87,8 +86,7 @@ void main() {
       });
     });
 
-    // A fault box that faults is the one thing worse than Flutter's own:
-    // Flutter gives up on the frame.
+    // A fault box that faults makes Flutter give up on the frame.
     testWidgets('stands at any size it is given', (tester) async {
       await _installed(() async {
         for (final given in <Widget Function(Widget)>[
@@ -97,7 +95,6 @@ void main() {
           (box) => SizedBox(width: 300, height: 20, child: box),
           (box) => SizedBox(width: 40, height: 300, child: box),
           (box) => SizedBox(width: 600, height: 400, child: box),
-          // No limit either way, then a parent that asks what size it wants.
           (box) => UnconstrainedBox(child: box),
           (box) => IntrinsicWidth(child: IntrinsicHeight(child: box)),
         ]) {

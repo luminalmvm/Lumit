@@ -98,11 +98,8 @@ void recordFaultTo(File file, String message, StackTrace? stack) {
   }
 }
 
-/// A fault as text: its words, then the frames that place it.
-///
-/// The frames are cut short deliberately. What is wanted is which panel and
-/// which widget, and that is the top of the trace; the rest is Flutter's own
-/// build machinery, the same forty lines under every one of these.
+/// A fault as text: its words, then the top frames, which say which panel
+/// and widget. The rest is Flutter's own build machinery.
 String _faultText(String message, StackTrace? stack) {
   final frames = stack == null
       ? const <String>[]
@@ -110,10 +107,8 @@ String _faultText(String message, StackTrace? stack) {
   return [message, for (final frame in frames) '    ${frame.trim()}'].join('\n');
 }
 
-/// The theme the fault box wears. `main` points it at the workspace's own once
-/// there is one. Asked for here and not from the tree: the box replaces a
-/// widget that has just failed to build, and a lookup is among the ways a
-/// build fails. If the box threw as well, Flutter would give up on the frame.
+/// The theme the fault box wears, set by `main`. Not read from the tree: a
+/// lookup can fail too, and a box that throws loses the whole frame.
 LumitTheme Function() faultTheme = LumitTheme.dark;
 
 /// What is drawn where a widget failed to build.
@@ -134,7 +129,6 @@ class _FaultBoxState extends State<FaultBox> {
 
   void _copy() {
     final details = widget.details;
-    // A clipboard that refuses is not a second fault.
     Clipboard.setData(ClipboardData(
             text: '${_faultText(details.exceptionAsString(), details.stack)}\n'
                 '${faultLog().path}'))
@@ -146,10 +140,7 @@ class _FaultBoxState extends State<FaultBox> {
   Widget build(BuildContext context) {
     final t = faultTheme();
     final quiet = t.small;
-    // One line height for the heading and the fault's own words, so a row
-    // has room for exactly one line of each.
     const line = 16.0;
-    // The lines under the heading start where its words do, past the dot.
     const indent = EdgeInsets.only(left: 14);
     // Its own [Directionality] and [DefaultTextStyle]: the box can land above
     // the ones the application installs, and must not wear what a stray
@@ -227,8 +218,6 @@ class _FaultBoxState extends State<FaultBox> {
                     cursor: SystemMouseCursors.click,
                     child: GestureDetector(
                       onTap: _copy,
-                      // The house button's resting face: an outline over the
-                      // surface it stands on.
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 3),
@@ -256,9 +245,7 @@ class _FaultBoxState extends State<FaultBox> {
   }
 }
 
-/// Stacks the box's lines and keeps only the whole ones that fit, so nothing
-/// is cut in half. The box takes all it is offered, and a modest size where it
-/// is offered no limit.
+/// Stacks the box's lines and keeps only the whole ones that fit.
 class _FaultLayout extends MultiChildLayoutDelegate {
   static const _lines = 4;
   static const _gap = 6.0;
@@ -274,7 +261,6 @@ class _FaultLayout extends MultiChildLayoutDelegate {
   void performLayout(Size size) {
     final inner = math.max(0.0, size.width - 2 * _edge);
     final head = layoutChild(0, BoxConstraints(maxWidth: inner));
-    // A line with no room goes below the box, where the clip hides it.
     final hidden = Offset(0, size.height + _edge);
     final block = BoxConstraints(maxWidth: math.min(inner, 440));
     if (size.height - 2 * _above < 2 * head.height + _gap) {
@@ -308,7 +294,6 @@ class _FaultLayout extends MultiChildLayoutDelegate {
       width = math.max(width, sizes[shown].width);
       shown++;
     }
-    // The lines stand in the middle as one block.
     final left = (size.width - width) / 2;
     var top = (size.height - height) / 2;
     for (var i = 0; i < _lines; i++) {
@@ -330,7 +315,6 @@ class _FaultLayout extends MultiChildLayoutDelegate {
 String faultSummary(FlutterErrorDetails details) {
   final full = details.exceptionAsString().trim();
   final firstLine = full.split('\n').first.trim();
-  // Flutter's context for a failed build is "building" and the widget.
   final part = RegExp(r'^building (\w+)')
       .firstMatch(details.context?.toDescription() ?? '')
       ?.group(1);
