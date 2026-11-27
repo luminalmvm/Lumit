@@ -1250,10 +1250,10 @@ class EffectParamRowFrb extends StatelessWidget {
                   );
                 },
                 child: SizedBox(
-                  width: side,
+                  width: side * 2,
                   height: side,
                   child: IgnorePointer(
-                    child: FittedBox(fit: BoxFit.contain, child: editor(150)),
+                    child: FittedBox(fit: BoxFit.fill, child: editor(150)),
                   ),
                 ),
               ),
