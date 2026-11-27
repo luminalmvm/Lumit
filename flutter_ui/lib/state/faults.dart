@@ -31,6 +31,7 @@
 import 'dart:io' hide Platform;
 import 'dart:math' as math;
 
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/state/cache_dir.dart';
@@ -87,24 +88,26 @@ void recordFaultTo(File file, String message, StackTrace? stack) {
     // file that keeps it rather than in one about to be truncated.
     final over = file.existsSync() && file.lengthSync() > _capBytes;
     final when = DateTime.now().toUtc().toIso8601String();
-    // The frames are cut short deliberately. What is wanted is which panel and
-    // which widget, and that is the top of the trace; the rest is Flutter's own
-    // build machinery, the same forty lines under every one of these.
-    final frames = stack == null
-        ? const <String>[]
-        : stack.toString().trimRight().split('\n').take(12);
-    final record = StringBuffer('$when shell: $message');
-    for (final frame in frames) {
-      record.write('\n    ${frame.trim()}');
-    }
-    record.write('\n');
+    final record = '$when shell: ${_faultText(message, stack)}\n';
     // One call, so a fault on the engine's thread cannot land inside this one.
-    file.writeAsStringSync(record.toString(),
+    file.writeAsStringSync(record,
         mode: over ? FileMode.write : FileMode.append, flush: true);
   } catch (_) {
     // A diagnostic that can break the thing it is diagnosing is worse than
     // none — the engine's file says the same, and means it the same way.
   }
+}
+
+/// A fault as text: its words, then the frames that place it.
+///
+/// The frames are cut short deliberately. What is wanted is which panel and
+/// which widget, and that is the top of the trace; the rest is Flutter's own
+/// build machinery, the same forty lines under every one of these.
+String _faultText(String message, StackTrace? stack) {
+  final frames = stack == null
+      ? const <String>[]
+      : stack.toString().trimRight().split('\n').take(12);
+  return [message, for (final frame in frames) '    ${frame.trim()}'].join('\n');
 }
 
 /// The theme the fault box wears. `main` points it at the workspace's own once
@@ -117,10 +120,27 @@ LumitTheme Function() faultTheme = LumitTheme.dark;
 ///
 /// It fills whatever the failed widget was offered, a whole panel or a single
 /// row, so where the box is says which part broke.
-class FaultBox extends StatelessWidget {
+class FaultBox extends StatefulWidget {
   final FlutterErrorDetails details;
 
   const FaultBox({super.key, required this.details});
+
+  @override
+  State<FaultBox> createState() => _FaultBoxState();
+}
+
+class _FaultBoxState extends State<FaultBox> {
+  bool _copied = false;
+
+  void _copy() {
+    final details = widget.details;
+    // A clipboard that refuses is not a second fault.
+    Clipboard.setData(ClipboardData(
+            text: '${_faultText(details.exceptionAsString(), details.stack)}\n'
+                '${faultLog().path}'))
+        .ignore();
+    setState(() => _copied = true);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -177,7 +197,7 @@ class FaultBox extends StatelessWidget {
                 child: Padding(
                   padding: indent,
                   child: Text(
-                    faultSummary(details),
+                    faultSummary(widget.details),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: t.mono.copyWith(
@@ -199,6 +219,35 @@ class FaultBox extends StatelessWidget {
                   ),
                 ),
               ),
+              LayoutId(
+                id: 3,
+                child: Padding(
+                  padding: indent + const EdgeInsets.only(top: 4),
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: GestureDetector(
+                      onTap: _copy,
+                      // The house button's resting face: an outline over the
+                      // surface it stands on.
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: t.hairlineStrong),
+                          borderRadius:
+                              BorderRadius.circular(t.tokens.actionRadius),
+                        ),
+                        child: Text(
+                          _copied ? l10n.faultCopied : l10n.faultCopy,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: t.bodyPrimary,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -211,7 +260,7 @@ class FaultBox extends StatelessWidget {
 /// is cut in half. The box takes all it is offered, and a modest size where it
 /// is offered no limit.
 class _FaultLayout extends MultiChildLayoutDelegate {
-  static const _lines = 3;
+  static const _lines = 4;
   static const _gap = 6.0;
   static const _edge = 12.0;
   static const _above = 8.0;

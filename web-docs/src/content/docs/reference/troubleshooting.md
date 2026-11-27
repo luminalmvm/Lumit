@@ -17,8 +17,9 @@ was written to. Both can be selected and copied.
 ## Part of the window reads "This part could not be drawn"
 
 A panel, row or control that fails to draw is replaced by a box with that heading, the
-first line of the fault, and the file it was recorded in. A box one row high shows the
-heading and the fault only. The rest of the window carries on.
+first line of the fault, and the file it was recorded in. **Copy details** puts the fault
+and the file's path on the clipboard. A box one row high shows the heading and the fault
+only. The rest of the window carries on.
 
 ## Windows shows "Windows protected your PC"
 
