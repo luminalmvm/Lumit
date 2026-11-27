@@ -427,16 +427,28 @@ class _ViewerRotateLayerState extends State<ViewerRotateLayer> {
     // The document is about to hold the angle itself, so the in-flight one has
     // to go — a stale entry here would keep the box turned past the commit.
     widget.uiState.liveRotations.value = const {};
-    for (final (box, degrees) in turned) {
-      try {
-        box.layer.setTransform(
-          prop: BridgeTransformProp.rotation,
-          value: BridgeScalar.static_(degrees),
-        );
-      } catch (_) {
-        // A layer deleted mid-drag. The rest still turn.
-      }
-    }
+    final frame = widget.uiState.playheadFrame.value;
+    asOneUndoStep(
+      turned.length > 1
+          ? Provider.of<LumitState>(context, listen: false).project
+          : null,
+      () {
+        for (final (box, degrees) in turned) {
+          try {
+            box.layer.setTransform(
+              prop: BridgeTransformProp.rotation,
+              value: scalarWithValueAt(
+                  box.transform?.rotation ?? BridgeScalar.static_(degrees),
+                  degrees,
+                  widget.comp,
+                  frame),
+            );
+          } catch (_) {
+            // A layer deleted mid-drag. The rest still turn.
+          }
+        }
+      },
+    );
     setState(() {
       _from = null;
       _startRotations.clear();

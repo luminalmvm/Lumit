@@ -4386,15 +4386,18 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     final box = _acting;
     final scale = _scaleNow();
     if (box == null || scale == null || _delta == Offset.zero) return;
-    // One op for both axes, for the same reason a move is.
+    // One op for both axes, and a keyed one takes a key, as a move does.
+    BridgeScalar keyed(BridgeScalar? was, double v) =>
+        scalarWithValueAt(was ?? BridgeScalar.static_(v), v, widget.comp,
+            widget.uiState.playheadFrame.value);
     box.layer.setTransforms(
       props: const [
         BridgeTransformProp.scaleX,
         BridgeTransformProp.scaleY,
       ],
       values: [
-        BridgeScalar.static_(scale.$1),
-        BridgeScalar.static_(scale.$2),
+        keyed(box.transform?.scaleX, scale.$1),
+        keyed(box.transform?.scaleY, scale.$2),
       ],
     );
     widget.onChanged();
@@ -4435,7 +4438,11 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     if (box == null || rotation == null || _delta == Offset.zero) return;
     box.layer.setTransform(
         prop: BridgeTransformProp.rotation,
-        value: BridgeScalar.static_(rotation));
+        value: scalarWithValueAt(
+            box.transform?.rotation ?? BridgeScalar.static_(rotation),
+            rotation,
+            widget.comp,
+            widget.uiState.playheadFrame.value));
     widget.onChanged();
   }
 
