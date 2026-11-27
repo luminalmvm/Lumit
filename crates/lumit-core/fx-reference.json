@@ -38882,7 +38882,7 @@
           "label": "Extend beyond layer",
           "kind": "bool",
           "unit": "raw",
-          "default": false
+          "default": true
         },
         {
           "id": "shimmer_amount",

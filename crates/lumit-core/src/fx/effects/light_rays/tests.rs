@@ -111,8 +111,6 @@ fn the_gradient_runs_black_to_shadows_to_highlights() {
 #[test]
 fn extend_beyond_layer_gives_the_rays_room_up_to_a_diagonal() {
     let mut fx = LightRays::read(Params::EMPTY);
-    assert_eq!(fx.reach(2203.0), 0.0, "off by default: no room");
-    fx.extend_beyond_layer = true;
     assert_eq!(fx.reach(2203.0), 2203.0, "long rays: one diagonal");
     fx.ray_length = 0.05;
     let short = fx.reach(2203.0);
@@ -122,6 +120,9 @@ fn extend_beyond_layer_gives_the_rays_room_up_to_a_diagonal() {
     );
     fx.ray_length = 0.0;
     assert_eq!(fx.reach(2203.0), 0.0, "no rays: no room");
+    fx.ray_length = 4.0;
+    fx.extend_beyond_layer = false;
+    assert_eq!(fx.reach(2203.0), 0.0, "off: no room");
 }
 
 #[test]

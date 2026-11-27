@@ -288,7 +288,7 @@ pub struct LightRays {
     )]
     pub ray_length: f32,
 
-    #[toggle(label = "Extend beyond layer", default = false)]
+    #[toggle(label = "Extend beyond layer", default = true)]
     pub extend_beyond_layer: bool,
 
     #[slider(
