@@ -64,9 +64,7 @@ pub struct SpriteFlareOp<'a> {
     pub centre: [f32; 2],
     /// Raster pixels; 0 is no fade.
     pub edge_fade: f32,
-    /// 0..1: how far light too bright for its colour runs to white.
     pub burn: f32,
-    /// Raster pixels the light is blurred by before Burn; 0 is sharp.
     pub defocus: f32,
     pub spots: Option<SpotsOp>,
     pub hide: Option<HideOp<'a>>,
@@ -113,7 +111,6 @@ struct LightPass {
 pub(super) struct SpriteFlareFx {
     draw: (wgpu::BindGroupLayout, wgpu::RenderPipeline),
     add: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
-    /// The light past 1, for Defocus.
     over: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
     lights: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
     detect: (
@@ -507,8 +504,6 @@ impl FxEngine {
         rp.set_bind_group(0, &draw_group, &[]);
         rp.draw(0..6, 0..count);
         drop(rp);
-        // Defocus: the light past 1 taken out, blurred and handed to the add
-        // pass beside the sharp light, as `raster::draw_with` does.
         let (v_soft, mut enc) = if op.defocus > 0.0 {
             let over = work_texture(ctx, w, h, "fx-sprite-flare-over");
             let over_group = group(

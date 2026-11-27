@@ -15,9 +15,7 @@ struct Frame {
     lights: u32,
     // 1 when the Texture layer's picture is bound.
     has_layer: u32,
-    // 0..1: how far light too bright for its colour runs to white.
     burn: f32,
-    // Raster pixels light past 1 is blurred by; 0 is sharp.
     defocus: f32,
     _p0: f32,
     _p1: f32,
@@ -490,11 +488,9 @@ fn sf_lights(@builtin(global_invocation_id) gid: vec3<u32>) {
 @group(0) @binding(3) var src: texture_2d<f32>;
 @group(0) @binding(4) var acc: texture_2d<f32>;
 @group(0) @binding(5) var dst: texture_storage_2d<rgba16float, write>;
-// Under Defocus: the light past 1, blurred.
 @group(0) @binding(14) var soft: texture_2d<f32>;
 @group(0) @binding(15) var over_out: texture_storage_2d<rgba16float, write>;
 
-// The light past 1, for Defocus to blur.
 @compute @workgroup_size(8, 8)
 fn sf_over(@builtin(global_invocation_id) gid: vec3<u32>) {
     let size = textureDimensions(acc);
@@ -522,9 +518,6 @@ fn sf_add(@builtin(global_invocation_id) gid: vec3<u32>) {
     textureStore(dst, at, vec4<f32>(base.rgb + light, base.a));
 }
 
-// == raster::burnt: past 1 in its brightest channel, light runs toward
-// white, the further past the whiter, the middle channel first and the
-// dimmest last: red, orange, yellow, white.
 fn burnt(c: vec3<f32>, burn: f32) -> vec3<f32> {
     let m = max(max(c.x, c.y), c.z);
     if (burn <= 0.0 || m <= 1.0) {

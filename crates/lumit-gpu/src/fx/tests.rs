@@ -5468,7 +5468,6 @@ fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
     );
     assert_eq!(gpu, gpu_of(&f), "the sprite flare must be bit-stable");
 
-    // Burn: a bright red light runs to white the same on both sides.
     let mut hot = f.clone();
     hot.burn = 1.0;
     hot.brightness *= 6.0;
@@ -5483,16 +5482,17 @@ fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
             worst_hot = worst_hot.max((a - b).abs() / a.abs().max(1.0));
         }
     }
-    // Burn bends the half-float sum's small gap steeply where it turns
-    // colour, so it gets twice the room.
     assert!(worst_hot < 1e-2, "burnt worst |Δ| {worst_hot}");
-    assert_ne!(gpu_hot, gpu_of(&{
-        let mut cool = hot.clone();
-        cool.burn = 0.0;
-        cool
-    }), "Burn changes the bright light");
+    assert_ne!(
+        gpu_hot,
+        gpu_of(&{
+            let mut cool = hot.clone();
+            cool.burn = 0.0;
+            cool
+        }),
+        "Burn changes the bright light"
+    );
 
-    // Defocus: the light blurred before Burn, the same on both sides.
     let mut soft = hot.clone();
     soft.defocus = 6.0;
     let (cpu_soft, gpu_soft) = (cpu_of(&soft), gpu_of(&soft));

@@ -69,8 +69,6 @@ fn every_flare_and_every_element_draws() {
     }
 }
 
-/// Offset moves a streak's lines across, off the light, by its pixels: the
-/// brightest row is that far from the light's, and nought leaves it there.
 #[test]
 fn a_streaks_offset_moves_its_lines_off_the_light() {
     let (w, h) = (200u32, 100u32);
@@ -104,9 +102,6 @@ fn a_streaks_offset_moves_its_lines_off_the_light() {
     );
 }
 
-/// Burn runs light too bright for its colour toward white: a bright red
-/// light gains green and blue where it is brightest, keeps its red where it
-/// is dim, and Burn 0 leaves it as drawn.
 #[test]
 fn burn_runs_a_bright_light_to_white() {
     use super::raster::burnt;
@@ -117,7 +112,6 @@ fn burn_runs_a_bright_light_to_white() {
         hot[1] > 4.0 && hot[2] > 3.0,
         "white where brightest: {hot:?}"
     );
-    // On the way it is yellow: green past 1 before blue is.
     let yellow = burnt([2.0, 0.1, 0.04], 1.0);
     assert!(
         yellow[1] >= 1.0 && yellow[2] < 0.5,
@@ -148,8 +142,6 @@ fn burn_runs_a_bright_light_to_white() {
     assert!(green(1.0) > 10.0 * green(0.0), "the middle burns");
 }
 
-/// Defocus blurs only light past 1: a faint streak is drawn as it was, a
-/// bright glow's middle spreads.
 #[test]
 fn defocus_softens_the_hot_middle_and_leaves_faint_lines() {
     let (w, h) = (64u32, 48u32);

@@ -397,9 +397,6 @@ const STREAK: &[Control] = &[
         (0.0, 100.0, 0.0, BIG),
         8.0,
     ),
-    // Moves the lines across themselves, off the light: two streaks at
-    // their own offsets are lines above and below the light that do not
-    // mirror each other.
     c(
         "offset",
         "Offset",

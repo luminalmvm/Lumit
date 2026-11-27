@@ -41,18 +41,10 @@ pub struct Frame {
     /// How far past the frame's edge a light fades out, comp pixels. 0 is
     /// no fade.
     pub edge_fade: f32,
-    /// 0..1: how far light too bright for its colour runs to white. 0
-    /// leaves it as drawn.
     pub burn: f32,
-    /// How far light past 1 is blurred before Burn, raster pixels: the hot
-    /// middle goes soft and fainter lines stay sharp. 0 leaves it all sharp.
     pub defocus: f32,
 }
 
-/// Light past 1 in its brightest channel, run toward white by `burn`: the
-/// further past, the whiter. The middle channel catches up first and the
-/// dimmest last, so a red light goes orange, yellow, then white, as glowing
-/// metal does. Anything 1 or under is left as it is.
 #[must_use]
 pub fn burnt(c: [f32; 3], burn: f32) -> [f32; 3] {
     let m = c[0].max(c[1]).max(c[2]);
@@ -63,7 +55,6 @@ pub fn burnt(c: [f32; 3], burn: f32) -> [f32; 3] {
     let mid = c[0] + c[1] + c[2] - m - lo;
     let x = 1.0 - 1.0 / m;
     let (first, last) = (burn * x, burn * x * x * x);
-    // Two channels alike share the pace, so nothing jumps as they cross.
     let apart = ((mid - lo) / (0.02 * m)).clamp(0.0, 1.0);
     let even = 0.5 * (first + last);
     let (t_mid, t_lo) = (even + (first - even) * apart, even + (last - even) * apart);
@@ -430,12 +421,8 @@ pub fn draw_with(
         })
         .collect();
     // A row at a time across threads, each adding the quads in the same
-    // order, so every pixel sums exactly as it would on one thread. Under
-    // Burn the light is summed apart first, as the GPU does, then burnt
-    // and added.
+    // order, so every pixel sums exactly as it would on one thread.
     let burn = frame.burn;
-    // Under Defocus the whole light is summed apart and what is past 1 is
-    // blurred before it is burnt, as a lens spreads a light too bright for it.
     if frame.defocus > 0.0 {
         let stride = w as usize * 4;
         let n = stride * h as usize;
@@ -448,8 +435,6 @@ pub fn draw_with(
                     splat_row(i, p, w, y as u32, row, layer.as_ref());
                 }
             });
-        // Only what is past 1 spreads: the hot middle goes soft, the fine
-        // lines and rays under it stay sharp.
         let mut over: Vec<f32> = light.iter().map(|v| (v - 1.0).max(0.0)).collect();
         crate::fx::cpu::blur_gaussian(&mut over, w, h, frame.defocus, 0, 1.0);
         for ((px, l), o) in rgba[..n]

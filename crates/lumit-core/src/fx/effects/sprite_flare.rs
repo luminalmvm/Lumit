@@ -250,9 +250,6 @@ pub struct SpriteFlare {
     #[colour(label = "Colour", default = [1.0, 1.0, 1.0, 1.0], max = 4.0)]
     pub tint: [f32; 4],
 
-    /// How far light too bright for its colour runs to white, per cent, as
-    /// a real one does on film: a red light goes orange, yellow, then white
-    /// where it is brightest, and stays red where it is dim.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -263,9 +260,6 @@ pub struct SpriteFlare {
     )]
     pub burn: f32,
 
-    /// How far out of focus the flare's brightest part is, px@comp: light
-    /// past 1 spreads before Burn, so a burnt middle is a soft glow and
-    /// fainter lines and rays stay sharp.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -454,7 +448,6 @@ impl SpriteFlare {
             // The row arrives at the raster's size, the frame wants comp px.
             edge_fade: s.edge_fade.max(0.0) / px_scale,
             burn: (s.burn / 100.0).clamp(0.0, 1.0),
-            // The row arrives at the raster's size, as the blur wants it.
             defocus: s.defocus.max(0.0),
         }
     }
