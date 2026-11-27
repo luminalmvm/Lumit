@@ -47,7 +47,9 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/src/rust/api/audio.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/api/effect.dart' show BridgeScalar;
 import 'package:lumit_flutter/src/rust/api/footage.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:lumit_flutter/src/rust/lib.dart';
@@ -59,9 +61,12 @@ import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../shell/dock_widget.dart' show DockOffTopLine, DockPaneHandle;
+import '../shell/model_settings_dialog.dart'
+    show modelLightNames, showDroppedModelSettingsFrb;
 import '../shell/welcome_frb.dart' show EmptyStageFrb;
 import '../state/audio_notices.dart';
 import '../state/dock.dart';
+import '../state/drag_payloads.dart';
 import '../state/settings.dart';
 import '../state/timecode.dart';
 import '../state/viewer_views.dart';
@@ -82,9 +87,11 @@ import 'viewer_picture.dart'
     if (dart.library.js_interop) 'viewer_picture_web.dart';
 import 'viewer_stage.dart';
 import 'viewer_strips.dart';
+import 'viewer_shape_layer.dart' show ShapeSpace;
 import 'viewer_zoom.dart';
 import 'angle_viewer_frb.dart';
 import 'timeline_extras_frb.dart' show showMenuAt;
+import 'layer_fold_frb.dart' show asOneUndoStep, startLayersAt;
 
 // The Viewer used to be one file, and every panel, test and tool that wanted a
 // piece of it imported this one. Re-exported rather than made to chase the
@@ -898,7 +905,24 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
               from: size.width == 0 ? 1 : fitted.width / size.width,
             );
 
-        return Listener(
+        return DragTarget<Object>(
+          onWillAcceptWithDetails: (details) =>
+              ui.workspace.activePreset != WorkspacePreset.cut &&
+              (details.data is FootageDragData ||
+                  details.data is CompDragData ||
+                  details.data is SolidDragData),
+          onAcceptWithDetails: (details) {
+            final box = context.findRenderObject();
+            final at = box is! RenderBox || canvas != null
+                ? null
+                : ShapeSpace.ofComp(
+                    fitted: fitted,
+                    compSize:
+                        Size(size.width.toDouble(), size.height.toDouble()),
+                  ).ofScreen(box.globalToLocal(details.offset));
+            _dropOnPicture(ui, comp, details.data, at);
+          },
+          builder: (context, candidates, rejects) => Listener(
           // The middle button pans, like in other software, except where it
           // moves the camera: in a 3D viewport, and with Alt in a 3D scene.
           onPointerMove: (event) {
@@ -980,6 +1004,7 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
             )),
             menus: _menus,
           ),
+        ),
         );
       },
     );
@@ -1183,6 +1208,49 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
     final share = math.min(1.0, math.sqrt(2 * w * h / (cw * ch)));
     ui.reportViewportCanvas(widget.view.engineId, (cw, ch), share);
     return Rect.fromCenter(center: c, width: cw * s, height: ch * s);
+  }
+
+  void _dropOnPicture(LumitUiState ui, CompositionReference comp, Object? data,
+      (double, double)? at) {
+    final frame = ui.playheadFrame.value;
+    final placed = <LayerReference>[];
+    try {
+      asOneUndoStep(Provider.of<LumitState>(context, listen: false).project,
+          () {
+        switch (data) {
+          case FootageDragData(:final footage):
+            placed.addAll(comp.addFootageLayers(
+                footage: footage,
+                asSequence: ui.workspace.interface.videoAsSequenceLayer,
+                row: 0,
+                arrival: ui.streamsArrival,
+                endToEnd: false,
+                lightNames: modelLightNames(),
+                startFrame: frame));
+          case SolidDragData(:final solid):
+            placed.add(comp.addSolidItemLayer(solid: solid, row: 0));
+            startLayersAt(comp, placed, frame);
+          case CompDragData(comp: final dropped):
+            placed.add(comp.addPrecompLayer(comp: dropped, row: 0));
+            startLayersAt(comp, placed, frame);
+        }
+        if (at case (final x, final y)) {
+          for (final layer in placed) {
+            layer.setTransforms(props: const [
+              BridgeTransformProp.positionX,
+              BridgeTransformProp.positionY,
+            ], values: [
+              BridgeScalar.static_(x),
+              BridgeScalar.static_(y),
+            ]);
+          }
+        }
+      });
+    } catch (_) {
+      // A comp cannot hold itself. The engine refuses and nothing is placed.
+    }
+    ui.model.refresh();
+    showDroppedModelSettingsFrb(context, placed);
   }
 
   /// Where the picture sits in the panel, at the current magnification.

@@ -1919,8 +1919,26 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
         },
       );
     } else {
-      for (final f in footage) {
-        await comp.addAudioLayer(footage: f, arrival: _ui?.streamsArrival);
+      final frame = at != null &&
+              at.dx - (_hLane.hasClients ? _hLane.offset : 0) >= 0
+          ? min(max(0, _laneAxis.frameAt(at.dx)), max(0, _laneFrames - 1))
+          : _ui?.playheadFrame.value ?? 0;
+      final before = {for (final l in comp.getLayers()) l.internallayerId};
+      final project = Provider.of<LumitState>(context, listen: false).project;
+      project?.beginUndoGroup();
+      try {
+        for (final f in footage) {
+          await comp.addAudioLayer(footage: f, arrival: _ui?.streamsArrival);
+        }
+        startLayersAt(
+            comp,
+            [
+              for (final l in comp.getLayers())
+                if (!before.contains(l.internallayerId)) l,
+            ],
+            frame);
+      } finally {
+        project?.endUndoGroup();
       }
     }
     if (mounted) _afterWrite();

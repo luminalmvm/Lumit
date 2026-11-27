@@ -41,6 +41,7 @@ import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/footage.dart' show FootageReference;
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/state/keymap.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -105,6 +106,7 @@ import 'sound_mix_row_frb.dart';
 import 'spectral_lane_frb.dart';
 import 'stagger.dart';
 import 'timeline_razor.dart';
+import 'timeline_snap.dart' show SnapTarget, snappedDelta, snapSuspended;
 import 'layer_fold_frb.dart';
 import 'model_fold_rows.dart' show modelPartPath, modelPartReveal;
 import 'shape_entries.dart';
@@ -2209,6 +2211,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// The body the Project panel drops onto, so a drop can be measured against
   /// it: where in the stack the pointer let go is where the footage lands.
   final GlobalKey _dropArea = GlobalKey();
+  final GlobalKey _laneContent = GlobalKey();
+  final ValueNotifier<_DropLanding?> _dropLanding = ValueNotifier(null);
+  List<SnapTarget>? _dropSnap;
+  int? _dropCompFrames;
 
   /// Whether a dragged keyframe sticks to whole frames (docs/07 §4.5). On by
   /// default: landing between frames is the deliberate exception.
@@ -3951,6 +3957,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _laneKeys.dispose();
     _laneMarquee.dispose();
     _markerPreview.dispose();
+    _dropLanding.dispose();
     _vOutline.dispose();
     _vLane.dispose();
     _outlineSettled.dispose();
@@ -4432,6 +4439,119 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
 
   String? _replacing;
 
+  _DropLanding? _dropLandingOf(LumitUiState ui, Object? data, Offset global,
+      List<double> heights, List<SnapTarget> Function() snap,
+      DensityTokens density) {
+    final box = _laneContent.currentContext?.findRenderObject();
+    if (box is! RenderBox || !box.hasSize) return null;
+    final fps = ui.model.fps;
+    final frames = max(1, _laneFrames);
+    final still = (5 * fps).round();
+    final run = !HardwareKeyboard.instance.isShiftPressed &&
+        data is FootageDragData &&
+        data.footage.length > 1;
+    int footageFrames(FootageReference f) {
+      final facts = ui.itemFacts(f);
+      if (facts == null || LumitUiState.framesOf(facts) <= 1) {
+        return run ? still : frames;
+      }
+      final seconds = facts.duration.num / max(1, facts.duration.den);
+      return max(1, (seconds * fps).round());
+    }
+
+    final (length, label) = switch (data) {
+      FootageDragData(:final footage, :final label) => (
+          run
+              ? footage.fold<int>(0, (n, f) => n + footageFrames(f))
+              : footage.fold<int>(0, (n, f) => max(n, footageFrames(f))),
+          label,
+        ),
+      CompDragData(:final comp, :final label) => (
+          _dropCompFrames ??= comp.durationFrames().toInt(),
+          label,
+        ),
+      SolidDragData(:final label) => (frames, label),
+      TemplateDragData(:final label, :final seconds) => (
+          seconds > 0 ? (seconds * fps).round() : still,
+          label,
+        ),
+      _ => (-1, ''),
+    };
+    if (length < 0) return null;
+    final local = box.globalToLocal(global);
+    final scrolled = _vLane.hasClients ? _vLane.offset : 0.0;
+    final slot = layerDropSlot(heights, local.dy - density.ruler + scrolled);
+    final top = heights.take(slot).fold<double>(0, (a, h) => a + h) - scrolled;
+    final axis = TimelineAxis(
+        frames: _laneFrames, width: _laneViewport * _zoom, inset: _axisPad);
+    final overLanes = local.dx - (_hLane.hasClients ? _hLane.offset : 0) >= 0;
+    final snapped = overLanes
+        ? snappedDelta(
+            rawFrames: axis.frameAtExact(local.dx),
+            perFrame: axis.perFrame,
+            sources: [0, length.toDouble()],
+            targets: snap(),
+            magnet: _magnet &&
+                !snapSuspended(
+                    controlPressed: HardwareKeyboard.instance.isControlPressed),
+          )
+        : (delta: ui.playheadFrame.value, caught: null);
+    return (
+      frame: snapped.delta.clamp(0, frames - 1),
+      length: length,
+      top: top,
+      label: label,
+      caught: snapped.caught,
+    );
+  }
+
+  Widget _dropGhost(LumitTheme t, _DropLanding landing) {
+    final axis = TimelineAxis(
+        frames: _laneFrames, width: _laneViewport * _zoom, inset: _axisPad);
+    final length = min(landing.length, _laneFrames - landing.frame);
+    final caught = landing.caught;
+    return Stack(
+      children: [
+        Positioned(
+          key: const ValueKey<String>('tl-drop-landing'),
+          left: axis.xOf(landing.frame.toDouble()),
+          top: landing.top + 1,
+          width: max(2.0, length * axis.perFrame),
+          height: max(2.0, t.density.laneRow - 2),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            alignment: Alignment.centerLeft,
+            decoration: BoxDecoration(
+              color: t.accent.withValues(alpha: 0.16),
+              border: Border.all(color: t.accent, width: 1.5),
+              borderRadius: BorderRadius.circular(clipRadius(t)),
+            ),
+            child: Text(landing.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: t.small.copyWith(color: t.textPrimary)),
+          ),
+        ),
+        if (caught != null)
+          Positioned(
+            left: axis.xOf(caught.frame) - 0.5,
+            top: 0,
+            bottom: 0,
+            width: 1,
+            child: ColoredBox(color: t.accent),
+          ),
+      ],
+    );
+  }
+
+  void _addAt(CompositionReference comp, int frame,
+      LayerReference Function() make) {
+    try {
+      asOneUndoStep(Provider.of<LumitState>(context, listen: false).project,
+          () => startLayersAt(comp, [make()], frame));
+    } catch (_) {}
+  }
+
   BridgeLayerEntry? _layerUnder(List<BridgeLayerEntry> layers,
       List<double> heights, Offset global, DensityTokens density) {
     final box = _dropArea.currentContext?.findRenderObject();
@@ -4732,6 +4852,14 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // inside a `setState` reaches them without saying so itself.
     _publishLaneKeys();
 
+    List<SnapTarget> dropSnap() => _dropSnap ??= timelineSnapTargets(
+          rows: rows,
+          comp: comp,
+          playhead: ui.playheadFrame,
+          work: work,
+          fps: ui.model.fps,
+        );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -4767,14 +4895,28 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
               if (id != _replacing) {
                 setState(() => _highlighted = _replacing = id);
               }
+              _dropLanding.value = id != null
+                  ? null
+                  : _dropLandingOf(ui, details.data, details.offset,
+                      blockHeights, dropSnap, t.density);
             },
             onLeave: (_) {
+              _dropLanding.value = null;
+              _dropSnap = null;
+              _dropCompFrames = null;
               if (_replacing != null) {
                 setState(() => _highlighted = _replacing = null);
               }
             },
             onAcceptWithDetails: (details) {
               _replacing = null;
+              final frame = _dropLandingOf(ui, details.data, details.offset,
+                          blockHeights, dropSnap, t.density)
+                      ?.frame ??
+                  ui.playheadFrame.value;
+              _dropLanding.value = null;
+              _dropSnap = null;
+              _dropCompFrames = null;
               if (HardwareKeyboard.instance.isAltPressed) {
                 final over = _layerUnder(
                     layers, blockHeights, details.offset, t.density);
@@ -4812,23 +4954,23 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                       row: at,
                       arrival: ui.streamsArrival,
                       endToEnd: !HardwareKeyboard.instance.isShiftPressed,
-                      lightNames: modelLightNames());
+                      lightNames: modelLightNames(),
+                      startFrame: frame);
                   showDroppedModelSettingsFrb(context, placed);
                 case CompDragData(comp: final dropped):
-                  try {
-                    comp.addPrecompLayer(comp: dropped, row: at);
-                  } catch (_) {}
+                  _addAt(comp, frame,
+                      () => comp.addPrecompLayer(comp: dropped, row: at));
                 case SolidDragData(:final solid):
-                  try {
-                    comp.addSolidItemLayer(solid: solid, row: at);
-                  } catch (_) {}
+                  _addAt(comp, frame,
+                      () => comp.addSolidItemLayer(solid: solid, row: at));
                 case TemplateDragData(:final path):
                   placeTemplateInTimeline(
                       Provider.of<LumitState>(context, listen: false),
                       ui,
                       comp,
                       path,
-                      row: at);
+                      row: at,
+                      atFrame: frame);
               }
               ui.model.refresh();
             },
@@ -5799,8 +5941,12 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                   scrollDirection: Axis.horizontal,
                   controller: _hLane,
                   child: SizedBox(
+                    key: _laneContent,
                     width: axis.width,
-                    child: LayerArea(
+                    child: Stack(
+                    fit: StackFit.passthrough,
+                    children: [
+                    LayerArea(
                       comp: comp,
                       rows: rows,
                       barNames: _barNames,
@@ -5866,6 +6012,21 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                       dragPreview: _barDrag,
                       bounds: _barBounds,
                       selectionMove: () => _selectionMove(ui),
+                    ),
+                    Positioned.fill(
+                      top: t.density.ruler,
+                      child: IgnorePointer(
+                        child: ClipRect(
+                          child: ValueListenableBuilder<_DropLanding?>(
+                            valueListenable: _dropLanding,
+                            builder: (context, landing, _) => landing == null
+                                ? const SizedBox.shrink()
+                                : _dropGhost(t, landing),
+                          ),
+                        ),
+                      ),
+                    ),
+                    ],
                     ),
                   ),
                 ),
@@ -6012,3 +6173,11 @@ class _LiftCornerPainter extends CustomPainter {
   @override
   bool? hitTest(Offset position) => false;
 }
+
+typedef _DropLanding = ({
+  int frame,
+  int length,
+  double top,
+  String label,
+  SnapTarget? caught,
+});

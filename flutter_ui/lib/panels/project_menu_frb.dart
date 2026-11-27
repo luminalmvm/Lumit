@@ -36,6 +36,7 @@ import '../state/dock.dart';
 import '../state/file_dialogs.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import 'layer_fold_frb.dart' show startLayersAt;
 import 'project_columns_frb.dart';
 
 enum _ProjectMenuAction {
@@ -194,13 +195,14 @@ Widget _flyout(List<Widget> rows) => FloatSurface(
 
 /// Put [items] in the open composition, on top of its stack, as a drop on the
 /// Timeline does: footage end to end, a comp as a precomp, and a solid as a
-/// layer. One undo step. A comp that would hold itself is refused and passed
-/// over.
+/// layer, all starting at the playhead. One undo step. A comp that would hold
+/// itself is refused and passed over.
 void addItemsToOpenComp(BuildContext context, List<ItemReference> items) {
   final ui = Provider.of<LumitUiState>(context, listen: false);
   final comp = ui.selectedComp;
   if (comp == null) return;
   final project = Provider.of<LumitState>(context, listen: false).project;
+  final at = ui.playheadFrame.value;
   project?.beginUndoGroup();
   try {
     final footage = [
@@ -214,18 +216,20 @@ void addItemsToOpenComp(BuildContext context, List<ItemReference> items) {
           row: 0,
           arrival: ui.streamsArrival,
           endToEnd: true,
-          lightNames: modelLightNames());
+          lightNames: modelLightNames(),
+          startFrame: at);
       showDroppedModelSettingsFrb(context, placed);
     }
     for (final item in items) {
       try {
-        switch (item) {
-          case ItemReference_Composition(:final field0):
-            comp.addPrecompLayer(comp: field0, row: 0);
-          case ItemReference_Solid(:final field0):
-            comp.addSolidItemLayer(solid: field0, row: 0);
-          case _:
-        }
+        final layer = switch (item) {
+          ItemReference_Composition(:final field0) =>
+            comp.addPrecompLayer(comp: field0, row: 0),
+          ItemReference_Solid(:final field0) =>
+            comp.addSolidItemLayer(solid: field0, row: 0),
+          _ => null,
+        };
+        if (layer != null) startLayersAt(comp, [layer], at);
       } catch (_) {}
     }
   } finally {
