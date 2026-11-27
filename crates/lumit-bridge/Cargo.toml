@@ -170,6 +170,8 @@ features = [
     # `GetSystemPowerStatus`, so the status line can say the laptop is on
     # battery or saving power (`power_saving`).
     "Win32_System_Power",
+    # `PeekNamedPipe`, so a Discord that never answers cannot hang its thread.
+    "Win32_System_Pipes",
 ]
 
 # The live endpoint's pipe. The browser build has no other programs to talk to.

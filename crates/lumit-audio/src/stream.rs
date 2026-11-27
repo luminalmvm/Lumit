@@ -48,10 +48,10 @@ pub const BLOCK_SECONDS: usize = 2;
 /// twenty-two minutes of sound.
 pub const DEFAULT_BUDGET_BYTES: usize = 512 * 1024 * 1024;
 
-/// Blocks to a table, and tables to a source. A source's tables are made as
-/// its blocks are first asked for, so a short file costs one.
+/// Blocks to a table, and tables to a source: about 36 hours. A source's tables
+/// are made as its blocks are first asked for, so a short file costs one.
 const TABLE_BLOCKS: usize = 256;
-const TABLES: usize = 64;
+const TABLES: usize = 256;
 
 /// How many files are kept open for decoding at once. A row plays one file at
 /// a time and a crossfade two, so this covers a handful of rows without

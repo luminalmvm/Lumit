@@ -9,7 +9,7 @@
 
 use std::io::{self, Read, Write};
 use std::sync::{Mutex, Once};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde_json::json;
 use web_time::{SystemTime, UNIX_EPOCH};
@@ -21,6 +21,8 @@ const CLIENT_ID: &str = "1558750922316976188";
 /// 20 seconds, and this is also how soon a Discord started after Lumit is
 /// found.
 const PACE: Duration = Duration::from_secs(5);
+
+const REPLY: Duration = Duration::from_secs(5);
 
 /// Discord refuses a line shorter than 2 characters or longer than 128.
 const LINE_MIN: usize = 2;
@@ -126,17 +128,62 @@ fn exchange(pipe: &mut Pipe, opcode: u32, body: &serde_json::Value) -> io::Resul
     frame.extend_from_slice(body.as_bytes());
     pipe.write_all(&frame)?;
 
+    let mut reply = Timed(pipe, Instant::now() + REPLY);
     let mut head = [0u8; 8];
-    pipe.read_exact(&mut head)?;
+    reply.read_exact(&mut head)?;
     let [a, b, c, d, e, f, g, h] = head;
     let length = u64::from(u32::from_le_bytes([e, f, g, h]));
-    io::copy(&mut Read::by_ref(pipe).take(length), &mut io::sink())?;
+    io::copy(&mut reply.take(length), &mut io::sink())?;
     // Opcode 2 is Discord closing on us, which is its answer to an id it does
     // not know.
     if u32::from_le_bytes([a, b, c, d]) == 2 {
         return Err(io::ErrorKind::ConnectionRefused.into());
     }
     Ok(())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+struct Timed<'a>(
+    &'a mut Pipe,
+    #[cfg_attr(not(windows), allow(dead_code))] Instant,
+);
+
+#[cfg(not(target_arch = "wasm32"))]
+impl Read for Timed<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        #[cfg(windows)]
+        wait(self.0, self.1)?;
+        self.0.read(buf)
+    }
+}
+
+#[cfg(windows)]
+fn wait(pipe: &Pipe, deadline: Instant) -> io::Result<()> {
+    use std::os::windows::io::AsRawHandle;
+    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::System::Pipes::PeekNamedPipe;
+    loop {
+        let mut avail = 0u32;
+        // SAFETY: the handle is the open pipe `pipe` holds, and `avail` lives
+        // for the call.
+        unsafe {
+            PeekNamedPipe(
+                HANDLE(pipe.as_raw_handle()),
+                None,
+                0,
+                None,
+                Some(&mut avail),
+                None,
+            )
+        }?;
+        if avail > 0 {
+            return Ok(());
+        }
+        if Instant::now() >= deadline {
+            return Err(io::ErrorKind::TimedOut.into());
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
 }
 
 #[cfg(windows)]
@@ -166,4 +213,7 @@ fn open(n: u32) -> Option<Pipe> {
         .chain([PathBuf::from("/tmp")])
         .flat_map(|dir| ["", "app/com.discordapp.Discord", "snap.discord"].map(|sub| dir.join(sub)))
         .find_map(|dir| Pipe::connect(dir.join(format!("discord-ipc-{n}"))).ok())
+        .inspect(|pipe| {
+            let _ = pipe.set_read_timeout(Some(REPLY));
+        })
 }
