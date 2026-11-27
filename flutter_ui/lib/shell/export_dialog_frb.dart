@@ -537,6 +537,7 @@ class _ExportDialogState extends State<_ExportDialog> {
   int _workStart = 0;
   int _workEnd = 1;
   bool _hasWorkArea = false;
+  int _compStart = 0;
 
   @override
   void initState() {
@@ -551,6 +552,8 @@ class _ExportDialogState extends State<_ExportDialog> {
       _compFps = settings.fpsNum / settings.fpsDen;
       _fps = _compFps;
       _compFrames = widget.comp.durationFrames();
+      _compStart =
+          widget.comp.frameAtTime(time: widget.comp.getStartTimecode());
       _hasCaptions = widget.comp.hasCaptions();
       final area = widget.comp.getWorkArea();
       if (area != null) {
@@ -1011,10 +1014,13 @@ class _ExportDialogState extends State<_ExportDialog> {
         ],
       ExportSection.time => [
           switch (_span) {
-            _Span.workArea => l10n.exportSpanWorkArea('$_workStart', '$_workEnd'),
+            _Span.workArea =>
+              l10n.exportSpanWorkArea('$_workStart', '${_workEnd - 1}'),
             _Span.wholeComp => l10n.exportSpanWholeComp,
             _Span.custom => l10n.custom,
           },
+          if (_span != _Span.workArea) '$start–${end - 1}',
+          '${_clock(start)}–${_clock(end - 1)}',
           '${_formatRate(_rate)} ${l10n.unitFps}',
           _timecode(end - start, _compFps),
         ],
@@ -1488,7 +1494,7 @@ class _ExportDialogState extends State<_ExportDialog> {
               ],
               label: (span) => switch (span) {
                 _Span.workArea =>
-                  l10n.exportSpanWorkArea('$_workStart', '$_workEnd'),
+                  l10n.exportSpanWorkArea('$_workStart', '${_workEnd - 1}'),
                 _Span.wholeComp => l10n.exportSpanWholeComp,
                 _Span.custom => l10n.custom,
               },
@@ -1616,12 +1622,12 @@ class _ExportDialogState extends State<_ExportDialog> {
                 height: dialogControlHeight,
                 child: DragValueField(
                   key: const ValueKey('export-range-end'),
-                  value: _rangeEnd,
-                  min: 1,
-                  max: _compFrames,
+                  value: _rangeEnd - 1,
+                  min: 0,
+                  max: _compFrames - 1,
                   fill: t.surface0,
                   onChanged: (v) => _edit(() {
-                    _rangeEnd = v.toInt().clamp(1, _compFrames);
+                    _rangeEnd = (v.toInt() + 1).clamp(1, _compFrames);
                     if (_rangeStart >= _rangeEnd) _rangeStart = _rangeEnd - 1;
                   }),
                 ),
@@ -1631,8 +1637,8 @@ class _ExportDialogState extends State<_ExportDialog> {
         _reading(
           t,
           l10n.exportTimeReading(
-            _timecode(start, _compFps),
-            _timecode(end, _compFps),
+            _clock(start),
+            _clock(end - 1),
             _timecode(end - start, _compFps),
           ),
           key: const ValueKey('export-time-reading'),
@@ -3298,6 +3304,8 @@ class _ExportDialogState extends State<_ExportDialog> {
 
   String _timecode(int frames, double rate) =>
       timecodeOfRate(frames, (rate * 1000).round(), 1000);
+
+  String _clock(int frame) => _timecode(frame + _compStart, _compFps);
 
   static String _leaf(String path) => path.split(RegExp(r'[/\\]')).last;
 }

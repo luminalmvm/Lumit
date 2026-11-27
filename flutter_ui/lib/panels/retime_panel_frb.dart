@@ -352,7 +352,10 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
       builder: (context, box) {
         void seek(double x) {
           final share = (x / box.maxWidth).clamp(0.0, 1.0);
-          _ui.scrubTo((inFrame + share * (outFrame - inFrame)).round());
+          final last = outFrame - 1 < inFrame ? inFrame : outFrame - 1;
+          final top = _ui.model.durationFrames - 1;
+          final frame = (inFrame + share * (outFrame - inFrame)).round();
+          _ui.scrubTo(frame.clamp(inFrame, last).clamp(0, top < 0 ? 0 : top));
         }
 
         return GestureDetector(

@@ -32690,7 +32690,7 @@
           "label": "Threshold",
           "kind": "float",
           "unit": "raw",
-          "default": 0.9,
+          "default": 0.5,
           "slider_min": 0.0,
           "slider_max": 4.0,
           "hard_min": 0.0
@@ -32711,7 +32711,7 @@
           "label": "Ambient",
           "kind": "float",
           "unit": "raw",
-          "default": 0.0,
+          "default": 0.15,
           "slider_min": 0.0,
           "slider_max": 1.0,
           "hard_min": 0.0

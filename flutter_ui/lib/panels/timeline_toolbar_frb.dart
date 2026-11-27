@@ -511,7 +511,7 @@ Future<void> showTimelineMoreMenu(
         span: workAreaWith(
           comp: comp,
           current: comp.getWorkArea(),
-          wanted: frame ?? playheadNow,
+          wanted: (frame ?? playheadNow) + (picked == 'work-in' ? 0 : 1),
           isStart: picked == 'work-in',
         ),
       );
