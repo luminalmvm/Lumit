@@ -148,20 +148,17 @@ pub(crate) fn opt_out_of_power_throttling() {}
 /// In front until told otherwise, which is how Lumit starts.
 static IN_FRONT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 
-/// Whether the worker is playing, as it last said.
 static PLAYING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// Whether Windows is now left to throttle this process, as last applied.
 /// Not at start: the worker opts out as it starts.
 static THROTTLE_ALLOWED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-/// The interface's window has come in front or gone behind something else.
 pub(crate) fn window_in_front(front: bool) {
     IN_FRONT.store(front, std::sync::atomic::Ordering::Relaxed);
     follow_power();
 }
 
-/// The worker has started or stopped playing.
 pub(crate) fn playing(on: bool) {
     PLAYING.store(on, std::sync::atomic::Ordering::Relaxed);
     follow_power();
@@ -196,7 +193,6 @@ fn throttle_allowed(in_front: bool, busy: impl FnOnce() -> bool) -> bool {
     !in_front && !busy()
 }
 
-/// Let Windows decide again whether to throttle this process (Windows).
 #[cfg(windows)]
 fn hand_power_throttling_back() {
     use windows::Win32::System::Threading::{
@@ -278,7 +274,6 @@ pub(crate) fn engine_ready() {
     }
 }
 
-/// A request is waiting: take the next turn now.
 #[cfg(target_arch = "wasm32")]
 pub(crate) fn wake() {
     web::schedule(0.0);
@@ -294,9 +289,7 @@ mod web {
     type Turn = Box<dyn FnMut() -> bool>;
 
     thread_local! {
-        /// Every running worker, one per open project.
         pub(super) static TURNS: RefCell<Vec<Turn>> = const { RefCell::new(Vec::new()) };
-        /// The shortest wait the worker taking its turn has asked for.
         pub(super) static NEXT: Cell<Option<Duration>> = const { Cell::new(None) };
         /// When the next round is due, on the page's clock, and the handle
         /// of its timer when it has one. Only ever one, or each wake would
@@ -352,7 +345,6 @@ mod web {
         }
     }
 
-    /// One turn of every worker, then the timer set for the soonest wait.
     fn round() {
         DUE.with(|due| due.set(None));
         // Taken out while they run, so a turn that starts another worker or
@@ -386,10 +378,6 @@ mod web {
 mod power_tests {
     use super::throttle_allowed;
 
-    /// **Throttled only behind other windows with nothing running.** In front,
-    /// or playing or exporting behind other windows, Lumit stays out of power
-    /// throttling; behind them and idle, Windows decides. In front, whether
-    /// anything runs is not even asked.
     #[test]
     fn power_throttling_is_allowed_only_behind_other_windows_and_idle() {
         assert!(!throttle_allowed(true, || unreachable!(

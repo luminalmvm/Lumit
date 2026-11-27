@@ -89,7 +89,6 @@ fn comp<'a>(doc: &'a Document, name: &str) -> &'a Composition {
         .unwrap_or_else(|| panic!("no composition named {name}"))
 }
 
-/// The outer composition, which is where all but one of the layers live.
 fn fixture() -> &'static Composition {
     comp(doc(), "Fixture")
 }
@@ -128,7 +127,6 @@ fn reported(f: impl Fn(&Reason) -> bool) -> bool {
     report().rows.iter().any(|row| f(&row.reason))
 }
 
-/// One effect parameter as the float it is, at time zero.
 fn float(fx: &EffectInstance, id: &str) -> f64 {
     match fx.param(id) {
         Some(EffectValue::Float(p)) => p.value_at(0.0),
@@ -136,7 +134,6 @@ fn float(fx: &EffectInstance, id: &str) -> f64 {
     }
 }
 
-/// One channel of an effect parameter that is a colour.
 fn colour(fx: &EffectInstance, id: &str) -> [f64; 4] {
     match fx.param(id) {
         Some(EffectValue::Colour(c)) => [
@@ -182,14 +179,6 @@ fn perimeter(path: &BezierPath) -> f64 {
         .sum()
 }
 
-// ---------------------------------------------------------------------------
-// The bundle itself
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// §5: nested comps, the item tree, the comp settings
-// ---------------------------------------------------------------------------
-
 /// **§5 row: nested comps (A contains B), and the folder tree around them.**
 ///
 /// `make-fixture.jsx` puts "Fixture inner" inside "Fixture folder" and adds it
@@ -215,7 +204,6 @@ fn the_nested_comp_its_folder_and_its_two_precomp_layers_come_across() {
         .expect("the fixture folder");
     assert_eq!(folder.children, vec![inner.id]);
 
-    // Eighteen solids in the Solids folder AE made for them.
     let solids = doc
         .items
         .iter()
@@ -226,7 +214,6 @@ fn the_nested_comp_its_folder_and_its_two_precomp_layers_come_across() {
         .expect("AE's own Solids folder");
     assert_eq!(solids.children.len(), 18);
 
-    // Both precomp layers resolve to the same nested composition.
     for name in ["retimed precomp", "stretched precomp"] {
         assert_eq!(
             layer(fixture(), name).kind,
@@ -235,7 +222,6 @@ fn the_nested_comp_its_folder_and_its_two_precomp_layers_come_across() {
         );
     }
 
-    // The inner comp's own animation arrived: 100 → 25 → 100 opacity.
     let opacity = keys(&layer(inner, "inner base").transform.opacity);
     assert_eq!(opacity.len(), 3);
     assert_eq!(
@@ -271,7 +257,6 @@ fn the_composition_keeps_its_settings_shutter_and_background() {
     assert_close(f64::from(c.background.0[0]), step(13.0));
     assert_close(f64::from(c.background.0[2]), step(15.0));
 
-    // "Preserve frame rate when nested" has no Lumit switch and is a row.
     assert!(reported(|r| matches!(
         r,
         Reason::NestedPreserveIgnored {
@@ -294,7 +279,6 @@ fn every_solids_colour_arrives_in_scene_linear_light() {
         other => panic!("{name} is not a solid: {other:?}"),
     };
 
-    // addSolid([0.5, 0.5, 0.5], "bg", 640, 360) — a mid grey.
     let bg = solid("bg");
     assert_eq!((bg.width, bg.height), (640, 360));
     for channel in 0..3 {
@@ -314,10 +298,6 @@ fn every_solids_colour_arrives_in_scene_linear_light() {
         Some(&serde_json::json!(31))
     );
 }
-
-// ---------------------------------------------------------------------------
-// §5: parenting, and the two layer kinds AE backs with a solid
-// ---------------------------------------------------------------------------
 
 /// **§5 rows: the parenting chain, the null, and the adjustment layer.**
 ///
@@ -345,14 +325,9 @@ fn the_parenting_chain_the_null_and_the_adjustment_layer() {
 
     let adjustment = layer(c, "adjustment");
     assert_eq!(adjustment.kind, LayerKind::Adjustment);
-    // And its Gaussian blur came with it, its pixels carried as px@comp.
     let blur = effect(adjustment, "blur");
     assert_close(float(blur, "radius"), 6.0);
 }
-
-// ---------------------------------------------------------------------------
-// §5: the keyframe variety
-// ---------------------------------------------------------------------------
 
 /// **§5 row: position keys with bezier ease, a hold key, and spatial
 /// tangents.**
@@ -387,7 +362,6 @@ fn the_position_keys_keep_their_ease_their_hold_and_report_the_motion_path() {
         assert_eq!(key.time, Rational::new(i as i64, 1).unwrap());
     }
 
-    // AE's 20% and 75% are Lumit's 0.2 and 0.75, on both axes of the same key.
     for lane in [&x, &y] {
         assert_eq!(
             lane[0].interp_in,
@@ -403,7 +377,6 @@ fn the_position_keys_keep_their_ease_their_hold_and_report_the_motion_path() {
                 influence: 75.0 / 100.0
             }
         );
-        // Mirrored on the last key.
         assert_eq!(
             lane[4].interp_in,
             SideInterp::Bezier {
@@ -418,7 +391,6 @@ fn the_position_keys_keep_their_ease_their_hold_and_report_the_motion_path() {
                 influence: 20.0 / 100.0
             }
         );
-        // The hold key, and it evaluates as one: flat until the next key.
         assert_eq!(lane[3].interp_out, SideInterp::Hold);
     }
     assert_eq!(child_a.transform.position_x.value_at(3.5), 440.0);
@@ -435,8 +407,6 @@ fn the_position_keys_keep_their_ease_their_hold_and_report_the_motion_path() {
         }
     );
 
-    // Lumit animates each axis on its own, so AE's motion path has nowhere to
-    // go — a report row, not a silent loss.
     assert!(reported(|r| matches!(r, Reason::SpatialTangentsFlattened)));
 
     // ROW NOT CARRIED: roving never made it into the capture at all.
@@ -447,9 +417,6 @@ fn the_position_keys_keep_their_ease_their_hold_and_report_the_motion_path() {
     );
 }
 
-/// The capture's own Position keyframes for one layer of the outer comp, for
-/// the two assertions that are about what After Effects *said* rather than
-/// what the mapping made of it.
 fn capture_position_keys(layer_name: &str) -> Vec<lumit_import::capture::Keyframe> {
     let capture = &golden().0.capture;
     let comp = capture
@@ -494,7 +461,6 @@ fn a_separated_position_animates_on_its_own_followers() {
     assert_eq!((y[0].value, y[1].value), (60.0, 300.0));
     assert_eq!(y[1].time, Rational::new(2, 1).unwrap(), "its own last key");
 
-    // Z was never separated away from its still zero.
     assert_eq!(
         child_b.transform.position_z.animation,
         Animation::Static(0.0)
@@ -528,10 +494,6 @@ fn an_expression_drives_the_property_only_when_it_was_switched_on() {
     assert!(reported(|r| matches!(r, Reason::ExpressionDisabledCarried)));
 }
 
-// ---------------------------------------------------------------------------
-// §5: the two stretches, the time remap, the frame blending
-// ---------------------------------------------------------------------------
-
 /// **§5 rows: stretch at 50% and at −100%, as Retimes with the right ends.**
 ///
 /// A layer at 50% plays its source twice as fast, which is a straight line of
@@ -550,7 +512,6 @@ fn an_expression_drives_the_property_only_when_it_was_switched_on() {
 fn both_stretches_become_retimes_with_the_right_endpoints() {
     let c = fixture();
 
-    // 50%: two seconds of layer, four seconds of source.
     let stretched = layer(c, "stretched precomp");
     let retime = stretched
         .retime
@@ -566,7 +527,6 @@ fn both_stretches_become_retimes_with_the_right_endpoints() {
         Reason::StretchAsRetime { percent } if close(*percent, 50.0)
     )));
 
-    // −100%: the bar sits before zero, read the right way round.
     let reversed = layer(c, "reversed");
     assert!(
         reversed.in_point < reversed.out_point,
@@ -584,7 +544,6 @@ fn both_stretches_become_retimes_with_the_right_endpoints() {
         "a reversed bar is not a damaged one"
     );
 
-    // Source time is minus layer time, all the way along.
     let retime = reversed.retime.as_ref().expect("a Retime from the stretch");
     for t in [-10.0, -5.0, -1.0] {
         assert_close(retime.value_at(t), -t);
@@ -622,7 +581,6 @@ fn the_time_remaps_hold_is_a_freeze_and_frame_blending_lands_beside_it() {
     assert_eq!(keys[1].interp_out, SideInterp::Hold);
     assert_eq!(keys[2].time, Rational::new(4, 1).unwrap());
 
-    // Across the whole held span, the same source moment.
     assert_eq!(map.value_at(2.5), 1.0);
     assert_eq!(map.value_at(3.9), 1.0);
 
@@ -634,10 +592,6 @@ fn the_time_remaps_hold_is_a_freeze_and_frame_blending_lands_beside_it() {
     assert!(reported(|r| matches!(r, Reason::FlowEngineDiffers)));
     assert_eq!(layer(c, "bg").interpolation, Interpolation::Nearest);
 }
-
-// ---------------------------------------------------------------------------
-// §5: mattes, masks, markers
-// ---------------------------------------------------------------------------
 
 /// **§5 rows: both generations of matte, normalised.**
 ///
@@ -705,7 +659,6 @@ fn the_two_masks_keep_their_modes_feather_inversion_and_animated_path() {
     assert_eq!(subtract.name, "mask subtract");
     assert_eq!(subtract.mode, MaskMode::Subtract);
     assert!(subtract.inverted);
-    // 12 × 12: one width, and no "the axes differ" row.
     assert_eq!(subtract.feather.value_at(0.0), 12.0);
     assert!(!reported(|r| matches!(
         r,
@@ -749,10 +702,6 @@ fn comp_and_layer_markers_carry_their_comment_and_their_duration() {
     let inner = comp(doc(), "Fixture inner");
     assert_eq!(inner.markers[0].label, "inner marker");
 }
-
-// ---------------------------------------------------------------------------
-// §5: blend modes, switches, the 3D trio, text
-// ---------------------------------------------------------------------------
 
 /// **§5 row: the blend-mode spread, including Dissolve's fallback.**
 ///
@@ -812,23 +761,6 @@ fn the_switches_cross_over_and_the_ones_with_no_counterpart_are_reported() {
     )));
 }
 
-/// **§5 row: the 3D layer, the two-node camera and the light — as far as they
-/// map.**
-///
-/// What does come across: the 3D switch and the layer's Z, the layer's
-/// **Orientation** on its own lanes, the camera's Zoom out of its
-/// options group, and the light's kind, colour, intensity, cone and aim.
-/// The colour converts into scene-linear light; the rest is After Effects'
-/// own numbers.
-/// Material Options' **Casts Shadows** is kept and drawn.
-///
-/// **ROWS NOT CARRIED**, all owed in docs/TODO.md and all revealed here:
-///
-/// - the camera's **Point of Interest** lands on the anchor-point lanes,
-///   because After Effects stores it under `ADBE Anchor Point` — its two-node
-///   flag survives in the `ae` namespace, and now says so in the report;
-/// - the camera's **Depth of Field, Aperture and Focus Distance** are dropped
-///   without a row.
 #[test]
 fn the_3d_layer_the_camera_and_the_light_come_across_as_far_as_they_map() {
     let c = fixture();
@@ -836,7 +768,6 @@ fn the_3d_layer_the_camera_and_the_light_come_across_as_far_as_they_map() {
     let card = layer(c, "3d card");
     assert!(card.switches.three_d);
     assert_eq!(card.transform.position_z.value_at(0.0), -150.0);
-    // Orientation [0, 30, 0], as it is.
     let orientation = card
         .transform
         .orientation
@@ -859,8 +790,6 @@ fn the_3d_layer_the_camera_and_the_light_come_across_as_far_as_they_map() {
         Some(&serde_json::json!("CAMERA_OR_POINT_OF_INTEREST")),
         "the two-node flag rides in the ae namespace"
     );
-    // The Point of Interest is the camera's own second node
-    // (docs/impl/camera.md §8), and the flag makes it a two-node camera.
     let LayerKind::Camera { options, .. } = &camera.kind else {
         panic!("a camera");
     };
@@ -878,7 +807,6 @@ fn the_3d_layer_the_camera_and_the_light_come_across_as_far_as_they_map() {
     assert!(light.two_node, "aimed at its point of interest");
     assert!(light.casts_shadows);
     assert_close(light.point_of_interest[0].value_at(0.0), 320.0);
-    // [1, 0.9, 0.8] in the project's display space.
     assert_close(light.colour[0].value_at(0.0), 1.0);
     assert_close(light.colour[1].value_at(0.0), to_linear(0.899_999_976));
     assert_close(light.colour[2].value_at(0.0), to_linear(0.800_000_012));
@@ -908,7 +836,6 @@ fn the_text_layers_words_arrive_and_the_shape_layer_keeps_its_slot() {
     };
     assert_eq!(document.text, "Lumit fixture");
     assert_eq!(document.size, 48.0);
-    // fillColor [1, 0.55, 0.1].
     assert_close(f64::from(document.fill.0[1]), to_linear(0.550_000_011));
     assert_close(f64::from(document.fill.0[2]), to_linear(0.100_000_001));
 
@@ -920,7 +847,6 @@ fn the_text_layers_words_arrive_and_the_shape_layer_keeps_its_slot() {
     assert!(style.fill_on && style.stroke_on && style.stroke_over);
     assert_eq!(style.stroke_width, 3.0);
     assert_eq!(style.stroke.0, [0.0, 0.0, 0.0, 1.0]);
-    // Auto leading, and the scales After Effects writes as 1.
     assert_eq!(style.leading, None);
     assert_eq!((style.scale_x, style.scale_y), (100.0, 100.0));
     assert_eq!(document.paragraph.align, TextAlign::Centre);
@@ -939,8 +865,6 @@ fn the_text_layers_words_arrive_and_the_shape_layer_keeps_its_slot() {
     assert_eq!(words.transform.position_x.value_at(0.0), 320.0);
     assert_eq!(words.transform.position_y.value_at(0.0), 180.0);
 
-    // The rectangle and the ellipse under one gradient fill, cut to 70 % and
-    // copied three times.
     let LayerKind::Shape { contents } = &layer(c, "shape").kind else {
         panic!("a shape layer");
     };
@@ -965,10 +889,6 @@ fn the_text_layers_words_arrive_and_the_shape_layer_keeps_its_slot() {
     )));
 }
 
-// ---------------------------------------------------------------------------
-// §5: the effect spread, parameter by converted parameter
-// ---------------------------------------------------------------------------
-
 /// **The blur, the colour effects and the generators, with their numbers
 /// converted.**
 ///
@@ -981,7 +901,6 @@ fn the_text_layers_words_arrive_and_the_shape_layer_keeps_its_slot() {
 fn the_colour_and_generate_effects_convert_every_parameter() {
     let host = layer(fixture(), "fx host");
 
-    // Gaussian Blur: keyframed, pixels on both sides, and no rebase row.
     let blur = effect(host, "blur");
     let radius = match blur.param("radius") {
         Some(EffectValue::Float(p)) => p,
@@ -998,7 +917,6 @@ fn the_colour_and_generate_effects_convert_every_parameter() {
             if effect == "Gaussian Blur" && param == "Blurriness"
     )));
 
-    // Tint, and the one instance switched off in After Effects.
     let tint = effect(host, "tint");
     assert!(!tint.enabled, "a switched-off effect imports switched off");
     assert_close(colour(tint, "black")[2], to_linear(0.200_000_003));
@@ -1012,30 +930,27 @@ fn the_colour_and_generate_effects_convert_every_parameter() {
     assert_close(colour(fill, "colour")[1], 1.0);
     assert_close(colour(fill, "colour")[2], to_linear(0.25));
 
-    // Fractal Noise: two option lists and the one rebased scale.
     let noise = effect(host, "fractal_noise");
     assert_eq!(
         noise.param("noise_type"),
-        Some(&EffectValue::Choice(0)),
-        "AE's Block is Lumit's first entry"
+        Some(&EffectValue::Choice(2)),
+        "AE's Block is Lumit's Block"
     );
     assert_eq!(
         noise.param("fractal_type"),
-        Some(&EffectValue::Choice(1)),
-        "AE's Turbulent Smooth folds onto Lumit's Turbulent"
+        Some(&EffectValue::Choice(2)),
+        "AE's Turbulent Smooth is Lumit's Turbulent smooth"
     );
     assert_close(float(noise, "contrast"), 140.0);
     assert_close(float(noise, "complexity"), 3.0);
     assert_close(float(noise, "evolution"), 90.0);
     // AE's 100 is Lumit's 200 on the anchor docs/11 §5 records.
     assert_close(float(noise, "scale"), 100.0 * 2.0);
-    assert!(reported(|r| matches!(
+    assert!(!reported(|r| matches!(
         r,
-        Reason::EffectParamApproximated { effect, param, .. }
-            if effect == "Fractal Noise" && param == "Fractal Type"
+        Reason::EffectParamApproximated { effect, .. } if effect == "Fractal Noise"
     )));
 
-    // Levels and Hue/Saturation: the master group, values unchanged.
     let levels = effect(host, "levels");
     assert_close(float(levels, "master_in_black"), 0.050_000_000_745);
     assert_close(float(levels, "master_gamma"), 1.200_000_047_684);
@@ -1066,7 +981,6 @@ fn the_transform_shadow_and_the_two_mask_reading_effects_convert() {
     assert_close(float(transform, "position_y"), 150.0);
     assert_close(float(transform, "rotation"), 15.0);
     assert_close(float(transform, "opacity"), 90.0);
-    // Uniform Scale was on, so both axes take AE's single figure.
     assert_close(float(transform, "scale_x"), 100.0);
     assert_close(float(transform, "scale_y"), 100.0);
 
@@ -1076,7 +990,6 @@ fn the_transform_shadow_and_the_two_mask_reading_effects_convert() {
     assert_close(float(shadow, "distance"), 12.0);
     assert_close(float(shadow, "softness"), 8.0);
 
-    // Both effects name mask 1, which is the layer's first mask.
     let first_mask = host.masks[0].id;
     let vegas = effect(host, "vegas");
     assert_eq!(
@@ -1088,7 +1001,6 @@ fn the_transform_shadow_and_the_two_mask_reading_effects_convert() {
         Some(&EffectValue::Choice(2)),
         "Stroke: Mask/Path is Lumit's mask source"
     );
-    // Eight segments round that mask's own perimeter.
     assert_close(
         float(vegas, "segment_length"),
         perimeter(&host.masks[0].path) / 8.0,
@@ -1113,10 +1025,6 @@ fn the_transform_shadow_and_the_two_mask_reading_effects_convert() {
     assert_eq!(scribble.param("seed"), Some(&EffectValue::Seed(1)));
 }
 
-// ---------------------------------------------------------------------------
-// The report
-// ---------------------------------------------------------------------------
-
 /// **The report's counts, and the placeholder the fixture is built to
 /// produce.**
 ///
@@ -1139,18 +1047,7 @@ fn the_report_counts_what_it_says_and_names_its_placeholder() {
         report.summary(),
         Summary {
             imported: 62,
-            // One fewer Adjusted row now the guide flag is a switch Lumit has,
-            // so it crosses over instead of being reported.
-            // One more since Invert joined the table: the fixture's Channel is
-            // Red, which is a row rather than a placeholder now. Two fewer
-            // since the Transform effect gained a Skew pair, so the fixture's
-            // Skew and Skew Axis carry rather than report. One fewer since
-            // the camera gained its second node: the fixture's two-node
-            // camera and its point of interest cross over whole.
-            // One fewer since the text layer's styling carries.
-            // Two fewer since the Gaussian blur gained Repeat edge pixels:
-            // the fixture's two blurs carry theirs.
-            adjusted: 54,
+            adjusted: 53,
             placeholders: 1,
             skipped: 1,
         }
@@ -1170,7 +1067,6 @@ fn the_report_counts_what_it_says_and_names_its_placeholder() {
         Reason::PropertyUnreadable { match_name } if match_name == "ADBE CurvesCustom-0001"
     )));
 
-    // Invert maps, and the one control Lumit has no counterpart for is a row.
     let invert = effect(host, "invert");
     assert_eq!(invert.effect.namespace, EffectNamespace::Builtin);
     // Blend With Original 0 is the whole effect, which is a Mix of 100.
@@ -1186,20 +1082,14 @@ fn the_report_counts_what_it_says_and_names_its_placeholder() {
             if effect == "Invert" && param == "Channel"
     )));
 
-    // Exactly that one, and exactly one unreadable property.
     assert_eq!(report.of(Outcome::Placeholder).len(), 1);
     assert_eq!(report.of(Outcome::Skipped).len(), 1);
 
-    // Every row reads as a sentence naming where it happened.
     for row in &report.rows {
         let said = row.to_string();
         assert!(said.contains(": "), "a row names where it happened: {said}");
     }
 }
-
-// ---------------------------------------------------------------------------
-// The round trip
-// ---------------------------------------------------------------------------
 
 /// **The golden document survives a save and a reload.**
 ///
@@ -1221,7 +1111,6 @@ fn the_golden_document_round_trips_through_a_saved_project() {
     let c = comp(&back, "Fixture");
     assert_eq!(c.layers.len(), 23);
 
-    // A keyframe ease.
     let x = keys(&layer(c, "child A").transform.position_x);
     assert_eq!(
         x[0].interp_out,
@@ -1232,13 +1121,11 @@ fn the_golden_document_round_trips_through_a_saved_project() {
     );
     assert_eq!(x[3].interp_out, SideInterp::Hold);
 
-    // A matte.
     let matte = layer(c, "alpha matted").matte.as_ref().expect("a matte");
     assert_eq!(matte.layer, layer(c, "alpha matte source").id);
     assert_eq!(matte.channel, MatteChannel::Alpha);
     assert!(matte.inverted);
 
-    // A converted effect parameter, and a placeholder's whole dump.
     let host = layer(c, "fx host");
     assert_close(
         float(effect(host, "drop_shadow"), "opacity"),
@@ -1248,7 +1135,6 @@ fn the_golden_document_round_trips_through_a_saved_project() {
     assert_eq!(curves.effect.namespace, EffectNamespace::Placeholder);
     assert!(curves.extra.get("ae").is_some(), "the dump survives");
 
-    // An expression, and the reversed Retime with its negative layer time.
     assert_eq!(
         layer(c, "child A").transform.opacity.animation,
         Animation::Expression("50 + 25".to_string())

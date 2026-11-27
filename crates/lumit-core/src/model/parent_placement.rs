@@ -1,5 +1,3 @@
-//! Where a layer's parent puts it, for the placement chain.
-
 use super::*;
 
 /// `layer`'s placement as a parent: a solved camera is placed by its solve.

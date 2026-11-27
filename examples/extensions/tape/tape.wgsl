@@ -28,7 +28,6 @@ fn tape_lines() -> f32 {
     return select(288.0, 240.0, p.style == 1u);
 }
 
-// Three numbers and the seed, mixed into one.
 fn tape_hash(a: u32, b: u32, c: u32) -> u32 {
     var h = a ^ (b * 0x9e3779b9u) ^ (c * 0x85ebca6bu) ^ lumit.seed;
     h ^= h >> 16u;
@@ -75,12 +74,10 @@ fn tape_rgb(iq: vec2<f32>) -> vec3<f32> {
     );
 }
 
-// The input exactly as it came, at this pixel.
 fn tape_here(uv: vec2<f32>) -> vec4<f32> {
     return lumit_load(vec2<i32>(floor(uv * lumit_size())));
 }
 
-// Pass one, at half size: the colour, smeared to the right.
 fn bleed(uv: vec2<f32>) -> vec4<f32> {
     if (p.bleed == 0.0) {
         return vec4<f32>(0.0);
@@ -98,28 +95,23 @@ fn bleed(uv: vec2<f32>) -> vec4<f32> {
     var iq = sum / weight;
     let k = clamp(abs(p.bleed) / 20.0, 0.0, 1.0);
     if (p.style == 1u) {
-        // NTSC: the hue drifts, down the picture and from frame to frame.
         let turn = (0.12 + 0.1 * tape_wave(uv.y * 4.0 + lumit.time * 0.8, 3u)) * k;
         iq = vec2<f32>(
             iq.x * cos(turn) - iq.y * sin(turn),
             iq.x * sin(turn) + iq.y * cos(turn)
         );
     } else {
-        // PAL: no drift, but the colour comes out a little paler.
         iq *= 1.0 - 0.15 * k;
     }
     return vec4<f32>(iq, 0.0, 1.0);
 }
 
-// Pass two, full size: everything else.
 fn shade(uv: vec2<f32>) -> vec4<f32> {
     let lines = tape_lines();
     let frame = tape_frame();
     // The line of the frame this is, two fields to a frame.
     let row = u32(max(uv.y * lines * 2.0, 0.0));
 
-    // Wobble: a slow wave down the picture, a little jitter on every line,
-    // and the tear in the last few lines where the heads switch.
     let tear = smoothstep(0.96, 1.0, uv.y);
     let shift = p.wobble * (0.7 * tape_wave(uv.y * 6.0 + lumit.time * 1.7, 1u)
         + 0.3 * (tape_rand(row, frame, 2u) * 2.0 - 1.0)
@@ -127,8 +119,6 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
     let at = uv + vec2<f32>(shift * lumit.comp_scale / lumit_size().x, 0.0);
     var c = select(lumit_sample(at), tape_here(uv), shift == 0.0);
 
-    // Bleed: a softer picture, and the smeared colour in place of its own.
-    // PAL also averages each line's colour with the line above.
     let k = clamp(abs(p.bleed) / 2.0, 0.0, 1.0);
     let soft = vec2<f32>(0.12 * p.bleed * lumit.comp_scale / lumit_size().x, 0.0);
     c = mix(c, 0.25 * (lumit_sample(at - soft) + 2.0 * c + lumit_sample(at + soft)), k);
@@ -145,9 +135,6 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
     let even = mix(0.375, gap, clamp(pitch - 1.0, 0.0, 1.0));
     c = vec4<f32>(c.rgb * (1.0 - clamp(p.scanlines / 100.0, 0.0, 1.0) * 0.6 * even), c.a);
 
-    // Noise: grain a little wider than it is tall, about as strong to the
-    // eye in the shadows as in the highlights, now and then a white streak
-    // where the tape dropped out, and a noisy tear.
     let amount = clamp(p.noise / 100.0, 0.0, 1.0);
     let cell = vec2<u32>(vec2<i32>(floor(lumit_px(uv) / vec2<f32>(2.0, 1.0))));
     let light = 2.0 * sqrt(max(dot(c.rgb, vec3<f32>(0.2126, 0.7152, 0.0722)), 0.0)) + 0.03;

@@ -1,9 +1,3 @@
-//! The document model, Phase 0 scope (docs/03-DATA-MODEL.md).
-//!
-//! Phase 0 carries projects, folders, footage items, compositions, and Footage
-//! layers with spans — no properties/keyframes yet (slice arrives in Phase 1).
-//! All mutation goes through operations (ops.rs); this module is data + queries.
-
 use std::sync::Arc;
 
 use crate::anim::Property;
@@ -42,7 +36,6 @@ impl LinearColour {
 /// (path first, and the resolver confirms candidates before adopting them).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Fingerprint {
-    /// File length in bytes.
     pub size: u64,
     /// Last-modified time, whole seconds since the Unix epoch (advisory: a copy
     /// keeps the content but may not keep the mtime, so matching ignores it).
@@ -61,7 +54,6 @@ impl Fingerprint {
     }
 }
 
-/// Media reference (docs/03-DATA-MODEL.md §3).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MediaRef {
     /// Path relative to the project file's directory — the one path a saved
@@ -82,8 +74,6 @@ pub struct MediaRef {
     /// unset, so those files round-trip byte-for-byte unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fingerprint: Option<Fingerprint>,
-    /// Unknown fields from newer Lumit versions, preserved on load/save
-    /// (docs/10-FILE-FORMAT.md §1.1 — mandatory forward compatibility).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -101,8 +91,6 @@ pub struct MediaRef {
 pub struct SequenceRef {
     /// The rate the run plays at. Defaults to 25 on import.
     pub frame_rate: FrameRate,
-    /// Unknown fields from newer Lumit versions, preserved on load/save
-    /// (docs/10-FILE-FORMAT.md §1.1 — mandatory forward compatibility).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -121,27 +109,6 @@ impl Default for SequenceRef {
 /// short.
 pub const MAX_AUDIO_STREAMS: usize = 32;
 
-/// Which of its file's audio streams a layer or a clip sounds
-/// (docs/01-GLOSSARY.md: Audio stream).
-///
-/// # In plain terms
-///
-/// A recording can carry several sounds side by side: a screen capture with
-/// the game on one stream and the microphone on another. A layer of such a
-/// file sounds the first stream unless it is told otherwise, which is what
-/// every layer did before one could choose. Told otherwise it sounds the
-/// streams listed here, mixed: one of them, for a stream on a row of its own,
-/// or several, for streams put back together.
-///
-/// A stream is named by its place among the file's audio streams, counted
-/// from nought in the file's own order. The list is kept ascending with no
-/// stream twice, and the first stream alone is kept as the empty list. So a
-/// layer that never chose writes nothing to the project file, and two layers
-/// sounding the same streams compare equal. A place the file has not got is
-/// silence.
-// ponytail: places, so a file re-recorded with its streams in another order
-// re-points them. A stream has no id that survives a re-encode; match on the
-// stream's title if that ever bites.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(from = "Vec<u32>", into = "Vec<u32>")]
 pub struct AudioStreams(Vec<u32>);
@@ -160,7 +127,6 @@ impl AudioStreams {
         Self(places)
     }
 
-    /// The stream at `place` and no other.
     #[must_use]
     pub fn only(place: u32) -> Self {
         Self::of(&[place])
@@ -224,12 +190,6 @@ pub struct FootageItem {
     /// project written before sequences existed round-trips byte for byte.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sequence: Option<SequenceRef>,
-    /// Set when this item reads one layer of a layered image file (a
-    /// Photoshop document) rather than the file's flattened picture: the
-    /// layer's place in the file's own list, bottom first
-    /// (docs/01-GLOSSARY.md: File layer).
-    // ponytail: an index, so reordering the layers in Photoshop re-points
-    // it. The file's own layer ids are the upgrade.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_layer: Option<u32>,
     /// How the file is read: its alpha, rate, fields, pixel shape, loop and
@@ -240,8 +200,6 @@ pub struct FootageItem {
         skip_serializing_if = "crate::interpretation::Interpretation::is_default"
     )]
     pub interpretation: crate::interpretation::Interpretation,
-    /// Unknown fields from newer Lumit versions, preserved on load/save
-    /// (docs/10-FILE-FORMAT.md §1.1 — mandatory forward compatibility).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -273,8 +231,6 @@ pub struct FootageTrim {
     pub in_point: Option<Rational>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub out_point: Option<Rational>,
-    /// Unknown fields from newer Lumit versions, preserved on load/save
-    /// (docs/10-FILE-FORMAT.md §1.1 — mandatory forward compatibility).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -321,8 +277,6 @@ pub struct ProxyRef {
     /// without giving up the proxy that took minutes to make.
     #[serde(default = "default_true")]
     pub enabled: bool,
-    /// Unknown fields from newer Lumit versions, preserved on load/save
-    /// (docs/10-FILE-FORMAT.md §1.1 — mandatory forward compatibility).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -348,8 +302,6 @@ pub struct PackedMedia {
     /// so a file never keeps a path inside one machine's cache.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub original: Option<String>,
-    /// Unknown fields from newer Lumit versions, preserved on load/save
-    /// (docs/10-FILE-FORMAT.md §1.1 — mandatory forward compatibility).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -385,8 +337,6 @@ pub struct SolidDef {
     pub colour: LinearColour,
     pub width: u32,
     pub height: u32,
-    /// Unknown fields from newer Lumit versions, preserved on load/save
-    /// (docs/10-FILE-FORMAT.md §1.1 — mandatory forward compatibility).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -395,10 +345,7 @@ pub struct SolidDef {
 pub struct Folder {
     pub id: Uuid,
     pub name: String,
-    /// Ordered children ids (docs/03-DATA-MODEL.md §2 table).
     pub children: Vec<Uuid>,
-    /// Unknown fields from newer Lumit versions, preserved on load/save
-    /// (docs/10-FILE-FORMAT.md §1.1 — mandatory forward compatibility).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -467,7 +414,6 @@ pub struct Composition {
     /// Lumit reads.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub master_keys: Option<crate::anim::Animation>,
-    /// How a move of the master fader writes [`Self::master_keys`].
     #[serde(default, skip_serializing_if = "crate::mixer::AutomationMode::is_read")]
     pub master_automation: crate::mixer::AutomationMode,
     /// The loudness the comp's mix is made for. `None` is no target.
@@ -521,16 +467,10 @@ pub struct Composition {
     /// way ([`crate::ops::OpError::CompIsNodeGraph`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub graph: Option<crate::comp_graph::CompGraph>,
-    /// Unknown fields from newer Lumit versions, preserved on load/save
-    /// (docs/10-FILE-FORMAT.md §1.1 — mandatory forward compatibility).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
-/// A confirmed tempo grid over a composition's timeline (docs/09 §5):
-/// beats at `bpm`, the first of them `phase` seconds in. Bars are the grid
-/// read four beats at a time — v1 assumes common time, which is what the
-/// scene's material is in.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct BeatGrid {
     /// Beats per minute. Always positive: a grid with no tempo is `None`
@@ -630,7 +570,6 @@ impl MotionBlur {
         needed.clamp(self.samples.min(most), most)
     }
 
-    /// [`Self::sample_offsets`] for `n` samples across the same shutter.
     #[must_use]
     pub fn offsets(&self, n: u32) -> Vec<f64> {
         let n = n.clamp(1, Self::MAX_SAMPLES);
@@ -642,10 +581,6 @@ impl MotionBlur {
     }
 }
 
-/// Layer transform (docs/03-DATA-MODEL.md §6; 2.5D fields join with the
-/// camera work — all maths is 4x4 from day one at the evaluator level).
-/// Dimensions are separated scalars in Phase 1 (AE's separated-dimensions
-/// mode); coupled spatial paths arrive with the motion-path unit.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TransformGroup {
     pub anchor_x: Property,
@@ -689,7 +624,6 @@ pub struct TransformGroup {
     pub after_effects_order: bool,
     /// Percent, 0..100.
     pub opacity: Property,
-    /// How each two-axis property is shown and edited (docs/03 §6.5).
     #[serde(default, skip_serializing_if = "AxisModes::is_default")]
     pub axis_modes: AxisModes,
     #[serde(default, skip_serializing_if = "crate::orient::Orient::is_off")]
@@ -717,14 +651,11 @@ pub struct TransformGroup {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Material {
-    /// How much of the ambient lights it takes.
     pub ambient: Property,
     /// How much of the other lights it takes. 50 lights a layer as Lumit's
     /// lights always have.
     pub diffuse: Property,
-    /// How bright the highlight a light makes on it is.
     pub specular: Property,
-    /// How small and hard that highlight is.
     pub shininess: Property,
     /// How much the highlight takes the layer's own colour rather than the
     /// light's.
@@ -869,7 +800,6 @@ impl Default for TransformGroup {
     }
 }
 
-/// Which transform property an op addresses (stable, serialisable path).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum TransformProp {
     AnchorX,
@@ -1353,7 +1283,6 @@ impl CameraOptions {
         }
     }
 
-    /// The part the settings dialog edits as one op.
     #[must_use]
     pub fn settings(&self) -> CameraSettings {
         CameraSettings {
@@ -1417,9 +1346,7 @@ pub struct CameraSettings {
 /// still (the documented boundary, unchanged).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum LayerInputSource {
-    /// Raw source pixels only — no masks, no effects.
     None,
-    /// Source plus its own masks, but not its effects.
     Masks,
     /// Source with its effects and masks (the old `after_effects = true`).
     /// The default: the most complete source is what a new matte/depth input
@@ -1452,7 +1379,6 @@ impl LayerInputSource {
         }
     }
 
-    /// This mode's `Choice` index (0/1/2), for storing on an effect parameter.
     pub fn to_choice(self) -> u32 {
         match self {
             Self::None => 0,
@@ -1467,19 +1393,15 @@ impl LayerInputSource {
         self.to_choice() as u8
     }
 
-    /// Whether the referenced layer's own masks gate the sampled input.
     pub fn applies_masks(self) -> bool {
         !matches!(self, Self::None)
     }
 
-    /// Whether the referenced layer's own effect stack runs into the input.
     pub fn folds_effects(self) -> bool {
         matches!(self, Self::EffectsAndMasks)
     }
 }
 
-/// Using another layer's alpha or luma to gate this layer
-/// (docs/01-GLOSSARY.md §6: matte — any layer, one matte may serve many).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(from = "MatteRefRepr")]
 pub struct MatteRef {
@@ -1516,8 +1438,6 @@ struct MatteRefRepr {
 
 impl From<MatteRefRepr> for MatteRef {
     fn from(r: MatteRefRepr) -> Self {
-        // `source` wins; else migrate the legacy bool; else the default
-        // (`EffectsAndMasks`) for a matte that predates both fields.
         let source = r
             .source
             .or_else(|| r.after_effects.map(LayerInputSource::from_after_effects))
@@ -1537,12 +1457,9 @@ pub enum MatteChannel {
     Luma,
 }
 
-/// Where an effect implementation comes from (docs/03-DATA-MODEL.md §8).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EffectNamespace {
-    /// Ships in the box (docs/08-EFFECTS.md tier lists).
     Builtin,
-    /// An OpenFX plugin (docs/12-PLUGINS.md).
     Ofx,
     /// An **audio plugin** — a CLAP one today, a VST3 one on the same road in
     /// AP4 (docs/impl/audio-plugins.md).
@@ -1587,7 +1504,6 @@ pub struct EffectKey {
 /// consuming effect treats that as identity (a no-op) rather than erroring.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FileParam {
-    /// The distinct file paths this parameter references (usually exactly one).
     pub paths: Vec<String>,
     /// f64-valued selector into `paths`, animated with hold keyframes only.
     /// Rounded and clamped at evaluation, so it never lands between paths.
@@ -1595,7 +1511,6 @@ pub struct FileParam {
 }
 
 impl FileParam {
-    /// A single static path — the common, non-animated case.
     pub fn single(path: impl Into<String>) -> Self {
         Self {
             paths: vec![path.into()],
@@ -1603,7 +1518,6 @@ impl FileParam {
         }
     }
 
-    /// The unset parameter (no file chosen yet).
     pub fn empty() -> Self {
         Self {
             paths: Vec::new(),
@@ -1708,7 +1622,6 @@ pub struct EffectParam {
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
-/// One image operation in a layer's effect stack (docs/03-DATA-MODEL.md §8).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EffectInstance {
     pub id: Uuid,
@@ -1757,30 +1670,6 @@ pub struct EffectInstance {
     /// whatever order the toggles were clicked in.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub linked_pairs: Vec<String>,
-    /// A **plugin's own memory of itself**, as hex
-    /// (docs/impl/audio-plugins.md §4, docs/impl/ofx-host.md §4a).
-    ///
-    /// # In plain terms
-    ///
-    /// A plugin's knobs are Lumit properties and keyframe like anything else,
-    /// but a plugin also keeps things no knob names — which impulse response a
-    /// reverb loaded, what a curve display was drawn as. It hands that over as
-    /// a run of bytes it alone understands. Lumit **never parses it**: the blob
-    /// is written into the project, handed back to the plugin when the layer
-    /// opens again, and that is the whole of the contract. A plugin that is no
-    /// longer installed keeps its blob, its rows and its keyframes, so
-    /// installing it again finds everything where it was (docs/12 §1).
-    ///
-    /// Hex rather than raw bytes because the `.lum` is pretty-printed JSON, and
-    /// a `Vec<u8>` there is one number per line.
-    /// ponytail: base64 if a vendor's blob ever makes the doubling matter —
-    /// it is a string either way, so the field does not move.
-    ///
-    /// An **OFX plugin** writes one when a button of its is pressed
-    /// (`EffectDef::press`): whatever it holds that no row carries, a vendor
-    /// blob or a text, and the render lays it over the plugin's values every
-    /// frame. An audio plugin's is still only loaded and saved, since nothing
-    /// opens an audio plugin's own window yet.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plugin_state: Option<String>,
     /// A **Roto brush's strokes and base frame** (docs/impl/roto.md §1).
@@ -1819,7 +1708,6 @@ impl EffectInstance {
         hex::decode(self.plugin_state.as_ref()?).ok()
     }
 
-    /// Write a plugin's blob onto this instance.
     pub fn set_plugin_state(&mut self, bytes: &[u8]) {
         self.plugin_state = (!bytes.is_empty()).then(|| hex::encode(bytes));
     }
@@ -1854,13 +1742,10 @@ impl EffectInstance {
         }
     }
 
-    /// The parameter named `id`, if the instance carries it.
     pub fn param(&self, id: &str) -> Option<&EffectValue> {
         self.params.iter().find(|p| p.id == id).map(|p| &p.value)
     }
 
-    /// A float parameter's evaluated value at layer time `lt` (the common
-    /// case), or None when absent or not a Float.
     pub fn float_at(&self, id: &str, lt: f64) -> Option<f64> {
         match self.param(id)? {
             EffectValue::Float(p) => Some(p.value_at(lt)),
@@ -1923,9 +1808,6 @@ impl EffectInstance {
         }
     }
 
-    /// A file parameter's live path at layer time `lt` (the hold-keyframed
-    /// index selects it), or None when the parameter is absent, not a File, or
-    /// unset.
     pub fn path_at(&self, id: &str, lt: f64) -> Option<&str> {
         match self.param(id)? {
             EffectValue::File(f) => f.path_at(lt),
@@ -1933,8 +1815,6 @@ impl EffectInstance {
         }
     }
 
-    /// A colour-name parameter's text, or None when the parameter is absent,
-    /// not a Text, or unset (empty).
     pub fn text(&self, id: &str) -> Option<&str> {
         match self.param(id)? {
             EffectValue::Text(s) if !s.is_empty() => Some(s),
@@ -2006,13 +1886,10 @@ pub(crate) fn is_true(b: &bool) -> bool {
     *b
 }
 
-/// The same for a field whose default is `false`.
 pub(crate) fn is_false(b: &bool) -> bool {
     !*b
 }
 
-/// `skip_serializing_if` for a number whose default is zero, the twin of
-/// [`is_true`]: a clip nobody has touched the gain on writes no line for it.
 pub(crate) fn is_zero(v: &f64) -> bool {
     *v == 0.0
 }
@@ -2173,9 +2050,6 @@ impl Layer {
         })
     }
 
-    /// Whether this layer is a Light — asked often enough by the
-    /// lighting path that it is worth a name rather than a `matches!` at each
-    /// call site.
     #[must_use]
     pub fn is_light(&self) -> bool {
         matches!(self.kind, LayerKind::Light { .. })
@@ -2291,8 +2165,6 @@ pub fn nested_source_frame(layer: &Layer, nested: &Composition, lt: f64) -> i64 
     frame.round().max(0.0) as i64
 }
 
-/// What the collapse switch actually does for a layer at local time `lt`
-/// (docs/06-RENDER-PIPELINE.md §1.4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CollapseState {
     /// Not a Precomp layer, or the switch is off: default nesting.
@@ -2354,8 +2226,6 @@ pub fn collapse_state(doc: &Document, comp: &Composition, layer: &Layer, lt: f64
     }
 }
 
-// ponytail: Text is the widest kind by far. Boxing its document is the
-// upgrade if a layer's size ever matters.
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum LayerKind {
@@ -2364,16 +2234,23 @@ pub enum LayerKind {
     /// rival retime store until it was deleted, and a document written
     /// before then is converted on open (the `0.1.0` → `0.2.0` migration in
     /// `lumit-project`).
-    Footage { item: Uuid },
+    Footage {
+        item: Uuid,
+    },
     /// A SolidDef asset as this layer's source (docs/01-GLOSSARY.md: Solid
     /// layer; docs/03-DATA-MODEL.md §5.2 — solids are assets so they dedupe).
-    Solid { def: Uuid },
+    Solid {
+        def: Uuid,
+    },
     /// Another composition as this layer's source (docs/01-GLOSSARY.md:
     /// Precomp layer). Cycles are invalid states, guarded at insertion and
     /// defensively at render.
-    Precomp { comp: Uuid },
-    /// Editable styled text (v1: one run — docs/03-DATA-MODEL.md §9.1).
-    Text { document: TextDocument },
+    Precomp {
+        comp: Uuid,
+    },
+    Text {
+        document: TextDocument,
+    },
     /// A 3D viewpoint (docs/01-GLOSSARY.md: Camera layer). Only affects
     /// layers with the 3D switch; the topmost visible camera is active.
     /// `zoom` is the AE model: focal distance in comp pixels. The layer's
@@ -2381,7 +2258,6 @@ pub enum LayerKind {
     /// (docs/impl/camera.md §1).
     Camera {
         zoom: Property,
-        /// Node type, point of interest, depth of field and the sensor size.
         #[serde(default)]
         options: Box<CameraOptions>,
         /// The **solve link** (docs/03 §5.6): the id of a layer whose
@@ -2482,7 +2358,9 @@ pub enum LayerKind {
         settings: Box<crate::model_layer::ModelSettings>,
     },
     /// A 3D shape Lumit makes itself ([`crate::mesh_shape`]). Always 3D.
-    Mesh { shape: crate::mesh_shape::MeshShape },
+    Mesh {
+        shape: crate::mesh_shape::MeshShape,
+    },
 }
 
 impl LayerKind {
@@ -2506,27 +2384,21 @@ impl LayerKind {
     }
 }
 
-/// What kind of light a [`LayerKind::Light`] is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LightKind {
-    /// A point of light with no extent — the classic bare bulb.
     #[default]
     Point,
     /// A cone, aimed by the layer's own rotation.
     Spot,
-    /// A rectangle of a real size: a softbox, a window, a strip light.
     Area,
     /// Light from so far away that every ray runs the same way, like the sun.
     /// It shines along the layer's own forward axis.
     Parallel,
-    /// Light from everywhere at once: no place and no direction.
     Ambient,
-    /// Light from a picture of everything round the scene.
     Environment,
 }
 
-/// How a composition's lights fall on its layers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CompLighting {
@@ -2551,11 +2423,9 @@ impl CompLighting {
     }
 }
 
-/// How a light weakens with distance, After Effects' three.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LightFalloff {
-    /// The same strength at any distance.
     #[default]
     None,
     /// Full strength out to the radius, then eases away to nothing over the
@@ -2661,7 +2531,6 @@ pub struct ResolvedLight {
     /// about z. An aimed light's aim is already in the three rotations.
     pub cone_deg: f64,
     pub rotation_deg: f64,
-    /// Percent of the cone that fades.
     pub cone_feather: f64,
     pub falloff: LightFalloff,
     pub radius_px: f64,
@@ -2679,7 +2548,6 @@ pub struct ResolvedLight {
     /// casts none, and how many comp pixels their edges spread over.
     pub shadow_darkness: f32,
     pub shadow_diffusion: f32,
-    /// How it shows in the air.
     pub haze: crate::haze::HazeLook,
 }
 
@@ -2701,7 +2569,6 @@ pub struct CameraPose {
     pub dof: Option<CameraDof>,
 }
 
-/// The depth-of-field numbers a pose carries to the renderer.
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct CameraDof {
     pub focus_distance: f64,
@@ -2779,7 +2646,6 @@ pub fn stored_camera_pose_lt(layer: &Layer, lt: f64) -> Option<CameraPose> {
 }
 
 impl Composition {
-    /// The key the comp's **Start timecode** is kept under in [`Self::extra`].
     pub const START_TIMECODE_KEY: &'static str = "start_timecode";
 
     /// **Start timecode**: the time the comp's first frame reads in the
@@ -2829,7 +2695,6 @@ impl Composition {
         boxes.chain(headers).chain(layers)
     }
 
-    /// [`Self::effects`], to change them.
     pub fn effects_mut(&mut self) -> impl Iterator<Item = &mut EffectInstance> {
         let boxes = self.graph.iter_mut().flat_map(|graph| &mut graph.nodes);
         let boxes = boxes.filter_map(|node| match node {
@@ -2970,7 +2835,6 @@ impl Composition {
     }
 }
 
-/// v1 text: single run. Styled runs, fonts and animators follow the doc.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TextDocument {
     pub text: String,
@@ -3011,10 +2875,6 @@ pub struct TextDocument {
         skip_serializing_if = "crate::paint::is_static_zero"
     )]
     pub path_offset: Property,
-    /// **The letters can move separately**: each animator names a set
-    /// of per-letter offsets and the stretch of the words they apply to. Empty
-    /// — the ordinary case — is absent from the file, and the layer draws the
-    /// bytes it always drew.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub animators: Vec<crate::text::TextAnimator>,
     /// The font, spacing, scale and outline of the letters. Absent from the
@@ -3022,7 +2882,6 @@ pub struct TextDocument {
     /// size of the other kinds.
     #[serde(default, skip_serializing_if = "style_is_default")]
     pub style: Box<crate::text::TextStyle>,
-    /// Alignment, indents and the room between lines. Absent the same way.
     #[serde(
         default,
         skip_serializing_if = "crate::text::ParagraphStyle::is_default"
@@ -3072,19 +2931,16 @@ impl TextDocument {
 pub enum BlendMode {
     #[default]
     Normal,
-    // Darken group.
     Darken,
     Multiply,
     ColourBurn,
     LinearBurn,
     DarkerColour,
-    // Lighten group.
     Add,
     Lighten,
     Screen,
     ColourDodge,
     LighterColour,
-    // Contrast group.
     Overlay,
     SoftLight,
     HardLight,
@@ -3092,14 +2948,12 @@ pub enum BlendMode {
     VividLight,
     PinLight,
     HardMix,
-    // Comparative group.
     Difference,
     Exclusion,
     /// dst − src per channel, clamped at black — the photographic subtract
     /// (GEN-1). Computed in linear light like Add's light-addition twin.
     Subtract,
     Divide,
-    // Component (HSL) group.
     Hue,
     Saturation,
     Colour,
@@ -3116,7 +2970,6 @@ pub struct Layer {
     pub out_point: CompTime,
     /// Where layer time 0 sits on the comp timeline.
     pub start_offset: CompTime,
-    /// Defaulted for projects saved before transforms existed (forward compat).
     #[serde(default)]
     pub transform: TransformGroup,
     /// Matte reference; a missing/deleted target degrades to "no matte"
@@ -3223,15 +3076,12 @@ pub struct Layer {
     /// tape does. Off keeps the pitch where it was. The layer's clips follow it.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub pitch_follows_speed: bool,
-    /// Where the layer's sound goes: a bus instead of the master, and its sends.
     #[serde(default, skip_serializing_if = "crate::routes::AudioRoutes::is_master")]
     pub audio_routes: crate::routes::AudioRoutes,
     /// The layer's own sound in dB before its rack and Volume: its **Gain**,
     /// set by hand or by Normalise. Volume is the fader.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub audio_gain_db: f64,
-    /// How a fader move writes the Volume, Pan and send keys while the comp
-    /// plays.
     #[serde(default, skip_serializing_if = "crate::mixer::AutomationMode::is_read")]
     pub automation: crate::mixer::AutomationMode,
     /// **Lower behind**: the layer drops while another layer or a bus sounds.
@@ -3313,7 +3163,6 @@ pub struct Layer {
     /// masks, before transform — docs/06 render order).
     #[serde(default)]
     pub effects: Vec<EffectInstance>,
-    /// The other versions of the layer's grade ([`crate::grade::versions`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub grade_versions: Option<crate::grade::versions::GradeVersions>,
     /// The layer's **style stack** (docs/impl/layer-styles.md §1): the
@@ -3465,7 +3314,7 @@ pub fn layer_parent_chain(comp: &Composition, layer: Uuid) -> Vec<Uuid> {
             break;
         };
         if parent == layer || chain.contains(&parent) {
-            break; // cycle
+            break;
         }
         chain.push(parent);
         current = parent;
@@ -3520,7 +3369,6 @@ impl Placement {
 /// the parent walk their own.
 pub type Read<'a> = dyn Fn(&Layer, &Property) -> f64 + 'a;
 
-/// A camera solve store, with the document a solved camera is read against.
 pub type Solves<'a> = Option<(&'a Arc<Document>, &'a dyn crate::track::CameraSolveStore)>;
 
 /// Reads properties at comp time `t` the way the renderer does: an expression
@@ -3611,8 +3459,6 @@ pub fn art_shift(layer: &Layer, lt: f64) -> (f64, f64) {
     }
 }
 
-/// What a layer's expressions in `comp` read at comp time `t`, the whole
-/// document behind them.
 #[must_use]
 pub fn comp_context(doc: &Arc<Document>, comp: &Composition, t: f64) -> Arc<ExpressionContext> {
     Arc::new(ExpressionContext {
@@ -3799,12 +3645,8 @@ fn collect_comp_footage(
                     Some(ProjectItem::Composition(_)) => {
                         descend_into_comp(doc, *item, found, walked);
                     }
-                    // A solid is a colour and a folder is not a source: neither
-                    // opens a file, exactly as the layer walk below has it.
                     _ => {}
                 },
-                // A Node graph box shows a whole graph inside this one, so it
-                // descends as a Read of a comp does.
                 crate::comp_graph::GraphNode::Fx(inst) => {
                     collect_graph_effect_footage(doc, std::slice::from_ref(inst), found, walked);
                 }
@@ -3849,7 +3691,6 @@ fn collect_comp_footage(
                         crate::sequence::ClipSource::Comp(nested) => {
                             descend_into_comp(doc, nested, found, walked);
                         }
-                        // A colour, with no file to open.
                         crate::sequence::ClipSource::Solid(_) => {}
                     }
                 }
@@ -3888,7 +3729,6 @@ pub(crate) fn applies_graph(inst: &EffectInstance, id: Uuid) -> bool {
         && crate::fx::effects::node_graph::comp_of(inst) == Some(id)
 }
 
-/// Whether any effect in `effects` applies the node graph `id`.
 fn effects_apply_graph(effects: &[EffectInstance], id: Uuid) -> bool {
     effects.iter().any(|e| applies_graph(e, id))
 }
@@ -3909,8 +3749,6 @@ fn collect_graph_effect_footage(
     }
 }
 
-/// Walk nested comp `id` for [`comp_footage_items`], unless it has been walked
-/// already (a diamond) or is not in the document (a dangling reference).
 fn descend_into_comp(doc: &Document, id: Uuid, found: &mut Vec<Uuid>, walked: &mut Vec<Uuid>) {
     if walked.contains(&id) {
         return;
@@ -3922,17 +3760,12 @@ fn descend_into_comp(doc: &Document, id: Uuid, found: &mut Vec<Uuid>, walked: &m
     collect_comp_footage(doc, nested, found, walked);
 }
 
-/// A composition's neighbours in the nesting, one step each way
-/// ([`Document::comp_flow`]).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct CompFlow {
-    /// The comps that place this one.
     pub used_by: Vec<CompLink>,
-    /// The comps this one places.
     pub uses: Vec<CompLink>,
 }
 
-/// One neighbour in a [`CompFlow`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CompLink {
     pub id: Uuid,
@@ -3979,10 +3812,6 @@ pub(crate) fn layer_names_item(layer: &Layer, id: Uuid) -> bool {
             crate::sequence::ClipSource::Comp(comp) => comp == id,
             crate::sequence::ClipSource::Solid(def) => def == id,
         }),
-        // Nothing from the Project panel: a drawn layer carries its own art, a
-        // camera is a viewpoint, a light is something other layers see, an
-        // adjustment layer works on the composite below it, a null draws
-        // nothing.
         LayerKind::Text { .. }
         | LayerKind::Shape { .. }
         | LayerKind::Camera { .. }
@@ -4045,13 +3874,11 @@ pub struct AutoFolders {
     pub compositions: Option<Uuid>,
 }
 
-/// The whole editable document (docs/01-GLOSSARY.md: Project).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Document {
     pub id: Uuid,
     /// Flat item storage; Project panel order = Vec order, folders reference by id.
     pub items: Vec<ProjectItem>,
-    /// Where new solids/comps are filed (see [`AutoFolders`]).
     #[serde(default)]
     pub auto_folders: AutoFolders,
     /// Project items' colour tags, by item id (docs/15 §12A.3a): an
@@ -4210,14 +4037,10 @@ pub struct Document {
     /// existed (docs/10 §1.1).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub swatches: Vec<Swatch>,
-    /// The Notes panel's text: whatever the user wants to keep with the
-    /// project. Nothing draws from it. Absent from the file when empty.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub notes: String,
-    /// The grade groups ([`crate::grade::groups`]).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub grade_groups: Vec<crate::grade::groups::GradeGroup>,
-    /// The grade memories ([`crate::grade::memories`]).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub grade_memories: Vec<crate::grade::memories::GradeMemory>,
     /// How the interface was arranged for this project, as the frontend's own
@@ -4281,7 +4104,6 @@ pub struct Swatch {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AntiAliasing {
-    /// One sample per pixel: no anti-aliasing.
     Off,
     X2,
     /// Four samples: the standard trade, and what a card that will not give
@@ -4329,7 +4151,6 @@ pub enum AntiAliasing {
     Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize, Hash,
 )]
 pub enum ColourDepth {
-    /// Eight bits a channel, nought to one, nothing above white.
     Eight,
     /// Half floats. The default, and what every effect was written against.
     #[default]
@@ -4345,10 +4166,8 @@ pub enum ColourDepth {
     Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize, Hash,
 )]
 pub enum GraphRoom {
-    /// One frame past each edge.
     #[default]
     OneFrame,
-    /// Two frames past each edge.
     TwoFrames,
     /// As far as the widest texture allows.
     Most,
@@ -4382,7 +4201,6 @@ impl GraphRoom {
 }
 
 impl ColourDepth {
-    /// Bits a channel, for the label and for anything counting memory.
     #[must_use]
     pub fn bits(self) -> u32 {
         match self {
@@ -4404,8 +4222,6 @@ impl ColourDepth {
         }
     }
 
-    /// Whether this depth can hold a value above white at all — the one
-    /// question most of the render path actually wants answered.
     #[must_use]
     pub fn is_high_dynamic_range(self) -> bool {
         !matches!(self, Self::Eight)
@@ -4417,7 +4233,6 @@ impl ColourDepth {
 pub const SAMPLE_BUDGET: u64 = 3840 * 2160 * 8;
 
 impl AntiAliasing {
-    /// The sample count to hand the renderer.
     #[must_use]
     pub fn samples(self) -> u32 {
         match self {
@@ -4469,8 +4284,6 @@ impl AntiAliasing {
     }
 }
 
-/// Where a project's rendered frames are parked (docs/06 §5.4). The document's
-/// own answer; the application-wide setting has the same three choices.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum CacheLocation {
@@ -4480,8 +4293,9 @@ pub enum CacheLocation {
     /// the project carries its cache with it. Falls back to [`Self::AppData`]
     /// until the project has been saved and therefore has a file to sit beside.
     BesideProject,
-    /// Under a folder the user picked.
-    Custom { folder: String },
+    Custom {
+        folder: String,
+    },
 }
 
 /// The project's colour management (docs/impl/ocio.md §3.1).
@@ -4508,14 +4322,10 @@ pub struct ColourManagement {
     /// relinks through the machinery footage already uses.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub config: Option<MediaRef>,
-    /// Which primaries the compositing maths runs in (docs/impl/ocio.md
-    /// §2.1). Absent from the file at the default, so older projects
-    /// round-trip byte for byte.
     #[serde(default, skip_serializing_if = "WorkingSpace::is_default")]
     pub working_space: WorkingSpace,
 }
 
-/// The project's working space: the primaries every layer is composited in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkingSpace {
@@ -4540,8 +4350,6 @@ impl WorkingSpace {
 }
 
 impl ColourManagement {
-    /// Whether this is the untouched default — the test that keeps an older
-    /// `.lum` byte-identical, since serde writes no line for it.
     #[must_use]
     pub fn is_default(&self) -> bool {
         self.config.is_none()
@@ -4664,7 +4472,6 @@ impl Document {
         }
     }
 
-    /// [`Self::packed_ref`], to point the reference somewhere else.
     pub fn packed_ref_mut(&mut self, id: Uuid) -> Option<&mut MediaRef> {
         if id == packed_id(self.id) {
             return self.colour.config.as_mut();
@@ -4682,7 +4489,6 @@ impl Document {
         }
     }
 
-    /// The footage item whose proxy is packed under `id`, if it is one's.
     fn packed_proxy_owner(&self, id: Uuid) -> Option<Uuid> {
         self.proxies
             .keys()
@@ -4705,7 +4511,6 @@ impl Document {
         })
     }
 
-    /// [`Self::effect_files`], to point each path somewhere else.
     pub fn effect_file_paths_mut(&mut self) -> impl Iterator<Item = &mut String> {
         let comps = self.items.iter_mut().filter_map(|item| match item {
             ProjectItem::Composition(c) => Some(c),
@@ -4792,7 +4597,6 @@ impl Document {
         self.comps().any(|c| comp_places(c, id))
     }
 
-    /// Every composition, in project order.
     fn comps(&self) -> impl Iterator<Item = &Composition> {
         self.items.iter().filter_map(|item| match item {
             ProjectItem::Composition(c) => Some(c),
@@ -4898,16 +4702,11 @@ mod tests {
         assert!(!light.two_node, "an old spot aims by its rotation");
         assert!(light.legacy_shape, "and keeps its old edge and falloff");
 
-        // And what it is saved as now reads back unchanged.
         let again: LightDef =
             serde_json::from_value(serde_json::to_value(&light).unwrap()).unwrap();
         assert_eq!(again, light);
     }
 
-    /// **What "has been retimed" means**. Switching Retime on installs
-    /// the identity map, so the presence of the property says nothing about
-    /// whether the layer has actually been retimed — and only the second
-    /// justifies a razor putting keys into both halves of a cut.
     #[test]
     fn an_untouched_retime_map_is_the_identity_one() {
         let map =
@@ -4917,8 +4716,6 @@ mod tests {
 
     #[test]
     fn an_eased_map_that_happens_to_end_where_it_started_is_not_identity() {
-        // The values read back their own times, but the curve between them
-        // does not: an eased pair is a ramp, not an identity.
         let mut map =
             Layer::identity_retime(Rational::new(0, 1).unwrap(), Rational::new(4, 1).unwrap());
         if let crate::anim::Animation::Keyframed(keys) = &mut map.animation {
@@ -4929,8 +4726,6 @@ mod tests {
         assert!(!Layer::is_identity_retime(&map));
     }
 
-    /// A Precomp layer sitting at 2..6 s on the outer ruler, whose four
-    /// seconds show its nested comp's first two — half speed.
     fn half_speed_precomp() -> Layer {
         let mut map =
             Layer::identity_retime(Rational::new(0, 1).unwrap(), Rational::new(4, 1).unwrap());
@@ -4978,9 +4773,6 @@ mod tests {
         }
     }
 
-    /// **Opening a precomp lands on the frame it is showing**. Standing
-    /// four seconds into the outer comp is two seconds into a layer that starts
-    /// at two, and a half-speed map shows the nested comp's first second there.
     #[test]
     fn entering_a_precomp_maps_the_playhead_through_the_retime() {
         assert!((half_speed_precomp().entry_time(4.0, 10.0) - 1.0).abs() < 1e-9);
@@ -5047,7 +4839,6 @@ mod tests {
             "channel": "Alpha",
             "inverted": false,
         });
-        // Legacy `after_effects: true` → EffectsAndMasks (the source's picture).
         let mut with_true = base.clone();
         with_true
             .as_object_mut()
@@ -5066,13 +4857,9 @@ mod tests {
         let m: MatteRef = serde_json::from_value(with_false).unwrap();
         assert_eq!(m.source, LayerInputSource::Masks);
 
-        // Absent entirely (saved before the bool) → the default, Effects and
-        // masks.
         let m: MatteRef = serde_json::from_value(base.clone()).unwrap();
         assert_eq!(m.source, LayerInputSource::EffectsAndMasks);
 
-        // The current form round-trips through `source`, and never re-emits the
-        // legacy bool.
         let now = MatteRef {
             layer: Uuid::now_v7(),
             channel: MatteChannel::Luma,
@@ -5087,14 +4874,9 @@ mod tests {
 
     #[test]
     fn effect_layer_source_reads_choice_then_legacy_bool() {
-        // `layer_source` prefers the `<id>_source` Choice, falls back to
-        // the legacy `<id>_after_effects` bool, then the default.
         let mut e = crate::fx::builtins::instantiate("dof").unwrap();
-        // Fresh instance carries neither sibling, so it is the default
-        // (Effects and masks).
         assert_eq!(e.layer_source("depth"), LayerInputSource::EffectsAndMasks);
 
-        // A legacy bool is honoured (true → EffectsAndMasks).
         e.params.push(EffectParam {
             id: "depth_after_effects".into(),
             value: EffectValue::Bool(true),
@@ -5102,7 +4884,6 @@ mod tests {
         });
         assert_eq!(e.layer_source("depth"), LayerInputSource::EffectsAndMasks);
 
-        // The current Choice sibling wins over the legacy bool when both exist.
         e.params.push(EffectParam {
             id: "depth_source".into(),
             value: EffectValue::Choice(LayerInputSource::Masks.to_choice()),
@@ -5115,16 +4896,12 @@ mod tests {
     fn file_param_steps_by_its_hold_keyed_index() {
         use crate::anim::{Animation, Keyframe, SideInterp};
 
-        // Unset: no path.
         assert_eq!(FileParam::empty().path_at(0.0), None);
 
-        // Single static path: always that path, at any time.
         let one = FileParam::single("look.cube");
         assert_eq!(one.path_at(0.0), Some("look.cube"));
         assert_eq!(one.path_at(99.0), Some("look.cube"));
 
-        // Two paths, index hold-keyed 0 -> 1 at t = 2 s: the path holds until
-        // the key, then steps, and never lands between the two.
         let hold = |t: i64, v: f64| Keyframe {
             time: Rational::new(t, 1).unwrap(),
             value: v,
@@ -5139,25 +4916,22 @@ mod tests {
             },
         };
         assert_eq!(anim.path_at(0.0), Some("a.cube"));
-        assert_eq!(anim.path_at(1.9), Some("a.cube")); // held right up to the key
-        assert_eq!(anim.path_at(2.0), Some("b.cube")); // steps exactly at the key
-        assert_eq!(anim.path_at(50.0), Some("b.cube")); // and stays
+        assert_eq!(anim.path_at(1.9), Some("a.cube"));
+        assert_eq!(anim.path_at(2.0), Some("b.cube"));
+        assert_eq!(anim.path_at(50.0), Some("b.cube"));
 
-        // A fractional or out-of-range index rounds to the nearest path and
-        // clamps into range — never an index panic.
         let frac = |v: f64| FileParam {
             paths: vec!["a.cube".into(), "b.cube".into()],
             index: Property::fixed(v),
         };
         assert_eq!(frac(0.4).path_at(0.0), Some("a.cube"));
         assert_eq!(frac(0.6).path_at(0.0), Some("b.cube"));
-        assert_eq!(frac(9.0).path_at(0.0), Some("b.cube")); // clamp above
-        assert_eq!(frac(-3.0).path_at(0.0), Some("a.cube")); // clamp below
+        assert_eq!(frac(9.0).path_at(0.0), Some("b.cube"));
+        assert_eq!(frac(-3.0).path_at(0.0), Some("a.cube"));
     }
 
     #[test]
     fn motion_blur_sample_offsets_are_centred_and_span_the_shutter() {
-        // Off, or fewer than two samples, is no blur (empty offsets).
         assert!(MotionBlur::default().sample_offsets().is_empty());
         let mut one = MotionBlur {
             enabled: true,
@@ -5168,8 +4942,6 @@ mod tests {
         one.samples = 0;
         assert!(one.sample_offsets().is_empty());
 
-        // AE defaults (angle 180, phase −90) with N=4: four slice centres of
-        // the half-frame window, symmetric about the frame time (0).
         let mb = MotionBlur {
             enabled: true,
             shutter_angle: 180.0,
@@ -5179,20 +4951,17 @@ mod tests {
         };
         let offs = mb.sample_offsets();
         assert_eq!(offs.len(), 4);
-        // open_frac = 0.5, phase_frac = −0.25 → −0.25 + (k+0.5)/4·0.5.
         let expect = [-0.1875, -0.0625, 0.0625, 0.1875];
         for (got, want) in offs.iter().zip(expect) {
             assert!((got - want).abs() < 1e-12, "{got} vs {want}");
         }
-        // Centred: the mean offset is the frame time, and the set is symmetric.
         let mean: f64 = offs.iter().sum::<f64>() / offs.len() as f64;
         assert!(mean.abs() < 1e-12, "mean {mean}");
         for (lo, hi) in offs.iter().zip(offs.iter().rev()) {
             assert!((lo + hi).abs() < 1e-12);
         }
-        // The window spans exactly the open shutter (angle/360 of a frame).
         let span = offs.last().unwrap() - offs.first().unwrap();
-        let slice = 0.5 / 4.0; // one sample sits half a slice in from each edge
+        let slice = 0.5 / 4.0;
         assert!((span - (0.5 - slice)).abs() < 1e-12, "span {span}");
     }
 
@@ -5211,10 +4980,8 @@ mod tests {
         };
         let offs = mb.sample_offsets();
         assert_eq!(offs.len(), MotionBlur::MAX_SAMPLES as usize);
-        // Still the centred AE-default window: mean at the frame time.
         let mean: f64 = offs.iter().sum::<f64>() / offs.len() as f64;
         assert!(mean.abs() < 1e-12, "mean {mean}");
-        // At or below the cap nothing changes.
         let at_cap = MotionBlur {
             enabled: true,
             samples: MotionBlur::MAX_SAMPLES,
@@ -5222,8 +4989,6 @@ mod tests {
         };
         assert_eq!(at_cap.sample_offsets().len(), 256);
 
-        // The count a moving layer takes: Samples for a slow one, a copy a
-        // pixel for a fast one, never past the limit or the cap.
         let mb = MotionBlur::default();
         assert_eq!(mb.samples_for(3.0), 16);
         assert_eq!(mb.samples_for(40.2), 41);
@@ -5252,7 +5017,6 @@ mod tests {
             def: uuid::Uuid::now_v7(),
         };
 
-        // Off: no key, and an old file (which has none either) reads the same.
         let old = serde_json::to_string(&layer).unwrap();
         assert!(
             !old.contains("adjustment"),
@@ -5262,7 +5026,6 @@ mod tests {
         assert_eq!(back, layer);
         assert!(!back.is_adjustment());
 
-        // On: written, read back, and the source is still there.
         layer.adjustment = true;
         let json = serde_json::to_string(&layer).unwrap();
         let back: Layer = serde_json::from_str(&json).unwrap();
@@ -5270,14 +5033,11 @@ mod tests {
         assert!(back.is_adjustment());
         assert!(matches!(back.kind, LayerKind::Solid { .. }));
 
-        // A layer born an adjustment answers the same question, with the flag
-        // never set — the two paths meet at `is_adjustment`.
         let mut born = layer.clone();
         born.adjustment = false;
         born.kind = LayerKind::Adjustment;
         assert!(born.is_adjustment());
 
-        // And the four with no picture refuse the switch.
         for kind in [
             LayerKind::Camera {
                 zoom: Property::zero(),
@@ -5375,9 +5135,6 @@ mod tests {
         comp
     }
 
-    /// The §1.4 collapse rules: Off for non-precomps and unset switches,
-    /// Active for a clean collapsed Precomp, Forced by a mask, a non-Normal
-    /// blend, sub-100 opacity, or being consumed as a matte.
     #[test]
     fn collapse_state_follows_the_force_rules() {
         let doc = Document::new();
@@ -5393,12 +5150,10 @@ mod tests {
         pre.transform = TransformGroup::default();
         comp.layers.push(pre.clone());
 
-        // Clean collapsed Precomp → Active.
         assert_eq!(
             collapse_state(&doc, &comp, &pre, 1.0),
             CollapseState::Active
         );
-        // Switch off → Off; non-Precomp kinds are always Off.
         let mut off = pre.clone();
         off.switches.collapse = false;
         assert_eq!(collapse_state(&doc, &comp, &off, 1.0), CollapseState::Off);
@@ -5406,7 +5161,6 @@ mod tests {
             collapse_state(&doc, &comp, &comp.layers[0], 1.0),
             CollapseState::Off
         );
-        // Each §1.4 force: mask, blend, opacity, matte consumption.
         let mut masked = pre.clone();
         masked
             .masks
@@ -5504,30 +5258,21 @@ mod tests {
         );
     }
 
-    /// The topmost visible in-span camera wins; hidden and out-of-span ones
-    /// never do; no camera at all → None (flat comp).
     #[test]
     fn camera_pose_picks_topmost_visible_in_span() {
         let comp = comp_with_cameras();
-        // t=1: "hidden" is invisible, "short" not yet in span → "main".
         let pose = comp.camera_pose(1.0).unwrap();
         assert_eq!(pose.zoom, 1200.0);
         assert_eq!(pose.position.2, -30.0);
-        // t=3: "short" is topmost visible in-span.
         let pose = comp.camera_pose(3.0).unwrap();
         assert_eq!(pose.zoom, 800.0);
         assert_eq!(pose.position.2, -20.0);
-        // Out point is exclusive.
         assert_eq!(comp.camera_pose(4.0).unwrap().zoom, 1200.0);
-        // No cameras → flat.
         let mut flat = comp_with_cameras();
         flat.layers.clear();
         assert!(flat.camera_pose(1.0).is_none());
     }
 
-    /// A two-node camera's forward points at its point of interest, and the
-    /// pose carries a depth of field only while the switch is on
-    /// (docs/impl/camera.md §2).
     #[test]
     fn a_two_node_pose_aims_at_the_point_of_interest_and_carries_dof_when_on() {
         let mut layer = comp_with_cameras().layers.remove(2);
@@ -5587,7 +5332,6 @@ mod tests {
         let mut doc = Document::new();
         doc.items.push(ProjectItem::Composition(comp));
 
-        // Parenting b to a, then undoing with the returned inverse.
         let set = Op::SetLayerParent {
             comp: comp_id,
             layer: b,
@@ -5606,7 +5350,6 @@ mod tests {
         apply(&mut doc, &inv).expect("inverse applies");
         assert_eq!(doc.comp(comp_id).unwrap().layers[1].parent, None);
 
-        // With b parented to a again, a→b is a cycle; self and unknown also fail.
         apply(&mut doc, &set).unwrap();
         let cycle = Op::SetLayerParent {
             comp: comp_id,
@@ -5628,7 +5371,6 @@ mod tests {
         assert_eq!(apply(&mut doc, &unknown), Err(OpError::InvalidParent));
     }
 
-    /// An empty composition of the given size, for the footage-reference walk.
     fn bare_comp(name: &str) -> Composition {
         Composition {
             graph: None,
@@ -5656,7 +5398,6 @@ mod tests {
         }
     }
 
-    /// One layer of `kind`, in span for the comp's whole length.
     fn bare_layer(kind: LayerKind) -> Layer {
         Layer {
             graph: Default::default(),
@@ -5715,7 +5456,6 @@ mod tests {
         );
         let mut doc = Document::new();
 
-        // Deepest first: `inner` shows `c` only.
         let mut inner = bare_comp("inner");
         inner
             .layers
@@ -5734,8 +5474,6 @@ mod tests {
         middle.layers.push(hidden);
         let middle_id = middle.id;
 
-        // `outer` shows `a` on a Sequence clip and nests `middle` twice — the
-        // diamond a cycle guard must survive without repeating an id.
         let mut outer = bare_comp("outer");
         outer.layers.push(bare_layer(LayerKind::Sequence {
             clips: vec![crate::sequence::Clip::new(
@@ -5754,7 +5492,6 @@ mod tests {
             .push(bare_layer(LayerKind::Precomp { comp: middle_id }));
         let outer_id = outer.id;
 
-        // A comp nobody nests, showing an item nobody else does.
         let mut orphan = bare_comp("orphan");
         orphan
             .layers
@@ -5794,8 +5531,6 @@ mod tests {
         }
     }
 
-    /// A Precomp cycle terminates, and a Precomp layer naming a comp that is
-    /// not in the document is skipped rather than being an error.
     #[test]
     fn the_footage_walk_survives_a_cycle_and_a_dangling_precomp() {
         let item = Uuid::now_v7();
@@ -5852,8 +5587,6 @@ mod tests {
         }
     }
 
-    /// The flowchart's question: one step each way from a comp, each
-    /// neighbour once, with a mark where the nesting carries on.
     #[test]
     fn a_comps_flow_is_what_places_it_and_what_it_places() {
         let clip = |comp: Uuid| LayerKind::Sequence {
@@ -5871,8 +5604,6 @@ mod tests {
             .push(bare_layer(LayerKind::Precomp { comp: leaf.id }));
         let cut = bare_comp("cut");
         let mut centre = bare_comp("centre");
-        // Placed twice, listed once. A clip places a comp as a layer does. A
-        // comp that has gone, and the comp itself, are nobody's neighbour.
         for kind in [
             LayerKind::Precomp { comp: deep.id },
             LayerKind::Precomp { comp: deep.id },
@@ -5959,9 +5690,6 @@ mod tests {
         );
     }
 
-    /// The anti-aliasing budget bites only above 4K, and only as far as it
-    /// must: 4K keeps 8×, 8K gets 2× (its attachment then costs what 4K's
-    /// does), and a setting that asked for less is never raised.
     #[test]
     fn anti_aliasing_steps_down_where_the_attachment_would_not_fit() {
         use super::AntiAliasing::{Off, X2, X4, X8};

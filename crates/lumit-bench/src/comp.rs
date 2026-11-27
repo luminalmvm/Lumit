@@ -1,34 +1,3 @@
-//! docs/13 §1's reference composition, built in code.
-//!
-//! # In plain terms
-//!
-//! Every budget in docs/13 §2 is stated "against the reference comp", so the
-//! comp has to be one exact thing rather than a description. §1 describes it in
-//! a paragraph; this module is that paragraph turned into a [`Document`], layer
-//! by layer, through the same model the application edits. Nothing here is a
-//! benchmark fixture in disguise — it is an ordinary project that happens to be
-//! written down in Rust instead of saved to a `.lum` file.
-//!
-//! §1, and where each phrase lands:
-//!
-//! | §1 says | built by |
-//! |---|---|
-//! | 1080p60, 20 s | [`reference_comp`]'s `Composition` |
-//! | two 1080p60 H.264 footage layers | the `Hero` and `Ramp` layers |
-//! | one with a Retime ramp to 40% using flow interpolation | `Ramp`'s `retime` + `interpolation` |
-//! | one text layer | `Title` |
-//! | one Sequence layer with four clips | `Edit` |
-//! | one adjustment layer carrying a grade (3D LUT + curves) | `Grade` |
-//! | a glow on one footage layer | `Hero`'s effect stack |
-//! | motion blur enabled on two layers | the comp master plus `Hero`/`Ramp`'s switches |
-//! | one luma matte | `Hero`'s matte, keyed off `Title` |
-//! | audio layer with volume keyframes | `Music` |
-//!
-//! One substitution, recorded rather than hidden: §1's "curves" half of the
-//! grade is built as **Colour balance**, which is lift/gamma/gain — a
-//! per-channel tone curve under a different name. Lumit has no effect called
-//! Curves. If one lands, the grade should gain it and this note should go.
-
 use std::path::Path;
 
 use lumit_core::anim::{Animation, Keyframe, Property, SideInterp};
@@ -44,10 +13,8 @@ use uuid::Uuid;
 
 use crate::media::{self, RefMedia};
 
-/// The comp's length in seconds — §1's 20 s, and the work area B11 fills.
 pub const DURATION_S: i64 = 20;
 
-/// How many layers §1 asks for. Five picture layers plus the audio layer.
 pub const LAYER_COUNT: usize = 6;
 
 /// Generate the media into `media_dir` (idempotent — see [`crate::media`]) and
@@ -60,8 +27,6 @@ pub fn reference_comp(media_dir: &Path) -> Result<(Document, Uuid), String> {
     build(&media::generate(media_dir)?)
 }
 
-/// [`reference_comp`] over media already generated — for a harness that makes
-/// the clips once and then builds the comp per scenario.
 pub fn build(media: &RefMedia) -> Result<(Document, Uuid), String> {
     let mut doc = Document::new();
     let span = secs(DURATION_S);
@@ -94,8 +59,6 @@ pub fn build(media: &RefMedia) -> Result<(Document, Uuid), String> {
         span,
     );
 
-    // §1: "a glow on one footage layer", "one luma matte", and one of the two
-    // motion-blurred layers.
     let mut hero = layer("Hero", LayerKind::Footage { item: clip_a }, span);
     hero.effects = vec![effect("glow")?];
     hero.matte = Some(MatteRef {
@@ -145,8 +108,6 @@ pub fn build(media: &RefMedia) -> Result<(Document, Uuid), String> {
         .collect();
     let edit = layer("Edit", LayerKind::Sequence { clips }, span);
 
-    // §1: "one adjustment layer carrying a grade (3D LUT + curves)". Topmost,
-    // so it grades everything beneath it.
     let mut lut = effect("lut")?;
     set_param(
         &mut lut,
@@ -156,8 +117,6 @@ pub fn build(media: &RefMedia) -> Result<(Document, Uuid), String> {
     let mut grade = layer("Grade", LayerKind::Adjustment, span);
     grade.effects = vec![lut, curves()?];
 
-    // §1: "audio layer with volume keyframes". It draws nothing — the switch
-    // says so — and is heard rather than seen.
     let mut music = layer("Music", LayerKind::Footage { item: tone }, span);
     music.switches.visible = false;
     music.volume_db = fade_keys();
@@ -181,7 +140,6 @@ pub fn build(media: &RefMedia) -> Result<(Document, Uuid), String> {
         frame_rate: FrameRate::new(60, 1).map_err(|e| format!("reference comp rate: {e}"))?,
         duration: Duration(span),
         background: LinearColour::BLACK,
-        // B11 fills "the 20 s work area" — so the comp states one.
         work_area: Some((CompTime(Rational::ZERO), CompTime(span))),
         // The comp master §1's "motion blur enabled on two layers" needs: with
         // it off, no per-layer switch does anything.
@@ -223,12 +181,10 @@ pub(crate) fn rat(num: i64, den: i64) -> Rational {
     Rational::new(num, den).unwrap_or(Rational::ZERO)
 }
 
-/// `n` whole seconds.
 fn secs(n: i64) -> Rational {
     rat(n, 1)
 }
 
-/// Register a footage item and return its id.
 pub(crate) fn add_footage(doc: &mut Document, name: &str, path: &Path) -> Uuid {
     let item = id(name);
     doc.items.push(ProjectItem::Footage(FootageItem {
@@ -249,8 +205,6 @@ pub(crate) fn add_footage(doc: &mut Document, name: &str, path: &Path) -> Uuid {
     item
 }
 
-/// A layer of `kind` running from the comp's start for `span`, everything else
-/// left at its default.
 pub(crate) fn layer(name: &str, kind: LayerKind, span: Rational) -> Layer {
     Layer {
         id: id(name),
@@ -291,15 +245,11 @@ pub(crate) fn layer(name: &str, kind: LayerKind, span: Rational) -> Layer {
     }
 }
 
-/// A built-in effect instance at its declared defaults.
 fn effect(match_name: &str) -> Result<EffectInstance, String> {
     lumit_core::fx::builtins::instantiate(match_name)
         .ok_or_else(|| format!("reference comp: no built-in effect `{match_name}`"))
 }
 
-/// §1's "curves": a per-channel tone curve, which in this catalogue is Colour
-/// balance's lift/gamma/gain. Set off neutral, or the grade would be a no-op
-/// that costs a pass and changes nothing.
 fn curves() -> Result<EffectInstance, String> {
     let mut cb = effect("colour_balance")?;
     set_param(&mut cb, "lift", colour([0.02, 0.01, 0.04, 1.0]))?;
@@ -308,7 +258,6 @@ fn curves() -> Result<EffectInstance, String> {
     Ok(cb)
 }
 
-/// A static colour parameter value.
 fn colour(rgba: [f64; 4]) -> EffectValue {
     EffectValue::Colour(rgba.map(Property::fixed))
 }

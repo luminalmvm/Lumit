@@ -1,5 +1,3 @@
-//! A tiny glTF and a tiny OBJ open, so a model file never silently fails.
-
 #![allow(clippy::unwrap_used)]
 
 use std::sync::atomic::AtomicBool;
@@ -74,7 +72,6 @@ fn an_obj_finds_its_mtl_by_name_and_says_what_is_missing() {
         m.base_colour[..3].to_vec()
     };
     assert_eq!(colour("red"), [1.0, 0.0, 0.0]);
-    // A picture with no colour shows as it is, not black.
     assert_eq!(colour("plain"), [1.0, 1.0, 1.0]);
     assert_eq!(scene.missing, ["paint.png", "plain.png"]);
     assert_eq!(lumit_scene::dependants(&path), vec![mats.join("quad.mtl")]);

@@ -1,5 +1,3 @@
-// What the Mixer's keys do to the picked strips, and the solo rules the desk
-// draws by.
 
 import 'dart:math' as math;
 
@@ -95,7 +93,6 @@ bool runMixerAction({
   return false;
 }
 
-/// Solo [picked] and nothing else on the desk, as one undo step.
 void soloAlone(LumitState app, CompositionReference comp,
     List<BridgeLayerEntry> desk, List<BridgeLayerEntry> picked) {
   final ids = {for (final e in picked) e.layer.internallayerId};
@@ -119,7 +116,6 @@ void soloAlone(LumitState app, CompositionReference comp,
           switch_: BridgeLayerSwitch.solo,
           on_: true);
     } catch (_) {
-      // A locked layer refuses, and quietly.
     }
   });
 }

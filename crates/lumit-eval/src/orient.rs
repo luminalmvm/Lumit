@@ -96,9 +96,6 @@ mod tests {
         p
     }
 
-    /// Off names a frame as it always did, and two layers at the same place on
-    /// the same frame heading different ways turn differently, so one's frame
-    /// can't stand in for the other's.
     #[test]
     fn the_way_a_layer_is_heading_names_the_frame() {
         let climbing = |l: &mut Layer| {

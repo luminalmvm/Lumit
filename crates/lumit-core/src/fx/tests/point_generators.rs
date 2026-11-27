@@ -1,10 +1,5 @@
-//! Sort, Math, Contour and Intersection points.
-
 use super::*;
 
-/// **Sort distribution puts the stream in a new order and keeps the ids**: across,
-/// reversed, and a shuffle that is the same for one seed and another for
-/// another.
 #[test]
 fn sort_points_orders_the_stream_and_keeps_the_ids() {
     use effects::sort_points::SortPoints;
@@ -43,9 +38,6 @@ fn sort_points_orders_the_stream_and_keeps_the_ids() {
     assert_eq!(all, [0, 1, 2, 3], "every point still there");
 }
 
-/// **Math points lays out its formula**: a Linear wave across from one side
-/// to the other, and a rose of four petals within its radius, through the
-/// middle.
 #[test]
 fn math_points_lays_out_waves_and_a_rose() {
     use effects::math_points::MathPoints;
@@ -79,8 +71,6 @@ fn math_points_lays_out_waves_and_a_rose() {
         rose.position.iter().any(|p| p[0].hypot(p[1]) < 1.0),
         "the petals meet in the middle"
     );
-    // A Denominator keyed through 1 does not jump there: five petals over 1
-    // lie where five over a hair more do.
     let five = |denominator: f32| {
         MathPoints {
             shape: 1,
@@ -100,9 +90,6 @@ fn math_points_lays_out_waves_and_a_rose() {
         .all(|(a, b)| (a[0] - b[0]).hypot(a[1] - b[1]) < 0.5));
 }
 
-/// **Contour points puts one point on each piece**: two squares are two
-/// points, each on its square's middle, and Size from area is the circle of
-/// the square's area.
 #[test]
 fn contour_points_puts_a_point_on_each_piece() {
     use effects::contour_points::ContourPoints;
@@ -125,9 +112,6 @@ fn contour_points_puts_a_point_on_each_piece() {
     assert!((points.size[1] - circle).abs() < 1e-2);
 }
 
-/// **Intersection points finds where paths cross, once each**: two squares
-/// overlapping by a corner cross twice; touching neighbours on one square
-/// are not crossings.
 #[test]
 fn intersection_points_finds_each_crossing_once() {
     use effects::intersection_points::crossings;

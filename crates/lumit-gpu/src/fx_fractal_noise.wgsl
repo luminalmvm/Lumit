@@ -22,6 +22,10 @@ struct Params {
     octaves: u32,                    // 1..10
     cycle: i32,                      // depth loop length in cells; 0 = no loop
     flags: u32,                      // bit 0 Perlin, bit 1 Turbulent, bit 2 Invert
+    base: u32,                       // Noise type, lumit_core::fx::noise::NOISE_*
+    kind: u32,                       // Fractal type, lumit_core::fx::noise::FRACTAL_*
+    distortion: f32,                 // in cells of the base octave; 0 = none
+    _pad1: u32,
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -44,10 +48,16 @@ fn fractal_noise(@builtin(global_invocation_id) gid: vec3<u32>) {
     let qy = py * p.cos_sin_offset.x - px * p.cos_sin_offset.y;
     // Bit 2 is this effect's own Invert and is not the field's business.
     let field = FractalField(p.seed, p.octaves, p.gain, p.lacunarity, p.flags & 3u, p.cycle);
-    let n = nc_fractal(field,
-                       qx * p.inv_scale_z_contrast.x,
-                       qy * p.inv_scale_z_contrast.y,
-                       p.inv_scale_z_contrast.z);
+    var fx = qx * p.inv_scale_z_contrast.x;
+    var fy = qy * p.inv_scale_z_contrast.y;
+    let fz = p.inv_scale_z_contrast.z;
+    if (p.distortion != 0.0) {
+        let dx = nc_perlin3(p.seed, 0x00d15700u, fx, fy, fz, p.cycle);
+        let dy = nc_perlin3(p.seed, 0x00d15701u, fx, fy, fz, p.cycle);
+        fx = fx + p.distortion * dx;
+        fy = fy + p.distortion * dy;
+    }
+    let n = nc_fractal_typed(field, p.base, p.kind, fx, fy, fz);
     let n01 = n * 0.5 + 0.5;
     var v = clamp((n01 - 0.5) * p.inv_scale_z_contrast.w + 0.5 + p.brightness, 0.0, 1.0);
     if ((p.flags & 4u) != 0u) {

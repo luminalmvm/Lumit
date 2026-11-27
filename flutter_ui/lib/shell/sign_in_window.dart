@@ -44,12 +44,10 @@ Future<bool> showSignIn(BuildContext context) async {
     id: 'sign-in',
     builder: (close) => _SignIn(account: ui.account, close: close),
   );
-  // Whatever was left waiting on a browser goes with the window.
   ui.account.cancelSignIn();
   return signedIn ?? false;
 }
 
-/// What a refusal is called in the person's own language.
 String cloudErrorText(CloudError e) => switch (e.code) {
       'offline' => l10n.signInErrorOffline,
       'bad_credentials' => l10n.signInErrorCredentials,
@@ -113,7 +111,6 @@ class _SignInState extends State<_SignIn> {
     _shown = page;
   }
 
-  /// Whether the code page is finishing a new account or a new password.
   bool _resetting = false;
   bool _busy = false, _resent = false, _asked = false;
   String? _error;
@@ -145,8 +142,6 @@ class _SignInState extends State<_SignIn> {
         _resent = false;
       });
 
-  /// Run one of the calls, with the window saying it is busy, and show what
-  /// came of it.
   Future<void> _try(Future<void> Function() call,
       {VoidCallback? then}) async {
     if (_busy) return;
@@ -164,8 +159,6 @@ class _SignInState extends State<_SignIn> {
       }
     } on CloudError catch (e) {
       if (!mounted) return;
-      // An account made but not yet confirmed is sent its code again, and
-      // this is the page to type it on.
       if (e.code == 'unverified') {
         setState(() {
           _resetting = false;
@@ -181,7 +174,6 @@ class _SignInState extends State<_SignIn> {
     }
   }
 
-  /// What is wrong with what was typed, before the server is troubled.
   String? _unfit({bool name = false, bool password = true}) {
     final email = _email.text.trim();
     if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
@@ -281,8 +273,6 @@ class _SignInState extends State<_SignIn> {
     } on CloudError catch (e) {
       if (!mounted) return;
       setState(() {
-        // A new account needs the date of birth, which only the create page
-        // asks.
         _page = e.code == 'need_birth_date' ? _Page.create : from;
         _error = e.code == 'cancelled' ? null : cloudErrorText(e);
       });
@@ -333,8 +323,6 @@ class _SignInState extends State<_SignIn> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Only the pages that have something to say: where the
-                    // code went, or that the browser is waiting.
                     if (switch (_page) {
                       _Page.code => l10n.signInCodeLead(_email.text.trim()),
                       _Page.reset => l10n.signInResetLead(_email.text.trim()),
@@ -470,7 +458,6 @@ class _SignInState extends State<_SignIn> {
           ],
       };
 
-  /// The line that says "or", and the buttons under it.
   List<Widget> _others(LumitTheme t, CloudConfig config) {
     final buttons = [
       if (config.apple)
@@ -638,7 +625,6 @@ class _SignInState extends State<_SignIn> {
       _Link(key: ValueKey<String>('sign-in-$id'), label: label, onTap: onTap);
 }
 
-/// A line of text that is pressed: quiet until the pointer is on it.
 class _Link extends StatefulWidget {
   final String label;
   final VoidCallback onTap;

@@ -70,29 +70,20 @@ import 'settings_account.dart' show askBefore;
 import 'settings_rows.dart' show byteSize;
 import 'status_line_frb.dart';
 
-/// The frame: wide enough for a name, its preset, a path and how it is
-/// getting on side by side.
 const double exportQueueWidth = 800;
 
-/// One item's row, and the tallest the list grows before it scrolls.
 const double exportQueueRow = 28;
 const double exportQueueListMax = 320;
 
-/// How far a template's rows are set in under the heading of their run,
-/// which is the width of its twirl.
 const double _runIndent = 18;
 
-/// One line of the list: an item, or the heading of a run of a template's
-/// rows queued together.
 class _Line {
   const _Line({this.item, this.inRun = false, this.group, this.run = const []});
 
   final BridgeExportQueueItem? item;
 
-  /// The item is one of a run's rows, drawn under its open heading.
   final bool inRun;
 
-  /// A heading's group and its rows, in the queue's order.
   final int? group;
   final List<BridgeExportQueueItem> run;
 
@@ -128,10 +119,8 @@ class _ExportQueue extends StatefulWidget {
   /// The read seam, injected by tests so no engine has to hold a queue.
   final List<BridgeExportQueueItem> Function()? list;
 
-  /// The reorder seam, injected beside it for the same reason.
   final void Function({required int id, required int index})? move;
 
-  /// The same seams for the exports between computers, and the computers.
   final List<BridgeRemoteJob> Function()? jobs;
   final List<BridgeComputer> Function()? computers;
   final VoidCallback onClose;
@@ -156,8 +145,6 @@ class _ExportQueueState extends State<_ExportQueue> {
   /// finds nothing here and keeps the settings it has.
   Map<String, CompositionReference> _comps = const {};
 
-  /// What the list draws: each item, with a template's rows under the
-  /// heading of their run, and the runs opened to show their rows.
   List<_Line> _lines = const [];
   final Set<int> _openRuns = {};
 
@@ -176,15 +163,11 @@ class _ExportQueueState extends State<_ExportQueue> {
   /// Start, and after Stop after this one.
   bool _goesOn = false;
 
-  /// The exports between this computer and the account's others, and those
-  /// computers, read with the queue.
   List<BridgeRemoteJob> _jobs = const [];
   List<BridgeComputer> _computers = const [];
 
-  /// The same as [_seenRunning], for an export running on another computer.
   final Map<String, (DateTime, int)> _jobRunning = {};
 
-  /// The jobs this computer sent, and those it does for another.
   Iterable<BridgeRemoteJob> get _sent => _jobs.where((j) => j.sent);
   BridgeRemoteJob? _doing(String job) => job.isEmpty
       ? null
@@ -216,18 +199,15 @@ class _ExportQueueState extends State<_ExportQueue> {
           comp.internalid.toString(): comp,
       };
     } catch (_) {
-      // No project to ask, as in a widget test.
     }
     try {
       _goesOn = exportQueueGoesOn();
     } catch (_) {
-      // No engine to ask, as in a widget test.
     }
     try {
       _jobs = (widget.jobs ?? remoteJobs)();
       _computers = (widget.computers ?? remoteComputers)();
     } catch (_) {
-      // No engine to ask, as in a widget test.
     }
     setState(() {
       _items = (widget.list ?? exportQueueList)();
@@ -244,9 +224,6 @@ class _ExportQueueState extends State<_ExportQueue> {
     });
   }
 
-  /// The lines the list draws: an item where it stands, and each run of a
-  /// template's rows under a heading where its first row stands, its rows
-  /// after the heading while it is open.
   List<_Line> _fold(List<BridgeExportQueueItem> items) {
     final runs = <int, List<BridgeExportQueueItem>>{};
     for (final item in items) {
@@ -348,8 +325,6 @@ class _ExportQueueState extends State<_ExportQueue> {
         });
     final sentDone =
         sent.where((j) => j.stage == BridgeRemoteStage.done).length;
-    // Another computer's exports done here count too, while they have no
-    // place in the queue.
     final arrivingWaiting = arriving
         .where((j) =>
             !remoteEnded(j.stage) && j.stage != BridgeRemoteStage.exporting)
@@ -370,7 +345,6 @@ class _ExportQueueState extends State<_ExportQueue> {
           onClose: widget.onClose,
           keyPrefix: 'export-queue',
         ),
-        // The list's ground is the queue's own right-click; a row's is its own.
         GestureDetector(
           behavior: HitTestBehavior.translucent,
           onSecondaryTapUp: (up) => _queueMenu(up.globalPosition),
@@ -444,7 +418,6 @@ class _ExportQueueState extends State<_ExportQueue> {
                   ),
                 ),
         )),
-        // The footer's count is the queue's too.
         GestureDetector(
           behavior: HitTestBehavior.translucent,
           onSecondaryTapUp: (up) => _queueMenu(up.globalPosition),
@@ -476,7 +449,6 @@ class _ExportQueueState extends State<_ExportQueue> {
               key: const ValueKey('export-queue-start'),
               primary: true,
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              // Nothing to do while the queue is already working through.
               onPressed: waiting == 0 || _goesOn ? null : _start,
               child: Text(l10n.exportQueueStart),
             ),
@@ -543,8 +515,6 @@ class _ExportQueueState extends State<_ExportQueue> {
     );
   }
 
-  /// One item's row where a drag is marked and not carried: the same grip,
-  /// and the line on whichever edge the row in hand would land against.
   Widget _markedRow(LumitTheme t, _Line entry, int index) {
     final row = _lineFace(t, entry);
     final from = _lines.indexWhere((l) => l.key == _markedKey);
@@ -581,7 +551,6 @@ class _ExportQueueState extends State<_ExportQueue> {
                 onVerticalDragUpdate: (d) {
                   final at = _lines.indexWhere((l) => l.key == _markedKey);
                   if (at < 0) return;
-                  // The place whose row the pointer is past the middle of.
                   final travel = d.localPosition.dy - _markedFrom;
                   final next = (at + (travel / exportQueueRow).round())
                       .clamp(0, _lines.length - 1);
@@ -612,8 +581,6 @@ class _ExportQueueState extends State<_ExportQueue> {
     });
   }
 
-  /// A line's face: an item's row, set in under its run's heading when it is
-  /// one of a template's rows, or the heading of a run.
   Widget _lineFace(LumitTheme t, _Line line) {
     final item = line.item;
     if (item == null) return _runFace(t, line);
@@ -625,9 +592,6 @@ class _ExportQueueState extends State<_ExportQueue> {
         : row;
   }
 
-  /// The heading of a run of a template's rows: the twirl, the template's
-  /// name and how many rows, how many are done of how many, a bar across the
-  /// run, and the failed rows in the error ink.
   Widget _runFace(LumitTheme t, _Line line) {
     final group = line.group!;
     final run = line.run;
@@ -701,7 +665,6 @@ class _ExportQueueState extends State<_ExportQueue> {
                   ],
                 ),
               ),
-              // Where an item's settings and remove marks stand.
               const SizedBox(width: 8 + 2 * (dialogCloseGlyph + 8)),
             ],
           ),
@@ -710,8 +673,6 @@ class _ExportQueueState extends State<_ExportQueue> {
     );
   }
 
-  /// A run's menu: stop after the row in hand, cancel what still waits,
-  /// clear what has landed, queue the failed rows again, and the folder.
   void _runMenu(_Line line, Offset at) {
     final run = line.run;
     final running =
@@ -780,7 +741,6 @@ class _ExportQueueState extends State<_ExportQueue> {
                     }),
           if (!kIsWeb)
             row('folder', l10n.projectShowInFolder, () {
-              // The last file written, else the folder the run writes into.
               if (revealInFolder(path: shown)) return;
               final cut = shown.lastIndexOf(RegExp(r'[/\\]'));
               if (cut > 0) revealInFolder(path: shown.substring(0, cut));
@@ -818,14 +778,10 @@ class _ExportQueueState extends State<_ExportQueue> {
               ),
             );
 
-  /// One item: what it is, where it goes, how it is getting on, and the mark
-  /// that takes it off the list.
   Widget _rowFace(LumitTheme t, BridgeExportQueueItem item) => _MenuKeyRow(
       open: (at) => _showMenu(t, item, at),
       child: GestureDetector(
       onSecondaryTapDown: (press) => _showMenu(t, item, press.globalPosition),
-      // The row's marks come up with the pointer. A row that is doing nothing
-      // only says what it is.
       child: HoverMark(
         cursor: MouseCursor.defer,
         builder: (context, lit) => SizedBox(
@@ -838,8 +794,6 @@ class _ExportQueueState extends State<_ExportQueue> {
               child: _named(t, item.compName, _doing(item.job)),
             ),
             const SizedBox(width: 10),
-            // The preset it was queued on, or its format where it was set
-            // by hand, and the format on hover.
             SizedBox(
               width: 120,
               child: LumitTooltip(
@@ -865,7 +819,6 @@ class _ExportQueueState extends State<_ExportQueue> {
             const SizedBox(width: 10),
             SizedBox(width: 260, child: _statusFace(t, item)),
             const SizedBox(width: 8),
-            // Hidden marks take no clicks either.
             IgnorePointer(
               ignoring: lit <= 0,
               child: Opacity(
@@ -914,7 +867,6 @@ class _ExportQueueState extends State<_ExportQueue> {
       ),
     ));
 
-  /// A row's menu: what can be done with it as it stands, Remove last.
   void _showMenu(LumitTheme t, BridgeExportQueueItem item, Offset at) {
     final comp = _comps[item.comp.toString()];
     final running = item.state is BridgeExportQueueState_Running;
@@ -922,7 +874,6 @@ class _ExportQueueState extends State<_ExportQueue> {
     final done = item.state is BridgeExportQueueState_Done;
     final index = _items.indexOf(item);
     final job = item.job.isNotEmpty;
-    // Where the record of another computer's export that failed here is.
     final log = job && item.state is BridgeExportQueueState_Failed
         ? remoteLog(job: item.job)
         : null;
@@ -934,7 +885,6 @@ class _ExportQueueState extends State<_ExportQueue> {
           onPressed: () {
             if (press != null) run(press);
           },
-          // In line with Stop after this one's tick, where it shows.
           child: MenuLabel(label,
               enabled: press != null, ticked: running ? false : null),
         );
@@ -1024,8 +974,6 @@ class _ExportQueueState extends State<_ExportQueue> {
     ));
   }
 
-  /// Stop after this one, ticked while the queue will hold once the running
-  /// export lands. Unticked, it runs on.
   Widget _stopAfterRow(VoidCallback close) => MenuRow(
         key: const ValueKey('export-queue-menu-stop-after'),
         onPressed: () {
@@ -1036,8 +984,6 @@ class _ExportQueueState extends State<_ExportQueue> {
         child: MenuLabel(l10n.exportQueueStopAfter, ticked: !_goesOn),
       );
 
-  /// The queue's own menu: run it, hold it after the export in flight, add
-  /// to it, find the last file it wrote, and clear away what has landed.
   void _queueMenu(Offset at) {
     final running =
         _items.any((item) => item.state is BridgeExportQueueState_Running);
@@ -1050,7 +996,6 @@ class _ExportQueueState extends State<_ExportQueue> {
     final last = _items
         .where((item) => item.state is BridgeExportQueueState_Done)
         .lastOrNull;
-    // Exports between computers that are done go with this computer's own.
     final doneJobs = [
       for (final job in _jobs)
         if (job.stage == BridgeRemoteStage.done) job.job,
@@ -1106,7 +1051,6 @@ class _ExportQueueState extends State<_ExportQueue> {
     ));
   }
 
-  /// Another row with the same settings, writing to a file of its own.
   void _duplicate(CompositionReference comp, BridgeExportQueueItem item) {
     final spec = exportQueueSpec(id: item.id);
     if (spec == null) return;
@@ -1136,7 +1080,6 @@ class _ExportQueueState extends State<_ExportQueue> {
             also: spec.also));
   }
 
-  /// A finished or failed row, queued again over its own file.
   void _again(CompositionReference comp, BridgeExportQueueItem item) {
     final spec = exportQueueSpec(id: item.id);
     if (spec == null) return;
@@ -1181,8 +1124,6 @@ class _ExportQueueState extends State<_ExportQueue> {
   /// than the column, so a failed item shows all of it on hover.
   Widget _statusFace(LumitTheme t, BridgeExportQueueItem item) {
     final key = ValueKey<String>('export-queue-status-${item.id}');
-    // Another computer's export: its files on their way here, or its file
-    // on its way back, say so instead.
     if (_doing(item.job) case final job?
         when job.stage == BridgeRemoteStage.sending ||
             job.stage == BridgeRemoteStage.returning ||
@@ -1204,7 +1145,6 @@ class _ExportQueueState extends State<_ExportQueue> {
           :final paused
         ) when total > 0) {
       final seen = _seenRunning[item.id] ??= (DateTime.now(), frame);
-      // A held export has no time left to tell.
       final left = paused
           ? null
           : exportTimeLeft(
@@ -1244,11 +1184,9 @@ class _ExportQueueState extends State<_ExportQueue> {
     return failed ? LumitTooltip(message: _status(item), child: text) : text;
   }
 
-  /// What one item is doing, in words, where it is not drawn as a bar.
   String _status(BridgeExportQueueItem item) => switch (item.state) {
         BridgeExportQueueState_Waiting() => l10n.exportQueueWaiting,
         BridgeExportQueueState_Running() => l10n.exportQueuePreparing,
-        // How long it took and how big the file is, where those are known.
         BridgeExportQueueState_Done(:final seconds, :final bytes) => [
             l10n.exportQueueDone,
             if (seconds > 0) clockTime(seconds),
@@ -1259,10 +1197,6 @@ class _ExportQueueState extends State<_ExportQueue> {
 
   static String _leaf(String path) => path.split(RegExp(r'[/\\]')).last;
 
-  // ---- exports between computers -------------------------------------------
-
-  /// A quiet heading over the rows of one computer: its name, and for
-  /// another one whether it is there.
   Widget _heading(LumitTheme t, String name, BridgeComputer? computer,
           {bool first = false}) =>
       Padding(
@@ -1284,8 +1218,6 @@ class _ExportQueueState extends State<_ExportQueue> {
         ]),
       );
 
-  /// A composition's name, with the computer it is exported for beside it
-  /// when that is another one.
   Widget _named(LumitTheme t, String name, BridgeRemoteJob? doing) =>
       doing == null
           ? FittedText(name, t.body)
@@ -1295,8 +1227,6 @@ class _ExportQueueState extends State<_ExportQueue> {
               reviewTag(t, doing.otherName),
             ]);
 
-  /// An export sent to another computer, or one arriving here, in the same
-  /// columns as the queue's own rows.
   Widget _jobRow(LumitTheme t, BridgeRemoteJob job) => _MenuKeyRow(
       open: (at) => _jobMenu(job, at),
       child: GestureDetector(
@@ -1351,7 +1281,6 @@ class _ExportQueueState extends State<_ExportQueue> {
         ),
       ));
 
-  /// The mark that cancels a job under way, and forgets one that has ended.
   Widget _jobDrop(LumitTheme t, BridgeRemoteJob job) {
     final ended = remoteEnded(job.stage);
     final label = ended ? l10n.exportQueueRemove : l10n.cancel;
@@ -1386,9 +1315,6 @@ class _ExportQueueState extends State<_ExportQueue> {
     );
   }
 
-  /// How a job is getting on: in words where it is waiting, as a local
-  /// export is drawn while it exports, and with a thin bar under the words
-  /// while its files move.
   Widget _jobStatus(LumitTheme t, BridgeRemoteJob job) {
     final key = ValueKey<String>('export-queue-job-status-${job.job}');
     final name = job.otherName;
@@ -1400,7 +1326,6 @@ class _ExportQueueState extends State<_ExportQueue> {
         overflow: TextOverflow.ellipsis,
         textAlign: TextAlign.right,
       );
-      // The whole reason on hover, for one longer than the column.
       return failed ? LumitTooltip(message: text, child: line) : line;
     }
 
@@ -1421,7 +1346,6 @@ class _ExportQueueState extends State<_ExportQueue> {
       BridgeRemoteStage.queued => words(l10n.remoteInQueue(name)),
       BridgeRemoteStage.paused => words(l10n.remotePaused),
       BridgeRemoteStage.exporting => _exporting(t, key, job),
-      // Done here, and the computer it goes back to is away: it waits.
       BridgeRemoteStage.returning
           when !job.sent &&
               _computers.any((c) => c.id == job.other && !c.online) =>
@@ -1434,7 +1358,6 @@ class _ExportQueueState extends State<_ExportQueue> {
               : l10n.remoteSendingBack(amount),
           job.size <= 0 ? 0 : job.bytes / job.size,
           _leftAt(job)),
-      // A kept file brought here since is done here too.
       BridgeRemoteStage.done => words(job.lands == BridgeRemoteLands.worker
           ? (job.sent && job.path.isEmpty
               ? l10n.remoteKeptOn(name)
@@ -1445,8 +1368,6 @@ class _ExportQueueState extends State<_ExportQueue> {
     };
   }
 
-  /// Files on the move: what and how far in words, how long is left, and a
-  /// thin bar in Pro's sweep under them, as the shared footage rows have.
   Widget _transfer(LumitTheme t, Key key, String text, double fraction,
           String? left) =>
       Column(
@@ -1512,14 +1433,11 @@ class _ExportQueueState extends State<_ExportQueue> {
     );
   }
 
-  /// How long a transfer has left at the rate it is going, or null.
   static String? _leftAt(BridgeRemoteJob job) =>
       job.rate <= 0 || job.size <= job.bytes
           ? null
           : exportMinutesLeft((job.size - job.bytes) / job.rate / 60);
 
-  /// While files move between computers, how much is left and how fast,
-  /// for the footer. Null while nothing moves.
   String? get _moving {
     var left = 0, rate = 0;
     for (final job in _jobs) {
@@ -1533,12 +1451,9 @@ class _ExportQueueState extends State<_ExportQueue> {
     return l10n.remoteLeftAt(writtenBytes(left), writtenBytes(rate));
   }
 
-  /// A job's menu: hold it, find its file, send it again or elsewhere, and
-  /// cancel or forget it last.
   void _jobMenu(BridgeRemoteJob job, Offset at) {
     final ended = remoteEnded(job.stage);
     final paused = job.stage == BridgeRemoteStage.paused;
-    // Only an export that hasn't begun can go to another computer instead.
     final unstarted = !ended &&
         job.frame == 0 &&
         job.stage != BridgeRemoteStage.exporting &&
@@ -1629,8 +1544,6 @@ class _ExportQueueState extends State<_ExportQueue> {
     ));
   }
 
-  /// [call], which sends a job again or elsewhere, with a refusal said as a
-  /// notice.
   static void _try(LumitState app, VoidCallback call) {
     try {
       call();
@@ -1639,7 +1552,6 @@ class _ExportQueueState extends State<_ExportQueue> {
     }
   }
 
-  /// Every export here and every one sent elsewhere, stopped, after asking.
   Future<void> _cancelAll() async {
     if (!await askBefore(
             context, l10n.exportQueueCancelAllAsk, l10n.exportQueueCancelAll,
@@ -1674,8 +1586,6 @@ String fileSize(int bytes) => bytes < 1 << 20
     ? '${(bytes / 1024).ceil()} ${l10n.unitKb}'
     : byteSize(bytes);
 
-/// The list's own inset — the export dialog's body padding, which is the
-/// pattern's (§12A.4).
 const EdgeInsets exportBodyPaddingForQueue =
     EdgeInsets.fromLTRB(14, 10, 14, 12);
 
@@ -1691,7 +1601,6 @@ String? exportTimeLeft(
   return exportMinutesLeft(taken.inMilliseconds / 60000 * left / done);
 }
 
-/// [exact] minutes left, in words for the strip.
 String exportMinutesLeft(double exact) {
   final minutes = exact.round();
   if (minutes < 1) return l10n.exportLeftUnderMinute;
@@ -1700,20 +1609,15 @@ String exportMinutesLeft(double exact) {
       : l10n.exportLeftHours('${(minutes / 60).round()}');
 }
 
-/// Whether [event] asks for a menu from the keyboard: the menu key, or
-/// Shift+F10.
 bool _asksMenu(KeyEvent event) =>
     event is KeyDownEvent &&
     (event.logicalKey == LogicalKeyboardKey.contextMenu ||
         (event.logicalKey == LogicalKeyboardKey.f10 &&
             HardwareKeyboard.instance.isShiftPressed));
 
-/// A row Tab can land on, whose menu the menu key or Shift+F10 opens under
-/// it, as a right-click on it does. The accent edge is its focus ring.
 class _MenuKeyRow extends StatefulWidget {
   const _MenuKeyRow({required this.open, required this.child});
 
-  /// Open the row's menu at a point on the screen.
   final void Function(Offset at) open;
   final Widget child;
 

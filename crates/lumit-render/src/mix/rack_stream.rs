@@ -24,13 +24,10 @@ use uuid::Uuid;
 use super::bake::{file_badge, open_links, rows_of};
 use super::jobs::AudioChain;
 
-/// Whether any switched-on effect in `effects` sounds: a hosted audio plugin
-/// or a built-in audio effect. A stack of picture effects is no rack.
 pub(crate) fn sounds(effects: &[EffectInstance]) -> bool {
     effects.iter().filter(|e| e.enabled).any(audio_effect)
 }
 
-/// Whether `e` is an audio effect, hosted or built in.
 fn audio_effect(e: &EffectInstance) -> bool {
     lumit_core::fx::builtins::audio_plugin_id(&e.effect.match_name).is_some()
         || lumit_core::fx::catalogue::BUILTIN_DEFS
@@ -38,8 +35,6 @@ fn audio_effect(e: &EffectInstance) -> bool {
             .is_some_and(|def| def.schema().category == lumit_core::fx::schema::FxCategory::Audio)
 }
 
-/// What opens a node's rack: its chain, and the rack's structure as a
-/// number ([`RackOpener::identity`]).
 pub struct NodeRack {
     chain: Arc<AudioChain>,
     identity: u64,
@@ -91,7 +86,6 @@ impl NodeRack {
         })
     }
 
-    /// The chain it opens.
     #[must_use]
     pub fn chain(&self) -> &Arc<AudioChain> {
         &self.chain
@@ -142,39 +136,31 @@ impl RackOpener for NodeRack {
     }
 }
 
-/// One opened effect of a stream.
 struct Link {
     id: Uuid,
     def: &'static dyn EffectDef,
     processor: Arc<dyn AudioProcessor>,
-    /// Its rows' values when none of them moves, read once rather than per
-    /// block.
     held: Option<Vec<(ParamId, f64)>>,
     /// Whether the last block came back, and its last frame: where a splice
     /// into a dry block ramps from.
     wet: bool,
     last: [f32; 2],
-    /// Whether it has refused a block since it opened, and what its badge
-    /// says now.
     refused: bool,
     filed: Option<bool>,
 }
 
-/// An opened rack, run a block at a time.
 struct NodeStream {
     /// Where the rows' values are read: handed afresh by every
     /// [`RackOpener::update`].
     chain: Arc<AudioChain>,
     links: Vec<Link>,
     rate: u32,
-    /// Frames processed since it opened.
     steady: i64,
     src: Vec<f32>,
     dst: Vec<f32>,
 }
 
 impl NodeStream {
-    /// Read the values of every link whose rows do not move.
     fn hold_values(&mut self) {
         for link in &mut self.links {
             let instance = self.chain.effects.iter().find(|e| e.id == link.id);
@@ -284,8 +270,6 @@ impl RackStream for NodeStream {
     }
 }
 
-/// Crossfade the head of `out` in from `dry`, linearly across
-/// [`AUDIO_SPLICE_FRAMES`].
 fn splice_in(out: &mut [f32], dry: &[f32]) {
     for (i, (o, d)) in out
         .chunks_exact_mut(2)

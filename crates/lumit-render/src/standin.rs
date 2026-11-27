@@ -44,7 +44,6 @@ const STAND_IN_RATE: (f64, f64) = (400e3, 8e6);
 const PART_BITS: f64 = 0.35;
 const PART_RATE: (f64, f64) = (4e6, 200e6);
 
-/// The least a stand-in made smaller spends, whatever it is made of.
 const SMALLEST_RATE: f64 = 64e3;
 
 /// How much smaller than its original a stand-in is made: its size divided
@@ -57,7 +56,6 @@ pub struct Smaller {
 }
 
 impl Smaller {
-    /// The original's size, a picture every frame.
     pub const NOT: Smaller = Smaller { size: 1, every: 1 };
 
     /// Held to 1, 2 or 4 each, as anything else would be.
@@ -75,13 +73,10 @@ impl Smaller {
     }
 }
 
-/// The sound's sample rate, and its bitrate in each kind of file.
 const SOUND_RATE: u32 = 48_000;
 const STAND_IN_SOUND: i64 = 128_000;
 const PART_SOUND: i64 = 320_000;
 
-/// How many frames of a stream's sound past the last picture frame are read
-/// at a time.
 const TAIL_FRAMES: usize = SOUND_RATE as usize;
 
 /// How many frames either side of one an export reads are kept with it, for
@@ -227,12 +222,9 @@ pub fn transcode(
         Some(runs) => runs.iter().any(|(from, to)| (*from..*to).contains(&frame)),
         None => true,
     };
-    // A frame between two pictures of one with fewer shows the one before.
     let held_over = |frame: usize| !frame.is_multiple_of(smaller.every as usize);
     let black: Vec<u8> = [0, 0, 0, 255].repeat(first.rgba.len() / 4);
-    // The last frame that decoded, to write again where one will not.
     let mut held = first.rgba;
-    // How much of the sound has gone in, in samples of both channels.
     let mut fed = 0usize;
     for n in 0..total {
         if cancel.load(Ordering::Relaxed) {
@@ -268,8 +260,6 @@ pub fn transcode(
             }
             encoder.write_rgba(&held).map_err(|e| e.to_string())?;
         }
-        // The sound that plays under this frame goes in beside it, so the
-        // two stay together in the file.
         if let Some(sound) = &sound {
             let upto = (((n + 1) as f64 / fps.max(1.0)) * f64::from(SOUND_RATE)).round() as usize;
             let upto = (upto * 2).min(sound.samples.len());
@@ -300,7 +290,6 @@ pub fn transcode(
             .write_audio(&sound.samples[fed..])
             .map_err(|e| e.to_string())?;
     }
-    // And what each of the other streams has left past the last frame.
     for (place, (reader, at)) in more_sound.iter_mut().enumerate() {
         while let Ok((read, _)) = reader.read(*at, TAIL_FRAMES, true) {
             if read.is_empty() {
@@ -321,8 +310,6 @@ pub fn transcode(
 mod tests {
     use super::*;
 
-    /// Frames an export reads become runs with room round them, close ones
-    /// joined, and none past the end of the clip.
     #[test]
     fn frames_read_become_runs_with_room_round_them() {
         let frames: BTreeSet<usize> = [10, 11, 12, 100, 300, 900, 5000].into_iter().collect();
@@ -330,9 +317,6 @@ mod tests {
         assert!(ranges(&BTreeSet::new(), 1000).is_empty());
     }
 
-    /// A stand-in is the original's size and has every one of its frames,
-    /// which is what lets a machine read it in the original's place. The
-    /// one an export wants keeps the frames asked for and blacks the rest.
     #[test]
     fn a_stand_in_matches_its_original_frame_for_frame() {
         let dir = tempfile::tempdir().unwrap();
@@ -404,8 +388,6 @@ mod tests {
         );
         assert!(red(25, &mut decoder) > 100, "a frame asked for is kept");
 
-        // A smaller one is read at the original's size and has every frame,
-        // so a layer of it sits where the original's does.
         let small = dir.path().join("standin-2-2.mp4");
         let half = Smaller::new(2, 2);
         transcode(
@@ -425,8 +407,6 @@ mod tests {
         let frame = decoder.frame_rgba(7, None).unwrap();
         assert_eq!((frame.width, frame.height), (320, 240));
 
-        // A size no stand-in could be made from is not believed: the file is
-        // read at its own.
         let forged = dir.path().join("forged.mp4");
         let mut said = Metadata::new();
         said.set(Metadata::COMMENT, &format!("{STAND_IN_TAG} 16000x12000"));
@@ -437,9 +417,6 @@ mod tests {
         assert_eq!((video.width, video.height), (320, 240));
     }
 
-    /// **A stand-in carries every audio stream of the file it stands in
-    /// for**, each in its own place, so a layer set to the second stream of a
-    /// recording sounds that stream for whoever has only the stand-in.
     #[test]
     fn a_stand_in_keeps_each_audio_stream_in_its_place() {
         let dir = tempfile::tempdir().unwrap();
@@ -460,7 +437,6 @@ mod tests {
         let probe = lumit_media::probe::probe(&made).unwrap();
         assert_eq!(probe.audio_streams().count(), 2);
 
-        // The pitch of a stream: how often its wave crosses nought going up.
         let pitch = |place: u32| {
             let stream = SoundSource::streams_of(&made, &[place]);
             let sound = lumit_media::audio::decode_sound(&stream, SOUND_RATE).unwrap();

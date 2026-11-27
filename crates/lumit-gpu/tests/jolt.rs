@@ -1,14 +1,9 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-//! Jolt's passes against their CPU oracle: the uneven blur, the scale and
-//! slide under each Edges, the split, the colour, the light and Jolts only.
-//! A frame with nothing hitting keeps the picture exactly.
-
 use lumit_core::fx::effects::jolt::{jolt, JoltParams};
 use lumit_gpu::fx::common::{readback_linear_f32, upload_linear_f32};
 use lumit_gpu::fx::jolt::JoltOp;
 
-/// A premultiplied picture with detail both ways and a soft alpha edge.
 fn picture(w: u32, h: u32) -> Vec<f32> {
     let mut img = vec![0.0f32; (w * h * 4) as usize];
     for y in 0..h {
@@ -48,7 +43,6 @@ fn wgsl_jolt_matches_the_cpu_oracle() {
     let tex = upload_linear_f32(&ctx, &picture(w, h), w, h);
     // The oracle reads what the kernel reads: the picture as half floats.
     let img = readback_linear_f32(&ctx, &tex, w, h).expect("readback");
-    // Scaled by 1/0.8 about (20, 14), slid by (3.5, -2).
     let zoom = 0.8;
     let scaled = [20.0 - 20.0 * zoom - 3.5, 14.0 - 14.0 * zoom + 2.0];
     for (name, p) in [

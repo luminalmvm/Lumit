@@ -41,7 +41,6 @@ import 'workspace.dart';
 /// HKDF info both sides use, so it never opens as anything else.
 const String computerBoxInfo = 'lumit computer v1';
 
-/// Whether a job has stopped, one way or the other.
 bool remoteEnded(BridgeRemoteStage stage) =>
     stage == BridgeRemoteStage.done ||
     stage == BridgeRemoteStage.failed ||
@@ -95,8 +94,6 @@ String remoteSizeOf(int done, int total) {
   return l10n.remoteSizeOf(amount(done), '${amount(total)} $unit');
 }
 
-/// Bring the file of an export that stayed on the other computer here, to a
-/// place picked with the save dialogue.
 Future<void> remoteBringHere(LumitState app, String job, String file) async {
   final dot = file.lastIndexOf('.');
   final extension = dot > 0 ? file.substring(dot + 1) : '';
@@ -159,14 +156,12 @@ class RemoteExports extends ChangeNotifier {
     _accountChanged();
   }
 
-  /// Take exports from the account's other computers, or stop.
   void setTakes(bool on) {
     workspace.setRemoteTakes(on);
     remoteSetTakes(on_: on);
     phones.sayNow();
   }
 
-  /// The folders looked in for footage another computer sends.
   void setFolders(List<String> folders) {
     workspace.setRemoteFolders(folders);
     remoteSetFolders(folders: workspace.remoteFolders);
@@ -196,8 +191,6 @@ class RemoteExports extends ChangeNotifier {
     if (keys == friendInvites.keys) _key = key;
   }
 
-  // ---- what this computer says in the room ---------------------------------
-
   Map<String, Object?> _sayAlso() {
     Object? fields;
     try {
@@ -212,7 +205,6 @@ class RemoteExports extends ChangeNotifier {
     };
   }
 
-  /// The computer the file of [job] ends up on.
   String? _lands(BridgeRemoteJob job) =>
       (job.lands == BridgeRemoteLands.sender) == job.sent ? _me : job.other;
 
@@ -241,7 +233,6 @@ class RemoteExports extends ChangeNotifier {
         BridgeRemoteStage.failed || BridgeRemoteStage.cancelled => ('failed', null),
       };
 
-  /// A job this computer does for another, on its item in the queue.
   Map<String, Object?> _itemAlso(BridgeExportQueueItem item) {
     if (item.job.isEmpty) return const {};
     final job = remoteJobs().where((j) => j.job == item.job).firstOrNull;
@@ -257,7 +248,6 @@ class RemoteExports extends ChangeNotifier {
     };
   }
 
-  /// A mirror of each job this computer sent, beside its own items.
   List<Map<String, Object?>> _queueAlso() => [
         for (final job in remoteJobs())
           if (job.sent) _mirror(job),
@@ -290,7 +280,6 @@ class RemoteExports extends ChangeNotifier {
     };
   }
 
-  /// Seal and say what the engine has to say.
   Future<void> _say(BridgeRemoteSay say) async {
     try {
       String? box;
@@ -321,8 +310,6 @@ class RemoteExports extends ChangeNotifier {
       // A key that isn't one. Said again by the engine, or given up there.
     }
   }
-
-  // ---- what this computer hears --------------------------------------------
 
   void _heard(Map<dynamic, dynamic> j) {
     switch (j['type']) {
@@ -410,8 +397,6 @@ class RemoteExports extends ChangeNotifier {
             error = 'failed';
           }
         default:
-          // ponytail: a preview of a job comes from the computer that did it,
-          // which the phone asks itself.
           error = 'failed';
       }
     }
@@ -501,8 +486,6 @@ class RemoteExports extends ChangeNotifier {
     return null;
   }
 
-  // ---- how exports end -----------------------------------------------------
-
   void _told(BridgeExportNews news) {
     switch (news.kind) {
       case BridgeExportNewsKind.landed:
@@ -542,8 +525,6 @@ class RemoteExports extends ChangeNotifier {
     return l10n.remoteNewsFailed(news.otherName, news.compName);
   }
 
-  // ---- the system's notifications ------------------------------------------
-
   /// News heard while Lumit isn't in front, gathered for a few seconds so
   /// exports ending together make one notification.
   final List<BridgeExportNews> _gathered = [];
@@ -580,7 +561,6 @@ class RemoteExports extends ChangeNotifier {
       return;
     }
     final news = all.single;
-    // Where the file is: its folder, as the body under the title.
     final cut = news.path.lastIndexOf(RegExp(r'[/\\]'));
     final folder = cut > 0 ? news.path.substring(0, cut) : news.path;
     final (title, body) = switch (news.kind) {

@@ -1,5 +1,3 @@
-//! `OfxPropertySuiteV1` — the one every plugin uses for everything.
-
 use std::ffi::{c_char, c_int, c_void, CString};
 use std::mem::discriminant;
 
@@ -10,7 +8,6 @@ use crate::props::{Element, PropValue, PropertySet};
 use crate::status::{Status, StatusResult};
 use crate::suites::{cstr, guard};
 
-/// The table handed out by `fetchSuite`.
 pub static SUITE: OfxPropertySuiteV1 = OfxPropertySuiteV1 {
     prop_set_pointer,
     prop_set_string,
@@ -32,7 +29,6 @@ pub static SUITE: OfxPropertySuiteV1 = OfxPropertySuiteV1 {
     prop_get_dimension,
 };
 
-/// Do something with the property set a handle names, for reading.
 fn read<R>(
     handle: OfxPropertySetHandle,
     body: impl FnOnce(&PropertySet) -> Result<R, Status>,
@@ -53,7 +49,6 @@ fn null_is_the_plugins(handle: OfxPropertySetHandle) -> StatusResult {
     Ok(())
 }
 
-/// The same, for writing.
 fn write(
     handle: OfxPropertySetHandle,
     body: impl FnOnce(&mut PropertySet) -> StatusResult,
@@ -64,17 +59,14 @@ fn write(
     body(state.props.get_mut(handle)?)
 }
 
-/// An index from the C API: never negative.
 fn index_of(index: c_int) -> Result<usize, Status> {
     usize::try_from(index).map_err(|_| Status::ErrBadIndex)
 }
 
-/// A count from the C API: never negative.
 fn count_of(count: c_int) -> Result<usize, Status> {
     usize::try_from(count).map_err(|_| Status::ErrValue)
 }
 
-/// Replace a whole property, refusing to change its type if it exists.
 fn replace(set: &mut PropertySet, key: &str, value: PropValue) -> StatusResult {
     if let Ok(existing) = set.get(key) {
         if discriminant(existing) != discriminant(&value) {

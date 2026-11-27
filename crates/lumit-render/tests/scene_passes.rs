@@ -16,7 +16,6 @@ use uuid::Uuid;
 
 const SIZE: u32 = 128;
 
-/// One white triangle drawn twice, by two named nodes under a third.
 fn model(dir: &std::path::Path) -> std::path::PathBuf {
     let floats: [f32; 9] = [-1.0, -1.0, 0.0, 1.0, -1.0, 0.0, 0.0, 1.0, 0.0];
     let bytes: Vec<u8> = floats.iter().flat_map(|f| f.to_le_bytes()).collect();
@@ -35,7 +34,6 @@ fn model(dir: &std::path::Path) -> std::path::PathBuf {
     path
 }
 
-/// A comp holding the Model layer, and the Precomp layer of it in a parent.
 fn project(path: &std::path::Path) -> (Document, Uuid, Layer) {
     let mut doc = Document::new();
     let settings = CompSettings {
@@ -99,7 +97,6 @@ fn effect(name: &str, source: Uuid, set: &[(&str, EffectValue)]) -> EffectInstan
     e
 }
 
-/// The parent as `effects` leave the Precomp layer, frames `frame`.
 fn drawn(
     r: &mut HeadlessRenderer,
     (doc, parent, placed): &(Document, Uuid, Layer),
@@ -177,7 +174,6 @@ fn part_ids_read_back_and_a_matte_keeps_its_part() {
     let soft = kept.chunks_exact(4).filter(|px| (32..200).contains(&px[0]));
     assert!(soft.count() > 4, "its edges take the anti-aliasing");
 
-    // At the other colour depths too.
     for depth in [ColourDepth::Eight, ColourDepth::ThirtyTwo] {
         let mut deep = (project.0.clone(), project.1, project.2.clone());
         deep.0.colour_depth = depth;
@@ -332,7 +328,6 @@ fn a_group_covers_the_groups_below_it_in_a_pass() {
         l.transform.position_z = lumit_core::anim::Property::fixed(z);
         l
     };
-    // Far behind the model, and above it in the stack past a 2D layer.
     let (behind, between) = (solid("Behind", true, 2000.0), solid("Between", false, 0.0));
     let number_of_behind = lumit_scene::parts::layer_number(behind.id.as_bytes());
     let comp = doc.comp_mut(scene).unwrap();
@@ -344,7 +339,6 @@ fn a_group_covers_the_groups_below_it_in_a_pass() {
     assert_eq!(number(middle), number_of_behind);
 }
 
-/// A triangle on a joint a take lifts, and another on a node of its own.
 fn skinned(dir: &std::path::Path) -> std::path::PathBuf {
     let mut bytes: Vec<u8> = Vec::new();
     for f in [-1.0f32, -1.0, 0.0, 1.0, -1.0, 0.0, 0.0, 1.0, 0.0] {
@@ -394,7 +388,6 @@ fn skinned(dir: &std::path::Path) -> std::path::PathBuf {
     path
 }
 
-/// The pixels naming `id`.
 fn named(px: &[u8], id: u32) -> Vec<usize> {
     px.chunks_exact(4)
         .enumerate()
@@ -403,7 +396,6 @@ fn named(px: &[u8], id: u32) -> Vec<usize> {
         .collect()
 }
 
-/// How far down the picture they are, on average.
 fn height(pixels: &[usize]) -> f64 {
     let rows = pixels.iter().map(|&k| (k / SIZE as usize) as f64);
     rows.sum::<f64>() / pixels.len().max(1) as f64
@@ -430,7 +422,6 @@ fn a_pass_follows_a_take_and_a_parts_rows() {
         effect("part_matte", own, &[("parts", text)])
     };
 
-    // The take lifts the skin and leaves the other part where it was.
     let first = drawn(&mut r, &project, vec![ids()], 0);
     let later = drawn(&mut r, &project, vec![ids()], 12);
     let (skin_first, skin_later) = (named(&first, skin), named(&later, skin));
@@ -443,7 +434,6 @@ fn a_pass_follows_a_take_and_a_parts_rows() {
     );
     assert_eq!(named(&first, prop), named(&later, prop));
 
-    // Where the picture shows the skin at that frame, the pass says so.
     let plain = drawn(&mut r, &project, Vec::new(), 12);
     let lit = |k: &&usize| plain[**k * 4] > 64;
     let on = skin_later.iter().filter(lit).count();
@@ -462,13 +452,11 @@ fn a_pass_follows_a_take_and_a_parts_rows() {
         prop_later.len()
     );
 
-    // The matte goes with it.
     let kept = drawn(&mut r, &project, vec![matte(skin)], 12);
     assert!(prop_later.iter().all(|&k| kept[k * 4] == 0));
     let shown = skin_later.iter().filter(|&&k| kept[k * 4] > 64).count();
     assert!(shown * 10 >= skin_later.len() * 8, "{shown}");
 
-    // A part's rows move it in the pass, and hide it.
     let set_rows = |doc: &mut Document, row: &str, value: EffectValue| {
         let LayerKind::Precomp { comp: inner } = project.2.kind else {
             panic!("a Precomp layer");

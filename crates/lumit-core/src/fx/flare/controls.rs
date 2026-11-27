@@ -3,43 +3,34 @@
 
 use super::design::Kind;
 
-/// How a control is edited.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Edit {
     Slider,
-    /// Whole numbers.
     Counter,
     Toggle,
-    /// Degrees, drawn as a dial.
     Angle,
     /// One of these options, stored as its index.
     Choice(&'static [&'static str]),
 }
 
-/// The unit a value is shown in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Unit {
     None,
     /// Pixels at composition size.
     Px,
     Degrees,
-    /// Degrees a second.
     DegreesPerSecond,
 }
 
-/// One control in the window.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Control {
     pub key: &'static str,
     pub label: &'static str,
-    /// The twirl it sits in.
     pub group: &'static str,
     pub edit: Edit,
     pub unit: Unit,
-    /// The slider's range.
     pub min: f32,
     pub max: f32,
-    /// What typing may reach.
     pub hard_min: f32,
     pub hard_max: f32,
     pub default: f32,
@@ -92,10 +83,8 @@ pub const TEXTURES: &[&str] = &[
     "Layer",
 ];
 
-/// The texture choices' hard range: none up to Layer.
 const TEXTURE_RANGE: (f32, f32, f32, f32) = (0.0, 11.0, 0.0, 11.0);
 
-/// What the element brightens towards.
 pub const RESPONSES: &[&str] = &["Nothing", "The centre", "The edges"];
 
 const LOOK: &str = "Look";
@@ -142,7 +131,6 @@ const SEED: Control = c(
     1.0,
 );
 
-/// Every kind ends with these.
 const TAIL: [Control; 7] = [
     c(
         "response",
@@ -201,7 +189,6 @@ const TAIL: [Control; 7] = [
     ),
 ];
 
-/// The iris shape Ghost and Ghosts share.
 const GHOST_SHAPE: [Control; 11] = [
     c(
         "sides",

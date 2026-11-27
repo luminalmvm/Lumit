@@ -39,8 +39,6 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:uuid/uuid.dart';
 
-/// What a pick is being read *for*. The magnifier looks the same in every case
-/// — it is the caption and the committed value that differ.
 enum DropperReads {
   /// The averaged colour of the region, in scene-linear RGB.
   colour,
@@ -49,7 +47,6 @@ enum DropperReads {
   /// depth-of-field Focus takes (docs/08 §3.22).
   depth,
 
-  /// The pixel's own position in the composition, for an x/y parameter pair.
   position,
 
   /// The part of a 3D precomp under the pointer: its Part id pass, whose bytes
@@ -81,8 +78,6 @@ class DropperArm {
 
   final DropperReads reads;
 
-  /// What is being picked, for the magnifier's caption: the parameter's own
-  /// name, as the user sees it in the panel ("Key colour", "Focus").
   final String label;
 
   /// Read this layer *alone* rather than the composite — a depth pass, which is
@@ -90,8 +85,6 @@ class DropperArm {
   /// the picture as shown.
   final LayerReference? sampleLayer;
 
-  /// The name of that layer, so the caption can say where the numbers are
-  /// coming from rather than showing a colour nobody is picking.
   final String? sampleLayerName;
 
   /// The name of a part by its number, for a part pick's caption. Null where
@@ -131,7 +124,6 @@ class DropperArm {
   });
 }
 
-/// What one pick lifted off the picture.
 @immutable
 class DropperSample {
   /// The region's average colour in **scene-linear** RGB, each 0–1 — the space
@@ -156,7 +148,6 @@ class DropperSample {
   /// the composition.
   final Size? frame;
 
-  /// How many pixels a side were averaged.
   final int region;
 
   /// The part a part pick lands on ([partNear]), nought for any other pick.
@@ -262,8 +253,6 @@ double srgbDecode(int byte) {
       : math.pow((v + 0.055) / 1.055, 2.4).toDouble();
 }
 
-/// Scene-linear light back to an sRGB byte — the inverse of [srgbDecode], for
-/// showing a linear value as a swatch.
 int srgbEncode(double linear) {
   final v = linear.clamp(0.0, 1.0);
   final e = v <= 0.0031308
@@ -272,8 +261,6 @@ int srgbEncode(double linear) {
   return (e * 255).round().clamp(0, 255);
 }
 
-/// How far a part pick looks for a part when the pixel under the pointer names
-/// none, as it can on a part's edge.
 const int dropperPartReach = 2;
 
 /// The part at `(x, y)` of a window of Part id bytes, or the nearest within

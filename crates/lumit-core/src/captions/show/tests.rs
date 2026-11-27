@@ -132,8 +132,6 @@ fn context(doc: &Arc<Document>, comp: Uuid, layer: Uuid, t: f64) -> ExpressionCo
     }
 }
 
-/// The caption layer `text` in `comp`, its captions and what it shows at
-/// comp time `t`.
 fn look(doc: &Arc<Document>, comp: Uuid, text: Uuid, t: f64) -> (Layer, Arc<Captions>, Shown) {
     let layer = doc
         .comp(comp)
@@ -155,8 +153,6 @@ fn near(got: f64, want: f64) -> bool {
     (got - want).abs() < 1e-3
 }
 
-/// A Sequence layer cutting `item` with a jump cut that drops 5.2 s to
-/// 5.6 s, a caption layer linked to it, and the document holding both.
 fn edit(item: Uuid) -> (Arc<Document>, Uuid, Uuid) {
     let picture = layer(
         "Talk",
@@ -276,11 +272,6 @@ fn shown(doc: &Arc<Document>, text: Uuid, t: f64) -> Shown {
     at(document.captions.as_ref().unwrap(), &context)
 }
 
-/// **Linked captions follow the cut.** A word cut out of the edit drops
-/// out of the caption, the words either side of a jump cut stay one
-/// caption, each word lands where it is heard, a caption layer that a ripple
-/// carries keeps its words on the speech, and one whose layer has gone shows
-/// nothing. Wrong here is the wrong words burned into an export.
 #[test]
 fn linked_captions_follow_the_cut() {
     let item = Uuid::now_v7();
@@ -298,9 +289,6 @@ fn linked_captions_follow_the_cut() {
         "nothing before the cue"
     );
 
-    // A ripple delete of one second before the caption: the source layer
-    // loses 1 s to 2 s of its first clip, and the caption layer, which
-    // starts after it, is carried a second earlier.
     let mut moved = (*doc).clone();
     let ProjectItem::Composition(comp) = &mut moved.items[0] else {
         panic!()
@@ -326,8 +314,6 @@ fn linked_captions_follow_the_cut() {
     let before = shown(&doc, text, 4.7);
     let after = shown(&moved, text, 3.7);
     assert_eq!(after.text, before.text);
-    // Words are in the caption layer's own time, which now starts two
-    // seconds in: on the comp's clock every word is a second earlier.
     for (a, b) in after.words.iter().zip(&before.words) {
         assert!(
             ((a.start + 2.0) - (b.start - 1.0)).abs() < 1e-6,
@@ -335,8 +321,6 @@ fn linked_captions_follow_the_cut() {
         );
     }
 
-    // The layer they were made from deleted: its source times are not read
-    // on the caption layer's clock, so nothing shows rather than wrong words.
     let mut gone = (*doc).clone();
     let ProjectItem::Composition(comp) = &mut gone.items[0] else {
         panic!()
@@ -346,11 +330,6 @@ fn linked_captions_follow_the_cut() {
     assert!(shown(&Arc::new(gone), text, 4.7).text.is_empty());
 }
 
-/// **Captions on their own clock show and export in step.** Captions read
-/// from a file keep their times on the caption layer, which here starts a
-/// second in: what shows, where each word sits in it, a caption moved off
-/// its place, and the cues an export writes on the comp's clock. Wrong here
-/// is a subtitle file out of step with the picture.
 #[test]
 fn captions_on_their_own_clock_show_and_export_in_step() {
     let mut first = cue(
@@ -404,7 +383,6 @@ fn captions_on_their_own_clock_show_and_export_in_step() {
     let (said, words, _) = spoken(&plain, Arc::new(here.clone()));
     assert_eq!((said.as_ref(), words.len()), ("Plain", 0));
 
-    // Every quarter second for five seconds, as an export samples frames.
     let times: Vec<f64> = (0..20).map(|f| f64::from(f) * 0.25).collect();
     let written = spans(&held, &here, &times, 5.0, &|| false);
     let placed: Vec<(f64, f64)> = written
@@ -423,18 +401,11 @@ fn captions_on_their_own_clock_show_and_export_in_step() {
     );
 }
 
-/// **Linked captions through a Retime and a precomp.** Words heard in a
-/// layer played at double speed land where they are heard, a caption slowed
-/// to a quarter keeps all its words, and words heard inside a nested comp
-/// that a Precomp layer starts a second in land too, under B-roll that has
-/// sound of its own. Wrong here is captions out of step with sped-up or
-/// nested speech, or gone.
 #[test]
 fn linked_captions_are_heard_through_a_retime_and_a_precomp() {
     let item = Uuid::now_v7();
     let words = vec![word("fast", 4000, 5000), word("talk", 5000, 6000)];
 
-    // Layer time t shows source time 2t.
     let mut fast = layer("Fast", LayerKind::Footage { item });
     let mut retime = crate::anim::Property::fixed(0.0);
     retime.animation = crate::anim::Animation::Keyframed(vec![key(0, 0.0), key(10, 20.0)]);
@@ -460,8 +431,6 @@ fn linked_captions_are_heard_through_a_retime_and_a_precomp() {
         "{placed:?}"
     );
 
-    // At a quarter speed a caption of four seconds is up for sixteen, and
-    // its first word stays in it to the end.
     let mut slow = layer("Slow", LayerKind::Footage { item });
     let mut retime = crate::anim::Property::fixed(0.0);
     retime.animation = crate::anim::Animation::Keyframed(vec![key(0, 0.0), key(20, 5.0)]);
@@ -474,7 +443,6 @@ fn linked_captions_are_heard_through_a_retime_and_a_precomp() {
     let doc = holding(vec![slowed]);
     assert_eq!(look(&doc, slow_id, text_id, 15.5).2.text, "slow talk");
 
-    // Inside, B-roll with its own sound plays over the talk.
     let broll = Uuid::now_v7();
     let nested = comp(
         "Nested",

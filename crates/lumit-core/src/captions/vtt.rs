@@ -102,7 +102,6 @@ pub fn read(text: &str) -> Result<Vec<Cue>, CaptionsError> {
             }
             continue;
         }
-        // A header line before the first blank line, or an identifier.
         let timing = if line.contains("-->") {
             i
         } else if lines.get(i + 1).is_some_and(|l| l.contains("-->")) {
@@ -130,12 +129,9 @@ pub fn read(text: &str) -> Result<Vec<Cue>, CaptionsError> {
     Ok(cues)
 }
 
-/// One cue from its text lines, its word times taken from the time tags where
-/// it has them.
 fn timed_cue(body: &[&str], start: Rational, end: Rational) -> Option<Cue> {
     let mut label = None;
     let mut plain = Vec::with_capacity(body.len());
-    // The moment written in front of each word, in reading order.
     let mut moments: Vec<Option<Rational>> = Vec::new();
     for line in body {
         let (text, line_moments, voice) = untag(line);
@@ -153,8 +149,6 @@ fn timed_cue(body: &[&str], start: Rational, end: Rational) -> Option<Cue> {
     Some(cue)
 }
 
-/// A line's text without its tags, the moment written in front of each of its
-/// words, and the name of a voice tag if it has one.
 fn untag(line: &str) -> (String, Vec<Option<Rational>>, Option<String>) {
     let mut text = String::new();
     let mut moments = Vec::new();

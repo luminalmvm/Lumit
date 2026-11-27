@@ -30,9 +30,7 @@ use zip::{CompressionMethod, ZipArchive, ZipWriter};
 use crate::pack::{self, PackSource};
 use crate::{Manifest, ProjectError};
 
-/// What a template file's name ends in.
 pub const EXTENSION: &str = "lumt";
-/// What a template file's manifest says it is.
 pub const FORMAT: &str = "lumit-template";
 
 const INFO_ENTRY: &str = "template.json";
@@ -43,12 +41,10 @@ const FONTS_PREFIX: &str = "fonts/";
 /// The most `template.json` may decompress to. It is a few lines for each
 /// control.
 const INFO_MAX_BYTES: u64 = 4 << 20;
-/// The most the poster or the strip of frames may decompress to.
 const PICTURE_MAX_BYTES: u64 = 64 << 20;
 /// The most one packed font may decompress to. The largest families that
 /// ship as one file run to a hundred megabytes or so.
 const FONT_MAX_BYTES: u64 = 256 << 20;
-/// The most fonts a template carries.
 const MAX_FONTS: usize = 256;
 
 /// Where a library template's footage is read out to, once per version:
@@ -59,7 +55,6 @@ pub fn media_dir(id: Uuid, version: u32) -> Option<PathBuf> {
     Some(media.join(id.to_string()).join(version.to_string()))
 }
 
-/// Where fonts that came inside templates are kept: `templates/fonts/`.
 #[must_use]
 pub fn fonts_dir() -> Option<PathBuf> {
     Some(crate::templates_dir()?.join("fonts"))
@@ -75,17 +70,13 @@ pub struct TemplateInfo {
     pub version: u32,
     /// When it was saved: UTC, RFC 3339.
     pub saved: String,
-    /// What the library shows it as.
     pub name: String,
-    /// The template's composition inside `project.json`.
     pub comp: Uuid,
     /// The composition's width in pixels.
     pub width: u32,
     /// The composition's height in pixels.
     pub height: u32,
-    /// The composition's frame rate.
     pub frame_rate: FrameRate,
-    /// How long the composition is.
     pub duration: Duration,
     /// The frame the library shows for it. `None` is the first.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -99,41 +90,30 @@ pub struct TemplateInfo {
     /// The controls, in the order a copy shows them.
     #[serde(default)]
     pub controls: Vec<ControlInfo>,
-    /// The fonts it draws with.
     #[serde(default)]
     pub fonts: Vec<FontUse>,
     /// The archive entries of the footage it carries. [`write`] fills this in.
     #[serde(default)]
     pub footage: Vec<String>,
-    /// Unknown fields from newer Lumit versions (docs/10-FILE-FORMAT.md §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
-/// One control, as a listing shows it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ControlInfo {
-    /// What a copy's value is kept under.
     pub id: String,
-    /// What a copy shows it as.
     pub label: String,
-    /// What it is drawn as on a copy.
     pub kind: ControlKind,
-    /// The folding heading it sits under.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub group: Option<String>,
-    /// A menu's options.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub options: Vec<String>,
-    /// Unknown fields from newer Lumit versions (docs/10-FILE-FORMAT.md §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
-/// One font a template draws with.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FontUse {
-    /// The family.
     pub family: String,
     /// The face inside the family. Empty is the family's regular.
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -141,12 +121,10 @@ pub struct FontUse {
     /// The archive entry under `fonts/` the font is packed as, when it is.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file: Option<String>,
-    /// Unknown fields from newer Lumit versions (docs/10-FILE-FORMAT.md §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
-/// The pictures a template file carries, as the caller made them.
 #[derive(Debug, Clone, Default)]
 pub struct Pictures {
     /// The poster frame, as a PNG. Empty leaves it out.
@@ -155,14 +133,10 @@ pub struct Pictures {
     pub preview_jpg: Vec<u8>,
 }
 
-/// One font file handed over for packing.
 #[derive(Debug, Clone)]
 pub struct FontFile {
-    /// The family it is named by.
     pub family: String,
-    /// The face inside the family.
     pub face: String,
-    /// The file on disk.
     pub path: PathBuf,
 }
 
@@ -250,12 +224,6 @@ pub fn info_of(
     })
 }
 
-/// The files of `held` that are on disk, offered for packing: each footage
-/// item's, and each file an effect reads.
-// ponytail: one file an item. An image sequence packs its first frame, a 3D
-// model goes without the files it pulls in, and the colour config stays
-// behind. The bridge knows the whole of each, so hand its pack sources to
-// `write_from` when a template with one of those has to travel.
 fn sources(held: &Document) -> Vec<PackSource> {
     let footage = held.items.iter().filter_map(|item| match item {
         ProjectItem::Footage(f) => Some((f.id, f.media.on_disk())),
@@ -290,7 +258,6 @@ pub fn write(
     write_from(path, held, info, pictures, fonts, &sources(held), progress)
 }
 
-/// [`write`], packing the files `sources` offers and no others.
 pub fn write_from(
     path: &Path,
     held: &Document,
@@ -393,7 +360,6 @@ pub fn write_from(
     Ok(())
 }
 
-/// Whether a file of this name is a font Lumit reads.
 fn is_font(name: &str) -> bool {
     let extension = Path::new(name).extension().and_then(|e| e.to_str());
     extension.is_some_and(|e| {
@@ -658,10 +624,6 @@ mod tests {
     use lumit_core::template::feed::Data;
     use lumit_core::template::{Control, Target, Template};
 
-    /// A project with a template in it: a composition placing a nested one
-    /// and a solid, the nested one showing a file that is on disk and one
-    /// that is not. A third composition and the rest of the footage are in
-    /// the project and in nothing the template places.
     fn project(dir: &Path) -> (Document, Uuid, Vec<Uuid>) {
         let mut doc = stress_document(&StressParams::TINY);
         let ids = |comps: bool| -> Vec<Uuid> {
@@ -727,7 +689,6 @@ mod tests {
         let (doc, comp, placed) = project(dir.path());
         let (plate, gone) = (placed[2], placed[3]);
 
-        // The composition and what it places, and nothing else.
         let held = document_of(&doc, comp).unwrap();
         let mut kept: Vec<Uuid> = held.items.iter().map(ProjectItem::id).collect();
         let mut wanted: Vec<Uuid> = placed.iter().copied().chain([comp]).collect();
@@ -753,7 +714,6 @@ mod tests {
         let path = dir.path().join("lower-third.lumt");
         write(&path, &held, &info, &pictures, &fonts, &mut |_, _| {}).unwrap();
 
-        // The listing reads what was written.
         let listed = read_info(&path).unwrap();
         assert_eq!((listed.id, listed.version, listed.comp), (id, 3, comp));
         assert_eq!(listed.name, "Lower third");
@@ -767,8 +727,6 @@ mod tests {
         assert_eq!(read_poster(&path).unwrap(), b"a poster");
         assert!(read_preview(&path).unwrap().is_empty());
 
-        // Opened, it is the same composition with its template, and the
-        // footage that was on disk is a file under the folder given.
         let media = dir.path().join("media");
         let (opened, info) = open(&path, &media).unwrap();
         assert_eq!(info, listed);
@@ -784,14 +742,12 @@ mod tests {
         assert!(!file_of(&opened, gone).is_file());
         assert!(opened.packed.is_empty());
 
-        // The font comes out once, and a second time finds it there.
         let font_dir = dir.path().join("fonts");
         let out = unpack_fonts(&path, &font_dir).unwrap();
         assert_eq!(out, vec![font_dir.join("Brand-Bold.otf")]);
         assert_eq!(fs::read(&out[0]).unwrap(), b"not really a font");
         assert_eq!(unpack_fonts(&path, &font_dir).unwrap(), out);
 
-        // A project is not a template.
         let project = dir.path().join("project.lum");
         crate::save(&held, &project).unwrap();
         assert!(matches!(
@@ -803,7 +759,6 @@ mod tests {
             Err(ProjectError::NotALumitProject)
         ));
 
-        // Nor is a template that asks for a newer reader one this Lumit opens.
         let newer = dir.path().join("newer.lumt");
         let mut zip = ZipWriter::new(File::create(&newer).unwrap());
         let manifest = Manifest {

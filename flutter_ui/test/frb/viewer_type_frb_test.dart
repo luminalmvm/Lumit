@@ -1,12 +1,3 @@
-// The Type tool on frb, against the real engine: the box round a line of
-// text, the caret, the selection, and who has the keyboard.
-//
-// Each of these was a bug report. The box ran well past the end of the words,
-// because it was half the point size per character. The caret stood at the
-// end of that box, not the end of the words. Nothing could be selected by
-// dragging. And the first click into a finished line put a caret down without
-// giving it the keyboard, so the next letter typed ran a shortcut (`S` for
-// Scale).
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
@@ -25,11 +16,9 @@ import 'package:lumit_flutter/state/tools.dart';
 
 import 'frb_test_support.dart';
 
-// The line from the report.
 const _words = 'Hello, this is a text';
 const _size = 72.0;
 
-/// The test's line as the engine lays it out, unstyled.
 BridgeTextBlock _measured() => measureText(
       text: _words,
       size: _size,
@@ -84,11 +73,9 @@ void main() {
       .boxes
       .firstWhere((b) => b.id == layer.internallayerId);
 
-  /// Where layer pixel (x, y) is on the test's screen.
   Offset screenOf(WidgetTester tester, LayerBox box, double x, double y) =>
       tester.getTopLeft(find.byType(ViewerTypeLayer)) + box.map.toScreen(x, y);
 
-  /// The point on screen just before character [i], halfway up a capital.
   Offset gap(WidgetTester tester, LayerBox box, int i) {
     final line = _measured().lines.first;
     return screenOf(tester, box, line.carets[i], line.baseline - _size * 0.3);
@@ -199,7 +186,6 @@ void main() {
         'Shift+Enter breaks the line, the arrows move by the engine\'s lines,'
         ' and the style survives the edit', (tester) async {
       final p = withLine();
-      // Tracked out, so the edit has a style to lose.
       final styled = p.layer.getText()!;
       p.layer.setText(
         document: styled.copyWith(
@@ -208,7 +194,6 @@ void main() {
       p.uiState.model.refresh();
       await mount(tester, p);
 
-      // The gap before character 5, as the styled line is laid out.
       final document = p.layer.getText()!;
       final line = measureText(
         text: document.text,
@@ -232,8 +217,6 @@ void main() {
       expect(field(tester).selection, const TextSelection.collapsed(offset: 6),
           reason: 'the caret starts the new line');
 
-      // Up from the start of the second line is the start of the first, and
-      // End is after its last letter, before the break.
       await simulateKeyDownEvent(LogicalKeyboardKey.arrowUp);
       await simulateKeyUpEvent(LogicalKeyboardKey.arrowUp);
       expect(field(tester).selection, const TextSelection.collapsed(offset: 0));
@@ -245,7 +228,6 @@ void main() {
       expect(field(tester).selection.baseOffset, greaterThan(6),
           reason: 'down a line, at about the same x');
 
-      // Enter still ends the edit, and writes both lines with the style kept.
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pump();
       final written = p.layer.getText()!;

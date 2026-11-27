@@ -34,7 +34,6 @@ const Duration statusPoll = Duration(milliseconds: 500);
 /// what happens when a job lands are the same for every card, so they live
 /// here.
 mixin StatusPoller<T, W extends StatefulWidget> on State<W> {
-  /// The last reading, or null before the first one.
   T? status;
 
   Timer? _timer;
@@ -42,17 +41,12 @@ mixin StatusPoller<T, W extends StatefulWidget> on State<W> {
   /// Ask the engine. Throwing means the layer went away under the card.
   T fetchStatus();
 
-  /// Whether the reading is still moving, and so worth asking about again.
   bool isMoving(T? status);
 
-  /// Something changed that the rest of the interface should re-read.
   VoidCallback get onChanged;
 
-  /// Whether this widget change is a reason to read again, off the clock.
   bool shouldResample(W old);
 
-  /// Whether this pair of readings is the job *landing*. By default it is: the
-  /// answer was moving and has stopped.
   bool hasLanded(T? was, T next) => isMoving(was) && !isMoving(next);
 
   @override
@@ -74,14 +68,12 @@ mixin StatusPoller<T, W extends StatefulWidget> on State<W> {
     super.dispose();
   }
 
-  /// Read once, and keep or stop the clock by what came back.
   void sample() {
     if (!mounted) return;
     final T next;
     try {
       next = fetchStatus();
     } catch (_) {
-      // The layer went away under the card; the line simply stops moving.
       _timer?.cancel();
       _timer = null;
       return;

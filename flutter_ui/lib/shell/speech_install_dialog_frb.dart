@@ -43,7 +43,6 @@ Future<bool> showSpeechInstallDialog(BuildContext context) async {
   return done ?? false;
 }
 
-/// Whether [service] has a speech pack installed.
 bool hasSpeechPack(AddonService service) =>
     service.packs.any((pack) => pack.task == 'speech' && !pack.broken);
 
@@ -62,10 +61,8 @@ class SpeechInstallBody extends StatefulWidget {
 class _SpeechInstallBodyState extends State<SpeechInstallBody> {
   AddonService get _service => widget.service;
 
-  /// The pack picked, by id.
   String? _pack;
 
-  /// An install was asked for and is under way, runtime first.
   bool _installing = false;
 
   @override
@@ -103,8 +100,6 @@ class _SpeechInstallBodyState extends State<SpeechInstallBody> {
     return packs.firstOrNull;
   }
 
-  /// What Install fetches: the runtime when it is missing, the pack picked
-  /// when there is none.
   List<Addon> get _wanted => [
         if (_runtimeMissing)
           if (_service.runtimeOffered case final runtime?) runtime,
@@ -248,7 +243,6 @@ class _SpeechInstallBodyState extends State<SpeechInstallBody> {
                   key: const ValueKey('speech-install-cancel'),
                   label: none ? l10n.close : l10n.cancel,
                   onPressed: _cancel),
-              // Nothing to install, nothing to press.
               if (!none)
                 dialogFilledAction(t,
                     key: const ValueKey('speech-install-go'),
@@ -265,8 +259,6 @@ class _SpeechInstallBodyState extends State<SpeechInstallBody> {
     );
   }
 
-  /// One speech pack to choose: its name and what it weighs, and the terms
-  /// its training carries when the catalogue gives any.
   Widget _packRow(LumitTheme t, Addon pack,
           {required bool selected, required bool enabled}) =>
       HoverMark(
@@ -308,8 +300,6 @@ class _SpeechInstallBodyState extends State<SpeechInstallBody> {
       );
 }
 
-// --- The words a running transcription is shown in -----------------------------
-
 /// The name of the footage item [id] in [project], or empty when it has gone.
 String footageItemName(ProjectReference? project, String id) {
   String? walk(List<ItemReference> items) {
@@ -335,7 +325,6 @@ String footageItemName(ProjectReference? project, String id) {
   }
 }
 
-/// What a transcription is doing, in a few words: [name] is the file.
 String transcriptionStep(BridgeTranscribeEvent event, String name) =>
     switch (event.stage) {
       BridgeTranscribeStage.loading => l10n.transcribeLoading,
@@ -343,7 +332,6 @@ String transcriptionStep(BridgeTranscribeEvent event, String name) =>
       _ => l10n.transcribeListening(name),
     };
 
-/// How long it should take from here, once that is known.
 String? transcriptionTimeLeft(BridgeTranscribeEvent event) {
   final seconds = event.remaining;
   if (seconds <= 0 || event.fraction <= 0) return null;

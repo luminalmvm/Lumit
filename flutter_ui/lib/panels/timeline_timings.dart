@@ -44,7 +44,6 @@ import '../widgets/controls.dart';
 class TimingsHeaderCell extends StatelessWidget {
   const TimingsHeaderCell({super.key});
 
-  /// The word for one stage, from the arb.
   static String stageWord(RenderStageKind kind) => switch (kind) {
         RenderStageKind.plan => l10n.stagePlan,
         RenderStageKind.decode => l10n.stageDecode,
@@ -72,8 +71,6 @@ class TimingsHeaderCell extends StatelessWidget {
             : total == null
                 ? '…'
                 : formatRenderMs(total);
-        // The tooltip carries the full split while there is one, so where the
-        // time went is a hover away even when no stage dominates.
         final split = stages.isEmpty
             ? l10n.tipRenderTime
             : stages
@@ -179,8 +176,6 @@ class TimingsCell extends StatelessWidget {
         // take no space and say nothing, which is also what makes the Effect
         // controls heading read as it did before this existed.
         if (!on) return const SizedBox.shrink();
-        // No number, nothing: a row the last frame did not draw says so by
-        // its silence, as an empty cell reads as empty.
         if (ms == null) return const SizedBox.shrink();
         final cell = Align(
           alignment: Alignment.centerRight,

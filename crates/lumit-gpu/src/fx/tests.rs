@@ -32,7 +32,6 @@ fn corpus(w: u32, h: u32) -> Vec<f32> {
     img.iter().map(|v| f16_to_f32(f16_bits(*v))).collect()
 }
 
-/// Worst absolute difference between two images.
 fn worst_diff(a: &[f32], b: &[f32]) -> f32 {
     a.iter()
         .zip(b)
@@ -58,9 +57,6 @@ fn worst_f16_ulp(a: &[f32], b: &[f32]) -> i32 {
         .fold(0, i32::max)
 }
 
-/// The §1.6 oracle: the WGSL blur agrees with the CPU reference on a
-/// corpus of gradient + alpha edge + HDR spike, per edge policy — and is
-/// bit-stable against itself (§2.4 determinism).
 #[test]
 fn wgsl_blur_matches_the_cpu_oracle() {
     let Some(ctx) = crate::test_support::lease() else {
@@ -71,8 +67,6 @@ fn wgsl_blur_matches_the_cpu_oracle() {
     // Wider than the kernel's 128-pixel tile, and rows that leave a part
     // group of four, so the tiles' edges are held to the oracle too.
     let (w, h) = (150u32, 27u32);
-    // Corpus (docs/08 §1.6): a diagonal gradient, a hard alpha edge down
-    // the middle, and an HDR spike.
     let mut img = vec![0.0f32; (w * h * 4) as usize];
     for y in 0..h {
         for x in 0..w {
@@ -119,7 +113,6 @@ fn wgsl_blur_matches_the_cpu_oracle() {
                 "edge {edge} radius {radius} mix {mix}: worst diff {worst}"
             );
 
-            // Determinism: a second run is bit-identical to the first.
             let out2 = fx.blur(&ctx, &tex, w, h, None, &op);
             let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
             assert_eq!(gpu, gpu2, "GPU blur must be bit-stable");
@@ -268,7 +261,6 @@ fn wgsl_matted_blur_matches_the_cpu_oracle_and_varies_in_width() {
             },
         );
         let got = readback_linear_f32(&ctx, &out, w, h).unwrap();
-        // How many pixels to the right of centre still carry light.
         (25..w)
             .take_while(|x| got[((8 * w + x) * 4) as usize] > 1e-4)
             .count()
@@ -335,7 +327,6 @@ fn wgsl_matted_glow_seeds_only_inside_the_matte_and_spills_past_it() {
         mix: 1.0,
         rolloff: 0.0,
     };
-    // Invert arrives through the seam's prepare pass, both paths.
     for invert in [false, true] {
         let quantised: Vec<f32> = img.iter().map(|v| f16_to_f32(f16_bits(*v))).collect();
         let mut qmatte: Vec<f32> = matte.iter().map(|v| f16_to_f32(f16_bits(*v))).collect();
@@ -354,20 +345,15 @@ fn wgsl_matted_glow_seeds_only_inside_the_matte_and_spills_past_it() {
         assert!(worst < 5e-3, "invert {invert}: worst diff {worst}");
     }
 
-    // The picture claim, on the un-inverted run.
     let tex = upload_linear_f32(&ctx, &img, w, h);
     let out = fx.glow(&ctx, &tex, w, h, Some(&matte_tex), &op);
     let got = readback_linear_f32(&ctx, &out, w, h).unwrap();
     let at = |x: u32, y: u32| got[((y * w + x) * 4) as usize];
-    // Beside the RIGHT square, well outside it: no halo, because the matte was
-    // black there and that square never seeded.
     assert!(
         at(33, 8) < 1e-3,
         "the right square glowed at {} — the matte did not gate the seed",
         at(33, 8)
     );
-    // Just PAST the matte's edge, in line with the seeded square's halo: light,
-    // because a seeded halo keeps spreading.
     assert!(
         at(26, 8) > 1e-3,
         "the halo stopped dead at the matte edge ({}) — that is a dissolve, not \
@@ -412,8 +398,6 @@ fn wgsl_sharpen_matches_the_cpu_oracle() {
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
         let worst = worst_diff(&cpu, &gpu);
-        // Logged so real cross-vendor deltas accumulate (docs/08 open
-        // question 5: the class tolerances are placeholders until then).
         eprintln!("sharpen a={amount} r={radius} t={threshold}: worst {worst:.2e}");
         assert!(
             worst < 5e-3,
@@ -477,8 +461,6 @@ fn wgsl_sharpen_simple_matches_the_cpu_oracle() {
     }
 }
 
-/// The §1.6 oracle for RGB split: a cheap pointwise effect, so the CPU
-/// and GPU must agree to ≤ 2 fp16 ULP, and the GPU is bit-stable (§2.4).
 #[test]
 fn wgsl_rgb_split_matches_the_cpu_oracle() {
     let Some(ctx) = crate::test_support::lease() else {
@@ -488,9 +470,6 @@ fn wgsl_rgb_split_matches_the_cpu_oracle() {
     let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
-    // Classic red / green / blue tints and one cross-tint case (T17), plus the
-    // classic 1 / 0 / 1 scales and asymmetric per-tap scales (FX-9), one
-    // negative, to exercise the tinted-tap displacement path.
     let classic_tints = [[1.0f32, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
     let cross_tints = [[1.0f32, 1.0, 0.0], [0.2, 0.5, 0.0], [0.0, 0.3, 0.9]];
     for (amount, angle, scale, tints, mix) in [
@@ -544,10 +523,6 @@ fn wgsl_spectral_split_matches_the_cpu_oracle() {
     let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
-    // Sweeps the sample count too (FX-9): 9 (the historical density), a
-    // denser 24, and both range ends, so the variable-count kernel matches.
-    // The picker gradient (A1) is exercised with the default red/green/blue
-    // and one custom yellow→magenta→cyan set.
     let rgb = [[1.0f32, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
     let custom = [[1.0f32, 1.0, 0.0], [1.0, 0.0, 1.0], [0.0, 1.0, 1.0]];
     for (amount, angle, radial, samples, tints, mix) in [
@@ -609,8 +584,6 @@ fn wgsl_chromatic_aberration_matches_the_cpu_oracle() {
     let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
-    // Default red / green / blue tints (the classic split), plus a custom set
-    // where the middle tap leaks colour (P2) to exercise the tinted sum.
     let rgb: [[f32; 3]; 3] = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
     let mixed: [[f32; 3]; 3] = [[1.0, 0.2, 0.0], [0.1, 1.0, 0.1], [0.0, 0.3, 0.9]];
     for (amount, tints, mix) in [
@@ -653,8 +626,6 @@ fn wgsl_chromatic_aberration_matches_the_cpu_oracle() {
     }
 }
 
-/// The §1.6 oracle for flash: a trivial pointwise effect, so the CPU
-/// and GPU must agree to ≤ 2 fp16 ULP, and the GPU is bit-stable (§2.4).
 #[test]
 fn wgsl_flash_matches_the_cpu_oracle() {
     let Some(ctx) = crate::test_support::lease() else {
@@ -666,7 +637,7 @@ fn wgsl_flash_matches_the_cpu_oracle() {
     let img = corpus(w, h);
     for (strength, colour, mix) in [
         (1.0f32, [1.0f32, 1.0, 1.0, 1.0], 1.0f32),
-        (0.35, [4.0, 2.0, 1.0, 1.0], 1.0), // HDR flash colour
+        (0.35, [4.0, 2.0, 1.0, 1.0], 1.0),
         (0.8, [1.0, 0.9, 0.7, 1.0], 0.6),
         (0.0, [1.0, 1.0, 1.0, 1.0], 1.0),
     ] {
@@ -695,10 +666,6 @@ fn wgsl_flash_matches_the_cpu_oracle() {
     }
 }
 
-/// The §1.6 oracle for colour balance: a cheap pointwise effect, so the
-/// CPU and GPU must agree to ≤ 2 fp16 ULP, the GPU is bit-stable (§2.4),
-/// and — the Grade split's promise — a fully neutral balance is the
-/// bit-exact identity on both paths.
 #[test]
 fn wgsl_colour_balance_matches_the_cpu_oracle() {
     let Some(ctx) = crate::test_support::lease() else {
@@ -751,9 +718,6 @@ fn wgsl_colour_balance_matches_the_cpu_oracle() {
     }
 }
 
-/// The §1.6 oracle for saturation: a cheap pointwise effect, so the CPU
-/// and GPU must agree to ≤ 2 fp16 ULP, the GPU is bit-stable (§2.4),
-/// and saturation 1 is the bit-exact identity on both paths.
 #[test]
 fn wgsl_saturation_matches_the_cpu_oracle() {
     let Some(ctx) = crate::test_support::lease() else {
@@ -825,9 +789,6 @@ fn wgsl_saturation_matches_the_cpu_oracle() {
     }
 }
 
-/// The §1.6 oracle for vibrancy: a cheap pointwise effect, so the CPU
-/// and GPU must agree to ≤ 2 fp16 ULP, the GPU is bit-stable (§2.4), and
-/// amount 0 is the bit-exact identity on both paths.
 #[test]
 fn wgsl_vibrancy_matches_the_cpu_oracle() {
     let Some(ctx) = crate::test_support::lease() else {
@@ -889,14 +850,6 @@ fn wgsl_vibrancy_matches_the_cpu_oracle() {
     }
 }
 
-/// The §1.6 oracle for matte key: a cheap pointwise Keylight-style keyer, so
-/// the CPU and GPU must agree to ≤ 2 fp16 ULP, the GPU is bit-stable (§2.4),
-/// and Mix 0 is the bit-exact identity on both paths. The corpus mixes
-/// near-screen greens, far-from-screen colours, partial-alpha (premultiplied)
-/// pixels and an HDR spike; the settings sweep gain / balance / despill /
-/// clips / replace method / bias colours and the three View modes so the
-/// screen-matte, clip, despill, replace and diagnostic paths are all
-/// exercised.
 #[test]
 fn wgsl_matte_key_matches_the_cpu_oracle() {
     use lumit_core::fx::resolved::MatteKeyParams;
@@ -906,10 +859,6 @@ fn wgsl_matte_key_matches_the_cpu_oracle() {
     };
     let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
-    // Corpus (§1.6): a green field on the left sliding to red/magenta on
-    // the right, brightness rising down the frame, alpha in bands 0.25..1
-    // so the unpremultiply round trip is load-bearing, plus an HDR
-    // partial-alpha spike.
     let mut img = vec![0.0f32; (w * h * 4) as usize];
     for y in 0..h {
         for x in 0..w {
@@ -931,7 +880,6 @@ fn wgsl_matte_key_matches_the_cpu_oracle() {
     let img: Vec<f32> = img.iter().map(|v| f16_to_f32(f16_bits(*v))).collect();
 
     let grey = [0.5f32, 0.5, 0.5, 1.0];
-    // A base op mirroring the schema defaults; each case overrides a field or two.
     let base = MatteKeyParams {
         view: 0,
         key: [0.0, 0.6, 0.0, 1.0],
@@ -1065,10 +1013,6 @@ fn wgsl_matte_key_spatial_matches_the_cpu_oracle() {
     };
     let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
-    // Corpus (§1.6): a green field sliding to red, brightness rising down the
-    // frame, alpha in bands — plus two single-pixel specks, one black hole in
-    // the kept side and one green fleck in the keyed side, so the despot has
-    // something to find, and an HDR spike.
     let mut img = vec![0.0f32; (w * h * 4) as usize];
     for y in 0..h {
         for x in 0..w {
@@ -1082,8 +1026,6 @@ fn wgsl_matte_key_spatial_matches_the_cpu_oracle() {
             img[i + 3] = a;
         }
     }
-    // A lone screen-coloured pixel deep in the foreground (a hole), and a lone
-    // foreground-coloured pixel deep in the screen (a fleck).
     let hole = ((12 * w + 26) * 4) as usize;
     img[hole..hole + 4].copy_from_slice(&[0.0, 0.6, 0.0, 1.0]);
     let fleck = ((12 * w + 4) * 4) as usize;
@@ -1302,9 +1244,6 @@ fn wgsl_matte_key_spatial_matches_the_cpu_oracle() {
     );
 }
 
-/// The §1.6 oracle for vignette: a cheap pointwise effect, so the CPU
-/// and GPU must agree to ≤ 2 fp16 ULP, the GPU is bit-stable (§2.4), and
-/// Amount 0 (or Mix 0) is the bit-exact identity on both paths.
 #[test]
 fn wgsl_vignette_matches_the_cpu_oracle() {
     let Some(ctx) = crate::test_support::lease() else {
@@ -1368,7 +1307,6 @@ fn wgsl_vignette_matches_the_cpu_oracle() {
                 radius: 0.6,
                 softness: 0.3,
                 roundness: 0.5,
-                // Non-identity ramp (T16): exercises the gamma path, not just ramp == 1.
                 ramp: 2.0,
                 mix: 0.5,
             },
@@ -1415,9 +1353,6 @@ fn wgsl_vignette_matches_the_cpu_oracle() {
     }
 }
 
-/// The §1.6 oracle for exposure: a cheap pointwise gain, so CPU and GPU
-/// must agree to ≤ 2 fp16 ULP, the GPU is bit-stable, and 0 stops
-/// (`factor` 1.0) or Mix 0 is the bit-exact identity on both paths.
 #[test]
 fn wgsl_exposure_matches_the_cpu_oracle() {
     let Some(ctx) = crate::test_support::lease() else {
@@ -1506,20 +1441,16 @@ fn wgsl_temperature_matches_the_cpu_oracle() {
     };
     let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
-    // Start from the shared corpus (gradient + alpha edge + HDR spike),
-    // then inject partial-alpha pixels: straight colour stored
-    // premultiplied, quantised to f16 so both paths begin identical.
     let mut img = corpus(w, h);
     let q = |v: f32| f16_to_f32(f16_bits(v));
     let partials = [
-        // (straight rgb, alpha)
         ([0.7_f32, 0.3, 0.5], 0.5_f32),
         ([0.2, 0.8, 0.6], 0.25),
         ([0.9, 0.1, 0.4], 0.75),
-        ([2.0, 1.0, 0.5], 0.5), // partial-alpha HDR
+        ([2.0, 1.0, 0.5], 0.5),
     ];
     for (n, (rgb, a)) in partials.iter().enumerate() {
-        let i = n * 4; // the first four pixels of row 0
+        let i = n * 4;
         img[i] = q(rgb[0] * a);
         img[i + 1] = q(rgb[1] * a);
         img[i + 2] = q(rgb[2] * a);
@@ -1536,7 +1467,7 @@ fn wgsl_temperature_matches_the_cpu_oracle() {
         ("neutral", 0.0, 1.0),
         ("warm", 120.0, 1.0),
         ("cool", -120.0, 1.0),
-        ("floor", 200.0, 1.0), // blue gain floored at 0
+        ("floor", 200.0, 1.0),
         ("mixed", 60.0, 0.5),
         ("mix-zero", 100.0, 0.0),
     ] {
@@ -1578,14 +1509,13 @@ fn corpus_with_partials(w: u32, h: u32) -> Vec<f32> {
     let mut img = corpus(w, h);
     let q = |v: f32| f16_to_f32(f16_bits(v));
     let partials = [
-        // (straight rgb, alpha)
         ([0.7_f32, 0.3, 0.5], 0.5_f32),
         ([0.2, 0.8, 0.6], 0.25),
         ([0.9, 0.1, 0.4], 0.75),
-        ([2.0, 1.0, 0.5], 0.5), // partial-alpha HDR
+        ([2.0, 1.0, 0.5], 0.5),
     ];
     for (n, (rgb, a)) in partials.iter().enumerate() {
-        let i = n * 4; // the first four pixels of row 0
+        let i = n * 4;
         img[i] = q(rgb[0] * a);
         img[i + 1] = q(rgb[1] * a);
         img[i + 2] = q(rgb[2] * a);
@@ -1720,20 +1650,16 @@ fn wgsl_contrast_matches_the_cpu_oracle() {
     };
     let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
-    // Start from the shared corpus (gradient + alpha edge + HDR spike),
-    // then inject partial-alpha pixels: straight colour graded, stored
-    // premultiplied, quantised to f16 so both paths begin identical.
     let mut img = corpus(w, h);
     let q = |v: f32| f16_to_f32(f16_bits(v));
     let partials = [
-        // (straight rgb, alpha)
         ([0.7_f32, 0.3, 0.5], 0.5_f32),
         ([0.2, 0.8, 0.6], 0.25),
         ([0.9, 0.1, 0.4], 0.75),
-        ([2.0, 1.0, 0.5], 0.5), // partial-alpha HDR
+        ([2.0, 1.0, 0.5], 0.5),
     ];
     for (n, (rgb, a)) in partials.iter().enumerate() {
-        let i = n * 4; // the first four pixels of row 0
+        let i = n * 4;
         img[i] = q(rgb[0] * a);
         img[i + 1] = q(rgb[1] * a);
         img[i + 2] = q(rgb[2] * a);
@@ -1780,20 +1706,16 @@ fn wgsl_gamma_matches_the_cpu_oracle() {
     };
     let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
-    // Start from the shared corpus (gradient + alpha edge + HDR spike),
-    // then inject partial-alpha pixels: straight colour curved, stored
-    // premultiplied, quantised to f16 so both paths begin identical.
     let mut img = corpus(w, h);
     let q = |v: f32| f16_to_f32(f16_bits(v));
     let partials = [
-        // (straight rgb, alpha)
         ([0.7_f32, 0.3, 0.5], 0.5_f32),
         ([0.2, 0.8, 0.6], 0.25),
         ([0.9, 0.1, 0.4], 0.75),
-        ([2.0, 1.0, 0.5], 0.5), // partial-alpha HDR
+        ([2.0, 1.0, 0.5], 0.5),
     ];
     for (n, (rgb, a)) in partials.iter().enumerate() {
-        let i = n * 4; // the first four pixels of row 0
+        let i = n * 4;
         img[i] = q(rgb[0] * a);
         img[i + 1] = q(rgb[1] * a);
         img[i + 2] = q(rgb[2] * a);
@@ -1856,9 +1778,6 @@ fn wgsl_gamma_matches_the_cpu_oracle() {
     }
 }
 
-/// The §1.6 oracle for hue shift: a cheap pointwise colour-matrix product,
-/// so CPU and GPU must agree to ≤ 2 fp16 ULP, the GPU is bit-stable, and
-/// 0° (the identity matrix) or Mix 0 is the bit-exact identity on both.
 #[test]
 fn wgsl_hue_shift_matches_the_cpu_oracle() {
     let Some(ctx) = crate::test_support::lease() else {
@@ -1914,10 +1833,6 @@ fn wgsl_hue_shift_matches_the_cpu_oracle() {
     }
 }
 
-/// The §1.6 oracle for the transform effect: a trivial one-tap resample,
-/// so the CPU and GPU must agree to ≤ 2 fp16 ULP, the GPU is bit-stable
-/// (§2.4), and — the docs/08 §3.5 pin — identity parameters reproduce
-/// the input bit-exactly.
 #[test]
 fn wgsl_transform_matches_the_cpu_oracle() {
     let Some(ctx) = crate::test_support::lease() else {
@@ -2164,8 +2079,6 @@ fn wgsl_shake_motion_blur_matches_the_cpu_oracle() {
     }
     let centre = samples[SHAKE_MB_SAMPLES / 2];
 
-    // The last case shakes the channels apart and crops, which the same
-    // kernel does by feeding each tap to some channels and moving the edges.
     for (name, edge, mix, apart) in [
         ("smear-transparent", 0u32, 1.0f32, false),
         ("smear-repeat", 1, 1.0, false),
@@ -2381,8 +2294,6 @@ fn wgsl_glow_matches_the_cpu_oracle() {
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
         let worst = worst_diff(&cpu, &gpu);
-        // Logged so real cross-vendor deltas accumulate (docs/08 open
-        // question 5: the class tolerances are placeholders until then).
         eprintln!("glow {name}: worst {worst:.2e}");
         assert!(worst < 5e-3, "{name}: worst diff {worst}");
         if name == "neutral" {
@@ -2463,7 +2374,6 @@ fn wgsl_glow_falloff_and_fringe_match_the_cpu_oracle() {
             },
             fringe_wavelength: wavelength,
             fringe_samples: samples,
-            // One case runs Rolloff through both paths too.
             rolloff: if name == "both" { 0.6 } else { 0.0 },
         };
         let mut cpu = img.clone();
@@ -2633,12 +2543,6 @@ fn wgsl_block_glitch_matches_the_cpu_oracle() {
     }
 }
 
-/// The §1.6 oracle for Scanlines (docs/08 §3.12, split out of the old
-/// Glitch; single Intensity since FX-13): WGSL agrees with the CPU reference
-/// across intensity, period, roll and interlace, and is bit-stable (§2.4).
-/// Intensity is now the sole darken dial (dark lines reach black at 1).
-/// Intensity 0 is asserted bit-exact against the untouched corpus regardless
-/// of Mix, matching the CPU reference's early return.
 #[test]
 fn wgsl_scanlines_matches_the_cpu_oracle() {
     let Some(ctx) = crate::test_support::lease() else {
@@ -2863,7 +2767,6 @@ fn adjust_blend_lerps_by_coverage_times_opacity() {
     let fx = ctx.fx();
     let (w, h) = (48u32, 32u32);
     let below = corpus(w, h);
-    // A visibly different "effected" copy (any distinct image works).
     let processed: Vec<f32> = below
         .iter()
         .enumerate()
@@ -2907,8 +2810,6 @@ fn adjust_blend_lerps_by_coverage_times_opacity() {
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "GPU adjust blend must be bit-stable");
     }
-    // End stops: no coverage passes `below` through bit-exactly; full
-    // coverage at opacity 1 is `processed` bit-exactly.
     let clear = vec![0.0f32; (w * h * 4) as usize];
     let t0 = upload_linear_f32(&ctx, &clear, w, h);
     let out = fx.adjust_blend(&ctx, &tb, &tp, &t0, w, h, 1.0);
@@ -2955,7 +2856,6 @@ fn wgsl_matte_mix_matches_the_cpu_oracle() {
     let fx = ctx.fx();
     let (w, h) = (48u32, 32u32);
     let input = corpus(w, h);
-    // A visibly different "effected" copy: any distinct image serves.
     let processed: Vec<f32> = input
         .iter()
         .enumerate()
@@ -2967,8 +2867,6 @@ fn wgsl_matte_mix_matches_the_cpu_oracle() {
             }
         })
         .collect();
-    // A matte that ramps across the frame, with a dark and a bright band so
-    // the clamp is exercised at both ends and the HDR spike drives past 1.
     let mut matte = vec![0.0f32; (w * h * 4) as usize];
     for y in 0..h {
         for x in 0..w {
@@ -3002,8 +2900,6 @@ fn wgsl_matte_mix_matches_the_cpu_oracle() {
         );
     }
 
-    // The end stops, both ways round: a white matte is the effect in full, a
-    // black one is the untouched input, and Invert swaps exactly those two.
     let white: Vec<f32> = vec![1.0; (w * h * 4) as usize];
     let black: Vec<f32> = (0..(w * h * 4))
         .map(|i| if i % 4 == 3 { 1.0 } else { 0.0 })
@@ -3043,7 +2939,6 @@ fn wgsl_matte_prepare_matches_the_cpu_oracle() {
     };
     let fx = ctx.fx();
     let (w, h) = (40u32, 24u32);
-    // A matte with four distinct channels, partial alpha and an HDR band.
     let mut matte = vec![0.0f32; (w * h * 4) as usize];
     for y in 0..h {
         for x in 0..w {
@@ -3120,18 +3015,13 @@ fn the_seam_inverts_the_matte_once_and_the_kernel_not_again() {
         let got = readback_linear_f32(&ctx, &out, w, h).unwrap();
         got[c]
     };
-    // A black matte: no blur, the dot keeps its full value.
     assert_eq!(spread(&black_tex), 1.0, "black matte: the dot is untouched");
-    // The same matte inverted once, by the seam: a white matte, a full blur,
-    // the dot's light spread thin.
     let inverted = fx.matte_prepare(&ctx, &black_tex, w, h, 0, true);
     let centre = spread(&inverted);
     assert!(
         centre < 0.2,
         "the seam's invert makes the matte white and the blur runs: centre {centre}"
     );
-    // And preparing the *inverted* matte without Invert changes nothing: the
-    // kernel reads luma of a grey, which is the grey.
     let again = fx.matte_prepare(&ctx, &inverted, w, h, 0, false);
     assert_eq!(
         spread(&again),
@@ -3161,7 +3051,6 @@ fn wgsl_blend_mix_matches_the_cpu_oracle_on_every_mode() {
     let fx = ctx.fx();
     let (w, h) = (24u32, 16u32);
     let input = corpus(w, h);
-    // A distinct "effected" picture: the corpus shifted and recoloured.
     let processed: Vec<f32> = input
         .iter()
         .enumerate()
@@ -3240,7 +3129,6 @@ fn wgsl_echo_matches_the_cpu_oracle() {
     let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let current = corpus(w, h);
-    // Two distinct neighbour frames, at offsets -1 and -2.
     let neigh = |scale: f32| -> Vec<f32> {
         current
             .iter()
@@ -3274,15 +3162,10 @@ fn wgsl_echo_matches_the_cpu_oracle() {
         w
     };
 
-    // The compositing orders + Add (Behind/In front/Add), two-tap, ≤4 ULP (T21).
     for (weights, mode, mix, bound) in [
         (two_tap(0.6, 0.3), 0u32, 1.0f32, 4i32),
         (two_tap(0.7, 0.4), 1, 0.8, 4),
         (two_tap(0.9, 0.5), 2, 1.0, 4),
-        // The blend modes (FX-17, T21), single-tap, ≤8 ULP: Screen,
-        // Multiply, Overlay, Soft light, Hard light, Lighten, Darken,
-        // Difference, Exclusion, Subtract. (Divide is checked separately below,
-        // with a neighbour floored away from zero.)
         (one_tap(0.6), 3, 1.0, 8),
         (one_tap(0.7), 4, 0.9, 8),
         (one_tap(0.6), 5, 1.0, 8),
@@ -3346,8 +3229,6 @@ fn wgsl_echo_matches_the_cpu_oracle() {
         eprintln!("echo mode=13 (divide): worst {worst} ulp");
         assert!(worst <= 8, "divide: worst {worst} fp16 ULP");
     }
-    // No taps, Mix 1: the accumulator is the current frame and the mix is
-    // identity, so the output is the current frame bit-exactly.
     let out = fx.echo(
         &ctx,
         &cur_t,
@@ -3390,8 +3271,6 @@ fn wgsl_motion_blur_matches_the_cpu_oracle() {
     let src = upload_linear_f32(&ctx, &img, w, h);
     let n = (w * h) as usize;
 
-    // A constant horizontal motion, and a smoothly varying field (per-pixel
-    // direction and magnitude) — the two shapes the kernel must handle.
     let constant: (Vec<f32>, Vec<f32>) = (vec![5.0; n], vec![0.0; n]);
     let mut vary_u = vec![0f32; n];
     let mut vary_v = vec![0f32; n];
@@ -3406,11 +3285,9 @@ fn wgsl_motion_blur_matches_the_cpu_oracle() {
 
     use lumit_core::fx::resolved::MbView;
     let full = vec![1.0f32; n];
-    // A smoothly varying confidence (FX-19): proves the GPU scales the streak by
-    // .z exactly as the CPU oracle does.
     let mut conf_vary = vec![0f32; n];
     for (i, c) in conf_vary.iter_mut().enumerate() {
-        *c = ((i % 5) as f32) / 4.0; // 0, .25, .5, .75, 1 repeating
+        *c = ((i % 5) as f32) / 4.0;
     }
 
     // The tile side is duplicated in this crate (it may not depend on
@@ -3445,8 +3322,6 @@ fn wgsl_motion_blur_matches_the_cpu_oracle() {
             MbQuality::Normal,
             "confidence-blended",
         ),
-        // High: curved trails and half the tap spacing, so the whole
-        // re-sample-along-the-streak branch is held to the oracle too.
         (
             &varying,
             &conf_vary,
@@ -3504,8 +3379,6 @@ fn wgsl_motion_blur_matches_the_cpu_oracle() {
         );
     }
 
-    // The diagnostic views (FX-19) match the CPU oracle too, on the varying
-    // field with the varying confidence.
     let (u, v) = &varying;
     let flow_t = upload_flow_field(&ctx, u, v, &conf_vary, w, h);
     for view in [MbView::MotionVectors, MbView::Confidence, MbView::TileMax] {
@@ -3537,8 +3410,6 @@ fn wgsl_motion_blur_matches_the_cpu_oracle() {
         assert!(worst <= 2, "view {view:?}: worst {worst} fp16 ULP");
     }
 
-    // A zero flow, and a real motion with a closed shutter, are both
-    // bit-exact passthroughs (every tap collapses onto the pixel itself).
     let zero = upload_flow_field(&ctx, &vec![0.0; n], &vec![0.0; n], &full, w, h);
     let out = fx.motion_blur(
         &ctx,
@@ -3604,8 +3475,6 @@ fn wgsl_datamosh_matches_the_cpu_oracle() {
     let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let current = corpus(w, h);
-    // A distinct -1 neighbour: the alpha channel carried through (as Echo's
-    // oracle does), colour channels scaled and requantised to fp16.
     let prev: Vec<f32> = current
         .iter()
         .enumerate()
@@ -3684,7 +3553,6 @@ fn wgsl_datamosh_matches_the_cpu_oracle() {
         );
     }
 
-    // Intensity 0 must be a bit-exact passthrough regardless of the melt.
     let moving = upload_flow_field(&ctx, &constant.0, &constant.1, &[], w, h);
     let out = fx.datamosh(
         &ctx,
@@ -3789,7 +3657,6 @@ fn wgsl_lut_matches_the_cpu_oracle() {
             img[i + 3] = a;
         }
     }
-    // Out-of-domain straight colours (alpha 1): must clamp on both paths.
     img[((5 * w + 7) * 4) as usize..((5 * w + 7) * 4 + 4) as usize]
         .copy_from_slice(&[1.5, 0.2, 2.0, 1.0]);
     img[((9 * w + 3) * 4) as usize..((9 * w + 3) * 4 + 4) as usize]
@@ -3811,7 +3678,6 @@ fn wgsl_lut_matches_the_cpu_oracle() {
     // approximate for it, but both paths use the *same* cube, so they still
     // agree — the point is the interpolation maths, not the cube's fidelity.
     let gamma = build_lut(5, |c| [c[0].powf(2.0), c[1].powf(0.5), c[2].powf(1.5)]);
-    // A non-separable swap of red and blue: out = [b, g, r].
     let swap = build_lut(2, |c| [c[2], c[1], c[0]]);
 
     // A cube over a NON-DEFAULT domain: the shipped shader assumed
@@ -3853,8 +3719,6 @@ fn wgsl_lut_matches_the_cpu_oracle() {
 
     let mut rendered: Vec<(&str, Vec<f32>)> = Vec::new();
     for (name, lut, mix, space) in cases {
-        // CPU expected: unpremultiply -> Lut3d::sample -> re-premultiply ->
-        // Mix, using the same lerp form the shader uses for the final blend.
         let mut cpu = vec![0.0f32; img.len()];
         for px in 0..(w * h) as usize {
             let i = px * 4;
@@ -3888,11 +3752,9 @@ fn wgsl_lut_matches_the_cpu_oracle() {
         assert!(worst <= 2, "{name}: worst {worst} fp16 ULP");
 
         if name == "identity-mix0" {
-            // Mix 0 is the bit-exact input on the GPU path.
             assert_eq!(gpu, img, "{name}: Mix 0 must be the bit-exact input");
         }
 
-        // Determinism: a second run is bit-identical to the first (§2.4).
         let out2 = fx.lut(
             &ctx,
             &tex,
@@ -4190,8 +4052,6 @@ fn wgsl_dof_matches_the_cpu_oracle() {
                 ..dof_defaults()
             },
         ),
-        // The aperture: a hexagon, a star (Roundness below zero), a squeezed
-        // oval, and rim/centre weighting.
         (
             "hexagonal iris",
             lumit_core::fx::cpu::DofParams {
@@ -4231,8 +4091,6 @@ fn wgsl_dof_matches_the_cpu_oracle() {
                 ..dof_defaults()
             },
         ),
-        // The highlights: the split-at-threshold power mean, at a threshold the
-        // corpus actually crosses.
         (
             "bloomed highlights",
             lumit_core::fx::cpu::DofParams {
@@ -4250,7 +4108,6 @@ fn wgsl_dof_matches_the_cpu_oracle() {
                 ..dof_defaults()
             },
         ),
-        // The depth model's own controls.
         (
             "focus point",
             lumit_core::fx::cpu::DofParams {
@@ -4297,7 +4154,6 @@ fn wgsl_dof_matches_the_cpu_oracle() {
         let worst = worst_f16_ulp(&cpu, &gpu);
         eprintln!("dof {name}: worst {worst} ulp");
         assert!(worst <= 2, "{name}: worst {worst} fp16 ULP");
-        // Determinism (§2.4): a second run is bit-identical to the first.
         let out2 = fx.dof(&ctx, &src, w, h, &depth_t, &dof_op(p));
         assert_eq!(
             gpu,
@@ -4306,8 +4162,6 @@ fn wgsl_dof_matches_the_cpu_oracle() {
         );
     }
 
-    // Mix 0 is the bit-exact input regardless of depth or aperture (Rendered
-    // mode).
     let zero_mix = lumit_core::fx::cpu::DofParams {
         near_aperture: 10.0,
         far_aperture: 10.0,
@@ -4321,9 +4175,6 @@ fn wgsl_dof_matches_the_cpu_oracle() {
         "Mix 0 must be the bit-exact input"
     );
 
-    // Both apertures zero collapses every aperture to the centre tap — a
-    // bit-exact passthrough at full Mix, whatever the depth (invert cannot
-    // change a zero radius).
     let zero_ap = lumit_core::fx::cpu::DofParams {
         near_aperture: 0.0,
         far_aperture: 0.0,
@@ -4337,9 +4188,6 @@ fn wgsl_dof_matches_the_cpu_oracle() {
         "a zero aperture must be a bit-exact passthrough"
     );
 
-    // A depth that sits everywhere inside the sharp band leaves the CoC at
-    // zero for every pixel — also a bit-exact passthrough at full Mix,
-    // even with large apertures. Inverting a flat 0.5 leaves it in-band.
     let flat = upload_depth_map(&ctx, &vec![0.5f32; n], w, h);
     let in_band = lumit_core::fx::cpu::DofParams {
         near_aperture: 10.0,
@@ -4365,15 +4213,8 @@ fn max_blades_matches_the_core_constant() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// Lens flare (docs/08 §3.27, docs/impl/lens-flare.md §8): the staged
-// oracle's GPU half.
-// ---------------------------------------------------------------------------
-
-/// The documented drop-on defaults (docs/08 §3.27) as a resolved bundle.
 fn flare_params() -> lumit_core::fx::lens_flare::LensFlareParams {
     lumit_core::fx::lens_flare::LensFlareParams {
-        // Every element left as the lens file describes it.
         coating_elements: [lumit_core::fx::lens_flare::COATING_AS_FILE;
             lumit_core::fx::lens_flare::MAX_COATING_ELEMENTS],
         // Raster pixels of a 192×108 probe framing.
@@ -4569,8 +4410,6 @@ fn lens_flare_accumulator_scale_matches_the_shader_and_clears_any_real_frame() {
         ((u32::MAX as f32 / ACCUM_SCALE) - ACCUM_CEILING).abs() < 0.01,
         "the ceiling is the scale's own consequence"
     );
-    // The deposit pyramid's spellings: the level-changeover rule's three
-    // numbers and the uniform's level-table capacity.
     for (name, value) in [
         ("DEPOSIT_SPAN_PX", lf::DEPOSIT_SPAN_PX),
         ("DEPOSIT_THIN_PX", lf::DEPOSIT_THIN_PX),
@@ -4735,7 +4574,6 @@ fn lens_flare_pair_grid_mirrors_lumit_core() {
             "w {w} h {h}"
         );
     }
-    // The padded-buffer dims are mirrored the same way.
     for (fw, fh) in [(960u32, 540u32), (480, 270), (1, 1), (1920, 1080)] {
         for (sq, sc) in [
             (1.0f32, 1.0f32),
@@ -4768,8 +4606,6 @@ fn lens_flare_batches_cover_every_combo_within_the_scratch_budget() {
         combo_deposit_cost, plan_batches, RAY_BYTES, SCRATCH_BYTE_BUDGET, SPLAT_BYTES,
         STEPS_PER_SUBMIT,
     };
-    // Grid-major tables as the frame builds them, including the worst case
-    // (every combo at the widest grid) and a mixed one.
     let tables: Vec<Vec<u32>> = vec![
         vec![32; 480],
         vec![64; 8],
@@ -4791,7 +4627,6 @@ fn lens_flare_batches_cover_every_combo_within_the_scratch_budget() {
                 .map(|i| combo_deposit_cost(if i % 3 == 0 { 1.5 } else { 0.1 }, 2203.0))
                 .collect();
             let plan = plan_batches(table, lights, &costs);
-            // Every (combo, light) appears exactly once.
             let mut seen = vec![0u32; table.len() * lights as usize];
             for b in &plan {
                 assert_eq!(
@@ -4801,7 +4636,6 @@ fn lens_flare_batches_cover_every_combo_within_the_scratch_budget() {
                 let rays = u64::from(b.grid) * u64::from(b.grid);
                 let slots = u64::from(b.lights) * u64::from(b.combos);
                 assert_eq!(b.ray_bytes, slots * rays * RAY_BYTES);
-                // One splat per RAY, not one per quad.
                 assert_eq!(b.splat_bytes, slots * rays * SPLAT_BYTES);
                 assert!(
                     b.ray_bytes + b.splat_bytes <= SCRATCH_BYTE_BUDGET,
@@ -4811,8 +4645,6 @@ fn lens_flare_batches_cover_every_combo_within_the_scratch_budget() {
                     b.lights,
                     b.ray_bytes + b.splat_bytes
                 );
-                // The deposit bound: no batch asks for more than about one
-                // submission of deposit work, down to the one-slot floor.
                 assert!(
                     b.deposit_px(&costs) <= STEPS_PER_SUBMIT || (b.combos == 1 && b.lights == 1),
                     "batch at grid {} × {} combos × {} lights deposits {} px",
@@ -4939,8 +4771,6 @@ fn wgsl_lens_flare_ghost_blur_matches_the_cpu_reference() {
 fn lens_flare_splits_a_heavy_frame_into_several_submissions() {
     use crate::fx::lens_flare::{combo_deposit_cost, plan_batches, plan_flushes, STEPS_PER_SUBMIT};
     let surfaces = 20u32;
-    // A working-tier frame: Normal's base grid across a default ghost count,
-    // compact ghosts (5% of the diagonal), so the trace dominates the cost.
     let compact = vec![combo_deposit_cost(0.05, 2203.0); 480];
     let heavy = plan_batches(&vec![64u32; 480], 1, &compact);
     let flushes = plan_flushes(&heavy, surfaces, &compact);
@@ -4966,8 +4796,6 @@ fn lens_flare_splits_a_heavy_frame_into_several_submissions() {
             run = 0;
         }
     }
-    // A small frame stays a single submission: the split must not cost
-    // ordinary work extra queue round trips.
     let light_costs = vec![combo_deposit_cost(0.05, 550.0); 24];
     let light = plan_batches(&[32u32; 24], 1, &light_costs);
     assert!(
@@ -5048,7 +4876,6 @@ fn lens_flare_deferred_bakes_answer_with_the_previous_lens_then_the_new_one() {
         "an exact frame drew the lens it names"
     );
 
-    // Now defer, and ask for a lens nothing holds.
     fx.set_deferred_flare_bakes(true);
     let op_b = flare_op(&second, w, h);
     let bake_b =
@@ -5108,8 +4935,6 @@ fn lens_flare_deferred_bakes_answer_with_the_previous_lens_then_the_new_one() {
         "the bake lands and the frame after it is no longer waiting"
     );
 
-    // And once it is held, the frame is nameable again: nothing more is
-    // queued and the generation sits still.
     let settled = fx.flare_bake_generation();
     let stood_in = fx.flare_substitutions();
     drop(fx.lens_flare(
@@ -5195,7 +5020,6 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
             let ray_count = (grid * grid) as usize;
             assert_eq!(gpu.len(), combos.len() * ray_count);
 
-            // The frame-time optics the CPU side mirrors.
             let stop_scale = lf::fstop_scale(baked.native_fstop, p.fstop);
             let roundness = lf::effective_roundness(p.roundness, p.fstop, baked.native_fstop);
             let rot = p.aperture_rotation_deg.to_radians();
@@ -5205,10 +5029,7 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
             let mut mismatched_liveness = 0u32;
             let mut total = 0u32;
             let mut live = 0u32;
-            // Rays compared on a four-bounce path: the phases the
-            // other two lenses never reach.
             let mut four_live = 0u32;
-            // Rays compared on a path whose iris mask is a ring slice.
             let mut ringed_live = 0u32;
             let mut sum_pos = 0.0f32;
             let mut pos_errs: Vec<f32> = Vec::new();
@@ -5388,10 +5209,6 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
     }
 }
 
-/// **Sprite flare**: the instanced draw agrees with the CPU twin for every
-/// kind of element, textures, a layer texture and a light half hidden by a
-/// layer or by depth included, is bit-stable, moving the light moves the
-/// flare smoothly, and with no light it is the input untouched.
 #[test]
 fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
     use lumit_core::fx::flare::design::{ColourMode, Design, Element, Kind};
@@ -5499,7 +5316,6 @@ fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
                 Kind::Ghost,
                 &[("size", 12.0), ("place", 1.4), ("texture", 2.0)],
             ),
-            // Small, so it reads from the smaller copies.
             el(
                 Kind::Ghost,
                 &[("size", 5.0), ("place", 1.8), ("texture", 8.0)],
@@ -5525,7 +5341,6 @@ fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
         f.edge_fade = 20.0;
         f
     };
-    // A wall over the left of the frame, up to the light's middle.
     let wall: Vec<f32> = (0..w * h)
         .flat_map(|i| {
             let a = if i % w < 24 { 1.0 } else { 0.0 };
@@ -5533,7 +5348,6 @@ fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
         })
         .collect();
     let wall_tex = upload_linear_f32(&ctx, &wall, w, h);
-    // The Texture layer: a coloured ramp.
     let (lw, lh) = (24u32, 16u32);
     let layer: Vec<f32> = (0..lw * lh)
         .flat_map(|i| {
@@ -5598,8 +5412,6 @@ fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
             .fold(0.0f32, f32::max)
     };
 
-    // Half behind the wall, the light flares at about half, the same on
-    // both sides.
     let f = frame(24.0);
     let radius = 6.0;
     let covered = raster::covered(&wall, w, h, f.lights[0].pos, radius, false);
@@ -5614,7 +5426,6 @@ fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
     let gap = worst_gap(&cpu_of(&hidden), &gpu_hidden(&f, Some(hide), None));
     assert!(gap < 5e-2, "hidden worst |Δ| {gap}");
 
-    // The same wall as a depth 5 m away, in front of a light 50 m away.
     let near: Vec<f32> = wall
         .chunks(4)
         .flat_map(|px| {
@@ -5693,8 +5504,6 @@ fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
     assert!(worst_soft < 1e-2, "defocused worst |Δ| {worst_soft}");
     assert_ne!(gpu_soft, gpu_hot, "Defocus changes the light");
 
-    // Nudging the light by a pixel nudges the light drawn by a little: no
-    // element pops in or out.
     let total = |lx: f32| {
         let mut frame_now = vec![0.0f32; img.len()];
         raster::draw(&design, &frame(lx), w, h, &mut frame_now);
@@ -5708,13 +5517,10 @@ fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
         );
     }
 
-    // No light (Brightness 0 or Mix 0) is the input, untouched.
     let mut dark = frame(24.0);
     dark.lights.clear();
     assert_eq!(gpu_of(&dark), img, "no light must be the bit-exact input");
 
-    // Bright spots: three lamps on a dark picture are found on the GPU and
-    // flare as the CPU's detection says, each in its own colour.
     let mut lamps = vec![0.02f32; (w * h * 4) as usize];
     for (x0, y0, c) in [
         (10u32, 8u32, [1.0f32, 0.5, 0.2]),
@@ -5769,9 +5575,6 @@ fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
     assert!(gap < 5e-2, "bright spots worst |Δ| {gap}");
 }
 
-/// **Light wrap** (docs/08 §3.28): the WGSL agrees with the CPU
-/// reference, the neutral points pass the input through bit-exactly, and the
-/// wrap lands where it should — inside the foreground's edge, nowhere else.
 #[test]
 fn wgsl_light_wrap_matches_the_cpu_oracle_and_stays_inside_the_edge() {
     let Some(ctx) = crate::test_support::lease() else {
@@ -5781,8 +5584,6 @@ fn wgsl_light_wrap_matches_the_cpu_oracle_and_stays_inside_the_edge() {
     let fx = ctx.fx();
     let (w, h) = (48u32, 32u32);
 
-    // A foreground: an opaque square in the middle of an empty frame, so it
-    // has a real edge with transparency on both sides of it.
     let mut fg = vec![0.0f32; (w * h * 4) as usize];
     for y in 8..24u32 {
         for x in 12..36u32 {
@@ -5794,7 +5595,6 @@ fn wgsl_light_wrap_matches_the_cpu_oracle_and_stays_inside_the_edge() {
         }
     }
     let fg: Vec<f32> = fg.iter().map(|v| f16_to_f32(f16_bits(*v))).collect();
-    // A background bright enough that its spill is unmistakable.
     let bg: Vec<f32> = (0..(w * h) as usize)
         .flat_map(|_| [2.0f32, 0.5, 0.25, 1.0])
         .map(|v| f16_to_f32(f16_bits(v)))
@@ -5846,7 +5646,6 @@ fn wgsl_light_wrap_matches_the_cpu_oracle_and_stays_inside_the_edge() {
             }
         }
 
-        // And it is the same picture every time (docs/14 §2.4).
         let again = fx.light_wrap(
             &ctx,
             &fg_tex,
@@ -5866,8 +5665,6 @@ fn wgsl_light_wrap_matches_the_cpu_oracle_and_stays_inside_the_edge() {
         );
     }
 
-    // Deep inside the subject, far from any edge, nothing changes: the wrap is
-    // an EDGE treatment, not a grade.
     let mut cpu = fg.clone();
     lumit_core::fx::cpu::light_wrap(&mut cpu, &bg, w, h, 4.0, 1.0, 1.0);
     let middle = (((16 * w) + 24) * 4) as usize;
@@ -6007,11 +5804,6 @@ fn the_flare_renders_the_same_frame_every_time() {
     }
 }
 
-/// Impl note §8.6 + §8.7: the full GPU frame (trace → raster → combine)
-/// stays within the perceptual bound of the CPU scanline reference, the
-/// flare is actually visible (the energy floor that keeps the bound honest),
-/// Intensity 0 and Mix 0 are bit-exact passthroughs, and the render is
-/// bit-stable across two runs (§2.4).
 #[test]
 fn wgsl_lens_flare_matches_the_cpu_frame_reference_and_neutrals() {
     let Some(ctx) = crate::test_support::lease() else {
@@ -6026,7 +5818,6 @@ fn wgsl_lens_flare_matches_the_cpu_frame_reference_and_neutrals() {
     let baked = lf::bake(&p);
     let op = flare_op(&p, w, h);
 
-    // CPU reference: flare at the Draft half-size buffer, then the combine.
     let (_, _, div) = lf::quality_ladder(p.quality);
     let (fw, fh) = ((w / div).max(1), (h / div).max(1));
     let lights = lf::manual_light(&p, w, h);
@@ -6034,7 +5825,6 @@ fn wgsl_lens_flare_matches_the_cpu_frame_reference_and_neutrals() {
     let mut cpu = img.clone();
     lf::cpu_combine(&mut cpu, w, h, &p, &baked, &flare, fw, fh, &lights);
 
-    // GPU.
     let tex = upload_linear_f32(&ctx, &img, w, h);
     let out = fx.lens_flare(
         &ctx,
@@ -6079,7 +5869,6 @@ fn wgsl_lens_flare_matches_the_cpu_frame_reference_and_neutrals() {
         "energy ratio {ratio} ({e_gpu} vs {e_cpu})"
     );
 
-    // Determinism (§2.4): a second run is bit-identical.
     let out2 = fx.lens_flare(
         &ctx,
         &tex,
@@ -6093,8 +5882,6 @@ fn wgsl_lens_flare_matches_the_cpu_frame_reference_and_neutrals() {
     let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
     assert_eq!(gpu, gpu2, "GPU lens flare must be bit-stable");
 
-    // Neutral points: Intensity 0 and Mix 0 pass the input through
-    // bit-exactly (fp16 texel in, identical fp16 texel out).
     for neutral in [
         lf::LensFlareParams {
             intensity: 0.0,
@@ -6165,10 +5952,6 @@ fn wgsl_lens_flare_matches_the_cpu_frame_reference_and_neutrals() {
     );
 }
 
-/// Matte mode (docs/08 §3.27): the GPU detection + per-light flare
-/// agrees with the CPU reference (detect_lights → cpu_flare → cpu_combine)
-/// at the frame bound, the detected flares actually render, and the shared
-/// constants the two crates must agree on are pinned.
 #[test]
 fn wgsl_lens_flare_matte_mode_matches_the_cpu_reference() {
     assert_eq!(
@@ -6196,8 +5979,6 @@ fn wgsl_lens_flare_matte_mode_matches_the_cpu_reference() {
         .iter()
         .map(|v| f16_to_f32(f16_bits(v * 0.05)))
         .collect();
-    // The matte: two bright sources on black, fp16-quantised exactly as the
-    // GPU texture upload rounds it.
     let mut matte = vec![0.0f32; (w * h * 4) as usize];
     for (x, y, rgb) in [
         (30u32, 20u32, [5.0f32, 4.0, 3.0]),
@@ -6221,7 +6002,6 @@ fn wgsl_lens_flare_matte_mode_matches_the_cpu_reference() {
     let baked = lf::bake(&p);
     let op = flare_op(&p, w, h);
 
-    // CPU: detect on the quantised matte, then render per light.
     let lights = lf::detect_lights(
         &matte,
         w,
@@ -6239,7 +6019,6 @@ fn wgsl_lens_flare_matte_mode_matches_the_cpu_reference() {
     let mut cpu = img.clone();
     lf::cpu_combine(&mut cpu, w, h, &p, &baked, &flare, fw, fh, &lights);
 
-    // GPU.
     let tex = upload_linear_f32(&ctx, &img, w, h);
     let matte_tex = upload_linear_f32(&ctx, &matte, w, h);
     let out = fx.lens_flare(
@@ -6254,7 +6033,6 @@ fn wgsl_lens_flare_matte_mode_matches_the_cpu_reference() {
     );
     let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
-    // The detected flares must be visible…
     let added: f32 = gpu
         .iter()
         .zip(&img)
@@ -6262,7 +6040,6 @@ fn wgsl_lens_flare_matte_mode_matches_the_cpu_reference() {
         .sum::<f32>()
         / (w * h) as f32;
     assert!(added > 1e-4, "matte mode added no visible energy: {added}");
-    // …and match the CPU reference at the frame bound.
     let mean: f32 = cpu
         .iter()
         .zip(&gpu)
@@ -6275,7 +6052,6 @@ fn wgsl_lens_flare_matte_mode_matches_the_cpu_reference() {
     let ratio = e_gpu / e_cpu.max(1e-9);
     assert!((0.99..=1.01).contains(&ratio), "energy ratio {ratio}");
 
-    // An unset matte in Matte mode is the labelled no-op: bit-exact input.
     let nout = fx.lens_flare(
         &ctx,
         &tex,
@@ -6392,7 +6168,6 @@ fn wgsl_lighting_matches_the_cpu_oracle() {
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
 
-    // A layer lying in the z = 0 plane at 1:1, facing the viewer.
     let surface = ShadingSurface {
         origin: [0.0, 0.0, 0.0],
         du: [1.0, 0.0, 0.0],
@@ -6449,9 +6224,6 @@ fn wgsl_lighting_matches_the_cpu_oracle() {
         kind: ShadingKind::Area,
         ..plain
     };
-    // The terms the light rows added: a spot feathered right to its middle,
-    // a smooth falloff with a radius, the inverse square, a parallel light
-    // raking in from one side and an ambient one.
     let feathered = ShadingLight {
         cone_inner: 1.0,
         radius_px: 30.0,
@@ -6505,9 +6277,6 @@ fn wgsl_lighting_matches_the_cpu_oracle() {
         ("after effects encoded", vec![spot, ambient]),
         ("shininess nought", vec![spot, ambient]),
     ] {
-        // Two are seen through a shiny material, a metal one and then a
-        // plastic one, and one lit from black as After Effects does; the rest
-        // through the plain one.
         let eye = [16.0, 12.0, -200.0];
         let plain = ShadingMaterial {
             eye,
@@ -6580,7 +6349,6 @@ fn wgsl_lighting_matches_the_cpu_oracle() {
     }
 }
 
-/// The oracle's surface, material and lights as the kernel takes them.
 fn lighting_op(
     s: &lumit_core::lighting::ShadingSurface,
     m: &lumit_core::lighting::ShadingMaterial,
@@ -6638,11 +6406,6 @@ fn lighting_op(
     }
 }
 
-/// Shadows against the oracle: two cards between a spot and a floor, one
-/// letting coloured light through, hard and diffused, half and fully dark,
-/// with the floor taking them and showing only them, display encoded too,
-/// and a card lit with its own square among the casters. The cards are
-/// turned from the light, so the soft edges stretch.
 #[test]
 fn wgsl_shadows_match_the_cpu_oracle() {
     use lumit_core::lighting::{
@@ -6696,8 +6459,6 @@ fn wgsl_shadows_match_the_cpu_oracle() {
         shadow_diffusion: 6.0,
         ..spot
     };
-    // A card with a hole and a soft edge, and a tinted one that lets light
-    // through, each at its own picture size.
     let (cw, ch) = (20u32, 16u32);
     let mut card = vec![0.0f32; (cw * ch * 4) as usize];
     for y in 0..ch {
@@ -6712,9 +6473,7 @@ fn wgsl_shadows_match_the_cpu_oracle() {
         }
     }
     let tint = [0.1, 0.6, 0.2, 0.8].repeat(16);
-    // A bar much wider than it is tall, as a lower third is.
     let bar = [0.8, 0.8, 0.8, 1.0].repeat(16);
-    // An 80 px logo under a spread wider than itself.
     let logo = [0.6, 0.5, 0.4, 1.0].repeat(16);
     let size = 64u32;
     const SPREAD: f32 = 100.0;
@@ -6819,7 +6578,6 @@ fn wgsl_shadows_match_the_cpu_oracle() {
         shadow_darkness: 0.5,
         ..spot
     };
-    // The first card itself, lit by both with its own square left out.
     let card_surface = ShadingSurface {
         origin: planes[0].3.origin,
         du: [4.0, 0.0, 0.0],
@@ -6890,8 +6648,6 @@ fn wgsl_shadows_match_the_cpu_oracle() {
         );
         let mut unshaded = img.clone();
         lumit_core::lighting::shade(&mut unshaded, w, h, &surface, &m, &lights);
-        // A card behind the light's way and its own square left out: lit as
-        // if nothing cast at all. Everything else has a shadow somewhere.
         assert_eq!(cpu == unshaded, own.is_some(), "{name}");
 
         let op = lighting_op(&surface, &m, &lights, own);
@@ -6920,14 +6676,13 @@ fn alpha_corpus(w: u32, h: u32) -> Vec<f32> {
     let mut img = corpus(w, h);
     let q = |v: f32| f16_to_f32(f16_bits(v));
     let partials = [
-        // (straight rgb, alpha)
         ([0.7_f32, 0.3, 0.5], 0.5_f32),
         ([0.2, 0.8, 0.6], 0.25),
         ([0.9, 0.1, 0.4], 0.75),
-        ([2.0, 1.0, 0.5], 0.5), // partial-alpha HDR
+        ([2.0, 1.0, 0.5], 0.5),
     ];
     for (n, (rgb, a)) in partials.iter().enumerate() {
-        let i = n * 4; // the first four pixels of row 0
+        let i = n * 4;
         img[i] = q(rgb[0] * a);
         img[i + 1] = q(rgb[1] * a);
         img[i + 2] = q(rgb[2] * a);
@@ -6960,14 +6715,12 @@ fn wgsl_curves_matches_the_cpu_oracle() {
     let img = alpha_corpus(w, h);
 
     let neutral = Curves::read(Params::EMPTY);
-    // A film S-curve on Master: shadows down, highlights up.
     let mut s_curve = neutral;
     s_curve.master = CurvePoints::sanitised(&[[0.0, 0.0], [0.25, 0.15], [0.75, 0.88], [1.0, 1.0]]);
     // A long flat run into a sudden rise — the shape a plain cubic overshoots
     // on, and so the one that exercises the bake's clamp.
     let mut crushed = neutral;
     crushed.master = CurvePoints::sanitised(&[[0.0, 0.1], [0.5, 0.1], [0.6, 0.95], [1.0, 1.0]]);
-    // Per-channel: a warm grade, blue pulled down, red lifted.
     let mut warm = neutral;
     warm.red = CurvePoints::sanitised(&[[0.0, 0.0], [0.5, 0.62], [1.0, 1.0]]);
     warm.blue = CurvePoints::sanitised(&[[0.0, 0.0], [0.5, 0.38], [1.0, 1.0]]);
@@ -7098,9 +6851,6 @@ fn wgsl_levels_matches_the_cpu_oracle() {
     }
 }
 
-/// The §1.6 oracle for Brightness (docs/08 §3.32): an affine grade, so the
-/// tolerance is the ≤ 2 fp16 ULP of the cheap class, and the neutral pair or
-/// Mix 0 is the bit-exact identity on both paths.
 #[test]
 fn wgsl_brightness_matches_the_cpu_oracle() {
     let Some(ctx) = crate::test_support::lease() else {
@@ -7214,8 +6964,6 @@ fn wgsl_hue_saturation_matches_the_cpu_oracle() {
     vivid.master_saturation = 45.0;
     let mut dim = neutral;
     dim.master_lightness = -35.0;
-    // The range half: the greens pulled toward teal and lifted, which is the
-    // grade this effect exists for, and the blues desaturated.
     let mut ranged = neutral;
     ranged.greens_hue = 25.0;
     ranged.greens_lightness = 20.0;
@@ -7265,9 +7013,6 @@ fn wgsl_hue_saturation_matches_the_cpu_oracle() {
     }
 }
 
-/// The §1.6 oracle for Fill (docs/08 §3.34): a trivial pointwise flood, so CPU
-/// and GPU must agree to ≤ 2 fp16 ULP, the GPU is bit-stable, and Mix 0 is the
-/// bit-exact identity on both paths.
 #[test]
 fn wgsl_fill_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::fill::Fill;
@@ -7320,7 +7065,6 @@ fn wgsl_fill_matches_the_cpu_oracle() {
         } else {
             assert!(gpu != img, "{name}: the fill must actually do something");
         }
-        // Alpha is untouched — the whole point of the effect (§3.34).
         for (g, o) in gpu.chunks_exact(4).zip(img.chunks_exact(4)) {
             assert_eq!(g[3], o[3], "{name}: alpha must pass through");
         }
@@ -7420,7 +7164,6 @@ fn wgsl_gradient_matches_the_cpu_oracle() {
             assert!(gpu != img, "{name}: the ramp must actually do something");
         }
         if mix == 1.0 && !name.starts_with("clear") {
-            // Opaque colours write opaque pixels edge to edge (§3.35).
             for g in gpu.chunks_exact(4) {
                 assert_eq!(g[3], 1.0, "{name}: the ramp must be opaque");
             }
@@ -7523,7 +7266,6 @@ fn wgsl_noise_matches_the_cpu_oracle() {
         } else {
             assert!(gpu != img, "{name}: the grain must actually do something");
         }
-        // A modifier never touches alpha (§3.36).
         for (g, o) in gpu.chunks_exact(4).zip(img.chunks_exact(4)) {
             assert_eq!(g[3], o[3], "{name}: alpha must pass through");
         }
@@ -7624,6 +7366,9 @@ fn wgsl_fractal_noise_matches_the_cpu_oracle() {
             lacunarity: p.field.lacunarity,
             perlin: p.field.perlin,
             turbulent: p.field.turbulent,
+            base: p.base,
+            kind: p.kind,
+            distortion: p.distortion,
             cycle: p.field.cycle,
             cos_sin: p.cos_sin,
             offset: p.offset,
@@ -7650,7 +7395,6 @@ fn wgsl_fractal_noise_matches_the_cpu_oracle() {
         } else {
             assert!(gpu != img, "{name}: the field must actually do something");
             if mix == 1.0 {
-                // A generator writes opaque pixels edge to edge (§3.37).
                 for g in gpu.chunks_exact(4) {
                     assert_eq!(g[3], 1.0, "{name}: the field must be opaque");
                 }
@@ -7665,6 +7409,95 @@ fn wgsl_fractal_noise_matches_the_cpu_oracle() {
         let out2 = fx.fractal_noise(&ctx, &tex, w, h, &op);
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "GPU fractal noise must be bit-stable");
+    }
+}
+
+/// The typed fractal on the GPU against its CPU oracle: every one of the fifteen
+/// fractal types over Perlin, and a spread of types over the three AE bases
+/// (Block, Linear, Spline). The warping types move each octave by the slope of
+/// the last, so a slope that drifted would show here first.
+#[test]
+fn wgsl_fractal_types_match_the_cpu_oracle() {
+    use lumit_core::fx::effects::fractal_noise::FractalNoise;
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
+
+    let Some(ctx) = crate::test_support::lease() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = ctx.fx();
+    let (w, h) = (32u32, 24u32);
+    let img = alpha_corpus(w, h);
+    let mut cases = Vec::new();
+    for kind in 0..=lumit_core::fx::noise::FRACTAL_LAST {
+        cases.push((1u32, kind, 0.0f32));
+    }
+    for base in [2u32, 3, 4] {
+        for kind in [0u32, 3, 4, 6, 7, 12, 14] {
+            cases.push((base, kind, 0.0));
+        }
+    }
+    for base in 5..=lumit_core::fx::noise::NOISE_LAST {
+        cases.push((base, 0, 0.0));
+    }
+    for base in [6u32, 13, 27] {
+        for kind in [1u32, 4, 12] {
+            cases.push((base, kind, 0.0));
+        }
+    }
+    for base in [1u32, 9, 27] {
+        cases.push((base, 0, 1.5));
+    }
+    for (base, kind, distortion) in cases {
+        let mut f = FractalNoise::read(Params::EMPTY);
+        f.distortion = distortion;
+        f.scale = 12.0;
+        f.scale_width = 12.0;
+        f.scale_height = 12.0;
+        f.offset_x = 16.0;
+        f.offset_y = 12.0;
+        f.seed = 4242;
+        f.evolution = 130.0;
+        f.noise_type = base;
+        f.fractal_type = kind;
+        let p = f.packed();
+        let op = FractalNoiseOp {
+            seed: p.field.seed,
+            octaves: p.field.octaves,
+            gain: p.field.gain,
+            lacunarity: p.field.lacunarity,
+            perlin: p.field.perlin,
+            turbulent: p.field.turbulent,
+            base: p.base,
+            kind: p.kind,
+            distortion: p.distortion,
+            cycle: p.field.cycle,
+            cos_sin: p.cos_sin,
+            offset: p.offset,
+            inv_scale: p.inv_scale,
+            z: p.z,
+            contrast: p.contrast,
+            brightness: p.brightness,
+            invert: p.invert,
+            mix: p.mix,
+        };
+        let mut cpu = img.clone();
+        lumit_core::fx::cpu::fractal_noise(&mut cpu, w, h, &p);
+        let tex = upload_linear_f32(&ctx, &img, w, h);
+        let out = fx.fractal_noise(&ctx, &tex, w, h, &op);
+        let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+        let worst = worst_f16_ulp(&cpu, &gpu);
+        eprintln!("fractal type {kind} over base {base}: worst {worst} ulp");
+        assert!(
+            worst <= 4,
+            "type {kind} base {base}: worst {worst} fp16 ULP"
+        );
+        let lo = gpu.chunks_exact(4).map(|p| p[0]).fold(f32::MAX, f32::min);
+        let hi = gpu.chunks_exact(4).map(|p| p[0]).fold(f32::MIN, f32::max);
+        assert!(
+            hi - lo > 0.05,
+            "type {kind} base {base}: the field is flat ({lo}..{hi})"
+        );
     }
 }
 
@@ -7730,7 +7563,6 @@ fn smooth_corpus(w: u32, h: u32) -> Vec<f32> {
             let i = ((y * w + x) * 4) as usize;
             let u = x as f32 / (w - 1) as f32;
             let v = y as f32 / (h - 1) as f32;
-            // A broad hump, so the picture has real structure without a step.
             let hump = 1.0 + 2.0 * (1.0 - (u - 0.5).abs() * 2.0) * (1.0 - (v - 0.5).abs() * 2.0);
             let a = 0.4 + 0.6 * v;
             img[i] = u * hump * a;
@@ -7873,8 +7705,6 @@ fn wgsl_turbulent_displace_matches_the_cpu_oracle() {
         );
     }
 
-    // **Pinning holds the border still.** With Pin all edges the frame's top row
-    // must be exactly what arrived; with Pin none it must not be.
     let row_moved = |t: TurbulentDisplace| -> bool {
         let out = fx.turbulent_displace(&ctx, &tex, w, h, None, &op_of(t));
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
@@ -7941,7 +7771,6 @@ fn wgsl_matted_turbulent_displace_scales_the_displacement() {
         }
     };
 
-    // A left-to-right ramp of matte, so the parity corpus covers every level.
     let mut ramp = vec![0.0f32; (w * h * 4) as usize];
     for y in 0..h {
         for x in 0..w {
@@ -7955,7 +7784,6 @@ fn wgsl_matted_turbulent_displace_scales_the_displacement() {
     }
     let qramp: Vec<f32> = ramp.iter().map(|v| f16_to_f32(f16_bits(*v))).collect();
     let ramp_tex = upload_linear_f32(&ctx, &ramp, w, h);
-    // Invert arrives through the seam's prepare pass, both paths.
     for invert in [false, true] {
         let p = base.packed();
         let mut qm = qramp.clone();
@@ -7984,7 +7812,6 @@ fn wgsl_matted_turbulent_displace_scales_the_displacement() {
         dot[src..src + 4].copy_from_slice(&[1.0, 1.0, 1.0, 1.0]);
         let flat: Vec<f32> = (0..(w * h) as usize).flat_map(|_| [k, k, k, 1.0]).collect();
         lumit_core::fx::cpu::turbulent_displace(&mut dot, w, h, &base.packed(), &flat);
-        // The lit pixel's new centre of mass, distance from where it began.
         let (mut sx, mut sy, mut sw) = (0.0f32, 0.0f32, 0.0f32);
         for y in 0..h {
             for x in 0..w {
@@ -8076,8 +7903,6 @@ fn wgsl_tile_matches_the_cpu_oracle() {
     let mut wide = tiled;
     wide.tile_width = w as f32 * 0.25;
     wide.tile_height = h as f32 * 2.0;
-    // The growing case: an output window wider than the frame writes a
-    // wider raster.
     let mut grown = tiled;
     grown.output_width = w as f32 * 2.0;
     grown.output_height = h as f32 * 1.5;
@@ -8092,8 +7917,6 @@ fn wgsl_tile_matches_the_cpu_oracle() {
     let mut off = tiled;
     off.mix = 0.0;
 
-    // `cpu::tile_into` at the raster `cpu::tile_raster` sizes, against
-    // `FxEngine::tile` at the raster it sizes for itself from the same rule.
     let run = |t: Tile| {
         let p = t.packed(w as f32, h as f32);
         let (ow, oh) = lumit_core::fx::cpu::tile_raster(w, h, &p);
@@ -8153,8 +7976,6 @@ fn wgsl_tile_matches_the_cpu_oracle() {
         }
     }
 
-    // **It repeats.** At a 2×2 tiling the pixel at (4, 3) and the one a tile
-    // away at (20, 15) come from the same place, so they must match.
     let (_, _, cpu_tiled, _) = run(tiled);
     let a = ((3 * w + 4) * 4) as usize;
     let b = ((15 * w + 20) * 4) as usize;
@@ -8164,7 +7985,6 @@ fn wgsl_tile_matches_the_cpu_oracle() {
         "tiles one period apart must be the same picture"
     );
 
-    // **The window clips.** At 60 % output the frame's corner is outside it.
     let (_, _, cpu_windowed, _) = run(windowed);
     assert_eq!(
         cpu_windowed[0..4],
@@ -8238,8 +8058,6 @@ fn wgsl_offset_matches_the_cpu_oracle() {
         }
     }
 
-    // **A whole-pixel shift is a rotation of the picture**: every output pixel is
-    // some input pixel, unblurred, and the wrap means none is lost.
     let mut shifted = img.clone();
     lumit_core::fx::cpu::offset(&mut shifted, w, h, [7.0, 5.0], 1.0);
     for y in 0..h {
@@ -8316,8 +8134,6 @@ fn wgsl_mirror_matches_the_cpu_oracle() {
         }
     }
 
-    // **The result is symmetric.** Angle 0 about the centre column: column x and
-    // column (w − 1 − x) must be the same picture.
     let (centre, normal, mix) = base.packed();
     let mut done = img.clone();
     lumit_core::fx::cpu::mirror(&mut done, w, h, centre, normal, mix);
@@ -8330,8 +8146,6 @@ fn wgsl_mirror_matches_the_cpu_oracle() {
     }
 }
 
-/// A pixel whose four taps all fall outside the frame comes back empty, on both
-/// tap shapes: the plain bounds check (Mirror) and the edge-policy one (Transform).
 #[test]
 fn every_tap_outside_the_frame_reads_transparent() {
     // Not every driver shows the hoisted fetch, so each tap is also held to the
@@ -8366,8 +8180,6 @@ fn every_tap_outside_the_frame_reads_transparent() {
     let tex = upload_linear_f32(&ctx, &img, w, h);
     let empty = vec![0.0f32; img.len()];
 
-    // A mirror line beside the frame reflects every pixel further out, between
-    // texels so the bilinear weights are fractional.
     for (centre, normal) in [
         ([-4.25, 12.0], [1.0, 0.0]),
         ([w as f32 + 4.25, 12.0], [-1.0, 0.0]),
@@ -8579,7 +8391,6 @@ fn wgsl_channel_blur_matches_the_cpu_oracle() {
         if name == "mix-zero" || name == "all-zero" {
             assert_eq!(gpu, img, "{name}: must be the bit-exact identity");
         }
-        // **The zero-radius channels are untouched, to the bit.**
         if name == "blue-only" {
             for i in (0..gpu.len()).step_by(4) {
                 assert_eq!(gpu[i], img[i], "red moved at pixel {}", i / 4);
@@ -8600,8 +8411,6 @@ fn wgsl_channel_blur_matches_the_cpu_oracle() {
         );
     }
 
-    // **A wider radius reaches further.** One bright pixel in blue, blurred at
-    // two radii; the narrow one's light must die out sooner along the row.
     let mut dot = vec![0.0f32; (w * h * 4) as usize];
     let centre = ((12 * w + 16) * 4) as usize;
     dot[centre..centre + 4].copy_from_slice(&[0.0, 0.0, 1.0, 1.0]);
@@ -8724,9 +8533,6 @@ fn wgsl_drop_shadow_matches_the_cpu_oracle() {
         );
     }
 
-    // The corpus is opaque on the left half and transparent on the right, so the
-    // alpha edge runs down the middle. At 135° the shadow falls down-and-right,
-    // which puts coverage just right of that edge.
     let out = fx.drop_shadow(&ctx, &tex, w, h, None, &op_of(base));
     let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
     let alpha_at = |x: u32, y: u32| gpu[((y * w + x) * 4 + 3) as usize];
@@ -8739,8 +8545,6 @@ fn wgsl_drop_shadow_matches_the_cpu_oracle() {
         "inside the shape the layer itself is still opaque"
     );
 
-    // Shadow only keeps the shadow and nothing else: the shape's own colour is
-    // gone from the middle of the opaque half.
     let only_out = fx.drop_shadow(&ctx, &tex, w, h, None, &op_of(only));
     let only_px = readback_linear_f32(&ctx, &only_out, w, h).unwrap();
     let i = ((14 * w + 6) * 4) as usize;
@@ -8769,8 +8573,6 @@ fn wgsl_set_matte_matches_the_cpu_oracle() {
     let img = alpha_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
 
-    // A matte with a different value in every channel, so the Channel row can be
-    // told apart: red ramps across, green down, blue is flat, alpha is a block.
     let mut matte = vec![0.0f32; (w * h * 4) as usize];
     for y in 0..h {
         for x in 0..w {
@@ -8814,8 +8616,6 @@ fn wgsl_set_matte_matches_the_cpu_oracle() {
         }
     }
 
-    // **The alpha IS the matte's channel.** Red at full mix, no combine: every
-    // output alpha is the matte's red, to fp16.
     let out = fx.set_matte(
         &ctx,
         &tex,
@@ -8840,7 +8640,6 @@ fn wgsl_set_matte_matches_the_cpu_oracle() {
         );
     }
 
-    // **An unbound matte is the bit-exact identity**, whatever the other rows say.
     let none = fx.set_matte(
         &ctx,
         &tex,
@@ -8934,8 +8733,6 @@ fn wgsl_set_channels_matches_the_cpu_oracle() {
         }
     }
 
-    // **A pick fetches what it names.** Alpha from the source's straight red,
-    // at full mix: every output alpha is that number, to fp16.
     let out = fx.set_channels(
         &ctx,
         &tex,
@@ -8958,8 +8755,6 @@ fn wgsl_set_channels_matches_the_cpu_oracle() {
         );
     }
 
-    // **An unbound Source row still shuffles this layer**, and reads the source
-    // as zero — the two halves of the row's documented no-source behaviour.
     let mut cpu = img.clone();
     lumit_core::fx::cpu::set_channels(&mut cpu, &[], [2, 1, 0, 8], 1.0);
     let none = fx.set_channels(
@@ -9072,8 +8867,6 @@ fn wgsl_linear_wipe_matches_the_cpu_oracle() {
         }
     }
 
-    // **Which side goes first.** At the default 90° the edge is vertical and the
-    // LEFT half is removed; the right half is untouched to the bit.
     let out = fx.linear_wipe(&ctx, &tex, w, h, None, &op_of(base));
     let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
     for y in 0..h {
@@ -9186,9 +8979,6 @@ fn wgsl_radial_wipe_matches_the_cpu_oracle() {
         }
     }
 
-    // **The three directions really differ.** At Completion 50 from straight up,
-    // Clockwise takes the right of the frame and Anticlockwise the left; Both
-    // takes the top and leaves the bottom, symmetric about the vertical.
     let read = |r: RadialWipe| {
         let out = fx.radial_wipe(&ctx, &tex, w, h, None, &op_of(r));
         readback_linear_f32(&ctx, &out, w, h).unwrap()
@@ -9300,9 +9090,6 @@ fn wgsl_venetian_blinds_matches_the_cpu_oracle() {
         }
     }
 
-    // **A rank, not one edge.** At Direction 0 the coverage depends only on the
-    // row, and over an 8-pixel slat there must be rows that are gone and rows
-    // that are whole — a single wipe edge has exactly one crossing.
     let out = fx.venetian_blinds(&ctx, &tex, w, h, None, &op_of(wide));
     let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
     let alpha = |y: u32| gpu[((y * w + 5) * 4 + 3) as usize];
@@ -9417,8 +9204,6 @@ fn wgsl_iris_wipe_matches_the_cpu_oracle() {
         }
     }
 
-    // **Inside gone, outside kept** — the sign of the distance, which no parity
-    // check can establish.
     let removed = |i: IrisWipe| {
         let out = fx.iris_wipe(&ctx, &tex, w, h, None, &op_of(i));
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
@@ -9432,7 +9217,6 @@ fn wgsl_iris_wipe_matches_the_cpu_oracle() {
     assert_eq!(middle, 0.0, "the middle must be gone");
     assert_eq!(corner, img[3], "the corner must be untouched");
 
-    // **More points, more area**, and **a star removes less than its polygon**.
     let (_, _, thirty_two) = removed(many);
     let (_, _, starred) = removed(star);
     assert!(
@@ -9573,10 +9357,6 @@ fn wgsl_card_wipe_matches_the_cpu_oracle() {
         }
     }
 
-    // **A grid, and a card that has not started is untouched to the bit.** With
-    // a narrow Transition width and Left to right, the leftmost column is gone
-    // and the rightmost has not moved at all — every pixel of it, edges
-    // included, which is what says no card reads outside its own cell.
     let gpu = read(leftward);
     let alpha = |px: &[f32], x: u32, y: u32| px[((y * w + x) * 4 + 3) as usize];
     for y in 0..h {
@@ -9594,8 +9374,6 @@ fn wgsl_card_wipe_matches_the_cpu_oracle() {
             "the first column must be gone at {y}"
         );
     }
-    // **Flip order reverses.** The same settings the other way round empty the
-    // right-hand side and leave the left.
     let other = read(rightward);
     for y in 0..h {
         assert_eq!(
@@ -9658,9 +9436,7 @@ fn wgsl_corner_pin_matches_the_cpu_oracle() {
     let mut mirrored = keystone;
     mirrored.edge = 2;
     let leaning = quad([2.0, 6.0], [30.0, 0.0], [4.0, 20.0], [28.0, 24.0]);
-    // Two corners crossed: part of the frame is behind the horizon.
     let crossed = quad([28.0, 2.0], [4.0, 2.0], [0.0, 22.0], [32.0, 22.0]);
-    // Three corners in a line: no map at all.
     let degenerate = quad([0.0, 0.0], [16.0, 0.0], [32.0, 0.0], [32.0, 24.0]);
     let mut faded = keystone;
     faded.mix = 50.0;
@@ -9718,9 +9494,6 @@ fn wgsl_corner_pin_matches_the_cpu_oracle() {
         );
     }
 
-    // **A keystone converges.** The pinned picture's covered span is narrower at
-    // the top than at the bottom — the projective part doing its work, which an
-    // affine map cannot do.
     let out = fx.corner_pin(&ctx, &tex, w, h, None, &op_of(keystone));
     let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
     let span = |y: u32| -> u32 {
@@ -9757,8 +9530,6 @@ fn wgsl_displacement_map_matches_the_cpu_oracle() {
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
 
-    // A map with a different gradient in every channel, so the channel pickers
-    // are actually distinguishable from one another.
     let mut map = vec![0.0f32; (w * h * 4) as usize];
     for y in 0..h {
         for x in 0..w {
@@ -9845,7 +9616,6 @@ fn wgsl_displacement_map_matches_the_cpu_oracle() {
         }
     }
 
-    // **No map bound is the exact identity** — the labelled no-op §1.2 sanctions.
     let out = fx.displacement_map(&ctx, &tex, w, h, None, &op_of(base, false));
     assert_eq!(
         readback_linear_f32(&ctx, &out, w, h).unwrap(),
@@ -9853,8 +9623,6 @@ fn wgsl_displacement_map_matches_the_cpu_oracle() {
         "an unbound map must render the input untouched"
     );
 
-    // **Mid-grey is the neutral.** A flat 0.5 map moves nothing at any Amount,
-    // which is what makes one map able to push both ways.
     let grey: Vec<f32> = (0..(w * h) as usize)
         .flat_map(|_| [0.5f32, 0.5, 0.5, 1.0])
         .collect();
@@ -9910,10 +9678,6 @@ fn wgsl_displacement_map_matches_the_cpu_oracle() {
     );
 }
 
-/// The §1.6 oracle for Vector blur, over both vector sources, straight and
-/// curved streaks, every direction, falloff, constant length, the angle offset,
-/// map softness, all three edge policies, Invert, and no map at all, where the
-/// layer's own picture is the map. Mix 0 is the exact identity.
 #[test]
 fn wgsl_vector_blur_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::vector_blur::VectorBlur;
@@ -9929,7 +9693,6 @@ fn wgsl_vector_blur_matches_the_cpu_oracle() {
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
 
-    // Swirling channels, so curved streaks really bend.
     let mut map = vec![0.0f32; (w * h * 4) as usize];
     for y in 0..h {
         for x in 0..w {
@@ -10207,8 +9970,6 @@ fn wgsl_twirl_matches_the_cpu_oracle() {
         }
     }
 
-    // **Nothing outside the circle moves.** The frame's corners sit well beyond a
-    // radius of 10 from (16, 12), and must arrive untouched.
     let out = fx.twirl(&ctx, &tex, w, h, None, &op_of(hard));
     let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
     for (x, y) in [(0u32, 0u32), (w - 1, 0), (0, h - 1), (w - 1, h - 1)] {
@@ -10216,8 +9977,6 @@ fn wgsl_twirl_matches_the_cpu_oracle() {
         assert_eq!(gpu[i..i + 4], img[i..i + 4], "the corner at {x},{y} moved");
     }
 
-    // **The middle turns further than the rim.** One lit pixel at two radii, and
-    // the inner one must travel further — the squared falloff, measured.
     let travel = |from: u32| -> f32 {
         let mut dot = vec![0.0f32; (w * h * 4) as usize];
         let x0 = 16 + from;
@@ -10271,7 +10030,6 @@ fn wgsl_spherize_matches_the_cpu_oracle() {
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
 
-    // Radius is px@comp; see the Twirl oracle's note.
     let base = {
         let mut s = Spherize::read(Params::EMPTY);
         s.centre_x = 16.0;
@@ -10334,7 +10092,6 @@ fn wgsl_spherize_matches_the_cpu_oracle() {
         }
     }
 
-    // **Nothing outside the ball moves.**
     let out = fx.spherize(&ctx, &tex, w, h, None, &op_of(base));
     let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
     for (x, y) in [(0u32, 0u32), (w - 1, 0), (0, h - 1), (w - 1, h - 1)] {
@@ -10485,14 +10242,6 @@ fn wgsl_ripple_matches_the_cpu_oracle() {
     );
 }
 
-/// The §1.6 oracle for Wave warp (docs/08 §3.54), on the smooth corpus and by
-/// absolute difference — the distort batch's rule.
-///
-/// Three claims beyond parity. **Wave height 0 is the exact identity.** **Every
-/// wave type moves the picture**, so a shape that fell through to a constant
-/// would be caught. And **a pinned edge is exactly still**, which is what the
-/// per-edge ramp is for: pinning the left edge alone leaves the left column
-/// bit-identical and the right one moving.
 #[test]
 fn wgsl_wave_warp_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::wave_warp::WaveWarp;
@@ -10587,7 +10336,6 @@ fn wgsl_wave_warp_matches_the_cpu_oracle() {
         }
     }
 
-    // **Pinning the left edge alone stills the left column and nothing else.**
     let out = fx.wave_warp(&ctx, &tex, w, h, None, &op_of(left));
     let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
     let column = |img: &[f32], x: u32| -> Vec<f32> {
@@ -10664,13 +10412,11 @@ fn wgsl_bezier_warp_matches_the_cpu_oracle() {
         b.left_bottom_tangent_y = fh * 2.0 / 3.0;
         b
     };
-    // A barrel: both horizontal edges bowed outward.
     let mut bowed = base;
     bowed.top_left_tangent_y = -6.0;
     bowed.top_right_tangent_y = -6.0;
     bowed.bottom_left_tangent_y = h as f32 + 6.0;
     bowed.bottom_right_tangent_y = h as f32 + 6.0;
-    // A corner dragged in, so the patch is a proper quadrilateral as well.
     let mut pulled = bowed;
     pulled.upper_right_x = 24.0;
     pulled.upper_right_y = 4.0;
@@ -10719,9 +10465,6 @@ fn wgsl_bezier_warp_matches_the_cpu_oracle() {
         }
     }
 
-    // **Quality is convergence, not a look.** One step and twelve differ only
-    // where a single Newton step has not caught up, and on a warp this size that
-    // is a fraction of a pixel of colour.
     let mut fine = bowed;
     fine.quality = 12;
     let a = readback_linear_f32(
@@ -10746,10 +10489,6 @@ fn wgsl_bezier_warp_matches_the_cpu_oracle() {
     );
 }
 
-/// Mesh warp's kernel against its CPU oracle: a flat grid is the picture to
-/// the bit, a crossing pulled bends it, one pulled far still finds its way
-/// from the nearest crossing, and one squeezed until it folds from the
-/// crossings beside it.
 #[test]
 fn wgsl_mesh_warp_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::mesh_warp::{mesh_warp, MeshWarpParams};
@@ -10766,9 +10505,7 @@ fn wgsl_mesh_warp_matches_the_cpu_oracle() {
     let mut pulled = flat(2, 2);
     pulled.pts[4] = [0.62, 0.45];
     let mut far = flat(3, 3);
-    // Far enough that its own place is no start, short of folding the grid.
     far.pts[5] = [0.5, 0.45];
-    // Pushed up until the cells above fold: some pixels start beside it.
     let mut squeezed = flat(2, 2);
     squeezed.pts[4] = [0.5, 0.02];
     let mut handled = flat(2, 2);
@@ -10860,7 +10597,6 @@ fn wgsl_warp_matches_the_cpu_oracle() {
         eprintln!("warp style {style}: worst {worst}");
         assert!(worst < 2e-3, "style {style}: worst diff {worst}");
         assert!(gpu != img, "style {style} must actually bend the picture");
-        // **Bend 0 is the identity for this style**, exactly.
         let mut flat = a;
         flat.bend = 0.0;
         let straight =
@@ -10872,7 +10608,6 @@ fn wgsl_warp_matches_the_cpu_oracle() {
         );
         renders.push(gpu);
     }
-    // **No two styles render the same frame.**
     for i in 0..renders.len() {
         for j in (i + 1)..renders.len() {
             assert!(
@@ -10882,7 +10617,6 @@ fn wgsl_warp_matches_the_cpu_oracle() {
         }
     }
 
-    // The two tapers, and Mix.
     let mut tapered = base;
     tapered.bend = 30.0;
     tapered.horizontal_distortion = 60.0;
@@ -10919,7 +10653,6 @@ fn disc_corpus(w: u32, h: u32) -> Vec<f32> {
             let px = x as f32 + 0.5;
             let py = y as f32 + 0.5;
             let r = ((px - cx) * (px - cx) + (py - cy) * (py - cy)).sqrt();
-            // A one-pixel antialiased rim, as a real shape has.
             let a = (1.0 - (r - radius)).clamp(0.0, 1.0);
             let u = px / w as f32;
             let v = py / h as f32;
@@ -11041,8 +10774,6 @@ fn wgsl_roughen_edges_matches_the_cpu_oracle() {
         if matches!(name, "roughen" | "cut" | "spiky") {
             renders.push(gpu.clone());
         }
-        // **The middle of the disc is untouched**: nothing inside the shape
-        // moves, which is what makes this a Stylise effect and not a distortion.
         let mid = ((12 * w + 16) * 4) as usize;
         for c in 0..4 {
             assert!(
@@ -11052,7 +10783,6 @@ fn wgsl_roughen_edges_matches_the_cpu_oracle() {
         }
     }
 
-    // **The three edge types are three pictures.**
     for i in 0..renders.len() {
         for j in (i + 1)..renders.len() {
             assert!(
@@ -11198,8 +10928,6 @@ fn wgsl_threshold_matches_the_cpu_oracle() {
         assert_eq!(gpu, gpu2, "GPU threshold must be bit-stable");
     }
 
-    // **Alpha survives the cut** (§3.59): a thresholded picture keeps its
-    // shape, so the transparent half of the corpus stays transparent.
     let (level, hw, mix) = of(50.0, 0.0, 100.0).packed();
     let mut cpu = img.clone();
     lumit_core::fx::cpu::threshold(&mut cpu, level, hw, mix);
@@ -11208,9 +10936,6 @@ fn wgsl_threshold_matches_the_cpu_oracle() {
     }
 }
 
-/// The §1.6 oracle for Tritone (docs/08 §3.60): a pointwise ramp, so ≤ 2 fp16
-/// ULP, plus the headroom claim — an HDR pixel must come back above white
-/// rather than clamped to the Highlights colour.
 #[test]
 fn wgsl_tritone_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::tritone::Tritone;
@@ -11267,8 +10992,6 @@ fn wgsl_tritone_matches_the_cpu_oracle() {
         assert_eq!(gpu, gpu2, "GPU tritone must be bit-stable");
     }
 
-    // **A specular keeps its headroom** (§3.60): the corpus spike is a luma
-    // well above 1, and its answer must be the Highlights colour *scaled*.
     let p = base.packed();
     let mut cpu = img.clone();
     lumit_core::fx::cpu::tritone(&mut cpu, &p);
@@ -11280,9 +11003,6 @@ fn wgsl_tritone_matches_the_cpu_oracle() {
     );
 }
 
-/// The §1.6 oracle for Photo filter (docs/08 §3.61): a multiply and a luma
-/// renormalisation, so ≤ 2 fp16 ULP, with Density 0 the bit-exact identity on
-/// both paths.
 #[test]
 fn wgsl_photo_filter_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::photo_filter::PhotoFilter;
@@ -11342,9 +11062,6 @@ fn wgsl_photo_filter_matches_the_cpu_oracle() {
         assert_eq!(gpu, gpu2, "GPU photo filter must be bit-stable");
     }
 
-    // **Preserve luminosity is the difference between a filter and a
-    // multiply** (§3.61): the same deep red at the same density is a far
-    // darker picture with it off.
     let lit = of(15, 100.0, true, 100.0).packed();
     let dark = of(15, 100.0, false, 100.0).packed();
     let (mut a, mut b) = (img.clone(), img.clone());
@@ -11427,17 +11144,12 @@ fn wgsl_black_and_white_matches_the_cpu_oracle() {
         assert_eq!(gpu, gpu2, "GPU black and white must be bit-stable");
     }
 
-    // **The six weights do nothing at all to a grey** (§3.62): every
-    // difference in the decomposition is zero there, which is the property the
-    // whole scheme rests on.
     let p = red_filter.packed();
     for v in [0.05_f32, 0.25, 0.6, 3.0] {
         let grey = lumit_core::fx::cpu::bw_grey([v, v, v], &p.weights);
         assert!((grey - v).abs() < 1e-6, "a grey of {v} came back as {grey}");
     }
 
-    // **The decomposition is exact**: all six weights at 100 answer the
-    // channel maximum, whatever the ordering.
     let mut ones = base;
     ones.reds = 100.0;
     ones.yellows = 100.0;
@@ -11576,10 +11288,6 @@ fn wgsl_shadow_highlight_matches_the_cpu_oracle() {
         "a neutral instance must be the bit-exact identity"
     );
 
-    // **The lift goes where the neighbourhood is dark, and the pull where it
-    // is bright** — the local half of local-adaptive. The corpus gradient runs
-    // from dark at the top left to bright at the bottom right, so the two must
-    // move opposite corners.
     let dark = ((23 * w + 8) * 4) as usize;
     let bright = ((3 * w + 3) * 4) as usize;
     let mut lifted = img.clone();
@@ -11733,8 +11441,6 @@ fn wgsl_median_matches_the_cpu_oracle() {
         "the median left the speckle behind: {after} of {before}"
     );
 
-    // **The coverage is untouched unless asked.** The corpus has a real alpha
-    // ramp; with Operate on alpha off, not one texel of it may move.
     let mut kept = img.clone();
     lumit_core::fx::cpu::median(&mut kept, w, h, &of(3.0, false, 100.0).packed());
     for i in (0..kept.len()).step_by(4) {
@@ -11814,9 +11520,6 @@ fn wgsl_mosaic_matches_the_cpu_oracle() {
         assert_eq!(gpu, gpu2, "GPU mosaic must be bit-stable");
     }
 
-    // **A block really is one colour.** 4×3 blocks on a 32×24 frame is exactly
-    // 8×8 pixels each, so every texel of the top-left block must equal its
-    // first.
     let mut blocked = img.clone();
     lumit_core::fx::cpu::mosaic(&mut blocked, w, h, &of(4, 3, false, 100.0).packed());
     for y in 0..8u32 {
@@ -11830,8 +11533,6 @@ fn wgsl_mosaic_matches_the_cpu_oracle() {
         }
     }
 
-    // **Sharp is a different picture.** The centre pixel of a block is not its
-    // mean on any corpus with structure in it.
     let mut sharp = img.clone();
     lumit_core::fx::cpu::mosaic(&mut sharp, w, h, &of(4, 3, true, 100.0).packed());
     assert!(
@@ -11839,9 +11540,6 @@ fn wgsl_mosaic_matches_the_cpu_oracle() {
         "Sharp colours changed nothing — the switch is not wired"
     );
 
-    // **A block finer than the sample grid is an exact mean.** 16×12 blocks on a
-    // 32×24 frame is 2×2 pixels, which the 8×8 grid samples completely, so the
-    // answer must equal the mean computed here by hand.
     let mut fine = img.clone();
     lumit_core::fx::cpu::mosaic(&mut fine, w, h, &of(16, 12, false, 100.0).packed());
     let mut want = [0.0f32; 4];
@@ -11862,12 +11560,6 @@ fn wgsl_mosaic_matches_the_cpu_oracle() {
     }
 }
 
-/// The §1.6 oracle for Find edges (docs/08 §3.66): eight taps and a magnitude,
-/// so ≤ 2 fp16 ULP on the smooth corpus.
-///
-/// Three claims beyond parity: **a flat picture has no edges** (the default must
-/// come back white where nothing changes), **Invert is the complement** of the
-/// default, and **the alpha survives** so the drawing keeps the layer's shape.
 #[test]
 fn wgsl_find_edges_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::find_edges::FindEdges;
@@ -11915,8 +11607,6 @@ fn wgsl_find_edges_matches_the_cpu_oracle() {
         assert_eq!(gpu, gpu2, "GPU find edges must be bit-stable");
     }
 
-    // **A flat picture has no edges.** A frame of one colour must come back
-    // white in the default and black inverted — the two ends of the drawing.
     let flat: Vec<f32> = (0..(w * h) as usize)
         .flat_map(|_| [0.4f32, 0.4, 0.4, 1.0])
         .collect();
@@ -11932,8 +11622,6 @@ fn wgsl_find_edges_matches_the_cpu_oracle() {
         );
     }
 
-    // **The alpha survives the drawing**, so a title comes back as a drawing of
-    // a title rather than as a full white frame.
     let (iv, mix) = of(false, 100.0).packed();
     let mut kept = img.clone();
     lumit_core::fx::cpu::find_edges(&mut kept, w, h, iv, mix);
@@ -12009,8 +11697,6 @@ fn wgsl_emboss_matches_the_cpu_oracle() {
         assert_eq!(gpu, gpu2, "GPU emboss must be bit-stable");
     }
 
-    // **The relief is grey**: AE's Emboss suppresses colour and so does this, so
-    // the three channels must agree wherever the layer has coverage.
     let mut grey = img.clone();
     lumit_core::fx::cpu::emboss(&mut grey, w, h, &of(45.0, 2.0, 100.0, 100.0).packed());
     for px in grey.chunks_exact(4) {
@@ -12038,9 +11724,6 @@ fn wgsl_emboss_matches_the_cpu_oracle() {
         );
     }
 
-    // **Turning the light round flips the relief.** The two answers must sit on
-    // opposite sides of mid-grey, which is what says the Direction dial is wired
-    // to the sign of the difference and not merely to its size.
     let mut lit = img.clone();
     let mut back = img.clone();
     lumit_core::fx::cpu::emboss(&mut lit, w, h, &of(90.0, 3.0, 100.0, 100.0).packed());
@@ -12061,12 +11744,6 @@ fn wgsl_emboss_matches_the_cpu_oracle() {
     );
 }
 
-/// The §1.6 oracle for Texturize (docs/08 §3.68): the same two taps as Emboss,
-/// on a second picture, so the same absolute-difference metric.
-///
-/// Four claims beyond parity: **an unset Texture is the exact identity**, **a
-/// flat texture presses nothing**, **the three Placements are three pictures**,
-/// and **Texture contrast 0 is the identity**.
 #[test]
 fn wgsl_texturize_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::texturize::Texturize;
@@ -12081,7 +11758,6 @@ fn wgsl_texturize_matches_the_cpu_oracle() {
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
 
-    // A canvas: a coarse weave with real structure in both axes.
     let mut weave = vec![0.0f32; (w * h * 4) as usize];
     for y in 0..h {
         for x in 0..w {
@@ -12147,8 +11823,6 @@ fn wgsl_texturize_matches_the_cpu_oracle() {
         assert_eq!(gpu, gpu2, "GPU texturize must be bit-stable");
     }
 
-    // **An unset Texture is the exact identity** — the labelled no-op §1.2
-    // sanctions, and here the host's answer rather than the kernel's.
     let out = fx.texturize(
         &ctx,
         &tex,
@@ -12164,9 +11838,6 @@ fn wgsl_texturize_matches_the_cpu_oracle() {
         "an unbound texture must render the input untouched"
     );
 
-    // **A flat texture presses nothing**: no gradient, no relief, whatever the
-    // contrast. This is the property that makes an unset row and a blank layer
-    // agree.
     let blank: Vec<f32> = (0..(w * h) as usize)
         .flat_map(|_| [0.5f32, 0.5, 0.5, 1.0])
         .collect();
@@ -12180,8 +11851,6 @@ fn wgsl_texturize_matches_the_cpu_oracle() {
     );
     assert_eq!(pressed, img, "a flat texture must press nothing");
 
-    // **The three Placements are three pictures** at a Scale that is not 100 —
-    // and all three agree at Scale 100, which is what makes that the AE case.
     let render = |t: Texturize| {
         let mut out = img.clone();
         lumit_core::fx::cpu::texturize(&mut out, &qweave, w, h, &t.packed());
@@ -12297,7 +11966,6 @@ fn wgsl_broadcast_safe_matches_the_cpu_oracle() {
         assert_eq!(gpu, gpu2, "GPU broadcast safe must be bit-stable");
     }
 
-    // The amplitude of one straight colour, as the effect measures it.
     let amp = |rgb: [f32; 3]| {
         let v = [rgb[0].sqrt(), rgb[1].sqrt(), rgb[2].sqrt()];
         let y = v[0] * 0.2126 + v[1] * 0.7152 + v[2] * 0.0722;
@@ -12330,9 +11998,6 @@ fn wgsl_broadcast_safe_matches_the_cpu_oracle() {
         );
     }
 
-    // **The two key modes are exact complements**: every pixel is removed by one
-    // and kept by the other, which is what makes Key out safe an overlay of the
-    // problem rather than a second guess at it.
     let (mut unsafe_out, mut safe_out) = (img.clone(), img.clone());
     lumit_core::fx::cpu::broadcast_safe(&mut unsafe_out, &of(0, 2, 110.0, 100.0).packed());
     lumit_core::fx::cpu::broadcast_safe(&mut safe_out, &of(0, 3, 110.0, 100.0).packed());
@@ -12460,8 +12125,6 @@ fn wgsl_beam_matches_the_cpu_oracle() {
         }
     }
 
-    // **It tapers.** Count the pixels the beam brightened on a column near the
-    // tail and on one near the head; the first must be the wider.
     let out = fx.beam(&ctx, &tex, w, h, &op_of(base));
     let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
     let lit_in = |x: u32| {
@@ -12479,9 +12142,6 @@ fn wgsl_beam_matches_the_cpu_oracle() {
         lit_in(38)
     );
 
-    // **Both colours appear.** The inside colour is white and the outside a
-    // blue, so somewhere on the beam blue must exceed red and somewhere else
-    // red must reach the inside colour's level.
     let alone_out = fx.beam(&ctx, &tex, w, h, &op_of(alone));
     let solo = readback_linear_f32(&ctx, &alone_out, w, h).unwrap();
     let mut core_seen = false;
@@ -12498,14 +12158,6 @@ fn wgsl_beam_matches_the_cpu_oracle() {
     assert!(rim_seen, "the outside colour must be visible as a rim");
 }
 
-/// The §1.6 oracle for Lightning (docs/08 §3.74), on the smooth corpus and by
-/// absolute difference.
-///
-/// Four claims beyond parity: **the bolt is jagged**, so it covers more than the
-/// straight line between its two points would; **forking adds material**;
-/// **Conductivity state changes the bolt** rather than only its brightness; and
-/// **the same state gives the same bolt back**, which is §2.4 and the whole point
-/// of a coordinate rather than a clock.
 #[test]
 fn wgsl_lightning_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::lightning::Lightning;
@@ -12592,9 +12244,6 @@ fn wgsl_lightning_matches_the_cpu_oracle() {
         }
     }
 
-    // **It is jagged, not straight.** A straight bolt of the same radius would
-    // never leave the corridor about the line between its two ends; measure the
-    // furthest lit pixel from that line and require it to be well outside.
     let solo = {
         let mut l = alone;
         l.forking = 0.0;
@@ -12619,7 +12268,6 @@ fn wgsl_lightning_matches_the_cpu_oracle() {
         "the bolt must wander off the straight line, saw {furthest}"
     );
 
-    // **Forking adds material**, and **Conductivity state reshapes the bolt.**
     let lit = |img: &[f32]| (0..img.len() / 4).filter(|i| img[i * 4 + 3] > 0.5).count();
     let forked = {
         let mut l = alone;
@@ -12638,13 +12286,6 @@ fn wgsl_lightning_matches_the_cpu_oracle() {
     assert_eq!(run(evolved), b, "the same state must give the same bolt");
 }
 
-/// The §1.6 oracle for Radio waves (docs/08 §3.75), on the smooth corpus and by
-/// absolute difference — §3.71's `atan2` admission again.
-///
-/// Four claims beyond parity: Time 0 is the exact identity; **there are several
-/// rings, not one**, which a single expanding shape could not produce; **a later
-/// Time puts them further out**; and **a star covers less than the polygon it
-/// came from**, which is what Star depth is for.
 #[test]
 fn wgsl_radio_waves_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::radio_waves::RadioWaves;
@@ -12737,8 +12378,6 @@ fn wgsl_radio_waves_matches_the_cpu_oracle() {
         }
     }
 
-    // **Several rings, not one.** Walk out along one row from the centre and
-    // count how many times the stroke starts.
     let solo = run(alone);
     let hits = (25..w)
         .filter(|x| {
@@ -12774,7 +12413,6 @@ fn wgsl_radio_waves_matches_the_cpu_oracle() {
         furthest(&run(later))
     );
 
-    // **A star covers less than its polygon**, which no parity check can see.
     let area = |v: &[f32]| (0..v.len() / 4).filter(|i| v[i * 4 + 3] > 0.25).count();
     let mut poly_alone = polygon;
     poly_alone.composite_on_original = false;
@@ -12876,14 +12514,10 @@ fn wgsl_vegas_matches_the_cpu_oracle() {
         }
     }
 
-    // **The stroke follows the picture**: a different Threshold is a different
-    // contour, so the lit pixels must move.
     let mut lower = base;
     lower.threshold = 35.0;
     assert!(run(lower) != run(base), "Threshold must move the contour");
 
-    // **Length breaks the outline into dashes.** The continuous stroke must
-    // light strictly more pixels than the dashed one at the same width.
     let lit = |v: &[f32]| {
         (0..v.len() / 4)
             .filter(|i| v[i * 4 + 3] > img[i * 4 + 3] + 1e-3)
@@ -12899,13 +12533,6 @@ fn wgsl_vegas_matches_the_cpu_oracle() {
     );
 }
 
-/// The §1.6 oracle for Add grain (docs/08 §3.77), and with it the fourth reader
-/// of the shared noise core.
-///
-/// Four claims beyond parity: Intensity 0 is the exact identity; **the grain has
-/// a size**, so neighbouring pixels are correlated at Size 4 and not at Size 1;
-/// **Monochrome moves the three channels together**; and **the tonal weights
-/// bite**, so grain confined to the shadows leaves the highlights alone.
 #[test]
 fn wgsl_add_grain_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::add_grain::AddGrain;
@@ -12984,9 +12611,6 @@ fn wgsl_add_grain_matches_the_cpu_oracle() {
         }
     }
 
-    // **The grain has a size.** Correlate each pixel's deviation with its right
-    // neighbour's: at Size 4 the cells are four pixels across and the two agree
-    // far more often than at Size 1.
     let agreement = |g: AddGrain| {
         let out = run(g, 37);
         let mut same = 0usize;
@@ -13020,9 +12644,6 @@ fn wgsl_add_grain_matches_the_cpu_oracle() {
         agreement(fine)
     );
 
-    // **Monochrome moves the three channels together**, which is what a lane
-    // rather than an average means. On a pixel with equal-ish weights the three
-    // deviations must share a sign.
     let m = run(mono, 37);
     let mut checked = 0;
     for i in (0..m.len()).step_by(4) {
@@ -13040,8 +12661,6 @@ fn wgsl_add_grain_matches_the_cpu_oracle() {
     }
     assert!(checked > 100, "too few pixels tested, saw {checked}");
 
-    // **The tonal weights bite**: grain confined to the shadows must leave the
-    // brightest pixels alone.
     let s = run(shadows_only, 37);
     let bright = (0..img.len() / 4)
         .filter(|i| img[i * 4 + 3] > 0.9 && img[i * 4] / img[i * 4 + 3] > 0.9)
@@ -13055,7 +12674,6 @@ fn wgsl_add_grain_matches_the_cpu_oracle() {
     }
 }
 
-/// The uniform's piece array and the builder's agree (docs/08 §3.78).
 #[test]
 fn the_path_piece_cap_matches_the_core() {
     assert_eq!(
@@ -13065,8 +12683,6 @@ fn the_path_piece_cap_matches_the_core() {
     );
 }
 
-/// A mask an effect can be pointed at: an ellipse, at the size the oracle
-/// corpus is. Closed, so it has an inside to fill.
 fn oracle_ellipse(w: u32, h: u32) -> lumit_core::mask::MaskPolyline {
     let m = lumit_core::mask::Mask::ellipse(
         f64::from(w) * 0.5,
@@ -13077,9 +12693,6 @@ fn oracle_ellipse(w: u32, h: u32) -> lumit_core::mask::MaskPolyline {
     lumit_core::mask::mask_path_at(std::slice::from_ref(&m), None, true, 0.0)
 }
 
-/// An open bezier squiggle across the frame — the other shape the seam can
-/// hand over, and the one that proves an *open* path is walked end to end
-/// rather than closed behind the effect's back.
 fn oracle_squiggle(w: u32, h: u32) -> lumit_core::mask::MaskPolyline {
     use lumit_core::mask::{BezierPath, Vertex};
     let (fw, fh) = (f64::from(w), f64::from(h));
@@ -13165,7 +12778,6 @@ fn wgsl_path_draw_matches_the_cpu_oracle() {
             .count()
     };
 
-    // ---- Scribble: a hatch inside the ellipse, at three densities.
     let mut base = Scribble::read(Params::EMPTY);
     base.spacing = 5.0;
     base.stroke_width = 1.5;
@@ -13185,7 +12797,6 @@ fn wgsl_path_draw_matches_the_cpu_oracle() {
     let mut tight = base;
     tight.path_overlap = 0.0;
 
-    // ---- Stroke: the continuous brush, and the dotted one.
     let mut brush = Stroke::read(Params::EMPTY);
     brush.brush_size = 5.0;
     let mut dotted = brush;
@@ -13200,7 +12811,6 @@ fn wgsl_path_draw_matches_the_cpu_oracle() {
     let mut revealed = brush;
     revealed.paint_style = 2;
 
-    // ---- Vegas on a path: the dashes it could not march before.
     let mut dashes = Vegas::read(Params::EMPTY);
     dashes.source = Vegas::SOURCE_MASK_PATH;
     dashes.segment_length = 14.0;
@@ -13287,7 +12897,6 @@ fn wgsl_path_draw_matches_the_cpu_oracle() {
         }
     }
 
-    // **Start and End trim it.** Half the drawing covers about half as much.
     let whole = covered(&run(&pick("scribble")));
     let part = covered(&run(&pick("scribble-half")));
     assert!(
@@ -13295,21 +12904,15 @@ fn wgsl_path_draw_matches_the_cpu_oracle() {
         "End 50 covered {part} of the whole drawing's {whole}"
     );
 
-    // **The dots come apart.** A stroke spaced well past its own width must
-    // cover less than the continuous one it would otherwise be.
     assert!(
         covered(&run(&pick("stroke-dotted"))) < covered(&run(&pick("stroke"))),
         "a dotted stroke must cover less than a continuous one"
     );
 
-    // **Reveal original is a hole in reverse**: what the brush did not touch is
-    // gone, and what it did keeps the picture rather than taking the colour.
     let reveal = run(&pick("stroke-reveal"));
     let mut kept = 0usize;
     for i in (0..reveal.len()).step_by(4) {
         if reveal[i + 3] > img[i + 3] * 0.5 && img[i + 3] > 0.5 {
-            // Where the stroke is, the colour is the picture's own — never the
-            // brush colour, which is white and would have shown as a lift.
             assert!(
                 reveal[i] <= img[i] + 1e-3,
                 "Reveal original brightened a pixel; it must only take away"
@@ -13319,8 +12922,6 @@ fn wgsl_path_draw_matches_the_cpu_oracle() {
     }
     assert!(kept > 20, "Reveal original kept nothing at all");
 
-    // **The waver holds still on Static and moves on Wiggly.** Same seed, same
-    // shape, two ticks: Static is bit-identical, Wiggly is not.
     let held = base.packed(&ellipse, 1.0, 3.5);
     assert_eq!(
         held.wiggle_tick, 0.0,
@@ -13338,24 +12939,16 @@ fn wgsl_path_draw_matches_the_cpu_oracle() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// The matte scales the amount (docs/08 §2.6): the blur, sharpen and
-// colour claims.
-// ---------------------------------------------------------------------------
-
-/// One effect's claim on the matte, checked four ways by [`check_matte_claim`].
 struct MatteClaim<'a> {
     name: &'static str,
     w: u32,
     h: u32,
     /// Scene-linear premultiplied RGBA, fp16-quantised by the harness.
     img: &'a [f32],
-    /// The §1.6 oracle with a matte; an empty one is the unmatted path.
     cpu: &'a dyn Fn(&mut [f32], &[f32]),
     /// The unmatted oracle as it was before the claim — what an empty matte
     /// must reproduce to the byte.
     plain: &'a dyn Fn(&mut [f32]),
-    /// The GPU pass, the matte bound or not.
     gpu: &'a dyn Fn(&wgpu::Texture, Option<&wgpu::Texture>) -> wgpu::Texture,
     /// Absolute parity tolerance. The corpus carries an HDR spike at 6.0, so
     /// the Moderate-class epsilon of the matted blur applies across the board.
@@ -13381,7 +12974,6 @@ fn check_matte_claim(ctx: &GpuContext, c: &MatteClaim<'_>) {
     let img = q(c.img);
     let tex = upload_linear_f32(ctx, &img, c.w, c.h);
 
-    // 1. Parity and stability under a ramp.
     let ramp: Vec<f32> = (0..n)
         .flat_map(|i| {
             let k = (i % c.w as usize) as f32 / (c.w - 1) as f32;
@@ -13406,7 +12998,6 @@ fn check_matte_claim(ctx: &GpuContext, c: &MatteClaim<'_>) {
         c.name
     );
 
-    // 2. An empty matte is the old function.
     let mut empty = img.clone();
     (c.cpu)(&mut empty, &[]);
     let mut plain = img.clone();
@@ -13429,7 +13020,6 @@ fn check_matte_claim(ctx: &GpuContext, c: &MatteClaim<'_>) {
         c.name
     );
 
-    // 3. A flat half matte is not the dissolve.
     let flat: Vec<f32> = (0..n).flat_map(|_| [0.5, 0.5, 0.5, 1.0]).collect();
     let mut half = img.clone();
     (c.cpu)(&mut half, &flat);
@@ -13444,7 +13034,6 @@ fn check_matte_claim(ctx: &GpuContext, c: &MatteClaim<'_>) {
         c.name
     );
 
-    // 4. And the two paths agree there too.
     let ftex = upload_linear_f32(ctx, &flat, c.w, c.h);
     let gpu_half = readback(&(c.gpu)(&tex, Some(&ftex)));
     let worst = worst_diff(&half, &gpu_half);
@@ -14198,14 +13787,6 @@ fn the_matte_scales_the_threshold_level() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// The matte scales the displacement (docs/08 §2.6): the distortion
-// claims. Every one runs through `check_matte_claim`, so each is held to the
-// same four facts as the blur and colour claims — parity under a ramp matte,
-// the empty matte equal to the old function to the byte, a half matte that is
-// NOT the generic dissolve, and parity there too.
-// ---------------------------------------------------------------------------
-
 #[test]
 fn the_matte_scales_the_rgb_split_amount() {
     let Some(ctx) = crate::test_support::lease() else {
@@ -14244,7 +13825,6 @@ fn the_matte_scales_the_rgb_split_amount() {
             tol: 2e-2,
         },
     );
-    // The Wavelength mode runs its own kernel and claims the same Amount.
     let samples = 16i32;
     let (basis, count) = lumit_core::fx::maths::spectral_basis_uniform(samples, tints);
     let sop = SpectralSplitOp {
@@ -14310,7 +13890,6 @@ fn the_matte_scales_the_chromatic_aberration_amount() {
             tol: 2e-2,
         },
     );
-    // Its Wavelength mode is the radial spectral split.
     let samples = 16i32;
     let (dx, dy) = lumit_core::fx::maths::rgb_split_offset(amount, 0.0);
     let (basis, count) = lumit_core::fx::maths::spectral_basis_uniform(samples, tints);
@@ -14355,8 +13934,6 @@ fn the_matte_scales_the_shake_displacement() {
     let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
-    // A wobble with all three parts, so the displacement the matte scales is
-    // a shove, a twist and a zoom together.
     let wobble = lumit_core::fx::maths::ShakeSample {
         offset_px: [5.0, -3.0],
         rotation_deg: 6.0,
@@ -14469,7 +14046,6 @@ fn the_matte_scales_the_shake_displacement() {
         "a half matte on a 6,4 shove must be the 3,2 shove"
     );
 
-    // The shake's own motion blur: every sub-frame tap scales the same way.
     let mut samples = [lumit_core::fx::maths::ShakeSample::IDENTITY; SHAKE_MB_SAMPLES];
     for (i, s) in samples.iter_mut().enumerate() {
         let t = i as f32 / (SHAKE_MB_SAMPLES - 1) as f32 - 0.5;
@@ -14668,7 +14244,6 @@ fn the_matte_widens_the_scanline_period() {
         half, doubled,
         "a half matte must be the lines at twice the period"
     );
-    // A black matte is no visible lines at all: the picture comes back whole.
     let black: Vec<f32> = (0..n).flat_map(|_| [0.0f32, 0.0, 0.0, 1.0]).collect();
     let mut none = img.clone();
     run(&mut none, &black);
@@ -15050,7 +14625,6 @@ fn the_matte_scales_the_warp_bend() {
     let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
-    // Bulge with both perspective tapers, so all three scaled controls matter.
     let mut a = Warp::read(Params::EMPTY);
     a.style = 4;
     a.bend = 60.0;
@@ -15091,8 +14665,6 @@ fn the_matte_scales_the_warp_bend() {
 // is nothing for a dissolve to fade back to.
 // ---------------------------------------------------------------------------
 
-/// A flat matte of one grey, at this test's raster — the picture a dissolve is
-/// held against when the claim's own answer has to be named exactly.
 fn flat_matte(w: u32, h: u32, grey: f32) -> Vec<f32> {
     (0..(w * h) as usize)
         .flat_map(|_| [grey, grey, grey, 1.0])
@@ -15343,13 +14915,11 @@ fn the_matte_scales_the_path_drawing_opacity() {
         mix: p.mix,
     };
 
-    // Scribble's hatch, laid on transparent.
     let mut s = Scribble::read(Params::EMPTY);
     s.spacing = 5.0;
     s.stroke_width = 1.5;
     s.composite_on_original = false;
     let sp = s.packed(&ellipse, 1.0, 3.5);
-    // Stroke's brush, revealing the original — the drawing as a hole.
     let mut b = Stroke::read(Params::EMPTY);
     b.brush_size = 5.0;
     b.paint_style = cpu::PAINT_REVEAL_ORIGINAL;
@@ -15584,7 +15154,6 @@ fn the_matte_scales_the_texturize_relief() {
     let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
-    // The same coarse weave the oracle test embosses.
     let mut weave = vec![0.0f32; (w * h * 4) as usize];
     for y in 0..h {
         for x in 0..w {
@@ -15626,12 +15195,6 @@ fn the_matte_scales_the_texturize_relief() {
         },
     );
 }
-
-// ---------------------------------------------------------------------------
-// The matte scales the amount (docs/08 §2.6): the temporal and
-// transition claims — Echo's Decay, both motion blurs' Shutter angle, and
-// every wipe's Completion.
-// ---------------------------------------------------------------------------
 
 #[test]
 fn the_matte_scales_the_linear_wipe_completion() {
@@ -15812,8 +15375,6 @@ fn the_matte_scales_the_iris_wipe_radius() {
         },
     );
 
-    // **A half matte IS the half-radius iris**, to the bit. A dissolve cannot
-    // move an edge; this does.
     let q = |v: &[f32]| -> Vec<f32> { v.iter().map(|x| f16_to_f32(f16_bits(*x))).collect() };
     let img = q(&img);
     let n = (w * h) as usize;
@@ -15830,8 +15391,6 @@ fn the_matte_scales_the_iris_wipe_radius() {
         "a half matte on a radius-8 iris must BE the radius-4 iris"
     );
 
-    // And a black matte leaves the frame exactly alone — the same exact
-    // identity Outer radius 0 already is.
     let black: Vec<f32> = (0..n).flat_map(|_| [0.0, 0.0, 0.0, 1.0]).collect();
     let mut shut = img.clone();
     lumit_core::fx::cpu::iris_wipe_matted(&mut shut, w, h, &p, &black);
@@ -15853,7 +15412,6 @@ fn the_matte_scales_the_card_wipe_completion() {
     let c = {
         let mut c = CardWipe::read(Params::EMPTY);
         c.seed = 12_345;
-        // Half of *this* raster, for the reason the oracle above gives.
         c.transition_width = w as f32 * 0.5;
         c
     };
@@ -15887,9 +15445,6 @@ fn the_matte_scales_the_card_wipe_completion() {
     );
 }
 
-/// Echo's Decay, per pixel. Beyond the four facts, one equality a
-/// dissolve cannot reach: a flat half matte on decay 0.6 draws *exactly* the
-/// decay-0.3 trail — genuinely shorter ghosts, not a long trail faded back.
 #[test]
 fn the_matte_scales_the_echo_decay() {
     let Some(ctx) = crate::test_support::lease() else {
@@ -15900,8 +15455,6 @@ fn the_matte_scales_the_echo_decay() {
     let (w, h) = (24u32, 16u32);
     let q = |v: &[f32]| -> Vec<f32> { v.iter().map(|x| f16_to_f32(f16_bits(*x))).collect() };
     let current = q(&corpus(w, h));
-    // Two neighbours that are the current frame shifted along, so a trail is
-    // visibly a trail rather than a brightening.
     let shifted = |by: usize| -> Vec<f32> {
         let n = (w * h) as usize;
         let mut out = vec![0.0f32; n * 4];
@@ -15924,7 +15477,6 @@ fn the_matte_scales_the_echo_decay() {
         ws[1] = decay * decay;
         ws
     };
-    // Screen, the schema's default combine, at full Mix.
     let (mode, mix) = (3u32, 1.0f32);
     let weights = weights_for(0.6);
     let op = EchoOp {
@@ -15976,7 +15528,6 @@ fn the_matte_scales_the_echo_decay() {
     );
 }
 
-/// Motion blur's Shutter angle, per pixel.
 #[test]
 fn the_matte_scales_the_fast_motion_blur_shutter() {
     use lumit_core::fx::{resolved::MbQuality, resolved::MbView};
@@ -16045,8 +15596,6 @@ fn the_matte_scales_the_fast_motion_blur_shutter() {
         },
     );
 
-    // **A half matte IS the half-shutter streak**, which is a genuinely shorter
-    // smear rather than a long one faded back over a sharp frame.
     let q = |x: &[f32]| -> Vec<f32> { x.iter().map(|y| f16_to_f32(f16_bits(*y))).collect() };
     let img = q(&img);
     let flat: Vec<f32> = (0..n).flat_map(|_| [0.5, 0.5, 0.5, 1.0]).collect();
@@ -16148,8 +15697,6 @@ fn a_motion_vectors_layer_stands_in_for_the_measured_flow() {
     assert!(worst < 3e-2, "the supplied field drifted by {worst}");
     assert_ne!(gpu, img, "a supplied field must actually smear the picture");
 
-    // Mid-grey everywhere is standing still: the field is zero and the blur is
-    // the picture back.
     let still = q(&(0..n)
         .flat_map(|_| [0.5, 0.5, 0.5, 1.0])
         .collect::<Vec<f32>>());
@@ -16205,8 +15752,6 @@ fn the_matte_scales_the_accumulation_shutter() {
         readback_linear_f32(&ctx, &out, w, h).unwrap()[0]
     };
 
-    // Fully open: the equal-weight average, which is what the effect has always
-    // drawn.
     let mean = levels.iter().sum::<f32>() / levels.len() as f32;
     let white = read(&flat(1.0));
     assert!(
@@ -16214,8 +15759,6 @@ fn the_matte_scales_the_accumulation_shutter() {
         "a white matte must be the equal-weight average: {white} vs {mean}"
     );
 
-    // Shut: the shutter has closed to the frame's own instant, so the picture
-    // is the sub-frame render at that instant and nothing is blurred at all.
     let black = read(&flat(0.0));
     assert!(
         (black - levels[2]).abs() < 2e-3,
@@ -16239,7 +15782,6 @@ fn the_matte_scales_the_accumulation_shutter() {
         "a half matte gave the dissolve between the blurred and the sharp frame          ({half} vs {dissolve}) — which is not a shorter exposure"
     );
 
-    // Bit-stable, run to run (§2.4).
     assert_eq!(half, read(&flat(0.5)), "the combine must be bit-stable");
 }
 
@@ -16375,8 +15917,6 @@ fn every_work_texture_is_charged_to_the_ledger_and_given_back_with_the_frame() {
     let b = work_texture(&ctx, 64, 36, "ledger-b");
     assert_eq!(ctx.ledger().used(Tier::Vram), before + one * 2);
 
-    // Give one back to the pool and take it again: the same memory, so the
-    // ledger must not move.
     ctx.recycle(a);
     let held = ctx.ledger().used(Tier::Vram);
     let again = work_texture(&ctx, 64, 36, "ledger-again");
@@ -16412,12 +15952,10 @@ fn a_frame_that_will_not_fit_is_refused_before_it_starts() {
     let was = ctx.ledger().budget(Tier::Vram);
     ctx.ledger().set_budget(Tier::Vram, 4096);
 
-    // A frame that fits opens, and holds its reservation while it is open.
     ctx.try_begin_frame(1024).expect("a small frame fits");
     assert!(ctx.ledger().used(Tier::Vram) >= 1024);
     ctx.end_frame();
 
-    // One that does not is refused, and takes nothing on the way out.
     let held = ctx.ledger().used(Tier::Vram);
     let refused = ctx.try_begin_frame(1 << 30);
     assert!(
@@ -16460,7 +15998,6 @@ fn a_frame_hands_a_finished_work_texture_to_the_pass_after_it() {
         "the pass after it writes into the one just given back"
     );
 
-    // A different size asks for its own.
     ctx.recycle(a.clone());
     let wider = work_texture(&ctx, 128, 36, "pool-wider");
     assert_ne!(wider, a, "a wider pass cannot be given a narrower texture");
@@ -16470,7 +16007,6 @@ fn a_frame_hands_a_finished_work_texture_to_the_pass_after_it() {
         "and the one it would not take is still there for the pass that fits"
     );
 
-    // So does a different format.
     let other = ctx.device.create_texture(&wgpu::TextureDescriptor {
         label: Some("pool-eight-bit"),
         size: wgpu::Extent3d {
@@ -16621,7 +16157,6 @@ fn wgsl_mood_lighting_matches_the_cpu_oracle() {
             assert_eq!(gpu, img, "{name}: must be the bit-exact identity");
         } else {
             assert!(gpu != img, "{name}: the effect must actually do something");
-            // Alpha is this effect's to leave alone, whatever the light does.
             for (g, o) in gpu.chunks_exact(4).zip(img.chunks_exact(4)) {
                 assert_eq!(g[3], o[3], "{name}: alpha must be untouched");
             }
@@ -16663,7 +16198,6 @@ fn the_matte_scales_the_mood_lighting() {
     let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
-    // Strong on both halves, so the claim is visible well above the fp16 floor.
     let of = |intensity: f32, contrast: f32| {
         let mut m = MoodLighting::read(Params::EMPTY);
         m.scale = 12.0;
@@ -16844,7 +16378,6 @@ fn wgsl_pixel_sort_matches_the_cpu_oracle() {
             })
         }),
         ("reseeded", with(&|s| s.seed = 7)),
-        // The three that must come back untouched.
         ("span-of-one", with(&|s| s.max_span = 0.0)),
         ("empty-band", {
             with(&|s| {
@@ -16853,7 +16386,6 @@ fn wgsl_pixel_sort_matches_the_cpu_oracle() {
             })
         }),
         ("mix-zero", with(&|s| s.mix = 0.0)),
-        // ... and one that must not.
         ("mixed", with(&|s| s.mix = 60.0)),
     ] {
         let p = s.packed();
@@ -16963,9 +16495,6 @@ fn the_matte_says_where_the_pixel_sort_spans_are() {
         },
     );
 
-    // **A black matte is the picture, untouched.** No span may form anywhere, so
-    // there is nothing to move — and the matted path has to reach that by
-    // holding the spans back rather than by dissolving toward the input.
     let mut dark = quantised(&img);
     lumit_core::fx::cpu::pixel_sort_matted(&mut dark, w, h, &p, &flat_matte(w, h, 0.0));
     assert_eq!(
@@ -16974,7 +16503,6 @@ fn the_matte_says_where_the_pixel_sort_spans_are() {
         "a black matte on Pixel sort must BE the frame as it arrived, to the bit"
     );
 
-    // **And a white one is the unmatted sort.** The row is off, not merely weak.
     let mut lit = quantised(&img);
     lumit_core::fx::cpu::pixel_sort_matted(&mut lit, w, h, &p, &flat_matte(w, h, 1.0));
     let mut plain = quantised(&img);
@@ -16985,9 +16513,6 @@ fn the_matte_says_where_the_pixel_sort_spans_are() {
     );
 }
 
-/// Depth of field pro over `img` at `w` x `h`, every pixel `metres` away and
-/// focused at 3 m, through the Biotar at `fstop`: Lens shapes with no `rays`,
-/// Ray traced with them.
 #[allow(clippy::too_many_arguments)]
 fn dof_pro(
     ctx: &crate::test_support::Lease,
@@ -17071,10 +16596,6 @@ fn dof_pro(
     readback_linear_f32(ctx, &out, w, h).expect("readback")
 }
 
-/// Depth of field pro's Ray traced method against the optics it claims: a plane
-/// at the focus distance comes back as it was in the middle of the frame, and
-/// a far point spreads to the disc a thin lens gives at that distance and
-/// f-stop, keeping its light.
 #[test]
 fn ray_traced_depth_of_field_matches_the_thin_lens() {
     let Some(ctx) = crate::test_support::lease() else {
@@ -17085,7 +16606,6 @@ fn ray_traced_depth_of_field_matches_the_thin_lens() {
     let render =
         |img: &[f32], metres: f32, fstop: f32| dof_pro(&ctx, img, w, h, metres, fstop, 1.0, 300);
 
-    // A checker at the focus distance, stopped down: the middle is untouched.
     let mut checker = vec![0f32; (w * h * 4) as usize];
     for (i, px) in checker.chunks_mut(4).enumerate() {
         let (x, y) = (i as u32 % w, i as u32 / w);
@@ -17109,7 +16629,6 @@ fn ray_traced_depth_of_field_matches_the_thin_lens() {
         }
     }
 
-    // One bright point at 100 m: the disc a thin lens gives, f/1.4.
     let mut dot = vec![0f32; (w * h * 4) as usize];
     for px in dot.chunks_mut(4) {
         px[3] = 1.0;
@@ -17132,9 +16651,6 @@ fn ray_traced_depth_of_field_matches_the_thin_lens() {
     );
 }
 
-/// Depth of field pro blurs a near picture right up to the frame's edge, by
-/// either method. Every sample past the edge used to read the edge pixel,
-/// which left a strip of it down each side.
 #[test]
 fn depth_of_field_pro_blurs_up_to_the_frame_edge() {
     let Some(ctx) = crate::test_support::lease() else {
@@ -17142,7 +16658,6 @@ fn depth_of_field_pro_blurs_up_to_the_frame_edge() {
         return;
     };
     let (w, h) = (320u32, 96u32);
-    // Upright stripes 2 px wide, all of it near and far out of focus.
     let stripes: Vec<f32> = (0..w * h)
         .flat_map(|i| {
             let v = if (i % w / 2) % 2 == 0 { 0.8 } else { 0.1 };

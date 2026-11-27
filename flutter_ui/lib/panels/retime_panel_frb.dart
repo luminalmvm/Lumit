@@ -24,10 +24,8 @@ import 'graph_maths.dart';
 import 'retime_commands.dart';
 import 'timeline_extras_frb.dart' show Segment, SegmentOption;
 
-/// The speeds a layer is most often put at, one click each.
 const List<int> _speedChips = [25, 50, 100, 200, 400];
 
-/// Below this the speed and the duration stop sharing a row.
 const double _narrow = 300;
 const double _labelWidth = 56;
 
@@ -37,7 +35,6 @@ const double _stripLeast = 56;
 const double _stripMost = 300;
 const double _besideStrip = 176;
 
-/// What the speed and the source time need side by side on the strip.
 const double _sourceTimeRoom = 160;
 
 class RetimePanelFrb extends StatefulWidget {
@@ -262,8 +259,6 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
                         ),
                       ),
                   ]),
-                  // With nothing to retime the name and the switch it can't
-                  // use are the whole panel.
                   if (on) ...[
                     const SizedBox(height: 6),
                     // Flat at 100% until there's a Retime to draw, so it
@@ -307,7 +302,6 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
                           ),
                           const SizedBox(height: 10),
                           _commands(t, targets, clips, speed, retimed),
-                          // A clip follows its layer here.
                           if (clip == null &&
                               first?.info.kind == BridgeLayerKind.footage) ...[
                             const SizedBox(height: 10),
@@ -332,7 +326,6 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
     );
   }
 
-  /// Greyed and out of reach while no layer can use it.
   Widget _dimmed(bool on, Widget child) =>
       on ? child : IgnorePointer(child: Opacity(opacity: 0.4, child: child));
 
@@ -713,7 +706,6 @@ class _SpeedStripPainter extends CustomPainter {
   final ValueNotifier<int> playhead;
   final Color ground, fill, line, normal, head;
 
-  /// The face the 100% and nought marks are written in.
   final TextStyle tick;
 
   _SpeedStripPainter({
@@ -757,7 +749,6 @@ class _SpeedStripPainter extends CustomPainter {
       if (s < lo) lo = s;
       if (s > hi) hi = s;
     }
-    // The readout has the top of the strip to itself.
     const headroom = 24.0;
     final room = size.height - headroom;
     double yOf(double s) => size.height - (s - lo) / (hi - lo) * room;
@@ -774,7 +765,6 @@ class _SpeedStripPainter extends CustomPainter {
     final rule = yOf(100);
     canvas.drawLine(
         Offset(0, rule), Offset(size.width, rule), Paint()..color = normal);
-    // The marks the Sequence envelope has, on the rule and on nought.
     _mark(canvas, size, '100${l10n.unitSymbolPercent}', rule);
     _mark(canvas, size, '0${l10n.unitSymbolPercent}', zero);
     canvas.drawPath(

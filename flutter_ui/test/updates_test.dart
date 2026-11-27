@@ -29,7 +29,6 @@ void main() {
       // Ten is not one: the numbers are compared as numbers, which a string
       // comparison would get backwards.
       expect(compareVersions('0.10.0', '0.9.0'), greaterThan(0));
-      // A missing place is zero.
       expect(compareVersions('1.2', '1.2.0'), 0);
     });
 
@@ -37,7 +36,6 @@ void main() {
       const nightly = '0.6.1-nightly.20261012.9';
       expect(compareVersions(nightly, '0.6.0'), greaterThan(0));
       expect(compareVersions(nightly, '0.6.1'), lessThan(0));
-      // Run ten follows run nine, and a new day follows both.
       expect(compareVersions('0.6.1-nightly.20261012.10', nightly),
           greaterThan(0));
       expect(compareVersions('0.6.1-nightly.20261013.11', nightly),
@@ -134,9 +132,6 @@ void main() {
       final service = _service(fetch: (_) async => _releaseJson());
       await service.check();
       expect(service.stage, UpdateStage.available);
-      // The exact wording the owner asked for. A test rather than a comment,
-      // because this string is the whole feature as far as anyone using Lumit
-      // is concerned.
       expect(service.menuLabel, 'Click to update - v0.2.0');
       expect(service.busy, isFalse);
     });
@@ -147,7 +142,6 @@ void main() {
       await service.check();
       expect(service.stage, UpdateStage.failed);
       expect(service.failure, 'Could not check for updates');
-      // Recoverable: the row offers the check again.
       expect(service.menuLabel, 'Check for updates');
     });
   });
@@ -230,7 +224,6 @@ void main() {
       if (scratch.existsSync()) scratch.deleteSync(recursive: true);
     });
 
-    /// A service whose download writes [body] to the file it is given.
     UpdateService serviceFor(List<int> body, {String? digest}) => _service(
           fetch: (_) async => _releaseJson(assets: [
             _asset('lumit-0.2.0-windows-x64-setup.exe',
@@ -394,8 +387,6 @@ void main() {
       if (tmp.existsSync()) tmp.deleteSync(recursive: true);
     });
 
-    /// A real little installation, and a service pointed at it whose "unpack"
-    /// writes the new version out by hand.
     ({UpdateService service, InstallSite site, List<File> relaunched})
         installed({bool emptyArchive = false}) {
       final root = Directory('${tmp.path}/Lumit')..createSync(recursive: true);
@@ -508,8 +499,6 @@ void main() {
       if (scratch.existsSync()) scratch.deleteSync(recursive: true);
     });
 
-    /// Everything the flow needs, with the answers a test can look at
-    /// afterwards.
     ({Widget host, List<String> notices, List<int> saves}) harness(
       UpdateService service, {
       required bool dirty,
@@ -557,13 +546,10 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('host-press')));
       await tester.pumpAndSettle();
 
-      // The offer names the version and what it costs.
       expect(find.text('Update to Lumit 0.2.0?'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('update-offer-yes')));
       await tester.pumpAndSettle();
 
-      // Straight through the download to the restart question, which offers
-      // to save because this project has unsaved work.
       expect(find.byKey(const ValueKey('update-save-restart')), findsOneWidget);
       expect(find.byKey(const ValueKey('update-restart-now')), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('update-save-restart')));
@@ -583,7 +569,6 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('host-press')));
       await tester.pumpAndSettle();
 
-      // The notice, with the release's own words, and no restart question yet.
       expect(find.byKey(const ValueKey('update-notice')), findsOneWidget);
       expect(find.text('Before you update to Lumit 0.2.0'), findsOneWidget);
       expect(find.textContaining('Glow is drawn by a new renderer'),
@@ -616,8 +601,6 @@ will not look the same as it did in 0.3.
 - Something else entirely
 ''';
 
-/// A service already holding a verified download, for the windows that come
-/// after one.
 Future<UpdateService> _readyService(Directory scratch, {String? notes}) async {
   final body = utf8.encode('installer');
   final service = _service(
@@ -670,26 +653,20 @@ UpdateService _service({
       quit: quit ?? () {},
       now: now,
       downloadFolder: folder ?? Directory.systemTemp.createTempSync,
-      // These tests are about downloading, not signing, which
-      // release_signature_test.dart covers.
       signingKeys: const [],
     );
 
-/// An installation Lumit cannot replace from inside — the safe default for
-/// every test that is not about replacing one.
 final InstallSite _unknownSite = InstallSite(
   kind: InstallKind.unknown,
   root: Directory('${Directory.systemTemp.path}/lumit-nowhere'),
   launcher: File('${Directory.systemTemp.path}/lumit-nowhere/lumit'),
 );
 
-/// The shape of GitHub's answer, with only the fields the updater reads.
 Map<String, dynamic> _releaseJson({
   String tag = 'v0.2.0',
   bool draft = false,
   bool prerelease = false,
   List<Map<String, dynamic>>? assets,
-  // The release notes. Left out, as an older API answer leaves it out.
   String? body,
 }) =>
     {
@@ -698,8 +675,6 @@ Map<String, dynamic> _releaseJson({
       'prerelease': prerelease,
       'html_url': 'https://github.com/luminalmvm/lumit/releases/tag/$tag',
       if (body != null) 'body': body,
-      // What a release actually carries: an installer and a package
-      // per platform, plus the Flatpak bundle.
       'assets': assets ??
           [
             _asset('lumit-0.2.0-windows-x64-setup.exe'),
@@ -719,8 +694,6 @@ Map<String, dynamic> _asset(String name, {int size = 0, String? digest}) => {
       if (digest != null) 'digest': digest,
     };
 
-/// A window with an Overlay and one button, which is what the update windows
-/// need to be shown into.
 class _Host extends StatelessWidget {
   final Future<void> Function(BuildContext context) onPressed;
   const _Host({required this.onPressed});

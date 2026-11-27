@@ -12,9 +12,7 @@ use realfft::RealFftPlanner;
 use super::coarse::Found;
 use super::{SyncError, Windows, RATE};
 
-/// 8 s at 8 kHz.
 const WINDOW: usize = 65_536;
-/// How far either side of the coarse line to look: 40 ms.
 const REACH: usize = 320;
 const SIZE: usize = 131_072;
 const MOST: usize = 12;
@@ -31,7 +29,6 @@ const DRIFT_SHIFT: f64 = 0.001;
 /// steady, so the pair is not sure.
 const STEADY: f64 = 0.002;
 
-/// The two inputs of a pair, as the fine stage reads them.
 pub(super) struct Pair<'a> {
     pub(super) windows: &'a dyn Windows,
     pub(super) short: usize,
@@ -50,7 +47,6 @@ pub(super) struct Fit {
     pub(super) sure: bool,
 }
 
-/// Pin down the pair `found` roughly placed.
 pub(super) fn refine(
     planner: &mut RealFftPlanner<f32>,
     pair: &Pair,
@@ -164,7 +160,6 @@ pub(super) fn refine(
     })
 }
 
-/// Up to [`MOST`] of `times`, spread evenly from first to last.
 fn spread(times: &[f64]) -> Vec<f64> {
     if times.len() <= MOST {
         return times.to_vec();
@@ -205,7 +200,6 @@ fn peak(g: &[f32]) -> Option<f64> {
     Some(j as f64 + frac)
 }
 
-/// The median of `x`, sorting it; the mean of the middle two when even.
 fn median(x: &mut [f64]) -> f64 {
     x.sort_by(f64::total_cmp);
     let n = x.len();

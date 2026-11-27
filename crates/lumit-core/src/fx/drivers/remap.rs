@@ -15,7 +15,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Remap's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "remap",
@@ -27,23 +26,18 @@ use lumit_fx_macros::Effect;
     matte = false,
 )]
 pub struct Remap {
-    /// The number coming in — usually wired from another driver.
     #[slider(min = 0.0, max = 1.0, default = 0.0, unit = Raw)]
     pub value: f32,
 
-    /// The bottom of the range it arrives in.
     #[slider(min = 0.0, max = 1.0, default = 0.0, unit = Raw)]
     pub in_low: f32,
 
-    /// The top of the range it arrives in.
     #[slider(min = 0.0, max = 1.0, default = 1.0, unit = Raw)]
     pub in_high: f32,
 
-    /// The bottom of the range it leaves in.
     #[slider(min = 0.0, max = 100.0, default = 0.0, unit = Raw)]
     pub out_low: f32,
 
-    /// The top of the range it leaves in.
     #[slider(min = 0.0, max = 100.0, default = 100.0, unit = Raw)]
     pub out_high: f32,
 
@@ -54,10 +48,8 @@ pub struct Remap {
     pub clamp: bool,
 }
 
-/// The port the mapped number leaves by.
 pub const VALUE_PORT: &str = "value";
 
-/// Remap's behaviour.
 pub struct RemapDef;
 
 impl EffectDef for RemapDef {

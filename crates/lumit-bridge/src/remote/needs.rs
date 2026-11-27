@@ -1,7 +1,3 @@
-//! What an export of a composition needs that a computer may not have, and
-//! what this computer has: its effects, fonts, model packs and Lumit, and the
-//! card, memory and cores the account's other computers choose by.
-
 use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -14,7 +10,6 @@ use uuid::Uuid;
 use crate::api::composition::CompositionReference;
 use crate::api::remote::BridgeRemoteFit;
 
-/// The match names of effects that come from outside Lumit.
 const PLUGINS: [&str; 4] = [
     lumit_core::fx::builtins::OFX_MATCH_PREFIX,
     lumit_core::fx::builtins::CLAP_MATCH_PREFIX,
@@ -26,24 +21,19 @@ fn plugin(match_name: &str) -> bool {
     PLUGINS.iter().any(|prefix| match_name.starts_with(prefix))
 }
 
-/// What an export of one composition needs.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub(super) struct Needs {
     /// Lumit's own effects it uses. A Lumit without one is too old for it.
     pub builtins: Vec<String>,
-    /// Effects from outside Lumit.
     pub plugins: Vec<String>,
-    /// Each font family and the face in it.
     pub fonts: Vec<(String, String)>,
     /// Model packs, by id, or by what they do where any pack doing it will.
     pub models: Vec<String>,
-    /// The schema of the document, and the Lumit that wrote it.
     pub schema: String,
     pub version: String,
 }
 
-/// What a computer lacks of [`Needs`].
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub(super) struct Lacks {
@@ -54,7 +44,6 @@ pub(super) struct Lacks {
     pub too_old: String,
 }
 
-/// What an export of `comp` in `doc` needs.
 pub(super) fn of(doc: &Document, comp: Uuid) -> Needs {
     let reached = super::files::reached(doc, comp);
     let comps = doc.items.iter().filter_map(|item| match item {
@@ -102,9 +91,6 @@ pub(super) fn of(doc: &Document, comp: Uuid) -> Needs {
                 models.insert("synthesis".to_owned());
             }
         }
-        // ponytail: a text style can sit in a layer, a keyframe or a range of
-        // letters, so every object in the comp naming a `family` is taken for
-        // one. An effect row of that name would only add a font to check.
         if let Ok(value) = serde_json::to_value(comp) {
             families(&value, &mut fonts);
         }
@@ -140,7 +126,6 @@ fn families(value: &Value, out: &mut BTreeSet<(String, String)>) {
     }
 }
 
-/// Whether this Lumit's schema is older than `schema`, which it can't read.
 pub(super) fn older_than(schema: &str) -> bool {
     let ours = lumit_project::semver_triple(lumit_project::SCHEMA_VERSION);
     match (ours, lumit_project::semver_triple(schema)) {
@@ -149,7 +134,6 @@ pub(super) fn older_than(schema: &str) -> bool {
     }
 }
 
-/// What this computer lacks of `needs`.
 pub(super) fn lacks(needs: &Needs) -> Lacks {
     let effects = &lumit_core::fx::catalogue::BUILTIN_DEFS;
     let missing_builtin = needs
@@ -205,7 +189,6 @@ pub(super) fn lacks(needs: &Needs) -> Lacks {
     }
 }
 
-/// The model packs installed here: id, name and what each does.
 fn models() -> Vec<(String, String, String)> {
     crate::api::addons::addon_list()
         .into_iter()
@@ -214,12 +197,10 @@ fn models() -> Vec<(String, String, String)> {
         .collect()
 }
 
-/// What [`state_fields`] last worked out, and when.
 static STATE: Mutex<(Option<web_time::Instant>, u64, String)> =
     Mutex::new((None, 0, String::new()));
 static WORKING: AtomicBool = AtomicBool::new(false);
 
-/// How long what this computer has is believed before it is asked again.
 const FRESH: web_time::Duration = web_time::Duration::from_secs(60);
 
 /// The fields this computer adds to what it says of itself in the room.
@@ -317,7 +298,6 @@ impl super::Remote {
         BridgeRemoteFit::Checking
     }
 
-    /// A computer answered whether it can export a composition.
     pub(super) fn checked(
         &self,
         computer: &str,

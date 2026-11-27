@@ -14,10 +14,8 @@ import '../widgets/controls.dart';
 import 'grade_wheel.dart' show wheelMaster;
 
 class GradeBars extends StatefulWidget {
-  /// The three channels as the document holds them, at the playhead.
   final List<double> rgb;
 
-  /// Where every channel rests.
   final double neutral;
 
   /// How far the bars travel either side of [neutral].
@@ -30,7 +28,6 @@ class GradeBars extends StatefulWidget {
   final bool enabled;
   final bool keyed;
 
-  /// The master's colour, then red's, green's and blue's.
   final List<Color> colours;
 
   final VoidCallback onStart;
@@ -169,8 +166,6 @@ class _GradeBarsState extends State<GradeBars> {
   }
 }
 
-/// One bar: a track, a mark where it rests, and a fill from there to the
-/// value.
 class _BarPainter extends CustomPainter {
   /// The value, -1 at the bottom to 1 at the top.
   final double at;

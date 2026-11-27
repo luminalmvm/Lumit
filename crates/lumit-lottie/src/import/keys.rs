@@ -26,7 +26,6 @@ use lumit_core::time::Rational;
 use super::read::{Clock, Read};
 use crate::keys::{Track, LINEAR_IN, LINEAR_OUT};
 
-/// The most samples a curved motion path takes: about an hour at 60 fps.
 const MAX_SAMPLES: usize = crate::time::MAX_SAMPLES;
 
 /// The two sides of one span, from its handles in the unit square, its length
@@ -70,7 +69,6 @@ fn times(track: &Track, clock: &Clock) -> Vec<Rational> {
     out
 }
 
-/// Number `dim` of a track as Lumit's keys, on the owner's clock.
 pub(super) fn keyframes(track: &Track, dim: usize, clock: &Clock, default: f64) -> Vec<Keyframe> {
     let at = times(track, clock);
     let value = |n: usize| {
@@ -123,7 +121,6 @@ pub(super) fn keyframes(track: &Track, dim: usize, clock: &Clock, default: f64) 
     keys
 }
 
-/// Number `dim` of a track as a property: still when it doesn't move.
 pub(super) fn property(track: &Track, dim: usize, clock: &Clock, default: f64) -> Property {
     let first = track
         .keys
@@ -145,7 +142,6 @@ pub(super) fn property(track: &Track, dim: usize, clock: &Clock, default: f64) -
     }
 }
 
-/// Number `dim` of a read property, or `default` when there is none.
 pub(super) fn one(read: Option<&Read>, dim: usize, clock: &Clock, default: f64) -> Property {
     read.map_or_else(
         || Property::fixed(default),
@@ -238,7 +234,6 @@ fn point_at(read: &Read, seconds: f64) -> [f64; 2] {
     at_length(&ctrl, ease.clamp(0.0, 1.0))
 }
 
-/// The point a fraction `s` of the way along a cubic, by length.
 fn at_length(c: &[[f64; 2]; 4], s: f64) -> [f64; 2] {
     const STEPS: usize = 64;
     let point = |u: f64| {

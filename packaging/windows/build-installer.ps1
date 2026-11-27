@@ -79,6 +79,25 @@ New-Item -ItemType Directory -Force "$release\data\colour" | Out-Null
 Copy-Item "$root\crates\lumit-colour\vendored\*.artefact" "$release\data\colour" -Force
 Write-Host "Bundled the vendored colour artefacts"
 
+# The generator names the Visual Studio found above, which on GitHub's runners
+# moved from 2022 to 2026, and that Visual Studio's own CMake knows its name.
+# The name comes from CMake's list, as vswhere calls 2026 "18", not "2026".
+$vsMajor = (& $vswhere -path $vs -property installationVersion).Split('.')[0]
+$cmake = "$vs\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
+if (-not (Test-Path $cmake)) { $cmake = 'cmake' }
+$generator = (& $cmake --help) -join "`n" |
+    Select-String -Pattern "Visual Studio $vsMajor \d{4}" |
+    ForEach-Object { $_.Matches[0].Value }
+if (-not $generator) { throw "CMake has no generator for Visual Studio $vsMajor" }
+& $cmake -S "$root\ofx" -B "$root\flutter_ui\build\resolve-ofx" -G $generator -A x64 -DLUMIT_REQUIRE_GPU=ON
+if ($LASTEXITCODE) { throw 'Resolve plugin configure failed' }
+& $cmake --build "$root\flutter_ui\build\resolve-ofx" --config Release -j4
+if ($LASTEXITCODE) { throw 'Resolve plugin build failed' }
+$link = "$release\Resolve"
+New-Item -ItemType Directory -Force "$link\LumitPreview.ofx.bundle\Contents\Win64" | Out-Null
+Copy-Item "$root\ofx\link.lua", "$root\ofx\import.js", "$root\ofx\canvas.png" $link -Force
+Copy-Item "$root\flutter_ui\build\resolve-ofx\Release\LumitPreview.ofx" "$link\LumitPreview.ofx.bundle\Contents\Win64" -Force
+
 $iscc = Get-Command iscc -ErrorAction SilentlyContinue
 if ($null -ne $iscc) {
     $iscc = $iscc.Source

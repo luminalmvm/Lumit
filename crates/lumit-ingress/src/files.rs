@@ -12,11 +12,9 @@ use std::io;
 use std::path::Path;
 use std::time::SystemTime;
 
-/// A file open for reading.
 #[cfg(not(target_arch = "wasm32"))]
 pub type Reader = std::fs::File;
 
-/// A file open for writing.
 #[cfg(not(target_arch = "wasm32"))]
 pub type Writer = std::fs::File;
 
@@ -98,7 +96,6 @@ pub fn modified(path: &Path) -> io::Result<SystemTime> {
     std::fs::metadata(path)?.modified()
 }
 
-/// What is in the folder `path`, by name, each with whether it is a folder.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn list(path: &Path) -> io::Result<Vec<(String, bool)>> {
     std::fs::read_dir(path)?
@@ -110,16 +107,11 @@ pub fn list(path: &Path) -> io::Result<Vec<(String, bool)>> {
         .collect()
 }
 
-/// This process's id, which a temporary file's name carries.
 #[cfg(not(target_arch = "wasm32"))]
 #[must_use]
 pub fn process_id() -> u32 {
     std::process::id()
 }
-
-// ---------------------------------------------------------------------------
-// The browser build's store
-// ---------------------------------------------------------------------------
 
 #[cfg(target_arch = "wasm32")]
 use std::collections::{BTreeMap, BTreeSet};
@@ -128,13 +120,11 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 #[cfg(target_arch = "wasm32")]
 struct Store {
-    /// Every file, by its tidied path.
     files: BTreeMap<String, (Arc<[u8]>, SystemTime)>,
     /// Every folder made, and every folder a file has been written into.
     dirs: BTreeSet<String>,
     /// Every file written or deleted since [`take_changed`] was last asked.
     changed: BTreeSet<String>,
-    /// Video and sound the page holds itself ([`hold`]).
     held: BTreeSet<String>,
 }
 
@@ -178,7 +168,6 @@ fn parents(key: &str) -> impl Iterator<Item = &str> {
         .map(move |(at, _)| key.get(..at).filter(|dir| !dir.is_empty()).unwrap_or("/"))
 }
 
-/// Whether `key` is inside the folder `dir`, at any depth.
 #[cfg(target_arch = "wasm32")]
 fn inside(key: &str, dir: &str) -> bool {
     dir == "/" && key != "/"
@@ -219,7 +208,6 @@ pub fn take_changed() -> Vec<String> {
     std::mem::take(&mut store().changed).into_iter().collect()
 }
 
-/// A file open for reading.
 #[cfg(target_arch = "wasm32")]
 pub type Reader = io::Cursor<Arc<[u8]>>;
 
@@ -300,8 +288,6 @@ pub fn write(path: &Path, bytes: &[u8]) -> io::Result<()> {
     Ok(())
 }
 
-// ponytail: the whole file is copied on each append, which a journal of a
-// few megabytes bears. A list of pieces per file if one ever grows past that.
 #[cfg(target_arch = "wasm32")]
 pub fn append(path: &Path, bytes: &[u8]) -> io::Result<()> {
     let key = key(path);
@@ -312,7 +298,6 @@ pub fn append(path: &Path, bytes: &[u8]) -> io::Result<()> {
     Ok(())
 }
 
-/// Moves a file, or a folder and everything in it.
 #[cfg(target_arch = "wasm32")]
 pub fn rename(from: &Path, to: &Path) -> io::Result<()> {
     let (from, to) = (key(from), key(to));
@@ -428,7 +413,6 @@ pub fn modified(path: &Path) -> io::Result<SystemTime> {
     when.ok_or_else(not_found)
 }
 
-/// What is in the folder `path`, by name, each with whether it is a folder.
 #[cfg(target_arch = "wasm32")]
 pub fn list(path: &Path) -> io::Result<Vec<(String, bool)>> {
     let dir = key(path);
@@ -446,7 +430,6 @@ pub fn list(path: &Path) -> io::Result<Vec<(String, bool)>> {
     Ok(dirs.chain(files).collect())
 }
 
-/// A page has no process of its own to name.
 #[cfg(target_arch = "wasm32")]
 #[must_use]
 pub fn process_id() -> u32 {

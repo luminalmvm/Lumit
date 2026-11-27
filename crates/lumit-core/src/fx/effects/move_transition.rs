@@ -16,38 +16,30 @@ use crate::fx::{
 use lumit_fx_macros::Effect;
 use PresetValue::{Bool, Choice, Float};
 
-/// Which picture an instance is on, in schema order.
 pub const SIDE_OPTIONS: &[&str] = &["Outgoing", "Incoming"];
 
 /// Which pictures travel, in schema order. The other sits still.
 pub const MOVES_OPTIONS: &[&str] = &["Both", "Outgoing", "Incoming"];
 
-/// How the move gathers speed, in schema order.
 pub const EASE_OPTIONS: &[&str] = &["Linear", "Smooth", "Sharp"];
 
-/// Move's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "move",
     label = "Move",
     version = 1,
     category = Transition,
-    // A few bilinear taps a pixel.
     cost = Cheap,
-    // A picture can travel the whole frame.
     roi = FullFrame,
     premultiplied = true,
 )]
 pub struct MoveTransition {
-    /// How far through the cut, per cent.
     #[bounded(min = 0.0, max = 100.0, default = 50.0, unit = Percent)]
     pub completion: f32,
 
-    /// Which picture this is.
     #[choice(options = *SIDE_OPTIONS, default = 0)]
     pub side: u32,
 
-    /// Which pictures travel.
     #[choice(options = *MOVES_OPTIONS, default = 0)]
     pub moves: u32,
 
@@ -78,7 +70,6 @@ pub struct MoveTransition {
     )]
     pub zoom: f32,
 
-    /// The turn the outgoing picture reaches, degrees.
     #[dial(label = "Spin", default = 0.0, step = 15.0)]
     pub spin: f32,
 
@@ -93,11 +84,9 @@ pub struct MoveTransition {
     )]
     pub stretch: f32,
 
-    /// How the move gathers speed.
     #[choice(options = *EASE_OPTIONS, default = 1)]
     pub ease: u32,
 
-    /// How much of the move is smeared, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -108,11 +97,9 @@ pub struct MoveTransition {
     )]
     pub smear: f32,
 
-    /// Taps in the smear.
     #[counter(min = 2, max = 64, default = 16, hard_min = 2, hard_max = 64, unit = Raw)]
     pub samples: i32,
 
-    /// The smear splits red, green and blue.
     #[toggle(label = "Split colours", default = false)]
     pub split: bool,
 
@@ -133,11 +120,9 @@ pub struct MoveTransition {
     #[toggle(default = true)]
     pub fade: bool,
 
-    /// What shows where a picture has moved away from.
     #[choice(label = "Edges", options = *EDGE_OPTIONS, default = 0)]
     pub edge: u32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -149,10 +134,8 @@ pub struct MoveTransition {
     pub mix: f32,
 }
 
-/// A tap that leaves the picture where it is.
 const STILL: ([f32; 4], [f32; 2], u32) = ([1.0, 0.0, 0.0, 1.0], [0.0, 0.0], 7);
 
-/// What both render paths read: the taps to average, then an opacity.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MovePacked {
     /// Inverse affines `(m, off, channels)`, sampling at `q = m·p + off`.
@@ -160,19 +143,16 @@ pub struct MovePacked {
     pub taps: [([f32; 4], [f32; 2], u32); SHAKE_MB_SAMPLES],
     /// `1..=SHAKE_MB_SAMPLES`.
     pub count: usize,
-    /// The [`EDGE_OPTIONS`] code.
     pub edge: u32,
     /// 0..1, multiplied into all four channels after the average, Mix
     /// already in it.
     pub alpha: f32,
     /// 0..1.
     pub mix: f32,
-    /// Nothing to do.
     pub identity: bool,
 }
 
 impl MoveTransition {
-    /// `t` through the Ease.
     fn eased(self, t: f64) -> f64 {
         match self.ease {
             0 => t,
@@ -225,7 +205,6 @@ impl MoveTransition {
         (m.map(|v| v as f32), off.map(|v| v as f32))
     }
 
-    /// The bundle both render paths read, on a `w`×`h` raster.
     #[must_use]
     pub fn packed(self, w: u32, h: u32) -> MovePacked {
         let t = (f64::from(self.completion) / 100.0).clamp(0.0, 1.0);
@@ -428,7 +407,6 @@ const fn look(name: &'static str, values: &'static [(&'static str, PresetValue)]
     EffectPreset { name, values }
 }
 
-/// What every Whip shares beside its Direction.
 const WHIP: [(&str, PresetValue); 5] = [
     ("ease", Choice(2)),
     ("smear", Float(60.0)),
@@ -437,7 +415,6 @@ const WHIP: [(&str, PresetValue); 5] = [
     ("cross", Float(10.0)),
 ];
 
-/// What both Zooms share beside their Zoom.
 const ZOOM: [(&str, PresetValue); 6] = [
     ("distance", Float(0.0)),
     ("ease", Choice(2)),
@@ -447,7 +424,6 @@ const ZOOM: [(&str, PresetValue); 6] = [
     ("cross", Float(15.0)),
 ];
 
-/// Move's behaviour.
 pub struct MoveTransitionDef;
 
 impl EffectDef for MoveTransitionDef {

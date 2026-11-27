@@ -63,7 +63,6 @@ const List<String> levelsChannels = ['master', 'red', 'green', 'blue'];
 String _channelLabel(String channel) =>
     engineLabel(channel[0].toUpperCase() + channel.substring(1));
 
-/// The parameters the display drives, in the order they are drawn.
 const String _inBlack = 'in_black';
 const String _gamma = 'gamma';
 const String _inWhite = 'in_white';
@@ -75,7 +74,6 @@ const String _outWhite = 'out_white';
 /// spending most of it near 1.
 const double _gammaExtreme = 9.99;
 
-/// How wide the plot is drawn, and how tall each of its two parts.
 const double _plotWidth = 200;
 const double _plotHeight = 54;
 const double _handleStrip = 9;
@@ -99,7 +97,6 @@ List<Uint8List> levelsHistogramColours(LumitTheme t, {required bool themed}) {
   return [chrome[0], chrome[1], standard[2], standard[3], standard[4]];
 }
 
-/// Levels' histogram, handles and output bar.
 class LevelsDisplayFrb extends StatefulWidget {
   final UuidValue effectId;
 
@@ -109,7 +106,6 @@ class LevelsDisplayFrb extends StatefulWidget {
   final CompositionReference comp;
   final int playheadFrame;
 
-  /// The panel's commit and preview channels, the same two every row uses.
   final void Function(UuidValue effect, String param, BridgeEffectValue value)
       onWrite;
   final void Function(UuidValue effect, String param, BridgeEffectValue value)
@@ -140,13 +136,10 @@ class _LevelsDisplayFrbState extends State<LevelsDisplayFrb> {
   StreamSubscription<WorkerResponse>? _responses;
   int _asked = -1;
 
-  /// Which handle a drag has hold of, by parameter tail.
   String? _held;
 
-  /// Which channel the handles are aiming, into [levelsChannels].
   int _channel = 0;
 
-  /// A parameter tail's full id on the channel showing.
   String _id(String param) => '${levelsChannels[_channel]}_$param';
 
   @override
@@ -222,8 +215,6 @@ class _LevelsDisplayFrbState extends State<LevelsDisplayFrb> {
         _ => null
       };
 
-  /// What a parameter reads right now — the static value, or the curve's value
-  /// under the playhead.
   double _valueOf(String param, double fallback) {
     final scalar = _scalarOf(param);
     if (scalar == null) return fallback;
@@ -242,7 +233,6 @@ class _LevelsDisplayFrbState extends State<LevelsDisplayFrb> {
         : scalarWithValueAt(scalar, value, widget.comp, widget.playheadFrame));
   }
 
-  /// An expression decides this number, so no handle may move it.
   bool _driven(String param) => _scalarOf(param) is BridgeScalar_Expression;
 
   /// Where the middle handle sits between the two input ends, and back again.
@@ -273,7 +263,6 @@ class _LevelsDisplayFrbState extends State<LevelsDisplayFrb> {
     };
   }
 
-  /// The value a drag to fraction [f] means for the handle being held.
   double _valueAt(String param, double f) {
     if (param != _gamma) return f;
     // The middle handle says where it sits between the ends, and the ends do
@@ -305,7 +294,6 @@ class _LevelsDisplayFrbState extends State<LevelsDisplayFrb> {
 
   double _fractionOf(double dx) => (dx / _plotWidth).clamp(0.0, 1.0);
 
-  /// The channel showing's five numbers back to where a fresh Levels has them.
   void _resetChannel() {
     const fresh = {
       _inBlack: 0.0,
@@ -328,7 +316,6 @@ class _LevelsDisplayFrbState extends State<LevelsDisplayFrb> {
     });
   }
 
-  /// The display's menu: which channel the handles aim at, and putting it back.
   void _menu(Offset at) {
     showMenuAt<void>(
       context: context,
@@ -481,8 +468,6 @@ class _LevelsDisplayFrbState extends State<LevelsDisplayFrb> {
                 ],
               ),
               const SizedBox(width: channelColumnGap),
-              // The same column Curves puts beside its graph, on this effect's
-              // own four channel groups.
               ChannelButtons(
                 keyPrefix: 'fx-levels',
                 labels: [for (final c in levelsChannels) _channelLabel(c)],
@@ -500,7 +485,6 @@ class _LevelsDisplayFrbState extends State<LevelsDisplayFrb> {
   }
 }
 
-/// Triangles pointing up at the values they mark.
 class _HandlePainter extends CustomPainter {
   final List<double> at;
   final List<Color> colours;
@@ -538,7 +522,6 @@ class _HandlePainter extends CustomPainter {
       List.generate(at.length, (i) => old.at[i] != at[i]).contains(true);
 }
 
-/// The output range: what black and white come out as.
 class _OutputBarPainter extends CustomPainter {
   final double black, white;
   final Color low, high, edge;

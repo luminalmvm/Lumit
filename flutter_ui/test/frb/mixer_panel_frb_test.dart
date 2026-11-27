@@ -1,6 +1,3 @@
-// The Mixer panel against the real engine: the Master strip that is always
-// there, the fader that writes the master gain, and the repaint gate — a
-// meter tick repaints the meter band and nothing else.
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';

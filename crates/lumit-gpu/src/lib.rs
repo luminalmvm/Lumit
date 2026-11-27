@@ -1,13 +1,3 @@
-//! The GPU colour foundation (docs/impl/gpu-foundation.md §1–2, slice 5).
-//!
-//! In plain terms: the engine does all its maths on light-linear values (where
-//! "add two lights" behaves like real light), but files and screens use sRGB
-//! encoding. This crate owns the ONLY two crossings: decode-side linearise
-//! (sRGB bytes → linear fp16 working texture) and display-side encode
-//! (linear → sRGB for the screen). Keeping both crossings in one module with
-//! a round-trip test is what prevents the classic "double gamma" washed-out /
-//! too-dark bugs — and it is why preview can be bit-identical to export.
-
 // Declared first, and with `#[macro_use]`, so `note!` is in scope for the whole
 // crate — see [`note`] for why nothing here may `eprintln!`.
 #[macro_use]
@@ -25,8 +15,6 @@ pub enum GpuError {
     Readback(String),
 }
 
-/// Device + queue. In the app these come from eframe's render state; tests
-/// and future headless export create their own.
 pub struct GpuContext {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
@@ -105,8 +93,6 @@ pub struct GpuContext {
     /// context is used by one thread at a time. Emptied at the outermost
     /// [`Self::end_frame`], so nothing outlives the frame that ordered it.
     pool: std::cell::RefCell<Vec<wgpu::Texture>>,
-    /// How many work textures this context has created rather than taken from
-    /// the pool ([`Self::work_textures_made`]).
     work_made: std::cell::Cell<u64>,
     /// The governor's ledger: what this renderer is holding, across every
     /// context that shares it (docs/13 §3).
@@ -207,7 +193,7 @@ pub struct GpuContext {
     /// and not yet waited for, oldest first. Shared with every handle, as
     /// `in_flight` is: a nested comp is drawn through a handle of its own, and
     /// it is the one card that falls behind.
-    batches_in_flight: BatchesInFlight,
+    batches_in_flight: pacing::Behind,
     /// Tags noted on this handle whose work is not submitted yet. They join
     /// `in_flight` at [`Self::submit`], so another handle seeing the queue
     /// empty before then can't clear them.
@@ -221,12 +207,15 @@ pub struct GpuContext {
     /// handle, as `in_flight` is: a nested comp and the frame after this one
     /// are each drawn through a handle of their own, and it is the one card
     /// that falls behind.
-    frames_in_flight: FramesInFlight,
+    frames_in_flight: pacing::Behind,
+    /// Every submission to this device not yet waited for, shared with every
+    /// handle: see [`pacing::SUBMITS_IN_FLIGHT`].
+    submitted: pacing::Behind,
+    /// Frames that can never fit the budget, shared with every handle.
+    over_budget: std::sync::Arc<frame_budget::Gate>,
 }
 
 type InFlight = std::sync::Arc<std::sync::Mutex<Vec<u64>>>;
-type FramesInFlight =
-    std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<wgpu::SubmissionIndex>>>;
 
 /// How many frames a device is left with before it waits for the
 /// oldest ([`GpuContext::end_frame`]). Two keeps the card fed while the CPU
@@ -399,7 +388,6 @@ static DIAGNOSTICS: std::sync::OnceLock<fn(&str)> = std::sync::OnceLock::new();
 const ERRORS_RECORDED: u32 = 20;
 static ERRORS_SEEN: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
-/// Send the device's errors and its loss to `record` as well as the console.
 pub fn diagnostics_to(record: fn(&str)) {
     let _ = DIAGNOSTICS.set(record);
 }
@@ -498,7 +486,6 @@ fn sample_count_from(flags: wgpu::TextureFormatFeatureFlags, requested: u32) -> 
 /// standalone behaviour every pass had before batching.
 pub struct EncoderGuard<'a> {
     ctx: &'a GpuContext,
-    /// Set when this guard owns its encoder (no batch open).
     owned: Option<wgpu::CommandEncoder>,
     /// Set when it borrows the frame's. Always `Some(..)` inside, because
     /// [`GpuContext::encoder`] fills the slot before handing the borrow over.
@@ -589,8 +576,6 @@ fn adapter_is_required(value: Option<&str>) -> bool {
     matches!(value, Some(v) if !v.is_empty() && v != "0")
 }
 
-/// The instance every engine device is made from, on the platform's pinned
-/// backend.
 #[cfg(not(target_arch = "wasm32"))]
 fn engine_instance() -> wgpu::Instance {
     // `from_env_or_default` supplies the rest of the descriptor (flags, the
@@ -650,11 +635,6 @@ pub fn hardware_adapter_ready() -> bool {
     })
 }
 
-type BatchesInFlight =
-    std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<wgpu::SubmissionIndex>>>;
-
-/// How many batches inside one frame a device is left with before
-/// [`GpuContext::flush_paced`] waits for the oldest.
 const BATCHES_IN_FLIGHT: usize = 2;
 
 impl GpuContext {
@@ -692,10 +672,12 @@ impl GpuContext {
             // device goes, and never claims to.
             lost: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             in_flight: InFlight::default(),
-            batches_in_flight: BatchesInFlight::default(),
+            batches_in_flight: Default::default(),
             noted: std::cell::RefCell::new(Vec::new()),
             last_submission: std::cell::RefCell::new(None),
-            frames_in_flight: FramesInFlight::default(),
+            frames_in_flight: Default::default(),
+            submitted: Default::default(),
+            over_budget: Default::default(),
         }
     }
 
@@ -738,7 +720,6 @@ impl GpuContext {
         sample_count_from(self.sample_flags & self.depth_sample_flags, requested)
     }
 
-    /// What this context's passes work in (see [`Self::working`] the field).
     #[must_use]
     pub fn working(&self) -> wgpu::TextureFormat {
         self.working.get()
@@ -780,7 +761,6 @@ impl GpuContext {
             device: self.device.clone(),
             queue: self.queue.clone(),
             software: self.software,
-            // A second handle on one device works in what that device is set to.
             working: std::cell::Cell::new(self.working.get()),
             unified_memory: self.unified_memory,
             sample_flags: self.sample_flags,
@@ -802,6 +782,8 @@ impl GpuContext {
             noted: std::cell::RefCell::new(Vec::new()),
             last_submission: std::cell::RefCell::new(None),
             frames_in_flight: std::sync::Arc::clone(&self.frames_in_flight),
+            submitted: std::sync::Arc::clone(&self.submitted),
+            over_budget: std::sync::Arc::clone(&self.over_budget),
         }
     }
 
@@ -845,6 +827,7 @@ impl GpuContext {
         let mut n = 0u64;
         let index = self.queue.submit(buffers.into_iter().inspect(|_| n += 1));
         *self.last_submission.borrow_mut() = Some(index.clone());
+        self.keep_within(&self.submitted, index.clone(), pacing::SUBMITS_IN_FLIGHT);
         self.submits
             .fetch_add(n, std::sync::atomic::Ordering::Relaxed);
         let noted = std::mem::take(&mut *self.noted.borrow_mut());
@@ -940,7 +923,6 @@ impl GpuContext {
         }
     }
 
-    /// The tags submitted since the queue was last seen empty, taken.
     pub fn take_in_flight(&self) -> Vec<u64> {
         self.in_flight
             .lock()
@@ -1016,8 +998,6 @@ impl GpuContext {
         self.overdrawn.set(0);
     }
 
-    // ------------------------------------------------ the governor's ledger --
-
     /// What this renderer is holding, and what it may still hold (docs/13 §3).
     ///
     /// Shared across every context that came from one device, because they are
@@ -1076,7 +1056,6 @@ impl GpuContext {
         Ok(())
     }
 
-    /// Fold a granted reservation into the frame's one charge.
     fn hold_vram(&self, more: lumit_budget::Reservation) {
         let mut charge = self.frame_charge.borrow_mut();
         match charge.as_mut() {
@@ -1198,36 +1177,13 @@ impl GpuContext {
         }
     }
 
-    /// See [`Self::end_frame`].
     fn wait_for_frames_behind(&self) {
-        let Some(closed) = self.last_submission.borrow_mut().take() else {
-            return;
-        };
-        // The lock is let go before the wait: another handle closing a frame
-        // meanwhile waits for its own oldest, not for this one.
-        let oldest = {
-            let Ok(mut frames) = self.frames_in_flight.lock() else {
-                return;
-            };
-            frames.push_back(closed);
-            if frames.len() <= FRAMES_IN_FLIGHT {
-                return;
-            }
-            frames.pop_front()
-        };
-        if let Some(oldest) = oldest {
-            // A lost device answers no wait.
-            if self.device_lost() {
-                return;
-            }
-            let done = self
-                .device
-                .poll(wgpu::Maintain::WaitForSubmissionIndex(oldest));
-            self.forget_finished(done);
+        let closed = self.last_submission.borrow_mut().take();
+        if let Some(closed) = closed {
+            self.keep_within(&self.frames_in_flight, closed, FRAMES_IN_FLIGHT);
         }
     }
 
-    /// How many frames this device has been left with and not waited for. The test of [`Self::end_frame`] reads it; nothing else does.
     #[must_use]
     pub fn frames_in_flight(&self) -> usize {
         self.frames_in_flight
@@ -1273,14 +1229,9 @@ impl GpuContext {
             occlusion_query_set: None,
         });
         drop(enc);
-        // ponytail: one flat list, scanned by shape. A frame holds a handful of
-        // spare textures, so the scan is shorter than a hash of the key would
-        // be; key it by (size, format) if a frame ever holds dozens.
         self.pool.borrow_mut().push(tex);
     }
 
-    /// How many work textures this context has created rather than taken from
-    /// the pool. The reuse gate reads it; nothing else does.
     #[must_use]
     pub fn work_textures_made(&self) -> u64 {
         self.work_made.get()
@@ -1317,25 +1268,7 @@ impl GpuContext {
             return;
         };
         let index = self.submit([enc.finish()]);
-        let oldest = {
-            let Ok(mut batches) = self.batches_in_flight.lock() else {
-                return;
-            };
-            batches.push_back(index);
-            if batches.len() <= BATCHES_IN_FLIGHT {
-                return;
-            }
-            batches.pop_front()
-        };
-        if let Some(oldest) = oldest {
-            if self.device_lost() {
-                return;
-            }
-            let done = self
-                .device
-                .poll(wgpu::Maintain::WaitForSubmissionIndex(oldest));
-            self.forget_finished(done);
-        }
+        self.keep_within(&self.batches_in_flight, index, BATCHES_IN_FLIGHT);
     }
 
     /// An encoder to record into.
@@ -1372,7 +1305,6 @@ impl GpuContext {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some(label) })
     }
 
-    /// Headless context (tests, future CLI export).
     pub fn headless() -> Result<Self, GpuError> {
         // The backend is pinned on all three platforms, in every build. Two
         // reasons: the zero-copy Viewer hand-off reaches through wgpu to a
@@ -1576,10 +1508,12 @@ impl GpuContext {
             submits: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
             lost,
             in_flight: InFlight::default(),
-            batches_in_flight: BatchesInFlight::default(),
+            batches_in_flight: Default::default(),
             noted: std::cell::RefCell::new(Vec::new()),
             last_submission: std::cell::RefCell::new(None),
-            frames_in_flight: FramesInFlight::default(),
+            frames_in_flight: Default::default(),
+            submitted: Default::default(),
+            over_budget: Default::default(),
         })
     }
 }
@@ -1684,7 +1618,6 @@ impl DisplayParams {
         }
     }
 
-    /// Whether this pass is the plain copy it always was.
     #[must_use]
     pub fn is_neutral(&self) -> bool {
         self.gain == 1.0 && !self.tone_map
@@ -1745,7 +1678,6 @@ fn upload_rgb_f32(
     tex
 }
 
-/// One view uniform, sized and written at creation.
 fn view_uniform(ctx: &GpuContext, label: &str, view: DisplayParams) -> wgpu::Buffer {
     wgpu::util::DeviceExt::create_buffer_init(
         &ctx.device,
@@ -1837,23 +1769,6 @@ pub fn working_format_for(bits: u32) -> wgpu::TextureFormat {
 }
 /// Source/display byte format: sRGB-encoded, hardware-converted at the edges.
 pub const SRGB_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
-/// The display target a sixteen-bit export reads back from
-/// ([`ColourEngine::display16`]). Display-ENCODED values in a float format —
-/// the one place in the pipeline where those two words sit together, and only
-/// because there is no `Rgba16UnormSrgb` to write instead.
-///
-// ponytail: fp16 holds an encoded value to about eleven bits in the top
-// octave (its step near 1.0 is 1/2048, which is 32 sixteen-bit codes), so a
-// sixteen-bit file carries the working format's own precision rather than a
-// full sixteen bits of it — eight times finer than the widened eight-bit path
-// it replaces, and far finer below the highlights. The ceiling is therefore
-// the top stop and only the top stop: 2048 distinct codes there where the file
-// can carry 65 536, so a gradient crossing it steps every 32 codes. The
-// trigger is that step seen in a delivered sixteen-bit file — a slow bright
-// gradient (a sky, a soft-box falloff) banding above roughly 0.5 while the
-// same gradient in the shadows is clean. The upgrade is `Rgba16Unorm` behind
-// the optional `TEXTURE_FORMAT_16BIT_NORM` feature, with this as the fallback
-// for adapters that lack it.
 pub const DEEP_DISPLAY_FORMAT: wgpu::TextureFormat = WORKING_FORMAT;
 
 /// The same pixel format with the hardware's sRGB encode taken off it.
@@ -1960,7 +1875,6 @@ pub struct OcioArtefact {
 }
 
 impl OcioArtefact {
-    /// The curve table, both stages in one texture.
     #[must_use]
     pub fn curve(&self) -> &wgpu::Texture {
         &self.curve
@@ -1972,7 +1886,6 @@ impl OcioArtefact {
         &self.cube
     }
 
-    /// `OcioParams`, as `ocio_sample.wgsl` reads it.
     #[must_use]
     pub fn params(&self) -> &wgpu::Buffer {
         &self.params
@@ -1994,7 +1907,6 @@ pub struct PendingReadback {
     /// The submission the copy went in, so a wait need not wait for the
     /// work queued after it.
     submitted: wgpu::SubmissionIndex,
-    /// The ledger's charge for a buffer kept between read-backs.
     charge: Option<lumit_budget::Reservation>,
 }
 
@@ -2006,7 +1918,6 @@ pub struct SpareReadback {
 }
 
 impl PendingReadback {
-    /// The frame's dimensions, known from the moment the copy is encoded.
     #[must_use]
     pub fn size(&self) -> (u32, u32) {
         (self.width, self.height)
@@ -2334,8 +2245,6 @@ impl ColourEngine {
         }
     }
 
-    /// One working format's linearise pair, from the module and layouts kept
-    /// since construction.
     fn build_linearise(&self, ctx: &GpuContext, format: wgpu::TextureFormat) -> LinearisePair {
         let make = |layout: &wgpu::PipelineLayout, label: &str, entry: &str| {
             ctx.device
@@ -2590,7 +2499,6 @@ impl ColourEngine {
         texture
     }
 
-    /// Upload sRGB-encoded RGBA8 bytes (a decoded frame) ready for linearising.
     pub fn upload_srgb8(
         &self,
         ctx: &GpuContext,
@@ -2767,7 +2675,6 @@ impl ColourEngine {
         dst
     }
 
-    /// sRGB source texture → linear fp16 working texture.
     pub fn linearise(&self, ctx: &GpuContext, src: &wgpu::Texture) -> wgpu::Texture {
         self.linearise_through(ctx, src, None)
     }
@@ -2875,7 +2782,6 @@ impl ColourEngine {
         self.display_bgra_through(ctx, src, view, None)
     }
 
-    /// [`Self::display_bgra`] through a baked display/view transform.
     pub fn display_bgra_through(
         &self,
         ctx: &GpuContext,
@@ -3392,8 +3298,6 @@ pub struct SharedGpu {
 }
 
 impl SharedGpu {
-    /// # Errors
-    /// No adapter, or no device on it.
     pub fn build() -> Result<Self, GpuError> {
         let ctx = GpuContext::headless()?;
         Ok(Self {
@@ -3405,7 +3309,6 @@ impl SharedGpu {
         })
     }
 
-    /// Forget what the previous borrower left behind.
     pub fn reset(&self) {
         // A test that panicked mid-frame leaves the encoder open; the next
         // test starts on a closed one.
@@ -3481,7 +3384,6 @@ mod tests {
         let Ok(ctx) = GpuContext::headless() else {
             return;
         };
-        // A frame that submits nothing leaves nothing behind.
         ctx.begin_frame();
         ctx.end_frame();
         assert_eq!(ctx.frames_in_flight(), 0);
@@ -3547,9 +3449,6 @@ mod tests {
         );
     }
 
-    /// The gpu-foundation §7 golden: every 8-bit value survives
-    /// sRGB → linear fp16 → sRGB within 1 LSB. This is the test that makes
-    /// double-gamma bugs impossible to reintroduce silently.
     #[test]
     fn colour_round_trip_is_within_one_lsb() {
         let Some(ctx) = crate::test_support::lease() else {
@@ -3558,13 +3457,12 @@ mod tests {
         };
         let engine = ctx.colour();
 
-        // 16×16: every possible byte value in R, G and B (offset per channel).
         let (w, h) = (16u32, 16u32);
         let mut rgba = Vec::with_capacity((w * h * 4) as usize);
         for i in 0..256u32 {
-            rgba.push(i as u8); // R = 0..255
-            rgba.push((255 - i) as u8); // G reversed
-            rgba.push(((i * 7) % 256) as u8); // B strided
+            rgba.push(i as u8);
+            rgba.push((255 - i) as u8);
+            rgba.push(((i * 7) % 256) as u8);
             rgba.push(255);
         }
 
@@ -3620,8 +3518,6 @@ mod tests {
             "values a widened byte could never produce"
         );
 
-        // The eight-bit path on the same ramp, for contrast and as the reason
-        // the ceiling was recorded in the first place.
         let shallow = engine
             .readback8(&ctx, &engine.display(&ctx, &src, DisplayParams::NEUTRAL))
             .unwrap();
@@ -3641,7 +3537,6 @@ mod tests {
         };
         let engine = ctx.colour();
         let (w, h) = (16u32, 16u32);
-        // Every eight-bit sRGB value, decoded to linear light and back.
         let mut bytes = Vec::with_capacity((w * h * 4) as usize);
         for i in 0..256u32 {
             bytes.extend_from_slice(&[i as u8, (255 - i) as u8, ((i * 7) % 256) as u8, 255]);
@@ -3658,13 +3553,10 @@ mod tests {
             .unwrap();
 
         for (i, (a, b)) in shallow.iter().zip(deep.iter()).enumerate() {
-            // The deep code back down to eight bits, the way a reader of the
-            // file would: 65535 → 255.
             let narrowed = (f64::from(*b) * 255.0 / 65_535.0).round() as i16;
             let d = (i16::from(*a) - narrowed).abs();
             assert!(d <= 1, "channel {i}: 8-bit {a} vs deep {b} → {narrowed}");
         }
-        // Alpha is not encoded by either, so full coverage stays full.
         assert_eq!(deep[3], 65_535);
     }
 }
@@ -3674,26 +3566,17 @@ mod compiling;
 pub mod composite;
 pub mod device;
 pub mod drm;
+pub mod frame_budget;
 pub mod fx;
 pub mod mesh;
+mod pacing;
 pub mod scope;
-/// The Windows-only zero-copy Viewer target. Present only in the opt-in
-/// `shared-texture` build on Windows; every other build has no shared texture at
-/// all, exactly as it had no D3D interop before.
 #[cfg(all(windows, feature = "shared-texture"))]
 pub mod shared;
-/// The Linux-only zero-copy Viewer target via DMA-BUF. Present only in
-/// the opt-in `shared-texture-linux` build on Linux; every other build has no
-/// DMA-BUF interop at all, exactly as it had no Vulkan external memory before.
 #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
 pub mod shared_linux;
-/// The macOS-only zero-copy Viewer target via IOSurface. Present only in
-/// the opt-in `shared-texture-macos` build on macOS; every other build has no
-/// Metal interop at all.
 #[cfg(all(target_os = "macos", feature = "shared-texture-macos"))]
 pub mod shared_metal;
-// The shared test device and engines. Reached by this crate's own tests and,
-// through the `test-fixtures` feature, by a downstream crate's.
 #[cfg(any(test, feature = "test-fixtures"))]
 pub mod test_support;
 use composite::Compositor;

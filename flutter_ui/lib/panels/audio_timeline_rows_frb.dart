@@ -30,8 +30,6 @@ import 'timeline_extras_frb.dart'
 import 'timeline_outline_row_frb.dart' show RowRenameField;
 import 'volume_band_frb.dart' show volumeBandFloorDb;
 
-/// The cell at a track head's right end: the lane picture's switch, or Detach
-/// audio on a faded picture row.
 const double audioTrackChipWidth = 22;
 
 /// How many lane rows a track may stand on. Two to begin with, which is the
@@ -41,8 +39,6 @@ const double audioTrackChipWidth = 22;
 const int audioTrackMinRows = 2;
 const int audioTrackMaxRows = 8;
 
-/// How far in a lane's name starts: where a fold row's does, one step in
-/// from the twirl.
 const double audioLaneIndent = outlineGap +
     switchCellWidth * 3 +
     automationChipWidth +
@@ -61,7 +57,6 @@ class AudioTrackRow {
   final BridgeLayerEntry entry;
   final String id;
 
-  /// Twirled open - whether [foldRows] are drawn.
   final bool open;
 
   /// Drawn faded and deaf to the pointer: the row carries a picture as well as
@@ -69,8 +64,6 @@ class AudioTrackRow {
   /// ([audioTimelineDims]).
   final bool dimmed;
 
-  /// The lanes this track's twirl opens, before its rows: Volume, Pan and one
-  /// per send. Held whether the twirl is open or shut, as [foldRows] are.
   final List<AutomationLane> lanes;
 
   /// The rows this track's own twirl shows: the Effects heading and the rack
@@ -79,8 +72,6 @@ class AudioTrackRow {
   /// still land on it.
   final List<LayerFoldRow> foldRows;
 
-  /// The rows the clips on this track show, in track order - nothing for a
-  /// clip whose twirl is shut, so the list is already only what is asked for.
   final List<LayerFoldRow> clipRows;
 
   /// One lane row, `t.density.laneRow` - carried rather than looked up, so the
@@ -104,7 +95,6 @@ class AudioTrackRow {
     this.rows = audioTrackMinRows,
   });
 
-  /// Every row under this track, drawn or not - what a drag can land on.
   List<LayerFoldRow> get allRows => [...foldRows, ...clipRows];
 
   /// What is drawn: the track's own rows while its twirl is open, and the open
@@ -112,18 +102,13 @@ class AudioTrackRow {
   List<LayerFoldRow> get drawnRows =>
       open ? [...foldRows, ...clipRows] : clipRows;
 
-  /// The lanes on show: the twirl's, while it is open.
   List<AutomationLane> get drawnLanes => open ? lanes : const [];
 
-  /// The track's own band: the room its wave, its clips and their gain lines
-  /// have, and where the lanes its twirl opened begin.
   double get laneHeight => rowHeight * rows;
 
-  /// What the open lanes stand on, between the band and the rows.
   double get lanesHeight =>
       drawnLanes.fold<double>(0, (sum, lane) => sum + lane.height);
 
-  /// The band, the lanes, then one lane row for each row the twirl opened.
   double get height =>
       laneHeight + lanesHeight + rowHeight * drawnRows.length;
 }
@@ -192,9 +177,6 @@ List<LayerFoldRow> audioTimelineFoldRows({
         effects.add(
             FoldEffectParamRow(info, param, value,
                 depth: row.depth, driven: driven));
-      // A picture group - Transform, Masks, Styles, the Waveform twirl - and
-      // the Volume row, which is a lane here, have nothing to say about a
-      // track.
       default:
         break;
     }
@@ -264,7 +246,6 @@ class AudioTrackOutlineRow extends StatelessWidget {
   final CompositionReference comp;
   final AudioTrackRow track;
 
-  /// The track's place in the list, drawn as its number.
   final int index;
   final LaneMode laneMode;
 
@@ -280,21 +261,17 @@ class AudioTrackOutlineRow extends StatelessWidget {
   final VoidCallback onToggleOpen;
   final VoidCallback onCycleLaneMode;
   final VoidCallback onDetach;
-  /// A press on the head, with the buttons it was made with.
   final ValueChanged<int> onSelect;
   final VoidCallback onRenameCommit;
   final VoidCallback onRenameCancel;
   final VoidCallback onChanged;
 
-  /// How far the row's bottom edge has just been dragged. Null leaves the
-  /// edge alone, which is what a row nobody can resize wants.
   final ValueChanged<double>? onResize;
 
   /// A press on that edge, before any travel. What a drag ends short of a
   /// whole lane row is carried, and a new drag must not spend it.
   final VoidCallback? onResizeStart;
 
-  /// A double-click on that edge: back to the usual height.
   final VoidCallback? onResizeReset;
 
   const AudioTrackOutlineRow({
@@ -332,8 +309,6 @@ class AudioTrackOutlineRow extends StatelessWidget {
     LumitIcon? icon,
     required String tip,
   }) {
-    // A switch at its usual setting draws quietly, and only the one that has
-    // been changed stands out, as a Mixer strip's do.
     final usual = which == BridgeLayerSwitch.solo ? !on : on;
     final ink = usual
         ? t.textMuted
@@ -349,7 +324,6 @@ class AudioTrackOutlineRow extends StatelessWidget {
             key: ValueKey<String>('atl-$name-${track.id}'),
             behavior: HitTestBehavior.opaque,
             onTap: () {
-              // A locked layer refuses, and quietly.
               try {
                 comp.setSwitchOnLayers(
                   clicked: track.entry.layer.internallayerId,
@@ -386,7 +360,6 @@ class AudioTrackOutlineRow extends StatelessWidget {
       child: AudioRowGround(
         selected: selected && !track.dimmed,
         builder: (over) => Stack(children: [
-        // The track's colour, a bar down its left edge, as its clips wear it.
         Positioned(
           key: ValueKey<String>('atl-label-${track.id}'),
           left: 0,
@@ -422,7 +395,6 @@ class AudioTrackOutlineRow extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: outlineGap),
-              // A bus has no sound of its own to draw, so no lane switch.
               if (track.dimmed)
                 _detach(t)
               else if (track.entry.info.kind == BridgeLayerKind.bus)
@@ -432,8 +404,6 @@ class AudioTrackOutlineRow extends StatelessWidget {
             ],
           ),
         )),
-        // The row's bottom edge, dragged to set how many lane rows the track
-        // stands on.
         if (onResize != null)
           RowResizeEdge(
             key: ValueKey<String>('atl-resize-${track.id}'),
@@ -446,7 +416,6 @@ class AudioTrackOutlineRow extends StatelessWidget {
     );
   }
 
-  /// The row's own controls, left of the trailing cell.
   Widget _head(
           LumitTheme t, BridgeLayerInfo info, BridgeLayerSwitches switches) =>
       Row(children: [
@@ -468,7 +437,6 @@ class AudioTrackOutlineRow extends StatelessWidget {
           mode: info.automationMode,
           keyed: track.lanes.any((lane) => lane.keys.isNotEmpty),
           onPick: (mode) {
-            // A locked layer refuses, and quietly.
             try {
               track.entry.layer.setAutomationMode(mode: mode);
             } catch (_) {}
@@ -520,9 +488,6 @@ class AudioTrackOutlineRow extends StatelessWidget {
             child: lumitIcon(iconForKind(BridgeLayerKind.bus),
                 size: iconSize, color: t.textMuted),
           ),
-        // The name, or the field Enter turns it into. The picked track's name
-        // is the one thing on its row read at full strength, which is how the
-        // layer Timeline marks its own.
         Expanded(
           child: rename == null
               ? Text(
@@ -558,8 +523,6 @@ class AudioTrackOutlineRow extends StatelessWidget {
             child: SizedBox(
               width: audioTrackChipWidth,
               child: Center(
-                // Brighter than the dimmed row it stands on, being the one
-                // thing there that answers.
                 child: glyph.LumitIcon(LumitIcons.unlink,
                     size: iconSize,
                     colour: Color.lerp(t.textSecondary, t.textPrimary, lit)),
@@ -609,8 +572,6 @@ class AudioTrackOutlineRow extends StatelessWidget {
   }
 }
 
-/// The two lane pictures, drawn small: a wave's bars, or a spectrogram's rows
-/// of dots. Also what the menu rows that choose between them wear.
 class LaneGlyphPainter extends CustomPainter {
   final bool spectral;
   final Color colour;
@@ -627,7 +588,6 @@ class LaneGlyphPainter extends CustomPainter {
     if (spectral) {
       for (var row = 0; row < 3; row++) {
         for (var col = 0; col < 4; col++) {
-          // Fuller at the foot, as a sound's energy mostly is.
           if (col > 3 - row || (row == 2 && col == 1)) continue;
           canvas.drawCircle(
               Offset((3.5 + col * 3) * u, (12.5 - row * 4.5) * u), 1.1 * u, paint);
@@ -648,10 +608,6 @@ class LaneGlyphPainter extends CustomPainter {
       old.spectral != spectral || old.colour != colour;
 }
 
-/// The board's column header over the outline: the number and the name each
-/// get their kicker, stood over the cells the rows below use, so the words line
-/// up with what they name. The switches, the twirl and the lane switch carry no
-/// word, as the layer Timeline's own header leaves them.
 class AudioTrackHeaderRow extends StatelessWidget {
   const AudioTrackHeaderRow({super.key});
 
@@ -671,8 +627,6 @@ class AudioTrackHeaderRow extends StatelessWidget {
           const EdgeInsets.only(left: outlineGap, right: outlineRowTrailing),
       child: Row(
         children: [
-          // The three switch cells, the mode, the gap, the twirl and its gap:
-          // blank, as the row's own controls say what they are.
           const SizedBox(
               width: switchCellWidth * 3 + automationChipWidth + outlineGap + 16),
           const SizedBox(width: identityGap),
@@ -685,14 +639,9 @@ class AudioTrackHeaderRow extends StatelessWidget {
   }
 }
 
-/// The ground under a track's head: the selection fill when the track is
-/// picked, and a faint wash under the pointer, both easing in and out as the
-/// layer Timeline's rows do.
 class AudioRowGround extends StatefulWidget {
   final bool selected;
 
-  /// The row, told whether the pointer is on it, so what waits for the pointer
-  /// comes up with the wash.
   final Widget Function(bool over) builder;
 
   const AudioRowGround(

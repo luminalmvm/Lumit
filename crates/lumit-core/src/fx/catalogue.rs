@@ -248,7 +248,6 @@ crate::catalogue![
     RadialBlurDef => RadialBlur,
     SharpenDef => Sharpen,
     SharpenSimpleDef => SharpenSimple,
-    // Noise measured and taken out, over the frames either side.
     DenoiseDef => Denoise,
     SpriteFlareDef => SpriteFlare,
     LightWrapDef => LightWrap,
@@ -272,7 +271,6 @@ crate::catalogue![
     OcioFileDef => OcioFile,
     DofDef => Dof,
     DofProDef => DofPro,
-    // The utility batch's blur, at the Blur & sharpen family's end.
     ChannelBlurDef => ChannelBlur,
     VectorBlurDef => VectorBlur,
     TransformDef => Transform,
@@ -286,22 +284,16 @@ crate::catalogue![
     BlockGlitchDef => BlockGlitch,
     ScanlinesDef => Scanlines,
     DatamoshDef => Datamosh,
-    // The distort batch, appended at the Distortion family's end, in
-    // docs/08 §3.38–§3.42 order.
     TurbulentDisplaceDef => TurbulentDisplace,
     TileDef => Tile,
     OffsetDef => Offset,
     MirrorDef => Mirror,
     LensDistortDef => LensDistort,
-    // Wave 2's Distort I batch, appended at the Distortion family's end, in
-    // docs/08 §3.48-§3.52 order.
     CornerPinDef => CornerPin,
     DisplacementMapDef => DisplacementMap,
     PolarCoordinatesDef => PolarCoordinates,
     TwirlDef => Twirl,
     SpherizeDef => Spherize,
-    // Wave 2's Distort II batch, appended at the Distortion family's end, in
-    // docs/08 §3.53-§3.56 order.
     RippleDef => Ripple,
     WaveWarpDef => WaveWarp,
     BezierWarpDef => BezierWarp,
@@ -310,7 +302,6 @@ crate::catalogue![
     // Stabilise, at the Distortion family's end: it moves the picture, as
     // Corner pin does, only by a measured amount.
     StabiliseDef => Stabilise,
-    // The Generate family, in docs/08 §3.34–§3.37 order.
     FillDef => Fill,
     GradientDef => Gradient,
     NoiseDef => Noise,
@@ -329,7 +320,6 @@ crate::catalogue![
     // in the picture.
     ScribbleDef => Scribble,
     StrokeDef => Stroke,
-    // Draws its own light along a line, a mask, a shape or text.
     AudioSpectrumDef => AudioSpectrum,
     EnergyLineDef => EnergyLine,
     // Particulate, at the Generate family's end: it makes its own pixels
@@ -343,8 +333,6 @@ crate::catalogue![
     ScatterDef => Scatter,
     EmitFromImageDef => EmitFromImage,
     PointsAlongPathDef => PointsAlongPath,
-    // Points laid out by a formula, on the pieces of a path, and where
-    // paths cross.
     MathPointsDef => MathPoints,
     ContourPointsDef => ContourPoints,
     IntersectionPointsDef => IntersectionPoints,
@@ -353,15 +341,12 @@ crate::catalogue![
     // The consumers, after the producers they read: the
     // stack effects that take a points wire rather than hand one out.
     CloneToPointsDef => CloneToPoints,
-    // What Clone to points drew, changed as one group.
     CloneDeformerDef => CloneDeformer,
     TrailDef => Trail,
     ConnectPointsDef => ConnectPoints,
     PointsFieldDef => PointsField,
     LabelPointsDef => LabelPoints,
-    // Rows of words that fill the room a region leaves.
     TypeFillDef => TypeFill,
-    // The modifiers: a points wire in and another out.
     VaryPointsDef => VaryPoints,
     PickPointsDef => PickPoints,
     TransformPointsDef => TransformPoints,
@@ -371,20 +356,15 @@ crate::catalogue![
     BakePointsDef => BakePoints,
     SortPointsDef => SortPoints,
     EchoDef => Echo,
-    // Another layer, a stretch of it played over and over.
     TimeLoopDef => TimeLoop,
     PosterizeTimeDef => PosterizeTime,
     AccumulationMbDef => AccumulationMb,
     MotionBlurDef => MotionBlur,
     TimewarpDef => Timewarp,
     MatteKeyDef => MatteKey,
-    // Set matte, at the Utility family's end.
     SetMatteDef => SetMatte,
-    // What a 3D precomp knows about its pixels, and a matte from it.
     ScenePassDef => ScenePass,
     PartMatteDef => PartMatte,
-    // Set channels, beside it: the same question asked of all four channels
-    // rather than only of the alpha.
     SetChannelsDef => SetChannels,
     // Broadcast safe (docs/08 §3.69), after it — a delivery tool rather
     // than a look, which is what Utility is for.
@@ -410,9 +390,7 @@ crate::catalogue![
     // Depth of field that reads it, because what it holds is a reading of the
     // shot rather than a look laid over one.
     DepthDef => Depth,
-    // The same analysis, drawn as points through a camera.
     DepthPointsDef => DepthPoints,
-    // Gas in a box, which the comp's volumetric walk draws.
     SmokeDef => Smoke,
     // Remove background (docs/08 §3.105), beside Depth: the same tier, the
     // same shape and the other thing a model reads out of a shot. A matte
@@ -422,7 +400,6 @@ crate::catalogue![
     InvertDef => Invert,
     TintDef => Tint,
     CurvesDef => Curves,
-    // A whole grade node, beside the colour effects it gathers up.
     CorrectionDef => Correction,
     CdlDef => Cdl,
     ColourWarperDef => ColourWarper,
@@ -438,14 +415,11 @@ crate::catalogue![
     PhotoFilterDef => PhotoFilter,
     BlackAndWhiteDef => BlackAndWhite,
     ShadowHighlightDef => ShadowHighlight,
-    // A grade group's place in a member's stack, at the Colour family's end.
     GradeGroupDef => GradeGroup,
     LensFlareDef => LensFlare,
     LensDirtDef => LensDirt,
     FilmDef => Film,
-    // Drop shadow, at the Stylise family's end.
     DropShadowDef => DropShadow,
-    // Roughen edges (docs/08 §3.57), at the Stylise family's end after it.
     RoughenEdgesDef => RoughenEdges,
     // Wave 2's Stylise II batch, appended at the Stylise family's end, in
     // docs/08 §3.64-§3.68 order. These five really are stylisations — what
@@ -469,11 +443,8 @@ crate::catalogue![
     HolographicFoilDef => HolographicFoil,
     // Hologram beside it: the same film, replaying a picture with depth.
     HologramDef => Hologram,
-    // The Transition family, in docs/08 §3.46–§3.47 order.
     LinearWipeDef => LinearWipe,
     RadialWipeDef => RadialWipe,
-    // Wave 2's Transitions batch, appended at the Transition family's
-    // end, in docs/08 §3.70-§3.72 order.
     VenetianBlindsDef => VenetianBlinds,
     IrisWipeDef => IrisWipe,
     CardWipeDef => CardWipe,
@@ -510,8 +481,6 @@ crate::catalogue![
     AudioTremoloDef => AudioTremolo,
     AudioVibratoDef => AudioVibrato,
     AudioWahDef => AudioWah,
-    // Repair, last: what takes damage out of a recording rather than adding
-    // anything to it.
     AudioDenoiseDef => AudioDenoise,
     AudioDehumDef => AudioDehum,
     AudioDeclickDef => AudioDeclick,
@@ -529,11 +498,7 @@ crate::catalogue![
     // never in that menu at all.
     MergeDef => Merge,
     SwitchDef => Switch,
-    // The per-node clock (node-graph-comp.md §5.2): what joins the two
-    // pictures is a wire, and what moves one of them in time is this.
     TimeOffsetDef => TimeOffset,
-    // A picture into its four channels and back, for work on one channel
-    // alone.
     SplitChannelsDef => SplitChannels,
     CombineChannelsDef => CombineChannels,
     // The boxes between these two run several times.
@@ -584,20 +549,13 @@ crate::catalogue![
     // Which copy a layer is being stamped as by Clone to points. It reads a
     // number the render hands it, which no other driver does.
     CloneIndexDef => CloneIndex,
-    // How big another layer's content is, which no other driver reads.
     MeasureDef => Measure,
-    // The music as events rather than a level: markers, beats found in the
-    // sound, or a band rising past a threshold.
     BeatTriggerDef => BeatTrigger,
-    // The Siceliot drivers: Cavalry's value behaviours, each
-    // reading the copy Clone to points stamps, as Clone index does.
     StaggerDef => Stagger,
     RandomDef => Random,
     OscillatorDef => Oscillator,
     ValueNoiseDef => ValueNoise,
     RingWaveDef => RingWave,
-    // One number to wire into many parameters, and the clock itself: the
-    // two convenience drivers, the same for every copy.
     ValueNodeDef => ValueNode,
     TimeNodeDef => TimeNode,
 ];

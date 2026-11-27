@@ -10,16 +10,12 @@ use lumit_core::model::Document;
 use lumit_core::model_layer::ModelSettings;
 use lumit_scene::{Clip, ModelScene};
 
-/// Cells along a model's longest side.
 const CELLS: f32 = 96.0;
 
-/// Empty cells round the model.
 const ROOM: f32 = 2.0;
 
-/// How thick the skin on a surface is, in cells.
 const SKIN: f32 = 0.75;
 
-/// The most models whose distances stay in memory.
 const HELD: usize = 8;
 
 pub(super) struct Distances {
@@ -36,8 +32,6 @@ type Key = (uuid::Uuid, Option<String>);
 
 static HOLD: Mutex<Option<HashMap<Key, Held>>> = Mutex::new(None);
 
-/// `item`'s distances in the pose the take `settings` names starts in, worked
-/// out the first time they are asked for.
 pub(super) fn of(
     doc: &Document,
     item: uuid::Uuid,
@@ -61,7 +55,6 @@ pub(super) fn of(
     Some(made)
 }
 
-/// The nearest distance from `p` to the triangle `a b c`.
 fn to_triangle(p: Vec3, a: Vec3, b: Vec3, c: Vec3) -> f32 {
     let (ab, ac, ap) = (b - a, c - a, p - a);
     let (d1, d2) = (ab.dot(ap), ac.dot(ap));
@@ -156,7 +149,6 @@ fn worked_out(scene: &ModelScene, take: Option<&Clip>) -> Option<Distances> {
             }
         }
     }
-    // Out from the surface, a sweep each way across every cell.
     let reach: Vec<(isize, isize, isize, f32)> = (-1..=1)
         .flat_map(|z: isize| {
             (-1..=1).flat_map(move |y: isize| (-1..=1).map(move |x: isize| (x, y, z)))
@@ -261,18 +253,15 @@ fn worked_out(scene: &ModelScene, take: Option<&Clip>) -> Option<Distances> {
 mod tests {
     use super::*;
 
-    /// The distance at model point `p`.
     fn at(d: &Distances, p: Vec3) -> f32 {
         let c = d.cell_to_model.inverse().transform_point3(p).round();
         let [nx, ny, _] = d.cells.map(|n| n as usize);
         d.values[c.x as usize + c.y as usize * nx + c.z as usize * nx * ny]
     }
 
-    /// A skinned model is hit where its take starts, not in its bind pose.
     #[test]
     fn a_skin_is_hit_in_the_pose_its_take_starts_in() {
         let mut scene = lumit_scene::fixtures::bending(24, 16, 4);
-        // Starts bent, by moving each bone's middle key to the front.
         for channel in &mut scene.clips[0].channels {
             if channel.path == lumit_scene::Path::Rotation {
                 let bent: Vec<f32> = channel.values[4..8].to_vec();

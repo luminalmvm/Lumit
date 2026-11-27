@@ -243,6 +243,20 @@ pub fn governor_report() -> BridgeGovernorReport {
     }
 }
 
+/// A frame the Viewer did not draw because it needs more video memory than
+/// Lumit may use.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BridgeFrameOverBudget {
+    /// Bytes the frame needs.
+    pub wanted: u64,
+    /// Bytes Lumit may use.
+    pub budget: u64,
+    /// Whether an edit or a redo made here stopped a frame that was drawing,
+    /// so undoing it would put it right.
+    pub undoable: bool,
+}
+
 /// Resize the cache, returning what it holds afterwards.
 ///
 /// Shrinking evicts oldest-first straight away rather than waiting for the next

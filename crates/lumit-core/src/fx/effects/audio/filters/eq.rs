@@ -45,7 +45,6 @@ const NOTCH: i64 = 5;
 /// voice, three bells across the middle, a low pass above the air.
 const CENTRES: [f64; BANDS] = [80.0, 250.0, 1_000.0, 4_000.0, 12_000.0];
 
-/// What shape each band starts as.
 const SHAPES: [i64; BANDS] = [HIGH_PASS, BELL, BELL, BELL, LOW_PASS];
 
 /// What Q each band starts at: Butterworth for the two filters, a bell's own
@@ -60,7 +59,6 @@ const QS: [f64; BANDS] = [FRAC_1_SQRT_2, 1.0, 1.0, 1.0, FRAC_1_SQRT_2];
 /// bottom and the top off a clip nobody asked it to touch.
 const ONS: [i64; BANDS] = [0, 1, 1, 1, 0];
 
-/// The parametric EQ's controls: five bands of five rows, then a trim.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "audio_eq",
@@ -116,7 +114,6 @@ pub struct AudioEq {
         label = "Band 1 gain"
     )]
     pub band1_gain: f32,
-    /// Band 1's Q: how narrow the shape is.
     #[bounded(
         min = 0.1,
         max = 10.0,
@@ -168,7 +165,6 @@ pub struct AudioEq {
         label = "Band 2 gain"
     )]
     pub band2_gain: f32,
-    /// Band 2's Q: how narrow the shape is.
     #[bounded(
         min = 0.1,
         max = 10.0,
@@ -220,7 +216,6 @@ pub struct AudioEq {
         label = "Band 3 gain"
     )]
     pub band3_gain: f32,
-    /// Band 3's Q: how narrow the shape is.
     #[bounded(
         min = 0.1,
         max = 10.0,
@@ -272,7 +267,6 @@ pub struct AudioEq {
         label = "Band 4 gain"
     )]
     pub band4_gain: f32,
-    /// Band 4's Q: how narrow the shape is.
     #[bounded(
         min = 0.1,
         max = 10.0,
@@ -324,7 +318,6 @@ pub struct AudioEq {
         label = "Band 5 gain"
     )]
     pub band5_gain: f32,
-    /// Band 5's Q: how narrow the shape is.
     #[bounded(
         min = 0.1,
         max = 10.0,
@@ -345,7 +338,6 @@ pub struct AudioEq {
     pub output: f32,
 }
 
-/// One band's five rows, so a band can read its own values by index.
 #[derive(Clone, Copy)]
 struct Rows {
     on: ParamId,
@@ -355,7 +347,6 @@ struct Rows {
     q: ParamId,
 }
 
-/// Every band's rows, in band order.
 const ROWS: [Rows; BANDS] = [
     Rows {
         on: AudioEq::BAND1_ON,
@@ -394,7 +385,6 @@ const ROWS: [Rows; BANDS] = [
     },
 ];
 
-/// One band on its way to what its rows hold.
 #[derive(Clone, Copy)]
 struct Band {
     freq: Smoother,
@@ -433,7 +423,6 @@ impl Band {
         self.kind = value(values, rows.kind, SHAPES[i] as f64).round() as i64;
     }
 
-    /// The section this band is right now.
     fn coeffs(&self, rate: f64) -> Coeffs {
         if !self.on {
             return Coeffs::IDENTITY;
@@ -450,7 +439,6 @@ impl Band {
     }
 }
 
-/// Everything the EQ carries between blocks.
 struct EqState {
     bands: [Band; BANDS],
     /// The output trim as a multiplier, so the dB is raised to a gain once a
@@ -460,7 +448,6 @@ struct EqState {
     right: Cascade<BANDS>,
 }
 
-/// A live parametric EQ: one per bake, built by [`AudioEqDef::open_audio`].
 struct Parametric {
     rate: f64,
     /// Behind a mutex because [`AudioProcessor::process`] takes `&self`.
@@ -516,7 +503,6 @@ impl AudioProcessor for Parametric {
     }
 }
 
-/// The parametric EQ's behaviour.
 pub struct AudioEqDef;
 
 impl EffectDef for AudioEqDef {
@@ -524,7 +510,6 @@ impl EffectDef for AudioEqDef {
         &<AudioEq as EffectMetadata>::SCHEMA
     }
 
-    /// It touches sound and no pixel, so the resolve step pushes no op for it.
     fn is_image_op(&self) -> bool {
         false
     }
@@ -559,8 +544,6 @@ mod tests {
     use super::*;
     use crate::fx::effects::audio::modulation::harness;
 
-    /// **Plan 1**: the same input baked twice is bit-identical, and one run is
-    /// its own two halves spliced at a block edge with the state carried.
     #[test]
     fn a_bake_of_the_eq_is_the_same_bake_twice_and_survives_a_split() {
         let input = harness::tone(6, 220.0);

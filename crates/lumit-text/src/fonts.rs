@@ -28,7 +28,6 @@ use skrifa::{FontRef, MetadataProvider};
 
 type Bytes = Arc<dyn AsRef<[u8]> + Send + Sync>;
 
-/// One face, loaded and ready to shape and draw.
 #[derive(Clone)]
 pub(crate) struct Face {
     bytes: Bytes,
@@ -66,7 +65,6 @@ impl Face {
         FontRef::from_index((*self.bytes).as_ref(), self.index).ok()
     }
 
-    /// The face's named place on every axis the font has.
     fn named_place(&self) -> Vec<([u8; 4], f32)> {
         let Some(font) = self.font() else {
             return Vec::new();
@@ -109,10 +107,8 @@ impl Face {
         self.base.instance_builder().variations(place).build()
     }
 
-    /// This face with the layer's own axes set, which is the place every
-    /// letter starts from.
     pub(crate) fn with_axes(&self, axes: &[lumit_core::text::FontAxisValue]) -> Face {
-        #[allow(clippy::cast_possible_truncation)] // a place on an axis
+        #[allow(clippy::cast_possible_truncation)]
         let moves: Vec<([u8; 4], f32)> = axes
             .iter()
             .filter(|a| a.value.is_finite())
@@ -151,7 +147,6 @@ impl Face {
         self.place.iter().find(|(t, _)| *t == tag).map(|(_, v)| *v)
     }
 
-    /// Each axis's tag and range.
     fn ranges(&self) -> Vec<([u8; 4], f32, f32)> {
         self.font().map_or_else(Vec::new, |font| {
             font.axes()
@@ -162,16 +157,12 @@ impl Face {
     }
 }
 
-/// One axis of a variable font, as the Text panel and an animator show it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FontAxis {
-    /// The four-letter tag, such as `wght`.
     pub tag: String,
-    /// What the font calls it, such as "Weight".
     pub name: String,
     pub min: f64,
     pub max: f64,
-    /// The font's own default place on it.
     pub default: f64,
     /// Where the face sits on it, which is what an unset axis reads as.
     pub face: f64,
@@ -209,7 +200,6 @@ pub fn axes(family: &str, face_name: &str) -> Vec<FontAxis> {
         .collect()
 }
 
-/// What OpenType calls a registered axis, for a font that doesn't name it.
 fn registered_name(tag: [u8; 4]) -> String {
     match &tag {
         b"wght" => "Weight".to_owned(),
@@ -229,7 +219,6 @@ pub fn is_variable(family: &str) -> bool {
     fonts_named(family).iter().any(|f| !f.axes().is_empty())
 }
 
-/// The installed families that vary, for the Text panel's filter.
 #[must_use]
 pub fn variable_families() -> Vec<String> {
     families().into_iter().filter(|f| is_variable(f)).collect()
@@ -247,7 +236,6 @@ pub(crate) fn builtin() -> Arc<Face> {
         .clone()
 }
 
-/// The built-in family, and the faces of it carried in the program.
 const INTER: &str = "Inter";
 const BUNDLED: [(&str, &[u8]); 2] = [
     (
@@ -278,7 +266,6 @@ fn bundled(family: &str, face: &str) -> Option<Arc<Face>> {
 
 struct Registry {
     system: fontique::Collection,
-    /// The fonts of the files handed to [`register_file`].
     registered: fontique::Collection,
     /// Those files, so one is never added twice.
     files: Vec<PathBuf>,
@@ -434,8 +421,6 @@ fn library_names() -> &'static Mutex<Vec<String>> {
     &NAMES
 }
 
-/// The families that come from the library's fonts, sorted the way a menu
-/// reads.
 #[must_use]
 pub fn library_families() -> Vec<String> {
     library_names()
@@ -459,8 +444,6 @@ pub fn library_identity(family: &str) -> Option<[u8; 32]> {
     registry.library.get(&id).copied()
 }
 
-/// The family and faces a font file holds, read from its bytes, or `None`
-/// when it isn't a font this engine draws with.
 #[must_use]
 pub fn file_info(bytes: &[u8]) -> Option<(String, Vec<String>)> {
     let file = skrifa::raw::FileRef::new(bytes).ok()?;
@@ -489,15 +472,12 @@ fn name(font: &FontRef<'_>, id: StringId) -> Option<String> {
     (!name.is_empty()).then_some(name)
 }
 
-/// What a face is called inside its family: "Bold Italic", "Condensed".
 fn face_name(font: &FontRef<'_>) -> String {
     name(font, StringId::TYPOGRAPHIC_SUBFAMILY_NAME)
         .or_else(|| name(font, StringId::SUBFAMILY_NAME))
         .unwrap_or_else(|| "Regular".to_owned())
 }
 
-/// Every face one font file holds: the named places of a variable font, or the
-/// one face of a fixed font.
 fn faces_in(font: &FontRef<'_>) -> Vec<(String, Option<usize>)> {
     let instances: Vec<(String, Option<usize>)> = font
         .named_instances()
@@ -512,8 +492,6 @@ fn faces_in(font: &FontRef<'_>) -> Vec<(String, Option<usize>)> {
     }
 }
 
-/// The font families installed on this machine, in the library or handed
-/// over as files, sorted the way a menu reads.
 #[must_use]
 pub fn families() -> Vec<String> {
     let mut registry = registry().lock().unwrap_or_else(PoisonError::into_inner);
@@ -525,7 +503,6 @@ pub fn families() -> Vec<String> {
     names
 }
 
-/// How many fonts each registered family holds.
 fn registered_counts(registered: &mut fontique::Collection) -> HashMap<String, usize> {
     let names: Vec<String> = registered.family_names().map(str::to_owned).collect();
     names
@@ -569,8 +546,6 @@ pub fn register_file(path: &Path) -> Vec<String> {
     added
 }
 
-/// Register every font file in `dir` (ttf, otf, ttc). What start-up calls for
-/// the templates' fonts folder.
 pub fn register_dir(dir: &Path) -> Vec<String> {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return Vec::new();
@@ -638,8 +613,6 @@ pub fn file_of(family: &str, face: &str) -> Option<PathBuf> {
     })
 }
 
-/// Whether `family` (with `face`, or any face when `face` is empty) is known:
-/// installed, registered or bundled.
 #[must_use]
 pub fn installed(family: &str, face: &str) -> bool {
     if family.is_empty() || bundled(family, face).is_some() {
@@ -675,12 +648,6 @@ pub fn faces(family: &str) -> Vec<String> {
     out
 }
 
-/// The family and face of the installed font with this PostScript name, which
-/// is how an After Effects project names a font. `None` when it isn't
-/// installed here.
-///
-/// ponytail: reads the name of every installed font, once per name asked for.
-/// Keep an index if a project with many fonts opens slowly.
 #[must_use]
 pub fn by_postscript_name(postscript: &str) -> Option<(String, String)> {
     let seen = postscript_seen();
@@ -747,7 +714,6 @@ fn fonts_named(family: &str) -> Vec<fontique::FontInfo> {
         .collect()
 }
 
-/// Whether the family holds a face of exactly this name.
 fn has_face(fonts: &[fontique::FontInfo], face: &str) -> bool {
     !face.is_empty() && fonts.iter().any(|font| holds(font, face))
 }
@@ -786,10 +752,6 @@ mod tests {
     use lumit_core::model::LinearColour;
     use lumit_core::text::{ParagraphStyle, TextStyle};
 
-    /// **A font in the library is listed and drawn with, and once it is gone
-    /// drawing falls back to Inter without a fault.** Paper Mono, which the
-    /// interface ships, stands in for a font the person keeps; it is read
-    /// from a temporary library folder, never a real one.
     #[test]
     fn a_library_font_is_used_and_falls_back_once_deleted() {
         let source = Path::new(env!("CARGO_MANIFEST_DIR"))

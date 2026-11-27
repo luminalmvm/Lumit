@@ -10,7 +10,6 @@ use super::{Clip, ClipSource};
 use crate::time::Rational;
 use serde::{Deserialize, Serialize};
 
-/// One more take a clip holds.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Take {
     pub source: ClipSource,
@@ -18,7 +17,6 @@ pub struct Take {
     /// in its own media. Kept relative, so a trim, a slip or a cut moves every
     /// take with the one shown and they stay in step.
     pub offset: Rational,
-    /// Unknown fields from newer Lumit versions (docs/10-FILE-FORMAT.md §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -80,7 +78,6 @@ impl Clip {
     pub fn without_take(&self, n: usize) -> Option<Clip> {
         let mut clip = self.clone();
         if n == 0 {
-            // The take shown goes to the back of the ring, and off it.
             clip = self.showing_take(1)?;
             clip.takes.pop();
         } else if n <= clip.takes.len() {
@@ -98,8 +95,6 @@ mod tests {
     use super::*;
     use uuid::Uuid;
 
-    /// Takes go round in one order and each keeps its own trim, and a clip
-    /// showing another take is where it was, as long as it was.
     #[test]
     fn takes_turn_in_order_and_keep_their_trims() {
         let s = |n: i64| Rational::new(n, 1).unwrap();
@@ -114,15 +109,12 @@ mod tests {
         let shows = |clip: &Clip| (clip.source, clip.source_in, clip.source_out);
         assert_eq!(shows(&clip), (c, s(0), s(2)));
         assert_eq!((clip.place_start, clip.place_duration), (s(10), s(2)));
-        // On from the last added is round to the first.
         let next = clip.showing_take(1).unwrap();
         assert_eq!(shows(&next), (a, s(1), s(3)));
         let next = next.showing_take(1).unwrap();
         assert_eq!(shows(&next), (b, s(5), s(7)));
-        // Back one from the first is the last.
         let back = clip.showing_take(clip.takes.len()).unwrap();
         assert_eq!(shows(&back), (b, s(5), s(7)));
-        // Taking away the take shown shows the next, and the other stays.
         let left = clip.without_take(0).unwrap();
         assert_eq!(shows(&left), (a, s(1), s(3)));
         assert_eq!(left.takes.len(), 1);

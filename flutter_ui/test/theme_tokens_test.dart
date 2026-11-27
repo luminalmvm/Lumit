@@ -1,4 +1,3 @@
-// The token list, custom themes, and the two Timeline colours.
 
 import 'dart:math' as math;
 
@@ -48,7 +47,6 @@ void main() {
         final changed = token.write(LumitTheme.dark(), probe);
         expect(token.read(changed), probe,
             reason: '${token.key} does not read back what it wrote');
-        // And it changed *only* its own field.
         final others = themeTokens.where((o) => o.key != token.key);
         for (final other in others) {
           expect(other.read(changed), other.read(LumitTheme.dark()),

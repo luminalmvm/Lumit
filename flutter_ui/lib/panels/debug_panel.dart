@@ -1,5 +1,3 @@
-// The Debug view: how fast the interface is drawing, and every call it has made
-// over the bridge, slowest first and as they happened.
 
 import 'dart:async';
 
@@ -16,7 +14,6 @@ import 'package:lumit_flutter/widgets/hover_intent.dart';
 
 import '../l10n/strings.dart';
 
-/// The columns of a statistics row, and how tall a row is.
 const double _countColumn = 48;
 const double _timeColumn = 60;
 const double _rowHeight = 20;
@@ -101,7 +98,6 @@ class _DebugPanelState extends State<DebugPanel> {
         ),
       );
 
-  /// A figure in its column.
   Widget _figure(LumitTheme theme, String text, double width, Color? colour) =>
       SizedBox(
         width: width,
@@ -268,7 +264,6 @@ class _DebugPanelState extends State<DebugPanel> {
   }
 }
 
-/// One call's stack, in the frame every other window has.
 class _TraceWindow extends StatefulWidget {
   final String name, trace;
   final VoidCallback onClose;

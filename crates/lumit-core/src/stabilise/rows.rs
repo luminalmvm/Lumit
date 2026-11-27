@@ -27,7 +27,6 @@ use crate::fx::effects::stabilise::{
 };
 use crate::model::{Composition, Document, EffectInstance, EffectValue, Layer};
 
-/// A choice row's index, or `fallback` where the row is missing.
 #[must_use]
 pub fn choice(inst: &EffectInstance, id: &str, fallback: u32) -> u32 {
     match inst.param(id) {
@@ -36,7 +35,6 @@ pub fn choice(inst: &EffectInstance, id: &str, fallback: u32) -> u32 {
     }
 }
 
-/// One Stabilise's rows on one layer of one comp.
 pub struct Reader<'a> {
     pub doc: &'a Arc<Document>,
     pub comp: &'a Composition,
@@ -68,7 +66,6 @@ impl Reader<'_> {
         }
     }
 
-    /// The comp's frame rate.
     #[must_use]
     pub fn comp_fps(&self) -> f64 {
         self.comp.frame_rate.fps().max(1.0)
@@ -144,8 +141,6 @@ impl Reader<'_> {
                 return Smoothness::Keyed {
                     keys: keys.clone(),
                     rate,
-                    // ponytail: exact without a Retime; a retimed layer reads
-                    // its keys at the source's own clock.
                     start: self.layer.source_time_at(0.0),
                     first: a.first,
                 };
@@ -220,7 +215,6 @@ fn spans() -> &'static Mutex<Spans> {
     SPANS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-/// Drop every walked span `keep` does not ask for.
 pub fn retain(keep: impl Fn(&Uuid) -> bool) {
     if let Ok(mut m) = spans().lock() {
         m.retain(|id, _| keep(id));

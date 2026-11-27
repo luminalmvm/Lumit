@@ -1,5 +1,3 @@
-// A group drawn as a stack: panels one above another, each under a header
-// that twirls it open or shut, the open ones sharing the height.
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
@@ -10,7 +8,6 @@ import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
 
 void main() {
-  /// A Viewer beside a stack of three, the first open.
   DockSplit layout({bool solo = false}) => DockSplit(
         DockAxis.horizontal,
         [
@@ -57,7 +54,6 @@ void main() {
       final json = stackOf(layout()..children).toJson()
         ..['open'] = [0, 2]
         ..['heights'] = [1.0, 2.0, 3.0];
-      // The middle panel is one this build no longer has.
       (json['children'] as List)[1] = {'kind': 'pane', 'panel': 'gone'};
       final back = DockNode.fromJson(json) as DockTabs;
       expect([for (final c in back.children) c.panel],
@@ -96,7 +92,6 @@ void main() {
       final root = layout();
       movePanel(root, Panel.viewer.pane(), Panel.effectsAndPresets.pane(),
           DropPosition.stack);
-      // The Viewer left its own tile, so the stack is the whole root now.
       final stack = root.children.single as DockTabs;
       expect([
         for (final c in stack.children) c.panel
@@ -188,7 +183,6 @@ void main() {
       expect(stackOf(root).isOpen(Panel.text.pane()), isTrue);
       expect(body(Panel.text), findsOneWidget);
       expect(saved, 1, reason: 'what is open is part of the arrangement');
-      // Both open: they share the height the headers leave.
       final first = tester.getSize(body(Panel.effectsAndPresets)).height;
       final second = tester.getSize(body(Panel.text)).height;
       expect(first, closeTo(second, 1));
@@ -265,7 +259,6 @@ void main() {
   });
 }
 
-/// A body with State to lose: a count of the taps it has had.
 class _Counter extends StatefulWidget {
   const _Counter({super.key});
 

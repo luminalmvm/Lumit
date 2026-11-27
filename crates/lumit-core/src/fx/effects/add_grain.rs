@@ -18,7 +18,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Add grain's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "add_grain",
@@ -68,11 +67,9 @@ pub struct AddGrain {
     #[slider(min = 0.0, max = 200.0, default = 100.0, hard_min = 0.0, unit = Percent)]
     pub red: f32,
 
-    /// The green channel's share; see [`red`](Self::red).
     #[slider(min = 0.0, max = 200.0, default = 100.0, hard_min = 0.0, unit = Percent)]
     pub green: f32,
 
-    /// The blue channel's share; see [`red`](Self::red).
     #[slider(min = 0.0, max = 200.0, default = 100.0, hard_min = 0.0, unit = Percent)]
     pub blue: f32,
 
@@ -92,7 +89,6 @@ pub struct AddGrain {
     #[slider(min = 0.0, max = 200.0, default = 100.0, hard_min = 0.0, unit = Percent)]
     pub midtones: f32,
 
-    /// The bright end of the range; see [`shadows`](Self::shadows).
     #[slider(min = 0.0, max = 200.0, default = 100.0, hard_min = 0.0, unit = Percent)]
     pub highlights: f32,
 
@@ -101,11 +97,9 @@ pub struct AddGrain {
     #[toggle(default = true)]
     pub animate: bool,
 
-    /// Which draw the grain follows (§2.4).
     #[seed]
     pub seed: u32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -123,7 +117,6 @@ impl AddGrain {
     /// produces, not what anyone typed.
     pub const DERIVED_TICK: ParamId = ParamId::new("derived.tick");
 
-    /// This instance's tick read back out of a resolved bag.
     #[must_use]
     pub fn tick_of(p: Params<'_>) -> i32 {
         p.int(Self::DERIVED_TICK, 0)
@@ -158,7 +151,6 @@ impl AddGrain {
     }
 }
 
-/// Add grain's behaviour.
 pub struct AddGrainDef;
 
 impl EffectDef for AddGrainDef {

@@ -1,5 +1,3 @@
-// The turning points the stacked graphs ring: where the speed peaks (the
-// value's steepest point), and none on a straight run.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/graph_channels.dart';
@@ -48,8 +46,6 @@ void main() {
   });
 }
 
-/// A typed acceleration is met at the key, whichever way it points: by the
-/// influence where that can reach it, by the side's speed where it cannot.
 void accelerationTests() {
   const ease =
       BridgeSideInterp.bezier(BridgeBezierSide(speed: 0, influence: 1 / 3));
@@ -86,7 +82,6 @@ void accelerationTests() {
   });
 }
 
-/// A stretch of constant acceleration from rest: the parabola, held exactly.
 void constantAccelerationTests() {
   const ease =
       BridgeSideInterp.bezier(BridgeBezierSide(speed: 0, influence: 1 / 3));
@@ -136,7 +131,6 @@ void constantAccelerationTests() {
   });
 }
 
-/// A start speed: the stretch slows down (or speeds up) evenly.
 void startSpeedTests() {
   const ease =
       BridgeSideInterp.bezier(BridgeBezierSide(speed: 0, influence: 1 / 3));
@@ -169,7 +163,6 @@ void startSpeedTests() {
   });
 }
 
-/// Speed up, hold, slow down: the profile's times and the keys that hold it.
 void speedProfileTests() {
   const ease =
       BridgeSideInterp.bezier(BridgeBezierSide(speed: 0, influence: 1 / 3));
@@ -179,7 +172,6 @@ void speedProfileTests() {
         acceleration: 100, cruiseSpeed: 200, deceleration: 50, distance: 1000)!;
     expect(p.accelSeconds, closeTo(2, 1e-9));
     expect(p.decelSeconds, closeTo(4, 1e-9));
-    // 200 + 400 on the ramps, 400 at 200 a second.
     expect(p.cruiseSeconds, closeTo(2, 1e-9));
     expect(p.peakSpeed, 200);
   });

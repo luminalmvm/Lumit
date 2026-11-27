@@ -58,7 +58,6 @@ fn test_cache_dir() -> Option<PathBuf> {
     TEST_CACHE_DIR.with(|dir| dir.borrow().clone())
 }
 
-/// Run `f` with the sidecar cache pointed at `dir` (tests only).
 #[cfg(test)]
 pub(crate) fn with_cache_dir<T>(dir: &std::path::Path, f: impl FnOnce() -> T) -> T {
     TEST_CACHE_DIR.with(|slot| *slot.borrow_mut() = Some(dir.to_path_buf()));

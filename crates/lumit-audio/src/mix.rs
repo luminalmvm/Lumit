@@ -109,7 +109,6 @@ impl GainEnvelope {
     }
 }
 
-/// One decoded stereo source placed on the comp's output strip.
 pub struct PlacedAudio<'a> {
     /// Output frame (per-channel sample index) where this source's first
     /// sample lands. May be negative: the head that falls before the strip
@@ -126,8 +125,6 @@ pub struct PlacedAudio<'a> {
     pub envelope: Option<GainEnvelope>,
 }
 
-/// Sum `sources` into a fresh `total_frames`-long interleaved stereo buffer,
-/// at unity master — [`mix_stereo_at`] with a master gain of 1.0.
 pub fn mix_stereo(sources: &[PlacedAudio], total_frames: usize) -> Vec<f32> {
     mix_stereo_at(sources, total_frames, 1.0)
 }
@@ -178,14 +175,12 @@ pub fn add_placed(out: &mut [f32], src: &PlacedAudio) {
         return;
     }
     let src_frames = src.samples.len() / 2;
-    // The output frame range this source covers, clipped to the strip.
     let out_start = src.start_frame.max(0);
     let out_end = (src.start_frame + src_frames as i64).min(total_frames as i64);
     if out_end <= out_start {
         return;
     }
     for out_f in out_start..out_end {
-        // The matching source frame (out_f - start_frame >= 0 here).
         let src_f = (out_f - src.start_frame) as usize;
         let g = src.envelope.as_ref().map_or(src.gain, |e| e.gain_at(src_f));
         let o = out_f as usize * 2;
@@ -229,7 +224,6 @@ pub fn place_on_timeline(
     rate: u32,
 ) -> Option<(i64, usize, usize)> {
     let rate_f = f64::from(rate);
-    // Can't hear the source before its own start (comp time offset_s).
     let audible_start = in_s.max(offset_s);
     if out_s <= audible_start {
         return None;
@@ -281,17 +275,13 @@ mod tests {
 
     #[test]
     fn placement_confines_audio_to_the_active_span() {
-        // GEN-4 bug 3: a layer must only sound across its comp-time span.
-        // 4 s of 48 kHz source, audible only across comp time [1, 2).
         let rate = 48_000u32;
         let src = tone(4 * rate as usize, 0.5);
         let (out_start, src_start, len) =
             place_on_timeline(1.0, 2.0, 0.0, src.len() / 2, rate).unwrap();
-        // Exactly one second, landing at comp second 1.
         assert_eq!(out_start, i64::from(rate));
         assert_eq!(src_start, rate as usize);
         assert_eq!(len, rate as usize);
-        // Mixed onto a 3 s strip: silence outside [1, 2), sound within it.
         let placed = PlacedAudio {
             start_frame: out_start,
             samples: &src[src_start * 2..(src_start + len) * 2],
@@ -327,16 +317,12 @@ mod tests {
         // active span intersected with the comp window [0, 2) is what sounds;
         // the second of source that falls before comp 0 is clipped, not wrapped.
         let rate = 48_000u32;
-        let src_frames = 4 * rate as usize; // 4 s source
+        let src_frames = 4 * rate as usize;
         let (out_start, src_start, len) =
             place_on_timeline(-1.0, 2.0, -1.0, src_frames, rate).unwrap();
-        // audible_start = max(in, offset) = -1; source runs from its own frame 0,
-        // landing one second before the strip; length spans -1..2 = 3 s.
         assert_eq!(out_start, -i64::from(rate));
         assert_eq!(src_start, 0);
         assert_eq!(len, 3 * rate as usize);
-        // Mixed onto a 2 s comp strip: the pre-0 second is dropped and the whole
-        // in-window span [0, 2) sounds the source from its 1 s mark onward.
         let src = tone(src_frames, 0.5);
         let placed = PlacedAudio {
             start_frame: out_start,
@@ -380,7 +366,6 @@ mod tests {
             gain: [1.0, 1.0],
             envelope: None,
         };
-        // Two of these sum to 1.6 — over the ceiling at unity master.
         let hot = mix_stereo_at(&[placed(), placed()], 4, 1.0);
         assert!(
             (hot[0] - MASTER_CEILING).abs() < 1e-6,
@@ -402,8 +387,6 @@ mod tests {
 
     #[test]
     fn master_limiter_holds_minus_0_3_dbfs_both_polarities() {
-        // docs/09 §3.1: the safety clip leaves −0.3 dBFS of headroom, so a hot
-        // sum never reaches full scale on either polarity.
         let hot_pos = tone(2, 1.5);
         let hot_neg = tone(2, -1.5);
         let out_pos = mix_stereo(
@@ -424,8 +407,6 @@ mod tests {
             }],
             2,
         );
-        // The ceiling really is below full scale (−0.3 dBFS ≈ 0.9661), so the
-        // clamped output stays under 1.0 — i.e. the limiter left headroom.
         assert!(out_pos.iter().all(|v| (v - MASTER_CEILING).abs() < 1e-6));
         assert!(out_neg.iter().all(|v| (v + MASTER_CEILING).abs() < 1e-6));
         assert!(out_pos.iter().all(|v| *v < 1.0));

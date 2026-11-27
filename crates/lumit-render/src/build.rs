@@ -53,7 +53,6 @@ pub type LayerPixels = (
     lumit_media::decode::PixelFormat,
 );
 
-/// The map of already-decoded pixels a build reads, keyed by layer id.
 pub type PixelsByLayer<'a> = HashMap<Uuid, &'a CompLayerPixels>;
 
 /// The single `model::BlendMode` → `gpu::Blend` mapping shared by every path
@@ -153,7 +152,6 @@ fn backdrop_fx(layer: &lumit_core::model::Layer) -> bool {
     layer.switches.fx && layer.effects.iter().any(|e| e.enabled && is_backdrop(e))
 }
 
-/// Whether `e` is an effect drawn over the composite below.
 fn is_backdrop(e: &lumit_core::model::EffectInstance) -> bool {
     e.effect.namespace == lumit_core::model::EffectNamespace::Lfx
         && lumit_core::fx::catalogue::BUILTIN_DEFS
@@ -161,11 +159,6 @@ fn is_backdrop(e: &lumit_core::model::EffectInstance) -> bool {
             .is_some_and(|d| d.backdrop())
 }
 
-/// The most pixels a shape layer's art is rasterised to: a shape scaled past
-/// it is drawn at this size and stretched, so a comp-sized shape at 400% is
-/// 64 MB of raster rather than 130.
-// ponytail: the whole art is drawn, seen or not. Draw only the part in frame
-// if a scaled-up shape is still too slow.
 const SHAPE_RASTER_PIXELS: f64 = 4096.0 * 4096.0;
 
 /// Whether the frames being built draw each layer as the outline of its own
@@ -174,8 +167,6 @@ const SHAPE_RASTER_PIXELS: f64 = 4096.0 * 4096.0;
 /// before anything else is drawn; such a frame is never cached.
 static OUTLINES_ONLY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-/// Turn outline drawing on or off for the frames built from here on. See
-/// [`OUTLINES_ONLY`].
 pub fn set_outlines_only(on: bool) {
     OUTLINES_ONLY.store(on, std::sync::atomic::Ordering::Relaxed);
 }
@@ -209,21 +200,6 @@ fn outline_like(rgba: &[u8], w: u32, h: u32) -> Option<Vec<u8>> {
     Some(out)
 }
 
-/// The transform edits that keep `layer` where it is at comp time `t_comp`
-/// when its parent becomes `new_parent`. Taking a parent, losing one or
-/// swapping one changes what the layer follows from then on. It must not move
-/// the picture on the frame it happens.
-///
-/// A parented layer's values are read inside its parent's space, so the same
-/// numbers under a new parent land somewhere else. This works out the numbers
-/// that land it where it already was: position, scale and the rotation, or on
-/// a 3D layer the Orientation, its X, Y and Z Rotation staying as they are.
-/// The anchor point stays, and opacity is not inherited. A property that
-/// already reads right is left out, and so is one driven by an expression.
-///
-/// ponytail: a keyed property moves as a whole, each axis on its own, so its
-/// other keys only hold their place under a parent that is not turned. Carry
-/// position keys as x, y pairs if a turned parent needs it.
 pub fn reparented(
     comp: &lumit_core::model::Composition,
     layer: &lumit_core::model::Layer,
@@ -257,7 +233,6 @@ pub fn reparented(
     let Some(out) = lumit_gpu::composite::invert_place(now).filter(|_| was != now) else {
         return Vec::new();
     };
-    // Out of the old parent's space and into the new one's.
     let carry = lumit_gpu::composite::concat_place(out, was);
 
     let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
@@ -534,7 +509,6 @@ fn reparented_eye(
         props.extend([P::PoiX, P::PoiY, P::PoiZ]);
     }
     let ae_order = layer.transform.after_effects_order;
-    // Every channel's value at layer time `lt`, carried as one eye.
     let carried = |lt: f64| {
         let at = |prop: P| {
             layer
@@ -692,7 +666,6 @@ fn reparented_eye(
                 }
             })
             .collect();
-        // A still channel the carry leaves still stays a single value.
         if let Animation::Static(v) = property.animation {
             let first = new.first().map_or(v, |k| k.value);
             if new.iter().all(|k| !differs(k.value, first)) {
@@ -702,7 +675,6 @@ fn reparented_eye(
                 continue;
             }
         }
-        // A lane the carry leaves where it was keeps its own keys and eases.
         let same = new
             .iter()
             .all(|k| !differs(k.value, property.value_at(k.time.to_f64())));
@@ -818,18 +790,6 @@ pub fn points_projection(
     Some(lumit_core::fx::points::Projection { m })
 }
 
-/// The empty room a points effect is given round a Shape or Text layer's art:
-/// texels on each side, across and down, and the raster's px per comp px.
-/// `None` where the art already fills the frame.
-///
-/// The room reaches the frame's edges as the layer's position and anchor put
-/// them, so the effect draws into the frame as it does on a solid that fills
-/// it. `corner` is where the art's own corner sits in the frame. Scale and
-/// rotation then turn the wider picture as they would turn that solid.
-// ponytail: a grown picture is placed by its centre, so both sides get the
-// larger margin and art at one edge of the frame makes a picture near twice
-// the frame's width. A parent's move is not read either. Grow one side at a
-// time, and follow the parent, if a profile or a project shows it.
 fn points_room(
     frame: (f32, f32),
     natural: (f32, f32),
@@ -850,8 +810,6 @@ fn points_room(
     (room != [0, 0]).then_some((room, scale))
 }
 
-/// The rows of a points consumer that wired drivers give each point
-/// its own value for, and the stream columns they are written into.
 fn driven_rows(
     consumer: &lumit_core::model::EffectInstance,
 ) -> Option<&'static [(&'static str, &'static str)]> {
@@ -954,8 +912,6 @@ fn clone_deformer_carriage(
         })
     };
     let context = context_of(layer);
-    // A layer's outline in its own px at comp time `t`, a Shape layer's art
-    // or another layer's first mask, with the size of its picture.
     let outline = |l: &lumit_core::model::Layer, t: f64| -> Option<(d::Outline, [f32; 2])> {
         let llt = lumit_core::time::layer_time(t, l.start_offset.0);
         let (line, size) = match &l.kind {
@@ -998,8 +954,6 @@ fn clone_deformer_carriage(
             && matches!(x.param("mode"), Some(EffectValue::Choice(d::MODE_VECTOR)))
     };
     let vector = is_vector(e);
-    // The Vector deformers between this one and the Clone to points above,
-    // top first, with nothing else switched on between.
     let mut chain = Vec::new();
     let mut above = None;
     for x in effects[..at].iter().rev().filter(|x| x.enabled) {
@@ -1099,7 +1053,6 @@ fn clone_deformer_carriage(
     for x in &chain {
         outline = outline.and_then(|o| deformer(x)?.on_paths(&o, boolean_of(x).as_deref(), frame));
     }
-    // Under another Vector deformer the copies are what that one left.
     let copies = match (chain.is_empty(), &outline) {
         (true, _) => copies,
         (false, Some(o)) => vec![d::ShapeCopy {
@@ -1158,8 +1111,6 @@ fn points_input_in(
             return found;
         }
     }
-    // A Clone to points whose Distribution is not Points input makes its
-    // own points, in place of the wire.
     if let Some(layer) = layer.filter(|_| consumer.effect.match_name == "clone_to_points") {
         use lumit_core::fx::effects::clone_to_points::CloneToPoints;
         let made = context
@@ -1169,7 +1120,6 @@ fn points_input_in(
                 CloneToPoints::distributed(consumer, comp, layer, t, context, projection)
             });
         if let Some(mut stream) = made {
-            // Drivers give each copy its own value here too.
             if let Some(rows) = driven_rows(consumer) {
                 lumit_core::fx::drivers::per_copy::drive_rows(
                     graph,
@@ -1200,9 +1150,7 @@ fn points_input_in(
     // number or the source matte is neither; the type check refused those at
     // commit, so they are stale lines to ignore rather than cases to guess.
     enum Source {
-        /// A producer in this layer's own stack, by id.
         Effect(uuid::Uuid),
-        /// A Layer points node in this layer's graph, by node id.
         Tap(uuid::Uuid),
     }
     for port in &ports {
@@ -1299,9 +1247,6 @@ fn points_input_in(
             // costs.
             let samples = read(Trail::SAMPLES_PARAM, 1.0).clamp(1.0, 256.0) as usize;
             let step = read(Trail::STEP_PARAM, 0.0).max(0.0);
-            // ponytail: one host evaluation per sample. A GPU carriage
-            // (points-stream.md §3.3) would make this one dispatch per sample
-            // instead; the trigger is a profile showing a real comp spending it.
             for k in 1..samples {
                 // Before the layer's own clock started there is nothing to ask
                 // for, and a tail that stops there is the honest picture.
@@ -1432,7 +1377,6 @@ fn text_carriage(
     let (words, _) =
         lumit_core::text::unit_indices(&line, lumit_core::text::selector::SelectorBasis::Words);
     let half = (laid.ascent - laid.descent) * 0.5;
-    // How far along the path this line starts. Lines run on one after another.
     let mut along = document.path_offset.value_at(lt) as f32;
     let mut glyphs = Vec::new();
     // Include spaces hands a space over as a letter, which only a point per
@@ -1452,7 +1396,6 @@ fn text_carriage(
             if !ink || glyphs.len() >= lumit_core::fx::points::CAP_HARD as usize {
                 continue;
             }
-            // Where the pen is and which way the baseline runs there.
             let (pen, tan) = match &spine {
                 None => ([pair[0], row.baseline], [1.0, 0.0]),
                 Some(path) => {
@@ -1461,14 +1404,12 @@ fn text_carriage(
                     if path.closed && total > 0.0 {
                         s = s.rem_euclid(total);
                     } else if !(0.0..=total).contains(&s) {
-                        // Off the end of an open path, where no letter is drawn.
                         continue;
                     }
                     (path.point_at(s), path.tangent_at(s))
                 }
             };
             let nrm = [-tan[1], tan[0]];
-            // An animator pushes a letter along and away from its baseline.
             let push = xforms.get(ch).map_or([0.0; 2], |x| x.position);
             let origin = [
                 pen[0] + push[0] * tan[0] + push[1] * nrm[0],
@@ -1488,14 +1429,12 @@ fn text_carriage(
     (glyphs, None)
 }
 
-/// What the wires into an effect's Points inputs bring it.
 #[derive(Default)]
 struct PointsInput {
     /// One stream and its history for an effect with one input, or one stream
     /// per input for an effect with several. Empty where nothing could be
     /// made yet.
     streams: Vec<lumit_core::fx::points::PointsStream>,
-    /// Which effect in the stack each input is wired from, by index.
     from: Vec<Option<u32>>,
 }
 
@@ -1560,7 +1499,6 @@ fn invert3(m: &[[f32; 3]; 3]) -> Option<[[f32; 3]; 3]> {
         return None;
     }
     let inv_det = 1.0 / det;
-    // The adjugate is the cofactor matrix transposed.
     let mut out = [[0.0f32; 3]; 3];
     for (r, row) in out.iter_mut().enumerate() {
         for (k, v) in row.iter_mut().enumerate() {
@@ -1570,33 +1508,6 @@ fn invert3(m: &[[f32; 3]; 3]) -> Option<[[f32; 3]; 3]> {
     Some(out)
 }
 
-/// Resolve a layer's **effect stack and then its styles**, as one op list
-/// (docs/impl/layer-styles.md §3).
-///
-/// **In plain terms.** A layer's styles are a second little stack that runs on
-/// the layer's own picture after its effects and before the transform
-/// photographs it. This resolves both at the same layer time and hands back one
-/// list of ops with one list of instance ids beside it, so nothing downstream —
-/// `run_ops`, the per-effect cache, the profiler's per-row milliseconds — learns
-/// that styles exist at all.
-///
-/// **The order the ops run is not the order the list is stored in**, and the
-/// difference is deliberate. §2's stored order is a *painting* order, back to
-/// front, which is what the panel and the Timeline show. But these ops run one
-/// after another on a single raster, and an interior style (Colour overlay)
-/// floods whatever alpha it finds: run a Drop shadow first and the overlay would
-/// paint the shadow too. So the interiors go first, on the layer's own alpha,
-/// and the outer styles — which add pixels *underneath* — come after, in reverse
-/// order so that the last one composited ends up furthest back. Because the
-/// stored list is sorted, the outers are exactly its leading pair, and the split
-/// costs a `take_while` rather than an allocation.
-//
-// ponytail: each outer style reads the raster's alpha at its point in the
-// chain, so a second outer style casts its shadow from the first one's soft
-// edge as well as from the layer. Ceiling: visible only with Drop shadow AND
-// Outer glow both live, which is package 2's pair — one of them ships in this
-// package. Upgrade: hold the pre-outer alpha in a texture and hand it to the
-// outer kernels. Trigger: the §2 order pixel test for shadow-under-glow.
 #[allow(clippy::too_many_arguments)]
 fn resolve_layer_fx(
     layer: &lumit_core::model::Layer,
@@ -1725,7 +1636,6 @@ pub fn build_comp_draws_at(
 // One of these a walk, so the picture is kept inline.
 #[allow(clippy::large_enum_variant)]
 enum Probe<'a> {
-    /// One layer row of an effect, as a picture.
     Picture {
         effect: &'a lumit_core::model::EffectInstance,
         row: &'a str,
@@ -1738,8 +1648,6 @@ enum Probe<'a> {
         upto: usize,
         found: Option<DofInputDraw>,
     },
-    /// Every picture of the Clone to points `effect` on layer `owner`, now
-    /// that its stream is known to hold `points` points.
     Clones {
         owner: uuid::Uuid,
         effect: uuid::Uuid,
@@ -1817,8 +1725,6 @@ fn comp_walk(
     // The frame's own pixels, kept for a probe at another moment to find its
     // clip in.
     let frame_pixels = pixels_by_layer;
-    // The copy this walk renders its layers as, and what it hands the comps
-    // it walks into.
     let clone_number = with.clone;
     let seen = with.seen_through.filter(|_| spliced).unwrap_or_else(|| {
         raster_scale::Seen::own(crate::track::camera_pose(doc, comp, t_comp), comp)
@@ -2024,13 +1930,12 @@ fn comp_walk(
                 .then(|| kept_raster::shape(comp, layer, contents, (lt, t_comp), &context, &seen))
                 .flatten()
                 .map(|made| named(layer, lt, made)),
-            LayerKind::Precomp { .. } => None, // handled as Nested below
-            LayerKind::Camera { .. } => None,  // shapes the view, draws nothing
+            LayerKind::Precomp { .. } => None,
+            LayerKind::Camera { .. } => None,
             // A light is something other layers SEE. It has no picture
             // of its own; the effects that read lights take them from
             // `Composition::lights_at`, not from the draw list.
             LayerKind::Light { .. } => None,
-            // Drawn by the mesh pass, from its own draw source.
             LayerKind::Model { .. } | LayerKind::Mesh { .. } => None,
         };
         // Footage is the only kind that can arrive as anything but bytes.
@@ -2041,8 +1946,6 @@ fn comp_walk(
             _ => lumit_media::decode::PixelFormat::Srgb8,
         };
         raw.map(|(mut rgba, w, h, natural)| {
-            // A wireframe drag frame: the layer's own rectangle, outlined, in
-            // place of its picture (see [`set_outlines_only`]).
             if outlines_only() {
                 if let Some(outline) = outline_like(&rgba, w, h) {
                     rgba = Arc::new(outline);
@@ -2205,14 +2108,6 @@ fn comp_walk(
         lumit_core::fx::effects::node_graph::overrides_of(inst, graph, drivers.as_ref())
     };
 
-    // Whether a driver wire feeds this layer's placed-graph instance. Such a
-    // value is substituted where a stored one would be read, and the nested
-    // frame's name is made from the stored instance, so a driven placement is
-    // named not at all: it renders live and banks nothing, which is the same
-    // answer unprobed footage gets.
-    //
-    // ponytail: no nested caching for a driven placed graph. Fold the
-    // substituted values into the name if scrubbing one ever feels slow.
     let driven_inputs = |src: &lumit_core::model::Layer| -> bool {
         use lumit_core::graph::{InputRef, NodeRef};
         src.graph_inputs.as_ref().is_some_and(|inst| {
@@ -2565,7 +2460,6 @@ fn comp_walk(
                     let projection =
                         crate::realise::scene::placement(expr_doc, comp, owner, e, t_comp, &size)
                             .or(projection);
-                    // The Text layer that Text to points and Label points read.
                     let (text, label) = owner.map_or_else(Default::default, |layer| {
                         text_carriage(comp, layer, e, t_comp, expr_doc)
                     });
@@ -2716,7 +2610,6 @@ fn comp_walk(
                         boolean_shape: None,
                     }
                 })();
-                // A Clone deformer's outlines ride beside the stream.
                 let mut made = made;
                 if let Some(layer) = owner.filter(|_| def.reads_clone_shapes()) {
                     (made.clone_shapes, made.boolean_shape) = clone_deformer_carriage(
@@ -2896,7 +2789,6 @@ fn comp_walk(
                         .is_some_and(|def| def.is_image_op())
                 })
                 .collect();
-            // The overwhelming case, and it costs a filter over the stack.
             if instances.is_empty() {
                 return Vec::new();
             }
@@ -3088,7 +2980,6 @@ fn comp_walk(
             .iter()
             .enumerate()
             .find(|(_, l)| l.id == owner)?;
-        // An adjustment layer's picture is the composite below it.
         let below = match (src.is_adjustment(), upto) {
             (true, None) => return None,
             (true, Some(_)) => Some(moments::below_picture(
@@ -3131,7 +3022,6 @@ fn comp_walk(
                     .filter(|(i, e)| upto.map_or(!is_backdrop(e), |n| *i < n))
                     .map(|(_, e)| e.clone())
                     .collect(),
-                // Styles come after the whole stack.
                 styles: if upto.is_some() {
                     Vec::new()
                 } else {
@@ -3178,23 +3068,6 @@ fn comp_walk(
          frame_lt: f64|
          -> Vec<GraphDraw> { graph_fx_with(owner, effects, lt, frame_lt, &layer_slot) };
 
-    // **Clone to points' pictures.** Its slot is not a picture a row but the
-    // list the effect lays out itself: each layer at each moment a stamp may
-    // show, or one render a clone. `CloneToPoints::planned` says what they
-    // are, and the draw reads the same layout back off the list.
-    //
-    // `known` is the stream's point count when the realiser is asking again
-    // for a stream that was made during the render. On the first ask such a
-    // list is left for then (`LayerInputDraw::Late`) where the copies are
-    // numbered: how many renders there are, and what each Clone index reads
-    // as its Count, both follow from a count nobody has yet.
-    //
-    // ponytail: every picture is a whole render of the clone layer, up to 32
-    // of them a frame, and one at another moment or with a clone number walks
-    // this comp again for that layer alone. Nothing is kept between frames,
-    // and a nested comp at another moment is never served from the nested
-    // store. Keep the pictures by layer, time and clone number if a profile
-    // shows a cascade costing.
     let clone_pictures = |owner: uuid::Uuid,
                           e: &lumit_core::model::EffectInstance,
                           known: Option<usize>|
@@ -3253,8 +3126,6 @@ fn comp_walk(
                             clone: clone_number,
                         }));
                     }
-                    // Nothing wired, or no points: nothing is stamped, so
-                    // nothing is rendered.
                     0 => return LayerInputDraw::Several(Vec::new()),
                     n => Some(n),
                 }
@@ -3347,7 +3218,6 @@ fn comp_walk(
             )
         };
 
-    // A probe wants one thing made at this walk's time and nothing else.
     match probe {
         Some(Probe::Picture { effect, row, found }) => {
             *found = layer_slot(effect, row);
@@ -3396,7 +3266,6 @@ fn comp_walk(
             use lumit_core::model::EffectNamespace;
             effects
                 .iter()
-                // An LFX effect's second input rides here too.
                 .filter(|e| {
                     e.enabled
                         && matches!(
@@ -3490,11 +3359,9 @@ fn comp_walk(
                         }
                         LayerInputDraw::Layer(d)
                     };
-                    // Clone to points lays its own list out.
                     if e.effect.match_name == "clone_to_points" {
                         return clone_pictures(owner, e, None);
                     }
-                    // Time loop's are its Source layer at other moments.
                     if e.effect.match_name == "time_loop" {
                         return time_loop_pictures(owner, e);
                     }
@@ -3738,23 +3605,17 @@ fn comp_walk(
                 source: DrawSource::Nested {
                     width: comp.width,
                     height: comp.height,
-                    // Transparent where nothing covers it, exactly as
-                    // a Precomp's intermediate is.
                     background: [0.0, 0.0, 0.0, 0.0],
                     draws: members,
                     // The comp's own active camera, so 3D members land exactly
                     // where they did; the finished slab is one 2D picture.
                     camera: Some(crate::track::camera_pose(doc, comp, t_comp)),
-                    // Uncached in v1 (§4): the stance the adjustment
-                    // path takes for its below-composite.
                     key: None,
                     paint: Vec::new(),
                     paint_time: t_comp,
                     flow: None,
                 },
                 natural_size: (w, h),
-                // Identity placement: comp-sized, drawn where the members
-                // always landed.
                 position: (w * 0.5, h * 0.5),
                 anchor: (w * 0.5, h * 0.5),
                 scale: (100.0, 100.0),
@@ -3775,9 +3636,6 @@ fn comp_walk(
                 fx,
                 fx_ids,
                 neighbours: Vec::new(),
-                // Temporal/flow effects on a header are inert or pass through
-                // in v1 (§3, the documented degrade): nothing builds
-                // neighbours or flow for the unit.
                 flow_fields: Vec::new(),
                 colour_tables: colour_tables(&group.effects, t_comp),
                 dof_inputs: dof_inputs_for(group.id, &group.effects, None),
@@ -3789,8 +3647,6 @@ fn comp_walk(
                 planes: planes_for(&group.effects, 0, None),
                 points_schedules: points_schedules_for(None, &group.effects, t_comp, frame_t, None),
                 flare_lens_files: flare_lens_files(&group.effects, t_comp),
-                // A Node graph effect on a group header applies to the
-                // wrapped unit, exactly as any other of its effects does.
                 graph_fx: graph_fx_for(None, &group.effects, t_comp, frame_t),
                 // The stack resolved at comp scale but runs on the render
                 // target — realise rescales, exactly the adjustment
@@ -3812,8 +3668,6 @@ fn comp_walk(
     // index, its group, and where in `draws` its members began.
     let mut open_unit: Option<(usize, &lumit_core::group::LayerGroup, usize)> = None;
 
-    // Solo / isolate: while any layer is soloed, only soloed layers
-    // render — computed once for the whole comp.
     let any_solo = lumit_core::model::any_picture_solo(comp);
     // An Environment light's picture is drawn for it, shown or not. A collapsed
     // precomp's own Environment light lights nothing, so its picture just goes.
@@ -3867,7 +3721,6 @@ fn comp_walk(
         {
             continue;
         }
-        // Under a full-frame opaque layer: never seen, so never built.
         if occluder.is_some_and(|o| idx > o) {
             continue;
         }
@@ -4127,32 +3980,8 @@ fn comp_walk(
         };
 
         let (source, natural) = match &layer.kind {
-            // **A Sequence clip that plays a composition** draws that comp
-            // as a Precomp layer draws its own: walked at the moment the clip
-            // shows, named by its own frame key, sized as the comp is, and
-            // behind the same guard against a comp inside itself.
-            //
-            // A dissolve with such a clip is mixed on the card, since a comp
-            // has no pixels until it is rendered, and so is any transition:
-            // the two clips become the draws of one more Nested
-            // (`crate::overlap`).
-            //
-            // ponytail: a fade at a lone end is the clip's share of the
-            // layer's opacity (`clip_share`), so it comes after the layer's
-            // effects, where a footage clip fades before them. A nested
-            // picture is read back as straight alpha, so one faded ahead of
-            // the stack would be dimmed twice, as anything part transparent
-            // inside a Precomp is. The upgrade is a nested picture read as
-            // the premultiplied one it is.
-            //
-            // ponytail: the frame's own picture only. Such a clip read as a
-            // matte or as an effect's layer input, and a temporal effect's
-            // neighbours on this layer, do not see the comp. The upgrade is
-            // the roads a Precomp layer has for each.
             LayerKind::Sequence { .. } if comp_clips.is_some() => {
                 use lumit_core::sequence::{Clip, ClipSource, Shown};
-                // One clip's picture and its natural size: its comp, or the
-                // footage the worker decoded for this layer.
                 let (outgoing_id, wipe) = match comp_clips {
                     Some(Shown::Two {
                         outgoing,
@@ -4171,8 +4000,6 @@ fn comp_walk(
                     let nested_id = match clip.source {
                         ClipSource::Footage(_) => {
                             let lp = *pixels_by_layer.get(&layer.id)?;
-                            // An outgoing clip beside an incoming one with a
-                            // picture of its own.
                             let lp = Some(clip.id)
                                 .filter(|id| Some(*id) == outgoing_id)
                                 .and_then(|_| crate::overlap::across(lp))
@@ -4217,7 +4044,6 @@ fn comp_walk(
                     let placed =
                         lumit_core::template::placed::for_clip(doc, comp, layer, clip, lt, t_comp);
                     let doc = placed.as_ref().unwrap_or(doc);
-                    // A multicam clip draws its comp seen through its angle.
                     let nested = lumit_core::multicam::nested_for(doc, clip)
                         .filter(|_| !visited.contains(&nested_id))?;
                     let nested = nested.as_ref();
@@ -4251,7 +4077,6 @@ fn comp_walk(
                         (nested.width as f32, nested.height as f32),
                     ))
                 };
-                // The clips showing, each with its share of the picture.
                 let (under, top) = match comp_clips {
                     Some(Shown::One { clip, gain }) => (None, picture(clip).map(|p| (p, gain))),
                     Some(Shown::Two {
@@ -4391,7 +4216,6 @@ fn comp_walk(
                         }
                         crate::realise::scene::collapsed(d, doc, comp, layer, parent, t_comp);
                         d.pre = Some(match d.pre {
-                            // A collapsed chain wraps the child's own parent.
                             Some(p) => lumit_gpu::composite::concat_place(parent, p),
                             None => parent,
                         });
@@ -4483,7 +4307,6 @@ fn comp_walk(
                 repeats::in_nested(doc, &mut offsets, names, layer, nested, nested_at);
                 flow_below = offsets
                     .into_iter()
-                    // None inside a walk that is itself a neighbour.
                     .filter(|_| !with.rebuild)
                     .map(|(offset, measure)| {
                         // The neighbour's own layer time, then the Retime
@@ -4537,11 +4360,6 @@ fn comp_walk(
                         )
                     })
                     .collect();
-                // The frame after, built as a moment of the frame before, as
-                // the neighbours above are, so its footage is the frame the
-                // planner fetched there.
-                // ponytail: unnamed, so it is built again on every frame that
-                // needs it. Naming it wants a walk at its own time.
                 let flow = pair.zip(match &layer.interpolation {
                     lumit_core::retime::Interpolation::Flow(p) => Some(p),
                     _ => None,
@@ -4827,8 +4645,6 @@ fn comp_walk(
                     // The adjust stack resolves at comp scale but runs on
                     // the render target — realise rescales.
                     fx_ref_width: Some(comp.width as f32),
-                    // The composite below has no name of its own in v1: an
-                    // adjustment's stack runs uncached.
                     fx_input_key: None,
                     // An adjustment layer is a staging point, not a picture —
                     // motion blur has no image of its own to smear (docs/06 §4).
@@ -4947,7 +4763,6 @@ fn comp_walk(
         // kind: a Pixels stack already resolved at its decode scale above.
         let fx_ref_width = match &source {
             DrawSource::Nested { width, .. } => Some(*width as f32),
-            // A model is drawn at the comp's size too.
             DrawSource::Model(_) => Some(comp.width as f32),
             DrawSource::Pixels { .. }
             | DrawSource::Adjust
@@ -5108,17 +4923,12 @@ fn comp_walk(
             graph_fx: graph_fx_for(Some(layer), &layer.effects, effect_lt, frame_lt),
             fx_ref_width,
             fx_input_key,
-            // Per-layer motion blur (docs/06 §4): where the layer is across
-            // the open shutter, empty unless it blurs.
             mb: motion_blur::samples(comp, layer, t_comp, natural, context.clone())
                 .into_iter()
                 .map(lift)
                 .collect(),
-            // The comp's lights, if this layer takes them (docs/06).
             lights: shading::shading_lights(comp, layer, t_comp, &context),
             material: shading::shading_material(comp, layer, t_comp),
-            // Ordinary layers never carry a temporal re-render — that is an
-            // adjustment-only capability in v1 (docs/08 §3.25, §3.26).
             temporal_below: None,
             accumulation_below: None,
             flow_below,
@@ -5431,7 +5241,6 @@ fn plane_of(
     })
 }
 
-/// The most steps a node graph's plan grows to through its Repeat pairs.
 const MAX_REPEAT_STEPS: usize = 4096;
 
 /// Where one output socket of a box landed in a graph's plan: the box, the
@@ -5506,7 +5315,6 @@ impl GraphLower<'_> {
         let context = Arc::new(ExpressionContext {
             document: self.doc.clone(),
             comp: Some(graph_comp.id),
-            // A graph has no layer, exactly as a group header has none.
             layer: None,
             comp_time: self.t,
             current_depth: 0,
@@ -5620,7 +5428,6 @@ impl GraphLower<'_> {
                 points: Vec::new(),
             })
         };
-        // Set channels picks, by their place in `SET_CHANNELS_OPTIONS`.
         const RED: u32 = 0;
         const GREEN: u32 = 1;
         const BLUE: u32 = 2;
@@ -5637,8 +5444,6 @@ impl GraphLower<'_> {
             }
             let Some(node) = graph.node(id) else { continue };
             let step = match node {
-                // The Output shows what is wired into it; it is no step of its
-                // own.
                 GraphNode::Output { .. } => continue,
                 GraphNode::Read { item, .. } => {
                     let depth = lumit_core::comp_graph::READ_DEPTH_PORT.id;
@@ -5694,8 +5499,6 @@ impl GraphLower<'_> {
                     }
                 }
                 GraphNode::Fx(inst) => {
-                    // The instance as it is to be resolved: the projection's
-                    // copy, with every wired Input written in.
                     let inst = projection
                         .effects
                         .iter()
@@ -6062,8 +5865,6 @@ impl GraphLower<'_> {
                 let nested = self.doc.comp(*nested_id)?;
                 visited.push(*nested_id);
                 let draws = match nested.graph.as_ref() {
-                    // A Read of a node graph: the same one road every other
-                    // reader takes, on its own defaults with no picture fed.
                     Some(graph) => vec![graph_comp_draw(
                         self,
                         nested,
@@ -6397,7 +6198,6 @@ impl GraphLower<'_> {
             );
             last = out;
             laid = match laid {
-                // The first time at the bottom, each after it laid over.
                 Some(below) if copies => {
                     plan.steps.push(GraphStep::Merge {
                         a: out,
@@ -6844,24 +6644,6 @@ pub fn accumulation_mb_below(
     })
 }
 
-/// A clip's picture when the layer itself carries accumulation motion blur
-/// (docs/08 §3.26): the clip averaged over its own shutter moments, which the
-/// decode planner fetched onto [`CompLayerPixels::shutter`] for exactly this.
-/// The frame-time pixels unchanged when the layer carries no live copy of the
-/// effect, which is every ordinary layer, and that case hands back the decode's
-/// own allocation rather than a copy of it.
-///
-/// A plain carrier has nothing beneath it to re-render, so this is what the
-/// effect means there: the motion inside the footage, averaged the way a Blend
-/// retime averages its two frames, in the decoded bytes. The layer's transform
-/// is not sampled here; that is the motion blur switch's job, and the two
-/// stack. A moment the worker could not make (a Sequence clip, a dropped
-/// decode) stands in as the frame-time picture, and Mix blends the average
-/// back toward it. The Matte is not read on a plain carrier.
-///
-/// ponytail: a scalar byte average, N reads of the frame on the CPU each
-/// render. Sum the moments on the card if a profile ever shows it; the
-/// planner and worker need not change.
 fn own_shutter_average(
     layer: &lumit_core::model::Layer,
     lp: &CompLayerPixels,
@@ -7065,10 +6847,12 @@ fn plain_stack(layer: &lumit_core::model::Layer, lt: f64) -> bool {
         && lumit_core::fx::temporal::stack_flow_neighbours(fx, fx_on).is_empty()
         && lumit_core::fx::temporal::stack_posterize(fx, fx_on, lt).is_none()
         && lumit_core::fx::temporal::stack_accumulation_mb(fx, fx_on, lt).is_none()
-        // Both of these read footage at other moments by roads of their own.
-        && fx
-            .iter()
-            .all(|e| !matches!(e.effect.match_name.as_str(), "clone_to_points" | "node_graph"))
+        && fx.iter().all(|e| {
+            !matches!(
+                e.effect.match_name.as_str(),
+                "clone_to_points" | "node_graph"
+            )
+        })
 }
 
 /// Whether `comp`, built again at `t` inside a frame whose own time in it is
@@ -7098,7 +6882,6 @@ fn rebuilt_as_itself(
     }
     let dt = 1.0 / comp.frame_rate.fps().max(1.0);
     let offset = crate::plan::moment_offset(t, frame_t, dt);
-    // The walk's own questions, asked at `t` as it asks them.
     let any_solo = comp.layers.iter().any(|l| l.switches.solo);
     let occluder = lumit_core::occlusion::occluder_index(doc, comp, t);
     comp.layers.iter().enumerate().all(|(idx, layer)| {
@@ -7121,7 +6904,6 @@ fn rebuilt_as_itself(
         if !plain_stack(layer, lt) {
             return false;
         }
-        // An adjustment draws the composite beneath it, whatever its kind.
         if layer.is_adjustment() || backdrop_fx(layer) {
             return true;
         }
@@ -7396,7 +7178,6 @@ mod render_below_at_tests {
             }
         };
 
-        // "0.0" against "500000.0" — a longer line, so a wider raster.
         assert!(width_at(5.0) > width_at(0.0));
         assert_eq!(width_at(5.0), width_at(5.0), "and it is deterministic");
     }
@@ -7415,7 +7196,7 @@ mod render_below_at_tests {
         use lumit_core::model::{LightDef, LightKind};
 
         let Some(ctx) = lumit_gpu::test_support::lease() else {
-            return; // no GPU here — skip, as the gpu crate's own tests do
+            return;
         };
         let engine = ctx.colour();
         let compositor = ctx.compositor();
@@ -7438,7 +7219,6 @@ mod render_below_at_tests {
             late_clones: None,
             graph_reach: None,
         };
-        // A softbox in front of the comp, big enough to rake across it.
         let mut light = text_layer(160.0);
         light.kind = LayerKind::Light {
             light: Box::new(LightDef {
@@ -7509,7 +7289,6 @@ mod render_below_at_tests {
             "light adds, so no channel may come out darker than it went in"
         );
 
-        // The switch off puts it back exactly where it started.
         let mut unlit_subject = subject.clone();
         unlit_subject.switches.accepts_lights = false;
         let unlit = render(&comp_with(vec![unlit_subject, light]));
@@ -7528,7 +7307,7 @@ mod render_below_at_tests {
         use lumit_core::model::{LightDef, LightKind, ProjectItem, SolidDef};
 
         let Some(ctx) = lumit_gpu::test_support::lease() else {
-            return; // no GPU here — skip, as the gpu crate's own tests do
+            return;
         };
         let engine = ctx.colour();
         let lut_cache = std::cell::RefCell::new(crate::fxops::LutCache::default());
@@ -7562,7 +7341,6 @@ mod render_below_at_tests {
         }));
         let doc = std::sync::Arc::new(doc);
 
-        // A narrow spot over one side, so the pool has an edge to smear.
         let mut spot = text_layer(100.0);
         spot.kind = LayerKind::Light {
             light: Box::new(LightDef {
@@ -7640,17 +7418,12 @@ mod render_below_at_tests {
         assert!(worst <= 1, "a plain solid lit as a tile, {worst}/255 off");
     }
 
-    /// A card between a light and a floor shades the floor, Only keeps the
-    /// shadow without the card, a floor that takes no shadows comes out
-    /// exactly as if nothing cast one, and one taking only shadows shows
-    /// the grey plate behind it, darkened red where the light comes through
-    /// a red card.
     #[test]
     fn a_card_casts_its_shadow_and_only_hides_the_card() {
         use lumit_core::model::{LightDef, LightKind, Material, ProjectItem, ShadowMode, SolidDef};
 
         let Some(ctx) = lumit_gpu::test_support::lease() else {
-            return; // no GPU here — skip, as the gpu crate's own tests do
+            return;
         };
         let engine = ctx.colour();
         let lut_cache = std::cell::RefCell::new(crate::fxops::LutCache::default());
@@ -7781,8 +7554,6 @@ mod render_below_at_tests {
             let i = ((y * w + x) * 4) as usize;
             tinted[i..i + 4].to_vec()
         };
-        // The grey plate behind the floor shows through it, and the red
-        // shadow only darkens it.
         let plate = at(10, 170);
         assert!(
             plate[0] == plate[1] && plate[1] == plate[2] && plate[0] > 100,
@@ -7797,8 +7568,6 @@ mod render_below_at_tests {
 
     mod region_of_interest;
 
-    // A property that ramps linearly from `from` at t=0 to `to` at t=1, so a
-    // held time differs visibly from the frame time.
     fn ramp(from: f64, to: f64) -> Property {
         use lumit_core::anim::{Animation, Keyframe, SideInterp};
         let key = |time: Rational, value: f64| Keyframe {
@@ -7816,8 +7585,6 @@ mod render_below_at_tests {
         }
     }
 
-    // An adjustment layer carrying a Posterize Time effect (everything-below) at
-    // the given posterised frame rate.
     pub(super) fn posterize_adjustment(rate: f64) -> Layer {
         let mut post = lumit_core::fx::builtins::instantiate("posterize_time").unwrap();
         for p in &mut post.params {
@@ -7866,7 +7633,7 @@ mod render_below_at_tests {
 
     fn posterize_comp() -> Composition {
         let mut text = text_layer(0.0);
-        text.transform.position_x = ramp(0.0, 100.0); // x = 100·t
+        text.transform.position_x = ramp(0.0, 100.0);
         Composition {
             graph: None,
             master_volume_db: 0.0,
@@ -7886,7 +7653,6 @@ mod render_below_at_tests {
             duration: Duration(Rational::new(10, 1).unwrap()),
             background: LinearColour([0.1, 0.1, 0.1, 1.0]),
             work_area: None,
-            // Adjustment on top (index 0), the animated text below (index 1).
             layers: vec![posterize_adjustment(10.0), text],
             markers: Vec::new(),
             motion_blur: Default::default(),
@@ -7931,7 +7697,6 @@ mod render_below_at_tests {
         let pixels: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
         let bg = comp.background.0.map(f64::from);
 
-        // The posterised frame at t = 0.35.
         let mut v1 = vec![comp.id];
         let draws = build_comp_draws(
             &std::sync::Arc::new(doc.clone()),
@@ -7949,7 +7714,6 @@ mod render_below_at_tests {
             )
             .unwrap();
 
-        // A plain render of the below-stack (just the text) at tau = 0.3.
         let below = &comp.layers[1..];
         let mut v2 = vec![comp.id];
         // frame_t = 0.35 matches what the posterise adjustment passes (its own
@@ -7978,8 +7742,6 @@ mod render_below_at_tests {
         );
     }
 
-    // An adjustment layer carrying an accumulation motion blur effect at the
-    // given sample count (defaults otherwise: 180° shutter centred on the frame).
     fn accumulation_adjustment(samples: f64) -> Layer {
         let mut e = lumit_core::fx::builtins::instantiate("accumulation_mb").unwrap();
         for p in &mut e.params {
@@ -8053,14 +7815,10 @@ mod render_below_at_tests {
         }
     }
 
-    // docs/08 §3.26: a still scene averaged over N is bit-identical to the
-    // plain composite (the accumulation adjustment is a pure identity when nothing
-    // moves), while a moving scene smears — differs from the plain composite and
-    // covers a wider horizontal extent. The same combine drives the export path.
     #[test]
     fn accumulation_still_scene_is_identity_and_moving_scene_smears() {
         let Some(ctx) = lumit_gpu::test_support::lease() else {
-            return; // no GPU here — skip, as the gpu crate's own tests do
+            return;
         };
         let engine = ctx.colour();
         let compositor = ctx.compositor();
@@ -8134,9 +7892,6 @@ mod render_below_at_tests {
             );
         }
 
-        // MOVING scene: text sweeping x = 200·t in a 2 fps comp (dt = 0.5 s) so the
-        // shutter spreads ~37 px. The accumulation frame must differ from the plain
-        // composite (the smear) and cover a wider horizontal extent.
         let mut moving_text = text_layer(0.0);
         moving_text.transform.position_x = ramp(0.0, 200.0);
         let moving_plain = comp_with(2, vec![moving_text.clone()]);
@@ -8147,7 +7902,6 @@ mod render_below_at_tests {
             plain, smeared,
             "a moving scene must smear (differ from the plain composite)"
         );
-        // Columns carrying visible text (red well above the dark background).
         let (w, h) = (320usize, 180usize);
         let text_cols = |b: &[u8]| {
             (0..w)
@@ -8162,9 +7916,6 @@ mod render_below_at_tests {
         );
     }
 
-    // An adjustment layer carrying the named built-in effects at their
-    // defaults — Motion blur (docs/08 §3.2) and Datamosh (§3.12) are the
-    // two that want measured motion.
     fn flow_adjustment(names: &[&str]) -> Layer {
         let mut l = accumulation_adjustment(4.0);
         l.name = "flow".into();
@@ -8175,15 +7926,12 @@ mod render_below_at_tests {
         l
     }
 
-    // A text layer sweeping x at `per_second` px/s from the origin.
     fn sweeping_text(per_second: f64) -> Layer {
         let mut text = text_layer(0.0);
         text.transform.position_x = ramp(0.0, per_second);
         text
     }
 
-    // The two GPU engines plus the flow backend a composite measurement needs,
-    // as the headless renderer's owner holds them.
     struct FlowRig {
         ctx: lumit_gpu::test_support::Lease,
         lut_cache: std::cell::RefCell<crate::fxops::LutCache>,
@@ -8225,7 +7973,6 @@ mod render_below_at_tests {
             self.render_with(doc, comp, t, &HashMap::new())
         }
 
-        // The same render over decoded footage.
         fn render_with(
             &self,
             doc: &Document,
@@ -8256,27 +8003,20 @@ mod render_below_at_tests {
         }
     }
 
-    // How many columns carry something brighter than the comp's background —
-    // the frame's horizontal extent, which a smear widens.
     fn lit_columns(px: &[u8], w: usize, h: usize) -> usize {
-        // Top-left is background in every scene here.
         let floor = px[0].saturating_add(15);
         (0..w)
             .filter(|&x| (0..h).any(|y| px[(y * w + x) * 4] > floor))
             .count()
     }
 
-    // docs/08 §3.2: **the headline case**. Motion blur on an
-    // adjustment layer over a moving scene must actually smear it — the effect's
-    // commonest placement, and a silent passthrough until the composite below
-    // could be measured. Deterministic across two runs, as every render is.
     #[test]
     fn an_adjustment_fast_motion_blur_smears_the_composite_below() {
         let Some(rig) = FlowRig::new() else {
-            return; // no GPU here — skip, as the gpu crate's own tests do
+            return;
         };
         let doc = Document::new();
-        let text = sweeping_text(400.0); // 40 px a frame at 10 fps
+        let text = sweeping_text(400.0);
         let plain = comp_with(10, vec![text.clone()]);
         let blurred = comp_with(10, vec![flow_adjustment(&["motion_blur"]), text]);
 
@@ -8301,9 +8041,6 @@ mod render_below_at_tests {
         );
     }
 
-    // On the frame before a cut the next frame is another shot, and the
-    // difference between the two is not motion. Motion blur is measured a
-    // frame back there, so the shot after the cut changes nothing.
     #[test]
     fn an_adjustment_motion_blur_does_not_measure_across_a_cut() {
         let Some(rig) = FlowRig::new() else {
@@ -8332,9 +8069,6 @@ mod render_below_at_tests {
         );
     }
 
-    // A stand-in for a plugin that reads the frame before this one, as a
-    // motion blur does: it paints the picture with its -1 neighbour, and
-    // leaves it alone when it is handed none.
     struct Previous(&'static lumit_core::fx::schema::EffectSchema);
 
     impl lumit_core::fx::registry::EffectDef for Previous {
@@ -8357,8 +8091,6 @@ mod render_below_at_tests {
         }
     }
 
-    // One instance of it, registered the way a scanned plugin is: a window of
-    // a frame either side, which is what a plugin with temporal access declares.
     pub(super) fn previous_frame_effect() -> lumit_core::model::EffectInstance {
         const NAME: &str = "ofx:test.build.previous";
         static REGISTERED: std::sync::Once = std::sync::Once::new();
@@ -8422,9 +8154,6 @@ mod render_below_at_tests {
         (l, [(item, probe)].into_iter().collect())
     }
 
-    // The clip as the decode worker hands it over for a planned job: grey at
-    // the frame's own time and orange at every other moment the plan asked
-    // for, filed under the plan's own keys.
     fn decoded(job: &crate::decode::CompJob) -> CompLayerPixels {
         use crate::decode::Cut;
         let flat = |rgb: [u8; 3]| CompLayerPixels {
@@ -8453,13 +8182,10 @@ mod render_below_at_tests {
             .map(|(o, _)| (*o, neighbour()))
             .collect();
         lp.shutter = job.shutter.iter().map(|s| (s.offset, moment())).collect();
-        // Another clip's frame arrives where a frame of this one would, and
-        // a gap arrives as nothing.
         for cut in &job.cuts {
             match cut {
                 Cut::Neighbour(o, _) => lp.temporal.push((*o, neighbour())),
                 Cut::Moment(o, clip) => lp.shutter.push((*o, clip.as_ref().and_then(|_| moment()))),
-                // Mixed into the frame's own pixels where it is decoded.
                 Cut::Under(..) => {}
             }
         }
@@ -8468,11 +8194,9 @@ mod render_below_at_tests {
     const GREY: [u8; 3] = [60, 60, 60];
     const ORANGE: [u8; 3] = [230, 120, 20];
 
-    // The colour a draw list's first clip is drawn in.
     fn clip_colour(draws: &[CompLayerDraw]) -> [u8; 3] {
         match &draws.first().expect("the clip draws").source {
             DrawSource::Pixels { rgba, .. } => [rgba[0], rgba[1], rgba[2]],
-            // A node graph's clip is its Read box.
             DrawSource::Graph(plan) => match plan.steps.first() {
                 Some(crate::draw::GraphStep::Read(read)) => {
                     clip_colour(std::slice::from_ref(&**read))
@@ -8483,7 +8207,6 @@ mod render_below_at_tests {
         }
     }
 
-    // The red in the middle of a rendered frame.
     fn centre_red(px: &[u8]) -> u8 {
         px[(90 * 320 + 160) * 4]
     }
@@ -8560,8 +8283,6 @@ mod render_below_at_tests {
             exposed: Vec::new(),
             groups: Vec::new(),
         });
-        // What the clip's pixels are filed under, the footage it shows a
-        // frame back, and the comp it sits in.
         let cases = [
             (
                 "a footage layer",
@@ -8585,8 +8306,6 @@ mod render_below_at_tests {
             l.effects = effects;
             comp_with(10, vec![l])
         };
-        // A job's other moments, whichever way they were asked for: the
-        // offset, whose footage, and which frame of it.
         let moments = |job: &crate::decode::CompJob| -> Vec<(f64, Uuid, usize)> {
             let own = job.shutter.iter();
             own.map(|s| (s.offset.round(), job.item, s.source_frame))
@@ -8600,8 +8319,6 @@ mod render_below_at_tests {
         for (what, clip_id, before, nested_id) in cases {
             let outer = precomp(nested_id, vec![previous_frame_effect()]);
 
-            // The plan fetches the clip at both of the plugin's neighbours,
-            // each the one real frame it shows then.
             let jobs = crate::plan::plan_comp_frame(
                 &doc,
                 &outer,
@@ -8617,7 +8334,6 @@ mod render_below_at_tests {
                 "{what}: the clip is planned a frame either side"
             );
 
-            // And the builder draws each neighbour from those pixels.
             let lp = decoded(job);
             let pixels: HashMap<Uuid, &CompLayerPixels> = [(clip_id, &lp)].into_iter().collect();
             let mut v = vec![outer.id];
@@ -8655,9 +8371,6 @@ mod render_below_at_tests {
             );
         }
 
-        // The plugin on the Sequence layer itself reads its neighbours
-        // through the clips. The frame after is one more frame of this clip,
-        // and the frame before the edit point is the other clip's own job.
         let mut direct = sequence.clone();
         direct.effects = vec![previous_frame_effect()];
         let comp = comp_with(10, vec![direct]);
@@ -8691,9 +8404,6 @@ mod render_below_at_tests {
             );
         }
 
-        // With nothing before the edit point the frame before is a gap, so
-        // that neighbour is drawn without the layer and not with this frame
-        // held.
         let mut alone = sequence;
         if let LayerKind::Sequence { clips } = &mut alone.kind {
             clips.remove(0);
@@ -8730,8 +8440,6 @@ mod render_below_at_tests {
         );
     }
 
-    // The same on an **adjustment** layer, whose picture is the composite
-    // below it: the clip beneath is planned and drawn a frame either side.
     #[test]
     fn a_plugin_on_an_adjustment_reads_the_footage_below_a_frame_back() {
         let mut doc = Document::new();
@@ -8754,9 +8462,6 @@ mod render_below_at_tests {
             jobs.iter().any(|j| j.layer == next.id),
             "the shot after the cut is planned for the neighbour it is in"
         );
-        // The same for a Sequence layer in a gap now whose clip starts on the
-        // next frame. The clip is fetched for that frame and drawn in it, and
-        // nothing of it is drawn in this one or in the gap a frame back.
         let LayerKind::Footage { item } = footage.kind else {
             panic!("a footage layer");
         };
@@ -8926,7 +8631,6 @@ mod render_below_at_tests {
             "a held frame wants no decodes"
         );
 
-        // Echo reads back through its window and measures nothing.
         let echoed = precomp(&["echo"]);
         let trail = rebuilds(&echoed);
         assert_eq!(trail.len(), 4, "one rebuild per echo it shows");
@@ -8940,15 +8644,12 @@ mod render_below_at_tests {
             .expect("planned");
         assert!(!job.shutter.is_empty());
 
-        // Motion blur still gets its measurement.
         let full = FlowWant::Full;
         assert_eq!(
             rebuilds(&precomp(&["motion_blur"])),
             vec![(1, Some((1, full)))]
         );
 
-        // A footage layer's Echo builds the layer again at each frame it
-        // shows, so the clip is decoded at each of them.
         clip_layer.effects = vec![lumit_core::fx::builtins::instantiate("echo").unwrap()];
         let footage_comp = comp_with(10, vec![clip_layer]);
         let jobs = plan(&footage_comp, false);
@@ -8956,8 +8657,6 @@ mod render_below_at_tests {
             .iter()
             .find(|j| j.layer == footage_id)
             .expect("planned");
-        // Echo time defaults to -0.0333 s, a third of a frame of this 10 fps
-        // comp, so the four echoes sit a third of a frame apart.
         let mut offsets: Vec<f64> = job.shutter.iter().map(|s| s.offset).collect();
         offsets.sort_by(f64::total_cmp);
         assert_eq!(offsets.len(), 4, "one decode per echo");
@@ -8971,8 +8670,6 @@ mod render_below_at_tests {
         }
     }
 
-    // Echo on a Precomp layer had the same fault as the plugin: every tap
-    // was the frame in hand, so there was no trail.
     #[test]
     fn an_echo_on_a_precomp_trails_the_comp_inside_it() {
         use lumit_core::model::ProjectItem;
@@ -9006,8 +8703,6 @@ mod render_below_at_tests {
 mod outline_tests {
     use super::outline_like;
 
-    /// The outline keeps the picture's size and kind: white on the edge,
-    /// clear inside.
     #[test]
     fn an_outline_is_white_on_the_edge_and_clear_inside() {
         let eight = outline_like(&[9u8; 6 * 5 * 4], 6, 5).expect("eight-bit");

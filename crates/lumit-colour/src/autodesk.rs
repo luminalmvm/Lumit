@@ -35,8 +35,6 @@ fn bad(what: &str, reason: impl Into<String>) -> ColourError {
 /// anything past 12-bit is taken as 16.
 fn likely_bit_depth(top: i64) -> u32 {
     for depth in [8_u32, 10, 12] {
-        // Twice the nominal maximum, so a table written with overshoot in it
-        // still reads at the depth it was written at.
         if top < (1_i64 << depth) * 2 {
             return depth;
         }
@@ -44,13 +42,10 @@ fn likely_bit_depth(top: i64) -> u32 {
     16
 }
 
-/// The code value 1.0 is written as at that depth.
 fn code_maximum(depth: u32) -> f32 {
     ((1_i64 << depth) - 1) as f32
 }
 
-/// Whether a shaper is a straight line, within the two code values the format's
-/// writers disagree by.
 fn is_identity(values: &[i64], maximum: f32) -> bool {
     let Some(last) = values.len().checked_sub(1).filter(|n| *n > 0) else {
         return true;
@@ -196,9 +191,7 @@ mod tests {
     fn rubbish_is_a_typed_error_not_a_panic() {
         assert!(parse_3dl("t.3dl", "").is_err());
         assert!(parse_3dl("t.3dl", "<ProcessList/>").is_err());
-        // Whole numbers, but far too small to be code values.
         assert!(parse_3dl("t.3dl", &"1 1 1\n".repeat(8)).is_err());
-        // Nine triples do not make a cube.
         assert!(parse_3dl("t.3dl", &"4095 4095 4095\n".repeat(9)).is_err());
         assert!(parse_3dl("t.3dl", "0 512 1023\n0 512 1023\n").is_err());
     }

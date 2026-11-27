@@ -78,7 +78,6 @@ Future<void> initEngineForTests({BaseHandler? handler}) async {
   _initialised = true;
 }
 
-/// True when the engine library is present, for `skip:` on a whole group.
 bool get engineAvailable => File(_libraryPath).existsSync();
 
 /// True when this machine cannot hand the Viewer a frame at all.
@@ -295,7 +294,6 @@ Future<void> settleFrb(
   int maxRounds = 40,
 }) async {
   for (var round = 0; round < maxRounds; round++) {
-    // A real event-loop turn: frb port messages land here.
     await tester.runAsync(() => Future<void>.delayed(slice));
     // Back in fake async: flush the continuations those messages queued, and
     // draw the frame their `setState`s asked for.
@@ -305,7 +303,6 @@ Future<void> settleFrb(
   await _settleProgress(tester, slice);
 }
 
-/// The UI states known to [settleFrb] and not yet torn down.
 final List<LumitUiState> _liveUis = [];
 
 /// Make a UI state known to [settleFrb], which ends every settle with its
@@ -393,12 +390,8 @@ double stillValue(BridgeScalar scalar) => switch (scalar) {
 /// from the bar's own `ValueKey`, which for a `Row` is left to right.
 List<String> barKeys(WidgetTester tester) => _keysUnder(tester, 'viewer-bar');
 
-/// The same for the Viewer's **deck**: the transport and everything about
-/// playing, under the picture.
 List<String> deckKeys(WidgetTester tester) => _keysUnder(tester, 'viewer-deck');
 
-/// The same for the Viewer's **header** strip: the three pickers the drawing
-/// puts at its right-hand end.
 List<String> headerKeys(WidgetTester tester) =>
     _keysUnder(tester, 'viewer-header');
 

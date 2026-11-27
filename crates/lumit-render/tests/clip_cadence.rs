@@ -28,8 +28,6 @@ fn frame_delta(a: &[u8], b: &[u8]) -> f64 {
     sum / n as f64
 }
 
-/// The fraction of the picture whose local gradient is below `thr` — flat, and
-/// therefore invisible to patch matching.
 fn flat_fraction(rgba: &[u8], w: usize, h: usize, thr: f64) -> f64 {
     let luma: Vec<f64> = rgba
         .chunks_exact(4)

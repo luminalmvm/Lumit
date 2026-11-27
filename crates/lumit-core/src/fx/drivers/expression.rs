@@ -58,7 +58,6 @@ use crate::fx::{
 use crate::model::EffectInstance;
 use lumit_fx_macros::Effect;
 
-/// The `extra` key the expression block lives under.
 pub const EXTRA_KEY: &str = "expression";
 
 /// Expression's controls.
@@ -81,14 +80,10 @@ pub const EXTRA_KEY: &str = "expression";
     matte = false,
 )]
 pub struct Expression {
-    /// Open the editor surface. A button, not a value — the source is not a
-    /// parameter, so this row carries none.
     #[action(label = "Edit expression…")]
     pub edit: (),
-    /// Give the box one more number input. A button, not a value.
     #[action(label = "Add input")]
     pub add_input: (),
-    /// Take the last input away again.
     #[action(label = "Remove input")]
     pub remove_input: (),
 }
@@ -122,7 +117,6 @@ fn input_rows() -> &'static [ParamSchema] {
     })
 }
 
-/// How many inputs this box holds.
 #[must_use]
 pub fn input_count(inst: &EffectInstance) -> usize {
     inst.extra
@@ -175,13 +169,9 @@ fn block_mut(inst: &mut EffectInstance) -> Option<&mut serde_json::Map<String, s
     block.as_object_mut()
 }
 
-/// The port a number leaves by.
 pub const VALUE_PORT: &str = "value";
-/// The port a colour leaves by.
 pub const COLOUR_PORT: &str = "colour";
-/// The port a point's x leaves by.
 pub const POINT_X_PORT: &str = "point_x";
-/// The port a point's y leaves by.
 pub const POINT_Y_PORT: &str = "point_y";
 
 /// The expression text this instance holds, or the empty string for a fresh
@@ -229,7 +219,6 @@ pub fn set_language(inst: &mut EffectInstance, language: Language) {
     }
 }
 
-/// Expression's behaviour.
 pub struct ExpressionDef;
 
 impl EffectDef for ExpressionDef {
@@ -284,8 +273,6 @@ impl EffectDef for ExpressionDef {
         if source.trim().is_empty() {
             return;
         }
-        // Each input is in scope under its own name, holding what its wire
-        // carries or the row's own value.
         let inputs: Vec<(&str, f64)> = self
             .derived(cx.inst)
             .iter()

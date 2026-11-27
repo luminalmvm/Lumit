@@ -146,8 +146,6 @@ double? layerDragMark(List<double> heights, LayerDrag? drag) {
   return y;
 }
 
-/// Where the lifted card stands and how lifted it is, for whatever draws
-/// round it.
 class LiftedBand {
   /// The card's top and bottom edges, in the rows' own pixels from the top of
   /// the stack.
@@ -159,7 +157,6 @@ class LiftedBand {
 
   const LiftedBand(this.top, this.bottom, this.amount);
 
-  /// The stretch the row seams leave unruled.
   (double, double) get blank => (top, bottom);
 
   @override
@@ -173,7 +170,6 @@ class LiftedBand {
   int get hashCode => Object.hash(top, bottom, amount);
 }
 
-/// What the block in hand did when it was let go.
 class LayerDrop {
   /// Where the block stands now it is down, as an index into the rows on
   /// screen: the slot it took, or its own when nothing moved.
@@ -234,7 +230,6 @@ class LayerDragState extends ValueNotifier<LayerDrag?> {
   final ValueNotifier<Map<int, double>> seams =
       ValueNotifier<Map<int, double>>(const {});
 
-  /// The block at [index] has its seams [shift] pixels down from their place.
   void moveSeams(int index, double shift) {
     if ((seams.value[index] ?? 0) == shift) return;
     seams.value = {
@@ -278,7 +273,6 @@ class LayerDragState extends ValueNotifier<LayerDrag?> {
     if (!_disposed) band.value = null;
   }
 
-  /// The drop that ended the last drag, read by the blocks as the drag clears.
   LayerDrop? get drop => _drop;
   LayerDrop? _drop;
 
@@ -316,7 +310,6 @@ class LayerDragState extends ValueNotifier<LayerDrag?> {
     if (drag == null) return null;
     final landed = cancelled ? LayerDrag(drag.from, drag.from) : drag;
     if (!_carries) {
-      // Nothing was moved, so nothing has to land.
       mark.value = null;
       value = null;
       return landed;
@@ -363,13 +356,10 @@ const double layerLiftInsetY = 1.5;
 /// ([LiftBridgePainter]). An end that meets another stretch is drawn square
 /// and flush, so no seam shows where they meet.
 enum LiftSide {
-  /// The whole card, both ends: a stack that stands alone.
   whole,
 
-  /// The left end, running on to the right.
   leading,
 
-  /// The right end, run into from the left.
   trailing,
 }
 
@@ -383,10 +373,8 @@ enum LiftSide {
 Color liftGround(LumitTheme t) =>
     Color.alphaBlend(rowSelectionFill(t), t.surface2);
 
-/// The colour the card's shadow is cast in.
 Color liftShadow(LumitTheme t) => t.floatShadow.first.color;
 
-/// The corner a lifted card's ends are rounded to.
 double liftRadius(LumitTheme t) => t.tokens.contentRadius * 2;
 
 /// A number that eases to wherever it is sent, from wherever it has reached.
@@ -405,10 +393,8 @@ class _Eased {
   double _to = 0;
   Curve _curve = Curves.linear;
 
-  /// Where it is this frame.
   double value = 0;
 
-  /// Put it at [to] with no travel.
   void jump(double to) {
     _controller?.stop();
     _from = _to = value = to;
@@ -478,7 +464,6 @@ class LayerDragSlide extends StatefulWidget {
   final List<double> heights;
   final int index;
 
-  /// Which stretch of the lifted card this block is.
   final LiftSide side;
   final Widget child;
 
@@ -497,16 +482,12 @@ class LayerDragSlide extends StatefulWidget {
 
 class _LayerDragSlideState extends State<LayerDragSlide>
     with TickerProviderStateMixin {
-  /// How far the block is drawn from its own place, in pixels down.
   late final _Eased _shift = _Eased(this, _repaint);
 
-  /// How lifted the block is drawn, from 0 at rest to 1 in hand.
   late final _Eased _lift = _Eased(this, _repaint);
 
-  /// Whether this is the block in hand, and so listening to the carry.
   bool _inHand = false;
 
-  /// Whether this block is the one the seams are standing clear of.
   bool _bandIsMine = false;
 
   /// Read in [didChangeDependencies] and kept, because the drag's listeners
@@ -600,7 +581,6 @@ class _LayerDragSlideState extends State<LayerDragSlide>
     super.dispose();
   }
 
-  /// Start or stop following the pointer.
   void _hold(bool inHand) {
     if (inHand == _inHand) return;
     _inHand = inHand;
@@ -621,7 +601,6 @@ class _LayerDragSlideState extends State<LayerDragSlide>
     if (motion == null) return;
     final drag = widget.drag.value;
     if (drag != null && !widget.drag.carries) {
-      // A drag that is only marked: every block stays where it stands.
       _hold(false);
       _shift.jump(0);
       _lift.jump(0);
@@ -656,7 +635,6 @@ class _LayerDragSlideState extends State<LayerDragSlide>
         _shift.jump(0);
         _lift.jump(0);
       } else {
-        // Nothing was reordered, so whatever had stepped aside steps back.
         _lift.jump(0);
         _shift.go(0, motion.makeWay);
       }
@@ -766,7 +744,6 @@ class LiftPainter extends CustomPainter {
     required this.shadow,
   });
 
-  /// Further than either shadow reaches.
   static const double _run = 32;
 
   @override
@@ -911,7 +888,6 @@ class DropMarkPainter extends CustomPainter {
 /// about a pointer too, so the row drawn on top is the row the pointer is
 /// over. Layout is a plain column's.
 class RaisedColumn extends Column {
-  /// The child to paint last, as an index into [children], or null for none.
   final int? raised;
 
   const RaisedColumn({

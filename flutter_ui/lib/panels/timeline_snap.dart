@@ -32,14 +32,11 @@ import 'graph_maths.dart' show rationalSeconds;
 /// What a snap landed on. The kind is for the *indicator* — a snap to a marker
 /// and a snap to the playhead are the same arithmetic and different news.
 enum SnapKind {
-  /// A layer's first or last frame.
   layerIn,
   layerOut,
 
-  /// A cut inside a Sequence layer: where one clip ends and the next begins.
   editPoint,
 
-  /// Another keyframe, on any row.
   keyframe,
 
   /// A composition or layer marker. **Beat markers are markers** — beat
@@ -51,7 +48,6 @@ enum SnapKind {
   workAreaEnd,
 }
 
-/// One thing a drag can land on, at [frame] in comp frames.
 @immutable
 class SnapTarget {
   final double frame;

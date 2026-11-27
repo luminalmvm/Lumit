@@ -9,13 +9,10 @@
 
 part of 'vector_export_frb.dart';
 
-/// Which player draws the file.
 enum _Player { lottie, browser }
 
-/// What is behind the picture.
 enum _Ground { board, comp, white, black }
 
-/// The transport rows under the stage.
 const double _transportRow = 22;
 
 /// Added before a frame is floored, so a product that lands a hair under a
@@ -25,7 +22,6 @@ const double _epsilon = 1e-6;
 extension _PlayerColumn on _VectorWindowState {
   int get _frames => _preview?.frames ?? 0;
 
-  /// The frame the clock is on.
   int _frameOf(double value) => _frames == 0
       ? 0
       : (value * _frames + _epsilon).floor().clamp(0, _frames - 1);
@@ -38,7 +34,6 @@ extension _PlayerColumn on _VectorWindowState {
     if (frame != _frame) _redraw(() => _frame = frame);
   }
 
-  /// A new file: both players take it, on the frame the window is on.
   void _show(BridgeVectorPreview p) {
     final frame = p.frames == 0 ? 0 : _frame.clamp(0, p.frames - 1);
     _frame = frame;
@@ -87,7 +82,6 @@ extension _PlayerColumn on _VectorWindowState {
       ? 0
       : _compSettings.fpsNum / _compSettings.fpsDen;
 
-  /// The file's frame that shows the comp's frame [frame].
   int _fileFrameOf(int frame) {
     final p = _preview;
     if (p == null || _frames == 0 || _compFps <= 0) return 0;
@@ -96,15 +90,12 @@ extension _PlayerColumn on _VectorWindowState {
         .clamp(0, _frames - 1);
   }
 
-  /// The comp's frame that the file's frame [frame] shows.
   int _compFrameOf(int frame) {
     final p = _preview;
     if (p == null || p.fps <= 0) return 0;
     return ((p.start + frame / p.fps) * _compFps).round();
   }
 
-  /// Keep the player to the Timeline, so the file plays beside Lumit's own
-  /// frame in the Viewer: the Timeline's transport runs both.
   void _setFollow(bool on) {
     _redraw(() => _follow = on);
     if (!on) return;
@@ -129,11 +120,8 @@ extension _PlayerColumn on _VectorWindowState {
     if (_follow && mounted) _redraw(() {});
   }
 
-  /// Whether the file is playing: the window's own clock, or the Timeline's
-  /// while the player keeps to it.
   bool get _shownPlaying => _follow ? widget.ui.playing.value : _playing;
 
-  /// Put the player on [frame], and nothing else.
   void _showFrame(int frame) {
     if (_frames == 0 || frame == _frame) return;
     _redraw(() => _frame = frame);
@@ -144,8 +132,6 @@ extension _PlayerColumn on _VectorWindowState {
     }
   }
 
-  /// Save the frame the player is on as a PNG, drawn by the Lottie player at
-  /// the file's own size.
   Future<void> _saveFrame() async {
     final p = _preview;
     if (p == null || p.frames == 0) return;
@@ -186,7 +172,6 @@ extension _PlayerColumn on _VectorWindowState {
       }
       return;
     }
-    // Played again from its end, a file that doesn't loop starts over.
     if (!_playing && !_settings.loopPlayback && _frame >= _frames - 1) _seek(0);
     _redraw(() => _playing = !_playing);
     if (_playerShown == _Player.browser) {
@@ -227,7 +212,6 @@ extension _PlayerColumn on _VectorWindowState {
 
   void _step(int by) {
     if (_frames == 0) return;
-    // A step wraps, so the arrow keys walk round a loop.
     _seek((_frame + by) % _frames, stop: true);
   }
 
@@ -246,8 +230,6 @@ extension _PlayerColumn on _VectorWindowState {
     _handOff(before);
   }
 
-  /// The file moved from [before] to another player, which takes up the
-  /// frame and the playing.
   void _handOff(_Player before) {
     if (_playerShown == before) return;
     if (_playerShown == _Player.browser) {
@@ -286,7 +268,6 @@ extension _PlayerColumn on _VectorWindowState {
         ),
       );
 
-  /// The picture on its ground, fitted or at the zoom asked for, clipped.
   Widget _stage(LumitTheme t) {
     final p = _preview;
     final ground = switch (_ground) {
@@ -340,7 +321,6 @@ extension _PlayerColumn on _VectorWindowState {
     );
   }
 
-  /// The stage's own menu: the frame on it saved as a picture.
   void _stageMenu(Offset at) {
     // The Lottie player draws the frame; an SVG plays only in the browser.
     final can = _settings.format != 'svg' && _frames > 0 && !kIsWeb;
@@ -353,7 +333,6 @@ extension _PlayerColumn on _VectorWindowState {
     ]);
   }
 
-  /// Play, loop, the Timeline, the scrubber and the frame.
   Widget _transport(LumitTheme t) {
     final frames = _frames;
     final live = frames > 0;
@@ -420,7 +399,6 @@ extension _PlayerColumn on _VectorWindowState {
     );
   }
 
-  /// Which player, what is behind the picture, and how big.
   Widget _looks(LumitTheme t) => SizedBox(
         height: _transportRow,
         child: Row(children: [
@@ -464,8 +442,6 @@ extension _PlayerColumn on _VectorWindowState {
         ]),
       );
 
-  /// The ground behind the picture: the Viewer's board mark, cycling through
-  /// the four on a click and offering them by name on a right click.
   Widget _groundMark(LumitTheme t) {
     final rows = [
       (_Ground.board, l10n.fxCheckerboard),
@@ -512,7 +488,6 @@ extension _PlayerColumn on _VectorWindowState {
   }
 }
 
-/// The transparency board, the Viewer's own squares.
 class _BoardPainter extends CustomPainter {
   final LumitTheme theme;
   const _BoardPainter(this.theme);

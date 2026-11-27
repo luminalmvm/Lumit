@@ -25,7 +25,6 @@
 use crate::fx::{registry::EffectDef, registry::EffectMetadata, schema::EffectSchema};
 use lumit_fx_macros::Effect;
 
-/// What the matte does to the layer's alpha, in index order.
 pub const MODE_OPTIONS: &[&str] = &["Matte", "Matte inverted"];
 
 /// What the effect draws, in index order.
@@ -72,10 +71,8 @@ pub fn flow_divisor(index: u32) -> u32 {
 /// draw without a string lookup per op.
 pub const VIEW_ID: crate::fx::params::ParamId = crate::fx::params::ParamId::new("view");
 
-/// The **Matte mode** row's resolved id.
 pub const MODE_ID: crate::fx::params::ParamId = crate::fx::params::ParamId::new("mode");
 
-/// The Roto brush's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "roto_brush",
@@ -96,8 +93,6 @@ pub const MODE_ID: crate::fx::params::ParamId = crate::fx::params::ParamId::new(
     matte = false,
 )]
 pub struct RotoBrush {
-    /// Carry the base frame's matte outward through the shot. A button, not a
-    /// value.
     #[action(label = "Propagate")]
     pub propagate: (),
     /// Stop a running propagation. **Cancel finalises rather than discards**:
@@ -110,7 +105,6 @@ pub struct RotoBrush {
     /// are two different answers and must never share a cached frame.
     #[choice(options = *SEED_OPTIONS, default = 0, label = "Seed from")]
     pub seed: u32,
-    /// Whether the matte keeps the subject or drops it.
     #[choice(options = *MODE_OPTIONS, default = 0, label = "Matte mode")]
     pub mode: u32,
     /// What the effect draws — see [`VIEW_OPTIONS`]. Not part of the matte's own
@@ -138,7 +132,6 @@ pub struct RotoBrush {
         unit = Raw
     )]
     pub refine_radius: f32,
-    /// The resolution the propagation's optical flow is measured at.
     #[choice(options = *FLOW_RESOLUTION_OPTIONS, default = 1, label = "Flow resolution")]
     pub flow_resolution: u32,
     /// The flow's regularisation, 0–100: high means fewer tears and a gloopier

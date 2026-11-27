@@ -1,5 +1,3 @@
-//! After Effects' Grid onto Grid's Lines type.
-
 use lumit_core::anim::Property as LumProperty;
 use lumit_core::model::{EffectInstance, EffectValue};
 
@@ -10,7 +8,6 @@ use super::fx_colour::Fx;
 use super::props::match_name_of;
 use super::Conv;
 
-/// This file's claim on a match name: the row whose conversion is `grid`.
 pub(super) fn claim(
     conv: &mut Conv<'_>,
     path: &ItemPath,

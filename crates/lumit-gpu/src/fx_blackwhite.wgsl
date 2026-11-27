@@ -9,8 +9,8 @@
 struct Params {
     // Reds, Yellows, Greens, Cyans, Blues, Magentas -- each / 100, packed two
     // to a vec4 so the uniform stays 16-byte aligned.
-    w0: vec4<f32>,   // reds, yellows, greens, cyans
-    w1: vec4<f32>,   // blues, magentas, unused, unused
+    w0: vec4<f32>,
+    w1: vec4<f32>,
     tint: vec4<f32>, // .rgb only; already divided by its own luma
     tint_on: f32,    // 1 to tint, 0 to leave the grey grey
     mix_amt: f32,    // 0..1, blended against the unprocessed input

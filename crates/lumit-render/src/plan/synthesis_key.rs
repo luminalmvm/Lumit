@@ -1,5 +1,3 @@
-//! What a flow-synthesis retime feeds into a frame key.
-
 /// Which model paints this job's in-between frames, for a job that asks one to.
 ///
 /// The pack is not in the document, so serialising the Flow group cannot say

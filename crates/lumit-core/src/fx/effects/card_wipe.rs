@@ -44,7 +44,6 @@ pub const FLIP_ORDER_OPTIONS: &[&str] = &[
     "Bottom to top",
 ];
 
-/// Card wipe's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "card_wipe",
@@ -99,7 +98,6 @@ pub struct CardWipe {
     )]
     pub transition_width: f32,
 
-    /// How many cards down the frame.
     #[counter(min = 1, max = 64, default = 6, hard_min = 1, hard_max = 256, unit = Raw)]
     pub rows: i32,
 
@@ -116,7 +114,6 @@ pub struct CardWipe {
     #[choice(label = "Flip direction", options = *FLIP_DIRECTION_OPTIONS, default = 0)]
     pub flip_direction: u32,
 
-    /// Which corner the wave of flips starts from.
     #[choice(label = "Flip order", options = *FLIP_ORDER_OPTIONS, default = 0)]
     pub flip_order: u32,
 
@@ -138,7 +135,6 @@ pub struct CardWipe {
     #[seed]
     pub seed: u32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -193,7 +189,6 @@ impl CardWipe {
     }
 }
 
-/// Card wipe's behaviour.
 pub struct CardWipeDef;
 
 impl EffectDef for CardWipeDef {

@@ -15,22 +15,20 @@ use uuid::Uuid;
 /// prominence) so weak beats can be filtered or drawn faintly.
 #[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub enum MarkerKind {
-    /// Placed by the editor.
     #[default]
     User,
     /// Detected from audio; regeneration replaces only these.
-    Beat { confidence: f32 },
-    /// A chapter division.
+    Beat {
+        confidence: f32,
+    },
     Chapter,
 }
 
-/// A flag at a moment on its owner's timeline (a composition, for now).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Marker {
     pub id: Uuid,
     /// Time on the owner's timebase.
     pub time: CompTime,
-    /// A spanning marker's length, if any.
     #[serde(default)]
     pub duration: Option<Rational>,
     #[serde(default)]
@@ -43,13 +41,11 @@ pub struct Marker {
     /// markers had a colour opens as.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub colour: Option<u8>,
-    /// Unknown fields from newer Lumit versions (docs/10-FILE-FORMAT.md §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 impl Marker {
-    /// A plain user marker at `time`.
     pub fn user(id: Uuid, time: Rational) -> Self {
         Self {
             id,
@@ -220,7 +216,6 @@ mod tests {
             Marker::beat(Uuid::now_v7(), rat(4, 1), 0.8),
         ];
         let merged = with_regenerated_beats(&existing, fresh);
-        // Old beat (1s) gone; user (0s) and chapter (3s) kept; sorted by time.
         let times: Vec<Rational> = merged.iter().map(|m| m.time.0).collect();
         assert_eq!(times, vec![rat(0, 1), rat(2, 1), rat(3, 1), rat(4, 1)]);
         assert_eq!(merged.iter().filter(|m| m.is_beat()).count(), 2);
@@ -230,7 +225,6 @@ mod tests {
     fn merged_edits_keep_what_the_panel_cannot_see() {
         let rate = crate::time::FrameRate::new(25, 1).unwrap();
         let mut beat = Marker::beat(Uuid::now_v7(), rat(1, 1), 0.7);
-        // A span finer than a frame, and a field from a newer Lumit.
         beat.duration = Some(rat(1, 10));
         beat.extra.insert("newer".into(), true.into());
         let same = rate.frame_at(CompTime(rat(1, 10)));

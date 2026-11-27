@@ -36,7 +36,6 @@ impl Drop for Walking {
     }
 }
 
-/// One layer's spaces at one time.
 pub(crate) struct Space {
     pub(crate) world: Place,
     /// The camera a 3D layer is seen through, the default one with no camera
@@ -77,7 +76,6 @@ pub(crate) fn space(
     let solves = crate::track::solve_store().map(|store| (doc, store));
     let mut world = crate::orient::placed_in(comp, layer, t, read, solves).place();
     let parents = crate::model::parent_placements(comp, layer, t, read, solves);
-    // Nearest parent first, each one wrapping what is inside it.
     for (_, parent) in parents.iter().rev() {
         world = world.within(&parent.place());
     }
@@ -267,7 +265,6 @@ pub(crate) fn anchor_in(
     (p.0.is_finite() && p.1.is_finite()).then_some((p.0, p.1))
 }
 
-/// Which way a point is carried, and so how many numbers come back.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Way {
     ToComp,

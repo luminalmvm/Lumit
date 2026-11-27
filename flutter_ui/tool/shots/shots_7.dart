@@ -1,27 +1,3 @@
-// Manual screenshots, sweep 7: the windows that open over the editor.
-//
-// new-composition · settings · keymap · export · export-queue ·
-// recovery-dialog
-//
-// Each is opened through the function the application's own menu calls, from a
-// context taken out of the live tree — so what is photographed is the dialogue
-// the program shows, over the editor the program was showing a moment before.
-//
-// **One shot the manual asks for is not here, and cannot be.**
-//
-// * `interpretation.png` wants a footage item's interpretation settings. The
-//   glossary and docs/07 §3.2 describe them; nothing in the bridge or the
-//   panels offers a place to override a file's rate, alpha or colour space.
-//
-// `export-queue.png` used to be on that list beside it, because export was a
-// single dialogue that wrote one composition. There is a queue now, so the
-// shot is taken above — through *Add to queue*, which is the button a reader
-// would press.
-//
-//   cargo build -p lumit_bridge
-//   cd flutter_ui
-//   $env:LUMIT_SHOTS=1   # PowerShell; LUMIT_SHOTS=1 elsewhere
-//   flutter run -d windows -t tool/shots/shots_7.dart
 
 // `_context` is not held across the gaps — it is re-read from the live tree at
 // every use, which is what the lint is there to make you do.
@@ -107,37 +83,24 @@ Future<void> main() async {
   ui.setSelectedComp(comp);
   ui.playheadFrame.value = 48;
 
-  // The sweeps photograph the shell; the welcome screen has its own sweep.
   runApp(shotRoot(LumitAppNew(state, ui, welcome: false)));
   await pause(2);
   await sizeWindow(1720, 1000);
   await pause(7);
 
-  // ---- Shot: the New composition dialogue ---------------------------------
-  // Opened from the Project panel's own button, which is one of the four routes
-  // into `LumitState.newComposition` and the only one that is a single click.
   await tapKey('project-new-comp', settle: 2);
   await captureUi('new-composition.png', scale: 2, crop: _window());
   await tapKey('comp-cancel', settle: 1.5);
 
-  // ---- Shot: the settings window, on the Appearance page -------------------
   unawaited(showSettingsWindowFrb(_context));
   await pause(2);
   await tapKey('settings-page-appearance', settle: 1.5);
   await captureUi('settings.png', scale: 2, crop: _window());
 
-  // ---- Shot: the keymap editor --------------------------------------------
-  // The same window, one page along: the editor is a page of Settings rather
-  // than a window of its own, and the sidebar showing where you are is part of
-  // what the shortcuts page has to explain.
   await tapKey('settings-page-shortcuts', settle: 2);
   await captureUi('keymap.png', scale: 2, crop: _window());
   await tapKey('settings-close', settle: 1.5);
 
-  // ---- Shot: the export settings ------------------------------------------
-  // The destination is set through the dialogue's own picker seam — the same
-  // call the Choose… button makes — so the row reads as a file somebody has
-  // chosen rather than as "not chosen yet".
   unawaited(showExportDialogFrb(
     context: _context,
     comp: comp,
@@ -147,15 +110,6 @@ Future<void> main() async {
   await tapKey('export-choose', settle: 1.5);
   await captureUi('export.png', scale: 2, crop: _window(tall: true));
 
-  // ---- Shot: the export queue ---------------------------------------------
-  // Queued through the dialogue's own *Add to queue* button, which leaves the
-  // item waiting rather than starting it, and the window opened the way the
-  // dialogue opens it once something is in there. Nothing is faked: the item
-  // in the picture is a real export the engine is holding.
-  //
-  // This was on the manual's "waiting on the feature" list for as long as
-  // export was a single dialogue that wrote one composition. It is not any
-  // more.
   await tapKey('export-add-to-queue', settle: 2.5);
   unawaited(showExportQueueFrb(context: _context));
   await pause(2.5);
@@ -183,7 +137,6 @@ Future<void> main() async {
   await pause(2.5);
   await captureUi('recovery-dialog.png', scale: 2, crop: _window());
 
-  // Nothing was chosen, so nothing was restored; the temporary project goes.
   try {
     scratch.deleteSync(recursive: true);
   } catch (_) {

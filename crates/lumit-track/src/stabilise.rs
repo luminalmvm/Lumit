@@ -25,7 +25,6 @@ use crate::{Correspondence, Track, TrackSet};
 mod layers;
 mod readout;
 
-/// What the analysis was of, beyond the tracks themselves.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Shape {
     /// The rate the frames were read at: the file's own, with no Interpret
@@ -49,13 +48,10 @@ pub struct Shape {
     pub scale: f64,
 }
 
-/// Why no analysis came back.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum StabiliseError {
-    /// Fewer than two frames were followed.
     #[error("too few frames were followed")]
     TooShort,
-    /// The caller stopped it.
     #[error("the analysis was cancelled")]
     Cancelled,
 }
@@ -87,8 +83,6 @@ pub fn analyse(
     let size = set.source_size();
     let count = frames as usize - 1;
 
-    // Every step's ways of moving, and how far each is one of the step
-    // before's.
     let mut found: Vec<Vec<layers::Layer>> = Vec::with_capacity(count);
     let mut share: Vec<[[Option<f64>; layers::MOST]; layers::MOST]> = Vec::with_capacity(count);
     let mut seen_by: Vec<(u32, bool)> = Vec::with_capacity(count);
@@ -281,7 +275,6 @@ pub fn to_layer(p: [f64; 2], s: f64) -> [f64; 2] {
     [(p[0] + 0.5) * s, (p[1] + 0.5) * s]
 }
 
-/// The way back: a point of the layer on the tracked raster.
 #[must_use]
 pub fn to_tracked(p: [f64; 2], s: f64) -> [f64; 2] {
     let s = if s > 0.0 { s } else { 1.0 };

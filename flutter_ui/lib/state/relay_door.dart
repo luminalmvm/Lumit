@@ -48,7 +48,6 @@ class RelayDoor {
 
   ServerSocket? _server;
 
-  /// The port the door is on, or null while it is shut.
   int? get port => _server?.port;
 
   /// For each room this machine hosts, the key its guests are taken with.

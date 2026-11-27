@@ -1,5 +1,3 @@
-// The Grade panel's rows: a section heading with its reset, a slider row, and
-// the right-click holder they share. The panel decides what each one writes.
 
 import 'package:flutter/gestures.dart' show DragStartBehavior;
 import 'package:flutter/widgets.dart';
@@ -12,7 +10,6 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'timeline_extras_frb.dart' show DoubleTap;
 
-/// The room every row keeps from the panel's edge.
 const double gradeInset = 10;
 
 /// [child] with a small dot after it while [on]: a page or a mode that holds
@@ -111,13 +108,11 @@ class GradeHeading extends StatelessWidget {
   }
 }
 
-/// A small frameless icon button: muted at rest, bright under the pointer.
 class GradeIconButton extends StatelessWidget {
   final String glyph;
   final String tip;
   final VoidCallback? onPressed;
 
-  /// Lit, for a button that is a held state rather than a press.
   final bool active;
 
   const GradeIconButton(
@@ -179,7 +174,6 @@ class GradeSlider extends StatefulWidget {
   final bool enabled;
   final bool keyed;
 
-  /// The start of a gesture, before anything moves.
   final VoidCallback onStart;
   final ValueChanged<double> onLive;
   final ValueChanged<double> onCommit;
@@ -187,7 +181,6 @@ class GradeSlider extends StatefulWidget {
   /// A gesture that began and wrote nothing.
   final VoidCallback onCancel;
 
-  /// The rows of the right-click menu, or none for a row with no menu.
   final List<Widget> Function(VoidCallback close)? menu;
 
   /// What sits after the number. The rows of a section all give one, so their
@@ -225,7 +218,6 @@ class GradeSlider extends StatefulWidget {
 }
 
 class _GradeSliderState extends State<GradeSlider> {
-  /// The value in hand during a drag on the track.
   double? _live;
   bool _over = false;
 
@@ -388,7 +380,6 @@ class _GradeSliderState extends State<GradeSlider> {
   }
 }
 
-/// A track with the fill from the neutral point to the knob.
 class _TrackPainter extends CustomPainter {
   final double at, from;
   final Color track, fill, knob;

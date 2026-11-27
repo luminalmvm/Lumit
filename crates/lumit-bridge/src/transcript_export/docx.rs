@@ -33,7 +33,6 @@ fn run(text: &str, bold: bool, italic: bool) -> String {
     )
 }
 
-/// The document's bytes.
 pub(super) fn write(
     words: &[Said],
     speakers: bool,

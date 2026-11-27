@@ -1,16 +1,7 @@
 part of 'effects_presets_panel_frb.dart';
 
-// The Graphics templates group of Effects & presets: the saved templates as
-// tiles, as many across as fit, under folding group headings. A tile shows the
-// template's poster, and scrubs its strip of frames as the pointer crosses it.
-// Dragged, it carries a `TemplateDragData` onto either timeline or the Project
-// panel; double-clicked, or `Enter` on the picked tile, it is placed at the
-// playhead.
-
-/// How wide a tile is drawn at most, before another fits across.
 const double _tileWidth = 132;
 
-/// The room between two tiles, across and down.
 const double _tileGap = 8;
 
 /// A template's poster and strip are kept by its file and its version, so a
@@ -32,7 +23,6 @@ Future<ui.Image?> _decodeTile(Uint8List bytes) async {
 }
 
 mixin _TemplateShelf on State<EffectsPresetsPanelFrb> {
-  // What the panel has that the shelf uses.
   Set<String> get _shut;
   bool _isOpen(String key, String needle);
   void _star(LumitUiState ui, String key);
@@ -47,7 +37,6 @@ mixin _TemplateShelf on State<EffectsPresetsPanelFrb> {
   /// The library, read with the presets and after each change to it.
   List<BridgeLibraryTemplate> _templates = const [];
 
-  /// The picked tile, by its file.
   String? _pickedTile;
 
   /// The shell state the keys are heard through, and the Delete claim this
@@ -65,7 +54,6 @@ mixin _TemplateShelf on State<EffectsPresetsPanelFrb> {
   final List<List<BridgeLibraryTemplate>> _tileGrids = [];
   final Map<int, int> _gridColumns = {};
 
-  /// The Graphics templates heading's name in the folds.
   static const String _templatesKey = '*templates';
 
   /// A template group's name in the folds is its path after this.
@@ -77,7 +65,6 @@ mixin _TemplateShelf on State<EffectsPresetsPanelFrb> {
     } catch (_) {
       _templates = const [];
     }
-    // What the library no longer holds is let go.
     final keep = {for (final t in _templates) _tileKey(t)};
     for (final held in [_posters, _strips]) {
       held.removeWhere((key, picture) {
@@ -109,14 +96,11 @@ mixin _TemplateShelf on State<EffectsPresetsPanelFrb> {
     }
   }
 
-  /// Every template group, and every group above one.
   Set<String> get _templateGroups => {
         for (final t in _templates)
           ..._EffectsPresetsPanelFrbState._withParents(t.group),
       };
 
-  /// The fold keys of the Graphics templates heading and its groups, for
-  /// Collapse all.
   Iterable<String> get _templateFoldKeys => [
         _templatesKey,
         for (final g in _templateGroups) '$_templateGroupKey$g',
@@ -133,7 +117,6 @@ mixin _TemplateShelf on State<EffectsPresetsPanelFrb> {
   bool _anyFavouriteTemplate(LumitUiState ui) =>
       _templates.any((t) => _isFavouriteTemplate(ui, t));
 
-  /// The starred templates a search leaves, as one grid for Favourites.
   List<BridgeLibraryTemplate> _favouriteTemplates(
           LumitUiState ui, String needle) =>
       [
@@ -141,7 +124,6 @@ mixin _TemplateShelf on State<EffectsPresetsPanelFrb> {
           if (_isFavouriteTemplate(ui, t) && _templateMatches(t, needle)) t,
       ];
 
-  /// Read a tile's poster, once.
   void _askPoster(BridgeLibraryTemplate t) {
     final key = _tileKey(t);
     if (_posters.containsKey(key)) return;
@@ -178,7 +160,6 @@ mixin _TemplateShelf on State<EffectsPresetsPanelFrb> {
     }();
   }
 
-  /// The Graphics templates heading, its groups, and the tiles in them.
   List<Widget> _templateRows(LumitTheme t, LumitUiState ui, String needle) {
     final shown = _templates.where((x) => _templateMatches(x, needle)).toList();
     if (shown.isEmpty) return const [];
@@ -194,8 +175,6 @@ mixin _TemplateShelf on State<EffectsPresetsPanelFrb> {
     ];
   }
 
-  /// The groups directly inside [parent], each with what is in it, then the
-  /// tiles in [parent] itself.
   List<Widget> _templateGroupRows(LumitTheme t, LumitUiState ui, String needle,
       String parent, Set<String> groups, List<BridgeLibraryTemplate> shown) {
     final depth = parent.isEmpty ? 0 : '/'.allMatches(parent).length + 1;
@@ -277,7 +256,6 @@ mixin _TemplateShelf on State<EffectsPresetsPanelFrb> {
     await placeTemplateAtPlayhead(app, ui, template.path);
   }
 
-  /// The picked tile's template, if it is still drawn.
   BridgeLibraryTemplate? get _picked {
     for (final grid in _tileGrids) {
       for (final t in grid) {
@@ -337,7 +315,6 @@ mixin _TemplateShelf on State<EffectsPresetsPanelFrb> {
     return true;
   }
 
-  /// `Delete` deletes the picked tile's template, after asking.
   bool _deleteClaim() {
     final picked = _keyedTile;
     final ui = _keysUi;
@@ -379,7 +356,6 @@ mixin _TemplateShelf on State<EffectsPresetsPanelFrb> {
     return next[math.min(row * otherCols + column, next.length - 1)];
   }
 
-  /// The menu on a tile.
   void _tileMenu(Offset at, LumitUiState ui, BridgeLibraryTemplate template) {
     _pickTile(template);
     final app = Provider.of<LumitState>(context, listen: false);
@@ -685,7 +661,6 @@ class _TemplateTileState extends State<_TemplateTile> {
                 ),
               ),
             ),
-            // How far through the strip the pointer is.
             if (scrubbing)
               PositionedDirectional(
                 start: 1,

@@ -1,15 +1,3 @@
-// Snapping and the ruler's own gestures (docs/impl/timeline-interaction.md
-// §4.1, §4.5, §7 — TI-9).
-//
-// Every sentence of the note's §7 and the still-unwired half of its §4.5 is a
-// claim here: a bar drag, a work-area edge and a marker all reach for the one
-// shared target list and draw the capture while it holds them; `Ctrl` suspends
-// it; `Escape` abandons a ruler drag and writes nothing; a double-click gives
-// the work area back or makes a marker; the zoom keys work; and the playhead
-// stays on screen while the transport runs.
-//
-// Against the real engine, like every other frb panel test: a snap that does
-// not reach the document is not a snap.
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
@@ -39,8 +27,6 @@ void main() {
       return (state: p.state, uiState: p.uiState, comp: comp);
     }
 
-    /// [scale] mounts the panel under the interface scale, as the application
-    /// does.
     Future<void> mount(WidgetTester tester, dynamic p, {double? scale}) async {
       tester.view.physicalSize = const Size(1280, 600);
       tester.view.devicePixelRatio = 1.0;
@@ -98,10 +84,6 @@ void main() {
       return gesture;
     }
 
-    // -------------------------------------------------------------------
-    // §4.1, §4.5 — a bar drag snaps, and says what caught it.
-    // -------------------------------------------------------------------
-
     testWidgets('a bar drag lands on the marker it is pulled near',
         (tester) async {
       final p = withComp();
@@ -134,16 +116,6 @@ void main() {
           reason: 'and the capture leaves no trace after (P1)');
     });
 
-    // -------------------------------------------------------------------
-    // §4.5, §7 — the work-area edges snap, and answer Escape.
-    // -------------------------------------------------------------------
-
-    // -------------------------------------------------------------------
-    // §4.5, §7 — a marker drag snaps and answers Escape.
-    // -------------------------------------------------------------------
-
-    /// Where [frame] falls on the ruler, in the clock row: ground no flag and
-    /// no band sits on, so a press there is a scrub.
     Offset clockAt(WidgetTester tester, dynamic p, num frame) {
       final ruler = tester.getRect(find.byKey(const ValueKey('tl-ruler')));
       return Offset(
@@ -180,7 +152,6 @@ void main() {
       expect(p.comp.frameAtTime(time: markersOf(p.comp).single.time),
           greaterThan(400));
 
-      // A plain click on the flag, no drag at all, is the same.
       await tester.tap(flag);
       await tester.pumpAndSettle();
       expect(p.uiState.playheadFrame.value, 0);
@@ -200,8 +171,6 @@ void main() {
 
       final perFrame = perFrameOf(tester, p);
       final id = markersOf(p.comp).single.id;
-      // Two frames past the playhead, well inside the snap's reach. The first
-      // of the eight moves is spent starting the drag.
       final gesture = await dragging(
           tester,
           tester.getCenter(find.byKey(ValueKey<String>('tl-marker-$id'))),
@@ -215,17 +184,12 @@ void main() {
           reason: 'the flag landed on the playhead as it stands now');
     });
 
-    // -------------------------------------------------------------------
-    // Shift while scrubbing: the playhead lands on what it comes near.
-    // -------------------------------------------------------------------
-
     testWidgets('Shift lands a scrubbed playhead on a marker', (tester) async {
       final p = withComp();
       p.comp.addSolidLayer();
       markerAt(p, 400);
       await mount(tester, p);
 
-      // Without Shift the playhead goes where the pointer is.
       var gesture = await tester.startGesture(clockAt(tester, p, 300),
           kind: PointerDeviceKind.mouse);
       await tester.pump(const Duration(milliseconds: 60));
@@ -252,10 +216,6 @@ void main() {
       expect(find.byKey(const ValueKey('tl-ruler-snap-caught')), findsNothing,
           reason: 'the mark goes when the scrub does');
     });
-
-    // -------------------------------------------------------------------
-    // A marker's colour, and its region.
-    // -------------------------------------------------------------------
 
     testWidgets('double-clicking a marker opens its settings', (tester) async {
       final p = withComp();
@@ -328,7 +288,6 @@ void main() {
       final p = withComp();
       p.comp.addSolidLayer();
       final frames = p.comp.durationFrames();
-      // Unlabelled, so the whole flag is on screen this near the end.
       markerAt(p, frames - 10, label: '');
       await mount(tester, p);
 
@@ -362,7 +321,6 @@ void main() {
           reason: 'the region is shaded down through the lanes');
 
       final perFrame = perFrameOf(tester, p);
-      // Ctrl keeps the magnet out of it, so the landing is the pointer's own.
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
       final gesture = await dragging(
           tester,
@@ -381,10 +339,6 @@ void main() {
           reason: 'taking hold of the end is not a scrub either');
     });
 
-    // -------------------------------------------------------------------
-    // A scaled interface: the flag and the edge stay under the pointer.
-    // -------------------------------------------------------------------
-
     testWidgets('a marker follows the pointer when the interface is scaled',
         (tester) async {
       final p = withComp();
@@ -394,7 +348,6 @@ void main() {
 
       final perFrame = perFrameOf(tester, p, scale: 1.25);
       final id = markersOf(p.comp).single.id;
-      // Ctrl keeps the magnet out of it, so the landing is the pointer's own.
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
       final gesture = await dragging(
           tester,
@@ -404,8 +357,6 @@ void main() {
       await tester.pumpAndSettle();
       await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
 
-      // The first of the eight moves is spent starting the drag, so the flag
-      // travels the other seven.
       expect(p.comp.frameAtTime(time: markersOf(p.comp).single.time),
           closeTo(360, 2),
           reason: 'the flag moved as far as the pointer did');
@@ -434,14 +385,9 @@ void main() {
       await tester.pumpAndSettle();
       await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
 
-      // An edge goes to the pointer itself, so all eight moves count.
       expect(workAreaFrames(p.comp).end, closeTo(700, 2),
           reason: 'the edge moved as far as the pointer did');
     });
-
-    // -------------------------------------------------------------------
-    // §7 — the two double-clicks.
-    // -------------------------------------------------------------------
 
     testWidgets('double-clicking empty ruler makes a marker and names it',
         (tester) async {
@@ -450,7 +396,6 @@ void main() {
       await mount(tester, p);
       expect(markersOf(p.comp), isEmpty);
 
-      // The clock, in the ruler's upper half: not the band, and no flag there.
       final ruler = tester.getRect(find.byKey(const ValueKey('tl-ruler')));
       final at = Offset(ruler.center.dx, ruler.top + ruler.height / 4);
       await tester.tapAt(at);
@@ -470,10 +415,6 @@ void main() {
       expect(markersOf(p.comp).single.label, 'Drop',
           reason: 'what was typed is what the marker says');
     });
-
-    // -------------------------------------------------------------------
-    // §4.6 (gap 23) — the zoom keys, and edge-follow during playback.
-    // -------------------------------------------------------------------
 
     testWidgets('= and - zoom time, and \\ toggles the whole comp',
         (tester) async {
@@ -511,7 +452,6 @@ void main() {
       p.comp.addSolidLayer();
       await mount(tester, p);
 
-      // Zoomed in, so there is somewhere to scroll to at all.
       await tester.sendKeyEvent(LogicalKeyboardKey.equal);
       await tester.sendKeyEvent(LogicalKeyboardKey.equal);
       await tester.pumpAndSettle();
@@ -520,7 +460,6 @@ void main() {
 
       p.uiState.play();
       await tester.pump();
-      // The transport hands the playhead out past the right-hand edge.
       p.uiState.playheadFrame.value = p.comp.durationFrames() ~/ 2;
       await tester.pumpAndSettle();
 

@@ -18,15 +18,12 @@ use crate::time::Timebase;
 use crate::walk::{Out, Role};
 use crate::LottieError;
 
-/// Lottie layer kinds.
 const PRECOMP: u8 = 0;
 const SOLID: u8 = 1;
 const IMAGE: u8 = 2;
 const NULL: u8 = 3;
 const SHAPE: u8 = 4;
 
-/// `out` as a Lottie layer, in a comp whose clock is `tb` and whose layers
-/// go out as `plan`.
 pub fn layer(
     cx: &mut Ctx,
     comp: &Composition,
@@ -457,7 +454,6 @@ fn blend(mode: BlendMode, report: &mut Report, place: &Place) -> u8 {
     }
 }
 
-/// The layer's masks, `shift` added to their points.
 fn masks(
     c: &Clock,
     l: &Layer,

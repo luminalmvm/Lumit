@@ -45,7 +45,6 @@ fn matte_k(xy: vec2<i32>) -> f32 {
     return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
 }
 
-// W3C soft-light D(d) helper (== the compositor's `soft_light_d`).
 fn echo_soft_light_d(d: vec4<f32>) -> vec4<f32> {
     let poly = ((16.0 * d - 12.0) * d + 4.0) * d;
     return select(sqrt(d), poly, d <= vec4<f32>(0.25));
@@ -57,15 +56,15 @@ fn echo_soft_light_d(d: vec4<f32>) -> vec4<f32> {
 fn echo_blend(mode: u32, a: vec4<f32>, n: vec4<f32>) -> vec4<f32> {
     let one = vec4<f32>(1.0);
     if (mode == 0u) {
-        return a + n * (1.0 - a.a); // Behind: accumulator over the echo
+        return a + n * (1.0 - a.a);
     } else if (mode == 1u) {
-        return n + a * (1.0 - n.a); // In front: the echo over the accumulator
+        return n + a * (1.0 - n.a);
     } else if (mode == 2u) {
-        return a + n; // Add
+        return a + n;
     } else if (mode == 3u) {
-        return a + n - a * n; // Screen
+        return a + n - a * n;
     } else if (mode == 4u) {
-        return a * n; // Multiply
+        return a * n;
     } else if (mode == 5u) {
         // Overlay = hard light with the accumulator as the switch.
         let lo = 2.0 * a * n;
@@ -82,17 +81,17 @@ fn echo_blend(mode: u32, a: vec4<f32>, n: vec4<f32>) -> vec4<f32> {
         let hi = one - 2.0 * (one - a) * (one - n);
         return select(hi, lo, n <= vec4<f32>(0.5));
     } else if (mode == 8u) {
-        return max(a, n); // Lighten (per-channel max)
+        return max(a, n);
     } else if (mode == 9u) {
-        return min(a, n); // Darken (per-channel min)
+        return min(a, n);
     } else if (mode == 10u) {
-        return abs(a - n); // Difference
+        return abs(a - n);
     } else if (mode == 11u) {
-        return a + n - 2.0 * a * n; // Exclusion
+        return a + n - 2.0 * a * n;
     } else if (mode == 12u) {
-        return max(a - n, vec4<f32>(0.0)); // Subtract
+        return max(a - n, vec4<f32>(0.0));
     }
-    return max(a / max(n, vec4<f32>(1e-6)), vec4<f32>(0.0)); // Divide
+    return max(a / max(n, vec4<f32>(1e-6)), vec4<f32>(0.0));
 }
 
 @compute @workgroup_size(8, 8)

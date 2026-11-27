@@ -26,18 +26,14 @@ import 'package:lumit_flutter/theme/theme_tokens.dart';
 import 'icons.dart' show LumitIcon, glyphOf;
 import 'lumit_icons.dart';
 
-/// The built-in weights a person can ask for.
 enum IconSet {
   /// The style's own weight: Desk's 1.25, the others' 1.5.
   styleChoice,
 
-  /// The set as drawn, 1.5.
   regular,
 
-  /// Thin, cut lines at 1.25.
   engraved,
 
-  /// Heavy lines at 2.
   bold,
 }
 
@@ -45,7 +41,6 @@ abstract final class IconStyle {
   /// The weight a picked set draws at, or null for the style's own.
   static double? weight;
 
-  /// The folder a person's own icons are read from, once known.
   static String? folder;
 
   static final Map<String, String> _overrides = {};
@@ -53,7 +48,6 @@ abstract final class IconStyle {
   /// Cached restyled glyphs, keyed by the source and the weight.
   static final Map<String, String> _restyled = {};
 
-  /// The weight in force under `t`.
   static double weightFor(LumitTheme t) => weight ?? t.tokens.strokeWeight;
 
   static double? weightOf(IconSet set) => switch (set) {
@@ -102,7 +96,6 @@ abstract final class IconStyle {
     return !mapEquals(before, _overrides);
   }
 
-  /// Folders read under the person's own: the style's icons.
   static List<String> under = const [];
 
   static Map<String, String> _read(String dir) {
@@ -136,7 +129,6 @@ abstract final class IconStyle {
     return found;
   }
 
-  /// How many icons the folder replaces, for the Settings row.
   static int get overrideCount => _overrides.length;
 
   static final Map<String, bool> _keeps = {};
@@ -193,7 +185,6 @@ abstract final class IconStyle {
             }));
   }
 
-  /// [c] as SVG reads a colour.
   static String _hex(Color c) {
     int byte(double v) => (v * 255).round().clamp(0, 255);
     return 'rgba(${byte(c.r)},${byte(c.g)},${byte(c.b)},${c.a.toStringAsFixed(3)})';

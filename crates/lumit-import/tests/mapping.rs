@@ -422,8 +422,6 @@ fn a_tracked_cameras_keyframes_arrive_on_the_orientation_lanes_and_the_zoom() {
     assert_eq!(keys(&camera.transform.position_x)[1].value, 20.0);
     assert_eq!(keys(&camera.transform.position_z)[2].value, 300.0);
 
-    // Orientation, on its own lanes, angle for angle, and the turn matches at
-    // every key.
     let orientation = [[10.0, 40.0, 1.0], [20.0, 45.0, 2.0], [30.0, 50.0, 3.0]];
     let [ox, oy, oz] = camera.transform.orientation.each_ref().map(keys);
     for (n, o) in orientation.into_iter().enumerate() {
@@ -440,11 +438,9 @@ fn a_tracked_cameras_keyframes_arrive_on_the_orientation_lanes_and_the_zoom() {
     let (a, mid, b) = (at(0.0), at(0.5), at(1.0));
     assert!((between(a, mid) - between(a, b) / 2.0).abs() < 1e-6);
     assert!((between(mid, b) - between(a, b) / 2.0).abs() < 1e-6);
-    // The middle key is held in After Effects, and held here.
     assert_eq!(oy[1].interp_out, SideInterp::Hold);
     assert_eq!(at(1.5), at(1.0));
 
-    // Zoom, out of the options group rather than the transform.
     let LayerKind::Camera { zoom, .. } = &camera.kind else {
         panic!("a camera");
     };
@@ -453,8 +449,6 @@ fn a_tracked_cameras_keyframes_arrive_on_the_orientation_lanes_and_the_zoom() {
     assert_eq!(zoom[0].value, 1000.0);
     assert_eq!(zoom[2].value, 1400.0);
 
-    // The exporter's expression sits over those keys, and the keys are the
-    // shot, so it drives nothing and is named in the report with its text.
     assert!(reported(&report, |r| matches!(
         r,
         Reason::ExpressionOverKeys { source } if source.contains("thisComp")
@@ -526,7 +520,6 @@ fn a_3d_layer_turned_on_x_and_y_faces_where_after_effects_faces_it() {
             same_turn(lumit_turn(turned, 0.0), ae_turn(o, r)),
             "orientation {o:?}, rotation {r:?}"
         );
-        // Orientation, the rotations, Anchor Z and Scale Z arrive as they are.
         let tr = &turned.transform;
         assert!(tr.after_effects_order);
         assert_eq!(tr.orientation.each_ref().map(|p| p.value_at(0.0)), o);
@@ -541,7 +534,6 @@ fn a_3d_layer_turned_on_x_and_y_faces_where_after_effects_faces_it() {
 
 type Mat3 = lumit_core::camera::Mat3;
 
-/// After Effects' turn for an Orientation and an X/Y/Z Rotation.
 fn ae_turn(orientation: [f64; 3], rotation: [f64; 3]) -> Mat3 {
     use lumit_core::camera::rotation as lumit;
     let mul = |a: Mat3, b: Mat3| {
@@ -562,7 +554,6 @@ fn ae_turn(orientation: [f64; 3], rotation: [f64; 3]) -> Mat3 {
     mul(xyz(orientation), xyz(rotation))
 }
 
-/// The turn a layer's Orientation and rotation lanes make at `t`.
 fn lumit_turn(layer: &Layer, t: f64) -> Mat3 {
     let tr = &layer.transform;
     let orientation = tr.orientation_at(t, &|p| p.value_at(t));
@@ -586,8 +577,6 @@ fn same_turn(a: Mat3, b: Mat3) -> bool {
     cells.all(|(a, b)| (a - b).abs() < 1e-9)
 }
 
-/// A tracked camera as an exporter writes one: keyed Position, Orientation and
-/// Zoom, each carrying the same After Effects expression.
 fn camera_capture() -> lumit_import::capture::Capture {
     const EXPRESSION: &str = r#"valueAtTime(thisComp.layer("Remap").timeRemap)"#;
     let key = |t: f64, v: serde_json::Value, out: &str| serde_json::json!({ "t": t, "v": v, "in_interp": "LINEAR", "out_interp": out });
@@ -712,20 +701,12 @@ fn a_motion_tile_is_measured_against_its_own_layer_not_the_composition() {
     let tile = &layer(comp(&doc, "Clips"), "Border").effects[0];
     assert_eq!(tile.effect.match_name, "tile");
     let at = |id: &str| tile.float_at(id, 0.0).expect("a float parameter");
-    // The layer's own middle, and the layer's own width and height.
     assert_eq!((at("tile_centre_x"), at("tile_centre_y")), (1280.0, 544.0));
     assert_eq!((at("tile_width"), at("tile_height")), (2560.0, 1088.0));
-    // 125 % of the layer is 3200, not 125 % of the comp's 1920.
     assert_eq!(at("output_width"), 3200.0);
-    // And the untouched Output Height is the layer's own, whole.
     assert_eq!(at("output_height"), 1088.0);
 }
 
-/// **An ambient light arrives as one, its keys with it.**
-///
-/// Light options used to come across as their still value alone, and an
-/// ambient light as a point. Its intensity's keys arrive as Lumit's own
-/// percentages, and its colour's in scene-linear light.
 #[test]
 fn an_ambient_light_keeps_its_kind_and_its_keyframes() {
     let (doc, report) = mapped("edges.lum-bundle");

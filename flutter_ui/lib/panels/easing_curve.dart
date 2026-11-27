@@ -41,7 +41,6 @@ const double easingHandleReach = 0.5;
 /// does. The other side keeps what it had.
 enum EaseSides { both, into, outOf }
 
-/// Send a shape to the selected keys.
 typedef ApplyEasing = void Function(EasingCurve curve, EaseSides sides);
 
 /// A normalised easing shape: the cubic bezier from (0, 0) to (1, 1) whose two
@@ -106,7 +105,6 @@ class EasingCurve {
     );
   }
 
-  /// This curve with one control point moved, for the editor's drag.
   EasingCurve withHandle({
     required bool first,
     required double x,
@@ -123,7 +121,6 @@ class EasingCurve {
     return 3 * v * v * u * y1 + 3 * v * u * u * y2 + u * u * u;
   }
 
-  /// The curve's x at parameter [u]; paired with [yAt] to walk the stroke.
   double xAt(double u) {
     final v = 1 - u;
     return 3 * v * v * u * x1 + 3 * v * u * u * x2 + u * u * u;
@@ -146,7 +143,6 @@ class EasingCurve {
     return yAt((lo + hi) / 2);
   }
 
-  /// The same shape played backwards: a slow start becomes a slow finish.
   EasingCurve get reversed => EasingCurve(1 - x2, 1 - y2, 1 - x1, 1 - y1);
 
   @override
@@ -177,7 +173,6 @@ EasingCurve? easingCurveOfSpan(List<BridgeKeyframe> keys, int index) {
   final dv = b.value - a.value;
   if (dt <= 0 || dv == 0) return null;
   final slope = dv / dt;
-  // The pair the curve uses, held within the span the shape is drawn in.
   final (r1, r2) =
       spanInfluences(sideInfluence(a.interpOut), sideInfluence(b.interpIn));
   final out = r1.clamp(0.0, 1.0);

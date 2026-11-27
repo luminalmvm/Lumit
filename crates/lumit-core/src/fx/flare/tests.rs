@@ -6,8 +6,6 @@ use super::raster::{draw, Frame, Light};
 const W: u32 = 96;
 const H: u32 = 54;
 
-/// A small frame with one light in the picture and one off it, moving and
-/// turning, so every road through the drawing is taken.
 fn frame() -> Frame {
     let mut f = Frame::preview(W, H, [20.0, 14.0], W as f32 / 1920.0);
     f.lights.push(Light {
@@ -28,8 +26,6 @@ fn drawn(design: &Design) -> Vec<f32> {
     rgba
 }
 
-/// Every built-in flare reads and draws, and every kind of element draws
-/// finite light in every colour, response and made texture, the same twice.
 #[test]
 fn every_flare_and_every_element_draws() {
     for (_, json) in BUILT_IN {
@@ -44,7 +40,6 @@ fn every_flare_and_every_element_draws() {
             design.name
         );
     }
-    // The made textures, without None and Layer at the ends.
     let made = TEXTURES.len() - 2;
     for (n, kind) in Kind::ALL.into_iter().enumerate() {
         for (m, mode) in ColourMode::ALL.into_iter().enumerate() {

@@ -1,5 +1,3 @@
-//! Sending on a link. Runs on each link's sending thread.
-
 use super::*;
 
 impl Hub {
@@ -119,7 +117,6 @@ impl Hub {
                     });
                 }
             }
-            // Given up on by the other end: nothing more is said of it.
             if dropped {
                 continue;
             }

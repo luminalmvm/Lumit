@@ -16,8 +16,6 @@ void main() {
   setUpAll(initEngineForTests);
 
   group('Select all (frb)', () {
-    /// The routing itself, with no panel mounted: which panels claim the chord
-    /// and which leave it to mean "every layer".
     test('only the panels that keep a selection claim the chord', () {
       final p = freshProject();
       // The Node graph joined once its pick became a set: before that

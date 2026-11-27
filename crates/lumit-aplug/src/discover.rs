@@ -208,11 +208,8 @@ pub fn scan_dir(dir: &Path) -> Vec<PathBuf> {
     found
 }
 
-/// What a scan was asked to do.
 #[derive(Debug, Default)]
 pub struct ScanOptions {
-    /// The directories to look in. [`ScanOptions::standard`] fills this from
-    /// [`search_paths`].
     pub paths: Vec<PathBuf>,
     /// Plugin identifiers the user has switched off. Consulted before a plugin
     /// is described, so a disabled plugin's code never runs. The same list the
@@ -221,8 +218,6 @@ pub struct ScanOptions {
 }
 
 impl ScanOptions {
-    /// The standard search paths, nothing disabled — what start-up asks for
-    /// before the preferences are read into it.
     #[must_use]
     pub fn standard() -> Self {
         Self {
@@ -232,39 +227,25 @@ impl ScanOptions {
     }
 }
 
-/// One plugin that became an effect.
 pub struct DiscoveredPlugin {
     /// The name the catalogue answers to — the standard's prefix and the
     /// plugin's own id: `clap:<id>` or `vst3:<class id>`.
     pub match_name: String,
-    /// The plugin's own identifier, which is what the switched-off list names.
     pub identifier: String,
-    /// The name a person sees.
     pub label: String,
-    /// Who wrote it.
     pub vendor: String,
-    /// Which `.clap` file or `.vst3` bundle it came out of.
     pub module: PathBuf,
-    /// The definition everything downstream sees.
     pub def: AudioEffectDef,
 }
 
-/// What one scan did.
 #[derive(Default)]
 pub struct ScanOutcome {
-    /// The plugins that can be hosted, in discovery order.
     pub found: Vec<DiscoveredPlugin>,
-    /// One calm sentence per file or plugin turned away, in the order it
-    /// happened. Nothing here is shown modally.
     pub skipped: Vec<String>,
 }
 
-/// What each module offered the last time it described, by module path, so a
-/// later scan can offer it without opening it again.
 pub type ScanCache = BTreeMap<PathBuf, CachedModule>;
 
-/// One module's describe, and what the file and the switched-off list were
-/// when it ran.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct CachedModule {
     /// The file's size and when it was last written, so an update in place is
@@ -273,7 +254,6 @@ pub struct CachedModule {
     /// What was switched off then. Those plugins were never described, so one
     /// switched back on since sends the module to the broker again.
     pub disabled: BTreeSet<String>,
-    /// What it offered.
     pub described: Vec<PluginDescriptor>,
 }
 
@@ -303,7 +283,6 @@ pub fn scan(options: &ScanOptions) -> ScanOutcome {
     outcome
 }
 
-/// One plugin file, opened, described and closed.
 fn scan_module(binary: &Path, options: &ScanOptions, outcome: &mut ScanOutcome) {
     let module = match AnyModule::open(binary) {
         Ok(module) => module,
@@ -366,8 +345,6 @@ pub fn scan_brokered_reporting(
     for (index, binary) in binaries.into_iter().enumerate() {
         file(&binary, index, total);
         let stamp = stamp_of(&binary);
-        // ponytail: switching any plugin back on describes every module once
-        // more, since a module's list does not say which ids were its own.
         if let Some(cached) = cache.get(&binary).filter(|cached| {
             Some(cached.stamp) == stamp && cached.disabled.is_subset(&switched_off)
         }) {
@@ -453,7 +430,6 @@ fn offer(
     }
 }
 
-/// One line of the report, in the shape the OFX scan's are.
 fn skip_line(binary: &Path, reason: &str) -> String {
     format!("{}: {reason}", binary.display())
 }

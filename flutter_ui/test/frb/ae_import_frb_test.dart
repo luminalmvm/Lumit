@@ -34,8 +34,6 @@ import 'package:provider/provider.dart';
 
 import 'frb_test_support.dart';
 
-/// The real After Effects project the differential test measures the parser
-/// against, as an absolute path.
 String get _aep =>
     File('../tools/ae-bridge/fixtures/fixture.aep').absolute.path;
 
@@ -74,7 +72,6 @@ void main() {
       await tester.pump();
     }
 
-    /// Every item in the project, folders flattened.
     List<String> itemNames(LumitState state) {
       List<ItemReference> walk(List<ItemReference> items) => [
             for (final i in items) ...[
@@ -134,27 +131,13 @@ void main() {
 
       expect(identical(p.state.project, before), isFalse,
           reason: 'the parsed project was adopted');
-      // The golden project's own items, read out of the file itself.
       expect(itemNames(p.state),
           containsAll(<String>['Fixture', 'Fixture inner', 'Solids']));
 
-      // 62·52·2·1 until the layer-styles map landed: the two
-      // placeholders and the one skipped chunk were the fixture's styles,
-      // which now import as real instances with three adjusted rows.
-      // One fewer adjusted since the two-node camera brings its point of
-      // interest whole. One more since a layer that casts shadows is
-      // reported rather than dropped. One moved from adjusted to skipped,
-      // since a text layer whose words can't be read is now said to be that.
-      // Two fewer adjusted since the fixture's two Gaussian blurs carry their
-      // Repeat Edge Pixels. The text layer's words are read now, so nothing
-      // is skipped, and the shape layer's contents arrive, so one fewer
-      // adjusted. One fewer again since shadows are drawn, so the card that
-      // casts them is no longer reported. 63, 50, 0 and 0, and only the
-      // adjusted are listed.
       expect(find.text(l10n.aeItemsImported(63)), findsOneWidget,
           reason: 'what the direct parse recovers, end to end');
       expect(find.text(l10n.aeOutcomeAdjusted), findsOneWidget);
-      expect(find.text('50'), findsOneWidget);
+      expect(find.text('49'), findsOneWidget);
       expect(find.text(l10n.aeOutcomeSkipped), findsNothing);
 
       await tester.tap(find.text(l10n.close));

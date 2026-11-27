@@ -25,28 +25,21 @@ import 'timeline_extras_frb.dart' show showMenuAt;
 import 'volume_band_frb.dart'
     show BandKind, volumeBandFloorDb, volumeBandTopDb;
 
-/// How tall one bar is, and the gap between two.
 const double _barHeight = 15;
 const double _barGap = 2;
 
 /// The press a bar opened its own menu with, so the head behind it opens none.
 int? cutMixMenuPointer;
 
-/// One track's mix controls, filling the width its parent gives it.
 class CutTrackMix extends StatelessWidget {
   final CompositionReference comp;
   final BridgeLayerEntry entry;
 
-  /// Vol and Pan when true, Level when false.
   final bool sound;
   final VoidCallback onChanged;
 
-  /// Vol and Pan side by side on one bar's height, for a track too short to
-  /// stack them.
   final bool inline;
 
-  /// Whether a sound track's envelope is out across its lane, and the switch
-  /// for it, for the bar's own menu.
   final bool Function(BandKind kind) bandShown;
   final void Function(BandKind kind) onBand;
 
@@ -61,7 +54,6 @@ class CutTrackMix extends StatelessWidget {
     this.inline = false,
   });
 
-  /// The height the strip needs, so a header can tell whether it fits.
   static double heightFor(bool sound, {bool inline = false}) =>
       sound && !inline ? _barHeight * 2 + _barGap : _barHeight;
 
@@ -103,7 +95,6 @@ class CutTrackMix extends StatelessWidget {
       onChanged();
     }
 
-    // The bar's right-click: the Mixer's own rows for the same value.
     MixMenu menu(
       BridgeScalar scalar,
       void Function(BridgeScalar) set, {
@@ -242,12 +233,8 @@ class CutTrackMix extends StatelessWidget {
   }
 }
 
-/// A bar's own menu rows, given how to close the menu and whether to leave
-/// room for a tick.
 typedef MixMenu = List<Widget> Function(VoidCallback close, bool tickColumn);
 
-/// One thin bar: the fill runs from [origin] to the value, the label and the
-/// value are written over it.
 class _MixBar extends StatefulWidget {
   final String label;
   final double value;
@@ -266,7 +253,6 @@ class _MixBar extends StatefulWidget {
 
   final MixMenu menu;
 
-  /// The envelope that draws this same value across the lane, for the menu.
   final ({String label, String action, bool shown, VoidCallback toggle})? band;
 
   const _MixBar({
@@ -290,11 +276,8 @@ class _MixBar extends StatefulWidget {
 }
 
 class _MixBarState extends State<_MixBar> {
-  /// The value while a drag runs, null at rest.
   double? _live;
 
-  /// A right click on the bar: the value's own rows, and the envelope that
-  /// draws it across the lane.
   void _menu(Offset at) {
     final band = widget.band;
     showMenuAt<void>(
@@ -394,7 +377,6 @@ class _MixBarState extends State<_MixBar> {
                 width: (to - from).abs(),
                 top: 0,
                 bottom: 0,
-                // Lifts a shade under the pointer.
                 child: ColoredBox(
                     color: fill.withValues(
                         alpha: ((changed ? 0.25 : 0.1) + 0.2 * lit) * bar)),

@@ -38,7 +38,6 @@ fn matte_k(xy: vec2<i32>) -> f32 {
     return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
 }
 
-// The unpremultiplied colour of a premultiplied pixel (== cpu::unpremult).
 fn unpremult(c: vec4<f32>) -> vec3<f32> {
     if (c.a > 0.0) {
         return c.rgb / c.a;

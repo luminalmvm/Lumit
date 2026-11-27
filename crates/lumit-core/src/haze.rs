@@ -41,10 +41,8 @@ pub const POINT_SHARE: f32 = 0.2;
 /// percent, comp pixels.
 pub const FALLOFF_PX: f32 = 100.0;
 
-/// The strongest Forward scatter, short of a beam only seen head on.
 const MAX_SCATTER: f32 = 0.95;
 
-/// A Light layer's rows for how it shows in the air.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct LightHaze {
@@ -83,27 +81,21 @@ impl Default for LightHaze {
 }
 
 impl LightHaze {
-    /// Left out of a saved light while it is untouched.
     #[must_use]
     pub fn is_default(&self) -> bool {
         *self == Self::default()
     }
 
-    /// Whether the light shows in the air at some moment: Volumetric is
-    /// above nought or keyed. What decides whether its other rows show.
     #[must_use]
     pub fn shows(&self) -> bool {
         self.amount.is_animated() || self.amount.value_at(0.0) > 0.0
     }
 
-    /// The same for its Noise, which decides whether Noise size and speed
-    /// show.
     #[must_use]
     pub fn noisy(&self) -> bool {
         self.noise.is_animated() || self.noise.value_at(0.0) > 0.0
     }
 
-    /// The row `prop` names, or `None` for one that is not a haze row.
     #[must_use]
     pub fn channel(&self, prop: crate::model::TransformProp) -> Option<&Property> {
         use crate::model::TransformProp as P;
@@ -139,7 +131,6 @@ impl LightHaze {
         })
     }
 
-    /// The rows at layer time `lt`.
     #[must_use]
     pub fn at(&self, lt: f64) -> HazeLook {
         let v = |p: &Property| p.value_at(lt) as f32;
@@ -319,8 +310,6 @@ pub fn march(
             let phase = (1.0 - g * g) / (1.0 + g * g - 2.0 * g * cos).max(1e-6).powf(1.5);
             let mut through = [1.0f32; 3];
             if l.shadow_darkness > 0.0 {
-                // On the card, models' shadow maps dim `through` here too
-                // (`mapped`), which this has no models for.
                 through = crate::lighting::transmitted(p, l, casters, None)
                     .map(|v| 1.0 - l.shadow_darkness * (1.0 - v));
             }

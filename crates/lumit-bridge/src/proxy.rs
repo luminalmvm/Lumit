@@ -26,8 +26,6 @@ use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 use uuid::Uuid;
 
-/// How the running transcode is getting on — the same three-beat shape the
-/// export's own poll has.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum State {
     Idle,
@@ -44,12 +42,9 @@ struct Job {
     /// still lands on the item that asked for it.
     project: Uuid,
     item: Uuid,
-    /// The proxies asked for while this one runs, in the order they were
-    /// asked for.
     waiting: VecDeque<Waiting>,
 }
 
-/// One queued proxy: what [`start`] was handed.
 struct Waiting {
     project: Uuid,
     item: Uuid,
@@ -165,13 +160,6 @@ fn drain(job: &mut Job) -> Option<(Uuid, Uuid, PathBuf)> {
     }
     if finished {
         job.handle = None;
-        // The next in the queue starts in its place, and the state goes
-        // straight back to running, so whoever is polling keeps polling until
-        // the last one lands. A file that has gone since it was queued is
-        // passed over.
-        //
-        // ponytail: a failure in the middle of a queue is not reported, only
-        // the last job's. Report each when the status line can list them.
         while let Some(next) = job.waiting.pop_front() {
             if !next.source.is_file() {
                 continue;

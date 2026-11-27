@@ -1,6 +1,3 @@
-// A node canvas with its cut edges faded: a box that runs past the panel's
-// edge fades out there rather than stopping dead. Only an edge a box crosses
-// fades, so a graph that fits is drawn plain.
 
 import 'package:flutter/widgets.dart';
 
@@ -13,7 +10,6 @@ class GraphCutFade extends StatelessWidget {
   final bool bottom;
   final Widget child;
 
-  /// How far in from a cut edge the fade reaches.
   static const double reach = 24;
 
   const GraphCutFade({

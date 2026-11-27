@@ -217,8 +217,6 @@ impl FilmFx {
 /// Built on first use: most projects never shoot on film.
 pub(super) type LazyFilm = OnceLock<FilmFx>;
 
-/// The textures one pass reads: the picture, the second picture, and the two
-/// extras.
 struct Reads<'t> {
     src: &'t wgpu::Texture,
     orig: &'t wgpu::Texture,

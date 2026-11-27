@@ -1,19 +1,3 @@
-// The toolbar's tools: what they are, which of them is armed, and how a
-// keyboard chord picks one (docs/07 §1.7).
-//
-// **In plain terms.** A tool is the answer to "what does dragging in the Viewer
-// do?" — nudge a layer about, pan the picture, draw a mask, cut a clip. Every
-// editor has a strip of them under the menu, and picking one is the whole of
-// what this file models: one value, held in one place, that the rest of the app
-// reads. Tools that share a job are grouped the way After Effects groups them —
-// all five shape tools sit under one button, and the button remembers which of
-// the five you last used — so the strip stays short.
-//
-// Nothing here does any editing. Which tool is armed is a *state*, and the
-// panels decide what to make of it; a tool whose behaviour is not built yet is
-// still a real, selectable tool that simply changes nothing on the picture yet
-// ([ToolMode.ready] says which are which, and the toolbar says so in the
-// tooltip rather than hiding the button).
 
 import 'package:flutter/painting.dart' show Color;
 import 'package:flutter/foundation.dart';
@@ -90,9 +74,6 @@ enum ToolMode {
   penConvertVertex(ToolGroup.pen, LumitIcon.vertexConvert, ready: true),
   penMaskFeather(ToolGroup.pen, LumitIcon.maskFeather, ready: true),
 
-  // Making and editing text layers on the picture. Vertical type would
-  // need the engine to lay a line out downwards; it lays out one horizontal
-  // line, so that member stays unbuilt.
   typeHorizontal(ToolGroup.type, LumitIcon.text, ready: true),
   typeVertical(ToolGroup.type, LumitIcon.textVertical),
 
@@ -133,7 +114,6 @@ enum ToolMode {
 
   const ToolMode(this.group, this.icon, {this.ready = false});
 
-  /// The toolbar button this tool lives under.
   final ToolGroup group;
 
   /// What it is called — in tooltips, in the flyout, and in the status line.
@@ -227,10 +207,8 @@ enum ToolMode {
 
   final LumitIcon icon;
 
-  /// Whether arming it changes what a drag does yet.
   final bool ready;
 
-  /// Every tool in [group], in declaration order — which is flyout order.
   static List<ToolMode> membersOf(ToolGroup group) =>
       ToolMode.values.where((m) => m.group == group).toList(growable: false);
 
@@ -260,8 +238,6 @@ const Map<String, ToolGroup> toolActions = {
   'tool.camera': ToolGroup.camera,
 };
 
-/// A modifier key held while a tool is armed, which the status line answers
-/// with what the key does to that tool ([ToolMode.hintFor]).
 enum ToolModifier {
   shift,
   alt,
@@ -269,7 +245,6 @@ enum ToolModifier {
   /// The platform's main modifier: Ctrl here, the command key on a Mac.
   mod;
 
-  /// The key's name, spelt as a chord spells it.
   String get label => chordLabel(switch (this) {
         ToolModifier.shift => 'Shift+',
         ToolModifier.alt => 'Alt+',
@@ -277,27 +252,17 @@ enum ToolModifier {
       }).replaceAll('+', '');
 }
 
-/// The axes a 3D layer's move arrows and rotation rings follow.
 enum GizmoAxes { local, world, view }
 
-/// What the Rotation tool turns on a 3D layer: its Orientation, or its X, Y
-/// and Z Rotation, as After Effects' Rotation tool offers.
 enum RotateSets { orientation, rotation }
 
-/// What a camera orbit swings round, After Effects' choice on the camera
-/// tools' options.
 enum CameraPivot {
-  /// What the camera looks at: its point of interest, or the middle of the
-  /// frame at its zoom.
   pointOfInterest,
 
-  /// The point on the layer under the pointer when the drag starts.
   cursor,
 
-  /// The middle of every 3D layer.
   scene,
 
-  /// The middle of the selected 3D layers.
   selection;
 
   String get label => switch (this) {
@@ -353,7 +318,6 @@ Color colourOf(ToolColour c, {double opacity = 1}) => Color.from(
 class ToolsState extends ChangeNotifier {
   ToolMode _tool = ToolMode.select;
 
-  /// The armed tool.
   ToolMode get tool => _tool;
 
   /// This machine can only look at the shared project it is in, so what
@@ -460,8 +424,6 @@ class ToolsState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Which way the 3D handles point: along the layer's own axes, the comp's,
-  /// or the screen's, as After Effects' three axis modes do.
   GizmoAxes _axes = GizmoAxes.local;
   GizmoAxes get axes => _axes;
   set axes(GizmoAxes value) {
@@ -470,8 +432,6 @@ class ToolsState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// What the Rotation tool turns on a 3D layer, Orientation by default as
-  /// in After Effects.
   RotateSets _rotateSets = RotateSets.orientation;
   RotateSets get rotateSets => _rotateSets;
   set rotateSets(RotateSets value) {
@@ -480,8 +440,6 @@ class ToolsState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// The **fill** the drawing tools use: the colour new text is set in,
-  /// and the colour a shape layer's fill will take once there are shape layers.
   ToolColour _fill = ToolColour.white;
   ToolColour get fill => _fill;
   set fill(ToolColour value) {
@@ -490,8 +448,6 @@ class ToolsState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Whether a new shape gets a fill at all: the Fill label's None, as in
-  /// After Effects. Text and paint always use the colour.
   bool _fillOn = true;
   bool get fillOn => _fillOn;
   set fillOn(bool value) {
@@ -506,7 +462,6 @@ class ToolsState extends ChangeNotifier {
   BridgeColourRgba get fillRgba =>
       BridgeColourRgba(r: _fill.r, g: _fill.g, b: _fill.b, a: 1);
 
-  /// The point size new text is set at.
   double _textSize = plainTextSize;
   double get textSize => _textSize;
   set textSize(double value) {
@@ -528,7 +483,6 @@ class ToolsState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// The paragraph new text is set in, kept the same way.
   BridgeParagraphStyle _paragraphStyle = plainParagraphStyle;
   BridgeParagraphStyle get paragraphStyle => _paragraphStyle;
   set paragraphStyle(BridgeParagraphStyle value) {
@@ -550,7 +504,6 @@ class ToolsState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Whether a new shape gets an outline: the Stroke label's None.
   bool _strokeOn = true;
   bool get strokeOn => _strokeOn;
   set strokeOn(bool value) {
@@ -558,10 +511,6 @@ class ToolsState extends ChangeNotifier {
     _strokeOn = value;
     notifyListeners();
   }
-
-  /// The stroke as the bridge wants it, for a shape layer's outline.
-  BridgeColourRgba get strokeRgba =>
-      BridgeColourRgba(r: _stroke.r, g: _stroke.g, b: _stroke.b, a: 1);
 
   double _strokeWidth = 2;
   double get strokeWidth => _strokeWidth;
@@ -596,8 +545,6 @@ class ToolsState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Which shape the brush stamps. Round is the brush everything was
-  /// painted with before there was a choice, and stays the default.
   BridgeBrushShape _brushShape = BridgeBrushShape.round;
   BridgeBrushShape get brushShape => _brushShape;
   set brushShape(BridgeBrushShape value) {
@@ -672,8 +619,6 @@ class ToolsState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// What the camera tools orbit round. The pointer by default, as in After
-  /// Effects.
   CameraPivot _cameraPivot = CameraPivot.cursor;
   CameraPivot get cameraPivot => _cameraPivot;
   set cameraPivot(CameraPivot value) {
@@ -707,7 +652,6 @@ class ToolsState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Arm [group] the way pressing its button does: the member it last had.
   void selectGroup(ToolGroup group) => select(memberOf(group));
 
   /// Arm [group] the way pressing its *chord* does.
@@ -730,7 +674,6 @@ class ToolsState extends ChangeNotifier {
     select(members[at < 0 ? 0 : (at + 1) % members.length]);
   }
 
-  /// Run a keymap action if it is one of the toolbar's, and say whether it was.
   bool handleAction(String action) {
     final group = toolActions[action];
     if (group == null) return false;

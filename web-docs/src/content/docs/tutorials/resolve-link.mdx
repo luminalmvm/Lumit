@@ -1,0 +1,82 @@
+---
+title: Linking a Resolve timeline
+description: Send clips from a DaVinci Resolve timeline to a Lumit composition, work on it, and see it back in Resolve.
+sidebar:
+  order: 18
+---
+
+Clips on a DaVinci Resolve timeline become a Lumit composition, and Resolve shows that
+composition in their place. This is Windows only, and verified with Resolve Studio 21.2.
+What comes across is listed under [DaVinci Resolve link](/use/resolve-link/).
+
+## Set it up
+
+**1. Install the link.** Run the Lumit installer and choose **Lumit with DaVinci Resolve
+linking**, or **Custom installation** and tick **DaVinci Resolve Linking**.
+
+**2. Restart Resolve.**
+
+## Link the clips
+
+**3. Select the clips.** On the Resolve timeline, select the video clips to work on. Add
+any audio clips wanted for reference.
+
+**4. Run the command.** Choose **Workspace ▸ Scripts ▸ Create Lumit Composition**. Lumit
+starts if it is not running.
+
+**5. Choose a Lumit project.** In Lumit, **Lumit project for Resolve** asks once for each
+Resolve project. Press **Create new** and choose where to save it, or **Choose existing**
+and pick a `.lum` file.
+
+**6. Wait for Resolve.** The selected video becomes one clip named **Lumit ·** and the
+composition's name. The original clips are inside it, disabled. The audio clips stay where
+they were.
+
+## Work in Lumit
+
+**7. Open the composition.** The new composition is already fronted in Lumit. From Resolve,
+select the linked clip and press **Open in Lumit** in the **Lumit Composition** effect's
+controls.
+
+**8. Find the placeholders.** A layer named **[Placeholder]** stands for a clip Lumit could
+not bring in: a generator, a title, a nested clip, a retimed clip, or missing media.
+
+**9. Make a change.** Add an effect or a layer.
+
+**10. Look in Resolve.** Move the playhead on the Resolve timeline. The change appears when
+Resolve asks for a new frame.
+
+**11. Save in Lumit.** **File ▸ Save** keeps the work.
+
+## Change the length
+
+**12. Turn on Match duration to Resolve.** It is in the effect's controls. Use it on one
+clip per composition.
+
+**13. Trim the linked clip's end in Resolve.** The composition in Lumit ends where the clip
+ends, at the next frame Resolve asks for. **Edit ▸ Undo** in Lumit takes it back.
+
+## Close Lumit
+
+**14. Close Lumit and look in Resolve.** A new frame shows a card reading **Lumit is
+offline**. An export from Resolve made now contains the card.
+
+**15. Press Open in Lumit.** Lumit starts and opens the project and the composition. The
+picture returns at the next frame Resolve asks for.
+
+## Relink a moved project
+
+**16. Move or rename the `.lum` file.** Do it with Lumit closed.
+
+**17. Press Open in Lumit.** Lumit shows **Linked project not found**.
+
+**18. Press Locate project and pick the file.** Every linked clip from that project
+reconnects. A different Lumit project is refused, and the picker opens again.
+
+Opening the moved file in Lumit yourself reconnects the links too.
+
+## Related
+
+- [DaVinci Resolve link](/use/resolve-link/)
+- [Compositions](/use/compositions/)
+- [Preview and playback](/use/preview/)

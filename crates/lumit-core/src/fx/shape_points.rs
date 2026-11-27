@@ -7,7 +7,6 @@
 //! follows them without a key on any point. That is also why the points never
 //! animate: a list that grows and shrinks has nothing to interpolate.
 
-/// The most points a Shape row holds.
 pub const SHAPE_MAX_POINTS: usize = 32;
 
 /// One Shape row's points, in order round the outline.
@@ -25,7 +24,6 @@ pub struct ShapePoints {
 const _: () = assert!(size_of::<ShapePoints>() <= size_of::<super::params::CurvePoints>());
 
 impl ShapePoints {
-    /// No points at all.
     pub const EMPTY: Self = Self {
         xy: [[0.0; 2]; SHAPE_MAX_POINTS],
         len: 0,
@@ -49,19 +47,16 @@ impl ShapePoints {
         out
     }
 
-    /// The points, in order.
     #[must_use]
     pub fn points(&self) -> &[[f32; 2]] {
         self.xy.get(..self.len as usize).unwrap_or(&[])
     }
 
-    /// How many points there are.
     #[must_use]
     pub fn len(&self) -> usize {
         self.len as usize
     }
 
-    /// Whether there are none.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len == 0

@@ -1,5 +1,3 @@
-//! The built-in flares, compiled in.
-
 use super::design::{Design, Element, Kind};
 
 /// Each built-in flare's group and its design as JSON, in the order the
@@ -69,7 +67,6 @@ pub const BUILT_IN: &[(&str, &str)] = &[
     ("Subtle", include_str!("presets/subtle-wet-glass.flare")),
 ];
 
-/// The groups the built-in flares are filed under.
 pub const GROUPS: &[&str] = &["Natural", "Cinema", "Sci-fi", "Stage", "Sun", "Subtle"];
 
 /// What a fresh Sprite flare draws: the first built-in flare, or a glow with

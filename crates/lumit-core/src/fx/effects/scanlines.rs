@@ -17,7 +17,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Scanlines' controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "scanlines",
@@ -74,7 +73,6 @@ pub struct Scanlines {
     #[toggle(label = "Interlace offset", default = false)]
     pub scanline_interlace: bool,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -105,8 +103,6 @@ impl Scanlines {
     /// moved and the roll stayed, and the phase shifted with the size.
     pub const DERIVED_ROLL_PX: ParamId = ParamId::new("derived.roll_px");
 
-    /// The intensity and roll offset out of a resolved bag: [`Scanlines::
-    /// packed`]'s two missing arguments, so no caller has to know the ids.
     pub fn derived_of(p: Params<'_>) -> (f32, f32) {
         (
             p.float(Self::DERIVED_INTENSITY, 0.0),
@@ -132,7 +128,6 @@ impl Scanlines {
     }
 }
 
-/// Scanlines' behaviour.
 pub struct ScanlinesDef;
 
 impl EffectDef for ScanlinesDef {

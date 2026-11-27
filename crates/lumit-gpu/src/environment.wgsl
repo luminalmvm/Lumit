@@ -115,7 +115,6 @@ fn rand_f(state: ptr<function, u32>) -> f32 {
     return f32((word >> 22u) ^ word) * bitcast<f32>(0x2f800004u);
 }
 
-// Where in the sequence a texel starts, from its place alone.
 fn texel_noise(coords: vec2<u32>, face: u32) -> vec2<f32> {
     var state = (coords.x * 3966231743u) ^ (coords.y * 3928936651u) ^ (face * 1199786941u);
     let a = rand_f(&state);
@@ -185,7 +184,6 @@ fn level_for(pdf: f32, samples: f32) -> f32 {
     return max(0.5 * log2(omega_s / omega_p), 0.0);
 }
 
-// The panorama onto the cube's first level.
 @compute @workgroup_size(8, 8, 1)
 fn to_cube(@builtin(global_invocation_id) id: vec3<u32>) {
     let size = textureDimensions(dst).xy;
@@ -207,7 +205,6 @@ fn keep(@builtin(global_invocation_id) id: vec3<u32>) {
     textureStore(dst, id.xy, 0, textureLoad(src, id.xy, 0, 0));
 }
 
-// A level from the one above, each texel the four above it.
 @compute @workgroup_size(8, 8, 1)
 fn down(@builtin(global_invocation_id) id: vec3<u32>) {
     let size = textureDimensions(dst).xy;
@@ -221,7 +218,6 @@ fn down(@builtin(global_invocation_id) id: vec3<u32>) {
     textureStore(dst, id.xy, id.z, sum * 0.25);
 }
 
-// Bevy's generate_radiance_map: one level of the specular cube.
 @compute @workgroup_size(8, 8, 1)
 fn radiance(@builtin(global_invocation_id) id: vec3<u32>) {
     let size = textureDimensions(dst).xy;
@@ -278,8 +274,6 @@ fn diffuse(@builtin(global_invocation_id) id: vec3<u32>) {
     textureStore(dst, id.xy, id.z, vec4<f32>(sum / f32(params.samples), 1.0));
 }
 
-// The background: the specular cube through the camera, at a level as soft
-// as Background blur asks.
 struct Background {
     env: Environment,
     // The camera's own directions in comp space, a column each.

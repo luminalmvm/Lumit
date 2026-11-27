@@ -1,5 +1,3 @@
-//! Tests for the Viewer and the compositor sharing one camera.
-
 use super::*;
 
 /// The Viewer draws a 3D layer's outline through

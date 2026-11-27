@@ -36,7 +36,6 @@ use crate::fx::{
     registry::EffectMetadata, schema::EffectSchema,
 };
 
-/// How long a moved row takes to arrive, the same ramp Gain uses.
 const SMOOTH_MS: f64 = 5.0;
 
 /// The bottom of the Background row, where it means off rather than very
@@ -47,10 +46,8 @@ pub const BACKGROUND_OFF_DB: f64 = -60.0;
 /// machine that has not got it.
 pub const PACK: &str = "deepfilternet3";
 
-/// The effect's `match_name`, so the code that opens chains can find it.
 pub const MATCH_NAME: &str = <AudioVoice as EffectMetadata>::SCHEMA.match_name;
 
-/// The Voice isolation effect's rows.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "audio_voice",
@@ -59,7 +56,6 @@ pub const MATCH_NAME: &str = <AudioVoice as EffectMetadata>::SCHEMA.match_name;
     category = Audio,
     cost = Heavy,
     roi = Exact,
-    // Sound, so no matte and no picture: the Audio family's rule.
     matte = false,
 )]
 pub struct AudioVoice {
@@ -74,7 +70,6 @@ pub struct AudioVoice {
     /// of the original left in sounds less processed than none.
     #[bounded(min = 0.0, max = 100.0, default = 80.0, unit = Percent)]
     pub wet: f32,
-    /// Play only what the model calls background, to hear what is taken away.
     #[toggle(default = false)]
     pub background_only: bool,
 }
@@ -87,29 +82,24 @@ pub struct Voices {
     pub right: Vec<f32>,
 }
 
-/// What asking a [`VoiceModel`] came to.
 #[derive(Debug, Clone)]
 pub enum Heard {
-    /// The voice in each channel.
     Voice(Arc<Voices>),
     /// Nothing on this machine can find one: no model runtime, or no Voice
     /// addon. The sound goes through untouched and the badge says what to
     /// install.
     Missing,
-    /// The model would not run, with its own sentence for the badge.
     Failed(String),
     /// The bake was stopped part way, so nothing it made will be heard.
     Stopped,
 }
 
-/// The model, as the code that opens the chain hands it in.
 pub trait VoiceModel: Send + Sync {
     /// The voice in `input`, interleaved stereo at `rate`, the whole of a
     /// link's input from its first sample.
     fn voices(&self, input: &[f32], rate: u32) -> Heard;
 }
 
-/// The Voice isolation effect's behaviour.
 pub struct AudioVoiceDef;
 
 impl EffectDef for AudioVoiceDef {
@@ -134,7 +124,6 @@ impl EffectDef for AudioVoiceDef {
     }
 }
 
-/// One open Voice isolation, finding the voice with `model`.
 #[must_use]
 pub fn open(
     values: &[(ParamId, f64)],
@@ -156,7 +145,6 @@ pub fn open(
     })
 }
 
-/// What the rows come to as multipliers.
 struct Levels {
     voice: f64,
     background: f64,
@@ -180,8 +168,6 @@ impl Levels {
     }
 }
 
-/// What the blocks read: the model's answer and the three levels on their way
-/// to what the rows ask.
 struct VoiceState {
     heard: Option<Heard>,
     voice: Smoother,
@@ -189,7 +175,6 @@ struct VoiceState {
     wet: Smoother,
 }
 
-/// One open Voice isolation.
 struct VoiceAudio {
     model: Option<Arc<dyn VoiceModel>>,
     rate: u32,
@@ -302,8 +287,6 @@ mod tests {
         }
     }
 
-    /// One bake of `input` through the effect with `model`, the way the
-    /// chain runs it: the look first, then the blocks.
     fn bake(model: Option<Arc<dyn VoiceModel>>, over: &[(&str, f64)], input: &[f32]) -> Vec<f32> {
         let mut values = harness::values(&AudioVoiceDef, over);
         // The switch goes to the bake as nought or one, which the harness
@@ -342,12 +325,10 @@ mod tests {
             "the same twice"
         );
         assert_eq!(*model.0.lock().unwrap(), 2, "asked once a bake");
-        // Background off and the voice at unity: the voice alone.
         for (got, x) in once.chunks_exact(2).zip(input.chunks_exact(2)) {
             assert!((got[0] - x[0] * 0.5).abs() < 1e-6 && (got[1] - x[1] * 0.25).abs() < 1e-6);
         }
 
-        // The defaults keep a fifth of the original under the voice.
         let default = bake(Some(model.clone()), &[], &input);
         let tail = AUDIO_BLOCK_FRAMES * AUDIO_CHANNELS * 4;
         for (got, x) in default[tail..]
@@ -358,7 +339,6 @@ mod tests {
             assert!((got[0] - want).abs() < 1e-5, "{} against {want}", got[0]);
         }
 
-        // Background only is the input less the voice, whatever the rows say.
         let rest = bake(
             Some(model),
             &[("background_only", 1.0), ("voice", 6.0)],

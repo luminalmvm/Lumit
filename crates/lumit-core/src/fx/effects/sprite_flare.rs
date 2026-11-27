@@ -22,7 +22,6 @@ use crate::fx::{
 use crate::model::{Composition, EffectInstance, EffectParam, EffectValue};
 use lumit_fx_macros::Effect;
 
-/// The panel's twirls, and the rows only one way of finding the light uses.
 pub const SPRITE_FLARE_GROUPS: &[ParamGroup] = &[
     ParamGroup {
         label: "",
@@ -93,17 +92,12 @@ pub const SPRITE_FLARE_GROUPS: &[ParamGroup] = &[
     },
 ];
 
-/// Light from: the Light row.
 pub const POINT: u32 = 0;
 /// Light from: the Light row and Light z, seen through the comp's camera.
 pub const THREE_D_POINT: u32 = 1;
-/// Light from: the comp's Light layers.
 pub const LIGHTS: u32 = 2;
-/// Light from: the bright parts of the layer's own picture.
 pub const BRIGHT_SPOTS: u32 = 3;
-/// Light from: each vertex of one of the layer's masks.
 pub const MASK_POINTS: u32 = 4;
-/// Light from: each point of a points stream wired in.
 pub const POINTS: u32 = 5;
 
 const POINTS_IN: &[Port] = &[Port::new(
@@ -116,8 +110,6 @@ const fn when(param: &'static str, on: &'static str, cond: EnabledCond) -> Enabl
     EnabledWhen { param, on, cond }
 }
 
-/// The Light row is only where the light is while nothing else finds it, and
-/// the Lights rows each mean something to some of the ways only.
 pub const SPRITE_FLARE_ENABLED_WHEN: &[EnabledWhen] = &[
     when("light_x", "light_from", EnabledCond::ChoiceIsNot(LIGHTS)),
     when(
@@ -170,7 +162,6 @@ pub const MAX_LIGHTS: usize = 64;
 /// vertices.
 pub const MAX_LIGHT_LAYERS: usize = 16;
 
-/// `<prefix><n>` for n up to [`MAX_LIGHTS`], as one const array.
 macro_rules! ids {
     ($prefix:literal) => {
         ids!($prefix; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
@@ -201,7 +192,6 @@ macro_rules! ids {
     enabled_when = SPRITE_FLARE_ENABLED_WHEN,
 )]
 pub struct SpriteFlare {
-    /// Opens the Flare window.
     #[action(label = "Edit flare…")]
     pub edit_flare: (),
 
@@ -209,13 +199,9 @@ pub struct SpriteFlare {
     #[slider(min = 0.0, max = 3840.0, default = 640.0, unit = Px)]
     pub light_x: f32,
 
-    /// See [`light_x`](Self::light_x).
     #[slider(min = 0.0, max = 2160.0, default = 360.0, unit = Px)]
     pub light_y: f32,
 
-    /// Where the light comes from: the Light row, that row as a point in the
-    /// comp's 3D space, the comp's Light layers, the bright parts of the
-    /// layer's own picture, or the corners of one of its masks.
     #[choice(
         label = "Light from",
         options = ["Point", "3D point", "Lights", "Bright spots", "Mask points", "Points"],
@@ -300,11 +286,9 @@ pub struct SpriteFlare {
     #[slider(label = "Centre X", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
     pub centre_x: f32,
 
-    /// See [`centre_x`](Self::centre_x).
     #[slider(label = "Centre Y", min = 0.0, max = 2160.0, default = 540.0, unit = Px)]
     pub centre_y: f32,
 
-    /// How far the brightness dips at random.
     #[slider(
         label = "Amount",
         min = 0.0,
@@ -332,11 +316,9 @@ pub struct SpriteFlare {
     #[counter(label = "Seed", min = 0, max = 999, default = 1, hard_min = 0, unit = Raw)]
     pub flicker_seed: i32,
 
-    /// A Light layer's own colour, or a spot's, tints the flare.
     #[toggle(label = "Use light colour", default = true)]
     pub use_light_colour: bool,
 
-    /// A Light layer's Intensity scales its flare.
     #[toggle(label = "Use light intensity", default = true)]
     pub use_light_intensity: bool,
 
@@ -350,7 +332,6 @@ pub struct SpriteFlare {
     #[layer(label = "Hide behind", self_default = false)]
     pub hide_behind: bool,
 
-    /// What of Hide behind covers the light: its alpha or its luma.
     #[choice(label = "Channel", options = ["Alpha", "Luma"], default = 0)]
     pub hide_channel: u32,
 
@@ -387,7 +368,6 @@ pub struct SpriteFlare {
     #[layer(label = "Texture layer", self_default = false)]
     pub texture_layer: bool,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -516,8 +496,6 @@ impl SpriteFlare {
         Some(lights)
     }
 
-    /// How to find the lights in the picture while Light from is Bright
-    /// spots and the flare draws at all.
     pub fn spots(p: Params<'_>) -> Option<Spots> {
         let s = Self::read(p);
         let mix = (s.mix / 100.0).clamp(0.0, 1.0);
@@ -545,8 +523,6 @@ impl SpriteFlare {
     }
 }
 
-/// How Bright spots finds its lights: Lens flare's detection, and what each
-/// spot it finds becomes. See [`raster::spots`].
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Spots {
     pub threshold: f32,
@@ -559,7 +535,6 @@ pub struct Spots {
 /// One light the resolve found: comp x, y, gain and scale, and its colour.
 type Found = ([f32; 4], [f32; 3]);
 
-/// The lights at `d` seconds from the frame `cx` resolves, in `mode`.
 fn lights_at(cx: &ResolveCx<'_>, comp: &Composition, mode: u32, d: f64) -> Vec<Found> {
     let ctx = &cx.context;
     let on = |id: &str, default: bool| cx.inst.bool_of(id).unwrap_or(default);
@@ -681,7 +656,6 @@ pub fn design_of(kept: Option<&(u64, String)>) -> Arc<Design> {
     design
 }
 
-/// A version 1 row, as version 1 declared it.
 const fn v1_row(
     id: &'static str,
     label: &'static str,
@@ -733,7 +707,6 @@ const V1_PARAMS: [ParamSchema; 9] = [
     },
 ];
 
-/// Whether `e` kept the version 1 rows.
 fn keeps_v1_rows(e: &EffectInstance) -> bool {
     V1_PARAMS.iter().any(|row| e.param(row.id).is_some())
 }
@@ -871,7 +844,6 @@ pub fn migrate_v1(e: &mut EffectInstance, w: f64, h: f64, wired: &dyn Fn(&str) -
     e.effect.version = 2;
 }
 
-/// Sprite flare's behaviour.
 pub struct SpriteFlareDef;
 
 impl EffectDef for SpriteFlareDef {
@@ -883,7 +855,6 @@ impl EffectDef for SpriteFlareDef {
         moves_with_time(inst)
     }
 
-    /// The version 1 rows an old flare kept because they move.
     fn derived(&self, inst: &EffectInstance) -> &'static [ParamSchema] {
         if keeps_v1_rows(inst) {
             &V1_PARAMS
@@ -969,7 +940,6 @@ impl EffectDef for SpriteFlareDef {
                 samples = at(&comp.motion_blur.offsets(wanted));
             }
         }
-        // A light that holds still across the shutter is drawn once.
         let lights: Vec<Found> = if samples.iter().all(|s| *s == now) {
             now
         } else {

@@ -51,7 +51,6 @@ fn decoded(job: &CompJob) -> CompLayerPixels {
     lp
 }
 
-// A frame planned, decoded and built, with the plan to look at.
 fn built(
     doc: &Document,
     comp: &Composition,
@@ -66,7 +65,6 @@ fn built(
     (jobs.len(), draws)
 }
 
-// The source frame a draw shows.
 fn shows(draw: &CompLayerDraw) -> u8 {
     match &draw.source {
         DrawSource::Pixels { rgba, .. } => rgba[0],
@@ -91,7 +89,6 @@ fn starting(layer: &mut Layer, start: i64) {
     layer.start_offset = CompTime(Rational::new(start, 1).unwrap());
 }
 
-// A layer of comp `nested`, showing it `ahead` seconds on from the frame.
 fn placed(nested: Uuid, ahead: i64) -> Layer {
     let mut l = text_layer(0.0);
     l.kind = LayerKind::Precomp { comp: nested };
@@ -110,7 +107,6 @@ fn a_comp_shown_at_two_times_draws_each_from_its_own_frame() {
     let id = nested.id;
     doc.items.push(ProjectItem::Composition(nested));
 
-    // Once decodes once, and twice at one time is one picture.
     let one = placed(id, 0);
     let (jobs, _) = built(&doc, &comp_with(10, vec![one]), 1.0, &probes);
     assert_eq!(jobs, 1, "one layer, one decode");
@@ -120,7 +116,6 @@ fn a_comp_shown_at_two_times_draws_each_from_its_own_frame() {
     assert_eq!(jobs, 1, "one time, one decode");
     assert_eq!(ids.map(|l| shows(of(&draws, l))), [30, 30]);
 
-    // By start time and by Retime, and with the frame order either way round.
     let (a, b, mut c) = (placed(id, 0), placed(id, 2), placed(id, 0));
     c.retime = Some(Property::fixed(5.0));
     let ids = [a.id, b.id, c.id];
@@ -133,7 +128,6 @@ fn a_comp_shown_at_two_times_draws_each_from_its_own_frame() {
         assert_eq!(ids.map(|l| shows(of(&draws, l))), [10, 30, 50]);
     }
 
-    // A clip on a Sequence layer, next to a Precomp layer of the same comp.
     let at = |s| Rational::new(s, 1).unwrap();
     let mut seq = text_layer(0.0);
     seq.kind = LayerKind::Sequence {
@@ -143,7 +137,6 @@ fn a_comp_shown_at_two_times_draws_each_from_its_own_frame() {
     let (_, draws) = built(&doc, &comp_with(10, vec![a.clone(), seq]), 1.0, &probes);
     assert_eq!(ids.map(|l| shows(of(&draws, l))), [10, 50]);
 
-    // A hidden Precomp read as the matte of another of the same comp.
     let mut source = placed(id, 2);
     source.switches.visible = false;
     let mut matted = a.clone();
@@ -162,7 +155,6 @@ fn a_comp_shown_at_two_times_draws_each_from_its_own_frame() {
         .expect("a comp matte");
     assert_eq!((shows(d), shows(&inner.draws[0])), (10, 30));
 
-    // Held by a Posterize Time above both: each holds its own frame.
     let post = posterize_adjustment(1.0);
     let post_id = post.id;
     let comp = comp_with(10, vec![post, a.clone(), b.clone()]);
@@ -170,7 +162,6 @@ fn a_comp_shown_at_two_times_draws_each_from_its_own_frame() {
     let held = of(&draws, post_id).temporal_below.as_ref().expect("held");
     assert_eq!([a.id, b.id].map(|l| shows(of(&held.draws, l))), [10, 30]);
 
-    // The moments an effect reads are the ones of its own layer's frame.
     let mut reader = b.clone();
     reader.effects = vec![previous_frame_effect()];
     let (_, draws) = built(&doc, &comp_with(10, vec![a.clone(), reader]), 1.0, &probes);
@@ -179,7 +170,6 @@ fn a_comp_shown_at_two_times_draws_each_from_its_own_frame() {
     assert_eq!((shows(d), neighbours), (30, vec![29, 31]));
     assert_eq!(shows(of(&draws, a.id)), 10);
 
-    // A node graph placed twice, and one applied by two layers.
     let (read, out) = (Uuid::now_v7(), Uuid::now_v7());
     let mut graph = comp_with(10, Vec::new());
     let wired = CompGraph {

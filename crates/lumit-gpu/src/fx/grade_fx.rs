@@ -11,7 +11,6 @@ use crate::GpuContext;
 
 use super::{work_texture, FxEngine};
 
-/// How many `vec4`s the uniform holds.
 pub const GRADE_WORDS: usize = 16;
 
 pub(super) struct GradeFx {
@@ -50,7 +49,6 @@ impl GradeFx {
     }
 }
 
-/// Built on first use.
 pub(super) type LazyGrade = OnceLock<GradeFx>;
 
 impl FxEngine {

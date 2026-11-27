@@ -47,7 +47,6 @@ use lumit_fx_macros::Effect;
 /// stop part-way through this.
 const MAX_TESTS: u64 = 50_000_000;
 
-/// The wire-only data input (points-stream.md §4.1).
 pub const POINTS_PORT: &str = "points";
 
 /// What this effect consumes. Not `three_d`: a web is drawn on the layer's own
@@ -66,8 +65,6 @@ const fn group(label: &'static str, params: &'static [&'static str]) -> ParamGro
     }
 }
 
-/// Which pairs are joined, what the line between them looks like, and the
-/// budget under the family's own heading.
 pub const CONNECT_GROUPS: &[ParamGroup] = &[
     group(
         "Connections",
@@ -97,8 +94,6 @@ const fn grey(param: &'static str, cond: EnabledCond) -> EnabledWhen {
     }
 }
 
-/// Max connections is read by Nearby and Nearest, and the other modes name
-/// their pairs. Nearest has no Max distance, and only In order can close.
 pub const CONNECT_ENABLED_WHEN: &[EnabledWhen] = &[
     grey("max_links", EnabledCond::ChoiceIsNot(1)),
     grey("max_links", EnabledCond::ChoiceIsNot(2)),
@@ -106,8 +101,6 @@ pub const CONNECT_ENABLED_WHEN: &[EnabledWhen] = &[
     grey("max_distance", EnabledCond::ChoiceIsNot(4)),
     grey("closed", EnabledCond::ChoiceIs(1)),
     grey("order_name", EnabledCond::ChoiceIs(1)),
-    // The first group is read by both of Between's choices, the second only
-    // by the one that joins two.
     EnabledWhen {
         param: "between_from",
         on: "between",
@@ -120,7 +113,6 @@ pub const CONNECT_ENABLED_WHEN: &[EnabledWhen] = &[
     },
 ];
 
-/// Which pairs of points are joined.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ConnectMode {
     /// Every pair within Max distance, up to Max connections at each point.
@@ -129,9 +121,7 @@ pub enum ConnectMode {
     /// Each point to the next one, in the order of the number each carries,
     /// which is its place in the stream until something above sets it.
     InOrder,
-    /// The edges of a triangulation of the points.
     Triangles,
-    /// Only the edges round the outside of them.
     Outline,
     /// Each point to its Max connections nearest, however far off they are.
     Nearest,
@@ -156,10 +146,8 @@ impl ConnectMode {
     }
 }
 
-/// Which points a line may run between.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Between {
-    /// Any two.
     #[default]
     All,
     /// Two picked points. The rest are left out altogether.
@@ -170,7 +158,6 @@ pub enum Between {
 }
 
 impl Between {
-    /// The Choice option labels, in code order.
     pub const OPTIONS: &'static [&'static str] = &["All points", "Picked", "Picked and the rest"];
 
     /// The rule for a stored Choice index. Anything unknown is All.
@@ -184,7 +171,6 @@ impl Between {
     }
 }
 
-/// Connect points' controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "connect_points",
@@ -257,7 +243,6 @@ pub struct ConnectPoints {
     )]
     pub max_links: i32,
 
-    /// Join the last point of In order back to the first.
     #[toggle(label = "Closed", default = false)]
     pub closed: bool,
 
@@ -306,7 +291,6 @@ pub struct ConnectPoints {
     )]
     pub width: f32,
 
-    /// How soft a line's edge is, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -339,7 +323,6 @@ pub struct ConnectPoints {
     )]
     pub max_points: i32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -357,7 +340,6 @@ impl ConnectPoints {
     /// pixels the frame is drawn at.
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
 
-    /// This instance's raster factor, read back out of a resolved bag.
     #[must_use]
     pub fn px_scale_of(p: Params<'_>) -> f32 {
         p.float(Self::DERIVED_PX_SCALE, 1.0)
@@ -383,7 +365,6 @@ impl ConnectPoints {
     pub fn links(self, in_stream: &PointsStream) -> (PointsStream, Vec<[f32; 3]>) {
         let mut points = in_stream.clone();
         let between = Between::from_code(self.between);
-        // Picked alone is the same web drawn over the picked points only.
         let from = in_stream.group(self.between_from.as_str());
         let to = self.between_to.as_str();
         if between == Between::Picked {
@@ -408,8 +389,6 @@ impl ConnectPoints {
             return (out, tails);
         }
         let across = between == Between::PickedAndRest;
-        // One end in the first group and the other in the second, either
-        // way round. With no names those are the picked points and the rest.
         let first = |i: usize| points.in_group(from, 0.5, i);
         let rest = points.column(to);
         let second = |i: usize| match to {
@@ -449,8 +428,6 @@ impl ConnectPoints {
             self.colour[2] * a,
             a,
         ];
-        // One line from point `i` to point `j`, `d` apart, where `span` is
-        // the length that reads as fully faded.
         let mut join = |i: usize, j: usize, d: f32, span: f32| {
             // How far along its own reach this line is: 0 for two points on
             // top of each other, 1 at exactly Max distance.
@@ -479,8 +456,6 @@ impl ConnectPoints {
         };
 
         if mode != ConnectMode::Nearby {
-            // The other modes name their pairs outright. A pair further apart
-            // than Max distance is still not joined.
             let mut pairs = match mode {
                 ConnectMode::InOrder => {
                     // By the number each point carries. The sort keeps the
@@ -586,27 +561,17 @@ impl ConnectPoints {
         apart: &dyn Fn(usize, usize) -> f32,
         allowed: &dyn Fn(usize, usize) -> bool,
     ) -> Vec<(usize, usize)> {
-        // ponytail: a sorted sweep, not a tree. The ceiling is a stream that
-        // is tall and thin, where every point is close across to every other
-        // and the sweep asks all of them, so n points cost n² distances. A
-        // k-d tree is the upgrade if a column of points has to be fast. Until
-        // then the sweep stops at [`MAX_TESTS`], in the same place every
-        // time, so the frame comes back and comes back the same.
         let x = |i: usize| flat.get(i).map_or(0.0, |p| p[0]);
         let mut tests = 0u64;
         let mut by_x: Vec<usize> = (0..flat.len()).collect();
         by_x.sort_by(|a, b| x(*a).total_cmp(&x(*b)).then(a.cmp(b)));
         let mut pairs: Vec<(usize, usize)> = Vec::new();
-        // The nearest so far, closest first, and the lower index first at
-        // equal distance.
         let mut best: Vec<(f32, usize)> = Vec::with_capacity(k + 1);
         for (at, &i) in by_x.iter().enumerate() {
             if pairs.len() >= points::CAP_HARD as usize || tests >= MAX_TESTS {
                 break;
             }
             best.clear();
-            // False once `j` is too far across for anything beyond it to be
-            // nearer than what is already held.
             let mut consider = |j: usize| {
                 let kth = best.get(k.saturating_sub(1)).map_or(f32::INFINITY, |b| b.0);
                 if (x(j) - x(i)).abs() > kth {
@@ -652,7 +617,6 @@ impl ConnectPoints {
     fn mesh(seen: &[[f32; 2]], outline: bool) -> Vec<(usize, usize)> {
         use spade::{DelaunayTriangulation, Point2, Triangulation};
         let mut mesh: DelaunayTriangulation<Point2<f64>> = DelaunayTriangulation::new();
-        // Which point each vertex of the mesh stands for.
         let mut owner: Vec<usize> = Vec::new();
         for (i, p) in seen.iter().enumerate() {
             let Ok(v) = mesh.insert(Point2::new(f64::from(p[0]), f64::from(p[1]))) else {
@@ -701,26 +665,6 @@ impl ConnectPoints {
         (axis(p[0]), axis(p[1]))
     }
 
-    /// The projected plane cut into squares of one Max distance, each holding
-    /// the indices that fall in it, in ascending order.
-    ///
-    /// **This is what keeps the pairing off the `n²` path.** Two points further
-    /// apart than one square cannot be within reach of each other, so the nine
-    /// squares around a point are the whole of what it has to ask — which makes
-    /// the walk `O(n · k)` for `k` the crowd in a neighbourhood rather than
-    /// `O(n²)` for the whole field.
-    ///
-    /// (ponytail: uniform buckets, no rebalancing. The ceiling is a *clump*:
-    /// `m` points inside one square is `O(m²)` distance tests again, and the
-    /// only things that bound it are Max points — 200 000 on the slider, a
-    /// million at `points::CAP_HARD` — and Max connections, at most 64, ending
-    /// each point's inner walk early. A hundredth of a default field in one
-    /// square is 2000 points and four million tests for that square alone. The
-    /// trigger is the shape that produces it rather than a profile: a
-    /// Particulate stream emitted from a tight nozzle, or any bag whose points
-    /// pile into far less than the frame, missing docs/13 §2's B12–B14 while
-    /// the same point count spread evenly holds them. That comp wants a k-d
-    /// tree or a sorted sweep here.)
     #[must_use]
     fn buckets(seen: &[[f32; 2]], reach: f32) -> HashMap<(i32, i32), Vec<u32>> {
         let mut cells: HashMap<(i32, i32), Vec<u32>> = HashMap::with_capacity(seen.len());
@@ -731,8 +675,6 @@ impl ConnectPoints {
         cells
     }
 
-    /// How the web is drawn — capsules through the shared kernel, and the
-    /// host Mix.
     #[must_use]
     pub fn draw_style(self) -> points::DrawStyle {
         points::DrawStyle {
@@ -762,7 +704,6 @@ impl EffectDef for ConnectPointsDef {
         &<ConnectPoints as EffectMetadata>::SCHEMA
     }
 
-    /// A picture in, a picture out, and a **stream in** beside it.
     fn signature(&self) -> Signature {
         Signature::Image {
             inputs: POINTS_IN,

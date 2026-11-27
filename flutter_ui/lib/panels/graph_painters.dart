@@ -8,13 +8,6 @@ import 'package:lumit_flutter/src/rust/api/effect.dart';
 
 import '../widgets/controls.dart';
 
-// ---------------------------------------------------------------------------
-// Painters.
-// ---------------------------------------------------------------------------
-
-/// A keyframe's glyph, coded by interpolation: diamond for linear, circle for
-/// an eased (bezier) key, square for hold — the same coding the lanes will
-/// learn (docs/07 §4.3). On the speed lens every dot is a circle.
 class KeyGlyphPainter extends CustomPainter {
   final BridgeKeyframe key_;
   final Color colour;
@@ -70,8 +63,6 @@ class HandleDotPainter extends CustomPainter {
   final Color colour;
   final Color fill;
 
-  /// The pointer is over the ring's target: the stroke comes up to full
-  /// strength, and goes back down when it leaves (P1 — nothing at rest).
   final bool hovered;
 
   const HandleDotPainter(

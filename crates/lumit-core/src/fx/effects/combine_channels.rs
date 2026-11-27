@@ -24,31 +24,24 @@ use lumit_fx_macros::Effect;
     label = "Combine channels",
     version = 1,
     category = Compositing,
-    // Three Set channels passes.
     cost = Trivial,
     roi = FullFrame,
-    // Nothing to dissolve, as the Merge has nothing.
     matte = false,
 )]
 pub struct CombineChannels {
-    /// Which channel of the Red socket's picture makes the red.
     #[choice(label = "Red from", options = *CHANNEL_OPTIONS, default = 0)]
     pub red_from: u32,
 
-    /// Which channel of the Green socket's picture makes the green.
     #[choice(label = "Green from", options = *CHANNEL_OPTIONS, default = 0)]
     pub green_from: u32,
 
-    /// Which channel of the Blue socket's picture makes the blue.
     #[choice(label = "Blue from", options = *CHANNEL_OPTIONS, default = 0)]
     pub blue_from: u32,
 
-    /// Which channel of the Alpha socket's picture makes the alpha.
     #[choice(label = "Alpha from", options = *CHANNEL_OPTIONS, default = 0)]
     pub alpha_from: u32,
 }
 
-/// Combine channels' behaviour: none of its own, for the Merge's reason.
 pub struct CombineChannelsDef;
 
 impl EffectDef for CombineChannelsDef {

@@ -1,5 +1,3 @@
-// The shared placeholder a panel shows before its phase makes it live
-// (docs/archive/flutter-port/05-PARITY-CHECKLIST.md).
 
 import 'package:flutter/widgets.dart';
 
@@ -11,7 +9,6 @@ class PlaceholderPanel extends StatelessWidget {
   final String title;
   final String hint;
 
-  /// A button under the hint, when there is something to do about it.
   final Widget? action;
 
   const PlaceholderPanel({

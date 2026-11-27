@@ -1,5 +1,3 @@
-//! The jobs signature: what decides whether an edit changed the sound.
-
 use lumit_render::mix::jobs::AudioJob;
 
 /// A change-detection fingerprint of a comp's mixed audio — the bridge twin of
@@ -133,8 +131,6 @@ fn hash_chain(
     }
 }
 
-/// Fold one Volume animation into the signature: static hashes as one f64,
-/// keyframed hashes every key.
 fn hash_animation(
     h: &mut std::collections::hash_map::DefaultHasher,
     a: &lumit_core::anim::Animation,

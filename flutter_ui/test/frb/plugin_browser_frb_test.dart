@@ -21,7 +21,6 @@ import 'package:lumit_flutter/src/rust/api/effect.dart';
 
 import 'frb_test_support.dart';
 
-/// One catalogue entry, as `list_effects` hands it over.
 BridgeEffectInfo entry({
   required String name,
   required String label,
@@ -40,8 +39,6 @@ BridgeEffectInfo entry({
       otherNames: const [],
     );
 
-/// One built-in and two plugins: one that declared a grouping, one that did
-/// not — the two headings the panel has to find words for.
 List<BridgeEffectInfo> aCatalogueWithPlugins() => [
       entry(
         name: 'blur',
@@ -116,16 +113,12 @@ void main() {
       final p = freshProject();
       await mount(tester, p);
 
-      // Under the plugin's own declared menu path, not under one of ours.
       expect(find.text('Example/Distort'), findsOneWidget);
       expect(find.byKey(const ValueKey('fx-item-ofx:com.example.wobbler')),
           findsOneWidget);
 
-      // A plugin that declared no grouping gets the panel's own word for it,
-      // rather than a blank heading.
       expect(find.text('Plugins'), findsOneWidget);
 
-      // And it folds exactly as a category does.
       await tester
           .tap(find.byKey(const ValueKey('fx-group-ofx/Example/Distort')));
       await tester.pump();
@@ -190,12 +183,9 @@ void main() {
       expect(find.byKey(picture), findsOneWidget,
           reason: 'the picture effect stays in the stack above');
 
-      // The machine running this has no such plugin, so the card wears the
-      // calm badge the OFX grammar defined — rows kept, nothing lost.
       expect(find.text('This plugin is not installed on this machine'),
           findsOneWidget);
 
-      // The heading twirls its rack away and back, leaving the stack alone.
       await tester.tap(find.byKey(const ValueKey('fx-audio-group')));
       await tester.pump();
       expect(find.byKey(plugin), findsNothing);

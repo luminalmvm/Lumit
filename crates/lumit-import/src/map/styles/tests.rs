@@ -73,7 +73,6 @@ fn square() -> TransformGroup {
     }
 }
 
-/// Map `slots` and hand back the styles and the report they raised.
 fn mapped(slots: Vec<Property>, transform: &TransformGroup) -> (Vec<EffectInstance>, ImportReport) {
     let mut report = ImportReport::default();
     let mut conv = Conv {
@@ -95,7 +94,6 @@ fn mapped(slots: Vec<Property>, transform: &TransformGroup) -> (Vec<EffectInstan
     (out, report)
 }
 
-/// One style's still parameter, as the number it holds.
 fn value_of(style: &EffectInstance, id: &str) -> f64 {
     match &style.params.iter().find(|p| p.id == id).expect(id).value {
         EffectValue::Float(p) => match &p.animation {
@@ -108,7 +106,6 @@ fn value_of(style: &EffectInstance, id: &str) -> f64 {
     }
 }
 
-/// After Effects' Drop Shadow at its own defaults.
 fn ae_drop_shadow(enabled: bool) -> Property {
     slot(
         "dropShadow/enabled",
@@ -128,13 +125,6 @@ fn ae_drop_shadow(enabled: bool) -> Property {
     )
 }
 
-// ---------------------------------------------------------------------------
-// The assertions
-// ---------------------------------------------------------------------------
-
-/// **A switched-off slot is a style nobody added.** After Effects lists all ten
-/// on any layer that has ever carried the group, so importing the off ones
-/// would dress every such layer in styles the user never applied.
 #[test]
 fn only_the_styles_after_effects_reports_as_on_are_imported() {
     let (styles, report) = mapped(vec![ae_drop_shadow(false)], &square());
@@ -146,9 +136,6 @@ fn only_the_styles_after_effects_reports_as_on_are_imported() {
     );
 }
 
-/// **The angle formula, and the rest of the shadow's dials.** After Effects'
-/// 120° default becomes 150° — down and to the right, which is where the
-/// default shadow is.
 #[test]
 fn a_drop_shadow_maps_its_angle_opacity_and_distances() {
     let (styles, _) = mapped(vec![ae_drop_shadow(true)], &square());
@@ -157,7 +144,6 @@ fn a_drop_shadow_maps_its_angle_opacity_and_distances() {
     assert!(shadow.enabled);
 
     assert!((value_of(shadow, "direction") - 150.0).abs() < 1e-9);
-    // Per cent one for one: the DOM hands per cent, not the format's byte.
     assert!((value_of(shadow, "opacity") - 75.0).abs() < 1e-9);
     assert!((value_of(shadow, "distance") - 5.0).abs() < 1e-9);
     assert!((value_of(shadow, "softness") - 5.0).abs() < 1e-9);
@@ -168,8 +154,6 @@ fn a_drop_shadow_maps_its_angle_opacity_and_distances() {
     );
 }
 
-/// **Photoshop's order, whatever order the capture listed them in**, and one
-/// instance of each.
 #[test]
 fn the_styles_come_out_in_the_pinned_painting_order() {
     let stroke = slot(
@@ -192,7 +176,6 @@ fn the_styles_come_out_in_the_pinned_painting_order() {
             leaf("solidFill/opacity", 100.0),
         ],
     );
-    // Deliberately backwards from §2's order.
     let (styles, _) = mapped(vec![stroke, fill, ae_drop_shadow(true)], &square());
     assert_eq!(
         styles
@@ -201,7 +184,6 @@ fn the_styles_come_out_in_the_pinned_painting_order() {
             .collect::<Vec<_>>(),
         vec!["style_drop_shadow", "style_colour_overlay", "style_stroke",]
     );
-    // Stroke's Position: After Effects' Outside is Lumit's first entry.
     let stroke = styles.last().expect("the stroke");
     assert!(value_of(stroke, "position").abs() < 1e-9);
 }

@@ -11,7 +11,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// sRGB curve's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "srgb_curve",
@@ -27,7 +26,6 @@ pub struct SrgbCurve {
     #[choice(options = ["Linear to sRGB", "sRGB to linear"], default = 0)]
     pub direction: u32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -40,7 +38,6 @@ pub struct SrgbCurve {
 }
 
 impl SrgbCurve {
-    /// True to decode, and the mix. Both render paths read this one method.
     pub fn packed(self) -> (bool, f32) {
         (self.direction == 1, (self.mix / 100.0).clamp(0.0, 1.0))
     }
@@ -61,7 +58,6 @@ pub fn srgb_curve_at(v: f32, decode: bool) -> f32 {
     y.copysign(v)
 }
 
-/// sRGB curve's behaviour.
 pub struct SrgbCurveDef;
 
 impl EffectDef for SrgbCurveDef {
@@ -112,8 +108,6 @@ mod tests {
         crate::fx::cpu::apply_stack(rgba, 1, (rgba.len() / 4) as u32, &ops);
     }
 
-    // An imported Photoshop adjustment sits between these two, so a wrong
-    // curve is a wrong picture.
     #[test]
     fn the_curve_lands_on_srgb_and_the_two_directions_undo_each_other() {
         let start = [0.214, 0.001, -0.5, 1.0, 0.25, 0.5, 2.0, 0.5];

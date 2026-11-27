@@ -12,7 +12,6 @@ import '../state/file_dialogs.dart';
 import '../widgets/controls.dart';
 import 'dialog_frame.dart';
 
-/// What a permission lets an extension do, as a line the person reads.
 String extensionPermissionText(BridgeExtensionPermission permission) =>
     switch (permission) {
       BridgeExtensionPermission.project => l10n.extensionCanProject,
@@ -23,12 +22,10 @@ String extensionPermissionText(BridgeExtensionPermission permission) =>
       BridgeExtensionPermission.edit => l10n.extensionCanEdit,
     };
 
-/// Why an extension could not be read or installed, as a sentence.
 String extensionOutcomeText(BridgeExtensionOutcome outcome) =>
     switch (outcome) {
       BridgeExtensionOutcome_Ready() => '',
       BridgeExtensionOutcome_NotAnExtension() => l10n.extensionNotOne,
-      // The engine's own sentence, which names the rule the manifest broke.
       BridgeExtensionOutcome_Invalid(:final why) => why,
       BridgeExtensionOutcome_Newer(:final version) =>
         l10n.extensionNewer(version),
@@ -37,8 +34,6 @@ String extensionOutcomeText(BridgeExtensionOutcome outcome) =>
       BridgeExtensionOutcome_Failed() => l10n.extensionFailed,
     };
 
-/// Pick a folder and install the extension in it, once the person has read
-/// what it asks for and agreed. Says how it went in the bottom strip.
 Future<void> installExtensionFromFolder(
     BuildContext context, LumitState app, ExtensionService service) async {
   final folder = await pickFolder();
@@ -58,7 +53,6 @@ Future<void> installExtensionFromFolder(
   _say(app, await service.install(folder));
 }
 
-/// Pick a `.lfx` package and install it, as [installExtensionPackage] does.
 Future<void> installExtensionFromPackage(
     BuildContext context, LumitState app, ExtensionService service) async {
   final path = await pickExtensionPackage();
@@ -66,9 +60,6 @@ Future<void> installExtensionFromPackage(
   await installExtensionPackage(context, app, service, path);
 }
 
-/// Install the package at [path] once the person has read what it adds and
-/// agreed, into Lumit's own folder or one they pick. A double-clicked or
-/// dropped package comes here too.
 Future<void> installExtensionPackage(BuildContext context, LumitState app,
     ExtensionService service, String path) async {
   final read = await service.inspectPackage(path);
@@ -103,8 +94,6 @@ void _say(LumitState app, BridgeExtensionOutcome outcome) {
   }
 }
 
-/// Pick an extension's folder and save it as `<id>.lfx` where the person
-/// says, checked as an install would check it.
 Future<void> makeExtensionPackage(
     LumitState app, ExtensionService service) async {
   final folder = await pickFolder();

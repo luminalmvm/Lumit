@@ -262,7 +262,6 @@ pub struct HueSaturation {
     )]
     pub magentas_lightness: f32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -331,7 +330,6 @@ impl HueSaturation {
     }
 }
 
-/// Hue and saturation's behaviour.
 pub struct HueSaturationDef;
 
 impl EffectDef for HueSaturationDef {

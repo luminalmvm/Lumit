@@ -1,8 +1,5 @@
-//! Tests for the effect ops.
-
 use super::*;
 
-/// A tiny valid `.cube` of `size`, with an optional declared domain.
 fn cube_text(size: usize, domain: Option<([f32; 3], [f32; 3])>) -> String {
     let mut s = format!("LUT_3D_SIZE {size}\n");
     if let Some((lo, hi)) = domain {
@@ -47,8 +44,6 @@ fn an_edited_cube_is_read_again() {
     assert_eq!(first.size, 2);
     assert_eq!(cache.len(), 1);
 
-    // Re-asking without touching the file is a cache hit: still one entry,
-    // still the cube that was parsed the first time.
     let again = cache.get_or_load(&ctx, &name).expect("loaded");
     assert_eq!(cache.len(), 1, "an untouched file is not read twice");
     assert_eq!(again.size, first.size);
@@ -67,10 +62,6 @@ fn an_edited_cube_is_read_again() {
     );
 }
 
-// ----- The per-effect cache -----
-
-/// A stack of built-in effects with one float parameter set on each:
-/// `(match_name, param id, value)`.
 fn stack(spec: &[(&str, &str, f32)]) -> lumit_core::fx::params::ResolvedStack {
     let insts: Vec<_> = spec
         .iter()
@@ -109,7 +100,6 @@ fn source(ctx: &GpuContext) -> Tex {
     lumit_gpu::fx::common::upload_linear_f32(ctx, &px, W, H)
 }
 
-/// `run_ops` with every side list empty, through `cache` under `key`.
 fn run(
     fx: &FxEngine,
     ctx: &GpuContext,
@@ -194,8 +184,6 @@ fn long_stack(n: usize) -> lumit_core::fx::params::ResolvedStack {
     stack(&spec)
 }
 
-/// **The second rung of the ladder** (docs/13 §4): under pressure the cold
-/// half of the intermediates goes, and the ledger hears about it.
 #[test]
 fn a_card_under_pressure_gives_back_the_cold_intermediates() {
     let Some(ctx) = lumit_gpu::test_support::lease() else {
@@ -356,8 +344,6 @@ fn a_passthrough_op_does_not_hand_the_layers_source_back_to_the_pool() {
     );
 }
 
-/// One custom-shader instance holding `source`, resolved as the walk
-/// resolves it.
 fn shader_stack(source: &str) -> lumit_core::fx::params::ResolvedStack {
     let mut inst = lumit_core::fx::builtins::instantiate("custom_shader").expect("a built-in");
     let mut block = serde_json::Map::new();
@@ -374,10 +360,6 @@ fn shader_stack(source: &str) -> lumit_core::fx::params::ResolvedStack {
     )
 }
 
-/// The whole carriage, end to end: the document holds a shader, the
-/// resolve walk reads it and puts its name in the bag, and the picture that
-/// comes out is the one the shader describes — with no parallel list, no new
-/// aux kind and nothing owned in the arena.
 #[test]
 fn a_custom_shader_in_a_stack_draws_what_its_text_says() {
     let Some(ctx) = lumit_gpu::test_support::lease() else {
@@ -393,7 +375,6 @@ fn a_custom_shader_in_a_stack_draws_what_its_text_says() {
         "an instance with no program renders its input unchanged"
     );
 
-    // Half the colour, alpha untouched.
     let halved = run(
         fx,
         &ctx,
@@ -418,8 +399,6 @@ fn a_custom_shader_in_a_stack_draws_what_its_text_says() {
     }
 }
 
-/// **Editing the last effect re-runs only that one** — and the
-/// picture is the one a cold walk makes.
 #[test]
 fn editing_the_last_effect_reruns_only_that_one() {
     let Some(ctx) = lumit_gpu::test_support::lease() else {
@@ -455,7 +434,6 @@ fn editing_the_last_effect_reruns_only_that_one() {
     );
 }
 
-/// An upstream edit renames everything after it: both ops run again.
 #[test]
 fn an_upstream_edit_misses() {
     let Some(ctx) = lumit_gpu::test_support::lease() else {
@@ -485,7 +463,6 @@ fn an_upstream_edit_misses() {
         7,
     );
     assert_eq!(cache.borrow().counts(), (4, 0));
-    // A different source under the same stack is a miss too.
     run(
         fx,
         &ctx,
@@ -499,9 +476,6 @@ fn an_upstream_edit_misses() {
     assert_eq!(cache.borrow().counts(), (6, 0));
 }
 
-/// An op that binds a picture nobody named — another layer's texture as a
-/// matte, the neighbour frames — breaks the chain: nothing from it on is
-/// filed, and the same stack runs in full again.
 #[test]
 fn a_bound_picture_breaks_the_chain() {
     let Some(ctx) = lumit_gpu::test_support::lease() else {
@@ -510,7 +484,6 @@ fn a_bound_picture_breaks_the_chain() {
     };
     let fx = ctx.fx();
 
-    // A matte texture on the first op.
     let cache = warm_cache();
     let ops = stack(&[
         ("saturation", "saturation", 20.0),
@@ -545,7 +518,6 @@ fn a_bound_picture_breaks_the_chain() {
     );
     assert_eq!(cache.borrow().stats().2, 0);
 
-    // The matte on the *second* op: the first op's output is still named.
     let cache = warm_cache();
     for _ in 0..2 {
         run_ops(
@@ -575,7 +547,6 @@ fn a_bound_picture_breaks_the_chain() {
         "the chain holds up to the matte"
     );
 
-    // Neighbour frames (Echo) break it the same way.
     let cache = warm_cache();
     let ops = stack(&[("echo", "decay", 0.5), ("exposure", "stops", 1.0)]);
     for _ in 0..2 {
@@ -604,9 +575,6 @@ fn a_bound_picture_breaks_the_chain() {
     assert_eq!(cache.borrow().stats().2, 0);
 }
 
-/// `TABLE_EFFECTS` is the predicate `build.rs` fills the colour-table list
-/// by, and `AuxKind::Lut` is the one `run_ops` counts by. One list, so the
-/// two must name the same effects.
 #[test]
 fn table_effects_are_the_lut_aux_declarers() {
     let mut declared: Vec<&str> = lumit_core::fx::catalogue::BUILTIN_DEFS
@@ -620,9 +588,6 @@ fn table_effects_are_the_lut_aux_declarers() {
     assert_eq!(declared, listed);
 }
 
-// ----- The frame's texture pool -----
-
-/// The chain, batched, with every side list empty and no cache.
 fn chain(fx: &FxEngine, ctx: &GpuContext, ops: &lumit_core::fx::params::ResolvedStack) -> Vec<f32> {
     let out = run_ops(
         fx,
@@ -647,12 +612,6 @@ fn chain(fx: &FxEngine, ctx: &GpuContext, ops: &lumit_core::fx::params::Resolved
     lumit_gpu::fx::common::readback_linear_f32(ctx, &out, W, H).expect("readback")
 }
 
-/// Three effects on one layer make two work textures, not three: the third
-/// op writes into the picture the second one read. The pixels do not move,
-/// and a cache that is keeping outputs gets its own textures back.
-///
-/// A frame is one command buffer, so before this every effect in a stack
-/// held a frame-sized texture until the frame ended.
 #[test]
 fn a_chain_writes_into_the_texture_the_op_before_it_finished_with() {
     let Some(ctx) = lumit_gpu::test_support::lease() else {

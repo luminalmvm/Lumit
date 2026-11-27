@@ -1,16 +1,10 @@
-//! A shared project: edits from more than one person converge.
-
 use super::*;
 
-/// What a tap was told.
 enum Heard {
-    /// An edit made at this end: its number, the edit, and what it replaced.
     Local(u64, Op, Box<Op>),
-    /// Someone else's as it was applied, and whether that is how it was sent.
     Remote(RemoteTag, Op, bool),
 }
 
-/// One end of a shared project: a store, and what its tap was told.
 struct End {
     store: DocumentStore,
     heard: Arc<Mutex<Vec<Heard>>>,
@@ -34,7 +28,6 @@ fn end(doc: &Document, guest: bool) -> End {
     End { store, heard }
 }
 
-/// What the host sends one guest.
 enum Wire {
     Applied(RemoteTag, Box<Op>),
     Accepted(u64),
@@ -108,7 +101,6 @@ fn name_of(store: &DocumentStore, id: Uuid) -> Option<String> {
     }
 }
 
-/// Two solids to edit, in a document every end starts from.
 fn two_solids() -> (Document, Uuid, Uuid) {
     let seed = DocumentStore::new(Document::new());
     let (x, y) = (loose_item(&seed), loose_item(&seed));
@@ -222,12 +214,8 @@ fn a_folders_children_merge_by_what_each_person_changed() {
     // What the list was where the edit was made, what the edit made it,
     // what it is here now, and what it has to come to.
     let cases: [[&[Uuid]; 4]; 3] = [
-        // Both filed something.
         [&[a, b], &[a, b, m], &[a, b, t], &[a, b, m, t]],
-        // One took something out, and the other filed something.
         [&[a, b, c], &[a, c], &[a, b, c, t], &[a, c, t]],
-        // One put them in another order and filed something, and the
-        // other took one out and filed another.
         [&[a, b, c], &[c, a, b, m], &[a, c, t], &[c, t, a, m]],
     ];
     for [was, mine, now, merged] in cases {
@@ -247,14 +235,11 @@ fn an_edit_the_host_took_is_not_held_against_the_guest_that_made_it() {
     let (doc, x, y) = two_solids();
     for theirs_too in [false, true] {
         let guest = end(&doc, true);
-        // Sent and not answered when the host is lost. Then more is
-        // done to the same item, and to another.
         guest.store.commit(rename(x, "first")).unwrap();
         guest.store.cast_adrift();
         guest.store.commit(rename(x, "second")).unwrap();
         guest.store.commit(rename(y, "mine")).unwrap();
 
-        // The host had taken the first, which was the guest's edit 1.
         let mut theirs = doc.clone();
         apply(&mut theirs, &rename(x, "first")).unwrap();
         if theirs_too {

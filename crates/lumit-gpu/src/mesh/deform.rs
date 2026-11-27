@@ -43,14 +43,12 @@ struct Influence {
     weights: [f32; 4],
 }
 
-/// What a scene's moving parts need, worked out when it is uploaded.
 #[derive(Default)]
 pub(super) struct Plan {
     jobs: Vec<Job>,
     slots: HashMap<(usize, usize), Slot>,
     influences: Vec<Influence>,
     targets: Vec<[f32; 4]>,
-    /// How many vertices one pose writes.
     total: u32,
 }
 
@@ -159,17 +157,14 @@ impl Plan {
         first
     }
 
-    /// Where the part drawing node `k`'s primitive `i` lands, if it moves.
     pub(super) fn slot(&self, k: usize, i: usize) -> Option<Slot> {
         self.slots.get(&(k, i)).copied()
     }
 
-    /// Whether any part moves.
     pub(super) fn any(&self) -> bool {
         !self.jobs.is_empty()
     }
 
-    /// The bytes it keeps on the card.
     pub(super) fn bytes(&self) -> u64 {
         std::mem::size_of_val(self.influences.as_slice()) as u64
             + std::mem::size_of_val(self.targets.as_slice()) as u64
@@ -226,10 +221,8 @@ impl Plan {
     }
 }
 
-/// The scenes too large for this card to move, which draw at rest.
 static AT_REST: Mutex<Vec<Weak<ModelScene>>> = Mutex::new(Vec::new());
 
-/// Whether `scene` draws at rest because it is too large for this card to move.
 #[must_use]
 pub fn left_at_rest(scene: &Arc<ModelScene>) -> bool {
     AT_REST.lock().is_ok_and(|a| {
@@ -238,12 +231,10 @@ pub fn left_at_rest(scene: &Arc<ModelScene>) -> bool {
     })
 }
 
-/// A model's moving parts on the card.
 pub(crate) struct Deforms {
     influences: wgpu::Buffer,
     targets: wgpu::Buffer,
     jobs: Vec<Job>,
-    /// The bytes one pose writes.
     one: u64,
     /// The buffer poses are written to, kept from one draw to the next, and
     /// how many it holds.
@@ -495,7 +486,6 @@ impl Posed<'_> {
             .unwrap_or(p.node)
     }
 
-    /// Whether `p` is hidden in pose `k`.
     pub(super) fn hidden(&self, p: &Part, k: usize) -> bool {
         self.pose(k)
             .and_then(|pose| pose.hidden.get(p.index))
@@ -503,7 +493,6 @@ impl Posed<'_> {
             .unwrap_or(false)
     }
 
-    /// The vertices to draw `p` from in pose `k`, and where its own start.
     pub(super) fn vertices(&self, p: &Part, k: usize) -> (wgpu::BufferSlice<'_>, i32) {
         match (&self.written, p.deform) {
             (Some(w), Some(slot)) => {

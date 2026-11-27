@@ -8,7 +8,6 @@ use super::instances::{self, Instance};
 use super::textures;
 use crate::fx::lens_flare::FlareLight;
 
-/// One light the flare is drawn from.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Light {
     /// Raster pixels. May be off the frame.
@@ -23,7 +22,6 @@ pub struct Light {
     pub scale: f32,
 }
 
-/// Everything about one frame the design is drawn into.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Frame {
     pub lights: Vec<Light>,
@@ -32,7 +30,6 @@ pub struct Frame {
     pub centre: [f32; 2],
     /// Raster pixels per comp pixel, which every px@comp size is scaled by.
     pub px_scale: f32,
-    /// The effect's Brightness, times flicker.
     pub brightness: f32,
     /// The effect's Size, 1 is the design as drawn.
     pub size: f32,
@@ -74,8 +71,6 @@ pub fn burnt(c: [f32; 3], burn: f32) -> [f32; 3] {
 }
 
 impl Frame {
-    /// One white light at `light` with the centre in the middle of a `w` by
-    /// `h` frame, everything else neutral: the window's preview.
     pub fn preview(w: u32, h: u32, light: [f32; 2], px_scale: f32) -> Self {
         Self {
             lights: vec![Light {
@@ -149,7 +144,6 @@ fn texel(k: u32, x: f32, y: f32, footprint: f32, layer: Option<&Picture<'_>>) ->
     [t; 3]
 }
 
-/// An instance put on one light: where its quad is on screen and how bright.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Placed {
     pub centre: [f32; 2],
@@ -158,7 +152,6 @@ pub struct Placed {
     pub colour: [f32; 3],
     pub colour_b: [f32; 3],
     pub gain: f32,
-    /// What the polygon in an iris is turned by on top of its own rotation.
     pub turn: f32,
     /// The light it was put on, raster pixels, which dirt is lit by.
     pub light: [f32; 2],
@@ -530,7 +523,6 @@ fn splat_row(
     }
 }
 
-/// How many points of the Hiding disc are read.
 pub const HIDE_TAPS: u32 = 64;
 
 /// How much of the disc `radius` round `at` the picture covers, 0..1: its

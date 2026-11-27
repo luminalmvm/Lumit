@@ -1,12 +1,3 @@
-// The Effect controls panel on frb, tested against the real engine.
-//
-// The panel that existed before this was a float-only sketch in panels_frb.dart
-// with a `TODO: commit the value` where the commit should be, so there is
-// nothing to migrate here — v0's own panel could only *edit* scalars and colours
-// ("every other kind shows its value read-only… since the matching edit op is
-// not in the bridge yet"), which this one improves on rather than matches.
-//
-// Every document operation is genuine; see frb_test_support.dart.
 
 import 'package:flutter/gestures.dart' show kSecondaryButton;
 import 'package:flutter/services.dart';
@@ -48,8 +39,6 @@ void main() {
     /// the arb string both stay sentence case. Studio draws them as written.
     Finder heading(String label) => find.text(label);
 
-    /// A project with one comp, one layer in it, and that layer selected — the
-    /// state the panel needs before it draws anything at all.
     ({LumitState state, LumitUiState uiState, LayerReference layer})
         withLayer() {
       final p = freshProject();
@@ -84,7 +73,6 @@ void main() {
       await tester.pump();
     }
 
-    /// The Compositing fold, shut by default, from the heading's menu.
     Future<void> openCompositing(WidgetTester tester, UuidValue id) async {
       await tester.tapAt(
         tester.getCenter(find.byKey(ValueKey<String>('fx-twirl-$id'))) +
@@ -105,9 +93,6 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('fx-add')));
       await tester.pumpAndSettle();
-      // The menu lists categories, each opening onto its effects by their
-      // sentence-case label — the raw match_name never reaches the user
-      // (Add effect → Blur & sharpen → Gaussian blur).
       expect(find.text('Gaussian blur'), findsNothing,
           reason: 'the effects wait behind their category');
       await tester.tap(find.byKey(const ValueKey('fx-category-blur_sharpen')));
@@ -144,7 +129,6 @@ void main() {
       expect(p.uiState.selectedEffects.value, [for (final e in stack) e.id()],
           reason: 'Shift extended the pick down the stack, in stack order');
 
-      // And that is what Copy takes: three effects, one .lumfx document.
       expect(copySelectionFrb(p.uiState), isTrue);
       expect(p.uiState.clipboard.kind, ClipboardKind.effects);
       final bare = p.uiState.selectedComp!.addSolidLayer();
@@ -271,7 +255,6 @@ void main() {
       expect(find.byType(DashedOutline), findsOneWidget,
           reason: 'the bypassed heading wears the outline; the live one does '
               'not');
-      // The stopwatch's own quiet is the row's rest, not the bypass.
       expect(
         find
             .descendant(
@@ -305,7 +288,6 @@ void main() {
       expect(p.layer.getEffects().map((e) => e.name()).toList(),
           before.reversed.toList());
 
-      // Remove: the stack shortens by exactly one.
       final top = p.layer.getEffects().first;
       await tester.tap(find.byKey(ValueKey<String>('fx-remove-${top.id()}')));
       await tester.pump();
@@ -325,7 +307,6 @@ void main() {
       final before = p.layer.getEffects().map((e) => e.name()).toList();
       expect(before, ['blur', 'sharpen']);
 
-      // The second heading onto the first: sharpen takes blur's place.
       final from = heading(effectLabelOf('sharpen'));
       final onto = heading(effectLabelOf('blur'));
       final drag = await tester.startGesture(tester.getCenter(from));
@@ -341,8 +322,6 @@ void main() {
           ['sharpen', 'blur']);
     });
 
-    /// Folds are kept with the project, so a panel closed and opened again
-    /// finds its effects and groups as it left them.
     testWidgets('effect and group folds outlive the panel', (tester) async {
       final p = withLayer();
       p.layer.addEffect(name: 'lens_flare');
@@ -444,7 +423,6 @@ void main() {
       await mount(tester, p);
       expect(find.text('100%'), findsOneWidget, reason: 'opacity as it starts');
 
-      // What the Timeline's fold-out does when the same row is dragged there.
       p.layer.setTransform(
           prop: BridgeTransformProp.opacity, value: BridgeScalar.static_(40));
       await settleFrb(tester,
@@ -512,7 +490,6 @@ void main() {
       expect(field, findsOneWidget,
           reason: 'an animated parameter keeps its field');
 
-      // The playhead sits on the first key: the drag edits that key.
       await tester.drag(field, const Offset(40, 0));
       await tester.pumpAndSettle();
 
@@ -534,8 +511,6 @@ void main() {
       p.uiState.model.refresh();
       await mount(tester, p, transform: false);
 
-      // The light x/y pair is ONE row (docs/07 SS6.1) with a shared stem
-      // label, not two rows.
       expect(
         find.byWidgetPredicate((w) {
           final key = w.key;
@@ -548,12 +523,10 @@ void main() {
       expect(find.text('Light'), findsOneWidget);
       expect(find.text('Light y'), findsNothing);
 
-      // The collapsed groups show their headers, not their members.
       expect(heading('Lens options'), findsOneWidget);
       expect(heading('Flare options'), findsOneWidget);
       expect(find.text('Blades'), findsNothing);
 
-      // Twirling Lens options open reveals the Int-kind Blades row.
       await tester.ensureVisible(heading('Lens options'));
       await tester.pump();
       await tester.tap(heading('Lens options'));
@@ -566,7 +539,6 @@ void main() {
       expect(find.text('Matte'), findsNothing);
       expect(find.text('Threshold'), findsNothing);
 
-      // ...and appear when Source type switches to Matte.
       final effects = p.layer.getEffects();
       final fx = effects.single;
       fx.setValue(id: 'source_type', value: const BridgeEffectValue.choice(1));
@@ -598,13 +570,9 @@ void main() {
       // below, was always the wrong one.
       expect(find.textContaining('(this layer)'), findsOneWidget);
 
-      // Light tint is a source-mode-independent row; Use source
-      // colour appears with Matte and would with Lights.
       expect(find.text('Light tint'), findsOneWidget);
       expect(find.text('Use source colour'), findsOneWidget);
 
-      // Back to Manual: the tint stays, the source-colour toggle and the
-      // matte rows go.
       final again = p.layer.getEffects();
       again.single.setValue(
           id: 'source_type', value: const BridgeEffectValue.choice(0));
@@ -618,18 +586,6 @@ void main() {
           reason:
               'the Invert is part of the Matte-only group, not a stray row');
     });
-
-    // Blend: the Transparent/Black Background pair became a blend
-    // menu, defaulting to Add — the behaviour every flare already had.
-    // --- Particulate's surface (particulate.md §2, points-stream.md §4.3) ---
-    //
-    // PS6 is the *verification* that the effect's controls arrive from the
-    // schema with no new row kind: four kickers, the two over-life curves, the
-    // seed with its reseed, the mask-path reference, the layer reference and
-    // the Mix row. What is asserted here is what would break silently — the
-    // Render group's three modes and the rows each of them owns, and that the
-    // sprite reference actually *binds*, since an unset one draws discs and
-    // says nothing about why.
 
     /// **Each render mode's own control, live only in that mode.** Three
     /// `EnabledWhen` rules, and nothing else in the panel knows the mode
@@ -647,7 +603,6 @@ void main() {
           .map((r) => r.param.id)
           .toSet();
 
-      // Disc, the default: Feather is its own control; the other two are not.
       expect(greyed(), isNot(contains('feather')));
       expect(greyed(), contains('sprite_layer'));
       expect(greyed(), contains('streak_length'));
@@ -714,7 +669,6 @@ void main() {
         reason: 'it has a row of its own',
       );
 
-      // The switch writes, from where it now lives.
       await tester.tap(invert);
       await tester.pumpAndSettle();
       expect(
@@ -723,7 +677,6 @@ void main() {
         reason: 'ticking Invert reached the document',
       );
 
-      // And the picker binds a layer, which reads back as that layer.
       await tester.tap(picker);
       await tester.pumpAndSettle();
       // The entry leads with the layer's number, in a text of its own.
@@ -774,7 +727,6 @@ void main() {
         findsNothing,
       );
 
-      // It writes, from where it lives.
       await tester.tap(blend);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Add').last);
@@ -815,13 +767,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(p.uiState.selectedEffects.value, [second.id()]);
 
-      // Through the shell's own Copy, which is the only route the chord takes.
       expect(copySelectionFrb(p.uiState), isTrue);
       expect(p.uiState.clipboard.kind, ClipboardKind.effects,
           reason: 'the picked effect went on the clipboard, not the keys a '
               'panel elsewhere had claimed');
 
-      // Paste onto ANOTHER layer: select it, and the panel follows.
       final other = p.uiState.selectedComp!.addSolidLayer();
       p.uiState.setSelection([other]);
       await tester.pumpAndSettle();
@@ -839,11 +789,8 @@ void main() {
       expect(other.getEffects().single.id(), isNot(second.id()),
           reason: 'a pasted effect is a fresh instance, never a shared id');
 
-      // And it is on screen, not only in the document.
       expect(heading(effectLabelOf(second.name())), findsOneWidget);
 
-      // Pasting again onto the same layer stacks a second copy — the paste is
-      // an append, exactly as loading a preset is.
       await paste();
       expect(other.getEffects(), hasLength(2));
     });
@@ -891,8 +838,6 @@ void main() {
       expect(p.layer.getEffects().single.getInfo().customName, isNull,
           reason: 'one rename, one undo step');
 
-      // And an empty name clears back to the effect's own label, the same way
-      // the keyboard path's does — one editor, one contract.
       await openMenu();
       await tester
           .tap(find.byKey(ValueKey<String>('fx-menu-rename-${effect.id()}')));
@@ -941,8 +886,6 @@ void main() {
       p.layer.addMask(mask: maskNamed('Highlight', 40));
       p.uiState.model.refresh();
 
-      // Somewhere to write to, and something to read back from: an ordinary
-      // effect instance, whose value map the row's writes land in.
       p.layer.addEffect(name: 'blur');
       final fx = p.layer.getEffects().single;
       final id = fx.id();
@@ -978,8 +921,6 @@ void main() {
       expect(find.text('First mask'), findsOneWidget,
           reason: 'an unset row means the layer’s first mask, not "None"');
 
-      // Open it: the entry, then this layer’s masks by their own names — and
-      // nothing from any other layer.
       await tester.tap(picker);
       await tester.pumpAndSettle();
       expect(find.text('Outline'), findsOneWidget);
@@ -998,9 +939,6 @@ void main() {
       );
     });
 
-    /// A sequenced row cut in two, a second sequenced row beside it, and an
-    /// effect to hang a clip picker off. The clips are what the picker lists;
-    /// the second row is there to be left out of it.
     ({
       LumitState state,
       LumitUiState uiState,
@@ -1014,8 +952,6 @@ void main() {
       final other = p.state.project!.importFootage(path: 'C:/clips/other.mov');
       comp.addFootageLayer(footage: other, asSequence: true);
       p.uiState.model.refresh();
-      // Somewhere to write to: an ordinary instance, whose values the row's
-      // writes land in.
       p.layer.addEffect(name: 'blur');
       return (
         state: p.state,
@@ -1025,8 +961,6 @@ void main() {
       );
     }
 
-    /// The clip row under test, with `siblings` standing in for the rest of
-    /// the effect: on Audio level that is the Audio row above it.
     Widget clipRow(
       ({
         LumitState state,
@@ -1098,10 +1032,6 @@ void main() {
       );
     });
 
-    // -----------------------------------------------------------------------
-    // A pick is a typed value, not a reset.
-    // -----------------------------------------------------------------------
-
     /// **Lifting a number off the picture must not throw the curve away.**
     ///
     /// The colour swatch already had this right: a picked channel goes
@@ -1163,7 +1093,6 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      // Arm it the way a hand does, then hand it the sample the Viewer would.
       await tester.tap(find.byKey(ValueKey<String>('dropper-fx-$id-focus')));
       await tester.pumpAndSettle();
       final arm = p.uiState.dropper.value;
@@ -1188,10 +1117,6 @@ void main() {
           reason: 'the keys away from the playhead are untouched');
     });
 
-    // -----------------------------------------------------------------------
-    // The unit rider and the vector-pair chain (docs/15 §12A.3).
-    // -----------------------------------------------------------------------
-
     /// A point is two wells with a chain between them, and the chain is a real
     /// undoable edit on the instance — not a Dart-side flag.
     testWidgets('a point pair chains and unchains, undoably', (tester) async {
@@ -1210,7 +1135,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(p.layer.getInfo().effects.single.linkedPairs, ['light']);
 
-      // One undo step, like every other effect-stack edit.
       p.state.project!.undo();
       p.uiState.model.refresh();
       await tester.pumpAndSettle();
@@ -1238,7 +1162,6 @@ void main() {
               .value as BridgeEffectValue_Float)
           .field0;
 
-      // x static, y a two-key curve with an eased side worth keeping.
       const eased =
           BridgeSideInterp.bezier(BridgeBezierSide(speed: 12, influence: 0.4));
       final keys = [
@@ -1275,7 +1198,6 @@ void main() {
         await tester.pumpAndSettle();
       }
 
-      // Unchained, the curve is not touched at all.
       await typeX('200');
       expect(scalarOf('light_y'), BridgeScalar.keyframed(keys),
           reason: 'a separate pair moves alone, curve and all');
@@ -1301,7 +1223,6 @@ void main() {
           reason: 'speed lives on the value axis and scales with it; '
               'influence is the shape and does not');
 
-      // One undo step for the whole gesture, both halves together.
       p.state.project!.undo();
       p.uiState.model.refresh();
       await tester.pumpAndSettle();
@@ -1405,7 +1326,6 @@ void main() {
       }
       await mount(tester, p);
       final stack = p.layer.getEffects();
-      // The bottom two, moved to the top together.
       p.uiState.setEffectSelection(p.layer, [stack[2].id(), stack[3].id()]);
       await tester.pump();
 
@@ -1430,11 +1350,6 @@ void main() {
         stack[1].name(),
       ]);
     });
-
-    // -------------------------------------------------------------------
-    // The panel as a whole: a drag across the switches, the picked run's
-    // twirl, Delete, and what survives a comp being fronted.
-    // -------------------------------------------------------------------
 
     /// **Delete removes the picked effects** (item 6.6) — claimed rather than
     /// handled on the keyboard, because the shell's own Delete removes the
@@ -1505,8 +1420,6 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
       expect(find.text('Load from file…'), findsOneWidget);
       expect(find.text('Ripple radius'), findsNothing);
 
-      // Load a shader the way `Load from file…` does: staged on one handle,
-      // committed with the stack.
       final stack = p.layer.getEffects();
       stack.single.setShaderSource(source: twoRows, origin: null);
       p.layer.setEffects(effects: stack);
@@ -1535,8 +1448,6 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
           reason: 'the compiler names line 3 of the three lines they wrote');
     });
 
-    /// An OCIO name row lists the project's config from the summary the
-    /// interface already holds, and a pick writes the config's own spelling.
     testWidgets('an OCIO name row lists the config and writes the name',
         (tester) async {
       final p = withLayer();
@@ -1574,7 +1485,6 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
       );
     });
 
-    /// A text row keeps what is typed into it, and one undo takes it back.
     testWidgets('a text row commits what is typed, in one undo step',
         (tester) async {
       final p = withLayer();
@@ -1621,8 +1531,6 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
           reason: 'the row fronted the bound graph');
     });
 
-    // Without the built library there is nothing to test against; the harness
-    // throws with the command to run.
   }, skip: !engineAvailable);
 
   // The logarithmic slider's own arithmetic, which needs no engine: a

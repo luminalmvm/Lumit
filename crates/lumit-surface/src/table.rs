@@ -31,16 +31,12 @@ impl Axis {
     }
 }
 
-/// One number a knob, a ring or a trackball axis moves.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Param {
-    /// The Tangent id.
     pub id: u32,
-    /// The Correction row it moves.
     pub param: &'static str,
     /// For a wheel, which part of it. None for an ordinary number row.
     pub axis: Option<Axis>,
-    /// The name the Mapper lists.
     pub name: &'static str,
     /// The label on a panel display, nine characters at most.
     pub short: &'static str,
@@ -51,7 +47,6 @@ pub struct Param {
     pub default: f32,
     /// The smallest step, in the row's own units.
     pub step: f32,
-    /// The Mapper's group it is listed under.
     pub group: &'static str,
 }
 
@@ -65,7 +60,6 @@ impl Param {
     }
 }
 
-/// One thing a button does.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Action {
     pub id: u32,
@@ -76,7 +70,6 @@ pub struct Action {
     pub group: &'static str,
 }
 
-/// A list a button or knob steps through.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Menu {
     pub id: u32,
@@ -419,7 +412,6 @@ const TRANSPORT: &str = "Transport";
 const EDIT: &str = "Edit";
 const PAGES: &str = "Pages";
 
-/// Every action a button can run.
 pub const ACTIONS: &[Action] = &[
     a(
         0x0003_0001,
@@ -535,8 +527,6 @@ pub const ACTIONS: &[Action] = &[
     a(0x0003_0064, "page_hdr", "HDR Page", "HDR", PAGES),
 ];
 
-/// The two lists: which page the Grade panel shows, and how its wheels are
-/// drawn.
 pub const MENUS: &[Menu] = &[
     Menu {
         id: 0x0004_0001,
@@ -562,27 +552,22 @@ pub const MENUS: &[Menu] = &[
     },
 ];
 
-/// The number with Tangent id `id`.
 pub fn param(id: u32) -> Option<&'static Param> {
     PARAMS.iter().find(|p| p.id == id)
 }
 
-/// The number that moves row `param` on `axis`.
 pub fn param_named(param: &str, axis: Option<Axis>) -> Option<&'static Param> {
     PARAMS.iter().find(|p| p.param == param && p.axis == axis)
 }
 
-/// The action with Tangent id `id`.
 pub fn action(id: u32) -> Option<&'static Action> {
     ACTIONS.iter().find(|a| a.id == id)
 }
 
-/// The action called `action`.
 pub fn action_named(action: &str) -> Option<&'static Action> {
     ACTIONS.iter().find(|a| a.action == action)
 }
 
-/// The menu with Tangent id `id`.
 pub fn menu(id: u32) -> Option<&'static Menu> {
     MENUS.iter().find(|m| m.id == id)
 }

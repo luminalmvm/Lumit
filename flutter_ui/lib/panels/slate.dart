@@ -20,7 +20,6 @@ final _red = documentColour(230, 20, 20, 255);
 final _blue = documentColour(20, 20, 220, 255);
 final _black = documentColour(0, 0, 0, 255);
 
-/// The seven main bars, left to right — the classic descending-luminance run.
 final List<Color> _bars = [
   _white,
   _yellow,
@@ -31,7 +30,6 @@ final List<Color> _bars = [
   _blue
 ];
 
-/// The reversed band beneath, which is what makes it read as test bars.
 final List<Color> _under = [
   _blue,
   _magenta,
@@ -42,7 +40,6 @@ final List<Color> _under = [
   _white
 ];
 
-/// Hue-sweep stops for the narrow strip beside the greyscale ramp.
 final List<Color> _hueStops = [
   _red,
   _yellow,
@@ -80,7 +77,6 @@ class SlatePainter extends CustomPainter {
     final colW = w / 7.0;
     final paint = Paint()..style = PaintingStyle.fill;
 
-    // Top band: the seven main bars.
     final underTop = h * _bandUnder;
     for (var c = 0; c < 7; c++) {
       paint.color = _bars[c];
@@ -88,7 +84,6 @@ class SlatePainter extends CustomPainter {
           Rect.fromLTRB(c * colW, 0, (c + 1) * colW, underTop), paint);
     }
 
-    // Reversed band beneath.
     final rampTop = h * _bandRamp;
     for (var c = 0; c < 7; c++) {
       paint.color = _under[c];
@@ -96,7 +91,6 @@ class SlatePainter extends CustomPainter {
           Rect.fromLTRB(c * colW, underTop, (c + 1) * colW, rampTop), paint);
     }
 
-    // Ramp band: greyscale ramp on the left of the split, hue sweep on the right.
     final stepsTop = h * _bandSteps;
     final splitX = w * _rampSplit;
     final greyRect = Rect.fromLTRB(0, rampTop, splitX, stepsTop);
@@ -113,7 +107,6 @@ class SlatePainter extends CustomPainter {
       Paint()..shader = LinearGradient(colors: _hueStops).createShader(hueRect),
     );
 
-    // Bottom band: stepped grey wedge on the left, black rest field on the right.
     final stepW = splitX / _steps;
     for (var s = 0; s < _steps; s++) {
       final v = (255 * s ~/ (_steps - 1));

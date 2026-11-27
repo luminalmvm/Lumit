@@ -39,25 +39,19 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// The match name.
 pub const COLOUR_WARPER: &str = "colour_warper";
 
-/// How many hues a mesh has, by Resolution.
 pub const RESOLUTION_OPTIONS: [&str; 2] = ["Six hues", "Eight hues"];
 
-/// The mesh's rings, the centre not counted.
 pub const RINGS: usize = 3;
 
-/// The most mesh points: eight hues by three rings, and the centre.
 pub const MESH_MAX: usize = 1 + 8 * RINGS;
 
 /// How many `vec4`s [`WarpPacked::words`] writes.
 pub const WORDS: usize = 16;
 
-/// Video gamma, the space the mesh is drawn in.
 const SPACE: u32 = 0;
 
-/// Colour warper's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "colour_warper",
@@ -70,19 +64,15 @@ const SPACE: u32 = 0;
     premultiplied = false,
 )]
 pub struct ColourWarper {
-    /// How many spokes the mesh has, round three rings.
     #[choice(options = RESOLUTION_OPTIONS, default = 0)]
     pub resolution: u32,
     /// Where each mesh point has been moved to, from where it sits.
     #[shape(label = "Points")]
     pub points: ShapePoints,
-    /// Moves colour without moving brightness.
     #[toggle(label = "Keep luma", default = true)]
     pub keep_luma: bool,
-    /// How far the colours follow the points.
     #[bounded(min = 0.0, max = 100.0, default = 100.0, unit = Percent)]
     pub strength: f32,
-    /// The host-uniform Mix every effect ends with, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -94,10 +84,8 @@ pub struct ColourWarper {
     pub mix: f32,
 }
 
-/// The mesh, ready to draw.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct WarpPacked {
-    /// Hues: 6 or 8.
     pub hues: u32,
     /// Each point's move, strength applied, centre first.
     pub moves: [[f32; 2]; MESH_MAX],
@@ -108,7 +96,6 @@ pub struct WarpPacked {
 }
 
 impl ColourWarper {
-    /// What both render paths draw with.
     #[must_use]
     pub fn packed(&self) -> WarpPacked {
         let hues = if self.resolution == 1 { 8 } else { 6 };
@@ -175,7 +162,6 @@ impl WarpPacked {
         spline(at(-1), at(0), at(1), at(2), t)
     }
 
-    /// The mesh's move at mesh position `theta` (spokes) and `rho` (rings).
     #[must_use]
     pub fn move_at(&self, theta: f32, rho: f32) -> [f32; 2] {
         let f = rho.clamp(0.0, RINGS as f32);
@@ -195,7 +181,6 @@ impl WarpPacked {
         spline(ring(r - 1), ring(r), ring(r + 1), ring(r + 2), t)
     }
 
-    /// One premultiplied pixel through the mesh.
     #[must_use]
     pub fn pixel(&self, o: [f32; 4]) -> [f32; 4] {
         let v = maths::v_in(o, SPACE);
@@ -222,7 +207,6 @@ impl WarpPacked {
     }
 }
 
-/// Colour warper's behaviour.
 pub struct ColourWarperDef;
 
 impl EffectDef for ColourWarperDef {

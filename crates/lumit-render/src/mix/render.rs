@@ -11,16 +11,13 @@ use lumit_audio::rack::RackPuller;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-/// How many frames are mixed at a time between progress reports.
 const STEP_FRAMES: usize = 64 * SCRATCH_FRAMES;
 
-/// One run through a plan from frame 0.
 pub struct Render {
     plan: Arc<MixPlan>,
     work: MixWork,
     racks: RackPuller,
     rate: u32,
-    /// The next frame to mix.
     at: usize,
     /// Frames the limiter still owes: the master comes out this late, so the
     /// first ones mixed are not the mix.
@@ -28,8 +25,6 @@ pub struct Render {
 }
 
 impl Render {
-    /// A run through `plan` at `rate`, the master through the limiter when
-    /// `limit`, else through a plain clamp at the plan's ceiling.
     #[must_use]
     pub fn new(plan: Arc<MixPlan>, rate: u32, limit: bool) -> Self {
         let mut work = MixWork::new(rate);
@@ -85,8 +80,6 @@ fn exact(plan: &MixPlan, from: usize, to: usize) {
     }
 }
 
-/// The whole of `plan`, `total_frames` long, as [`Render`] plays it.
-/// `on_progress` is handed how far through it is, from 0 to 1.
 #[must_use]
 pub fn render(
     plan: Arc<MixPlan>,
@@ -106,7 +99,6 @@ pub fn render(
     out
 }
 
-/// A mix measured as it is heard.
 #[derive(Debug, Clone, Copy)]
 pub struct Measured {
     /// Integrated loudness, in LUFS. Minus infinity for a silent mix.
@@ -147,7 +139,6 @@ pub fn measure(
         meter.add(&chunk[..n * 2]);
         short_term_max = short_term_max.max(f64::from(meter.reading().short_term));
         done += n;
-        // Told each hundredth, not each step.
         let now = done * 100 / total;
         if now != told {
             told = now;
@@ -218,9 +209,6 @@ pub fn land(
     Some((first + more, last))
 }
 
-/// Set `plan` for a loudness target: the limiter's ceiling at
-/// `true_peak_db` and the master moved until the mix lands on `lufs`
-/// ([`land`]). None when stopped.
 pub fn aim(
     plan: &mut MixPlan,
     rate: u32,
@@ -233,12 +221,10 @@ pub fn aim(
     land(plan, rate, lufs, false, stop, on_progress).map(|_| ())
 }
 
-/// `plan`'s master, keys and all, moved by `db`.
 pub fn lift(plan: &mut MixPlan, db: f64) {
     scale(&mut plan.master, 10f64.powf(db / 20.0) as f32);
 }
 
-/// `fader` turned up by `gain`, keys and all.
 fn scale(fader: &mut Fader, gain: f32) {
     fader.gain = fader.gain.map(|g| g * gain);
     if let Some(envelope) = &mut fader.envelope {

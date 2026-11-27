@@ -21,14 +21,11 @@ pub const SPOT_SLOTS: usize = 16;
 /// Lens flare's detection tile side, as its WGSL has it.
 const DETECT_TILE: u32 = 16;
 
-/// Bright spots: the lights are found in the layer's own picture.
 #[derive(Debug, Clone, Copy)]
 pub struct SpotsOp {
     pub threshold: f32,
     pub softness: f32,
-    /// A spot's own hue tints its light.
     pub use_colour: bool,
-    /// The Colour row, times every light.
     pub colour: [f32; 3],
     /// The most a spot's light is worth.
     pub gain: f32,
@@ -57,7 +54,6 @@ pub struct DepthOp<'a> {
     pub radius: f32,
 }
 
-/// One frame's flare, already expanded.
 #[derive(Debug, Clone, Copy)]
 pub struct SpriteFlareOp<'a> {
     pub instances: &'a [[f32; INSTANCE_FLOATS]],
@@ -96,7 +92,6 @@ struct Params {
     _pad: [f32; 3],
 }
 
-/// What `sf_lights` is told.
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct LightPass {
@@ -121,7 +116,6 @@ pub(super) struct SpriteFlareFx {
     /// The light past 1, for Defocus.
     over: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
     lights: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
-    /// Lens flare's own detection kernels, built from its shader.
     detect: (
         wgpu::BindGroupLayout,
         wgpu::ComputePipeline,
@@ -352,7 +346,6 @@ impl FxEngine {
             bytemuck::cast_slice(&given),
             B::STORAGE,
         );
-        // Detection writes its sixteen lights straight here.
         let found = buffer(
             "fx-sprite-flare-found",
             bytemuck::cast_slice(&[[0.0f32; 8]; SPOT_SLOTS]),

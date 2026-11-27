@@ -48,9 +48,6 @@ import 'mixer_strip.dart';
 import 'placeholder.dart';
 import 'timeline_extras_frb.dart' show showMenuAt;
 
-/// The menu rows every level meter wears: how long its hold line rests,
-/// putting the lines and the limiter's light out, and starting the loudness
-/// afresh.
 List<Widget> meterRows(LumitUiState ui, VoidCallback close) {
   final settings = ui.workspace.interface;
   return [
@@ -132,10 +129,6 @@ BridgeScalar scalarWithKeyToggled(
   ]);
 }
 
-/// The rows a track's Volume, Pan or Level gives wherever it is pressed, the
-/// Mixer's fader and pot and the Cut timeline's head bars alike: back to its
-/// usual value, a number asked for, any sides it can be thrown to, and a key at
-/// the playhead.
 List<Widget> mixValueRows({
   required BuildContext context,
   required CompositionReference comp,
@@ -155,7 +148,6 @@ List<Widget> mixValueRows({
   List<(String, double)> sides = const [],
   bool tickColumn = false,
 }) {
-  // Room for a tick, when a row the caller adds below wears one.
   final tick = tickColumn ? false : null;
   final value = scalar is BridgeScalar_Static
       ? scalar.field0
@@ -166,7 +158,6 @@ List<Widget> mixValueRows({
     try {
       write(scalarWithValueAt(scalar, v, comp, frame));
     } catch (_) {
-      // A locked layer refuses, and quietly.
       return;
     }
     onChanged();
@@ -207,7 +198,6 @@ List<Widget> mixValueRows({
         },
         child: MenuLabel(label, ticked: tick),
       ),
-    // A value an expression drives has no keys to add.
     if (scalar is! BridgeScalar_Expression) ...[
       const MenuDivider(),
       MenuRow(
@@ -263,12 +253,9 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
   Set<String>? _opening;
   final Set<String> _added = {};
 
-  /// The strips as last laid out, left to right, and how wide each stood, for
-  /// the keys and for Show bus.
   List<BridgeLayerEntry> _desk = const [];
   double _width = _stripWidth;
 
-  /// The strips' own scroll, for the bar under them and the wheel.
   final ScrollController _strips = ScrollController();
 
   @override
@@ -328,7 +315,6 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
     }
   }
 
-  /// Bring [id]'s strip into view and pick it.
   void _show(UuidValue id) {
     final at = _desk.indexWhere((e) => e.layer.internallayerId == id);
     if (at < 0) return;
@@ -344,8 +330,6 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
           (right - p.viewportDimension).clamp(0.0, p.maxScrollExtent));
     }
   }
-
-  // ---------------------------------------------------------------- the keys
 
   /// The Mixer's keys, answered while it is the focused panel. A dialogue, or
   /// a field being typed into, keeps its keys.
@@ -364,7 +348,6 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
     }
     final action = ui.keymap.actionFor(BridgeKeyContext.mixer, event);
     if (action == null) return false;
-    // Only the arrows that nudge repeat while held.
     if (event is KeyRepeatEvent && !action.startsWith('mixer.fader.')) {
       return false;
     }
@@ -382,10 +365,6 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
     return true;
   }
 
-  // -------------------------------------------------------------- the ground
-
-  /// The desk's own ground, off every strip: new strips, and what can be said
-  /// of all of them at once.
   void _groundMenu(CompositionReference comp, Offset at) {
     final ui = _ui;
     final desk = _desk;
@@ -479,8 +458,6 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
     );
   }
 
-  /// Insert audio layer and Insert bus, on the ground menu and on an empty
-  /// desk.
   List<Widget> _insertRows(CompositionReference comp, VoidCallback close,
           {bool chords = true}) =>
       [
@@ -498,8 +475,6 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
             child: MenuLabel(label, action: chords ? action : null),
           ),
       ];
-
-  // ---------------------------------------------------------------- the desk
 
   @override
   Widget build(BuildContext context) {
@@ -568,7 +543,6 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
               color: t.surface0,
               child: box.maxHeight >= _deskFloor
                   ? row
-                  // Too short for a strip: it keeps its floor and is cut.
                   : ClipRect(
                       child: OverflowBox(
                         alignment: Alignment.topCenter,
@@ -584,7 +558,6 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
     );
   }
 
-  /// A comp with nothing to mix: the words, and the two ways to start.
   Widget _empty(LumitTheme t, CompositionReference comp) => Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 180),
@@ -601,8 +574,6 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
         ),
       );
 
-  /// The strips, layers then buses after a gap, scrolled sideways under a bar
-  /// that says there are more than the panel shows.
   Widget _stripList(BuildContext context, CompositionReference comp,
       List<BridgeLayerEntry> desk, int layerCount, int busCount, double height) {
     final reveal = ThemeScope.of(context).motion;
@@ -652,7 +623,6 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
             return HouseScrollbar(
               controller: _strips,
               crossAxisMargin: 2,
-              // Shown for as long as strips are out of sight.
               thumbVisibility: width * desk.length + gap > box.maxWidth + 0.5,
               child: EdgeFade(
                 reach: _fadeReach,
@@ -662,7 +632,6 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
                   children: [
                     for (final entry in desk.take(layerCount))
                       strip(entry, width),
-                    // The buses stand on their own ground, a hairline along.
                     if (gap > 0)
                       Container(
                         width: gap,
@@ -706,8 +675,6 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
         sendRows: short || !sendable ? 0 : 1);
   }
 
-  /// Whether the Master's loudness can stand beside its meter without costing
-  /// the desk a strip, on a panel [width] wide.
   bool _loudnessRoom(double width, int count, bool gap) {
     final room = width - _masterWidth - _deskGap - (gap ? _busGap : 0);
     return _wholeStrips(room - _loudnessWidth, count) ==
@@ -719,18 +686,15 @@ extension on RackLayout {
   int get rows => insertRows + sendRows;
 }
 
-/// How wide a strip stands, and the most one takes when the desk has room.
 const double _stripWidth = 58;
 const double _stripWidthMost = 84;
 
-/// How wide the Master stands, and how much wider to hold its loudness.
 const double _masterWidth = 70;
 const double _loudnessWidth = 46;
 
 /// The desk's own ground kept beside strips that all fit, for its right-click.
 const double _deskGround = 16;
 
-/// The gap before the buses.
 const double _busGap = 6;
 
 /// The gap between the strips and the Master, and how far in from a cut edge
@@ -740,7 +704,6 @@ const double _busGap = 6;
 const double _deskGap = 14;
 const double _fadeReach = 34;
 
-/// Everything on a strip but its rack and its fader, top to bottom.
 const double _stripFixed = 12 +
     stripNameRow +
     stripPotRow +
@@ -768,7 +731,6 @@ double _stripWidthIn(double room, int count) {
   return math.max(_stripWidth, room / (whole + 0.35));
 }
 
-/// How many of [count] strips stand whole on a desk [room] wide.
 int _wholeStrips(double room, int count) => room ~/ _stripWidth >= count
     ? count
     : (room / _stripWidth - 0.35).floor().clamp(1, count);

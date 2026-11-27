@@ -35,7 +35,6 @@ fn finish(@builtin(global_invocation_id) g: vec3<u32>) {
         }
         r.x = r.x + grain * (removed(x, y) - box5 / 25.0);
     }
-    // == spatial::matte_strength: the matte's share of the reduction.
     let cur = textureLoad(in1, q, 0).xyz;
     if ((p.pass_.w & 4u) != 0u) {
         let m = textureLoad(in5, q, 0);

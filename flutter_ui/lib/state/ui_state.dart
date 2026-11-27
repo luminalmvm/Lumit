@@ -34,6 +34,7 @@ import 'package:lumit_flutter/panels/viewer_picture.dart'
     if (dart.library.js_interop) 'package:lumit_flutter/panels/viewer_picture_web.dart';
 import 'package:lumit_flutter/panels/viewer_texture_controller.dart';
 import 'package:lumit_flutter/shell/about_window_frb.dart';
+import 'usage_data.dart';
 import 'package:lumit_flutter/shell/live_endpoint_frb.dart';
 import 'package:lumit_flutter/shell/pop_out.dart'
     show NativeDisplay, NativeWindows, displaySetupOf, windowsQuitting;
@@ -60,7 +61,8 @@ import 'package:lumit_flutter/src/rust/api/model.dart'
     show BridgeModelDisplay, BridgeModelLook;
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
-import 'package:lumit_flutter/src/rust/api/system.dart' show setWindowInFront;
+import 'package:lumit_flutter/src/rust/api/system.dart'
+    show gpuKind, setWindowInFront, systemMemoryBytes, videoMemoryBytes;
 import 'package:lumit_flutter/src/rust/api/shell.dart'
     show
         setAutosave,
@@ -180,31 +182,19 @@ typedef OnlineKept = ({
 });
 
 class LumitUiState extends ChangeNotifier {
-  /// Everything that outlives the session: the panel layout, the appearance,
-  /// UI scale, tooltips, autosave and export defaults.
-  ///
-  /// This is the same [Workspace] the shell has always used, loaded from disk
-  /// on construction — the port briefly kept its own copies of the layout and
-  /// the colour scheme here instead, which is why arrangements stopped
-  /// surviving a restart and the Settings window's scale slider moved nothing.
   final Workspace workspace;
 
-  /// The keyboard map every shortcut is looked up in (docs/07 §15).
   late final KeymapState keymap;
 
   /// The account the profile in use is signed in to, if it is. Lumit needs
   /// none. Lumit Pro hangs off one.
   final AccountState account = AccountState();
 
-  /// The profiles on this machine and the one in use: its settings, and
-  /// keeping them in step with the server when the account has Pro.
   late final ProfilesState profiles =
       ProfilesState(workspace, account, afterApply: _afterProfile)
         ..beforeSwitch = (() => library.pause())
         ..afterSwitch = (() => library.resume());
 
-  /// The library: presets, styles, themes, fonts and the rest, and with Pro
-  /// the same library on every computer of the account.
   late final LibraryState library = LibraryState(
     account: account,
     profiles: profiles,
@@ -213,7 +203,6 @@ class LumitUiState extends ChangeNotifier {
     presetsChanged: presetsChanged,
   );
 
-  /// The way to Lumit's own relay, for a shared project.
   late final RelayDoor relayDoor = RelayDoor(account);
 
   /// The way to Lumit's server, for a shared project that is kept online.
@@ -221,15 +210,10 @@ class LumitUiState extends ChangeNotifier {
   late final OnlineDoor onlineDoor = OnlineDoor(
       account, (port) => bridge_share.shareOnlineDoor(port: port));
 
-  /// What moves the footage of a project kept online to the server and
-  /// back. It follows the open project by itself.
   late final OnlineFootage onlineFootage;
 
-  /// What the open project's sharing was when its doors were last seen to.
   String _doorsFor = '';
 
-  /// Whether Lumit's server was taking edits to a project this machine
-  /// hosts, when that was last looked at.
   bool _taking = false;
 
   /// Open the doors the open project's sharing goes through. The engine
@@ -245,10 +229,7 @@ class LumitUiState extends ChangeNotifier {
     final taking = (share.online?.host ?? false) && share.writable;
     if (taking && !_taking && !account.pro) unawaited(account.refreshAccount());
     _taking = taking;
-    // What changes the project is held still on a machine that can only
-    // look at it.
     tools.lookOnly = share.online?.look ?? false;
-    // What the others are changing right now, which their rows are held by.
     final held = share.active ? share.changing : null;
     if (!mapEquals(held, valuesHeld.value)) valuesHeld.value = held;
     final project = share.active ? _app.project : null;
@@ -283,11 +264,9 @@ class LumitUiState extends ChangeNotifier {
       }
       _noteHosted();
     } catch (_) {
-      // Closed again already.
     }
   }
 
-  /// The copy whose watched edits are held, by the engine's id for it.
   String? _watchedFor;
 
   /// Write down how much of each recent sitting this copy has watched, for
@@ -320,10 +299,8 @@ class LumitUiState extends ChangeNotifier {
   /// keeping it. Throws a [CloudError].
   Future<List<OnlineKept>> keptOnline() async {
     try {
-      // The open project may have been saved since it was put online.
       _noteHosted();
     } catch (_) {
-      // Closed.
     }
     final listed = await account.call('GET', '/v1/online');
     DateTime at(Object? seconds) => DateTime.fromMillisecondsSinceEpoch(
@@ -384,7 +361,6 @@ class LumitUiState extends ChangeNotifier {
   (UuidValue?, int) _followedTo = (null, 0);
   bool _followMoving = false;
 
-  /// The person being followed, while they are still here.
   BridgeSharePerson? get followed {
     final id = following.value;
     if (id == null) return null;
@@ -394,7 +370,6 @@ class LumitUiState extends ChangeNotifier {
     return null;
   }
 
-  /// Follow the person numbered [id], or with null stop following.
   void follow(int? id) {
     if (following.value == id) return;
     following.value = id;
@@ -485,7 +460,6 @@ class LumitUiState extends ChangeNotifier {
     try {
       id = _app.project?.shareId();
     } catch (_) {
-      // Closed meanwhile.
     }
     _app.stopSharing();
     if (id != null) {
@@ -494,19 +468,14 @@ class LumitUiState extends ChangeNotifier {
     }
   }
 
-  /// The account's review links, and the comments left on them.
   late final ReviewsState reviews = ReviewsState(account, profiles);
-  /// The line to the account's phones, and what pairs one.
   late final PhoneLine phones = PhoneLine(account, _app, workspace, reviews)
     ..onLibrary = (() => unawaited(library.syncNow()));
 
-  /// Invites to multi-edit that friends sent this computer, and sending them.
   late final FriendInvites friendInvites = FriendInvites(account);
 
-  /// Exports sent to the account's other computers, and theirs done here.
   late final RemoteExports remoteExports = RemoteExports(
       account, _app, workspace, phones, friendInvites, relayDoor);
-  /// The open project's backup and the account's backed-up projects.
   late final BackupState backup = BackupState(_app, account, profiles,
       looking: () => (selectedComp, playheadFrame.value));
 
@@ -523,12 +492,9 @@ class LumitUiState extends ChangeNotifier {
     pushDiscordStatus();
   }
 
-  /// Let other programs drive Lumit, or stop, as Settings says.
   void applyLiveEndpoint() =>
       applyLiveEndpointFrb(workspace.liveEndpoint, _app, this);
 
-  /// Tell Discord what Lumit is open on, as far as Settings allows. Called
-  /// where the project's path or the fronted comp can have changed.
   void pushDiscordStatus() {
     // Never under `flutter test`, or a test run turns up in the status of
     // whoever started it.
@@ -542,7 +508,6 @@ class LumitUiState extends ChangeNotifier {
         comp: names ? _selectedComp?.getSettings().name : null,
       );
     } catch (_) {
-      // The comp has gone under the call. The status keeps what it had.
     }
   }
 
@@ -555,6 +520,20 @@ class LumitUiState extends ChangeNotifier {
   late final UpdateService updates = UpdateService(
       currentVersion: () => versionFromBootLine(lumitVersion()),
       nightly: () => workspace.nightlyUpdates);
+
+  late final UsageData usage = UsageData(
+      workspace: workspace,
+      version: () => versionFromBootLine(lumitVersion()),
+      machine: () {
+        final gpu = gpuKind();
+        return (
+          ram: systemMemoryBytes(),
+          vram: videoMemoryBytes(),
+          vendor: gpu.vendor,
+          gpu: gpu.kind,
+        );
+      })
+    ..listenTo(activePane);
 
   /// The catalogue of addons, what is installed, and one install at a time.
   ///
@@ -595,7 +574,6 @@ class LumitUiState extends ChangeNotifier {
       try {
         selectedComp?.audioPrepare();
       } catch (_) {
-        // The composition has gone; there is no mix to make again.
       }
     });
   }
@@ -606,14 +584,11 @@ class LumitUiState extends ChangeNotifier {
   /// for its first use.
   late final ExtensionService extensions;
 
-  /// Tangent panels and MIDI controllers, which drive the grade.
   late final ControlSurfaces surfaces = ControlSurfaces(this, _app);
 
-  /// Whether the extension [id] has its panel in the arrangement.
   bool extensionShown(String id) =>
       panesIn(split).contains(extensions.pane(id));
 
-  /// Put the extension [id]'s panel up, or take it down.
   void toggleExtension(String id) {
     final pane = extensions.pane(id);
     if (panesIn(split).contains(pane)) {
@@ -648,7 +623,6 @@ class LumitUiState extends ChangeNotifier {
   /// document and the view, so a hover asks the engine nothing.
   final ViewProjections viewProjections = ViewProjections();
 
-  /// Where a selected camera is and which way it faces, for its 3D handles.
   final CameraPoses cameraPoses = CameraPoses();
   final OrientTurns orientTurns = OrientTurns();
 
@@ -666,8 +640,6 @@ class LumitUiState extends ChangeNotifier {
   /// two homes (docs/impl/multi-viewer.md §3.1).
   ValueNotifier<PaneId?> activePane = ValueNotifier(null);
 
-  /// Which panel the keyboard is pointed at, which is what every keymap
-  /// context and search-box question actually asks.
   Panel? get activePanel => activePane.value?.panel;
 
   /// Move the focus ring on by [by] panels in the arrangement's own order —
@@ -747,7 +719,6 @@ class LumitUiState extends ChangeNotifier {
     return true;
   }
 
-  /// Whether [panel] is the one a [panelSearchRequest] is meant for.
   bool searchRequestIsFor(Panel panel) => activePanel == panel;
 
   /// Bumped when `Ctrl+A` asks the focused panel to select everything it holds.
@@ -792,7 +763,6 @@ class LumitUiState extends ChangeNotifier {
     return true;
   }
 
-  /// Whether [panel] is the one a [selectAllRequest] is meant for.
   bool selectAllRequestIsFor(Panel panel) => activePanel == panel;
 
   /// A finer selection's claim on Delete, set by the Timeline while it
@@ -902,11 +872,15 @@ class LumitUiState extends ChangeNotifier {
     workspace.rememberUpdateCheck(DateTime.now().millisecondsSinceEpoch);
   }
 
+  Future<void> maybeSendUsage() {
+    usage.start();
+    return usage.sendKept();
+  }
+
   /// Follow nightly builds or stable releases, and look at once at what the
   /// new channel has: what the last check found belongs to the old one.
   Future<void> setNightlyUpdates(bool on) async {
     workspace.setNightlyUpdates(on);
-    // Never under `flutter test`, for the reason above.
     if (Platform.environment.containsKey('FLUTTER_TEST')) return;
     await updates.check();
   }
@@ -969,7 +943,6 @@ class LumitUiState extends ChangeNotifier {
   /// and for the same reason.
   final ValueNotifier<int> revealFilterRequest = ValueNotifier(0);
 
-  /// Which reveal the last [requestRevealFilter] asked for.
   RevealFilter revealFilter = RevealFilter.keyframed;
 
   void requestRevealFilter(RevealFilter filter) {
@@ -977,11 +950,8 @@ class LumitUiState extends ChangeNotifier {
     revealFilterRequest.value++;
   }
 
-  /// Layer ▸ Reveal ▸ Expand all and Collapse all: the Timeline runs its own
-  /// rows over the selection. The same counter shape as the reveal above.
   final ValueNotifier<int> foldAllRequest = ValueNotifier(0);
 
-  /// Whether the last [requestFoldAll] opens or shuts.
   bool foldAllExpand = true;
 
   void requestFoldAll({required bool expand}) {
@@ -1007,17 +977,13 @@ class LumitUiState extends ChangeNotifier {
 
   void requestSelectProperty(String path) => selectPropertyRequest.value = path;
 
-  /// Whether the next [selectPropertyRequest] also puts the graph up.
   bool selectPropertyShowsGraph = false;
 
-  /// Pick the property row at [path] in the Timeline and show its curve.
   void requestRevealInGraph(String path) {
     selectPropertyShowsGraph = true;
     selectPropertyRequest.value = path;
   }
 
-  /// The id of the shape item `Enter` has asked to rename, for its row to
-  /// open its own editor and clear.
   final ValueNotifier<String?> renameItemRequest = ValueNotifier(null);
 
   /// The Project panel's picked item — its selection anchor, published by the
@@ -1049,6 +1015,10 @@ class LumitUiState extends ChangeNotifier {
   /// only the cache bar, which listens to both.
   final ValueNotifier<int> cacheChanged = ValueNotifier(0);
 
+  /// Called when the engine didn't draw a frame because it needs more memory
+  /// than Lumit may use. The shell shows the window.
+  void Function(BridgeFrameOverBudget over)? onFrameOverBudget;
+
   /// Bumped when a Camera track analysis lands a solve. Its own
   /// notifier because a solve moves neither the document's revision nor the
   /// playhead — and those two are exactly what the Viewer's point cloud is
@@ -1070,8 +1040,6 @@ class LumitUiState extends ChangeNotifier {
   /// progress bar listens to it and nothing else does.
   final PreviewProgressTracker previewProgress = PreviewProgressTracker();
 
-  /// How far the Stabilise analyses in the comp on screen have got, for the
-  /// same slot on the Viewer's transport. Made when the Viewer first asks.
   StabiliseProgress get stabiliseProgress =>
       _stabiliseProgress ??= StabiliseProgress(this);
   StabiliseProgress? _stabiliseProgress;
@@ -1198,7 +1166,6 @@ class LumitUiState extends ChangeNotifier {
   /// comp's rate, negative for backwards. Zero is ordinary playback.
   int _shuttle = 0;
 
-  /// How many times the comp's rate the run plays at.
   int get _speed => _shuttle == 0 ? 1 : _shuttle.abs();
 
   /// How many times slower than the comp's rate playback runs: 1, 2 or 4,
@@ -1276,7 +1243,6 @@ class LumitUiState extends ChangeNotifier {
     if (_ahead(frame)) playheadFrame.value = frame;
   }
 
-  /// Whether `frame` is further along the running leg than the playhead.
   bool _ahead(int frame) =>
       _reverse ? frame < playheadFrame.value : frame > playheadFrame.value;
 
@@ -1293,7 +1259,6 @@ class LumitUiState extends ChangeNotifier {
         reverse: _reverse,
         speed: _speed,
         slow: _slow,
-        // Where the leg ends, so nothing past it is made.
         until: _clockEnd,
       );
 
@@ -1362,7 +1327,6 @@ class LumitUiState extends ChangeNotifier {
     workspace.settingsChanged();
   }
 
-  /// **Wireframe while dragging**, from Settings → Performance or the deck.
   void setWireframeWhileDragging(bool on) {
     workspace.performance.wireframeDrags = on;
     setWireframeDrags(on_: on);
@@ -1398,7 +1362,6 @@ class LumitUiState extends ChangeNotifier {
     return false;
   }
 
-  /// The lock as last seen, so only a change of it counts.
   bool? _capsLocked;
 
   void _followLock({bool force = false}) {
@@ -1411,13 +1374,11 @@ class LumitUiState extends ChangeNotifier {
 
   bool _capsLockWatching = false;
 
-  /// Starts or stops following Caps Lock, as the setting now says.
   void followCapsLock() {
     final want = workspace.performance.capsLockSuspends;
     if (want && !_capsLockWatching) {
       HardwareKeyboard.instance.addHandler(_capsLockWatch);
       _capsLockWatching = true;
-      // A lock already on when the setting is turned on counts at once.
       _followLock(force: true);
     } else if (!want && _capsLockWatching) {
       HardwareKeyboard.instance.removeHandler(_capsLockWatch);
@@ -1467,21 +1428,17 @@ class LumitUiState extends ChangeNotifier {
     }
     final comp = compFor(view);
     if (comp == null) return;
-    // A layer's source before transform is the layer view, which draws its own
-    // picture when it lands.
     if (view.mode != ViewMode.composition) return;
     view.compId ??= comp.internalid.toString();
     // A 3D viewport opens on its free view of whichever comp it is shown,
     // and that asks for the picture itself.
     final viewport = views.isViewport(view);
     if (viewport && !view.cameraViews.containsKey(view.compId)) {
-      // Framed the first time it shows a comp it has no view of yet.
       view.frameOnOpen = !view.cameraPoses
           .containsKey('${view.compId}/${ViewerView.free.name}');
       setViewerView(ViewerView.free, viewId: view.engineId);
       return;
     }
-    // Drawn as lines only: nothing to ask the engine for.
     if (linesOnly(view.engineId)) return;
     // One picture in flight at a time beside the view being worked in, and in
     // a view being moved: a newer picture stops the one being made, so moves
@@ -1532,8 +1489,6 @@ class LumitUiState extends ChangeNotifier {
         _askedAt[view.engineId] = DateTime.now();
       }
     } catch (_) {
-      // No worker yet, or a composition that has gone away. The next playhead
-      // move or edit asks again; there is nothing to recover here.
       _askedFor.remove(view.engineId);
     }
   }
@@ -1574,7 +1529,6 @@ class LumitUiState extends ChangeNotifier {
         view: view.engineId,
       );
     } catch (_) {
-      // No worker yet, or an item that has gone away.
       _askedFor.remove(view.engineId);
     }
   }
@@ -1702,8 +1656,6 @@ class LumitUiState extends ChangeNotifier {
     return pane == null ? CompareMode.none : views.compareOf(pane);
   }
 
-  /// One, two or four views in the Viewer pane the keyboard is in. Says
-  /// whether there was a Viewer to change.
   bool setViewerLayout(ViewLayout layout) {
     final pane = currentViewerPane;
     if (pane == null) return false;
@@ -1732,7 +1684,6 @@ class LumitUiState extends ChangeNotifier {
       if (all.length == 4) ...[ViewerView.front, ViewerView.right],
     ].where((v) => !shown.contains(v)).iterator;
     for (final view in all.skip(had)) {
-      // Only views of the comp the held layers are of.
       if (compFor(view)?.internalid != _selectedComp?.internalid) continue;
       if (!seeds.moveNext()) break;
       setViewerView(seeds.current, viewId: view.engineId);
@@ -1767,7 +1718,6 @@ class LumitUiState extends ChangeNotifier {
     final pane = currentViewerPane;
     if (pane == null) return;
     views.setCompare(pane, mode);
-    // Ending a compare leaves the app on the picture that stays.
     if (mode == CompareMode.none) {
       final lead = views.byId(views.paneViews[pane]?.firstOrNull);
       if (lead != null) {
@@ -1782,8 +1732,6 @@ class LumitUiState extends ChangeNotifier {
     requestFrame();
   }
 
-  /// The compositions a compare's second side can show: every one but the
-  /// first side's.
   List<(CompositionReference, String)> get compareChoices {
     final pane = currentViewerPane;
     final ids = pane == null ? null : views.paneViews[pane];
@@ -1794,7 +1742,6 @@ class LumitUiState extends ChangeNotifier {
     ];
   }
 
-  /// The composition a two-view compare's second side shows, or null.
   String? get compareSideB {
     final pane = currentViewerPane;
     if (pane == null || !views.compareOf(pane).pairsViews) return null;
@@ -1822,7 +1769,6 @@ class LumitUiState extends ChangeNotifier {
     requestFrame();
   }
 
-  /// The compare's two sides the other way round.
   void swapCompare() {
     final pane = currentViewerPane;
     if (pane == null) return;
@@ -1961,7 +1907,6 @@ class LumitUiState extends ChangeNotifier {
     }
   }
 
-  /// Start the next leg of the loop from `frame`, in the direction given.
   void _turn(CompositionReference comp, int frame, {required bool reverse}) {
     final loop = _loop;
     if (loop == null) return;
@@ -2014,7 +1959,6 @@ class LumitUiState extends ChangeNotifier {
     workspace.settingsChanged();
   }
 
-  /// Put the panels back where they started (Window → Reset workspace).
   void resetLayout() => workspace.resetWorkspaceLayout();
 
   /// Remember a layout the user changed by dragging a panel — app-wide, and
@@ -2088,7 +2032,6 @@ class LumitUiState extends ChangeNotifier {
   /// against. Empty while none are known.
   String get displaySetup => displaySetupOf(displays.value);
 
-  /// Keep the arrangement as the one for the displays in use.
   void _rememberSetupDock() {
     final setup = displaySetup;
     if (setup.isEmpty) return;
@@ -2146,8 +2089,6 @@ class LumitUiState extends ChangeNotifier {
     }
   }
 
-  /// Whether an arrangement, as JSON, has a floating window this build can
-  /// open.
   static bool _floats(Map<String, dynamic>? json) {
     if (json == null) return false;
     try {
@@ -2175,21 +2116,14 @@ class LumitUiState extends ChangeNotifier {
   /// piece of footage must not empty the Timeline under it.
   CompositionReference? get selectedComp => _selectedComp;
 
-  /// The engine's id for the view being drawn into, which every render
-  /// request carries.
   int get activeViewId => views.active?.engineId ?? 0;
 
   /// The fronted comp as the panels draw it — refreshed by one bridge
   /// call when the engine reports a change, read by everything else for free.
   final CompModel model = CompModel();
 
-  /// The fronted composition's graphics template: which of its rows are
-  /// controls. Read when [model] says the document moved, never in a build.
   final TemplateControls templateControls = TemplateControls();
 
-  /// Every Viewer view, which pane holds it, and which one is active
-  /// (docs/impl/multi-viewer.md §1). The panels that follow the active view
-  /// read [selectedComp], which is a reading of this.
   final ViewerViews views = ViewerViews();
 
   /// One texture controller per view, made when a view is first given a
@@ -2219,7 +2153,6 @@ class LumitUiState extends ChangeNotifier {
       try {
         _app.project?.closeViewerView(view: engineId);
       } catch (_) {
-        // No worker, or the project has gone. The textures go with it.
       }
     }
   }
@@ -2233,12 +2166,8 @@ class LumitUiState extends ChangeNotifier {
   /// commands, the Timeline's fold-out. The *primary* of the selection below.
   ValueNotifier<LayerReference?> selectedLayer = ValueNotifier(null);
 
-  /// The captions picked in the Captions panel and the Timeline's captions
-  /// row, which share it.
   final CaptionSelection captionSelection = CaptionSelection();
 
-  /// Every caption layer's captions in the fronted comp, for the Timeline and
-  /// the Viewer to draw from.
   CaptionTracks get captionTracks =>
       _captionTracks ??= CaptionTracks(this, _app.onChange);
   CaptionTracks? _captionTracks;
@@ -2282,12 +2211,8 @@ class LumitUiState extends ChangeNotifier {
   final ValueNotifier<({String key, Offset at})?> graphBoxMenuAsk =
       ValueNotifier(null);
 
-  /// An effect the Effect controls panel is asked to scroll into view, by a
-  /// box's Reveal in Effect controls. The panel clears it once it has.
   final ValueNotifier<UuidValue?> revealEffect = ValueNotifier(null);
 
-  /// Reveal in Effect controls: the panel is opened where the layout has it
-  /// shut, fronted, and handed the effect to pick and scroll to.
   void revealEffectCard(LayerReference layer, UuidValue effect) {
     if (!panelVisible(split, Panel.effectControls)) {
       setPanelVisible(split, Panel.effectControls, true);
@@ -2298,20 +2223,14 @@ class LumitUiState extends ChangeNotifier {
     revealEffect.value = effect;
   }
 
-  /// A box the Graph panel is asked to bring into view, by an effect's Reveal
-  /// in node graph. The panel clears it once it has.
   final ValueNotifier<BridgeNodeRef?> frameBoxRequest = ValueNotifier(null);
 
-  /// Reveal in node graph: the Graph panel is opened where the layout has it
-  /// shut, fronted on [layer], and the box is picked and brought into view.
   void revealBox(LayerReference layer, BridgeNodeRef node) {
     showNodeIn(Panel.graph, layer, node);
     frameBoxRequest.value = null;
     frameBoxRequest.value = node;
   }
 
-  /// Front [panel] on [layer] with [node] picked: the Node panel for a driven
-  /// row's driver, the Graph panel for a box.
   void showNodeIn(Panel panel, LayerReference layer, BridgeNodeRef node) {
     if (!panelVisible(split, panel)) {
       setPanelVisible(split, panel, true);
@@ -2337,24 +2256,10 @@ class LumitUiState extends ChangeNotifier {
   /// costs no call in a rebuild.
   final ValueNotifier<ShaderGraphEntry?> shaderGraphEntry = ValueNotifier(null);
 
-  /// The one box picked inside that graph, by its id, which the Node panel
-  /// draws. Either side may set it: the canvas on a pick, the Node panel's
-  /// list of boxes on a click.
   final ValueNotifier<int?> shaderGraphNode = ValueNotifier(null);
 
-  /// The word each box of the open inner graph goes by, for the boxes that
-  /// make a value and so can be looked at. Handed over by the canvas on
-  /// each read, so the Viewer's chip names a box without a call.
   Map<int, String> shaderGraphWords = const {};
 
-  /// Where each inner graph's canvas was left **this session**, by effect
-  /// instance id: the pan and the zoom come back on re-entry (§4.2 — standing
-  /// somewhere in a graph is a way of working on it, not an edit to it), and
-  /// they are never in the document.
-  ///
-  /// ponytail: session memory only; the trigger for persisting it in
-  /// `SavedSession` beside `compViews` is somebody missing their place across
-  /// a restart.
   final Map<String, ({Offset pan, double zoom})> shaderGraphViews = {};
 
   /// Enter one Custom shader's inner graph: entering a shader node works like
@@ -2368,8 +2273,6 @@ class LumitUiState extends ChangeNotifier {
       compName = _selectedComp?.getSettings().name ?? '';
       layerName = layer.getInfo().name;
     } catch (_) {
-      // The comp or layer has gone under the gesture; the crumbs read blank
-      // and the canvas's own reload decides whether there is anything to show.
     }
     shaderGraphNode.value = null;
     shaderGraphEntry.value = (
@@ -2383,15 +2286,12 @@ class LumitUiState extends ChangeNotifier {
     );
   }
 
-  /// [enterShaderGraph] for a Custom shader box in a node graph, whose boxes
-  /// are where the shader sits.
   void enterShaderGraphInComp(CompositionReference comp, UuidValue effect,
       {required String effectName}) {
     var compName = '';
     try {
       compName = comp.getSettings().name;
     } catch (_) {
-      // The comp has gone under the gesture; the crumb reads blank.
     }
     shaderGraphNode.value = null;
     shaderGraphEntry.value = (
@@ -2405,7 +2305,6 @@ class LumitUiState extends ChangeNotifier {
     );
   }
 
-  /// The breadcrumb's way back, and Escape's.
   void exitShaderGraph() {
     shaderGraphNode.value = null;
     shaderGraphEntry.value = null;
@@ -2431,14 +2330,12 @@ class LumitUiState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Copy one effect or a whole stack, same repaint, same mirror.
   void copyEffectsToClipboard(String text) {
     clipboard.putEffects(text);
     Clipboard.setData(ClipboardData(text: text));
     notifyListeners();
   }
 
-  /// Copy masks, same repaint, same mirror.
   void copyMasksToClipboard(String text) {
     clipboard.putMasks(text);
     Clipboard.setData(ClipboardData(text: text));
@@ -2479,8 +2376,6 @@ class LumitUiState extends ChangeNotifier {
     return text != clipboard.text;
   }
 
-  /// The part of a 3D model the Timeline has picked, by its layer and its rows'
-  /// id, which the Viewer draws handles on.
   final ValueNotifier<({UuidValue layer, String part})?> pickedPart =
       ValueNotifier(null);
 
@@ -2545,7 +2440,6 @@ class LumitUiState extends ChangeNotifier {
     ]);
   }
 
-  /// Replace the selection. The first entry becomes [selectedLayer].
   void setSelection(List<LayerReference> layers) {
     selectedLayers.value = List.unmodifiable(layers);
     selectedLayer.value = layers.isEmpty ? null : layers.first;
@@ -2666,7 +2560,6 @@ class LumitUiState extends ChangeNotifier {
     return (entry: entry, node: node);
   }
 
-  /// How [_atNodes] remembers one point.
   String? get _chipNodeKey {
     if (viewerShaderPoint case final shader?) {
       return 'shader:${shader.entry.effect}/${shader.node}';
@@ -2688,8 +2581,6 @@ class LumitUiState extends ChangeNotifier {
   /// point and so cuts nothing.
   BridgePrefixPoint? get viewerPrefix {
     if (!atSelectedEffect.value) return null;
-    // A box inside a Custom shader: the shader's point, and the box its
-    // Result reads instead.
     if (viewerShaderPoint case (:final entry, :final node)) {
       if (entry.comp case final comp?) {
         return BridgePrefixPoint(
@@ -2701,7 +2592,6 @@ class LumitUiState extends ChangeNotifier {
             layer: layer, effect: entry.effect, shaderNode: node);
       }
     }
-    // A node graph has no layers to cut, so its point names a comp and a box.
     if (viewerGraphPoint case final graph?) {
       return BridgePrefixPoint(graph: graph);
     }
@@ -2736,9 +2626,6 @@ class LumitUiState extends ChangeNotifier {
   /// asked for.
   void _followSelectionWithChip() {
     final key = _chipNodeKey;
-    // Nothing names a single point, so the chip has nothing to say and goes
-    // quiet. What each box was left at is remembered, so coming back to one is
-    // coming back to where you left it.
     final on = key == null ? false : _atNodes[key] ?? atSelectedEffect.value;
     if (key != null) _atNodes[key] = on;
     if (atSelectedEffect.value == on) return;
@@ -2802,8 +2689,6 @@ class LumitUiState extends ChangeNotifier {
           ? selectedEffects.value
           : [id];
 
-  /// Nothing picked out of any stack — a layer chosen, a parameter chosen,
-  /// empty space clicked.
   void clearEffectSelection() {
     selectedEffectsLayer = null;
     if (selectedEffects.value.isNotEmpty) {
@@ -2840,6 +2725,7 @@ class LumitUiState extends ChangeNotifier {
       return false;
     }
     EffectDragData.last = name;
+    usage.effect(name);
     model.refresh();
     if (onClip) return true;
     final added = model
@@ -2852,7 +2738,6 @@ class LumitUiState extends ChangeNotifier {
     return true;
   }
 
-  /// Add [layer] to the selection, or take it out again — Shift-click.
   void toggleSelected(LayerReference layer) {
     final id = layer.internallayerId;
     final next = [
@@ -2934,11 +2819,8 @@ class LumitUiState extends ChangeNotifier {
     setSelection(kept);
   }
 
-  /// Keep the list honest when something sets the primary on its own.
   void _syncSelection() {
     final primary = selectedLayer.value;
-    // Whichever way round the two notifiers were set, the selection has just
-    // changed, and it is part of the session (see [rememberSession]).
     rememberSession();
     // **A selected layer fronts its controls** (item 6.28): what you asked for
     // by clicking the layer is what the panel behind the tab is showing, and
@@ -2995,7 +2877,6 @@ class LumitUiState extends ChangeNotifier {
   /// in step.
   double get viewerScale => previewResolution.scaleFor(_panelScale);
 
-  /// The scale the *panel* implies, last time the Viewer laid itself out.
   double _panelScale = 1.0;
 
   /// Called by the Viewer as it lays out. Clamped to (0, 1]: rendering *above*
@@ -3079,7 +2960,6 @@ class LumitUiState extends ChangeNotifier {
     // Every tier is stored, Auto included: with Full the default, an absent
     // entry means "never chosen" and Auto is a choice like any other.
     previewResolutions[id] = resolution;
-    // The View menu ticks the one in force, so the bar has to be rebuilt.
     notifyListeners();
     rememberSession();
     requestFrame();
@@ -3172,7 +3052,6 @@ class LumitUiState extends ChangeNotifier {
     dropper.value = arm;
   }
 
-  /// Put the dropper away, picked or not.
   void disarmDropper() {
     dropper.value = null;
     dropperPatch.value = null;
@@ -3204,8 +3083,6 @@ class LumitUiState extends ChangeNotifier {
         view: activeViewId,
       );
     } catch (_) {
-      // No worker, or a composition that has gone away. The next pointer move
-      // asks again; there is nothing to recover here.
     }
   }
 
@@ -3227,7 +3104,6 @@ class LumitUiState extends ChangeNotifier {
           size: workspace.shareSize,
           every: workspace.shareEvery);
     } catch (_) {
-      // No engine to tell, as in a widget test.
     }
   }
 
@@ -3241,21 +3117,13 @@ class LumitUiState extends ChangeNotifier {
     // runs — listeners fire in the order they were added.
     _applyLanguage();
     this.workspace.addListener(_applyLanguage);
-    // Appearance and layout live in the workspace, so a change there is a
-    // change here as far as any listening widget is concerned.
     this.workspace.addListener(notifyListeners);
-    // A viewport's ground is drawn in the theme's colour.
     this.workspace.addListener(_recolourGrounds);
-    // How fast footage crosses in a shared project, and whether this
-    // computer sends and asks for any, are the person's settings and the
-    // engine's to keep to.
     this.workspace.onShareFootage = _applyShareFootage;
     _applyShareFootage();
-    // The Blender picked in Settings, which the engine converts with.
     try {
       chooseBlender(path: this.workspace.blenderPath);
     } catch (_) {
-      // No engine to tell, as in a widget test.
     }
     // Floating windows read and write where they were left through this;
     // the controls file has no other way to reach the store.
@@ -3268,8 +3136,6 @@ class LumitUiState extends ChangeNotifier {
     _app.addListener(_sourceNames.clear);
     _app.addListener(_followTrims);
     _app.addListener(_sourceMarkers.clear);
-    // The angle viewer follows the multicam clip under the playhead, so it
-    // looks again whenever the playhead or the document moves.
     _app.addListener(_followMulticam);
     playheadFrame.addListener(_followMulticam);
     // A layer that has gone must leave the selection with it. The
@@ -3280,9 +3146,7 @@ class LumitUiState extends ChangeNotifier {
     // The Source box is picked on the canvas and nowhere else, so the effect
     // selection cannot be what tells the chip about it (N4).
     graphNode.addListener(_followSelectionWithChip);
-    // And the node graph's own pick, which names a point the same way.
     compGraphNode.addListener(_followSelectionWithChip);
-    // And a box picked inside a Custom shader.
     shaderGraphNode.addListener(_followSelectionWithChip);
     // And the same for the comp the model itself is bound to: it can be undone
     // out of existence while it is the one being looked at.
@@ -3300,7 +3164,6 @@ class LumitUiState extends ChangeNotifier {
     // no rebuild path ever asks (docs/impl/ocio.md §6.1).
     _app.addListener(refreshColourSummary);
     refreshColourSummary();
-    // What this person has open, for the others in a shared project.
     selectedLayers.addListener(_lookAfterPick);
     selectedProperties.addListener(_lookAfterPick);
     selectedEffects.addListener(_lookAfterPick);
@@ -3308,10 +3171,8 @@ class LumitUiState extends ChangeNotifier {
     // Sharing starting is the one time what is selected has to be sent
     // without having changed.
     _app.share.roster.addListener(_look);
-    // And what they are changing, the moment a drag or a typing begins.
     valuesInHand.addListener(_look);
     _app.share.roster.addListener(_mindDoors);
-    // Following: where they go, and whether this person has moved off.
     _app.share.addListener(_followAlong);
     playheadFrame.addListener(_followCheck);
     addListener(_followCheck);
@@ -3331,7 +3192,6 @@ class LumitUiState extends ChangeNotifier {
         try {
           setWindowInFront(front: state == AppLifecycleState.resumed);
         } catch (_) {
-          // No engine, which is a test.
         }
       },
       onInactive: () {
@@ -3369,7 +3229,6 @@ class LumitUiState extends ChangeNotifier {
         try {
           _app.project?.noteCleanExit();
         } catch (_) {
-          // Closed already.
         }
         // The endpoint's file goes with it, so nothing names a Lumit that
         // has gone.
@@ -3528,6 +3387,9 @@ class LumitUiState extends ChangeNotifier {
         // the only thing left is to say why the picture blinked.
         case WorkerResponse_DeviceReset():
           state.postNotice(l10n.graphicsDeviceReset);
+        // The engine says this once per edit, so it is shown as it comes.
+        case WorkerResponse_FrameOverBudget(:final field0):
+          onFrameOverBudget?.call(field0);
       }
     }, onDone: () {
       // The engine's render worker has finished for good — it could not build
@@ -3568,8 +3430,6 @@ class LumitUiState extends ChangeNotifier {
   /// here. One case for both, because the payload is the same shape.
   /// Leaving `fd` null is what selects the handle argument set.
   void _showSharedTexture(BridgeSharedFrameInfo f) {
-    // The browser build: the picture is on the page, and a view's texture is
-    // named by the view.
     if (kIsWeb) {
       takeViewerPicture(f.view).then((_) => _adoptTexture(f.view, f.view));
       _followFrame(f.frame.toInt(), f.view, f.tier);
@@ -3597,7 +3457,6 @@ class LumitUiState extends ChangeNotifier {
   ValueNotifier<ViewerReach?> reachOf(int engineId) =>
       _viewReach.putIfAbsent(engineId, () => ValueNotifier<ViewerReach?>(null));
 
-  /// Whether each view's last frame was cut to the largest picture.
   final Map<int, ValueNotifier<bool>> _viewCut = {};
 
   ValueNotifier<bool> cutOf(int engineId) =>
@@ -3691,8 +3550,6 @@ class LumitUiState extends ChangeNotifier {
     }
   }
 
-  /// A registered texture is now current: mark a frame available and, if the id
-  /// changed, point that view at it.
   void _adoptTexture(int? id, int engineId) {
     if (id == null) return;
     if (!kIsWeb) controllerFor(engineId).frameReady();
@@ -3713,7 +3570,6 @@ class LumitUiState extends ChangeNotifier {
         comp: _selectedComp,
         layers: selectedLayers.value,
         playhead: playheadFrame.value,
-        // Gathered only while there is somebody to tell.
         properties: share.active ? _inHand() : const [],
         changing: valuesInHand.value);
   }
@@ -3730,8 +3586,6 @@ class LumitUiState extends ChangeNotifier {
   /// editing a value is how the others see which one this person is on.
   String? _touched;
 
-  /// Note that the row at [path] has just been edited, for the others in a
-  /// shared project. Does nothing when the project is not shared.
   void touchProperty(String path) {
     if (!_app.share.active || _touched == path) return;
     _touched = path;
@@ -3742,8 +3596,6 @@ class LumitUiState extends ChangeNotifier {
   /// Held only while the project is shared.
   List<String> _projectPicks = const [];
 
-  /// The Project panel's selection, for the others in a shared project to
-  /// see marked. Does nothing when the project is not shared.
   void setProjectPicks(Iterable<String> ids) {
     if (!_app.share.active) {
       _projectPicks = const [];
@@ -3933,7 +3785,6 @@ class LumitUiState extends ChangeNotifier {
     }
     _selectedComp = reference;
     if (moved) compGraphNode.value = null;
-    // An entered shader belongs to the comp it was entered from.
     if (moved) shaderGraphEntry.value = null;
     model.bind(reference);
     if (moved && arriving != null) {
@@ -3983,7 +3834,6 @@ class LumitUiState extends ChangeNotifier {
     into.itemId = footage.internalid.toString();
     into.compId = null;
     into.sourceFrame = 0;
-    // The marks belong to the item that was here, and the item brings its own.
     into.sourceIn = null;
     into.sourceOut = null;
     views.front(into.id);
@@ -4027,7 +3877,6 @@ class LumitUiState extends ChangeNotifier {
     try {
       _seenTrims[view.id] = footage.trim();
     } catch (_) {}
-    // Source time to the item's own frames, which wants the item's rate.
     void stand(BridgeMediaInfo? facts) {
       if (facts == null || view.itemId != id || facts.fpsNum <= 0) return;
       final last = framesOf(facts) - 1;
@@ -4048,7 +3897,6 @@ class LumitUiState extends ChangeNotifier {
     if (facts != null) {
       stand(facts);
     } else {
-      // Still being probed: the view stands on the start until the facts land.
       footage.mediaInfo().then(stand).catchError((Object _) {});
     }
     notifyListeners();
@@ -4075,8 +3923,6 @@ class LumitUiState extends ChangeNotifier {
       notifyListeners();
       requestFrame();
     }).catchError((Object _) {
-      // A file that cannot be probed shows the empty state. The next open
-      // asks again; there is nothing to recover here.
       _itemFacts.remove(id);
     });
     return null;
@@ -4094,14 +3940,11 @@ class LumitUiState extends ChangeNotifier {
       try {
         return ItemReference.footage(footage).name();
       } catch (_) {
-        // The item has gone: the view is about to show its empty state.
         return '';
       }
     }();
   }
 
-  /// The item behind a footage view, or null when the view is bound to nothing
-  /// or the project has gone.
   FootageReference? footageOf(ViewerSurface view) {
     final project = _app.project;
     final id = view.itemId;
@@ -4133,10 +3976,8 @@ class LumitUiState extends ChangeNotifier {
     views.touch();
   }
 
-  /// Plays or stops the source side, set by its bar while it is on screen.
   VoidCallback? sourcePlayToggle;
 
-  /// Whether the source side is playing, as its bar says.
   final ValueNotifier<bool> sourcePlaying = ValueNotifier(false);
 
   /// A transport key pressed with the source side in front: it plays and
@@ -4175,8 +4016,6 @@ class LumitUiState extends ChangeNotifier {
     return true;
   }
 
-  /// Whether a footage view is on screen for an opened clip to load into,
-  /// which is what the Cut workspace's source side is.
   bool get hasSourceView =>
       views.views.any((view) => view.mode == ViewMode.footage);
 
@@ -4192,7 +4031,6 @@ class LumitUiState extends ChangeNotifier {
     if (source == null) return;
     for (final entry in views.paneViews.entries) {
       if (!entry.value.contains(source.id) || entry.value.length != 2) continue;
-      // One view keeps the composition and lets the source go.
       views.setLayout(entry.key, ViewLayout.one);
       saveLayout();
       rememberSession();
@@ -4212,7 +4050,6 @@ class LumitUiState extends ChangeNotifier {
       views.setLayout(pane, ViewLayout.twoAcross);
     }
     final source = views.forPane(pane).first;
-    // The composition keeps a view: the one beside it takes what this showed.
     final beside = views.forPane(pane)[1];
     if (beside.mode != ViewMode.composition) {
       beside.mode = ViewMode.composition;
@@ -4229,7 +4066,6 @@ class LumitUiState extends ChangeNotifier {
     requestFrame();
   }
 
-  /// Whether [view] shares its pane, so letting its clip go leaves a picture.
   bool sourceBesideComposition(ViewerSurface view) => views.paneViews.values
       .any((ids) => ids.length > 1 && ids.contains(view.id));
 
@@ -4324,8 +4160,6 @@ class LumitUiState extends ChangeNotifier {
     _app.notifyDocumentChanged();
   }
 
-  /// After an edit, a footage view whose item's marks have changed under it,
-  /// by an undo or a guest, shows them.
   void _followTrims() {
     for (final view in views.views) {
       if (view.mode != ViewMode.footage) continue;
@@ -4365,8 +4199,6 @@ class LumitUiState extends ChangeNotifier {
   final ValueNotifier<({LayerReference layer, UuidValue clip})?> cutClip =
       ValueNotifier(null);
 
-  /// What the Colour workspace grades: the current shot, its current node and
-  /// what the grading panels share. Made on first use.
   GradeTarget get grade => _grade ??= GradeTarget(
       layer: selectedLayer,
       clip: cutClip,
@@ -4387,10 +4219,8 @@ class LumitUiState extends ChangeNotifier {
   /// The picked Cut clip, else the selected layer.
   ValueListenable<GradeShot?> get gradeShot => grade.shot;
 
-  /// The effect the Grade panel edits on [gradeShot].
   ValueListenable<UuidValue?> get gradeNode => grade.node;
 
-  /// Whose grade the nodes are: the shot's, a group's or the comp's.
   ValueNotifier<GradeScope> get gradeScope => grade.scope;
 
   /// Every picture clip picked in the Cut timeline, the pressed one first: what
@@ -4403,8 +4233,6 @@ class LumitUiState extends ChangeNotifier {
   final ValueNotifier<({LayerReference layer, UuidValue clip})?> cutOverlap =
       ValueNotifier(null);
 
-  /// Multicam editing: the switch mode, the angle viewer's page, the multicam
-  /// clip under the playhead, and the job that makes or syncs a multicam comp.
   late final MulticamState multicam = MulticamState(
     project: () => _app.project,
     comp: () => _selectedComp,
@@ -4416,9 +4244,6 @@ class LumitUiState extends ChangeNotifier {
     refused: reportCut,
   );
 
-  // --- The angle viewer ----------------------------------------------------
-
-  /// The multicam comp an angle viewer shows, or null for any other view.
   CompositionReference? multicamOf(ViewerSurface view) {
     final project = _app.project;
     final id = view.itemId;
@@ -4429,8 +4254,6 @@ class LumitUiState extends ChangeNotifier {
     );
   }
 
-  /// Show every angle of [multicam] in the source side, putting one up if
-  /// there is none. Footage the source side showed goes.
   void showAngles(CompositionReference multicam) {
     showSourceView();
     final view = sourceView;
@@ -4441,8 +4264,6 @@ class LumitUiState extends ChangeNotifier {
     rememberSession();
   }
 
-  /// Stand [view] on the start of the multicam comp [comp], marks and picks
-  /// cleared, and ask for its picture.
   void _standOnAngles(ViewerSurface view, UuidValue comp) {
     view.angles = true;
     view.itemId = comp.toString();
@@ -4494,7 +4315,6 @@ class LumitUiState extends ChangeNotifier {
     final comp = multicamOf(view);
     if (comp == null) return;
     final (width, height) = view.canvas;
-    // Not measured yet: the stage asks once it is.
     if (width <= 0 || height <= 0) return;
     final frame = anglesFollowing(view)?.frame ?? view.sourceFrame;
     final page = multicam.page.value;
@@ -4513,7 +4333,6 @@ class LumitUiState extends ChangeNotifier {
         view: view.engineId,
       );
     } catch (_) {
-      // No worker yet, or a comp that has gone away.
       _askedFor.remove(view.engineId);
     }
   }
@@ -4532,8 +4351,6 @@ class LumitUiState extends ChangeNotifier {
     if (view.angles) _askForView(view, force: force);
   }
 
-  /// How many frames the multicam comp an angle viewer shows has, or null
-  /// when it has gone.
   int? _anglesFrames(ViewerSurface view) {
     try {
       final frames = multicamOf(view)?.multicam()?.frames;
@@ -4543,9 +4360,6 @@ class LumitUiState extends ChangeNotifier {
     }
   }
 
-  /// The angle viewer's Insert and Overwrite: its marked stretch of the
-  /// multicam comp, on the angles picked there, placed as [placeSource]
-  /// places footage.
   void _placeAngles(ViewerSurface view, {required bool insert}) {
     final comp = _selectedComp;
     final mc = multicamOf(view);
@@ -4581,8 +4395,6 @@ class LumitUiState extends ChangeNotifier {
     playheadFrame.value = end <= 0 ? at : (at + placed).clamp(0, end);
   }
 
-  // --- Markers on footage ---------------------------------------------------
-
   /// Each item's markers as its source view last read them, by item id,
   /// dropped when the document changes.
   final Map<String, List<BridgeFootageMarker>> _sourceMarkers = {};
@@ -4609,7 +4421,6 @@ class LumitUiState extends ChangeNotifier {
     ];
   }
 
-  /// Put a marker on a footage view's item at the frame it stands on.
   void addSourceMarker(ViewerSurface view) {
     final footage = footageOf(view);
     final facts = footage == null ? null : itemFacts(footage);
@@ -4633,7 +4444,6 @@ class LumitUiState extends ChangeNotifier {
     try {
       edit();
     } catch (_) {
-      // The item went away under the press.
       return;
     }
     _app.notifyDocumentChanged();
@@ -4643,9 +4453,6 @@ class LumitUiState extends ChangeNotifier {
   /// panel reads its folder again.
   final ValueNotifier<int> presetsChanged = ValueNotifier(0);
 
-  /// The Sequence layers whose view is open in the Timeline, by layer id:
-  /// double-clicking one opens its clips and their speed envelope inside its
-  /// own row.
   final Set<String> sequenceOpen = {};
 
   /// How tall each open view's **graph** half is, by layer id, once its
@@ -4679,8 +4486,6 @@ class LumitUiState extends ChangeNotifier {
     return null;
   }
 
-  /// Say why a Cut edit was refused, on the status line. Quiet for one that
-  /// went through.
   void reportCut(BridgeCutResult result) {
     final why = switch (result) {
       BridgeCutResult.done => null,
@@ -4819,18 +4624,14 @@ class LumitUiState extends ChangeNotifier {
     return target;
   }
 
-  /// Run a source-side edit, say why when it is refused, and whether it went
-  /// through.
   bool _sourceEdit(BridgeCutResult Function() edit, {String? name}) {
     final BridgeCutResult result;
-    // Named in the History list where the edit has a name of its own.
     final project = name == null ? null : _app.project;
     project?.beginUndoGroup();
     if (name != null) project?.nameUndoGroup(name: name);
     try {
       result = edit();
     } catch (_) {
-      // The item or the composition went away under the press.
       return false;
     } finally {
       project?.endUndoGroup();
@@ -4860,13 +4661,10 @@ class LumitUiState extends ChangeNotifier {
       try {
         at = layer.nestedEntryFrame(outerFrame: playheadFrame.value);
       } catch (_) {
-        // A layer that has gone under us: open it where it was left.
       }
     }
     setSelectedComp(comp, atFrame: at);
   }
-
-  // --- How the Viewer is looking -------------------------------------------
 
   /// Exposure and tone map per composition id. Not in the document: a way of
   /// looking is not an edit, so this rides in the session blob (see
@@ -4903,8 +4701,6 @@ class LumitUiState extends ChangeNotifier {
     String roi,
     String view
   })? _pushedView;
-
-  // --- The project's colour config ------------------------------------------
 
   /// The project's OCIO config as the interface reads it: its path, whether it
   /// is in force, why not when it is not, and every name it puts in a picker
@@ -4945,8 +4741,6 @@ class LumitUiState extends ChangeNotifier {
     try {
       next = _app.project?.colourSummary() ?? noColourConfig;
     } catch (_) {
-      // No project, or one that has gone. The built-in family is the honest
-      // answer either way.
       next = noColourConfig;
     }
     if (next == colourSummary) return;
@@ -4987,7 +4781,6 @@ class LumitUiState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// The fronted comp's region, or null for the whole frame.
   List<double>? get regionOfInterest {
     final id = _selectedComp?.internalid.toString();
     return id == null ? null : regionsOfInterest[id];
@@ -5036,7 +4829,6 @@ class LumitUiState extends ChangeNotifier {
   /// so no tick makes a project dirty and Ctrl+Z never undoes one.
   final Map<String, ViewerOverlays> viewerOverlaysByComp = {};
 
-  /// The fronted comp's overlays — nothing drawn, until something is asked for.
   ViewerOverlays get viewerOverlays =>
       viewerOverlaysByComp[_selectedComp?.internalid.toString()] ??
       noViewerOverlays;
@@ -5208,9 +5000,6 @@ class LumitUiState extends ChangeNotifier {
     requestFrame();
   }
 
-  // --- The Viewer's 3D view -------------------------------------------------
-
-  /// The view the engine knows by [viewId], or null when there is none.
   ViewerSurface? _surfaceOf(int viewId) {
     for (final view in views.views) {
       if (view.engineId == viewId) return view;
@@ -5218,15 +5007,12 @@ class LumitUiState extends ChangeNotifier {
     return null;
   }
 
-  /// The pose [view] draws [comp] through, or null for the comp's own camera.
   BridgeCameraPose? _poseIn(ViewerSurface view, String? comp) {
     final looking = view.cameraViews[comp];
     if (comp == null || looking == null) return null;
     return view.cameraPoses['$comp/${looking.name}'];
   }
 
-  /// How Viewer view [viewId] is looking at its comp. Each view keeps its
-  /// own, per comp, beside its own look.
   ViewerView viewOf(int viewId) {
     final view = _surfaceOf(viewId);
     if (view == null) return ViewerView.activeCamera;
@@ -5296,12 +5082,8 @@ class LumitUiState extends ChangeNotifier {
   /// so moving the same thing again starts as a draft.
   final Map<int, (String?, int?, BridgeModelDisplay)> _slowMove = {};
 
-  /// Why a 3D model isn't drawing, as the Project panel's badge says it, so a
-  /// view with no model to draw can say it too. Null when nothing's wrong.
   final ValueNotifier<String?> modelTrouble = ValueNotifier(null);
 
-  /// A drag or a flight started or ended. Each move is timed afresh, and
-  /// ending one puts a view drawn as a draft back to its full scale.
   void _moved() {
     final draft = draftView.value;
     if (cameraDragging || cameraFlying) {
@@ -5382,11 +5164,8 @@ class LumitUiState extends ChangeNotifier {
           ? view.cameraDisplay ?? BridgeModelDisplay.final_
           : view.viewDisplay ?? BridgeModelDisplay.shaded;
 
-  /// Whether view [viewId] tints models' faces by which way they face.
   bool facesShown(int viewId) => _surfaceOf(viewId)?.faces ?? false;
 
-  /// Show models in view [viewId] the [display] way, kept for the kind of
-  /// view it is looking through, and tint their faces or not.
   void setModelDisplay(int viewId, {BridgeModelDisplay? display, bool? faces}) {
     final view = _surfaceOf(viewId);
     final comp = view == null ? null : compFor(view);
@@ -5401,7 +5180,6 @@ class LumitUiState extends ChangeNotifier {
     _cameraMoved(view, comp);
   }
 
-  /// The cube's Lines only: Wireframe, and back to the look before.
   void toggleLines(int viewId) {
     final view = _surfaceOf(viewId);
     if (view == null) return;
@@ -5438,7 +5216,6 @@ class LumitUiState extends ChangeNotifier {
     return holds;
   }
 
-  /// What [_holdsModels] last said for each comp, by id.
   final Map<String, (int?, bool)> _modelsIn = {};
 
   /// Whether view [viewId] is a fixed or custom view drawn as lines only with
@@ -5477,17 +5254,14 @@ class LumitUiState extends ChangeNotifier {
     return activeViewId;
   }
 
-  /// The scale [measuredViewId] is drawn at.
   double get measuredScale =>
       previewResolutionOf(measuredViewId).scaleFor(_panelScale);
 
-  /// Whether Viewer view [viewId] is in a 3D viewport.
   bool isViewport(int viewId) {
     final view = _surfaceOf(viewId);
     return view != null && views.isViewport(view);
   }
 
-  /// Whether view [viewId] is looking through its free view orthographically.
   bool viewportOrtho(int viewId) {
     final view = _surfaceOf(viewId);
     final id = view == null ? null : compFor(view)?.internalid.toString();
@@ -5548,15 +5322,12 @@ class LumitUiState extends ChangeNotifier {
     rememberSession();
   }
 
-  /// Back to perspective from an orthographic view the corner axes snapped.
   void leaveSnappedOrtho(int viewId, {required double distance}) {
     if (_surfaceOf(viewId)?.snappedOrtho ?? false) {
       setViewportOrtho(viewId, false, distance: distance);
     }
   }
 
-  /// Switch the active view to its 3D view shortcut [slot]. False with no
-  /// composition in it.
   bool recallViewSlot(int slot) {
     final view = views.active;
     if (view == null || compFor(view) == null || cameraDragging) return false;
@@ -5564,7 +5335,6 @@ class LumitUiState extends ChangeNotifier {
     return true;
   }
 
-  /// Make the active view's 3D view its shortcut [slot].
   bool assignViewSlot(int slot) {
     final view = views.active;
     if (view == null || compFor(view) == null) return false;
@@ -5598,7 +5368,6 @@ class LumitUiState extends ChangeNotifier {
     return true;
   }
 
-  /// Put Viewer view [viewId]'s 3D view back where it started.
   void resetViewerView({required int viewId}) {
     final view = _surfaceOf(viewId);
     final comp = view == null ? null : compFor(view);
@@ -5618,7 +5387,6 @@ class LumitUiState extends ChangeNotifier {
   void requestViewerCamera(ViewerCameraCommand command) =>
       viewerCameraRequest.value = (++_viewerCameraRequests, command);
 
-  /// The custom view Viewer view [viewId] last looked through.
   ViewerView lastCustomViewOf(int viewId) =>
       _surfaceOf(viewId)?.lastCustom ?? ViewerView.custom1;
 
@@ -5633,7 +5401,6 @@ class LumitUiState extends ChangeNotifier {
     );
   }
 
-  /// Turn view [viewId]'s 3D ground or corner axes on or off.
   void setViewerAids(int viewId, {bool? ground, bool? axes}) {
     final view = _surfaceOf(viewId);
     if (view == null) return;
@@ -5646,7 +5413,6 @@ class LumitUiState extends ChangeNotifier {
     if (views.isViewport(view) && comp != null) _cameraMoved(view, comp);
   }
 
-  /// Look at view [viewId]'s comp through [look], and render it again.
   void setViewerView(ViewerView look, {required int viewId}) {
     final view = _surfaceOf(viewId);
     final comp = view == null ? null : compFor(view);
@@ -5675,7 +5441,6 @@ class LumitUiState extends ChangeNotifier {
             height: size.height.toDouble(),
           );
         } catch (_) {
-          // No worker yet, or a comp that has gone.
           return;
         }
       }
@@ -5749,13 +5514,11 @@ class LumitUiState extends ChangeNotifier {
         look: look,
       );
     } catch (_) {
-      // No worker yet, or a comp that has gone.
       return;
     }
     _pushedCamera[view.engineId] = target;
   }
 
-  /// Say each 3D viewport's ground colour again when the theme has changed it.
   void _recolourGrounds() {
     for (final view in views.views) {
       final comp = compFor(view);
@@ -5785,7 +5548,6 @@ class LumitUiState extends ChangeNotifier {
 
   late final AppLifecycleListener _lifecycle;
 
-  /// When the account was last read on coming back to the window.
   DateTime _proAsked = DateTime(0);
 
   /// Write down where the user is. A project with no file has nowhere to be
@@ -5800,8 +5562,6 @@ class LumitUiState extends ChangeNotifier {
     workspace.rememberSession(path, session());
   }
 
-  /// Where the user is, as the thing that gets written down: the tab strip, the
-  /// fronted comp, the playhead, the selection, and how the panels are arranged.
   SavedSession session() {
     // The fronted comp's own record is only written when it is left, so the
     // live playhead is folded in here: a session written mid-work has to say
@@ -5846,8 +5606,6 @@ class LumitUiState extends ChangeNotifier {
         folds: folds.toJson());
   }
 
-  /// This project's arrangement with each set of displays it has been open
-  /// with, the one in use now included.
   Map<String, Map<String, dynamic>> _sessionSetupDocks() {
     final path = _app.project?.path();
     final before = path == null
@@ -5878,8 +5636,6 @@ class LumitUiState extends ChangeNotifier {
   /// heard of.
   bool _restoring = false;
 
-  /// The arrangement the project file itself carries, or null when it has none
-  /// or none that can be read.
   SavedSession? _embeddedSession(ProjectReference project) {
     try {
       final json = project.uiState();
@@ -5908,11 +5664,9 @@ class LumitUiState extends ChangeNotifier {
       final parsed = DockNode.fromJson(json);
       if (parsed is! DockSplit) return;
       workspace.dock = parsed;
-      // The strip's tick follows the arrangement the project brought.
       workspace.tickMatchingPreset();
       workspace.touch();
     } catch (_) {
-      // Left as it was.
     }
   }
 
@@ -5965,8 +5719,6 @@ class LumitUiState extends ChangeNotifier {
       // is no local record — the first time this project is opened here.
       final session = workspace.sessionFor(path) ?? _embeddedSession(project!);
       if (session == null) return;
-      // The arrangement this project last had with these displays, when it
-      // has been open with them before and floating windows are involved.
       final forSetup = session.setupDocks[displaySetup];
       _applyDock(forSetup != null && (_floats(forSetup) || _floats(session.dock))
           ? forSetup
@@ -5993,8 +5745,6 @@ class LumitUiState extends ChangeNotifier {
           if (r.name == e.value) previewResolutions[e.key] = r;
         }
       }
-      // The regions, checked against the comps that actually loaded — the
-      // same rule every other id in a session gets.
       for (final e in session.regionsOfInterest.entries) {
         if (known.containsKey(e.key)) {
           regionsOfInterest[e.key] = List.of(e.value);
@@ -6009,7 +5759,6 @@ class LumitUiState extends ChangeNotifier {
       for (final e in session.guides.entries) {
         if (known.containsKey(e.key)) guidesByComp[e.key] = List.of(e.value);
       }
-      // Where the user was in each comp, same rule again.
       compViews.addEntries(
         session.compViews.entries.where((e) => known.containsKey(e.key)),
       );
@@ -6050,7 +5799,6 @@ class LumitUiState extends ChangeNotifier {
         rememberCompView(activeComp,
             frame: session.frame < 0 ? 0 : session.frame);
       }
-      // Which puts the playhead back itself.
       setSelectedComp(front);
       // Unless there is no comp left to be in: no comp remembers the frame,
       // but the frame the user was on is still the frame.

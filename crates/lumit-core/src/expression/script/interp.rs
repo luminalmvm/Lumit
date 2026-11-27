@@ -1,10 +1,3 @@
-//! Walking the tree: values, variables, arithmetic and the parts of
-//! JavaScript's own library an expression leans on (arrays, text, `Math`).
-//!
-//! What After Effects adds on top (`thisComp`, `effect(…)`, `wiggle`) is in
-//! [`super::ae`]. The two meet at [`Host`]: a value this file carries about
-//! without looking inside.
-
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
@@ -106,7 +99,6 @@ pub(super) struct Closure {
     env: Rc<Env>,
 }
 
-/// Why an evaluation stopped early.
 pub(super) enum Abort {
     Error(String),
     Throw(Value),
@@ -233,7 +225,6 @@ impl<'a> Interp<'a> {
         }
     }
 
-    /// Run the program and answer with what its last statement came to.
     pub(super) fn run(&mut self) -> Result<Value, String> {
         let program = self.program;
         let root = self.root.clone();
@@ -253,7 +244,6 @@ impl<'a> Interp<'a> {
         self.spend(1)
     }
 
-    /// Charge `work` steps at once: for something whose cost is its size.
     pub(super) fn spend(&mut self, work: usize) -> Res<()> {
         let work = u32::try_from(work).unwrap_or(u32::MAX);
         SPENT.with(|spent| spent.set(spent.get().saturating_add(work)));
@@ -291,8 +281,6 @@ impl<'a> Interp<'a> {
         self.spend(text.len() / 16)?;
         Ok(Value::Str(Rc::from(text.as_str())))
     }
-
-    // ───────────────────────────── statements ─────────────────────────────
 
     fn block(&mut self, body: &[Stmt], env: &Rc<Env>) -> Res<Flow> {
         // A function can be called above the line it is written on.
@@ -555,8 +543,6 @@ impl<'a> Interp<'a> {
         Ok(Flow::Next)
     }
 
-    // ───────────────────────────── expressions ────────────────────────────
-
     fn eval(&mut self, expr: &Expr, env: &Rc<Env>) -> Res<Value> {
         self.step()?;
         Ok(match expr {
@@ -722,7 +708,6 @@ impl<'a> Interp<'a> {
         Ok(out)
     }
 
-    /// Whether a logical operator already has its answer in its left side.
     fn settles(&mut self, op: Logical, left: &Value) -> Res<bool> {
         Ok(match op {
             Logical::And => !self.truthy(left.clone())?,
@@ -821,7 +806,6 @@ impl<'a> Interp<'a> {
         }
     }
 
-    /// Call `name` on `object`.
     fn invoke(&mut self, object: Value, name: &str, args: Vec<Value>) -> Res<Value> {
         if let Value::Object(fields) = &object {
             let field = fields
@@ -889,8 +873,6 @@ impl<'a> Interp<'a> {
         })
     }
 
-    // ───────────────────────────── conversions ────────────────────────────
-
     /// A property stands for its value wherever a value is wanted, which is
     /// what lets `effect("Shake")("Seed") * 2` read as it does.
     pub(super) fn plain(&mut self, value: Value) -> Res<Value> {
@@ -928,7 +910,6 @@ impl<'a> Interp<'a> {
         out
     }
 
-    /// The numbers in a value: one for a number, each item for a list.
     pub(super) fn vector(&mut self, value: &Value) -> Res<Vec<f64>> {
         Ok(match self.plain(value.clone())? {
             Value::Array(items) => {
@@ -950,8 +931,6 @@ impl<'a> Interp<'a> {
             many => self.numbers(many),
         }
     }
-
-    // ───────────────────────────── operators ──────────────────────────────
 
     fn unary(&mut self, op: Unary, value: Value) -> Res<Value> {
         let value = self.plain(value)?;
@@ -1022,12 +1001,10 @@ impl<'a> Interp<'a> {
                 if matches!(a, Value::Str(_)) || matches!(b, Value::Str(_)) {
                     self.string(format!("{}{}", self.text(a), self.text(b)))?
                 } else {
-                    // A number added to a list joins its first item.
                     self.spread(a, b, |x, y| x + y, true)?
                 }
             }
             Binary::Sub => self.spread(a, b, |x, y| x - y, true)?,
-            // A number times a list scales every item.
             Binary::Mul => self.spread(a, b, |x, y| x * y, false)?,
             Binary::Div => self.spread(a, b, |x, y| x / y, false)?,
             Binary::Rem => Value::Num(to_number(a) % to_number(b)),
@@ -1063,9 +1040,6 @@ impl<'a> Interp<'a> {
         })
     }
 
-    // ───────────────────────────── the library ────────────────────────────
-
-    /// Call the built-in `name` on `on`.
     pub(super) fn method(&mut self, on: Value, name: &str, args: Vec<Value>) -> Res<Value> {
         match on {
             Value::Host(host) => self.host_method(host, name, args),
@@ -1151,7 +1125,6 @@ impl<'a> Interp<'a> {
         // A copy to walk, so a callback that changes the list it is being
         // called over cannot pull it out from under the loop.
         let list = || items.borrow().clone();
-        // Everything but the two that only touch the end walks the list.
         if !matches!(name, "push" | "pop") {
             self.spend(items.borrow().len() / 8)?;
         }

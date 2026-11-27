@@ -87,7 +87,18 @@ A shape takes the **Fill**, **Stroke** and **Width** on the toolbar as it is dra
 the word **Fill** or **Stroke** there for **Solid colour** or **None**. A **Width** of 0
 draws no stroke.
 
-Both are editable afterwards from the Timeline, on the shape's own **Fill**, **Stroke** and
+With shape layers selected, the three show and set those layers' shapes: the shapes and
+groups picked under **Contents**, or every shape when none is picked. Where the shapes
+differ, the toolbar shows the last one listed on the highest of the layers. **None** switches
+the fill or stroke off as its eye in the Timeline does, and **Solid colour** brings it back.
+A keyed colour or width takes a keyframe at the playhead, and one driven by an expression is
+left as it is. While a colour is being picked or **Width** dragged, the Viewer shows the
+change on the highest layer alone. A change to several layers is one undo step. The
+toolbar's own **Fill**, **Stroke** and **Width** come back when no shape layer is selected.
+The three are on the toolbar with a shape tool or the Pen armed, and not with the Selection
+tool.
+
+Both are also editable from the Timeline, on the shape's own **Fill**, **Stroke** and
 **Stroke width** rows, and all three are animatable. **Add** and **Remove** on the shape's
 menu give it a fill or a stroke, or take one away. A new fill is white and a new stroke
 black. The eye beside a **Fill** or **Stroke** row leaves it out of the picture and keeps

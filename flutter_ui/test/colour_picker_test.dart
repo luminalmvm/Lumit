@@ -1,9 +1,3 @@
-// The colour picker: the conversion maths pinned both ways (an HSV↔RGB table
-// and hex parse/format round-trips, including '#' tolerance and rejection of
-// bad input — pure functions, so a drift here would silently miscolour every
-// pick), and the behaviour the owner asked for — the R/G/B numbers above the
-// graph, each editable, and the colour applying to the document as it changes
-// rather than on a button.
 
 import 'dart:ui';
 
@@ -19,10 +13,6 @@ int g(Color c) => (c.g * 255).round();
 int b(Color c) => (c.b * 255).round();
 
 
-/// A picker opened over an overlay, with what it applied recorded.
-///
-/// The picker no longer *returns* a colour: it applies as it goes, so a test
-/// of it is a test of what it applied and when.
 class _Applied {
   final List<PickedColour> previews = [];
   final List<PickedColour> commits = [];
@@ -86,12 +76,12 @@ void main() {
     }
 
     test('the conversion table (HSV → RGB)', () {
-      expectRgb((0, 0, 0), 0, 0, 0); // black
-      expectRgb((0, 0, 1), 255, 255, 255); // white
-      expectRgb((0, 1, 1), 255, 0, 0); // pure red
-      expectRgb((120, 1, 1), 0, 255, 0); // pure green
-      expectRgb((240, 1, 1), 0, 0, 255); // pure blue
-      expectRgb((120, 0.5, 0.8), 102, 204, 102); // mid sat / mid value
+      expectRgb((0, 0, 0), 0, 0, 0);
+      expectRgb((0, 0, 1), 255, 255, 255);
+      expectRgb((0, 1, 1), 255, 0, 0);
+      expectRgb((120, 1, 1), 0, 255, 0);
+      expectRgb((240, 1, 1), 0, 0, 255);
+      expectRgb((120, 0.5, 0.8), 102, 204, 102);
     });
   });
 
@@ -100,7 +90,7 @@ void main() {
       for (final sample in [
         const Color.fromARGB(0xff, 12, 200, 90),
         const Color.fromARGB(0xff, 200, 40, 160),
-        const Color.fromARGB(0xff, 224, 90, 114), // clay, a preset accent
+        const Color.fromARGB(0xff, 224, 90, 114),
       ]) {
         final hsv = rgbToHsv(sample);
         final back = hsvToRgb(hsv.$1, hsv.$2, hsv.$3);
@@ -129,7 +119,6 @@ void main() {
 
       expect(applied.commits, isNotEmpty, reason: 'applied without a button');
       expect((applied.commits.last.r * 255).round(), 255);
-      // The hex field followed the number, so the two cannot disagree.
       expect(find.text('FF4020'), findsOneWidget);
     });
 
@@ -150,9 +139,6 @@ void main() {
           reason: 'one settled edit for the whole drag');
     });
 
-    /// With the eyedropper armed, a click is the pipette's: it reads the
-    /// window, and nothing under it (the square here) takes the click. The
-    /// picker stays open. A test has no window picture, so nothing is read.
     testWidgets('the eyedropper takes the next click', (tester) async {
       final applied = await _openPicker(tester);
       await tester.tap(find.byKey(const Key('colour-picker-dropper')));
@@ -163,7 +149,6 @@ void main() {
       expect(applied.commits, isEmpty, reason: 'the square never saw it');
       expect(find.byKey(const Key('colour-picker-square')), findsOneWidget,
           reason: 'the picker is still open');
-      // Put away, the next click is the square's again.
       await tester.tap(find.byKey(const Key('colour-picker-square')));
       await tester.pumpAndSettle();
       expect(applied.commits, isNotEmpty);
@@ -171,12 +156,10 @@ void main() {
 
     testWidgets('a linear colour reads as the screen shows it',
         (tester) async {
-      // Linear light whose screen colour is #FF8F00.
       final initial = PickedColour(1, linearOf(0x8f / 255), 0);
       final applied = await _openPicker(tester, initial: initial, linear: true);
       expect(find.text('FF8F00'), findsOneWidget,
           reason: 'the hex is what the screen shows');
-      // A hex typed is the colour seen, handed back as linear light.
       await tester.enterText(find.byType(EditableText).last, '808080');
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
@@ -223,14 +206,10 @@ void main() {
 
       expect(applied.commits.last.r, closeTo(2.5, 1e-9),
           reason: 'the value reached the document unclamped');
-      // And the picker says the swatch and hex can no longer show it.
       expect(find.byKey(const Key('colour-picker-clipped')), findsOneWidget);
     });
   });
 
-  /// The project's colour shelf, inside the picker: the kept colours apply on
-  /// a click, the plus keeps the one being edited, and the strip is absent
-  /// altogether when no project is open.
   group('the project colour shelf', () {
     SwatchShelf recording(List<BridgeSwatch> held, List<List<BridgeSwatch>> writes) =>
         SwatchShelf(held, writes.add);
@@ -268,7 +247,6 @@ void main() {
           reason: 'the colour already on the shelf keeps its name');
       final kept = writes.single.last;
       expect([kept.r, kept.g, kept.b], [1, 0, 0]);
-      // And the strip shows it without asking the engine again.
       expect(find.byKey(const Key('colour-picker-shelf-1')), findsOneWidget);
     });
   });

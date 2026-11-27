@@ -1,5 +1,3 @@
-//! What names the picture a layer's effects run on.
-
 use std::collections::HashMap;
 
 use lumit_core::fx::builtins::{LFX_MATCH_PREFIX, OFX_MATCH_PREFIX};

@@ -1,7 +1,3 @@
-//! The worker's side of a remote export: taking an offer, gathering the
-//! files it lacks, laying them out for the export, following its item in the
-//! queue, and giving the finished file back.
-
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -18,32 +14,22 @@ use super::{needs, Io, Remote};
 use crate::api::remote::BridgeExportNewsKind;
 use crate::export::QueueRowState;
 
-/// What the worker keeps free on the store's disk besides a job's files.
 const SPARE: u64 = 1 << 30;
 
-/// How many files and folders the folders it was told to look in are
-/// walked through, at most, for one job.
 const LOOK_MOST: usize = 200_000;
 
-/// The most one analysis file is read at, the most a roto one may be.
 const ANALYSIS_MOST: u64 = 512 << 20;
 
-/// The worker's side of a job's files while it gathers them.
 #[derive(Debug, Default, Clone)]
 pub(super) struct Gathering {
     pub manifest: Manifest,
-    /// The files to take from the sender, by hash, with their sizes.
     wanted: HashMap<String, u64>,
-    /// Files that arrived wrong once, and were asked for again.
     retried: HashSet<String>,
-    /// Where each file this computer had already is.
     local: HashMap<String, PathBuf>,
-    /// The manifest has been read and the files it lists asked for.
     gathered: bool,
 }
 
 impl Gathering {
-    /// The file a manifest lists under `item`.
     pub(super) fn file(&self, item: Uuid) -> Option<&Entry> {
         self.manifest
             .files
@@ -51,14 +37,12 @@ impl Gathering {
             .find(|f| files::item(&f.hash) == item)
     }
 
-    /// What is still asked for, by item.
     pub(super) fn wanted(&self) -> impl Iterator<Item = Uuid> + '_ {
         self.wanted.keys().map(|hash| files::item(hash))
     }
 }
 
 impl Remote {
-    /// Another computer offers this one an export to do.
     pub(super) fn offer(
         self: &Arc<Self>,
         id: Uuid,
@@ -164,7 +148,6 @@ impl Remote {
             Ok(link) => link,
             Err(_) => return Err("lost"),
         };
-        // Named in the queue as the sender named it.
         bridged.preset.clone_from(&job.preset);
         let item = crate::export::queue_add_job(
             id,
@@ -190,8 +173,6 @@ impl Remote {
         Ok(answer)
     }
 
-    /// Ask for the job's manifest and document, those not here yet, and
-    /// gather the rest once both are.
     fn begin_gathering(&self, job: &Job) {
         let folder = job::folder(&self.root, job.job);
         let mut gathering = Gathering::default();
@@ -219,7 +200,6 @@ impl Remote {
         }
     }
 
-    /// Whether this computer can export what another computer asks about.
     pub(super) fn check(&self, body: &Value) -> Value {
         let needs: needs::Needs = body
             .get("needs")
@@ -228,8 +208,6 @@ impl Remote {
         json!({ "lacks": needs::lacks(&needs), "version": env!("CARGO_PKG_VERSION") })
     }
 
-    /// A file of a job arrived here, on the disk thread: one a sent job is
-    /// waiting for, or one this computer was taking for its export.
     pub(super) fn arrived(self: &Arc<Self>, id: Uuid, item: Uuid, path: &Path) {
         match self.job(id) {
             Some(job) if job.sent => self.land(id, item, path),
@@ -240,11 +218,8 @@ impl Remote {
         }
     }
 
-    /// Keep a file that is what the manifest says it is, and ask once more
-    /// for one that is not.
     fn verify(self: &Arc<Self>, job: &Job, item: Uuid, path: &Path) {
         let id = job.job;
-        // The store's name for it, for a file the manifest lists.
         let expected = [&job.manifest, &job.document]
             .into_iter()
             .find(|p| files::item(&p.hash) == item)
@@ -310,8 +285,6 @@ impl Remote {
         }
     }
 
-    /// Read the manifest, check this Lumit can read the document, and ask
-    /// the sender for every file this computer lacks. On the disk thread.
     pub(super) fn gather(self: &Arc<Self>, id: Uuid) {
         let Some(job) = self.job(id).filter(|j| !j.stage.ended()) else {
             return;
@@ -405,8 +378,6 @@ impl Remote {
         let mut found: HashMap<(String, u64), Vec<PathBuf>> = HashMap::new();
         let mut next: Vec<PathBuf> = folders;
         let mut seen = 0usize;
-        // ponytail: a bounded walk. A drive of millions of files is looked
-        // through only so far, and anything past that is sent instead.
         while let Some(dir) = next.pop() {
             for entry in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
                 seen += 1;
@@ -431,8 +402,6 @@ impl Remote {
         found
     }
 
-    /// Every file is here: lay them out in the job's folder for its export,
-    /// and let its item run. On the disk thread.
     pub(super) fn lay(self: &Arc<Self>, id: Uuid) {
         let Some(job) = self.job(id).filter(|j| !j.stage.ended()) else {
             return;
@@ -561,7 +530,6 @@ impl Remote {
         files::trim(&self.root, &keep, false);
     }
 
-    /// Follow each job's item in the export queue.
     pub(super) fn follow_queue(&self, rows: &[crate::export::QueueRow]) {
         let account = self.account.lock().map(|a| a.clone()).unwrap_or_default();
         let live: Vec<Job> = self.jobs.lock().map_or_else(
@@ -598,7 +566,6 @@ impl Remote {
                             (j.frame, j.total) = (*frame, *total);
                         }
                     });
-                    // Held or let go in the queue window here.
                     if job.paused != *paused {
                         self.update(id, |j| j.paused = *paused);
                     }
@@ -621,7 +588,6 @@ impl Remote {
         }
     }
 
-    /// A job's export is done here: its file goes back, or stays.
     fn exported_here(&self, job: &Job) {
         let id = job.job;
         let Some(size) = self.write_out_list(job) else {
@@ -649,8 +615,6 @@ impl Remote {
         }
     }
 
-    /// Write the list of what a job's export wrote, for the sender to fetch.
-    /// Answers how many bytes it lists.
     fn write_out_list(&self, job: &Job) -> Option<u64> {
         let out = PathBuf::from(&job.path);
         let first = crate::export::first_file(&job.path, &job.codec);
@@ -688,8 +652,6 @@ impl Remote {
         Some(size)
     }
 
-    /// Keep a worker's job going after a restart: its link, its gathering
-    /// and its place in the queue.
     pub(super) fn keep_linked(self: &Arc<Self>, job: &Job) {
         let id = job.job;
         // As it stands now, which may have ended earlier in this turn.
@@ -793,7 +755,6 @@ impl Remote {
         }
     }
 
-    /// The other computer ended `id`: cancelled, or given up on for `error`.
     pub(super) fn ended_there(&self, id: Uuid, error: &str) {
         if error.is_empty() || error == "cancelled" {
             self.cancel_here(id, false);
@@ -802,7 +763,6 @@ impl Remote {
         }
     }
 
-    /// The sender has the file: the copy here goes.
     pub(super) fn landed_there(&self, id: Uuid) {
         let Some(job) = self.job(id) else {
             return;
@@ -833,8 +793,6 @@ impl Remote {
         view
     }
 
-    /// The sender wants the file this computer kept: answer where the link
-    /// to fetch it on listens.
     pub(super) fn fetch_here(self: &Arc<Self>, id: Uuid) -> Result<Value, &'static str> {
         let job = self.job(id).ok_or("not_found")?;
         // A sequence's path names no one file: its first frame is asked about.
@@ -848,7 +806,6 @@ impl Remote {
     }
 }
 
-/// Where a link listens, as an answer says it.
 fn addresses(link: &lumit_share::remote::Link) -> Value {
     json!({ "addresses": listening(link) })
 }
@@ -857,7 +814,6 @@ fn listening(link: &lumit_share::remote::Link) -> Vec<String> {
     link.addresses().iter().map(ToString::to_string).collect()
 }
 
-/// The error code a job ended with, as an answer gives it.
 fn code(error: &str) -> &'static str {
     match error {
         "turned_off" => "turned_off",

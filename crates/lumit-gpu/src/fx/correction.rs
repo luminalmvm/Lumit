@@ -96,10 +96,8 @@ impl CorrectionFx {
     }
 }
 
-/// Built on first use.
 pub(super) type LazyCorrection = OnceLock<CorrectionFx>;
 
-/// The two buffers every pass of one Correction reads.
 struct Buffers {
     params: wgpu::Buffer,
     data: wgpu::Buffer,
@@ -212,7 +210,6 @@ impl FxEngine {
         out
     }
 
-    /// The key step on buffers already made.
     #[allow(clippy::too_many_arguments)]
     fn correction_key_with(
         &self,
@@ -253,8 +250,6 @@ impl FxEngine {
         Some(key)
     }
 
-    /// Grow or shrink the qualifier's key: the Matte key's two separable
-    /// passes.
     fn correction_grow(
         &self,
         ctx: &GpuContext,

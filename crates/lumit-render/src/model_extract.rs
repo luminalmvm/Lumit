@@ -1,6 +1,3 @@
-//! Camera and Light layers from what a 3D model's file holds, keyed a frame at
-//! a time so they follow it through its take, its Retime and its layer's moves.
-
 use std::sync::Arc;
 
 use glam::{EulerRot, Mat3, Mat4, Quat};
@@ -22,7 +19,6 @@ struct Track {
     times: Vec<Rational>,
     position: [Vec<f64>; 3],
     rotation: [Vec<f64>; 3],
-    /// A camera's Zoom at each frame, when its lens moves.
     zoom: Vec<f64>,
 }
 
@@ -50,8 +46,6 @@ impl Track {
         self.times.push(time);
     }
 
-    /// `values` as a row: one number when they never change, a key a frame when
-    /// they do.
     fn row(&self, values: &[f64]) -> Property {
         let first = values.first().copied().unwrap_or(0.0);
         if values.iter().all(|&v| (v - first).abs() < 1e-3) {
@@ -85,7 +79,6 @@ impl Track {
         row
     }
 
-    /// The rows on `layer`.
     fn lay_on(&self, layer: &mut Layer) {
         let tr = &mut layer.transform;
         tr.position_x = self.row(&self.position[0]);
@@ -97,7 +90,6 @@ impl Track {
     }
 }
 
-/// How many frames a take is followed for at most.
 const MOST_FRAMES: i64 = 100_000;
 
 /// A Camera or Light layer for each camera and light in the file of Model layer
@@ -126,7 +118,6 @@ pub fn layers_from_model(
     let tracks = follow(doc, comp, layer, settings, &scene, &nodes);
     let size = (comp.width as f32, comp.height as f32);
     let to_layer = crate::model::model_to_comp(settings, &scene.bounds, size);
-    // The comp's pixels to a metre of the model at the layer's first frame.
     let scale = Mat4::from_cols_array_2d(&to_layer)
         .x_axis
         .truncate()
@@ -160,7 +151,6 @@ pub fn layers_from_model(
         .collect()
 }
 
-/// Where each of `nodes` is at every frame the layer spans, in comp pixels.
 fn follow(
     doc: &Arc<Document>,
     comp: &Composition,
@@ -273,7 +263,6 @@ fn light_layer(
                 lumit_scene::LightKind::Spot => LightKind::Spot,
                 _ => LightKind::Point,
             };
-            // Full strength out to where the inverse square comes to 100%.
             def.falloff = LightFalloff::InverseSquareClamped;
             def.intensity = Property::fixed(100.0);
             def.radius_px = Property::fixed((share.sqrt() * f64::from(px_per_metre)).max(1.0));
@@ -294,7 +283,6 @@ fn light_layer(
     )
 }
 
-/// Whether `scene` holds a camera or a light to make a layer from.
 #[must_use]
 pub fn holds_any(scene: &ModelScene) -> bool {
     scene
@@ -309,8 +297,6 @@ mod tests {
     use super::*;
     use glam::Vec3;
 
-    /// A key the straight line already gives is left out, and the row still
-    /// reads the same at every key it had.
     #[test]
     fn a_row_keeps_only_the_keys_a_line_cant_give() {
         let mut track = Track::default();
@@ -330,9 +316,6 @@ mod tests {
         }
     }
 
-    /// At rest a model's camera is the comp's: no turn, whatever its place.
-    /// Looking back along itself turns it half way round Y, and the same turn
-    /// again next frame doesn't unwind.
     #[test]
     fn a_track_reads_turns_as_the_comp_has_them() {
         let flip = Mat4::from_rotation_x(std::f32::consts::PI);
@@ -352,7 +335,6 @@ mod tests {
         for deg in [170.0f32, -170.0] {
             track.push(time, flip * Mat4::from_rotation_y(deg.to_radians()));
         }
-        // 170 then 190, the short way, not back through nought.
         let y = &track.rotation[1];
         assert!((y[2].abs() - y[1].abs() - 20.0).abs() < 1e-2, "{y:?}");
     }

@@ -1,5 +1,3 @@
-// The house text well: a single-line box with the house edge, an optional
-// leading mark, and the expression autofill list.
 
 import 'package:flutter/material.dart';
 
@@ -92,14 +90,12 @@ Future<void> showTextFieldMenu(
   );
 }
 
-/// A text field's gestures, with the right press opening [showTextFieldMenu].
 class TextFieldGestures extends TextSelectionGestureDetectorBuilder {
   TextFieldGestures(
       {required super.delegate, required this.context, this.more});
 
   final BuildContext context;
 
-  /// The rows the field adds to its menu as it stands now, if it adds any.
   final List<Widget> Function(VoidCallback close)? Function()? more;
   Offset _at = Offset.zero;
 
@@ -118,8 +114,6 @@ class TextFieldGestures extends TextSelectionGestureDetectorBuilder {
   }
 }
 
-/// A single-line text box in the house style. The dialogs each grew their own
-/// copy of this; it belongs here.
 class HouseTextField extends StatefulWidget {
   final TextEditingController controller;
   final double width;
@@ -144,9 +138,6 @@ class HouseTextField extends StatefulWidget {
   final TextStyle? style;
   final ExpressionAutofillGenerator? autofill;
 
-  /// Grab focus on first build — for fields that appear in response to a
-  /// gesture (an inline rename), where a second click to focus would be
-  /// asking the user to say it twice.
   final bool autofocus;
 
   /// The field's focus, owned by the caller — for a caller that has to steer
@@ -155,8 +146,6 @@ class HouseTextField extends StatefulWidget {
   /// caller wants.
   final FocusNode? focusNode;
 
-  /// Muted placeholder shown while the field is empty — what the field is
-  /// *for*, on fields whose surroundings do not already say.
   final String? hint;
 
   /// A mark inside the well, before the text — the search glyph on a field
@@ -220,8 +209,6 @@ class HouseTextField extends StatefulWidget {
   /// untouched, and is kept out of the system's autofill and suggestions.
   final bool obscure;
 
-  /// Rows added to the field's right-click menu, under Cut, Copy, Paste and
-  /// Select all.
   final List<Widget> Function(VoidCallback close)? menuRows;
 
   const HouseTextField({
@@ -273,9 +260,7 @@ class _HouseTextFieldState extends State<HouseTextField>
     super.initState();
     _focus = widget.focusNode ?? FocusNode();
     _focus.onKeyEvent = onKeyEvent;
-    // The hint draws only while empty, so emptiness changing must redraw.
     widget.controller.addListener(_changed);
-    // And the edge answers focus, so taking or losing it must redraw too.
     _focus.addListener(_redraw);
   }
 
@@ -364,8 +349,6 @@ class _HouseTextFieldState extends State<HouseTextField>
     return KeyEventResult.ignored;
   }
 
-  /// Put suggestion [i] into the text and close the list, from Enter or a
-  /// click on it.
   void _applySuggestion(int i) {
     setState(() {
       widget.autofill!.applySuggestion(suggestions[i], widget.controller);
@@ -380,8 +363,6 @@ class _HouseTextFieldState extends State<HouseTextField>
     hideOverlay();
   }
 
-  /// Up to four spaces off the start of every line the selection touches,
-  /// with the selection kept on the same text.
   static TextEditingValue _outdent(TextEditingValue value) {
     final text = value.text;
     final sel = value.selection;
@@ -453,8 +434,6 @@ class _HouseTextFieldState extends State<HouseTextField>
                               left: BorderSide(color: t.theme.selectionFill),
                               right: BorderSide(color: t.theme.selectionFill),
                               bottom: BorderSide(color: t.theme.selectionFill)),
-                          // The list hangs under the well, so it wears the
-                          // well's own corner.
                           borderRadius: BorderRadius.only(
                               bottomLeft:
                                   Radius.circular(t.theme.tokens.wellRadius),
@@ -517,8 +496,6 @@ class _HouseTextFieldState extends State<HouseTextField>
     final hint = widget.hint;
     final leading = widget.leading;
 
-    // Animated for the edge alone: the focus ring comes up as the well takes
-    // focus and fades as it gives it up (docs/15 §8).
     return AnimatedContainer(
       duration: scope.motion.mark.duration,
       curve: scope.motion.mark.curve,
@@ -529,7 +506,6 @@ class _HouseTextFieldState extends State<HouseTextField>
       // constraints instead of shrink-wrapping the 11px line — the project
       // panel's 20px search well rendered 16 without this.
       alignment: AlignmentDirectional.centerStart,
-      // A style's inner shadows, so a well can sit sunk into its panel.
       foregroundDecoration: widget.frameless
           ? null
           : insetDecoration(
@@ -617,9 +593,6 @@ class _HouseTextFieldState extends State<HouseTextField>
                       if (widget.submitOnLostFocus) {
                         widget.onSubmitted?.call(widget.controller.text);
                       }
-                      // Clicking away is a person finishing the edit, so an
-                      // inline rename commits on it rather than throwing the
-                      // work away for everyone who does not press Enter.
                       widget.onTapOutside?.call();
                       _focus.unfocus();
                       hideOverlay();
@@ -635,7 +608,6 @@ class _HouseTextFieldState extends State<HouseTextField>
     );
   }
 
-  /// The well's contents, with [leading] before them when there is one.
   static Widget _withLeading(Widget? leading, bool interactive, Widget field) =>
       leading == null
           ? field

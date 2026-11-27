@@ -35,16 +35,12 @@ use crate::fx::{
     registry::EffectMetadata, schema::EffectSchema,
 };
 
-/// How long a moved row takes to arrive.
 const SMOOTH_MS: f64 = 20.0;
 
-/// Where the read sits with no sweep on it.
 const BASE_MS: f64 = 6.0;
 
-/// The widest sweep either side of that.
 const MAX_SWEEP_MS: f64 = 5.0;
 
-/// The Vibrato effect's rows.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "audio_vibrato",
@@ -67,7 +63,6 @@ pub struct AudioVibrato {
     pub shape: i32,
 }
 
-/// The Vibrato effect's behaviour.
 pub struct AudioVibratoDef;
 
 impl EffectDef for AudioVibratoDef {
@@ -115,8 +110,6 @@ fn sweep_frames(values: &[(ParamId, f64)], rate: f64) -> f64 {
     (seconds * 1000.0).clamp(0.0, MAX_SWEEP_MS) * 0.001 * rate
 }
 
-/// The line a side, the sweep on its way to what this block asked for, and
-/// where the cycle stands.
 struct VibratoState {
     sweep: Smoother,
     left: DelayLine,
@@ -124,10 +117,8 @@ struct VibratoState {
     phase: Phase,
 }
 
-/// One open Vibrato.
 struct VibratoAudio {
     rate: f64,
-    /// Where the read sits with no sweep on it, in frames.
     base: f64,
     state: Mutex<VibratoState>,
 }
@@ -201,7 +192,6 @@ mod tests {
         let values = harness::values(&AudioVibratoDef, &[("rate", 2.0), ("depth", 60.0)]);
         let out = harness::run(&*harness::open(&AudioVibratoDef, &values), &input, &values);
 
-        // Past the smoothing, the delay swings by the sweep the cents ask for.
         let delays: Vec<f64> = out[frames / 2 * AUDIO_CHANNELS..]
             .chunks_exact(AUDIO_CHANNELS)
             .enumerate()
@@ -216,7 +206,6 @@ mod tests {
             deepest - shallowest,
             2.0 * sweep
         );
-        // And the middle of the swing is where the read rests.
         let rest = BASE_MS * 0.001 * f64::from(harness::RATE);
         assert!(((deepest + shallowest) * 0.5 - rest).abs() < 1.0);
 

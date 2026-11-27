@@ -31,8 +31,6 @@ import 'grade_clipboard.dart';
 import 'timeline_extras_frb.dart' show DoubleTap;
 import 'viewer_view_cube.dart' show ViewLookTag;
 
-/// One cell: what it shows, what it is called, whether it is the one in use,
-/// and what a double-click does.
 typedef _Cell = ({
   String key,
   String name,
@@ -93,7 +91,6 @@ class _ViewerGradeGridState extends State<ViewerGradeGrid> {
     super.dispose();
   }
 
-  /// The most cells a grid shows.
   static const int _most = 9;
 
   List<_Cell> _cells(LumitState app) {
@@ -180,7 +177,6 @@ class _ViewerGradeGridState extends State<ViewerGradeGrid> {
     }
   }
 
-  /// How big a cell's picture is made.
   static const int _edge = 640;
 
   static int _frameIn(BridgeShot s, int frame) =>
@@ -188,7 +184,6 @@ class _ViewerGradeGridState extends State<ViewerGradeGrid> {
           ? frame
           : (s.startFrame + s.endFrame) ~/ 2;
 
-  /// [from]'s grade in place of the current shot's.
   void _applyShot(LumitState app, BridgeShot from) {
     final shot = _ui.gradeShot.value;
     if (shot == null || shot.same(shotOf(from))) return;
@@ -197,7 +192,6 @@ class _ViewerGradeGridState extends State<ViewerGradeGrid> {
       layGrade(app, _ui, from.layer.copyEffects(effects: ids),
           name: 'Apply grade', to: [shot]);
     } catch (_) {
-      // The shot went.
     }
   }
 
@@ -261,13 +255,11 @@ class _ViewerGradeGridState extends State<ViewerGradeGrid> {
             final (across, down, cell) = _grid(cells.length, area.size, aspect);
             final left = area.left +
                 (area.width - across * cell.width - (across - 1) * _gap) / 2;
-            // Centred on the rows the cells fill.
             final rows = math.min(down, (cells.length / across).ceil());
             final top = area.top +
                 (area.height - rows * cell.height - (rows - 1) * _gap) / 2;
             return Stack(
               children: [
-                // The picture under the grid is put out of sight.
                 Positioned.fill(child: ColoredBox(color: t.surface0)),
                 for (final (i, c) in cells.indexed)
                   Positioned(

@@ -71,9 +71,6 @@ use crate::report::{ImportReport, ItemPath, Outcome, Reason};
 use props::{ae_extra, ae_map};
 use time::{TimeBase, DEFAULT_DURATION, DEFAULT_FPS};
 
-/// What a project item turned out to be — the half of an [`Item`] the layer
-/// mapping needs, so a layer naming a source knows whether it is a Precomp
-/// layer, a Solid layer or a Footage layer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ItemKind {
     Folder,
@@ -101,14 +98,11 @@ impl Items {
         self.by_ae_id.get(&ae_id).copied()
     }
 
-    /// The raster an item draws at, for the layers that draw from it.
     pub(crate) fn size(&self, ae_id: i64) -> Option<(f64, f64)> {
         self.sizes.get(&ae_id).copied()
     }
 }
 
-/// The conversion's running state: where times come from, where a report row
-/// goes, and the origin the current layer's key times are measured against.
 pub struct Conv<'a> {
     pub(crate) report: &'a mut ImportReport,
     pub(crate) tb: TimeBase,
@@ -132,7 +126,6 @@ pub struct Conv<'a> {
     /// Whether the comp's renderer draws Geometry options. Classic 3D ignores
     /// them, however they're set.
     pub(crate) solids: bool,
-    /// The current layer's own span, in its own timebase.
     pub(crate) span: (Rational, Rational),
     /// AE stacking index → Lumit layer id, so an effect parameter naming a
     /// layer (Set matte's, Displacement map's) resolves to the same id the
@@ -153,12 +146,10 @@ pub struct Conv<'a> {
 }
 
 impl Conv<'_> {
-    /// A capture time, in the current layer's own timebase.
     pub(crate) fn layer_time(&self, t: f64) -> Rational {
         self.offset_from(self.tb.seconds(t))
     }
 
-    /// The same subtraction, for a time already made exact.
     pub(crate) fn offset_from(&self, t: Rational) -> Rational {
         t.checked_sub(self.offset).unwrap_or(t)
     }
@@ -314,8 +305,6 @@ pub fn map_capture(capture: &Capture) -> (Document, ImportReport) {
         doc.items.push(built);
     }
 
-    // Pass three: the folder tree. Ids are already handed out, so this is a
-    // single walk with no ordering worries.
     let mut children: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
     for (item, uuid, _) in &order {
         let Some(parent) = item.parent_id.filter(|id| *id != 0) else {
@@ -688,7 +677,6 @@ fn empty_comp(id: Uuid, name: &str, ae_id: i64) -> Composition {
     }
 }
 
-/// One composition: its settings, its markers, and its layer stack.
 fn composition(
     report: &mut ImportReport,
     ae: &Comp,
@@ -810,7 +798,6 @@ fn composition(
         master_keys: None,
         master_automation: Default::default(),
         loudness_target: None,
-        // Lit as After Effects lights it, so the comp looks as it did there.
         lighting,
         blending: Default::default(),
         sound_mix: false,

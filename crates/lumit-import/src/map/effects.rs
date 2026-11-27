@@ -50,14 +50,11 @@ use super::Conv;
 /// report without inspecting the namespace.
 #[derive(Debug, Clone, PartialEq)]
 pub enum MappedEffect {
-    /// The table recognised the match name and built the Lumit equivalent.
     Mapped(EffectInstance),
-    /// Nothing claimed the match name; the instance is inert and complete.
     Placeholder(EffectInstance),
 }
 
 impl MappedEffect {
-    /// The instance either way — what the layer's stack actually receives.
     #[must_use]
     pub fn instance(self) -> EffectInstance {
         match self {
@@ -66,14 +63,6 @@ impl MappedEffect {
     }
 }
 
-/// One After Effects effect instance, mapped or placeheld.
-///
-/// **This is the seam the effect-mapping stage implements against.** It takes
-/// the capture node exactly as the walker recorded it — the effect group, with
-/// its match name, its display name, its enabled flag and its whole parameter
-/// subtree — plus the conversion context that owns the composition's timebase
-/// and the report, and the path a report row is filed under. Adding the table
-/// means giving [`claim`] a body; nothing else here changes.
 pub fn map_effect(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> MappedEffect {
     match claim(conv, path, node) {
         Some(mapped) => MappedEffect::Mapped(mapped),
@@ -81,13 +70,6 @@ pub fn map_effect(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Mapp
     }
 }
 
-/// The mapping table's claim on a match name — docs/11 §5.
-///
-/// Returns the Lumit instance when the table knows this effect, and `None`
-/// when it does not, which is what sends the instance down the placeholder
-/// road. The table is split in two halves by category so that neither can
-/// collide with the other; each is asked in turn and the first to claim the
-/// name wins.
 fn claim(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
     if let Some(controls) = pseudo(conv, path, node) {
         return Some(controls);
@@ -124,7 +106,6 @@ fn claim(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Effect
     super::fx_distort::claim(conv, path, node)
 }
 
-/// What every pseudo effect's match name begins with.
 const PSEUDO: &str = "Pseudo/";
 
 /// **A pseudo effect, as Custom controls.**
@@ -194,7 +175,6 @@ fn pseudo(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Effec
                 }
                 continue;
             }
-            // A heading, or something After Effects itself could not read.
             _ => continue,
         };
         let value = match kind {
@@ -251,7 +231,6 @@ fn pseudo(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Effec
     Some(inst)
 }
 
-/// Every leaf under `nodes`, with After Effects' own groups opened.
 fn flatten<'a>(nodes: &'a [Property], out: &mut Vec<&'a Property>) {
     for node in nodes {
         if node.group.is_some() {
@@ -283,7 +262,6 @@ fn direct(
         lumit_core::fx::builtins::schema(&name).map(|schema| (name, schema))
     })?;
     let mut inst = lumit_core::fx::builtins::instantiate(&plugin)?;
-    // An effect switched off in After Effects imports switched off.
     inst.enabled = node.enabled.unwrap_or(true);
 
     let here = path.property(display_name(node, match_name_of(node)));
@@ -316,22 +294,6 @@ fn direct(
     Some(inst)
 }
 
-/// One AE parameter leaf onto the plug-in's control of the same name.
-///
-/// "The same name" is the *displayed* name on both sides, folded to letters and
-/// digits: After Effects numbers a third-party effect's parameters
-/// (`S_Glow-0004`) where OFX keeps the plug-in's own, so the match names cannot
-/// be compared and the labels are what the two builds genuinely share. The
-/// type has to agree as well — a number onto a number, a colour onto a colour —
-/// and a control whose type does not agree is named in the report rather than
-/// coerced.
-///
-/// A point is deliberately **not** carried: After Effects measures one in
-/// pixels and OFX in whichever canonical space the plug-in declared, so the
-/// same two numbers are two different places.
-/// ponytail: no point carriage until an OFX build's coordinate space is read
-/// off a live installation rather than assumed; the report's carried-of-total
-/// count is what shows it missing.
 #[allow(clippy::too_many_arguments)]
 fn carry(
     conv: &mut Conv<'_>,
@@ -400,7 +362,6 @@ fn carry(
                 from_node(conv, at, leaf, 2, 0.0),
                 from_node(conv, at, leaf, 3, 1.0),
             ]),
-            // Named alike, shaped unlike: said out loud rather than coerced.
             _ => {
                 conv.report.row(
                     here.clone(),
@@ -420,8 +381,6 @@ fn carry(
     }
 }
 
-/// A name reduced to what two builds of one plug-in genuinely share: its
-/// letters and digits, in lower case.
 fn folded(name: &str) -> String {
     name.chars()
         .filter(|c| c.is_ascii_alphanumeric())
@@ -439,7 +398,6 @@ fn is_dissolve(row: &Row) -> bool {
     row.ae.starts_with("S_Dissolve")
 }
 
-/// Sapphire's Dissolve Percent, [`folded`].
 const DISSOLVE_AMOUNT: &str = "dissolvepercent";
 
 /// **The owner's dissolve curve** (docs/11 §5a).
@@ -530,16 +488,11 @@ fn placeholder(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> EffectI
             version: 0,
             extra: serde_json::Map::new(),
         },
-        // An effect switched off in After Effects imports switched off.
         enabled: node.enabled.unwrap_or(true),
         params,
         sample_temporally: true,
         roto: None,
-        // docs/11 §6: the placeholder keeps the name the user was looking at,
-        // which is what `custom_name` is for.
         custom_name: Some(name),
-        // Nothing to link: a placeholder carries no schema, so it has no
-        // `_x`/`_y` pairs for a chain to tie together.
         linked_pairs: Vec::new(),
         plugin_state: None,
         extra: ae_map(vec![("params", serde_json::Value::Array(carried))]),
@@ -592,7 +545,6 @@ fn collect(
                 .map(|name| ("name".to_string(), serde_json::json!(name.trim())))
                 .collect(),
         }),
-        // Nothing Lumit animates: kept whole rather than approximated.
         None => {
             // Raising the row is `from_node`'s job for the animatable leaves;
             // this branch is the only place an unreadable non-numeric leaf

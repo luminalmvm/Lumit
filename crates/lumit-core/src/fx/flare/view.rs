@@ -1,11 +1,7 @@
-//! Where a Light layer lands on the picture once the comp's camera has looked
-//! at it.
-
 use std::sync::Arc;
 
 use crate::model::{Composition, Document, ResolvedLight};
 
-/// The comp's camera at one moment, ready to place lights.
 pub struct View {
     /// The camera's projection, or none where the comp has no camera and the
     /// lights are drawn where they stand.
@@ -13,7 +9,6 @@ pub struct View {
 }
 
 impl View {
-    /// The active camera at comp time `t`.
     #[must_use]
     pub fn at(doc: &Arc<Document>, comp: &Composition, t: f64) -> Self {
         let (w, h) = (f64::from(comp.width), f64::from(comp.height));
@@ -33,7 +28,6 @@ impl View {
             Some(m) => {
                 let row = |r: [f64; 4]| r[0] * x + r[1] * y + r[2] * z + r[3];
                 let depth = row(m[2]);
-                // A light further off draws smaller, by the same distance.
                 (depth > 1e-6).then(|| (row(m[0]) / depth, row(m[1]) / depth, 1.0 / depth))?
             }
         };

@@ -58,7 +58,6 @@ const fn group(
     }
 }
 
-/// The rows only one source uses, then the twirls.
 pub const ENERGY_LINE_GROUPS: &[ParamGroup] = &[
     group(
         "",
@@ -115,7 +114,6 @@ pub const ENERGY_LINE_GROUPS: &[ParamGroup] = &[
     ),
 ];
 
-/// Energy line's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "energy_line",
@@ -140,7 +138,6 @@ pub struct EnergyLine {
     )]
     pub preset: u32,
 
-    /// What the light is drawn along.
     #[choice(
         label = "Draw along",
         options = ["Line", "Mask", "Shape", "Text"],
@@ -272,7 +269,6 @@ pub struct EnergyLine {
     #[colour(label = "Glow colour", default = [0.06, 0.28, 1.0, 1.0], max = 4.0)]
     pub glow_colour: [f32; 4],
 
-    /// How bright the glow is, per cent.
     #[slider(
         label = "Glow intensity",
         min = 0.0,
@@ -423,7 +419,6 @@ pub struct EnergyLine {
     #[toggle(label = "Composite on original", default = false)]
     pub composite_on_original: bool,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -440,7 +435,6 @@ impl EnergyLine {
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
     /// The flicker's gain this frame, 0..1.
     pub const DERIVED_FLICKER: ParamId = ParamId::new("derived.flicker");
-    /// How far the noise has evolved this frame.
     pub const DERIVED_EVOLUTION: ParamId = ParamId::new("derived.evolution");
     /// How far the wind has carried the noise, px@comp, x and y.
     pub const DERIVED_WIND: ParamId = ParamId::new("derived.wind");
@@ -561,8 +555,6 @@ impl EnergyLine {
     /// How far past the core the glow and the noise reach, raster pixels.
     #[must_use]
     pub fn reach(look: &Look) -> f32 {
-        // ponytail: the widest exponential reads 73 radii out; this keeps up
-        // to 20, where it is down to about a hundredth, as Glow does.
         let ratio = 1.0 - 1.0 / (1.0 + look.glow_falloff);
         let glow = if look.glow_gain > 0.0 {
             look.glow_radius * (2.0 + 18.0 * ratio) + look.glow_warp
@@ -727,7 +719,6 @@ fn shutter(cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
     );
 }
 
-/// Energy line's behaviour.
 pub struct EnergyLineDef;
 
 impl EffectDef for EnergyLineDef {

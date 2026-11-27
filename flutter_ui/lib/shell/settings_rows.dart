@@ -8,8 +8,7 @@
 //
 // A row is its name at one edge and its control at the other, so a page's
 // controls stand in one column down the far edge and the row uses the width it
-// has. A section is a kicker over its rows with a rule and a little air above
-// it, and no card around them.
+// has. A section is a kicker over a rounded card that holds its rows.
 
 import 'dart:math' as math;
 
@@ -27,32 +26,24 @@ import '../state/files.dart' if (dart.library.js_interop) '../state/files_web.da
 import 'dialog_frame.dart' show FittedText;
 import 'settings_account.dart' show askBefore;
 
-/// A row's height, and the numbers that make it up (docs/15 §12A.4/§12A.6: a
-/// dialog row is 30 under both densities). A row carrying a live readout under
-/// it is taller by that line; nothing else grows.
-const double settingsRowHeight = 30;
+const double settingsRowHeight = 34;
 
-/// The inset every row and section header takes from the page's edges.
 const double settingsRowPadding = 16;
 
-/// The least a row's name keeps, the gap beside it, and what a row sets aside
-/// for each button after its control.
 const double settingsLabelMin = 130;
 const double settingsRowGap = 12;
 const double settingsActionAllowance = 80;
 
-/// A section's kicker band: 12 above the label, its 14px line, 4 below.
-const double settingsSectionHeaderHeight = 30;
+const double settingsPagePadding = 16;
+const double settingsSectionGap = 22;
 
-/// The air above a section's rule — every section but the page's first.
-const double settingsSectionGap = 6;
+const double settingsCardPadding = 6;
 
 /// A dropdown's closed face and a value well **in a dialog**: 22, the one
 /// height §12A.6 gives them under both densities. Panel wells are 20; a dialog
 /// is roomier because it is read once rather than lived in.
 const double settingsControlHeight = 22;
 
-/// The dot beside a row's name when its setting differs from a new install's.
 const double settingsChangedMark = 4;
 
 /// Where a row's setting stands against a new install's: whether it differs,
@@ -65,8 +56,6 @@ class SettingState {
   final String? copy;
 }
 
-/// A row's control, carrying where its setting stands, so [settingsRow] can
-/// offer Reset and mark a change without each row wiring both.
 class SettingControl extends StatelessWidget {
   const SettingControl({super.key, required this.setting, required this.child});
   final SettingState setting;
@@ -76,11 +65,7 @@ class SettingControl extends StatelessWidget {
   Widget build(BuildContext context) => child;
 }
 
-/// A named group of rows: a quiet kicker, then the rows themselves.
 ///
-/// [first] leaves off the rule and the air above it, which the page's opening
-/// section has nothing to be separated from. [onResetPage] puts the page it
-/// is on back, from the kicker's right-click, greyed unless [pageChanged].
 Widget settingsSection(
   LumitTheme t,
   String title,
@@ -88,28 +73,43 @@ Widget settingsSection(
   bool first = false,
   VoidCallback? onResetPage,
   bool pageChanged = true,
-}) =>
-    Column(
+}) {
+  final corner = t.tokens.sectionRadius <= 0
+      ? 0.0
+      : (t.tokens.sectionRadius < 8 ? 8.0 : t.tokens.sectionRadius);
+  return Padding(
+    padding: EdgeInsets.fromLTRB(settingsPagePadding,
+        first ? settingsPagePadding : settingsSectionGap, settingsPagePadding, 0),
+    child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (!first) ...[
-          const SizedBox(height: settingsSectionGap),
-          Container(height: 1, color: t.hairline),
-        ],
-        pageMenu(onResetPage, SizedBox(
-          height: settingsSectionHeaderHeight,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(
-                settingsRowPadding, 12, settingsRowPadding, 4),
-            child: Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: Text(t.kickerCase(title), style: t.kicker),
+        pageMenu(
+            onResetPage,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(2, 0, 2, 8),
+              child: Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: Text(t.kickerCase(title), style: t.kicker),
+              ),
             ),
+            changed: () => pageChanged),
+        Container(
+          clipBehavior: Clip.antiAlias,
+          padding: const EdgeInsets.symmetric(vertical: settingsCardPadding),
+          decoration: BoxDecoration(
+            color: t.surface2,
+            borderRadius: BorderRadius.circular(corner),
+            border: Border.all(color: t.hairline),
           ),
-        ), changed: () => pageChanged),
-        ...rows,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: rows,
+          ),
+        ),
       ],
-    );
+    ),
+  );
+}
 
 /// [heading] with a right-click holding Reset page, when [reset] is given.
 /// [changed] is asked as the menu opens, and greys the row when it says no.
@@ -139,7 +139,6 @@ Widget _rightClick(
       ),
     );
 
-/// The Reset page row every page heading's menu carries.
 Widget resetPageRow(VoidCallback reset, VoidCallback close,
         {bool enabled = true}) =>
     MenuRow(
@@ -152,8 +151,6 @@ Widget resetPageRow(VoidCallback reset, VoidCallback close,
       child: MenuLabel(l10n.settingsResetPage, enabled: enabled),
     );
 
-/// A row's right-click: Reset, greyed while it stands at the default, then
-/// Copy value where there is one worth copying.
 List<Widget> _settingMenu(SettingState setting, VoidCallback close) => [
       if (setting.reset case final reset?)
         MenuRow(
@@ -245,7 +242,6 @@ Widget settingsRow(
       ),
     ));
 
-/// [row] with its setting's menu and mark, when [control] carries one.
 Widget _withSetting(LumitTheme t, Widget control, Widget row) {
   if (control is! SettingControl) return row;
   final setting = control.setting;
@@ -281,8 +277,6 @@ String byteSize(int bytes) {
   return '${(b / (1 << 20)).toStringAsFixed(0)} ${l10n.unitMb}';
 }
 
-/// How much the browser keeps for Lumit, once it has said, and a Clear that
-/// forgets the files no recent project uses.
 Widget storageKept(LumitTheme t) => StatefulBuilder(
       builder: (context, setState) => Row(
         mainAxisSize: MainAxisSize.min,

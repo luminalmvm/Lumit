@@ -147,7 +147,6 @@ fn ps_xy(line: i32, pos: i32) -> vec2<i32> {
     return vec2<i32>(pos, line);
 }
 
-// Is this pixel in the band, and what does it sort by.
 struct Sample {
     masked: bool,
     key: u32,
@@ -215,8 +214,6 @@ fn pixel_sort(@builtin(global_invocation_id) gid: vec3<u32>) {
     let here = textureLoad(src, ps_xy(line, pos), 0);
     let me = ps_sample(line, pos);
 
-    // The walk: outward until the run of in-band pixels ends, counting the ones
-    // that belong in front on the way.
     var s = pos;
     var e = pos;
     var rank = 0;

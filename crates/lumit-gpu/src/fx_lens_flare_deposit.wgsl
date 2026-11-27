@@ -75,7 +75,6 @@ struct Dims {
     head: vec4<u32>,
 };
 
-// One axis of pyramid level `level`: ceil(n / 2^level).
 fn level_dim(n: u32, level: u32) -> u32 {
     return (n + (1u << level) - 1u) >> level;
 }
@@ -215,7 +214,6 @@ fn deposit(@builtin(global_invocation_id) gid: vec3<u32>) {
     for (var py = y0; py <= y1; py = py + 1) {
         for (var px = x0; px <= x1; px = px + 1) {
             let d = vec2<f32>(f32(px) + 0.5 - centre.x, f32(py) + 0.5 - centre.y);
-            // (u, v) in the parallelogram's own frame: solve [a1 a2](u,v)^T = d.
             let u = (d.x * a2.y - d.y * a2.x) * inv_det;
             let v = (d.y * a1.x - d.x * a1.y) * inv_det;
             if (abs(u) >= 3.0 || abs(v) >= 3.0) {

@@ -29,8 +29,6 @@ import 'frb_test_support.dart';
 void main() {
   setUpAll(initEngineForTests);
 
-  /// A project with one footage layer, selected — carrying an enabled Roto
-  /// brush unless [brush] says it starts bare (the first-touch case).
   ({
     LumitState state,
     LumitUiState uiState,
@@ -144,7 +142,6 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  /// Drag across the picture, which is how a scribble is made.
   Future<void> scribble(WidgetTester tester, Offset from) async {
     final gesture = await tester.startGesture(from);
     await tester.pump();
@@ -196,9 +193,7 @@ void main() {
       // file's own pixel, not the panel's and not the composition's.
       expect(stroke.points[0], closeTo(200, 1));
       expect(stroke.points[1], closeTo(160, 1));
-      // The last point is where the pointer stopped, five 12-px steps along.
       expect(stroke.points[stroke.points.length - 2], closeTo(320, 2));
-      // And the width is in that same ruler.
       expect(stroke.radius, w.uiState.tools.rotoSize / 2);
     });
 
@@ -237,8 +232,6 @@ void main() {
       expect(status.baseFrame, 18, reason: 'the file\'s frame, not the comp\'s');
       expect(strokesOf(w.layer).single.frame, 18);
 
-      // A second scribble on another frame is a correction and leaves the base
-      // where the first one put it.
       frame.value = 40;
       nudge.value++;
       await tester.pumpAndSettle();
@@ -431,8 +424,6 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    /// The two model refusals: each has its own words, and the missing one is
-    /// the only status with somewhere for the reader to go.
     testWidgets('a missing model says so and offers the Addons page',
         (tester) async {
       final w = withBrush();

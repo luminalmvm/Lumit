@@ -1,12 +1,7 @@
-//! Writing into an encoder's frames: a blank one for the test encode, views of
-//! the audio planes, and the copies that fill the picture planes. Each raw
-//! pointer touch is kept small and checked.
-
 use crate::MediaError;
 use rsmpeg::avutil::AVFrame;
 use rsmpeg::ffi;
 
-/// A black frame in the encoder's own pixel format, used by the test encode.
 pub(super) fn blank_frame(pix_fmt: i32, width: u32, height: u32) -> Result<AVFrame, MediaError> {
     let mut frame = AVFrame::new();
     let w = i32::try_from(width).map_err(|_| MediaError::Ffmpeg("frame width overflows".into()))?;
@@ -36,14 +31,12 @@ pub(super) fn blank_frame(pix_fmt: i32, width: u32, height: u32) -> Result<AVFra
         }
         return Ok(frame);
     }
-    // Packed ARGB, QuickTime Animation's: one plane, clear black.
     if pix_fmt == ffi::AV_PIX_FMT_ARGB {
         fill_plane(frame.data[0], frame.linesize[0], rows, 0)?;
         return Ok(frame);
     }
     // Y = 16, chroma = 128 is video-range black for both layouts we feed.
     fill_plane(frame.data[0], frame.linesize[0], rows, 16)?;
-    // VP9's alpha plane, full height: opaque.
     if pix_fmt == ffi::AV_PIX_FMT_YUVA420P {
         fill_plane(frame.data[3], frame.linesize[3], rows, 255)?;
     }
@@ -59,8 +52,6 @@ pub(super) fn blank_frame(pix_fmt: i32, width: u32, height: u32) -> Result<AVFra
     Ok(frame)
 }
 
-/// Fill one frame plane with a byte value — a raw-pointer touch, kept small
-/// and auditable like `copy_pixels_into`.
 fn fill_plane(ptr: *mut u8, linesize: i32, rows: usize, value: u8) -> Result<(), MediaError> {
     if ptr.is_null() {
         return Err(MediaError::Ffmpeg("encode frame has no data plane".into()));
@@ -79,8 +70,6 @@ fn fill_plane(ptr: *mut u8, linesize: i32, rows: usize, value: u8) -> Result<(),
     Ok(())
 }
 
-/// View an audio plane as `len` f32 samples — the audio twin of
-/// `fill_plane`, with the same null discipline plus an alignment check.
 pub(super) fn plane_f32_mut<'a>(ptr: *mut u8, len: usize) -> Result<&'a mut [f32], MediaError> {
     if ptr.is_null() {
         return Err(MediaError::Ffmpeg("audio frame has no data plane".into()));
@@ -98,8 +87,6 @@ pub(super) fn plane_f32_mut<'a>(ptr: *mut u8, len: usize) -> Result<&'a mut [f32
     }
 }
 
-/// View an audio plane as `len` i16 samples — the packed-PCM twin of
-/// [`plane_f32_mut`], with the same null and alignment discipline.
 pub(super) fn plane_i16_mut<'a>(ptr: *mut u8, len: usize) -> Result<&'a mut [i16], MediaError> {
     if ptr.is_null() {
         return Err(MediaError::Ffmpeg("audio frame has no data plane".into()));
@@ -117,8 +104,6 @@ pub(super) fn plane_i16_mut<'a>(ptr: *mut u8, len: usize) -> Result<&'a mut [i16
     }
 }
 
-/// View an audio plane as `len` i32 samples — the 24-bit twin of
-/// [`plane_i16_mut`], with the same null and alignment discipline.
 pub(super) fn plane_i32_mut<'a>(ptr: *mut u8, len: usize) -> Result<&'a mut [i32], MediaError> {
     if ptr.is_null() {
         return Err(MediaError::Ffmpeg("audio frame has no data plane".into()));

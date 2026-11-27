@@ -29,7 +29,6 @@ pub(super) fn find_folder(doc: &Document, key: &str) -> Result<Uuid, ScriptError
     }
 }
 
-/// The folder `id` is filed in, if any.
 fn folder_of(doc: &Document, id: Uuid) -> Option<Uuid> {
     doc.items.iter().find_map(|i| match i {
         ProjectItem::Folder(f) if f.children.contains(&id) => Some(f.id),
@@ -140,7 +139,6 @@ pub(super) fn item_set(host: &dyn Host, a: ItemSetArgs) -> Result<Value, ScriptE
             );
         }
         Some(None) => {
-            // Out of whatever folder holds it, to the top of the panel.
             if let Some(ProjectItem::Folder(f)) = folder_of(&doc, id).and_then(|f| doc.item(f)) {
                 ops.push(Op::SetFolderChildren {
                     folder: f.id,

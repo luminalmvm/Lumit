@@ -30,7 +30,6 @@ use super::props::{child, display_name, from_node, match_name_of, starting_value
 use super::shape_paths::{ellipse, rect, star, Bake, Op};
 use super::{linear_colour, Conv};
 
-/// A shape layer's contents, ready to draw.
 pub(super) fn contents(
     conv: &mut Conv<'_>,
     path: &ItemPath,
@@ -42,7 +41,6 @@ pub(super) fn contents(
     entries(items)
 }
 
-/// An item and the modifiers that act on it, in the order they apply.
 struct Art {
     item: ShapeItem,
     mods: Vec<ModifierKind>,
@@ -138,7 +136,6 @@ pub(super) fn follow(contents: &[ShapeEntry], transform: &mut lumit_core::model:
     }
 }
 
-/// One group's transform, as its five properties.
 #[derive(Clone)]
 struct Xf {
     anchor: [LumProperty; 2],
@@ -163,7 +160,6 @@ struct Drawn {
     wiggle: Option<Deform>,
 }
 
-/// What makes a path.
 #[derive(Clone)]
 enum Make {
     Rect {
@@ -429,7 +425,6 @@ fn walk(conv: &mut Conv<'_>, path: &ItemPath, nodes: &[Property], chain: &[Xf]) 
     }
 }
 
-/// One item: the path under one fill or stroke.
 fn paint(conv: &mut Conv<'_>, node: &Property, drawn: &Drawn) -> Option<Art> {
     let props = node.children();
     let kind = match_name_of(node);
@@ -526,7 +521,6 @@ fn paint(conv: &mut Conv<'_>, node: &Property, drawn: &Drawn) -> Option<Art> {
     (!item.path.vertices.is_empty()).then_some(Art { item, mods })
 }
 
-/// The repeater, for an item above it.
 fn repeat(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> Repeater {
     let transform =
         child(props, "ADBE Vector Repeater Transform").map_or(&[][..], Property::children);
@@ -575,12 +569,6 @@ fn repeat(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> Repeater 
     }
 }
 
-/// The path at the start, and, where anything that shapes or places it moves,
-/// its shape on every frame across the keys that move it.
-///
-/// ponytail: a frame at a time rather than the keys' own curves, which is exact
-/// on every frame and a few hundred keys for a long move. Map the keys straight
-/// across if a file ever grows too big from it.
 fn geometry(conv: &Conv<'_>, drawn: &Drawn) -> (BezierPath, Vec<PathKeyframe>) {
     let at = |t: f64| shape_at(drawn, t);
     let Some((first, last)) = moving(drawn) else {
@@ -700,7 +688,6 @@ fn shape_at(drawn: &Drawn, t: f64) -> BezierPath {
     path
 }
 
-/// A path carried out through the groups in `chain`.
 fn carry(chain: &[Xf], path: &BezierPath, t: f64) -> BezierPath {
     BezierPath {
         vertices: path
@@ -723,7 +710,6 @@ fn carry(chain: &[Xf], path: &BezierPath, t: f64) -> BezierPath {
     }
 }
 
-/// A point carried out through every group it sits in, innermost first.
 fn place(chain: &[Xf], p: [f64; 2], t: f64) -> (f64, f64) {
     let (mut x, mut y) = (p[0], p[1]);
     for g in chain {
@@ -784,7 +770,6 @@ fn pair(
     })
 }
 
-/// A number Lumit keeps still, as it starts.
 fn still_value(props: &[Property], name: &str, default: f64) -> f64 {
     child(props, name)
         .and_then(|node| starting_value(node).0)

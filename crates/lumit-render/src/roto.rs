@@ -62,10 +62,6 @@ use uuid::Uuid;
 
 use crate::sidecar;
 
-// ---------------------------------------------------------------------------
-// What a propagation is asked for
-// ---------------------------------------------------------------------------
-
 use crate::frames::RotoFrames;
 
 /// What names one propagation's file: the media's own content, and everything
@@ -90,7 +86,6 @@ pub struct RotoKey {
 }
 
 impl RotoKey {
-    /// The key for `fingerprint` propagated from `block` under `settings`.
     #[must_use]
     pub fn new(fingerprint: &Fingerprint, block: &RotoBlock, settings: RotoSettings) -> Self {
         let mut h = blake3::Hasher::new();
@@ -139,10 +134,7 @@ impl RotoKey {
     }
 }
 
-/// One propagation, as handed to the worker.
 pub struct RotoJob {
-    /// The **Roto brush instance** the answer is filed under, and what
-    /// [`progress`] is read by.
     pub instance: Uuid,
     /// What the sidecar calls it, or `None` for a source with no fingerprint —
     /// which is [`RotoFailure::Offline`], refused before a thread is spawned.
@@ -190,7 +182,6 @@ impl RotoJob {
 /// samples it as it repaints, exactly as it samples the cache bar.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Progress {
-    /// Accepted, not started.
     Queued,
     /// Solving: `done` of `total` frames, `reused` of them copied from a
     /// previous run rather than solved. The second number is what makes prefix
@@ -200,7 +191,6 @@ pub enum Progress {
         total: usize,
         reused: usize,
     },
-    /// There is a run in the store for this instance.
     Done,
     /// Stopped between frames. **The finished prefix was kept** — see the
     /// module note.
@@ -213,7 +203,6 @@ pub enum Progress {
 /// the bridge can hand the interface a reason rather than an English sentence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum RotoFailure {
-    /// No resolved media fingerprint — nothing to key a cache with.
     #[error("the media is offline")]
     Offline,
     /// No GPU flow on this device. The CPU oracle at seconds a pair would
@@ -221,16 +210,12 @@ pub enum RotoFailure {
     /// the byte-identical rebuild claim, so the honest answer is the refusal.
     #[error("optical flow is not available on this device")]
     FlowUnavailable,
-    /// One propagation at a time.
     #[error("another propagation is running")]
     Busy,
-    /// Propagate pressed before any stroke.
     #[error("there is no base frame to propagate from")]
     NoBaseFrame,
-    /// The media could not be opened, or carries no video.
     #[error("the media could not be read")]
     Unreadable,
-    /// Opened, but with no frames or no raster.
     #[error("the media has no frames to propagate through")]
     NoFrames,
     /// The base frame's own solve had nothing to work from — every stroke fell
@@ -283,7 +268,6 @@ impl RotoFailure {
 /// because the encoder is nearly the whole cost and a second ask about the same
 /// frame should pay the decoder alone (docs/impl/addons.md §6.2).
 pub trait RotoModel {
-    /// Read the base frame of RGBA bytes, and hold on to what it read.
     fn embed(&mut self, rgba: &[u8], width: u32, height: u32) -> Result<(), RotoFailure>;
     /// What the taps point at, as a coverage per pixel of the frame just read.
     fn mask(&mut self, points: &[(f32, f32)], labels: &[u8]) -> Result<Vec<f32>, RotoFailure>;
@@ -292,10 +276,8 @@ pub trait RotoModel {
     fn made_with(&self) -> String;
 }
 
-/// The segmentation model, wrapped so this file never names `lumit_ml` twice.
 struct SegmentModel {
     model: lumit_ml::segment::Segment,
-    /// The base frame as the encoder described it, kept for the run.
     frame: Option<lumit_ml::segment::Embedding>,
 }
 
@@ -338,28 +320,18 @@ impl RotoModel for SegmentModel {
     }
 }
 
-/// Open the installed segmentation pack, on the thread that will run it.
 fn open_segment() -> Result<Box<dyn RotoModel>, RotoFailure> {
     lumit_ml::segment::Segment::open()
         .map(|model| Box::new(SegmentModel { model, frame: None }) as Box<dyn RotoModel>)
         .map_err(|e| RotoFailure::of(&e))
 }
 
-/// What happened when a propagation was asked for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Requested {
-    /// Accepted; watch [`progress`].
     Started,
-    /// Refused, with the reason. [`RotoFailure::Busy`] is the ordinary one.
     Refused(RotoFailure),
 }
 
-// ---------------------------------------------------------------------------
-// What comes back
-// ---------------------------------------------------------------------------
-
-/// One frame's matte as the sidecar keeps it: the strokes it depends on, boiled
-/// down, the box it lives in, and the pixels inside that box.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct FrameRecord {
     frame: i64,
@@ -375,7 +347,6 @@ struct FrameRecord {
     lz4: Vec<u8>,
 }
 
-/// One Roto brush instance's propagation, as the render path wants it.
 #[derive(Debug)]
 pub struct RotoRun {
     pub width: u32,
@@ -395,13 +366,6 @@ pub struct RotoRun {
     pub made_with: String,
     /// Ascending by frame, so a lookup is a binary search.
     records: Vec<FrameRecord>,
-    /// The last few frames decompressed, so scrubbing one region does not
-    /// re-inflate a plane per repaint.
-    ///
-    /// ponytail: a four-entry ring walked linearly, which is an LRU at this
-    /// size; a real one when somebody wants more than a handful of frames warm
-    /// at once. The lock is held for the length of a `Vec` scan and never
-    /// across a decompression that misses.
     warm: Mutex<Vec<(i64, Arc<Vec<u8>>)>>,
 }
 
@@ -422,8 +386,6 @@ impl RotoRun {
         self.first_frame > 0 || self.last_frame + 1 < clip
     }
 
-    /// The chain hash frame `frame`'s matte was filed under, for the frame key
-    /// and for the reuse test.
     #[must_use]
     pub fn chain(&self, frame: i64) -> Option<[u8; 32]> {
         Some(self.records.get(self.index(frame)?)?.chain)
@@ -574,10 +536,6 @@ pub(crate) fn shrink(plane: &[u8], width: u32, height: u32) -> ([u32; 4], Vec<u8
     )
 }
 
-// ---------------------------------------------------------------------------
-// The sidecar
-// ---------------------------------------------------------------------------
-
 /// Bump when the record's meaning changes. Old files then hash to a different
 /// name and are simply never asked for — the disposal the frame cache's
 /// algorithm version performs.
@@ -590,7 +548,6 @@ const FORMAT_VERSION: u16 = 2;
 /// of ours is refused rather than fed to a decoder.
 const MAGIC: &[u8; 7] = b"LUMROT\0";
 
-/// What one `.lrot` file holds.
 #[derive(serde::Serialize, serde::Deserialize)]
 pub(crate) struct Record {
     /// Repeated inside the file as well as in its name, so a collision or a
@@ -613,7 +570,6 @@ fn key_bytes(key: RotoKey) -> [u8; 32] {
     out
 }
 
-/// Serialise a run, in the crate's shared framing ([`crate::sidecar`]).
 fn encode(key: RotoKey, run: &RotoRun) -> Option<Vec<u8>> {
     let body = bincode::serialize(&Record {
         key: key_bytes(key),
@@ -662,7 +618,6 @@ const MAX_RASTER_SIDE: u32 = 65_536;
 /// to catch. A gigapixel is 32768 on a side, past any comp anybody composites.
 const MAX_RASTER_PIXELS: u64 = 1 << 30;
 
-/// Whether a raster size is one this crate will allocate for.
 fn raster_is_sane(width: u32, height: u32) -> bool {
     if width == 0 || height == 0 || width > MAX_RASTER_SIDE || height > MAX_RASTER_SIDE {
         return false;
@@ -872,17 +827,12 @@ fn test_cache_dir() -> Option<PathBuf> {
     TEST_CACHE_DIR.lock().ok().and_then(|dir| dir.clone())
 }
 
-/// Point the sidecar at a temporary folder for the length of a test.
 #[cfg(test)]
 pub(crate) fn set_test_cache_dir(dir: Option<PathBuf>) {
     if let Ok(mut held) = TEST_CACHE_DIR.lock() {
         *held = dir;
     }
 }
-
-// ---------------------------------------------------------------------------
-// The store
-// ---------------------------------------------------------------------------
 
 /// Every propagation this session knows about, **by Roto brush instance**.
 ///
@@ -894,7 +844,6 @@ fn runs() -> &'static RwLock<HashMap<Uuid, Arc<RotoRun>>> {
     RUNS.get_or_init(|| RwLock::new(HashMap::new()))
 }
 
-/// The one propagation in flight, and what every instance's last one did.
 struct Jobs {
     running: Option<(Uuid, Arc<AtomicBool>)>,
     progress: HashMap<Uuid, Progress>,
@@ -934,13 +883,11 @@ pub fn matte(instance: Uuid, frame: i64) -> Option<(u32, u32, Arc<Vec<u8>>)> {
     Some((run.width, run.height, plane))
 }
 
-/// The chain hash naming frame `frame`'s matte as the store actually holds it.
 #[must_use]
 pub fn stored_chain(instance: Uuid, frame: i64) -> Option<[u8; 32]> {
     propagated(instance)?.chain(frame)
 }
 
-/// How far `instance`'s propagation has got.
 #[must_use]
 pub fn progress(instance: Uuid) -> Option<Progress> {
     jobs().lock().ok()?.progress.get(&instance).cloned()
@@ -955,7 +902,6 @@ pub fn publish(instance: Uuid, run: RotoRun) {
     }
 }
 
-/// Forget everything: what closing a project does.
 pub fn clear() {
     if let Ok(mut held) = runs().write() {
         held.clear();
@@ -1000,10 +946,6 @@ pub fn run_from_planes(
         warm: Mutex::new(Vec::new()),
     })
 }
-
-// ---------------------------------------------------------------------------
-// Asking for one
-// ---------------------------------------------------------------------------
 
 /// Start `job` on its own thread.
 ///
@@ -1150,10 +1092,6 @@ pub(crate) fn run(job: RotoJob, cancel: &AtomicBool) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// The work
-// ---------------------------------------------------------------------------
-
 /// Every tap deciding frame `frame`, gathered into one question: the points in
 /// document order and a label each.
 ///
@@ -1191,7 +1129,6 @@ fn to_engine(stroke: &lumit_core::roto::RotoStroke) -> RotoStroke {
     }
 }
 
-/// Encoded RGBA8 to the interleaved encoded f32 RGB the solve reads.
 fn to_rgb(rgba: &[u8], out: &mut Vec<f32>) {
     out.clear();
     out.reserve(rgba.len() / 4 * 3);
@@ -1202,7 +1139,6 @@ fn to_rgb(rgba: &[u8], out: &mut Vec<f32>) {
     }
 }
 
-/// The flow settings one Roto brush's rows mean to the flow engine.
 fn flow_settings(settings: RotoSettings) -> lumit_flow::FlowSettings {
     lumit_flow::FlowSettings {
         divisor: lumit_core::fx::effects::roto_brush::flow_divisor(settings.flow_resolution),
@@ -1211,7 +1147,6 @@ fn flow_settings(settings: RotoSettings) -> lumit_flow::FlowSettings {
     }
 }
 
-/// The arithmetic crate's settings from the document's.
 fn solver_settings(settings: RotoSettings) -> lumit_roto::RotoSettings {
     lumit_roto::RotoSettings {
         guide_radius: settings.refine_radius.clamp(0.0, 256.0) as u32,
@@ -1370,7 +1305,6 @@ fn propagate(
                 reused += 1;
                 prev_rgba = None;
             } else if copy_only {
-                // Nothing to lend and nothing asked for on this side.
                 break;
             } else {
                 let previous = match prev_rgba.take() {
@@ -1498,12 +1432,6 @@ fn record_of(frame: i64, chain: [u8; 32], plane: &[u8], width: u32, height: u32)
     }
 }
 
-// ---------------------------------------------------------------------------
-// Reading a document
-// ---------------------------------------------------------------------------
-
-/// The real frames, through the same frame index and decoder every other
-/// consumer opens (docs/impl/media-io.md §2).
 pub struct MediaRgba {
     decoder: lumit_media::decode::VideoDecoder,
     frames: usize,
@@ -1544,8 +1472,6 @@ impl RotoFrames for MediaRgba {
     }
 }
 
-/// The job one Roto brush instance on one footage layer describes, or `None`
-/// when there is nothing to key a cache with.
 #[must_use]
 pub fn job_for(
     fx: &EffectInstance,
@@ -1600,12 +1526,9 @@ pub fn job_for_comp(
     }
 }
 
-/// The warm pass's half of [`job_for_comp`]: the name of the file and nothing
-/// to open, since a warm pass reads a sidecar and never a frame.
 fn warm_job_for_comp(fx: &EffectInstance, comp: Uuid) -> RotoJob {
     let block = fx.roto.clone().unwrap_or_default();
     let mut settings = RotoSettings::of(fx);
-    // The pack that would seed the run, for `job_for`'s reason.
     if settings.segments() {
         settings.identity = lumit_ml::segment::installed_identity().unwrap_or_default();
     }

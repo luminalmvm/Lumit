@@ -59,10 +59,8 @@ fn matte_toward(value: f32, neutral: f32, k: f32) -> f32 {
 // §1.6 oracle test.
 const MAX_RADIUS: i32 = 3;
 const KEEP: i32 = 25;
-// == cpu::MEDIAN_PAD.
 const PAD: f32 = 1e30;
 
-// The unpremultiplied colour of a premultiplied pixel (== cpu::unpremult).
 fn unpremult(c: vec4<f32>) -> vec3<f32> {
     if (c.a > 0.0) {
         return c.rgb / c.a;

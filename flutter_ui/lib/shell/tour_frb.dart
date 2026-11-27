@@ -47,7 +47,6 @@ List<TourStep> tourSteps(LumitUiState ui) {
     },
     leave: restore,
   );
-  // The doors into the node search that Settings has left open.
   final interface = ui.workspace.interface;
   final searchKey = interface.tabOpensNodeSearch
       ? chordLabel('Tab')
@@ -191,7 +190,6 @@ List<TourStep> tourSteps(LumitUiState ui) {
   ];
 }
 
-/// Whether the composition in front has layers to show the effects of.
 bool _hasLayers(LumitUiState ui) =>
     !ui.model.isNodeGraph && ui.model.layers.isNotEmpty;
 
@@ -210,8 +208,6 @@ void _selectALayer(LumitUiState ui) {
   if (effect != null) ui.graphNode.value = BridgeNodeRef.effect(effect.id);
 }
 
-/// What puts the panels back the way they stand now: the arrangement, and
-/// which workspace the strip has lit.
 VoidCallback _restorer(LumitUiState ui) {
   final workspace = ui.workspace;
   final dock = workspace.dock.toJson();
@@ -235,7 +231,6 @@ void maybeShowTourFrb(
   showTourFrb(context, state, ui);
 }
 
-/// Raise the tour, whether or not it has been seen: Help ▸ Show the tour.
 void showTourFrb(BuildContext context, LumitState state, LumitUiState ui) {
   final made = _demoItems = _makeDemo(state, ui);
   final hadNone = ui.selectedLayer.value == null && ui.graphNode.value == null;
@@ -244,7 +239,6 @@ void showTourFrb(BuildContext context, LumitState state, LumitUiState ui) {
     ui.workspace,
     steps: tourSteps(ui),
     onEnd: () {
-      // The tour picks a layer when none is, and lets go of it at the end.
       if (hadNone) {
         ui.setSelection(const []);
         ui.graphNode.value = null;
@@ -274,8 +268,6 @@ int? _makeDemo(LumitState state, LumitUiState ui) {
   }
 }
 
-/// The effect the tour's text layer wears, by its name in the catalogue: one
-/// that shows on letters, for Effect controls and the node graph to list.
 const String _demoEffect = 'glow';
 
 /// Take the tour's composition away by starting the project afresh, which is
@@ -285,16 +277,11 @@ const String _demoEffect = 'glow';
 void _clearDemo(LumitState state, int? made) {
   final only = onlyTourDemo(state);
   _demoItems = null;
-  // Nothing in it is the user's, so there is nothing to ask about saving.
   if (made != null && only) state.newProject(ask: false, blank: true);
 }
 
-/// How many items the project held once the tour had made its composition,
-/// while the tour is up over it.
 int? _demoItems;
 
-/// Whether the tour is up and everything in the project is its own, so
-/// quitting part way has nothing of the user's to ask about saving.
 bool onlyTourDemo(LumitState state) {
   final made = _demoItems;
   final project = state.project;

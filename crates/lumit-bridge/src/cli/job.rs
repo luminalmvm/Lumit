@@ -23,7 +23,6 @@ use uuid::Uuid;
 
 use super::host::Headless;
 
-/// The fewest seconds between two progress lines.
 const EVERY: Duration = Duration::from_millis(100);
 
 pub(super) fn export_job(folder: &Path) -> Result<(), String> {

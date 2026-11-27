@@ -29,13 +29,10 @@ import 'keyframe_controls_frb.dart';
 import 'param_row_menu.dart';
 import 'layer_fold_frb.dart' show flowPath, hasFlow;
 
-/// The Flow section for [layer], or nothing when its flow switch is off.
 class FlowRowsFrb extends StatelessWidget {
   final LayerReference layer;
   final VoidCallback onChanged;
 
-  /// The comp and playhead, for the Input rate's keyframe controls — the one
-  /// animatable thing in this group.
   final CompositionReference comp;
   final int playheadFrame;
   final ValueChanged<int> onSeek;
@@ -222,7 +219,6 @@ class FlowRowsFrb extends StatelessWidget {
     );
   }
 
-  /// A labelled [FlowChoice], in this section's own row shape.
   Widget _choice(
     BuildContext context,
     LumitTheme t,
@@ -360,8 +356,6 @@ List<String> get flowOcclusionOptions =>
 List<String> get flowFallbackOptions =>
     [l10n.flowFallbackBlend, l10n.flowFallbackNearest];
 
-/// A dropdown over one of the Flow group's option lists — the control both
-/// surfaces (this section and the Timeline fold-out) build their choices from.
 class FlowChoice extends StatelessWidget {
   final String keyName;
   final List<String> options;

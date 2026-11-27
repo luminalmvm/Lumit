@@ -17,7 +17,6 @@ use std::sync::Arc;
 
 pub(crate) mod depth_points;
 
-/// How the frame a Particulate in the scene draws into is seen.
 #[derive(Clone)]
 pub(super) struct Frame {
     comp: (u32, u32),
@@ -27,7 +26,6 @@ pub(super) struct Frame {
     /// which keeps the half floats it is laid in fine where the particles are.
     occluder: Option<wgpu::Texture>,
     near: f32,
-    /// What the layer drawing now carries, and its size.
     carried: Carried,
     natural: (f32, f32),
     /// Its anti-aliasing, lights and Material options, which a model drawn as
@@ -37,7 +35,6 @@ pub(super) struct Frame {
     material: lumit_gpu::fx::lighting::LightingMaterial,
 }
 
-/// What a Particulate in the scene drew beside its picture.
 struct Joined {
     /// One over clip w at each pixel.
     depth: wgpu::Texture,
@@ -76,8 +73,6 @@ pub(crate) fn collapsed(
     }
 }
 
-/// What a layer whose Particulate is in the scene takes from the comp beyond
-/// its own rows.
 #[derive(Clone, Default)]
 pub struct Carried {
     /// How long the shutter stays open, in seconds, when the layer blurs,
@@ -91,20 +86,17 @@ pub struct Carried {
     /// The model its Sprite layer names, drawn at each particle, and that
     /// model's space to a box a pixel across about nought.
     pub shape: Option<(Arc<lumit_scene::ModelScene>, glam::Mat4)>,
-    /// Where Depth points' rays start and the layer they pass through.
     pub rays: Option<depth_points::Rays>,
     /// The collapsed precomps' placements it was spliced out through, which its
     /// own placement doesn't know about.
     pub outer: Option<glam::Mat4>,
 }
 
-/// Whether `layer` is a 3D layer with an effect drawing in the scene.
 #[must_use]
 pub fn in_scene(layer: &Layer) -> bool {
     layer.switches.three_d && layer.effects.iter().any(is_scene)
 }
 
-/// What `layer` carries into the scene, `None` when it has nothing there.
 pub(crate) fn carried(
     doc: &Arc<Document>,
     comp: &Composition,
@@ -137,9 +129,6 @@ pub(crate) fn surface_of(
     in_scene(layer).then(|| surface(doc, comp, layer)).flatten()
 }
 
-/// The most triangles a surface gives birth on.
-// ponytail: the triangles are gathered again each frame. Keep them with the
-// model's scene if a large model shows in a profile.
 const MAX_SURFACE: usize = 1 << 20;
 
 /// The surface `layer`'s Particulate in the scene gives birth on, when its
@@ -211,7 +200,6 @@ fn shape(
     (across > 0.0).then_some((scene, unit))
 }
 
-/// The layer a Layer emitter names, if `e` is one.
 fn emitter_layer<'a>(comp: &'a Composition, e: &EffectInstance) -> Option<&'a Layer> {
     matches!(e.param("shape"), Some(EffectValue::Choice(9)))
         .then(|| e.layer_ref("emitter_layer"))
@@ -219,7 +207,6 @@ fn emitter_layer<'a>(comp: &'a Composition, e: &EffectInstance) -> Option<&'a La
         .and_then(|id| comp.layers.iter().find(|l| l.id == id))
 }
 
-/// Whether a resolved op draws in the scene.
 pub(crate) fn is_scene_op(op: &lumit_core::fx::params::ResolvedFx<'_>) -> bool {
     let name = op.def.schema().match_name;
     name == lumit_core::planes::DEPTH_POINTS
@@ -312,7 +299,6 @@ pub(crate) fn draw(
     ];
     let at = op.emitter_pos;
     let w_middle = m[3][0] * at[0] + m[3][1] * at[1] + m[3][2] * at[2] + m[3][3];
-    // A particle is as big as the layer's scale makes it.
     let scale = place
         .x_axis
         .truncate()
@@ -322,7 +308,6 @@ pub(crate) fn draw(
     // A blurring layer draws each disc from where it was when the shutter
     // opened to where it was when it closed, as a streak is drawn.
     let blur = frame.carried.shutter > 0.0 && op.tail_seconds == 0.0 && op.mode != 1;
-    // A model's surface to give birth on, taken into the raster.
     let surface = frame.carried.surface.as_ref().map(|tris| {
         tris.iter()
             .map(|c| [c[0] * s, c[1] * s, c[2] * s, c[3]])
@@ -330,7 +315,6 @@ pub(crate) fn draw(
     });
     let target = lumit_gpu::composite::scaled_size(cw, ch, r);
     let zoom = frame.camera.zoom.max(1.0);
-    // The camera's blur, as the layers take it (dof.rs).
     let lens = frame.camera.dof.map_or([0.0; 3], |dof| {
         let k = lumit_core::camera::coc_per_zoom(&dof, zoom) / 2.0 * super::dof::DOF_SOFTNESS;
         [k as f32 * r, zoom as f32, dof.focus_distance as f32]
@@ -387,9 +371,6 @@ pub(crate) fn draw(
     Some(colour)
 }
 
-/// The most models a Particulate draws as its particles.
-// ponytail: the particles are read back to place the copies, which waits on
-// the card once a frame. Placing them on the card is the way up.
 const MAX_SHAPES: usize = 20_000;
 
 /// The particles of `op` each drawn as the model the frame carries, through
@@ -420,7 +401,6 @@ fn shapes(
             let at = Vec3::new(float(i * 3), float(i * 3 + 1), float(i * 3 + 2));
             let [r, g] = halves(5 * n + 2 * i);
             let [b, a] = halves(5 * n + 2 * i + 1);
-            // Each one turns about its own axis, picked by its id.
             let id = word(7 * n + 2 * i).wrapping_mul(0x9e37_79b9);
             let spin = (id & 0xffff) as f32 / 65_536.0 * std::f32::consts::TAU;
             let up = (id >> 16) as f32 / 65_536.0 * 2.0 - 1.0;
@@ -512,7 +492,6 @@ impl Realiser<'_> {
         let Some(first) = layers.iter().position(draws_in_scene) else {
             return (None, Vec::new());
         };
-        // The 3D layers either side of it, up to a 2D layer, are its run.
         let in_run = |l: &CompLayerDraw| l.three_d && !l.ends_run;
         let start = layers[..first]
             .iter()
@@ -526,7 +505,6 @@ impl Realiser<'_> {
             lumit_core::camera::default_pose(f64::from(width), f64::from(height))
         });
         let cam = crate::export::camera_mat(width, height, pose);
-        // Distances are counted from the particles' own layer.
         let own = &layers[first];
         let near = (cam * glam::vec4(own.position.0, own.position.1, own.z, 1.0)).w;
         let mut made: Vec<Option<Made>> = layers.iter().map(|_| None).collect();
@@ -586,13 +564,6 @@ impl Realiser<'_> {
         (Some(frame), made)
     }
 
-    /// Particles in the scene lit by the comp's lights where the layer takes
-    /// them, each pixel where `depth` puts it, and shaded by `casters`. They
-    /// were drawn through the camera, so nothing lights them as a plane or
-    /// blurs them as one.
-    // ponytail: each pixel is lit as its nearest particle, so in a dense cloud
-    // the ones behind take the front one's light and shadow. Lighting each
-    // particle in its own draw is the way up (item 11).
     pub(super) fn scene_lit(
         &self,
         l: &CompLayerDraw,
@@ -609,7 +580,6 @@ impl Realiser<'_> {
         }
         let pose = camera
             .unwrap_or_else(|| lumit_core::camera::default_pose(f64::from(cw), f64::from(ch)));
-        // Comp pixels back from a pixel and its clip w, the camera undone.
         let cam = crate::export::camera_mat(cw, ch, pose);
         let rows = cam.transpose().to_cols_array_2d();
         let a = glam::Mat3::from_cols_array_2d(&[

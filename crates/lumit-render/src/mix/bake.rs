@@ -1,6 +1,3 @@
-//! The racks and the gains baked for one job: what its effects make of its
-//! sound, and its Volume and Pan as a constant or an envelope.
-
 use lumit_core::anim::{Animation, Property};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -117,7 +114,6 @@ pub fn chain_bake_until(
     Some((out.samples, out.latency))
 }
 
-/// One effect of a chain, opened, with its instance and definition.
 pub(super) type Opened<'a> = (
     &'a lumit_core::model::EffectInstance,
     &'static dyn lumit_core::fx::registry::EffectDef,
@@ -149,8 +145,6 @@ pub(super) fn open_links(
     opened
 }
 
-/// File the badge for effect `id`: the host's own sentence when it shipped
-/// a block dry, else take any stale one off.
 pub(super) fn file_badge(
     id: Uuid,
     processor: &dyn lumit_core::fx::audio_chain::AudioProcessor,
@@ -247,19 +241,14 @@ fn bake_values(
         .collect()
 }
 
-/// One automatable row: what it is called, what it holds, and how far it may
-/// be pushed.
 struct Row<'a> {
     id: lumit_core::fx::params::ParamId,
     property: std::borrow::Cow<'a, lumit_core::anim::Property>,
     hard: (Option<f64>, Option<f64>),
 }
 
-/// The rows of one effect instance a processor is handed, read block by
-/// block by [`Rows::at`]: what a bake and a rack stream both evaluate.
 pub(super) struct Rows<'a>(Vec<Row<'a>>);
 
-/// `instance`'s automatable rows, or `None` when it has none.
 pub(super) fn rows_of<'a>(
     instance: &'a lumit_core::model::EffectInstance,
     def: &'static dyn lumit_core::fx::registry::EffectDef,
@@ -275,11 +264,9 @@ pub(super) fn rows_of<'a>(
             let held = instance.params.iter().find(|p| p.id == row.id)?;
             let property = match &held.value {
                 EffectValue::Float(property) => std::borrow::Cow::Borrowed(property),
-                // A switch goes to a plugin as nought or one.
                 EffectValue::Bool(on) => std::borrow::Cow::Owned(
                     lumit_core::anim::Property::fixed(f64::from(u8::from(*on))),
                 ),
-                // A list goes as the index of what is picked.
                 EffectValue::Choice(index) => {
                     std::borrow::Cow::Owned(lumit_core::anim::Property::fixed(f64::from(*index)))
                 }
@@ -295,7 +282,6 @@ pub(super) fn rows_of<'a>(
     (!rows.is_empty()).then_some(Rows(rows))
 }
 
-/// Whether a wire in `chain`'s graph feeds a row of effect `id`.
 fn wired(chain: &AudioChain, id: Uuid) -> bool {
     use lumit_core::graph::{InputRef, NodeRef};
     let node = NodeRef::Effect(id);
@@ -307,8 +293,6 @@ fn wired(chain: &AudioChain, id: Uuid) -> bool {
 }
 
 impl Rows<'_> {
-    /// Whether any row can hold a different value from one block to the next:
-    /// keys, or a wire.
     pub(super) fn moves(&self, chain: &AudioChain, id: Uuid) -> bool {
         wired(chain, id) || self.0.iter().any(|row| row.property.is_animated())
     }
@@ -473,8 +457,6 @@ pub(super) fn gain_bake(
     )
 }
 
-/// Whether `property` can change over time: keys, or an expression, which
-/// is read again at every control point.
 pub(super) fn moves(property: &Property) -> bool {
     property.is_animated() || matches!(property.animation, Animation::Expression(_))
 }

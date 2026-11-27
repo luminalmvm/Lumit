@@ -32,9 +32,7 @@ import 'timeline_bar_frb.dart' show BarGrab;
 import 'timeline_extras_frb.dart';
 import 'timeline_snap.dart';
 
-/// How big a corner handle's target is, and the mark drawn inside it.
 const double _handleWidth = 12;
-/// How tall the strip along a box's top is that the fade handles take.
 const double audioFadeHandleHeight = 14;
 const double _handleHeight = audioFadeHandleHeight;
 const double _handleMark = 5;
@@ -79,9 +77,6 @@ List<ClipFadeRamp> shiftRamps(
   ];
 }
 
-/// A corner drag in flight: what it has hold of, whether it is dragging the
-/// clip's edge instead (which is what a corner does inside an overlap), and
-/// where the pointer started and stands now.
 typedef _FadeGrab = ({
   BridgeClip? clip,
   bool into,
@@ -100,8 +95,6 @@ class AudioFadeLayer extends StatefulWidget {
   final TimelineAxis axis;
   final double fps;
 
-  /// The track's lane in pixels, which is where the gain line each ramp tops
-  /// out at is measured.
   final double height;
 
   final List<SnapTarget> snapTargets;
@@ -112,11 +105,8 @@ class AudioFadeLayer extends StatefulWidget {
   /// (docs/impl/audio-timeline.md §5).
   final ValueNotifier<AudioClipDrag?> preview;
 
-  /// The razor is armed, so the handles stand down and the whole clip takes the
-  /// blade - a corner is a place to cut like any other.
   final bool razor;
 
-  /// A corner let go on a fade: the panel writes it.
   final void Function(AudioClipFade fade) onFade;
 
   /// A corner let go inside an overlap, which drags the clip's edge: the same
@@ -143,7 +133,6 @@ class AudioFadeLayer extends StatefulWidget {
 class _AudioFadeLayerState extends State<AudioFadeLayer> {
   _FadeGrab? _grab;
 
-  /// Whether the pointer is on the track, which is when the corners show.
   bool _over = false;
   final DragEscape _escape = DragEscape();
 
@@ -198,7 +187,6 @@ class _AudioFadeLayerState extends State<AudioFadeLayer> {
             controlPressed: HardwareKeyboard.instance.isControlPressed),
       ).delta;
 
-  /// The fade's length after a travel of [shift] frames, held inside the clip.
   double _secondsOf(_FadeGrab held, int shift) {
     final info = widget.track.entry.info;
     final start = held.clip?.startFrame.toInt() ?? info.inFrame.toInt();
@@ -309,15 +297,12 @@ class _AudioFadeLayerState extends State<AudioFadeLayer> {
     );
   }
 
-  /// Every ramp the lane draws, with the strip's drag carried into the dragged
-  /// clip's own.
   List<ClipFadeRamp> _ramps(ClipFadeDrag? live, AudioClipDrag? drag) {
     final ramps = clipFadeRamps(_clips, widget.fps, live: live);
     final id = drag?.clip;
     return id == null ? ramps : shiftRamps(ramps, id, drag!.grab, drag.shift);
   }
 
-  /// Both corners of every clip, or of the bar on a row that has none yet.
   List<Widget> _handles(LumitTheme t, {required bool bare}) {
     if (widget.razor) return const [];
     if (bare) {
@@ -331,7 +316,6 @@ class _AudioFadeLayerState extends State<AudioFadeLayer> {
     ];
   }
 
-  /// One top corner's handle, standing where the fade at that end ends.
   Widget _handle(LumitTheme t, BridgeClip? clip, {required bool into}) {
     final motion = ThemeScope.of(context).motion;
     final id = clip?.id.toString() ?? widget.track.id;
@@ -391,7 +375,6 @@ class _AudioFadeLayerState extends State<AudioFadeLayer> {
     );
   }
 
-  /// How long the fade is, while it is being dragged.
   Widget _readout(LumitTheme t, _FadeGrab held) {
     final shift = _shiftOf(held);
     return Positioned(

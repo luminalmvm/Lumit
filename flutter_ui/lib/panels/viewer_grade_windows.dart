@@ -54,7 +54,6 @@ Map<String, BridgeEffectValue> gradeWindowStart(
   };
 }
 
-/// One window slot as it reads at the playhead, a drag's staged values first.
 class _Win {
   final int slot, shape;
   final Offset centre;
@@ -163,7 +162,6 @@ class _Win {
   }
 }
 
-/// What a drag on a window holds.
 enum _Grip { centre, corner, edgeX, edgeY, turn, soft, softIn, round, aim, point }
 
 class ViewerGradeWindows extends StatefulWidget {
@@ -203,7 +201,6 @@ class _ViewerGradeWindowsState extends State<ViewerGradeWindows> {
   int _point = -1;
   Map<String, BridgeEffectValue> _moved = {};
 
-  /// The polygon point picked, which Delete removes.
   int? _picked;
 
   /// A polygon being drawn, in the shot's pixels, and the slot it is for.
@@ -216,8 +213,6 @@ class _ViewerGradeWindowsState extends State<ViewerGradeWindows> {
     _focus.dispose();
     super.dispose();
   }
-
-  // --- Reading ---
 
   late ViewerLayerMap _map;
 
@@ -293,8 +288,6 @@ class _ViewerGradeWindowsState extends State<ViewerGradeWindows> {
         smooth);
   }
 
-  // --- Writing ---
-
   BridgeEffectValue _floatFor(
       BridgeEffectInstanceInfo node, String id, double v) {
     final was = node.values.where((p) => p.id == id).firstOrNull?.value;
@@ -318,8 +311,6 @@ class _ViewerGradeWindowsState extends State<ViewerGradeWindows> {
     if (rows.isEmpty) return;
     _writer.write(context.read<LumitState>(), _ui, shot, node, rows);
   }
-
-  // --- Drags ---
 
   void _start(_Grip grip, _Win w, Offset screen, {int point = -1}) {
     _focus.requestFocus();
@@ -450,8 +441,6 @@ class _ViewerGradeWindowsState extends State<ViewerGradeWindows> {
     _ui.requestFrame();
   }
 
-  // --- Polygon drawing and points ---
-
   void _addPoint(Offset screen) {
     final drawn = _drawing;
     if (drawn == null) return;
@@ -521,7 +510,6 @@ class _ViewerGradeWindowsState extends State<ViewerGradeWindows> {
     return KeyEventResult.ignored;
   }
 
-  /// A window's own menu: its shape, or off.
   void _menu(GradeShot shot, BridgeEffectInstanceInfo node, _Win w, Offset at) {
     final names = switch (cachedListParameters(correctionName)
         .where((p) => p.id == 'win${w.slot}_shape')
@@ -549,8 +537,6 @@ class _ViewerGradeWindowsState extends State<ViewerGradeWindows> {
       ],
     );
   }
-
-  // --- Building ---
 
   @override
   Widget build(BuildContext context) {
@@ -581,7 +567,6 @@ class _ViewerGradeWindowsState extends State<ViewerGradeWindows> {
               if (_win(node, n) case final w?) w
           ];
           final picked = wins.where((w) => w.slot == slot).firstOrNull;
-          // A polygon with nothing to it yet is drawn, point by point.
           if (picked != null && picked.shape == 3 && picked.points.length < 3) {
             if (_drawing == null || _drawingSlot != slot) {
               _drawing = [];
@@ -767,7 +752,6 @@ class _WindowsPainter extends CustomPainter {
   /// the picked one, on screen.
   final List<(List<Offset>, List<Offset>, List<Offset>, bool)> wins;
 
-  /// A polygon being drawn.
   final List<Offset> drawing;
   final Color accent, muted, under;
 
@@ -839,7 +823,6 @@ class _WindowsPainter extends CustomPainter {
   bool shouldRepaint(_WindowsPainter old) => true;
 }
 
-/// A handle's grip: a square for a size or a place, a round one for the rest.
 class _GripPainter extends CustomPainter {
   final Color line, under;
   final bool dot, lit;

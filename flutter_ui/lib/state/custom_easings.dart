@@ -25,7 +25,6 @@ import 'workspace.dart';
 import 'package:lumit_flutter/state/platform.dart'
     if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
-/// One shape the user kept: what they called it, and the curve.
 class SavedEasing {
   final String name;
   final EasingCurve curve;
@@ -71,7 +70,6 @@ class CustomEasings {
         '${Platform.pathSeparator}easings.json',
       );
 
-  /// Every saved shape, in the order they were kept.
   static List<SavedEasing> get all {
     if (!_loaded) reload();
     return List.unmodifiable(_list);
@@ -117,7 +115,6 @@ class CustomEasings {
     return name;
   }
 
-  /// Forget one.
   static void delete(String name) {
     _list = [..._list.where((e) => e.name != name)];
     _write();
@@ -135,8 +132,6 @@ class CustomEasings {
     return tried;
   }
 
-  /// Every saved shape written to [path] in the store's own form, so a
-  /// collection can be handed to somebody else.
   static void exportTo(String path) => File(path).writeAsStringSync(_encode());
 
   /// The shapes in the file at [path] kept after the ones already here, a

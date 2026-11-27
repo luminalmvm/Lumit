@@ -1,11 +1,8 @@
-//! Invert (docs/08 §3.22): 1 − c, on unpremultiplied colour.
-
 use crate::fx::{
     cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
 };
 use lumit_fx_macros::Effect;
 
-/// Invert's controls — the Mix alone.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "invert",
@@ -18,7 +15,6 @@ use lumit_fx_macros::Effect;
     premultiplied = false,
 )]
 pub struct Invert {
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -39,7 +35,6 @@ impl Invert {
     }
 }
 
-/// Invert's behaviour.
 pub struct InvertDef;
 
 impl EffectDef for InvertDef {

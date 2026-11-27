@@ -1,6 +1,3 @@
-//! Two computers in one process, each with its own folders, saying to each
-//! other what the room would pass on, over a link on this machine.
-
 use super::*;
 use lumit_media::encode::{ColourTags, Encoder, Metadata, VideoCodec, VideoSettings};
 
@@ -43,10 +40,8 @@ fn clip(path: &Path, frames: u32, seed: u32) {
     encoder.finish().unwrap();
 }
 
-/// Where what one computer says goes: the other, while it is there.
 type Slot = Arc<Mutex<Option<Arc<Remote>>>>;
 
-/// What a computer said, kept for a test to read.
 type Heard = Arc<Mutex<Vec<BridgeRemoteSay>>>;
 
 struct Rig {
@@ -56,7 +51,6 @@ struct Rig {
     said_by_worker: Heard,
     project: crate::api::project::ProjectReference,
     comp: CompositionReference,
-    /// The second clip, which the worker has already.
     second: PathBuf,
 }
 
@@ -128,7 +122,6 @@ impl Rig {
         jobs
     }
 
-    /// The first clip back where the project has it.
     fn put_back(&self) {
         let path = self.dir.path();
         std::fs::rename(path.join("moved.mp4"), path.join("clip.mp4")).unwrap();
@@ -151,7 +144,6 @@ impl Rig {
     }
 }
 
-/// Start one computer, kept under `root`, as the account's computer `me`.
 fn computer(root: &Path, me: &str, other: &str, takes: bool) -> Arc<Remote> {
     let remote = Remote::start(root.to_path_buf());
     *remote.account.lock().unwrap() = "account".into();
@@ -160,7 +152,6 @@ fn computer(root: &Path, me: &str, other: &str, takes: bool) -> Arc<Remote> {
     remote
 }
 
-/// What the room says to `remote`: it is `me`, and `other` is online or not.
 fn listed(remote: &Remote, me: &str, other: &str, online: bool) {
     remote.hear(&serde_json::json!({
         "type": "computers",
@@ -172,7 +163,6 @@ fn listed(remote: &Remote, me: &str, other: &str, online: bool) {
     }));
 }
 
-/// Pass what `from` says to whoever is in `to`.
 fn wire(from: &Arc<Remote>, me: &str, to: &Slot, heard: Option<Heard>) {
     let (to, me) = (to.clone(), me.to_owned());
     from.set_outbox(Box::new(move |say: BridgeRemoteSay| {
@@ -222,14 +212,10 @@ fn rig(takes: bool) -> Rig {
     }
 }
 
-/// The worker takes only the file it lacks, checks it, and lays the job out
-/// for its export, whose item then waits its turn in the queue. Two jobs of
-/// one project sent at once take the same file without spoiling it.
 #[test]
 fn a_job_sends_only_what_the_worker_lacks() {
     let _queue = crate::api::tests::export_queue_test();
     let rig = rig(true);
-    // The worker has the second clip in its store already.
     let worker = rig.worker();
     let hash = |path: &Path| files::hash_file(path, &|| false, &mut |_| {}).unwrap();
     let kept = files::stored(&worker.root, &hash(&rig.second), "second.mp4");
@@ -243,8 +229,6 @@ fn a_job_sends_only_what_the_worker_lacks() {
         rig.stage(&worker, job) == Stage::Queued && rig.stage(&worker, twin) == Stage::Queued
     });
 
-    // What each took is the first clip, or nothing when the other had it
-    // in the store by then, and never the second.
     let first = std::fs::metadata(&clip).unwrap().len();
     let wanted = [hash(&clip), hash(&rig.second)];
     for (job, item) in [job, twin].into_iter().zip(items) {
@@ -305,7 +289,6 @@ fn a_job_comes_back_as_the_same_file() {
     let landed = PathBuf::from(sender.job(job).unwrap().path);
     assert_eq!(landed, rig.dir.path().join("out.mp4"));
 
-    // The same export, here.
     let here = rig.dir.path().join("here.mp4");
     let doc = {
         let state = rig.comp.project().unwrap();
@@ -337,14 +320,12 @@ fn a_job_comes_back_as_the_same_file() {
     });
     let size = |p: &Path| std::fs::metadata(p).unwrap().len();
     assert_eq!(size(&landed), size(&here));
-    // The worker let its copy go once the sender had it.
     let worker = rig.worker();
     until("the worker hears it landed", || {
         rig.stage(&worker, job) == Stage::Done
     });
 }
 
-/// Nothing of a cancelled job is left in its folder on the worker.
 fn left(worker: &Remote, job: Uuid) -> Vec<String> {
     let folder = job::folder(&worker.root, job);
     let names = std::fs::read_dir(folder).into_iter().flatten().flatten();
@@ -385,7 +366,6 @@ fn a_cancel_on_either_computer_ends_the_job_on_both() {
     until("the job waits in the queue", || {
         rig.stage(&worker, job) == Stage::Queued
     });
-    // The queue window's cross.
     crate::export::queue_cancel(item);
     until("both have cancelled", || {
         rig.stage(&sender, job) == Stage::Cancelled && rig.stage(&worker, job) == Stage::Cancelled
@@ -394,7 +374,6 @@ fn a_cancel_on_either_computer_ends_the_job_on_both() {
         left(&worker, job).is_empty()
     });
 
-    // Done, and its row removed before the worker looks at the queue again.
     let job = rig.send();
     let item = rig.hold_item(job);
     until("the job waits in the queue", || {
@@ -412,8 +391,6 @@ fn a_cancel_on_either_computer_ends_the_job_on_both() {
     assert_eq!(landed, b"exported");
 }
 
-/// A sender that quits while its files move takes the job up again from its
-/// record when it starts, and the worker gets every file.
 #[test]
 fn a_job_carries_on_after_the_sender_starts_again() {
     let _queue = crate::api::tests::export_queue_test();
@@ -425,8 +402,6 @@ fn a_job_carries_on_after_the_sender_starts_again() {
     until("files move", || {
         worker.job(job).is_some_and(|j| j.bytes > 0)
     });
-    // The sender quits, and comes back with the clip where its project has
-    // it.
     let gone = rig.sender.lock().unwrap().take().unwrap();
     gone.write_down();
     gone.shut();
@@ -443,7 +418,6 @@ fn a_job_carries_on_after_the_sender_starts_again() {
     until("the worker has every file", || {
         rig.stage(&worker, job) == Stage::Queued
     });
-    // The clip carried on across the two links is the clip, whole.
     let hash = |path: &Path| files::hash_file(path, &|| false, &mut |_| {}).unwrap();
     let clip = hash(&rig.dir.path().join("clip.mp4"));
     assert!(files::in_store(
@@ -460,8 +434,6 @@ fn a_job_carries_on_after_the_sender_starts_again() {
     crate::export::queue_remove(item);
 }
 
-/// A worker that doesn't take exports says so, and so does one that can't
-/// read the project.
 #[test]
 fn a_worker_refuses_what_it_cannot_take() {
     let _queue = crate::api::tests::export_queue_test();

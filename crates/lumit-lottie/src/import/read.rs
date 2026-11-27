@@ -24,7 +24,6 @@ use serde_json::Value;
 
 use crate::keys::{Track, TrackKey, LINEAR_IN, LINEAR_OUT};
 
-/// The file's clock: its rate, exactly, and as a number.
 #[derive(Debug, Clone, Copy)]
 pub(super) struct Clock {
     pub rate: FrameRate,
@@ -32,7 +31,6 @@ pub(super) struct Clock {
 }
 
 impl Clock {
-    /// The clock for a file's `fr`, or `None` when it isn't a rate.
     pub fn of(fr: f64) -> Option<Clock> {
         let rate = FrameRate::from_decimal(fr)?;
         Some(Clock {
@@ -57,7 +55,6 @@ impl Clock {
         Rational::from_f64_on_grid(frames / self.fps, Rational::FLICK_DEN).unwrap_or(Rational::ZERO)
     }
 
-    /// Seconds as a number, for sampling.
     pub fn seconds(&self, frames: f64) -> f64 {
         frames / self.fps
     }
@@ -83,7 +80,6 @@ impl Version {
         ])
     }
 
-    /// True for a file written before `at`.
     pub fn before(self, at: [u64; 3]) -> bool {
         self < Version(at)
     }
@@ -99,7 +95,6 @@ pub(super) fn num(v: Option<&Value>) -> Option<f64> {
     }
 }
 
-/// Numbers: a list of them, or one.
 pub(super) fn nums(v: Option<&Value>) -> Vec<f64> {
     match v {
         Some(Value::Array(list)) => list.iter().filter_map(|x| num(Some(x))).collect(),
@@ -108,7 +103,6 @@ pub(super) fn nums(v: Option<&Value>) -> Vec<f64> {
     }
 }
 
-/// A text field.
 pub(super) fn text<'a>(v: &'a Value, key: &str) -> Option<&'a str> {
     v.get(key).and_then(Value::as_str)
 }
@@ -118,15 +112,12 @@ pub(super) fn on(v: Option<&Value>) -> bool {
     num(v).is_some_and(|n| n != 0.0)
 }
 
-/// A list field, or nothing.
 pub(super) fn list<'a>(v: &'a Value, key: &str) -> &'a [Value] {
     v.get(key)
         .and_then(Value::as_array)
         .map_or(&[], Vec::as_slice)
 }
 
-/// A property as read: its keys, the expression it carried, and the spatial
-/// tangents of a position whose motion path curves.
 #[derive(Debug, Clone)]
 pub(super) struct Read {
     pub track: Track,
@@ -137,7 +128,6 @@ pub(super) struct Read {
 }
 
 impl Read {
-    /// A still value.
     pub fn still(value: Vec<f64>) -> Read {
         Read {
             track: Track::still(value),
@@ -146,18 +136,15 @@ impl Read {
         }
     }
 
-    /// True when the value moves.
     pub fn is_animated(&self) -> bool {
         !self.track.is_still()
     }
 
-    /// The value at the first key.
     pub fn first(&self) -> Vec<f64> {
         self.track.first_value()
     }
 }
 
-/// One key as the file has it, its value read by the caller.
 #[derive(Debug, Clone)]
 pub(super) struct RawKey<T> {
     /// Frames on the owner's clock.
@@ -172,7 +159,6 @@ pub(super) struct RawKey<T> {
     pub ti: Vec<f64>,
 }
 
-/// True when `k` is a list of keyframes rather than a value.
 pub(super) fn is_keyed(k: Option<&Value>) -> bool {
     matches!(k, Some(Value::Array(list)) if list.first().is_some_and(|f| f.is_object() && f.get("t").is_some()))
 }

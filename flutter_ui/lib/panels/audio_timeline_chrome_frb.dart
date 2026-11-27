@@ -1,7 +1,3 @@
-// The Audio timeline's chrome strip over the outline's column header: the
-// playhead's time and frame, the comp's length, and the search that narrows
-// the list. The layer Timeline's own pieces at its own height, less LAYERS and
-// GRAPH - this panel has one shape.
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
@@ -35,12 +31,9 @@ bool audioTimelineChromeCarriesCount({
 }) =>
     strip - clock - outlineGap - audioTimelineSearchFloor >= count + length + 8;
 
-/// A typed frame number, with or without the letter the readout wears.
 int? _frameOfTyped(String text) =>
     int.tryParse(text.trim().replaceFirst(RegExp('^[fF]'), ''));
 
-/// The strip itself. [search] is the panel's own field, whose text narrows
-/// the tracks to the names carrying it.
 class AudioChromeStrip extends StatelessWidget {
   final TextEditingController search;
 

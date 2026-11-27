@@ -11,8 +11,6 @@ import 'dart:ui' show Rect;
 
 import 'package:lumit_flutter/l10n/strings.dart';
 
-/// The dockable panels — glossary names (docs/01-GLOSSARY.md §7).
-
 enum Panel {
   project,
   viewer,
@@ -28,10 +26,8 @@ enum Panel {
   /// Stills kept with their grades, in albums, to compare and grade from.
   gallery,
 
-  /// The current shot's grade as nodes, from its picture to what it shows.
   gradeNodes,
 
-  /// Every shot of the comp in time order, a graded picture each.
   shots,
   debug,
   hierarchy,
@@ -76,7 +72,6 @@ enum Panel {
   /// next text the Type tool makes when no text layer is selected.
   text,
 
-  /// Which side a text layer's lines line up on, and the room round them.
   paragraph,
 
   /// The user's saved expressions, and the editor that puts one on the
@@ -108,7 +103,6 @@ enum Panel {
   /// Retiming workspace's right-hand column heads with it.
   retime,
 
-  /// A caption layer's captions, a row each, to read, retype and retime.
   captions,
 
   /// The fronted composition's controls, as a copy of it will show them,
@@ -154,8 +148,6 @@ enum Panel {
 /// thing that knows: an arrangement holds only the number.
 String? Function(int slot)? extensionPaneTitle;
 
-/// What a pane's tab says. The panel's own name, and for an extension's
-/// pane the extension's.
 String paneTitle(PaneId pane) => pane.panel == Panel.extension
     ? extensionPaneTitle?.call(pane.instance) ?? pane.panel.title
     : pane.panel.title;
@@ -173,7 +165,6 @@ String paneTitle(PaneId pane) => pane.panel == Panel.extension
 /// bytes it always did and one written by an older build reads back unchanged.
 typedef PaneId = ({Panel panel, int instance});
 
-/// This panel's first (usually only) pane.
 extension PanelPane on Panel {
   PaneId pane([int instance = 0]) => (panel: this, instance: instance);
 }
@@ -319,7 +310,6 @@ class DockTabs extends DockNode {
   final List<DockPane> children;
   int active;
 
-  /// Drawn as a stack of twirled panels rather than as tabs.
   bool stacked;
 
   /// In a stack, opening one panel shuts the others.
@@ -536,16 +526,13 @@ PaneId? _paneFromJson(Object? raw) {
   return panel?.pane(_instance(raw['n']));
 }
 
-/// A floating window: an arrangement of its own beside the main window's.
 class DockWindow {
   /// What the window is known by while it lasts and across restarts: its
   /// view is keyed by it, and a window's place is remembered against it.
   final int id;
 
-  /// Its panels, arranged as the main window's are.
   final DockSplit root;
 
-  /// Where it was last seen, or null for a window never yet placed.
   FloatingFrame? frame;
 
   /// Kept above every other program's windows, not only Lumit's.
@@ -698,7 +685,6 @@ enum WorkspacePreset {
 /// The factory layout of one preset — restorable at any time, never touched
 /// by the user's own rearranging (that persists separately).
 DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
-      // Edit is the default arrangement.
       WorkspacePreset.edit => defaultLayout(),
       // Project and Effect controls (fronted) tabbed on the left; the Easing
       // panel full height beside the Viewer; then a stack at the right edge
@@ -938,7 +924,6 @@ List<PaneId> panesIn(DockNode node) => switch (node) {
         ],
     };
 
-/// The panes in the main window alone.
 List<PaneId> mainPanesIn(DockSplit root) =>
     [for (final c in root.children) ...panesIn(c)];
 
@@ -957,7 +942,6 @@ DockWindow? windowOf(DockSplit root, PaneId pane) {
 List<Panel> panelsIn(DockNode node) =>
     [for (final pane in panesIn(node)) pane.panel];
 
-/// The next free instance number for `panel` — what a new Viewer is given.
 int nextInstance(DockNode node, Panel panel) {
   var next = 0;
   for (final pane in panesIn(node)) {
@@ -1097,8 +1081,6 @@ PaneId addPane(DockSplit root, Panel panel, {PaneId? beside}) {
   final made = (panel: panel, instance: nextInstance(root, panel));
   final loc = beside == null ? null : _tileOf(root, beside);
   if (loc != null) {
-    // Beside the pane it was asked for, splitting its share in two — the same
-    // arithmetic a drop on that pane's right edge does.
     final half = loc.split.shares[loc.index] / 2;
     loc.split.shares[loc.index] = half;
     loc.split.children.insert(
@@ -1139,7 +1121,6 @@ bool activatePanelTab(DockNode node, Panel panel) {
     case DockTabs(:final children):
       final i = children.indexWhere((c) => c.panel == panel);
       if (i < 0) return false;
-      // In a stack, fronted means twirled open.
       final shut = node.stacked && !node.isOpen(children[i].id);
       if (node.active == i && !shut) return false;
       node.front(i);
@@ -1153,10 +1134,6 @@ bool activatePanelTab(DockNode node, Panel panel) {
   }
 }
 
-// --- Re-dock operations (dock.rs drag-to-redock, via egui_tiles) ----------
-
-/// Where a dragged panel lands relative to the target pane: stacked into its
-/// tab group, or splitting off one of its four sides.
 enum DropPosition { left, right, above, below, stack }
 
 /// Move `dragged` so it lands relative to `target`'s pane per `pos`, then
@@ -1189,7 +1166,6 @@ void movePanel(
   from?.homes.remove(dragged);
   if (to != null && home != null) to.homes[dragged] = home;
   final loc = _tileOf(root, target);
-  // The target should always survive the removal; bail defensively if not.
   if (loc == null) return;
 
   final draggedPane = DockPane(dragged.panel, instance: dragged.instance);
@@ -1204,7 +1180,6 @@ void movePanel(
       tile.children.insert(at, draggedPane);
       tile.front(at);
     } else {
-      // A solo pane becomes a two-tab group, the newcomer fronted.
       loc.split.children[loc.index] =
           DockTabs([tile as DockPane, draggedPane], active: 1);
     }
@@ -1215,14 +1190,12 @@ void movePanel(
     final before = pos == DropPosition.left || pos == DropPosition.above;
     final split = loc.split;
     if (split.axis == axis) {
-      // Same axis: sit adjacent to the target, each taking half its share.
       final half = split.shares[loc.index] / 2;
       split.shares[loc.index] = half;
       final at = before ? loc.index : loc.index + 1;
       split.children.insert(at, draggedPane);
       split.shares.insert(at, half);
     } else {
-      // Cross axis: wrap the target tile in a new split of the other axis.
       final tile = loc.tile;
       split.children[loc.index] = DockSplit(
         axis,
@@ -1234,9 +1207,6 @@ void movePanel(
   simplify(root);
 }
 
-/// The DockSplit directly enclosing `panel`'s tile, that tile (a DockPane when
-/// the panel sits alone, else the DockTabs holding it), and its index in the
-/// split. Null when the panel is absent.
 ({DockSplit split, DockNode tile, int index})? _tileOf(
   DockSplit split,
   PaneId pane,
@@ -1337,9 +1307,6 @@ void _simplifyRoot(DockSplit root) {
   }
 }
 
-// --- Floating windows -------------------------------------------------------
-
-/// A number no window in [root] has yet.
 int nextWindowId(DockSplit root) => root.windows.fold(
     1, (next, w) => w.id >= next ? w.id + 1 : next);
 
@@ -1357,8 +1324,6 @@ bool canFloat(DockSplit root, PaneId pane) {
   return main.contains(pane) && main.length > 1;
 }
 
-/// Take [pane] out into a new window, placed at [frame], and answer it. Null
-/// when it cannot go ([canFloat]).
 DockWindow? floatPane(DockSplit root, PaneId pane, {FloatingFrame? frame}) {
   if (!canFloat(root, pane)) return null;
   final from = windowOf(root, pane);
@@ -1388,7 +1353,6 @@ DockWindow? floatGroup(DockSplit root, PaneId pane, {FloatingFrame? frame}) {
       ? mainPanesIn(root).where((p) => !members.contains(p)).length
       : panesIn(from.root).where((p) => !members.contains(p)).length;
   if (left == 0) return null;
-  // The first member goes back where the group stood, the rest into it.
   final homes = <PaneId, DockHome>{};
   if (from == null) {
     final first = _homeOfTile(root, members.first);
@@ -1472,7 +1436,6 @@ void dockWindow(DockSplit root, int id) {
   }
 }
 
-/// Every floating window's panes back in the main window.
 void dockAllWindows(DockSplit root) {
   for (final w in root.windows.toList()) {
     dockWindow(root, w.id);
@@ -1491,9 +1454,6 @@ Map<String, dynamic> withoutWindows(DockSplit root) {
   return copy.toJson();
 }
 
-/// The splits from [root]'s main tree down to the one holding [pane]'s tile,
-/// each with the index of the child the way goes through. Null when [pane]
-/// is not in the main tree.
 List<({DockSplit split, int index})>? _pathTo(DockSplit root, PaneId pane) {
   for (var i = 0; i < root.children.length; i++) {
     final child = root.children[i];
@@ -1618,7 +1578,6 @@ DockNode? _simplifyNode(DockNode node) {
         final simplified = _simplifyNode(node.children[i]);
         if (simplified == null) continue;
         if (simplified is DockSplit && simplified.axis == node.axis) {
-          // Join a same-axis nested split, scaling its shares by its own.
           final total = simplified.shares.reduce((a, b) => a + b);
           for (var k = 0; k < simplified.children.length; k++) {
             children.add(simplified.children[k]);

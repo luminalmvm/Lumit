@@ -35,15 +35,12 @@ use lumit_fx_macros::Effect;
     matte = false,
 )]
 pub struct Combine {
-    /// How much red.
     #[slider(min = 0.0, max = 1.0, default = 0.0, unit = Raw)]
     pub red: f32,
 
-    /// How much green.
     #[slider(min = 0.0, max = 1.0, default = 0.0, unit = Raw)]
     pub green: f32,
 
-    /// How much blue.
     #[slider(min = 0.0, max = 1.0, default = 0.0, unit = Raw)]
     pub blue: f32,
 
@@ -53,10 +50,8 @@ pub struct Combine {
     pub alpha: f32,
 }
 
-/// The port the colour leaves by.
 pub const COLOUR_PORT: &str = "colour";
 
-/// Combine's behaviour.
 pub struct CombineDef;
 
 impl EffectDef for CombineDef {

@@ -1,5 +1,3 @@
-//! Where a block's lines start and where a paragraph wraps.
-
 /// The text cut into lines. Each is its first character's index and its
 /// characters, without the break that ended it.
 pub(super) fn lines_of(text: &str) -> Vec<(usize, Vec<char>)> {

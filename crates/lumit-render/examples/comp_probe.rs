@@ -1,9 +1,3 @@
-//! Temporary by-hand probe: where does a real project's measured frame go?
-//! Opens a .lum, renders frames of named comps with profiling on, and prints
-//! the profile total, the per-layer sum, and wall-clock per render — the
-//! instrument for "the readout says 106 ms but the rows sum to 9".
-//! Run with:
-//!   cargo run --release -p lumit-render --example comp_probe -- <project.lum> <CompName> [CompName...]
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use lumit_core::model::ProjectItem;
@@ -33,7 +27,6 @@ fn main() {
     r.watch_frames(true);
     r.measure_frames(true);
 
-    // Timestamp every progress report so the stage boundaries have times.
     let stages: Arc<Mutex<Vec<(u32, f32, f64)>>> = Arc::new(Mutex::new(Vec::new()));
     let t0 = Instant::now();
     {
@@ -55,7 +48,6 @@ fn main() {
         })));
     }
 
-    // Where does the draw-list build spend its time? Every comp, timed alone.
     if std::env::var("PROBE_ALL_COMPS").is_ok() {
         let pixels = std::collections::HashMap::new();
         let mut rows: Vec<(f64, String, usize)> = Vec::new();
@@ -86,8 +78,6 @@ fn main() {
         for (ms, name, layers) in rows.iter().take(12) {
             println!("build alone: {ms:8.2} ms  {layers:3} layers  {name}");
         }
-        // The hottest comp, bisected by mutation: what part of its layers
-        // carries the cost?
         if let Some((_, hot_name, _)) = rows.first() {
             let hot = doc
                 .items
@@ -162,7 +152,6 @@ fn main() {
             }
             time_variant("all stripped", &flat);
         }
-        // Clips, one layer at a time — which layers carry the every-call cost?
         if let Some(clips) = doc.items.iter().find_map(|it| match it {
             ProjectItem::Composition(c) if c.name == "Clips" => Some(c),
             _ => None,
@@ -192,7 +181,6 @@ fn main() {
             for (ms, name) in rows.iter().take(10) {
                 println!("clips layer alone: {ms:8.2} ms  {name}");
             }
-            // The hot layer bisected: which of its parts re-pays per call?
             if let Some(hot_l) = clips
                 .layers
                 .iter()
@@ -261,7 +249,6 @@ fn main() {
             println!("comp not found: {name}");
             continue;
         };
-        // --- CPU-side costs, no GPU involved. ---
         {
             let t_mid = comp.duration.0.to_f64() * 0.5;
             let n = 200;
@@ -301,7 +288,6 @@ fn main() {
             println!(
                 "\n[{name}] CPU: camera_pose {per_pose:.3} ms | comp_frame_key {per_key:.2} ms | build_comp_draws_at (no pixels) {per_build:.2} ms"
             );
-            // The camera curve itself, if the comp has one.
             if let Some(cam) = comp
                 .layers
                 .iter()
@@ -363,7 +349,6 @@ fn main() {
                         "frame {frame} ({}x{}) pick#{i}: wall {wall:.1} ms | profile total {total:.1} ms | layers sum {layer_sum:.1} ms [{layer_lines}]",
                         w, h
                     );
-                    // Stage transitions from the progress reports.
                     let stages = stages.lock().unwrap();
                     if !stages.is_empty() {
                         let base = stages.first().unwrap().2;

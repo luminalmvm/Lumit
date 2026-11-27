@@ -60,8 +60,6 @@ use crate::pairs::{PairGeometry, PairVerdict};
 use crate::segment::{ZoomBoundary, ZoomKind};
 use crate::{Correspondence, TrackSet, TrackState};
 
-/// Every knob the global solve takes. The defaults are docs/impl/tracking.md
-/// §4's choices made numeric.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SolveSettings {
     /// Focal to assume, as a multiple of the raster's long edge, when nothing
@@ -95,7 +93,6 @@ pub struct SolveSettings {
     /// IRLS sweeps in rotation averaging. Fixed, not convergence-driven, so the
     /// work is the same every run.
     pub rotation_iterations: usize,
-    /// Alternations in translation averaging.
     pub position_iterations: usize,
     /// Ray angle, in degrees, a triangulated point must subtend at some pair of
     /// its observing cameras. Below this the depth is guesswork.
@@ -105,9 +102,7 @@ pub struct SolveSettings {
     pub max_reprojection_px: f64,
     /// Huber knee for the bundle, in source pixels.
     pub huber_px: f64,
-    /// Levenberg–Marquardt iteration cap.
     pub bundle_iterations: usize,
-    /// Points a frame needs before it can be resectioned at all.
     pub min_resection_points: usize,
     /// Ratio of the smallest to the largest eigenvalue of the baseline
     /// directions' scatter below which the motion is called colinear and the
@@ -156,11 +151,8 @@ impl Default for SolveSettings {
 /// this crate exists to avoid.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum SolveError {
-    /// The track set is empty or has no raster.
     #[error("there are no tracks to solve")]
     NoTracks,
-    /// No keyframe pair survived phase 2, or none of them yielded a usable
-    /// two-view geometry.
     #[error("no keyframe pair carries a usable geometry")]
     NoKeyframes,
     /// Every usable pair was rotation-only: the camera turned or zoomed but
@@ -171,8 +163,6 @@ pub enum SolveError {
         "every pair is rotation-only; the camera never travelled, so there is no position to solve"
     )]
     RotationOnly,
-    /// Nothing triangulated: the cameras were placed but no track produced a
-    /// 3D point that survived cheirality and parallax.
     #[error("no track triangulated to a point in front of its cameras")]
     NoPoints,
     /// The caller asked for the solve to stop. Nothing partial is handed back:
@@ -188,7 +178,6 @@ pub enum SolveError {
     BadFocalHint,
 }
 
-/// Something the solve wants the caller to know without failing over it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum SolveNote {
     /// The baseline directions all point the same way, so the *ratios* between
@@ -225,7 +214,6 @@ pub enum SolveNote {
     DisconnectedKeyframes(usize),
 }
 
-/// One stretch of the shot over which the lens does not cut.
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SolveSegment {
     pub first_frame: i64,
@@ -235,8 +223,6 @@ pub struct SolveSegment {
     /// bent the focal into a curve (the per-frame values are on
     /// [`SolvedPose::focal_px`]).
     pub focal_px: f64,
-    /// Whether a smooth zoom was detected inside this segment. See
-    /// [`SolveNote::ZoomRamp`].
     pub ramp: bool,
 }
 
@@ -244,16 +230,13 @@ pub struct SolveSegment {
 /// pose is not a measured one and phase 4 should be able to say so.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum PoseSource {
-    /// A keyframe: solved globally and refined by the bundle.
     Keyframe,
-    /// Resectioned against the solved point cloud.
     Resection,
     /// Neither was possible; the pose is interpolated between the nearest
     /// solved frames (or copied from the nearest one, at the ends).
     Interpolated,
 }
 
-/// One frame's camera.
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SolvedPose {
     pub frame: i64,
@@ -285,7 +268,6 @@ pub struct ScenePoint {
     pub frames: [i64; 2],
 }
 
-/// The whole answer: what phase 4's export reads.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct CameraSolve {
     /// One per frame of the track set's range, in frame order.
@@ -357,7 +339,6 @@ pub fn solve_camera_cancellable(
     let long_edge = w.max(h) as f64;
     let mut notes: Vec<SolveNote> = Vec::new();
 
-    // --- 1. Segments and their focal unknowns -------------------------------
     let mut segments = segment_table(first, last, zooms);
     for seg in &segments {
         if seg.ramp {
@@ -467,7 +448,6 @@ pub fn solve_camera_cancellable(
     } = pass;
     notes.extend(pass.notes.iter().copied());
 
-    // --- 7. A pose for every frame -------------------------------------------
     let mut lookup: Vec<(u32, usize)> = tracks.iter().enumerate().map(|(i, id)| (*id, i)).collect();
     lookup.sort_unstable();
     let mut poses = fill_frames(
@@ -505,7 +485,6 @@ pub fn solve_camera_cancellable(
     })
 }
 
-/// What one pass over the geometry produced.
 struct Pass {
     keyframes: Vec<i64>,
     cams: Vec<BundleCamera>,
@@ -534,7 +513,6 @@ fn one_pass(
 ) -> Result<Pass, SolveError> {
     let mut notes: Vec<SolveNote> = Vec::new();
 
-    // --- The keyframe view graph --------------------------------------------
     let mut frames: Vec<i64> = Vec::with_capacity(usable.len() * 2);
     for g in usable {
         frames.push(g.from);
@@ -618,10 +596,8 @@ fn one_pass(
         return Err(SolveError::NoKeyframes);
     }
 
-    // --- Rotation averaging ---------------------------------------------------
     let rotations = average_rotations(views, &rels, settings.rotation_iterations);
 
-    // --- Global positions ------------------------------------------------------
     let mut edges: Vec<(usize, usize, [f64; 3])> = Vec::new();
     for r in &rels {
         let (Some(d), Some(ri)) = (r.dir, rotations.get(r.i)) else {
@@ -641,7 +617,6 @@ fn one_pass(
     }
     let positions = average_positions(views, &edges, settings.position_iterations);
 
-    // --- Triangulation ----------------------------------------------------------
     let mut cams: Vec<BundleCamera> = Vec::with_capacity(views);
     for (k, frame) in keyframes.iter().enumerate() {
         cams.push(BundleCamera {
@@ -658,7 +633,6 @@ fn one_pass(
     }
     let obs_before = obs.len();
 
-    // --- Bundle adjustment --------------------------------------------------------
     let mut report = bundle::bundle_adjust(
         &mut cams,
         &mut focals,
@@ -718,7 +692,6 @@ fn one_pass(
 
 const IDENTITY: Mat3 = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
 
-/// One edge of the keyframe view graph.
 #[derive(Clone, Copy)]
 struct Relative {
     i: usize,
@@ -729,8 +702,6 @@ struct Relative {
     /// `None` for a rotation-only pair, which has no baseline at all.
     dir: Option<[f64; 3]>,
 }
-
-// --- Segments ----------------------------------------------------------------
 
 fn segment_table(first: i64, last: i64, zooms: &[ZoomBoundary]) -> Vec<SolveSegment> {
     let mut cuts: Vec<i64> = zooms
@@ -775,8 +746,6 @@ fn segment_index(segments: &[SolveSegment], frame: i64) -> usize {
         .position(|s| frame >= s.first_frame && frame <= s.last_frame)
         .unwrap_or(0)
 }
-
-// --- The focal curve -----------------------------------------------------------
 
 /// The focal curve the solve works on: one knot for a constant-focal segment,
 /// a sparse ascending row of knots for a segment with a detected zoom ramp,
@@ -841,7 +810,6 @@ impl FocalCurve {
             frames.sort_unstable();
             frames.dedup();
             if frames.len() > cap {
-                // Thin evenly, keeping the first and last knot.
                 let n = frames.len();
                 let thinned: Vec<i64> = (0..cap)
                     .filter_map(|k| frames.get((k * (n - 1)) / (cap - 1)).copied())
@@ -883,7 +851,6 @@ impl FocalCurve {
         FocalCurve { knots, values }
     }
 
-    /// Which knot or pair of knots the frame reads, and the blend between them.
     fn ref_at(&self, segments: &[SolveSegment], frame: i64) -> bundle::FocalRef {
         let Some(list) = self.knots.get(segment_index(segments, frame)) else {
             return bundle::FocalRef::fixed(0);
@@ -1033,8 +1000,6 @@ fn focal_from_pairs(
     }
 }
 
-// --- Two-view pose -----------------------------------------------------------
-
 fn intrinsics(f: f64, centre: [f64; 2]) -> Mat3 {
     [[f, 0.0, centre[0]], [0.0, f, centre[1]], [0.0, 0.0, 1.0]]
 }
@@ -1176,8 +1141,6 @@ pub(crate) fn closest_rotation(m: &Mat3) -> Option<Mat3> {
     let r = build(false);
     Some(if geom::det3(&r) < 0.0 { build(true) } else { r })
 }
-
-// --- Rotation averaging --------------------------------------------------------
 
 /// Robust rotation averaging: a spanning-tree initialisation, then IRLS sweeps
 /// that reweight each pair by how far it sits from the consensus.
@@ -1347,8 +1310,6 @@ fn so3_log(r: &Mat3) -> [f64; 3] {
     }
     [angle * v[0], angle * v[1], angle * v[2]]
 }
-
-// --- Translation averaging -----------------------------------------------------
 
 /// Whether the baseline directions all point along one line, which is the case
 /// direction constraints alone cannot resolve (docs/impl/tracking.md §4).
@@ -1528,7 +1489,6 @@ fn block1(index: usize) -> Option<usize> {
     index.checked_sub(1)
 }
 
-/// The keyframes reachable from the first one through any chain of pairs.
 fn reachable(views: usize, rels: &[Relative]) -> Vec<bool> {
     let mut seen = vec![false; views];
     if let Some(s) = seen.first_mut() {
@@ -1557,9 +1517,6 @@ fn reachable(views: usize, rels: &[Relative]) -> Vec<bool> {
     seen
 }
 
-// --- Triangulation --------------------------------------------------------------
-
-/// A 3×4 projection matrix.
 type Proj = [[f64; 4]; 3];
 
 fn projection(rot: &Mat3, pos: [f64; 3], focal: f64, centre: [f64; 2]) -> Proj {
@@ -1757,8 +1714,6 @@ fn keep_explained(
         .collect();
     (kept_points, kept_tracks, kept_obs)
 }
-
-// --- Every frame ------------------------------------------------------------
 
 /// Give every frame in the range a pose: the keyframes from the bundle, the
 /// rest resectioned against the cloud, and whatever neither reaches
@@ -2134,8 +2089,6 @@ fn resect_dlt(
         focal: focal_ref,
     })
 }
-
-// --- Small vector arithmetic ---------------------------------------------------
 
 fn dot3(a: [f64; 3], b: [f64; 3]) -> f64 {
     a[0] * b[0] + a[1] * b[1] + a[2] * b[2]

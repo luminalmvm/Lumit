@@ -14,13 +14,13 @@ final Map<String, Object?> shippedSettings = () {
   final i = w.interface;
   final p = w.performance;
   return <String, Object?>{
-    // General
     'settings-language': i.language,
     'settings-welcome-on-launch': w.showWelcomeOnLaunch,
     'settings-keep-running': w.keepRunning,
     'settings-open-at-sign-in': w.openAtSignIn,
     'settings-project-template': w.projectTemplate,
     'settings-auto-update': w.autoUpdate,
+    'settings-share-usage': w.shareUsage,
     'settings-nightly-icon': w.nightlyIcon,
     'settings-share-up-limit': w.shareUpLimit,
     'settings-share-down-limit': w.shareDownLimit,
@@ -31,7 +31,6 @@ final Map<String, Object?> shippedSettings = () {
     'settings-scripts-folder': w.scriptsFolder,
     for (final event in ScriptEvent.values)
       'settings-event-script-${event.name}': w.eventScripts[event],
-    // Appearance
     'settings-scheme': w.themeChoice,
     'settings-accent': w.accentOverride,
     'settings-themed-splash': w.themedSplash,
@@ -60,7 +59,6 @@ final Map<String, Object?> shippedSettings = () {
     'settings-multiwave': i.multiwaveWaveforms,
     'settings-waveform-from-bottom': i.waveformsFromBottom,
     'settings-waveform-scale': i.waveformScale,
-    // Timeline
     'settings-retime-speed-lens': i.retimeOpensToSpeed,
     'settings-retime-in-seconds': i.retimeInSeconds,
     'settings-video-as-sequence': i.videoAsSequenceLayer,
@@ -79,18 +77,15 @@ final Map<String, Object?> shippedSettings = () {
     'settings-right-click-node-search': i.rightClickOpensNodeSearch,
     'settings-tab-node-search': i.tabOpensNodeSearch,
     'settings-shift-a-node-search': i.shiftAOpensNodeSearch,
-    // Viewer
     'settings-smooth-zoomed-viewer': w.smoothZoomedViewer,
     'settings-show-tone-map': i.showToneMap,
     'settings-invert-orbit-across': i.invertOrbitAcross,
     'settings-invert-orbit-up-down': i.invertOrbitUpDown,
-    // Audio
     'settings-audio-device': w.audioDevice,
     'settings-audio-offset': w.audioOffsetMs,
     'settings-touch-return': w.touchReturnMs,
     'settings-scrub-on-drag': w.scrubOnDrag,
     'settings-normalise-target': w.normaliseTargetDb,
-    // Autosave
     'settings-autosave-minutes': w.autosaveMinutes,
     'settings-autosave-keep': w.autosaveKeep,
     // Export: an unwritten store is blank and asks where to write.
@@ -98,7 +93,6 @@ final Map<String, Object?> shippedSettings = () {
     'settings-export-template': '',
     'settings-export-destination': 'ask',
     'settings-notify-exports': w.notifyExports,
-    // Preview and cache
     'settings-playback-mode': p.playback,
     'settings-full-res-drags': p.fullResDragPreviews,
     'settings-hardware-decode': p.hardwareDecode,

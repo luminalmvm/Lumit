@@ -50,13 +50,11 @@ fn photo_filter(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let o = textureLoad(src, xy, 0);
-    // No glass (== the CPU reference early return).
     if (p.density == 0.0) {
         textureStore(dst, xy, o);
         return;
     }
     let u = unpremult(o);
-    // The matte scales Density per pixel: thinner glass.
     var density = p.density;
     if (p.matte_on != 0.0) {
         density = density * matte_k(xy);

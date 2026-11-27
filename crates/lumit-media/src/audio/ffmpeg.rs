@@ -1,6 +1,3 @@
-//! The FFmpeg calls under the sound reader: the resampler, whether a jump
-//! lands where it says, and the raw pointer touches, each one small.
-
 use crate::MediaError;
 use rsmpeg::avcodec::AVCodecContext;
 use rsmpeg::avformat::AVFormatContextInput;
@@ -83,8 +80,6 @@ pub(super) fn lands_exactly(
     };
     entries.windows(2).all(|pair| {
         let (at, size) = pair[0];
-        // How many samples this packet holds: a fixed frame for a codec that
-        // has one, and bytes over bytes-per-frame for uncompressed sound.
         let samples = if par.frame_size > 0 {
             i128::from(par.frame_size)
         } else if pcm && pcm_frame > 0 {

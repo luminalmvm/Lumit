@@ -28,6 +28,8 @@ mod host;
 mod interrupt;
 mod job;
 mod relay;
+#[cfg(windows)]
+mod resolve_link;
 mod rows;
 mod vector;
 
@@ -106,9 +108,12 @@ font files in it are used as if they were installed.
 Exit status: 0 done, 1 failed, 2 the arguments were wrong.
 ";
 
-/// What was asked for.
 #[derive(Debug, PartialEq)]
 enum Command {
+    #[cfg(windows)]
+    ResolveSetup {
+        directory: PathBuf,
+    },
     Help,
     Version,
     Export {
@@ -125,13 +130,11 @@ enum Command {
         /// `None` for the project open in Lumit.
         project: Option<PathBuf>,
     },
-    /// A remote export another computer sent, which Lumit starts this for.
     ExportJob {
         folder: PathBuf,
     },
 }
 
-/// Which comps `export` writes, and how.
 #[derive(Debug, Default, PartialEq)]
 struct Export {
     /// By name or id. None and not `all` is the project's only comp.
@@ -144,12 +147,9 @@ struct Export {
     out: Option<PathBuf>,
     /// A vector format key (`lottie`, `dotlottie`, `svg`) in place of a video.
     format: Option<String>,
-    /// Text as text naming its font rather than as outlines.
     text_as_text: bool,
     minify: bool,
-    /// What happens to caption layers, when not the preset's choice.
     captions: Option<BridgeCaptionsOut>,
-    /// A file of rows to export a graphics template once for each of.
     data: Option<PathBuf>,
     /// With `data`, the first and last row, counting from 1.
     rows: Option<(u32, u32)>,
@@ -189,6 +189,8 @@ fn main() -> i32 {
         }
     };
     let done = match command {
+        #[cfg(windows)]
+        Command::ResolveSetup { directory } => resolve_link::run(&directory),
         Command::Help => {
             out!("{}", HELP.trim_end());
             Ok(())
@@ -219,8 +221,6 @@ fn main() -> i32 {
     }
 }
 
-/// Write `line` and a line break to standard output, and end the program
-/// when nobody is reading it.
 fn write_out(line: std::fmt::Arguments<'_>) {
     let mut output = std::io::stdout().lock();
     if let Err(e) = writeln!(output, "{line}").and_then(|()| output.flush()) {
@@ -298,7 +298,12 @@ fn parse(args: Vec<OsString>) -> Result<Command, String> {
     };
     let first = text(first)?;
     let mut rest: Vec<OsString> = args.collect();
-    // --help anywhere is a request for help.
+    #[cfg(windows)]
+    if first == "resolve-setup" && rest.len() == 1 {
+        return Ok(Command::ResolveSetup {
+            directory: PathBuf::from(&rest[0]),
+        });
+    }
     if matches!(first.as_str(), "--help" | "-h" | "help")
         || rest.iter().any(|a| a == "--help" || a == "-h")
     {
@@ -444,7 +449,6 @@ fn parse(args: Vec<OsString>) -> Result<Command, String> {
     }
 }
 
-/// Open the project at `path`, saying which footage is missing.
 fn open(path: &Path) -> Result<Headless, String> {
     note!("Opening {}", path.display());
     let (host, missing) = Headless::open(path)?;
@@ -454,7 +458,6 @@ fn open(path: &Path) -> Result<Headless, String> {
     Ok(host)
 }
 
-/// Files of image sequences that would not read, each drawn as a neighbour.
 fn note_unreadable_frames() {
     #[cfg(feature = "media")]
     {
@@ -508,13 +511,11 @@ fn export(project: &Path, how: Export) -> Result<(), String> {
     // Extension effects draw in an export as they do in Lumit.
     crate::api::extensions::register_effects();
     let comps = chosen_comps(&host, &how)?;
-    // Beside the project, or beside the template file it was opened from.
     let beside = host
         .path()
         .and_then(|p| p.parent().map(Path::to_path_buf))
         .or_else(|| project.parent().map(Path::to_path_buf))
         .unwrap_or_default();
-    // With several comps, --out is where they all go.
     let folder = match &how.out {
         Some(out) if comps.len() > 1 => {
             if !out.is_dir() {
@@ -559,7 +560,6 @@ fn export(project: &Path, how: Export) -> Result<(), String> {
     }
 }
 
-/// The comps `how` names, or the project's only one.
 fn chosen_comps(host: &Headless, how: &Export) -> Result<Vec<(Uuid, String)>, String> {
     let comps = if how.all {
         host.comps()
@@ -604,8 +604,6 @@ fn export_name(dir: &Path, settings: &BridgeExportSpec, name: &str) -> PathBuf {
     }
 }
 
-/// Export `comp` to `file` with `settings` over frames `range`, and wait for
-/// it. Answers the file written.
 fn export_one(
     host: &Headless,
     stop: &AtomicBool,
@@ -717,12 +715,10 @@ fn run(
             stop: stop.clone(),
             readable,
             args,
-            // Nobody to ask. Files come in with --arg.
             choose_file: &|_, _| None,
             // Absolute, so a bare file name still gives the script its folder.
             path: std::path::absolute(script).ok(),
             alert: Some(&alert),
-            // No window here, so a script's dialog is cancelled.
             dialog: None,
             // The person running this is the one aiming it.
             limits: Limits::Off,

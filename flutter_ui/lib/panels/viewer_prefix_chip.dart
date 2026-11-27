@@ -139,7 +139,6 @@ class ViewerPrefixChip extends StatelessWidget {
         // And a node graph's box is picked on its own canvas, which is a third
         // surface with a notifier of its own.
         uiState.compGraphNode,
-        // And a box inside a Custom shader, on the shader's own canvas.
         uiState.shaderGraphNode,
         uiState.model,
       ]),
@@ -176,7 +175,6 @@ class ViewerPrefixChip extends StatelessWidget {
                         const BoxConstraints(maxWidth: viewerTagMaxWidth),
                     padding:
                         const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    // The selection tag's plate, so the two read as a pair.
                     decoration: BoxDecoration(
                       color: t.surface0.withValues(alpha: viewerChipPlate),
                       borderRadius:

@@ -39,8 +39,6 @@
 //!    regions either side of the transition and leave the boundary alone —
 //!    testing a matte, not the resampler's edge treatment.
 
-// A test binary: a failed setup step should stop this test, loudly, and the
-// no-panic rule of docs/14 is about the engine's own paths.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use lumit_core::model::{
@@ -53,8 +51,6 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 const COMP: u32 = 64;
-/// The white band's width inside the matte precomp: half the frame, laid down
-/// from the left edge.
 const BAND: u32 = 32;
 /// The flat region inside the lit half, stopping well short of the soft edge.
 const LIT: std::ops::Range<u32> = 0..24;
@@ -184,14 +180,12 @@ fn project(bind: bool) -> (Arc<Document>, Uuid) {
     }
     base.effects = vec![exposure];
 
-    // Topmost first: the hidden matte source above the layer that reads it.
     let comp = comp_of("Comp", vec![matte_layer, base]);
     let comp_id = comp.id;
     doc.items.push(ProjectItem::Composition(comp));
     (Arc::new(doc), comp_id)
 }
 
-/// The red channel of the pixel at `x` on the middle row.
 fn px(rgba: &[u8], w: u32, x: u32) -> u8 {
     let y = COMP / 2;
     rgba[((y * w + x) * 4) as usize]
@@ -226,15 +220,12 @@ fn a_matte_bound_in_a_document_drives_the_effect_it_is_bound_to() {
             "the unmatted control must be flat, and column {x} is not"
         );
     }
-    // The untouched source, for the dark half to be measured against.
     let source = lumit_core::pixels::srgb_encode(0.25);
     assert_ne!(
         lifted, source,
         "the Exposure must actually do something, or the test is vacuous"
     );
 
-    // 1. Where the matte is lit, the effect applied *in full* — the same byte
-    //    the render with no matte at all produces.
     for x in LIT {
         assert_eq!(
             px(&bound, w, x),
@@ -243,8 +234,6 @@ fn a_matte_bound_in_a_document_drives_the_effect_it_is_bound_to() {
         );
     }
 
-    // 2. Where it is black, nothing happened — and the strong form of nothing:
-    //    the untouched source grey, not merely less effect.
     for x in DARK {
         assert_eq!(
             px(&bound, w, x),
@@ -299,7 +288,6 @@ fn a_hidden_layer_still_mattes_and_stays_out_of_the_picture() {
     });
 
     let grey = lumit_core::pixels::srgb_encode(0.25);
-    // How far the parent moves both layers, and the region as comp fractions.
     for (shift, region) in [(0, None), (16, None), (0, Some([0.5, 0.0, 1.0, 1.0]))] {
         let (mut matte_layer, mut base) = (matte_layer.clone(), base.clone());
         if shift > 0 {
@@ -314,7 +302,6 @@ fn a_hidden_layer_still_mattes_and_stays_out_of_the_picture() {
         let (rgba, w, _h) = r
             .render_rgba(&Arc::new(doc), comp_id, 0, 1.0)
             .expect("render");
-        // A region comes back stretched to the comp's size.
         let [u0, _, u1, _] = region.unwrap_or([0.0, 0.0, 1.0, 1.0]);
         for x in 0..w {
             let at = (u0 + (x as f32 + 0.5) / w as f32 * (u1 - u0)) * COMP as f32;
@@ -506,7 +493,6 @@ fn emit_from_image_reads_its_source_where_the_source_sits() {
     doc.items
         .push(solid(white_def, "logo", [1.0, 1.0, 1.0, 1.0], 16, 16));
 
-    // The square covers x 40..56 and y 8..24 of the comp, and is only read.
     let mut logo = layer("logo", LayerKind::Solid { def: white_def });
     logo.transform.position_x = Property::fixed(40.0);
     logo.transform.position_y = Property::fixed(8.0);
@@ -519,13 +505,11 @@ fn emit_from_image_reads_its_source_where_the_source_sits() {
     for p in &mut emit.params {
         match p.id.as_str() {
             "source" => p.value = EffectValue::Layer(Some(logo.id)),
-            // Enough candidates that the square gets well over a hundred.
             "density" => p.value = EffectValue::Float(Property::fixed(5000.0)),
             "size" => p.value = EffectValue::Float(Property::fixed(2.0)),
             _ => {}
         }
     }
-    // Still particles born over the whole of the base layer, a second in.
     let mut dense = lumit_core::fx::builtins::instantiate("particulate").expect("a built-in");
     for p in &mut dense.params {
         let f = |v: f64| EffectValue::Float(Property::fixed(v));

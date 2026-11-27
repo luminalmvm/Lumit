@@ -1,5 +1,3 @@
-//! Tests of parented placement.
-
 use super::*;
 use lumit_core::anim::Property;
 use lumit_core::model::*;
@@ -100,17 +98,13 @@ fn unparented_is_none_and_a_chain_composes_top_outermost() {
     let parent = layer(100.0, 0.0, Some(gp.id));
     let child = layer(5.0, 5.0, Some(parent.id));
     let c = comp(vec![gp.clone(), parent.clone(), child.clone()]);
-    // No parent → no placement.
     assert!(
         parent_world_placement(&c, &gp, 0.0, Arc::new(ExpressionContext::detached())).is_none()
     );
-    // The child's world placement is grandparent × parent (top outermost),
-    // exactly the manual concat — proving the walk and fold order.
     let world =
         parent_world_placement(&c, &child, 0.0, Arc::new(ExpressionContext::detached())).unwrap();
     let expected = lumit_gpu::composite::concat_place(place_of(&gp), place_of(&parent));
     assert_eq!(world, expected);
-    // A 2D grandparent's hidden z and tilt leave the chain as it was.
     let mut tilted = gp.clone();
     tilted.transform.position_z = Property::fixed(-50.0);
     tilted.transform.rotation_x = Property::fixed(60.0);
@@ -118,8 +112,6 @@ fn unparented_is_none_and_a_chain_composes_top_outermost() {
     let flat = parent_world_placement(&c, &child, 0.0, Arc::new(ExpressionContext::detached()));
     assert_eq!(flat, Some(expected));
 
-    // A layer on a two-node camera turns with its aim, and an imported
-    // camera's anchor (After Effects' point of interest) moves nothing.
     let mut camera = layer(100.0, 50.0, None);
     camera.transform.anchor_x = Property::fixed(400.0);
     camera.transform.position_z = Property::fixed(-300.0);
@@ -161,8 +153,6 @@ fn taking_and_losing_a_parent_leaves_the_layer_where_it_was() {
             None => own,
         }
     };
-    // A scaled parent and a tilted one are separate rigs: scale has no z,
-    // so a tilt under a scaled parent has no exact answer.
     for tilted in [false, true] {
         let (tilt, scale) = if tilted { (15.0, 100.0) } else { (0.0, 50.0) };
         let mut gp = layer(10.0, 20.0, None);
@@ -172,15 +162,12 @@ fn taking_and_losing_a_parent_leaves_the_layer_where_it_was() {
         parent.transform.rotation = Property::fixed(30.0);
         parent.transform.scale_x = Property::fixed(scale);
         parent.transform.scale_y = Property::fixed(scale);
-        // Flipped, more than a turn round and tilted: the awkward ones to
-        // read back out of a matrix.
         let mut child = layer(5.0, 60.0, None);
         child.transform.anchor_y = Property::fixed(4.0);
         child.transform.rotation = Property::fixed(400.0);
         child.transform.rotation_x = Property::fixed(tilt);
         child.transform.scale_x = Property::fixed(80.0);
         child.transform.scale_y = Property::fixed(-80.0);
-        // A tilt only counts on a 3D layer.
         gp.switches.three_d = tilted;
         child.switches.three_d = tilted;
 
@@ -199,12 +186,9 @@ fn taking_and_losing_a_parent_leaves_the_layer_where_it_was() {
                 assert!((b - a).abs() < 1e-2, "{before:?} became {after:?}");
             }
         }
-        // Back where it started, in the numbers too.
         assert!((child.transform.rotation.value_at(0.0) - 400.0).abs() < 1e-2);
         assert!((child.transform.scale_y.value_at(0.0) + 80.0).abs() < 1e-2);
 
-        // A camera keeps its eye, its turn and what it is aimed at, under
-        // the same parents.
         for two_node in [false, true] {
             let mut camera = layer(30.0, 70.0, None);
             camera.kind = LayerKind::Camera {
@@ -227,7 +211,6 @@ fn taking_and_losing_a_parent_leaves_the_layer_where_it_was() {
                     own(TransformProp::PoiY),
                     own(TransformProp::PoiZ),
                 );
-                // A one-node camera's point of interest is inert.
                 let context = ctx();
                 let read = lumit_core::model::context_reader(&context, 0.0);
                 let poi = match parent_space(c, l, 0.0, &read, None) {
@@ -257,9 +240,6 @@ fn taking_and_losing_a_parent_leaves_the_layer_where_it_was() {
         }
     }
 
-    // A keyed camera keeps its whole move under a null turned a quarter
-    // round, where x and z trade places: every key is carried, not just
-    // the one under the playhead, and an eased move keeps its ease.
     let mut null = layer(200.0, 100.0, None);
     null.switches.three_d = true;
     null.transform.rotation_y = Property::fixed(90.0);
@@ -313,7 +293,6 @@ fn taking_and_losing_a_parent_leaves_the_layer_where_it_was() {
     for (b, a) in before.iter().zip(&after) {
         let (pb, pa) = (b.position, a.position);
         let gap = (pb.0 - pa.0).abs() + (pb.1 - pa.1).abs() + (pb.2 - pa.2).abs();
-        // Every axis, so a roll shows as well as where it looks.
         let (ab, aa) = (
             lumit_core::camera::axes(b.rotation_deg),
             lumit_core::camera::axes(a.rotation_deg),
@@ -325,8 +304,6 @@ fn taking_and_losing_a_parent_leaves_the_layer_where_it_was() {
             .sum();
         assert!(gap < 1e-2 && turn < 1e-6, "{b:?} became {a:?}");
     }
-    // The rows keep their keys, and the Orientation keeps its own two
-    // rather than gaining one at every position key.
     assert_eq!(camera.transform.rotation_y, keyed(0.0, 40.0));
     for p in &camera.transform.orientation {
         let times: Vec<_> = match &p.animation {
@@ -338,8 +315,6 @@ fn taking_and_losing_a_parent_leaves_the_layer_where_it_was() {
         assert_eq!(times, [1.0, 3.0], "{p:?}");
     }
 
-    // After Effects' own numbers: a 3D layer put under a turned null
-    // keeps its X, Y and Z Rotation, and Orientation takes the turn.
     let mut rider = layer(1000.0, 600.0, None);
     rider.switches.three_d = true;
     rider.transform.after_effects_order = true;
@@ -385,8 +360,6 @@ fn taking_and_losing_a_parent_leaves_the_layer_where_it_was() {
     let gap = (at.0 - want.0).abs() + (at.1 - want.1).abs() + (at.2 - want.2).abs();
     assert!(gap < 1e-2, "{at:?}");
 
-    // Under a mirrored parent with an Orientation of its own, there and
-    // back again.
     let mut mirror = turner.clone();
     mirror.id = uuid::Uuid::now_v7();
     mirror.transform.scale_x = Property::fixed(-100.0);
@@ -411,7 +384,6 @@ fn taking_and_losing_a_parent_leaves_the_layer_where_it_was() {
         }
     }
 
-    // A keyed Orientation has every key turned, so the whole move stays.
     let mut spun = layer(1000.0, 600.0, None);
     spun.switches.three_d = true;
     spun.transform.rotation_x = keyed(30.0, -10.0);
@@ -443,12 +415,6 @@ fn taking_and_losing_a_parent_leaves_the_layer_where_it_was() {
     }
 }
 
-/// A 2D layer pinned to a 3D null with `toComp` sits where the compositor
-/// draws the null, through parents and a turned camera, and `fromComp`
-/// takes a picture point back to the null's own pixels. A 2D parent's
-/// leftover z and tilt count for nothing, as they do in the picture.
-/// Orientation, Anchor Z and Scale Z are on the way, and the picture's own
-/// placement, with Anchor Z in its position, lands where the walk does.
 #[test]
 #[allow(clippy::panic)]
 fn to_comp_lands_where_the_compositor_draws_and_from_comp_takes_it_back() {
@@ -490,8 +456,6 @@ fn to_comp_lands_where_the_compositor_draws_and_from_comp_takes_it_back() {
     camera.transform.rotation_x = Property::fixed(-10.0);
     camera.transform.rotation_y = Property::fixed(15.0);
     camera.transform.rotation = Property::fixed(5.0);
-    // Below the active camera, a two-node one with a layer on it, and a
-    // null moved by an expression on time with a layer on that.
     let mut aimer = layer(300.0, 200.0, None);
     aimer.kind = LayerKind::Camera {
         zoom: Property::fixed(900.0),
@@ -593,7 +557,6 @@ fn to_comp_lands_where_the_compositor_draws_and_from_comp_takes_it_back() {
             assert!((got - want).abs() < 1e-2, "{got} is not {want}");
         }
     }
-    // A 2D layer is drawn flat, with no camera.
     let flat_world = world_placement(&c, &card, 0.0, context.clone());
     let on_card = |r: usize| flat_world[0][r] * 5.0 + flat_world[1][r] * 7.0 + flat_world[3][r];
     for (axis, want) in [on_card(0), on_card(1)].into_iter().enumerate() {
@@ -622,8 +585,6 @@ fn to_comp_lands_where_the_compositor_draws_and_from_comp_takes_it_back() {
         assert!((back - want).abs() < 1e-6, "{back} is not {want}");
     }
 
-    // A layer on a two-node camera turns with the camera's aim, and one
-    // on a null moved by `time` follows it at that time.
     let later = Arc::new(ExpressionContext {
         comp_time: 0.5,
         ..(*context).clone()
@@ -647,9 +608,6 @@ fn to_comp_lands_where_the_compositor_draws_and_from_comp_takes_it_back() {
     }
 }
 
-/// The rig of aecheck's tocomp-check.jsx, and After Effects' own numbers
-/// for it: toComp's third number, fromComp off it, the Vec forms, a point
-/// behind the eye, and the facing sign of toCompVec.
 #[test]
 #[allow(clippy::panic)]
 fn to_comp_reads_what_after_effects_reads() {
@@ -708,7 +666,6 @@ fn to_comp_reads_what_after_effects_reads() {
         other => panic!("{text}: {other:?}"),
     };
 
-    // 100 px behind the eye, as the camera sees it.
     let m = lumit_core::camera::rotation(pose.rotation_deg);
     let a = (30.0, 20.0, -100.0);
     let eye = [pose.position.0, pose.position.1, pose.position.2];

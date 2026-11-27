@@ -53,7 +53,6 @@ Future<void> showExportPickFrb({
   try {
     current ??= context.read<LumitUiState>().selectedComp;
   } catch (_) {
-    // No shell above, as in a widget test.
   }
   return showLumitModal<void>(
     context: context,
@@ -67,7 +66,6 @@ Future<void> showExportPickFrb({
   );
 }
 
-/// One row: which comp, with which preset, to which file.
 class _Pick {
   int comp;
   String preset;
@@ -98,8 +96,6 @@ class _ExportPickState extends State<_ExportPick> {
   final List<_Pick> _rows = [];
   final ScrollController _scroll = ScrollController();
 
-  /// Where every file goes. Empty until one is chosen when the defaults ask
-  /// each time.
   String _folder = '';
   String? _refused;
   bool _busy = false;
@@ -111,8 +107,6 @@ class _ExportPickState extends State<_ExportPick> {
     if (widget.comps.isEmpty) return;
     final front = widget.comps.indexWhere(
         (c) => c.$1.internalid == widget.front?.internalid);
-    // The preset the dialogue would open on: the named default, else the
-    // first built-in.
     final preset = _presets.any((p) => p.name == _defaults.preset)
         ? _defaults.preset
         : (_presets.firstOrNull?.name ?? '');
@@ -126,7 +120,6 @@ class _ExportPickState extends State<_ExportPick> {
     super.dispose();
   }
 
-  /// The row's settings: the preset as stored, with its own name on it.
   BridgeExportSpec? _spec(_Pick row) => exportPresetGet(name: row.preset);
 
   String _compName(int index) => widget.comps[index].$2;
@@ -262,7 +255,6 @@ class _ExportPickState extends State<_ExportPick> {
     );
   }
 
-  /// The columns' names.
   Widget _header(LumitTheme t) => SizedBox(
         height: exportQueueRow,
         child: Row(children: [
@@ -344,8 +336,6 @@ class _ExportPickState extends State<_ExportPick> {
         ]),
       );
 
-  /// The + under the list: a dropdown of every comp, and the one picked
-  /// becomes a new row with the preset of the row above it.
   Widget _add(LumitTheme t) => LumitTooltip(
         message: l10n.exportPickAdd,
         child: SizedBox(
@@ -451,7 +441,6 @@ class _ExportPickState extends State<_ExportPick> {
     }
     if (!mounted) return;
     if (failed.isEmpty) return widget.onClose();
-    // What went in leaves the list, so pressing again only tries the rest.
     setState(() {
       _busy = false;
       _rows.retainWhere(failed.contains);

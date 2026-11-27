@@ -1,10 +1,3 @@
-// The Grade panel's Wheels and Adjust pages: the primaries.
-//
-// Wheels shows Lift, Gamma, Gain and Offset three ways: as wheels, as bars,
-// or as the log wheels (Shadow, Midtone, Highlight and Offset, with their
-// ranges). A fourth mode, HDR, shows the zone wheels (grade_hdr.dart). A
-// strip of the everyday numbers sits under the wheels. Adjust is every number
-// as a slider, then the RGB mixer.
 
 part of 'grade_panel_frb.dart';
 
@@ -32,7 +25,6 @@ const List<String> _wheelRows = [
   'high_range',
 ];
 
-/// The numbers under the wheels, Resolve's strip in Lumit's words.
 const List<String> _stripRows = [
   'temperature',
   'tint',
@@ -73,10 +65,8 @@ mixin _GradePrimaries on _GradeModel {
   /// Whether a white balance pick has opened its undo group.
   bool _neutralTouched = false;
 
-  /// The HDR mode's zones and Global, in place of the four wheels.
   Widget _hdrBody(LumitTheme t, bool enabled);
 
-  /// The rows each wheel mode shows, for its tab's dot.
   static List<String> _modeRows(GradeWheelMode m) => switch (m) {
         GradeWheelMode.log => const [
             'shadow',
@@ -140,8 +130,6 @@ mixin _GradePrimaries on _GradeModel {
                       ? _barCell(t, id, enabled)
                       : (double size) => _wheelCell(t, id, size, enabled),
               ];
-              // Four across while each has room for its numbers, two by two,
-              // then one a row.
               const gap = 8.0;
               final least = _cellMin(t);
               final across = [4, 2, 1].firstWhere(
@@ -168,24 +156,18 @@ mixin _GradePrimaries on _GradeModel {
     );
   }
 
-  /// How big a wheel may be: no taller than the pane can show with its
-  /// numbers and the strip under it.
   double get _wheelMax {
     final room = _room;
     if (room == null) return 96;
     return (room.height - 130).clamp(56.0, 96.0).toDouble();
   }
 
-  /// A wheel's Y R G B row: four bare numbers, each with its tick.
   static double _numbersWidth(LumitTheme t) =>
       4 * (monoSlotWidth(t.mono.copyWith(fontSize: barValueTextSize), 5) + 4) +
       3 * 2;
 
-  /// The narrowest a wheel's cell goes before the wheels wrap.
   static double _cellMin(LumitTheme t) => math.max(112, _numbersWidth(t));
 
-  /// The wheels page's width beside Adjust: four wheels in one row, each
-  /// cell as wide as its wheel or its numbers, and the strip in one row.
   double _wheelsWidth(LumitTheme t) {
     final log = _wheelMode == GradeWheelMode.log;
     final strip = _stripRows.length + (log ? 2 : 0);
@@ -194,7 +176,6 @@ mixin _GradePrimaries on _GradeModel {
         2 * gradeInset;
   }
 
-  /// How wide each of the strip's fields is.
   static const double _stripField = 62;
 
   static const double _columnMin = 340, _columnMax = 420, _columnGap = 8;
@@ -239,7 +220,6 @@ mixin _GradePrimaries on _GradeModel {
         );
       });
 
-  /// One wheel with its name, its master number and its three channels.
   Widget _wheelCell(LumitTheme t, String id, double size, bool enabled) {
     final rgb = _colour(id);
     final neutral = _defaultColour(id)[0];
@@ -271,7 +251,6 @@ mixin _GradePrimaries on _GradeModel {
     );
   }
 
-  /// One wheel's colour as four bars: the master, then red, green and blue.
   Widget Function(double) _barCell(LumitTheme t, String id, bool enabled) =>
       (size) {
         final rgb = _colour(id);
@@ -326,7 +305,6 @@ mixin _GradePrimaries on _GradeModel {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Each number gives way in a narrow cell rather than spill out.
         Text(
           _label(id),
           maxLines: 1,
@@ -341,7 +319,6 @@ mixin _GradePrimaries on _GradeModel {
                         : t.textMuted,
           ),
         ),
-        // Y R G B, as a colourist reads them: the master, then each channel.
         Padding(
           padding: const EdgeInsets.only(top: 2),
           child: Row(
@@ -394,8 +371,6 @@ mixin _GradePrimaries on _GradeModel {
       ignoring: !enabled,
       child: Opacity(
         opacity: enabled ? 1 : 0.5,
-        // A channel's own colour under its number says which it is; the
-        // master's is the text's.
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -416,8 +391,6 @@ mixin _GradePrimaries on _GradeModel {
     );
   }
 
-  /// The everyday numbers as named fields in a row that wraps: a name above
-  /// each number, which scrubs, types and double-clicks back like any field.
   Widget _strip(LumitTheme t, bool enabled) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: gradeInset),
         child: Wrap(
@@ -492,7 +465,6 @@ mixin _GradePrimaries on _GradeModel {
     );
   }
 
-  /// How many places a row's number shows: fine rows more.
   int _decimals(String id) {
     final (min, max) = _range(id);
     final span = max - min;
@@ -503,7 +475,6 @@ mixin _GradePrimaries on _GradeModel {
             : 1;
   }
 
-  /// One number as a slider row, its menu and its reset.
   Widget _slider(LumitTheme t, String id, bool enabled,
       {int? decimals, Widget? trailing, List<Color>? tint, String? label}) {
     final (min, max) = _range(id);
@@ -578,7 +549,6 @@ mixin _GradePrimaries on _GradeModel {
   }
 
   Widget _adjustPage(LumitTheme t, bool enabled) {
-    // Blue to orange and green to magenta, the way the rows push.
     final warm = [hsvToRgb(210, 0.45, 0.8), hsvToRgb(32, 0.55, 0.85)];
     final tint = [hsvToRgb(120, 0.45, 0.75), hsvToRgb(300, 0.45, 0.8)];
     return Padding(
@@ -613,8 +583,6 @@ mixin _GradePrimaries on _GradeModel {
     );
   }
 
-  /// The mixer as three rows of three: what each output channel takes from
-  /// red, green and blue.
   Widget _mixer(LumitTheme t, bool enabled) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: gradeInset),
         child: Column(
@@ -694,8 +662,6 @@ mixin _GradePrimaries on _GradeModel {
       ),
     );
   }
-
-  // --- The neutral picker ------------------------------------------------------
 
   /// The number a pick reads the picture against is the document's, never a
   /// preview's: the window of pixels the dropper reads is cut from the frame

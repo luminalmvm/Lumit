@@ -52,11 +52,8 @@ class OpeningOverlay extends StatefulWidget {
   /// How far the job has got, 0..1, or null for one that cannot say.
   final double? fraction;
 
-  /// Stops the job, for one that can be stopped: the card then carries a
-  /// Cancel button, the one thing on it that takes a click.
   final VoidCallback? onCancel;
 
-  /// What the Cancel button says. Null is the plain word.
   final String? cancelLabel;
 
   const OpeningOverlay(

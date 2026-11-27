@@ -20,7 +20,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// A tint colour means nothing until the tint is on.
 pub const BLACK_AND_WHITE_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
     param: "tint_colour",
     on: "tint",
@@ -48,28 +47,21 @@ pub struct BlackAndWhite {
     #[slider(min = -200.0, max = 300.0, default = 40.0, hard_min = -200.0, unit = Percent)]
     pub reds: f32,
 
-    /// Per cent; see [`reds`](Self::reds).
     #[slider(min = -200.0, max = 300.0, default = 60.0, hard_min = -200.0, unit = Percent)]
     pub yellows: f32,
 
-    /// Per cent; see [`reds`](Self::reds).
     #[slider(min = -200.0, max = 300.0, default = 40.0, hard_min = -200.0, unit = Percent)]
     pub greens: f32,
 
-    /// Per cent; see [`reds`](Self::reds).
     #[slider(min = -200.0, max = 300.0, default = 60.0, hard_min = -200.0, unit = Percent)]
     pub cyans: f32,
 
-    /// Per cent; see [`reds`](Self::reds). Lower it to darken a sky.
     #[slider(min = -200.0, max = 300.0, default = 20.0, hard_min = -200.0, unit = Percent)]
     pub blues: f32,
 
-    /// Per cent; see [`reds`](Self::reds).
     #[slider(min = -200.0, max = 300.0, default = 80.0, hard_min = -200.0, unit = Percent)]
     pub magentas: f32,
 
-    /// On, the grey is coloured by [`tint_colour`](Self::tint_colour) —
-    /// the sepia print, the cyanotype.
     #[toggle(default = false)]
     pub tint: bool,
 
@@ -78,7 +70,6 @@ pub struct BlackAndWhite {
     #[colour(label = "Tint colour", default = [0.62, 0.44, 0.26, 1.0], max = 4.0)]
     pub tint_colour: [f32; 4],
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -125,7 +116,6 @@ impl BlackAndWhite {
     }
 }
 
-/// Black and white's behaviour.
 pub struct BlackAndWhiteDef;
 
 impl EffectDef for BlackAndWhiteDef {

@@ -37,13 +37,11 @@ use crate::MediaError;
 /// a single item.
 pub const MAX_FRAMES: u32 = 1_000_000;
 
-/// The numbered run one file belongs to.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Run {
     /// The `image2` input: the containing directory joined with the file name,
     /// its number replaced by a printf field (`Depth%06d_depth.exr`).
     pub pattern: PathBuf,
-    /// The number of the run's first file.
     pub start: u32,
     /// How many files are in the run. Never zero — the picked file is one.
     pub count: u32,
@@ -113,7 +111,6 @@ impl Run {
     }
 }
 
-/// A file name split at its number: `Depth`, 6, `_depth.exr`.
 struct Parts<'a> {
     prefix: &'a str,
     digits: &'a str,
@@ -169,8 +166,6 @@ pub const STILL_EXTENSIONS: &[&str] = &[
     "pgm", "pnm", "pbm",
 ];
 
-/// Whether `path`'s extension is a still-image format a numbered run of which
-/// should be offered as one sequence.
 #[must_use]
 pub fn is_still(path: &Path) -> bool {
     path.extension()
@@ -230,7 +225,6 @@ pub fn detect(file: &Path) -> Option<Run> {
         return None;
     }
 
-    // Walk out from the picked file to the first hole either side.
     let mut start = picked;
     while start > 0 && numbers.contains(&(start - 1)) {
         start -= 1;
@@ -288,7 +282,6 @@ pub struct MediaSource {
 }
 
 impl MediaSource {
-    /// This source with [`Self::stamp_now`].
     #[must_use]
     pub fn stamped(mut self) -> Self {
         self.stamp = self.stamp_now();
@@ -308,7 +301,6 @@ impl MediaSource {
         Some((u64::from(run.count), first.1.max(last)))
     }
 
-    /// A plain single file.
     #[must_use]
     pub fn file(path: impl Into<PathBuf>) -> Self {
         Self {
@@ -382,7 +374,6 @@ fn briefly_held<T: Clone>(
     answer
 }
 
-/// A file's length and modification time.
 pub(crate) fn file_stamp(path: &Path) -> Option<(u64, SystemTime)> {
     // A file the page holds has no length here, and never changes, but one
     // handed in after its project opened must not keep the answer from
@@ -471,7 +462,6 @@ impl From<&MediaSource> for MediaSource {
     }
 }
 
-/// The `image2` input for `run` at `fps`, ready to open.
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn open_run(
     run: &Run,
@@ -547,8 +537,6 @@ mod tests {
         }
     }
 
-    /// The whole point of the feature, end to end: frame N of a sequence item
-    /// is file N of the run, at the rate the item asked for.
     #[test]
     fn frame_n_of_a_sequence_is_file_n_of_the_run() {
         let dir = tempfile::tempdir().unwrap();
@@ -630,7 +618,6 @@ mod tests {
         let index = crate::index::build_frame_index(&src).unwrap();
         let mut decoder = crate::decode::VideoDecoder::open(&src, index).unwrap();
         let mut read = |frame: usize| decoder.frame_rgba(frame, None).unwrap().rgba[0];
-        // In order, as an export reads them, then scrubbed back.
         let played: Vec<u8> = (0..6).map(&mut read).collect();
         assert_eq!(played, [2, 2, 3, 3, 3, 6]);
         assert_eq!([read(4), read(0), read(3)], [3, 2, 3]);

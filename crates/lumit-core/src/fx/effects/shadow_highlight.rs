@@ -22,8 +22,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// The panel's one disclosure — AE's "More Options", trimmed to the two controls
-/// that survived (§3.63).
 pub const SHADOW_HIGHLIGHT_GROUPS: &[ParamGroup] = &[ParamGroup {
     label: "More options",
     params: &["colour_correction", "midtone_contrast"],
@@ -32,7 +30,6 @@ pub const SHADOW_HIGHLIGHT_GROUPS: &[ParamGroup] = &[ParamGroup {
     visible_when_lens_elements: None,
 }];
 
-/// Shadow highlight's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "shadow_highlight",
@@ -191,7 +188,6 @@ impl ShadowHighlight {
     }
 }
 
-/// Shadow highlight's behaviour.
 pub struct ShadowHighlightDef;
 
 impl EffectDef for ShadowHighlightDef {
@@ -203,7 +199,6 @@ impl EffectDef for ShadowHighlightDef {
         cpu::shadow_highlight(rgba, w, h, &ShadowHighlight::read(p).packed());
     }
 
-    // No neighbourhood: each pixel decides by its own brightness.
     fn apply_cpu_pointwise(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
         let packed = cpu::ShadowHighlightParams {
             radius_px: 0.0,

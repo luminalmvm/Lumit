@@ -14,30 +14,20 @@ use libloading::Library;
 
 use super::cuda::symbol;
 
-/// `cl_int`. Nought is `CL_SUCCESS`.
 pub type ClInt = i32;
-/// `cl_uint`.
 pub type ClUint = u32;
-/// Every `cl_*` object handle.
 pub type ClHandle = *mut c_void;
 
-/// `CL_DEVICE_TYPE_GPU`.
 pub const DEVICE_TYPE_GPU: u64 = 1 << 2;
-/// `CL_DEVICE_NAME`.
 pub const DEVICE_NAME: ClUint = 0x102B;
 /// `CL_DEVICE_BOARD_NAME_AMD`: AMD's marketing name, where `CL_DEVICE_NAME` is
 /// a code name.
 pub const DEVICE_BOARD_NAME_AMD: ClUint = 0x4038;
-/// `CL_CONTEXT_PLATFORM`.
 pub const CONTEXT_PLATFORM: isize = 0x1084;
-/// `CL_MEM_READ_WRITE`.
 pub const MEM_READ_WRITE: u64 = 1;
-/// `CL_QUEUE_CONTEXT`.
 pub const QUEUE_CONTEXT: ClUint = 0x1090;
-/// `CL_QUEUE_DEVICE`.
 pub const QUEUE_DEVICE: ClUint = 0x1091;
 
-/// The ICD loader's own file.
 #[cfg(windows)]
 const LIBRARY: &str = "OpenCL.dll";
 #[cfg(not(windows))]
@@ -125,7 +115,6 @@ pub struct Api {
 }
 
 impl Api {
-    /// Open the loader, or `None` on a machine without one.
     #[must_use]
     pub fn load() -> Option<Self> {
         // SAFETY: loading the loader runs its own start-up code, which is what
@@ -157,7 +146,6 @@ impl Api {
         }
     }
 
-    /// One text property of a device, or empty.
     fn device_text(&self, device: ClHandle, what: ClUint) -> String {
         let mut text = [0_u8; 256];
         let mut written = 0;
@@ -179,7 +167,6 @@ impl Api {
     }
 }
 
-/// A sentence for the badge, from an OpenCL answer.
 fn check(what: &str, code: ClInt) -> Result<(), String> {
     if code == 0 {
         Ok(())
@@ -188,7 +175,6 @@ fn check(what: &str, code: ClInt) -> Result<(), String> {
     }
 }
 
-/// One GPU device, with a context and a command queue of our own.
 pub(crate) struct OpenCl {
     api: Api,
     context: ClHandle,
@@ -202,7 +188,6 @@ unsafe impl Send for OpenCl {}
 unsafe impl Sync for OpenCl {}
 
 impl OpenCl {
-    /// Whether this machine has an OpenCL GPU, without making a context.
     pub(crate) fn present() -> bool {
         let Some(api) = Api::load() else {
             return false;
@@ -232,7 +217,6 @@ impl OpenCl {
             })
     }
 
-    /// Open the GPU whose name Lumit's adapter starts with, or the first.
     pub(crate) fn open(adapter: Option<&str>) -> Option<Self> {
         let api = Api::load()?;
         let mut platforms = [std::ptr::null_mut(); 8];
@@ -368,7 +352,6 @@ impl OpenCl {
         unsafe { (self.api.release_mem_object)(at as ClHandle) };
     }
 
-    /// Wait for everything the plugin queued.
     pub(crate) fn finish(&self) -> Result<(), String> {
         // SAFETY: this value's own queue.
         check("render", unsafe { (self.api.finish)(self.queue) })

@@ -1,5 +1,3 @@
-//! The Correction's GPU pass, kept beside the dispatch table rather than in it.
-
 use lumit_core::fx::effects::correction::cpu::MATTE_VIEW_GREY;
 use lumit_core::fx::effects::correction::{combine, Correction, DERIVED_PX_SCALE};
 use lumit_core::fx::params::Params;

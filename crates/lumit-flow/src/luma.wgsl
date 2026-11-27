@@ -15,10 +15,8 @@
 // halving `flow_grays` does on the CPU, done in one pass.
 
 struct LumaParams {
-    // Output (working) dimensions.
     w: u32,
     h: u32,
-    // Source texture dimensions.
     sw: u32,
     sh: u32,
     // Box factor: source texels per output texel, each way.

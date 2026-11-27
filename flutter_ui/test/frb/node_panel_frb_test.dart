@@ -27,7 +27,6 @@ void main() {
   setUpAll(initEngineForTests);
 
   group('Node panel (frb)', () {
-    /// A comp with one solid carrying one Gaussian blur, selected.
     ({LumitState state, LumitUiState uiState, LayerReference layer})
         withBlur() {
       final p = freshProject();
@@ -41,8 +40,6 @@ void main() {
       return (state: p.state, uiState: p.uiState, layer: layer);
     }
 
-    /// Add `name` as a driver, wired into the blur's `radius`, so the panel
-    /// has both a driver box to draw and a driven row to count.
     UuidValue seedWiredDriver(LayerReference layer, String name) {
       final made = layer.newDriver(name: name);
       final id = made.id();
@@ -105,8 +102,6 @@ void main() {
       expect(find.byKey(const ValueKey('node-driven-count')), findsNothing);
     });
 
-    /// An Expression box drew Edit expression and did nothing when it was
-    /// pressed. It opens the dialogue and Apply writes the text.
     testWidgets("an Expression driver's Edit expression writes its text",
         (tester) async {
       final p = withBlur();
@@ -126,8 +121,6 @@ void main() {
       expect(p.layer.getGraphDrivers().single.expressionSource(), 'time * 2');
     });
 
-    /// Add input gives an Expression box a socket and a row. Remove input
-    /// takes them away again, with the wire that was plugged in, in one op.
     testWidgets("an Expression driver's inputs are added and removed",
         (tester) async {
       final p = withBlur();
@@ -155,7 +148,6 @@ void main() {
       expect(find.byKey(ValueKey<String>('node-row-$box-input_1')),
           findsOneWidget);
 
-      // A Math box wired into the new input.
       final math = p.layer.newDriver(name: 'math');
       final graph = p.layer.getGraph();
       p.layer.setGraph(
@@ -224,7 +216,6 @@ void main() {
       await tester.pumpAndSettle();
       final names = [for (final e in p.uiState.model.layers) e.info.name];
       expect(names, hasLength(2));
-      // The Null is the layer with no picture; it must still be offered.
       final nulls = p.uiState.model.layers
           .where((e) => e.info.kind == BridgeLayerKind.nullLayer);
       expect(nulls, hasLength(1));
@@ -283,8 +274,6 @@ void main() {
       expect(amount(), before,
           reason: 'the whole drag was one op, so one undo puts it back');
     });
-
-    // --- Points sample's rows (points-stream.md §2.2, §4.3) ---------------
 
     /// The coupling. Clicking a box on the canvas is what fills this panel,
     /// and neither panel is told the other exists — the pick goes through the

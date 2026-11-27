@@ -23,7 +23,6 @@ import 'recovery_dialog_frb.dart';
 import 'settings_account.dart' show askBefore;
 import 'tour_frb.dart' show onlyTourDemo;
 
-/// Narrow, like the recovery dialogue: one sentence and three short answers.
 const double unsavedDialogWidth = 350;
 
 /// Give LumitState somewhere to ask. Called once, from the widget that is up
@@ -60,8 +59,6 @@ void installUnsavedQuestion(BuildContext context) {
       );
       if (keep == null) return false;
       if (!keep) return true;
-      // As Settings' Keep running does: closing the window from now on
-      // leaves Lumit in the tray.
       ui.workspace.setKeepRunning(true);
       await applyBackground(ui.workspace);
       await closeWindow();
@@ -72,7 +69,6 @@ void installUnsavedQuestion(BuildContext context) {
     if (!context.mounted) return true;
     return askBefore(context, l10n.exportQuitAsk, l10n.exportQuit);
   };
-  // The same window is where a crash's edits are offered back.
   app.offerRecovery = (path) => showRecoveryDialogFrb(
       context: context, state: app, projectPath: path, crashed: true);
 }
@@ -104,7 +100,6 @@ Future<bool> askUnsavedChangesFrb(
     try {
       app.project?.shareDiscardAway();
     } catch (_) {
-      // Closed already.
     }
     return true;
   }
@@ -158,7 +153,6 @@ class _UnsavedDialog extends StatelessWidget {
                 onPressed: () => onChoose(false),
                 child: _keyed(l10n.discard, l10n.unsavedKeyDiscard),
               ),
-              // The default: focused on open, so Enter saves.
               HouseButton(
                 key: const ValueKey('unsaved-save'),
                 primary: true,

@@ -35,7 +35,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// The wire-only data input (points-stream.md §4.1).
 pub const POINTS_PORT: &str = "points";
 
 /// What this effect consumes. Not `three_d`: a trail is a line drawn on the
@@ -43,14 +42,12 @@ pub const POINTS_PORT: &str = "points";
 /// puts it — which is what a 2D reading answers.
 const POINTS_IN: &[Port] = &[Port::new(POINTS_PORT, "Points", PortType::Points)];
 
-/// Colour is only read once the tail stops taking each point's own.
 pub const TRAIL_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
     param: "colour",
     on: "point_colour",
     cond: EnabledCond::BoolIs(false),
 }];
 
-/// The most pieces Smooth cuts the run between two samples into.
 const SMOOTH_PIECES: usize = 6;
 
 /// How many pieces a run is cut into for how far its curve bows away from the
@@ -75,23 +72,15 @@ fn catmull_rom(a: [f32; 3], b: [f32; 3], c: [f32; 3], d: [f32; 3], t: f32) -> [f
     })
 }
 
-/// What a tail is drawn as.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TrailStyle {
-    /// One dab per sample: a dotted tail, and the honest picture of what was
-    /// actually evaluated.
     #[default]
     Dots,
-    /// A capsule from each sample to the one before it: a continuous ribbon,
-    /// which is the same kernel with the tail somewhere other than the head.
     Segments,
-    /// Segments with the corners rounded: a curve through the samples, cut
-    /// into shorter capsules.
     Smooth,
 }
 
 impl TrailStyle {
-    /// The Choice option labels, in code order.
     pub const OPTIONS: &'static [&'static str] = &["Dots", "Segments", "Smooth"];
 
     /// The style for a stored Choice index; anything unknown is Dots, the
@@ -106,7 +95,6 @@ impl TrailStyle {
     }
 }
 
-/// Trail's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "trail",
@@ -168,7 +156,6 @@ pub struct Trail {
     #[slider(min = 0.0, max = 400.0, default = 60.0, hard_min = 0.0, unit = Percent)]
     pub scale: f32,
 
-    /// How soft a dab's edge is, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -210,7 +197,6 @@ pub struct Trail {
     #[toggle(label = "Use point colour", default = true)]
     pub point_colour: bool,
 
-    /// The colour of every tail when it is not the point's own.
     #[colour(default = [1.0, 1.0, 1.0, 1.0], max = 4.0)]
     pub colour: [f32; 4],
 
@@ -229,7 +215,6 @@ pub struct Trail {
     )]
     pub max_trails: i32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -247,7 +232,6 @@ impl Trail {
     /// pixels the frame is drawn at.
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
 
-    /// This instance's raster factor, read back out of a resolved bag.
     #[must_use]
     pub fn px_scale_of(p: Params<'_>) -> f32 {
         p.float(Self::DERIVED_PX_SCALE, 1.0)
@@ -262,7 +246,6 @@ impl Trail {
     /// consumer that wants the same back-samples declares the same two ids and
     /// needs no edit to the builder.
     pub const SAMPLES_PARAM: &'static str = "back_samples";
-    /// See [`SAMPLES_PARAM`](Self::SAMPLES_PARAM).
     pub const STEP_PARAM: &'static str = "back_step";
 
     /// The tail, drawn: every sample of every point that has one, and — for
@@ -337,7 +320,6 @@ impl Trail {
                 None
             };
             let oldest = if smooth { samples.get(k + 2) } else { None };
-            // The pieces of one run, furthest from the point first.
             for piece in (0..pieces).rev() {
                 let mut cursor = 0usize;
                 let mut older_cursor = 0usize;
@@ -350,7 +332,6 @@ impl Trail {
                 for i in 0..heads.len() {
                     let id = heads.id[i];
                     let Some(j) = PointsStream::seek_id(past, id, &mut cursor) else {
-                        // Not alive then: the tail simply stops there.
                         continue;
                     };
                     let at = past.position[j];
@@ -360,8 +341,6 @@ impl Trail {
                     if back.is_none() && piece > 0 {
                         continue;
                     }
-                    // Where this dab runs from and to, and how many pieces
-                    // its run is in.
                     let (head, tail, own) = match back {
                         Some(back) if pieces > 1 => {
                             let before = place(newer, id, &mut newer_cursor).unwrap_or(at);
@@ -380,7 +359,6 @@ impl Trail {
                     };
                     let along = (k as f32 + piece as f32 / own as f32) / last;
                     let along = along.min(1.0);
-                    // A power of 1 is the even fade, left as the number it was.
                     let dim = 1.0
                         - fade
                             * if power == 1.0 {
@@ -415,8 +393,6 @@ impl Trail {
         (out, tails)
     }
 
-    /// How the tail is drawn — dabs and capsules through the one kernel, and
-    /// the host Mix.
     #[must_use]
     pub fn draw_style(self) -> points::DrawStyle {
         points::DrawStyle {
@@ -446,7 +422,6 @@ impl EffectDef for TrailDef {
         &<Trail as EffectMetadata>::SCHEMA
     }
 
-    /// A picture in, a picture out, and a **stream in** beside it.
     fn signature(&self) -> Signature {
         Signature::Image {
             inputs: POINTS_IN,
@@ -454,8 +429,6 @@ impl EffectDef for TrailDef {
         }
     }
 
-    /// The raster factor, so a px@comp stream reaches the pixels this frame is
-    /// drawn at.
     fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
         push(Trail::DERIVED_PX_SCALE, Value::Float(cx.px_scale));
     }

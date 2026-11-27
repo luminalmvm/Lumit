@@ -52,11 +52,9 @@ import 'graph_panel.dart';
 import 'timeline_extras_frb.dart'
     show DoubleTap, chipRing, showLabelPicker, showMenuAt;
 
-/// One group as a canvas works on it: its boxes by key.
 class GraphGroup {
   final String name;
 
-  /// Which chip of the label palette tints it.
   final int colour;
   final List<String> members;
   const GraphGroup(this.name, this.colour, this.members);
@@ -74,12 +72,10 @@ String graphGroupFile(String dir, String name, String extension) {
   return '$dir/$stem.$extension';
 }
 
-/// A group in the library, as its file describes it.
 class SavedGroup {
   final String path;
   final BridgeSavedGroupDetails details;
 
-  /// How many boxes it holds.
   final int boxes;
   const SavedGroup(this.path, this.details, this.boxes);
 
@@ -104,10 +100,8 @@ class SavedGroup {
   }
 }
 
-/// What a row of a group's menu does.
 enum _GroupDo { rename, colour, save, ungroup }
 
-/// What a row of a note's menu does.
 enum _NoteDo { edit, fold, colour, delete }
 
 /// How wide a note is drawn, in canvas units. Its height is its words'.
@@ -120,9 +114,7 @@ const int _noteColour = 2;
 /// library sync does, so every open shelf reads them again.
 final ValueNotifier<int> savedGroupsChanged = ValueNotifier(0);
 
-/// The group half of a graph canvas.
 mixin GraphGroups<W extends StatefulWidget> on State<W> {
-  /// The canvas's groups as the document has them.
   List<GraphGroup> get groups;
 
   /// Write the groups back as one undo step.
@@ -140,28 +132,23 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
   /// behind, since every graph has its own.
   bool groupCarries(String key);
 
-  /// The engine's text for these boxes saved as a group.
   String groupText(String name, int colour, List<String> members);
 
-  /// What a saved group of this canvas is called on disk.
   String get groupExtension;
 
   /// Where saved groups go. A test names a folder of its own.
   String? get groupLibrary => presetsDirPath();
 
-  /// The library's saved groups for this kind of graph.
   List<BridgePresetInfo> savedGroups();
 
   /// Put the saved group at [path] in the middle of the canvas.
   void insertSavedGroup(String path);
 
-  /// The canvas's notes as the document has them.
   List<BridgeGraphNote> get notes;
 
   /// Write the notes back as one undo step.
   void commitNotes(List<BridgeGraphNote> next);
 
-  /// A clear spot in the middle of the canvas, where a new note goes.
   Offset get noteSpot;
 
   /// Whether the toolbar's magnet is on, which a dragged note follows too.
@@ -173,20 +160,17 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
   /// The group whose bar was pressed last, while its boxes are still the pick.
   int? groupPick;
 
-  /// The group whose name is being typed.
   int? groupRenaming;
 
   /// The group a dragged box would join if it were let go now.
   int? groupLit;
 
-  /// The note whose words are being typed.
   int? noteEditing;
 
   /// Where a note that is not written yet will go. It joins the document
   /// when it has words, so a note abandoned empty never existed.
   Offset? _noteNew;
 
-  /// A note being dragged, and where it has got to.
   (int, Offset)? _noteDrag;
 
   /// A press that landed in a name or a note being typed. The canvas takes
@@ -214,7 +198,6 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
             saved,
       ];
     } catch (_) {
-      // No library to read. The shelf is then simply not drawn.
       return;
     }
     if (mounted) setState(() => _shelf = shelf);
@@ -326,7 +309,6 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
   /// since the field would keep Ctrl+Z from undoing the group.
   void groupPicked() {
     final picked = pickedKeys;
-    // Boxes that are a group already are not framed twice.
     if (picked.isEmpty || _groupOfPick != null) return;
     final next = _grouped(picked, l10n.graphGroupDefaultName);
     commitGroups(next);
@@ -353,7 +335,6 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
       for (final (i, g) in all.indexed)
         if (leaves[i] == null)
           g
-        // A group left with no box goes.
         else if (g.members.any((m) => !leaves[i]!.contains(m)))
           GraphGroup(g.name, g.colour, [
             for (final m in g.members)
@@ -439,7 +420,6 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
     refreshShelf();
   }
 
-  /// The saved groups' window. A row picked there is inserted here.
   Future<void> _openSaved() async {
     final path = await showLumitModal<String>(
       context: context,
@@ -465,7 +445,6 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
           color: t.surface1,
           padding: const EdgeInsets.symmetric(horizontal: 10),
           alignment: Alignment.centerLeft,
-          // More than fit are reached by scrolling the strip sideways.
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
@@ -568,7 +547,6 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
     final g = _pressed;
     _pressed = null;
     if (unless || g == null || g >= groups.length) return false;
-    // The middle button pans, over a bar as anywhere else.
     if (event.buttons == kMiddleMouseButton) return false;
     if (event.buttons == kSecondaryMouseButton) {
       _menu(g, event.position);
@@ -649,7 +627,6 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
     ];
   }
 
-  /// Start a new note in the middle of the canvas.
   void addNote() => setState(() {
         noteEditing = null;
         _noteNew = noteSpot;
@@ -665,7 +642,6 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
         collapsed: collapsed ?? from.collapsed,
       );
 
-  /// Fold a note down to its first line, or open it again.
   void _noteFold(int at) {
     if (at >= notes.length) return;
     commitNotes([
@@ -779,7 +755,6 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
       onOwnPress();
     }
 
-    // A note being dragged is drawn where the drag has got it to.
     Offset place(int i, BridgeGraphNote note) => switch (_noteDrag) {
           (final at, final where) when at == i => where,
           _ => Offset(note.x, note.y),
@@ -1066,7 +1041,6 @@ class GraphNoteCard extends StatelessWidget {
   final String text;
   final Color colour;
 
-  /// Folded down to its first line.
   final bool collapsed;
   final bool editing;
   final VoidCallback? onFold;
@@ -1360,8 +1334,6 @@ class _GroupDetailsFormState extends State<_GroupDetailsForm> {
   }
 }
 
-/// The groups saved to the library for one kind of graph: click one to insert
-/// it, or pin it to the shelf, edit it or delete it here.
 class _SavedGroups extends StatefulWidget {
   final List<BridgePresetInfo> Function() lister;
   final String? folder;

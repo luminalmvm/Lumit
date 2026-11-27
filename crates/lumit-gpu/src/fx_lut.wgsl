@@ -64,7 +64,6 @@ fn lerp3(a: vec3<f32>, b: vec3<f32>, t: f32) -> vec3<f32> {
     return a + (b - a) * t;
 }
 
-// Scene-linear -> the Input space (== LutSpace::from_linear).
 fn to_space(c: vec3<f32>) -> vec3<f32> {
     if (p.space == 1u) {
         let lo = 12.92 * c;
@@ -79,7 +78,6 @@ fn to_space(c: vec3<f32>) -> vec3<f32> {
     return c;
 }
 
-// The Input space -> scene-linear (== LutSpace::to_linear).
 fn to_linear(c: vec3<f32>) -> vec3<f32> {
     if (p.space == 1u) {
         let lo = c / 12.92;
@@ -102,7 +100,6 @@ fn lut_apply(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let o = textureLoad(src, xy, 0);
-    // Straight colour, then into the space the cube was authored for.
     let u = to_space(unpremult(o));
 
     // Map each channel through its domain onto the grid and clamp
@@ -143,8 +140,6 @@ fn lut_apply(@builtin(global_invocation_id) gid: vec3<u32>) {
     let c1 = lerp3(c01, c11, f.y);
     let graded = lerp3(c0, c1, f.z);
 
-    // Back to scene-linear, re-premultiply, then blend against the untouched
-    // original by Mix.
     let pm = to_linear(graded) * o.a;
     let outv = lerp3(o.rgb, pm, p.mix);
     textureStore(dst, xy, vec4<f32>(outv, o.a));

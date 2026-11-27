@@ -197,7 +197,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     });
   }
 
-  /// Twirl every effect on the stack open or shut.
   void _foldAll(List<BridgeEffectInstanceInfo> effects, bool open) =>
       setState(() {
         _folds += 1;
@@ -322,7 +321,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                           text: await readEffectPreset(path: path),
                           atFrame: ui.playheadFrame.value);
                     } catch (_) {
-                      // Not a preset: the picker will take any file.
                       app.postNotice(l10n.presetFileNotPreset, error: true);
                       return;
                     }
@@ -347,11 +345,9 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     );
   }
 
-  /// Save the layer's whole stack as a preset in the library.
   Future<void> _saveStackPreset(LumitUiState ui, LayerReference layer) =>
       saveLayerPreset(context, ui, layer);
 
-  /// The effect whose heading is an inline rename editor, or null.
   UuidValue? _renamingEffect;
 
   /// A double-click counter per Custom shader heading, so two
@@ -379,7 +375,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         return;
       }
     } catch (_) {
-      // The layer went while its card was up; there is nothing to open.
     }
   }
 
@@ -448,11 +443,8 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   Map<String, ({String label, BridgeOutputRef? from})> _points = const {};
   LumitUiState? _boundUi;
 
-  /// The row filter Ctrl+F opens in the header. Its text narrows every card
-  /// to the rows whose names hold it.
   final RowFilter _filter = RowFilter();
 
-  /// `Ctrl+F` over this panel: the filter well comes up with the cursor in it.
   void _onSearchRequested() {
     if (_boundUi?.searchRequestIsFor(Panel.effectControls) ?? false) {
       _filter.show();
@@ -503,8 +495,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     return out.isEmpty ? const {} : out;
   }
 
-  /// Someone came, went or took something else in hand. The rows whose
-  /// marks changed are the ones that redraw.
   void _onRoster() {
     if (!mounted) return;
     if ((_share?.active ?? false) || _theirs.isNotEmpty) setState(() {});
@@ -515,8 +505,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   /// selection of its own.
   void _onRowTouched(String name) => _boundUi?.touchProperty(name);
 
-  /// Reveal in Effect controls, from a box on the node graph: the effect's
-  /// card is scrolled into view once the selection has drawn it.
   void _onReveal() {
     final ui = _boundUi;
     final id = ui?.revealEffect.value;
@@ -583,7 +571,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     _readDriven();
   }
 
-  /// The claims this panel had to displace to take the editing chords.
   bool Function()? _priorDeleteClaim;
   bool Function()? _priorCopyClaim;
   bool Function()? _priorPasteClaim;
@@ -663,8 +650,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         }
       }, name: deleteStepName(names));
     } catch (_) {
-      // The effects went away under the selection; there is nothing here to
-      // report and nothing left to remove.
     }
     ui.clearEffectSelection();
     Provider.of<LumitState>(context, listen: false).notifyDocumentChanged();
@@ -672,7 +657,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     return true;
   }
 
-  /// Pick the whole effect stack of the layer this panel is showing.
   void _onSelectAllRequested() {
     final ui = _boundUi;
     if (!mounted || ui == null) return;
@@ -788,8 +772,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     try {
       ui.copyEffectsToClipboard(layer.copyEffects(effects: picked));
     } catch (_) {
-      // The effects went away under the selection; the clipboard keeps what
-      // it had, and the layer below is not a silent substitute.
       return false;
     }
     return true;
@@ -812,7 +794,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     try {
       layer.pasteEffects(text: text, atFrame: ui.playheadFrame.value);
     } catch (_) {
-      // Not a stack this layer can take, or the layer has gone.
       return false;
     }
     Provider.of<LumitState>(context, listen: false).notifyDocumentChanged();
@@ -849,7 +830,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         hint: l10n.effectControlsNoComp,
       );
     }
-    // A node graph has no layers, so the picked box's rows go here instead.
     if (ui.model.isNodeGraph) return const NodePanelFrb();
     _theirs = _gatherTheirs(comp);
 
@@ -870,7 +850,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
       builder: (context, groupId, _) => ValueListenableBuilder<LayerReference?>(
         valueListenable: ui.selectedLayer,
         builder: (context, layer, _) {
-          // The layer last drawn was another project's, and went with it.
           if (_lastLayer?.internalprojectId != comp.internalproject) {
             _lastLayer = null;
           }
@@ -891,8 +870,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
               hint: l10n.effectControlsNoLayer,
             );
           }
-          // One clip picked in the Cut timeline is the subject the way a
-          // picked group header is: its own stack, its own Add effect.
           return _orOverlap(context, comp, ValueListenableBuilder<
               ({LayerReference layer, UuidValue clip})?>(
             valueListenable: ui.cutClip,
@@ -909,9 +886,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                 _effects.clipStack =
                     () => layer.getClipEffects(clip: clip, onCompClock: true);
               }
-              // Going between a layer's stack and a clip's is content
-              // arriving in a place that was already there, and the stack
-              // being left goes at once.
               final reveal = ThemeScope.of(context).motion.reveal;
               return AnimatedSwitcher(
                 duration: reveal.duration,
@@ -936,7 +910,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     );
   }
 
-  /// [child], or the rows of the overlap the Cut timeline has fronted.
   Widget _orOverlap(
       BuildContext context, CompositionReference comp, Widget child) {
     final ui = Provider.of<LumitUiState>(context, listen: false);
@@ -949,7 +922,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     );
   }
 
-  /// The Transition effect at a clip's start, read once per document revision.
   ({int? revision, UuidValue clip, BridgeEffectInstanceInfo? info})? _overlapRead;
 
   BridgeEffectInstanceInfo? _overlapInfo(
@@ -963,16 +935,11 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     try {
       info = layer.getClipTransition(clip: clip)?.getInfo();
     } catch (_) {
-      // The clip went under the panel.
     }
     _overlapRead = (revision: revision, clip: clip, info: info);
     return info;
   }
 
-  /// The panel with an **overlap** as its subject: its one effect's rows, less
-  /// what the overlap decides for it, marked as a transition. When the clip goes
-  /// or the overlap stops being one of the kinds, the panel goes back to what it
-  /// showed.
   Widget _overlapBody(
     BuildContext context,
     CompositionReference comp,
@@ -1067,16 +1034,11 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
           instance.getInfo(),
       ];
     } catch (_) {
-      // The clip went under the panel, which then has no cards to draw.
     }
     _clipRead = (revision: revision, clip: clip, stack: stack);
     return stack;
   }
 
-  /// The panel with one **clip** of a Sequence layer as its subject: the
-  /// clip's own stack drawn with the cards a layer's is, and Add effect
-  /// landing on the clip. A clip the model no longer holds falls back to its
-  /// layer.
   Widget _clipBody(
     BuildContext context,
     CompositionReference comp,
@@ -1111,8 +1073,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
           try {
             layer.addClipEffect(clip: clipId, name: name);
           } catch (_) {
-            // A driver, which a clip has no graph for: the engine refused
-            // calmly and the menu simply did nothing.
           }
           changed();
         }
@@ -1143,7 +1103,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
               onMenu: (at) => _showStackMenu(context, at,
                   effects: stack, onAdd: addToClip),
             ),
-            // A picture clip's blend mode, beside the effects it carries.
             if (entry.info.kind != BridgeLayerKind.audio)
               _ClipBlendRow(
                 blend: clip.blend,
@@ -1151,7 +1110,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                   try {
                     layer.setClipBlend(clip: clipId, index: index);
                   } catch (_) {
-                    // A locked layer refuses, and quietly.
                   }
                   changed();
                 },
@@ -1179,8 +1137,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                       key: const ValueKey('fx-clip-ground'),
                       padding: const EdgeInsets.symmetric(vertical: 4),
                       children: [
-                        // A clip of a graphics template: its card, above
-                        // the clip's own effects.
                         if (copyCard != null) copyCard,
                         if (stack.isEmpty) _EmptyStack(onAdd: addToClip),
                         for (var i = 0; i < stack.length; i++)
@@ -1200,9 +1156,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     );
   }
 
-  /// The staged rows of the clips that are copies of a graphics template,
-  /// read once per document revision and kept: on the comp's clock, as a
-  /// clip's effects are.
   ({int? revision, Map<UuidValue, BridgeEffectInstanceInfo?> rows})? _copyRead;
 
   BridgeEffectInstanceInfo? _clipCopyRows(
@@ -1217,13 +1170,10 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     try {
       info = layer.getClipInputs(clip: clip, onCompClock: true)?.getInfo();
     } catch (_) {
-      // The clip went under the panel, which then draws no card for it.
     }
     return held.rows[clip] = info;
   }
 
-  /// [picks] as copies, when every one of them is a copy of one template.
-  /// Empty otherwise.
   List<CopyTarget> _clipCopies(LumitUiState ui,
       List<({LayerReference layer, UuidValue clip})> picks) {
     final out = <CopyTarget>[];
@@ -1276,8 +1226,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     ];
   }
 
-  /// The template card for [targets], the one it shows first, kept while
-  /// what it draws from reads the same.
   Widget _copyCard(BuildContext context, LumitUiState ui,
       CompositionReference comp, List<CopyTarget> targets,
       VoidCallback changed) {
@@ -1324,7 +1272,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         _filter.needle,
         comp.internalid,
         l10n.localeName,
-        // What a live drag is holding, which is not in the document yet.
         [
           for (final p in first.rows.derivedParams)
             _effects.stagedValue(id, p.id),
@@ -1411,7 +1358,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
               param: param,
               frame: ui.playheadFrame.value);
         } catch (_) {
-          // Refused; the effect's own status line says why.
         }
         setState(() => _actionPressed += 1);
       },
@@ -1454,8 +1400,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         }
         final layer = carrier.layer;
         final g = group;
-        // The shared editor's third place to read a stack from, while the
-        // header is the subject.
         final gid = g.id;
         _effects.groupStack = () => comp.getGroupEffects(group: gid);
         _effects.clipStack = null;
@@ -1463,8 +1407,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
           try {
             comp.addGroupEffect(group: gid, name: name);
           } catch (_) {
-            // A driver, or a name this build does not know: the engine refused
-            // calmly and the menu simply did nothing.
           }
           ui.model.refresh();
         }
@@ -1568,7 +1510,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
               param: param,
               frame: ui.playheadFrame.value);
         } catch (_) {
-          // Refused; the effect's own status line says why.
         }
         setState(() => _actionPressed += 1);
       },
@@ -1635,9 +1576,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
       );
     }
     final info = entry.info;
-    // One reading of the comp's other layers for every card on the panel.
     final layersRead = _layersRead(ui.model.layers);
-    // An add lands on the layer these rows are for, and no other.
     void addToLayer(String name) => ui.addEffect(layer, name);
     void stackMenu(Offset at) => _showStackMenu(context, at,
         effects: info.effects, onAdd: addToLayer, layer: layer);
@@ -1655,24 +1594,17 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
               : null,
         ),
         Expanded(
-          // The keyframe strip beside the rows, spanning the layer's own in
-          // and out points. The rows' lanes draw into the column it opens.
           child: FxKeyStripHost(
             spanStart: info.inFrame,
             spanFrames: info.outFrame - info.inFrame < 1
                 ? 1
                 : info.outFrame - info.inFrame,
-          // The drop target for an effect dragged from Effects & presets.
-          // Nothing else produces an `EffectDragData`; the Timeline's layer
-          // rows and the graph panels are the other places that take one.
           child: DragTarget<EffectDragData>(
             onAcceptWithDetails: (details) async {
               await details.data.landOn(layer, atFrame: ui.playheadFrame.value);
               ui.model.refresh();
             },
             builder: (context, candidate, _) => _DropGround(
-              // While something is over it, say so: a drop with no feedback is
-              // indistinguishable from a drop that did nothing.
               lit: candidate.isNotEmpty,
               // **A click on nothing clears the pick.** Every other surface
               // in the editor works this way — the Timeline's lane ground,
@@ -1692,9 +1624,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                 child: ListView(
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   children: [
-                    // A copy of a graphics template: its card first, above
-                    // everything the layer itself has. It follows the
-                    // selection, as it edits every selected copy at once.
                     ListenableBuilder(
                       listenable:
                           Listenable.merge([ui.selectedLayers, ui.cutClips]),
@@ -1715,12 +1644,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                     // filter reaches Transform's rows either way.
                     if (ui.workspace.interface.transformInEffectControls ||
                         _filter.needle.isNotEmpty) ...[
-                      // What the layer is made of comes before where it sits: a
-                      // text layer's words are the first thing you want when
-                      // you select one.
-                      // The filter names rows, and Source, Flow and the
-                      // Animators have none to name: they step aside while
-                      // it holds text.
                       if (_filter.needle.isEmpty)
                       SourceRowsFrb(
                         key: ValueKey<String>(
@@ -1731,10 +1654,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                         open: _isOpen('source'),
                         onToggle: () => _toggle('source'),
                       ),
-                      // Flow sits between what the layer is made of and where it
-                      // sits, because that is what it is: how the source is
-                      // *sampled*. It shows itself only when the layer's
-                      // flow switch is on.
                       if (_filter.needle.isEmpty)
                       _AtPlayhead(
                         builder: (context, at) => FlowRowsFrb(
@@ -1799,14 +1718,10 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                       open: _isOpen('animators'),
                       onToggle: () => _toggle('animators'),
                     ),
-                    // A placed node graph's Inputs, above the stack because
-                    // they make the picture the effects then process.
                     if (info.copy == null &&
                         (info.graphInputs?.derivedParams.isNotEmpty ?? false))
                       _effectCard(context, ui, comp, layer, info, 0,
                           layersRead: layersRead, inputs: true),
-                    // A Model layer's materials, before the effects that run
-                    // on the picture they make.
                     if (info.materials case final materials?
                         when materials.isNotEmpty) ...[
                       if (!isGeometryOptions(materials.first))
@@ -1865,8 +1780,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     );
   }
 
-  /// The stack positions of the audio-typed entries, or of everything else —
-  /// two walks of a list the model already holds, no bridge call.
   List<int> _stackIndices(List<BridgeEffectInstanceInfo> effects,
           {required bool audio}) =>
       [
@@ -1964,7 +1877,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     );
   }
 
-  /// The add-a-style popup: the ones a menu may offer, in §2's order.
   void _addStyleMenu(BuildContext context, LumitUiState ui,
       LayerReference layer, Set<String> worn) {
     final box = context.findRenderObject() as RenderBox?;
@@ -2048,7 +1960,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         : material
             ? l10n.modelMaterialNumbered(index + 1)
             : _graphNameOf(context, fx);
-    // Neither a style nor the Inputs takes part in the effect selection.
     final fixed = style || inputs;
     // A model with many materials starts with each closed, so its first
     // look is a list of names rather than a wall of rows. Geometry options
@@ -2069,8 +1980,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     if (open) _everOpen.add(fx.id);
     final drawsRows = !startsClosed || _everOpen.contains(fx.id);
     final renaming = _renamingEffect == fx.id;
-    // Every row this instance draws, which is also what says whether it lists
-    // the comp's layers.
     final params = instanceParameters(fx);
     // The row filter: a heading that holds the text keeps every row, a card
     // with no row that does is left out altogether.
@@ -2088,7 +1997,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         return const SizedBox.shrink();
       }
     }
-    // An LFX effect with a page of its own, which the heading opens.
     final interface =
         !fixed && (ui.extensions.carrying(fx.name)?.$2.interface_ ?? false);
     return _SameCard(
@@ -2137,7 +2045,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         // than something inherited, so a card that kept its build would keep
         // the words it was built with (l10n/strings.dart).
         l10n.localeName,
-        // What a live drag is holding, which is not in the document yet.
         [for (final p in params) _effects.stagedValue(fx.id, p.id)],
         // A row that lists the comp's layers draws names from outside this
         // card, so a card with one follows every re-read of the model.
@@ -2150,7 +2057,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         style: style,
         inputs: inputs,
         material: material,
-        // A card narrowed to the rows that match shows them, shut or not.
         open: open || filter.isNotEmpty,
         filter: filter,
         drawsRows: drawsRows,
@@ -2182,7 +2088,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
             onStackChanged: ui.model.refresh,
           ).rename(name);
         },
-        // Escape: close the editor, write nothing.
         onRenameCancelled: () => setState(() => _renamingEffect = null),
         onStartRename:
             inputs || material
@@ -2266,7 +2171,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
               )) {
             return;
           }
-          // Edit lens… opens the lens window, shared by both lens effects.
           if (pressLensButton(
             context: context,
             home: _shaderHome(layer),
@@ -2276,7 +2180,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
           )) {
             return;
           }
-          // Edit flare… opens the Flare window on a Sprite flare.
           if (pressFlareButton(
             context: context,
             home: _shaderHome(layer),
@@ -2288,8 +2191,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
           )) {
             return;
           }
-          // Mesh warp's Reset mesh puts every crossing back where a flat grid
-          // has it, keys and all, as one undo step.
           if (fx.name == 'mesh_warp' && param == 'reset_mesh') {
             _effects.writeAll(layer, effect, {
               for (final p in fx.derivedParams)
@@ -2474,8 +2375,6 @@ class _DropGround extends StatelessWidget {
   }
 }
 
-/// A clip's own blend mode under the header: **From layer** while it has
-/// none, then the engine's list.
 class _ClipBlendRow extends StatelessWidget {
   final int? blend;
   final ValueChanged<int?> onChanged;
@@ -2510,27 +2409,20 @@ class _ClipBlendRow extends StatelessWidget {
   }
 }
 
-/// The panel header: which layer is being edited, and Add effect.
 class _Header extends StatelessWidget {
   final String layerName;
 
-  /// The layer a clip subject is on. Set, the header says the rows are a
-  /// clip's and not the layer's own.
   final String? clipOn;
 
-  /// What the mark says for [clipOn]: the clip's, unless it says otherwise.
   final String? mark;
 
   /// Where the add button adds to. An overlap has no stack to add to.
   final ValueChanged<String>? onAdd;
 
-  /// A right-click anywhere on the header, the add button included.
   final ValueChanged<Offset> onMenu;
 
-  /// The row filter's well, in the name's place while it is up.
   final Widget? filter;
 
-  /// Puts the filter up, from the search mark shown while it is down.
   final VoidCallback? onFilter;
   const _Header({
     required this.layerName,
@@ -2559,7 +2451,6 @@ class _Header extends StatelessWidget {
   Widget _row(BuildContext context, LumitTheme t) {
     return Row(
       children: [
-        // The same column the switches and stopwatches stand in below.
         SizedBox(
           width: fxStopwatchColumn,
           child: lumitIcon(LumitIcon.fx, size: iconSize, color: t.textMuted),
@@ -2577,8 +2468,6 @@ class _Header extends StatelessWidget {
               ),
               if (clipOn case final layer?) ...[
                 const SizedBox(width: 8),
-                // The mark that these are a clip's own effects, with the layer
-                // it is on in the tooltip.
                 LumitTooltip(
                   message: layer,
                   child: Container(
@@ -2599,7 +2488,6 @@ class _Header extends StatelessWidget {
         ),
         if (onFilter case final show? when filter == null)
           rowFilterMark(context, show, key: const ValueKey('fx-filter-mark')),
-        // The keyframe strip's switch.
         const FxKeyStripToggle(),
         const SizedBox(width: 4),
         // Its own context, so the menu drops from the *button* rather than
@@ -2624,8 +2512,6 @@ class _Header extends StatelessWidget {
   }
 }
 
-/// What a stack with nothing on it shows: the one thing it can do, on the
-/// value column's edge, where Add animator stands.
 class _EmptyStack extends StatelessWidget {
   final ValueChanged<String> onAdd;
   const _EmptyStack({required this.onAdd});
@@ -2685,7 +2571,6 @@ Future<void> showAddEffectMenu(BuildContext context, ValueChanged<String> onAdd,
   );
 }
 
-/// One flyout row per effect category, each opening onto its effects.
 List<Widget> _addEffectRows(VoidCallback close, ValueChanged<String> onAdd,
     {String? category}) {
   // Grouped in schema order, so the headings come out in the order the engine
@@ -2757,7 +2642,6 @@ class _EffectSection extends StatelessWidget {
   final bool open;
   final VoidCallback onToggle;
 
-  /// Twirl every effect on this stack open or shut.
   final ValueChanged<bool>? onFoldAll;
 
   /// Picked out of the stack, and the click that picks it. The same
@@ -2800,8 +2684,6 @@ class _EffectSection extends StatelessWidget {
   /// switch says, so the card is its rows, Reset and nothing else.
   final bool inputs;
 
-  /// Whether its rows are built at all, which a closed card that has never
-  /// been opened skips.
   final bool drawsRows;
 
   /// This card is one of a Model layer's materials, which also sets [style]:
@@ -2827,21 +2709,15 @@ class _EffectSection extends StatelessWidget {
   /// stack.
   final ({String tip, String why})? vectorReason;
 
-  /// Rows this subject doesn't show, on top of what the instance itself hides.
   final Set<String> hideRows;
 
-  /// Every layer in the comp, from the read model — what a layer-valued
-  /// parameter picks from.
   final List<BridgeLayerEntry> allLayers;
   final CompositionReference comp;
   final int playheadFrame;
   final ValueChanged<int> onSeek;
 
-  /// The stack itself changed (enabled, reordered, removed) — re-read it.
   final VoidCallback onStackChanged;
 
-  /// The heading is an inline rename editor, its commit, and the
-  /// Escape that throws the edit away instead.
   final bool renaming;
   final ValueChanged<String>? onRenamed;
   final VoidCallback? onRenameCancelled;
@@ -2872,21 +2748,13 @@ class _EffectSection extends StatelessWidget {
   final bool Function(String path, bool collapsedByDefault) isGroupOpen;
   final void Function(String path, bool collapsedByDefault) onToggleGroup;
 
-  /// An Action row's press, and the panel's running count of them —
-  /// what an effect's own display watches to know one happened.
   final void Function(UuidValue effect, String param) onAction;
   final int pressed;
 
-  /// Open this Custom shader's inner graph. Null on every other effect, which
-  /// draws no button for it.
   final VoidCallback? onOpenShaderGraph;
 
-  /// Open this LFX effect's interface. Null on every effect without one.
   final VoidCallback? onOpenInterface;
 
-  /// A camera following this layer's Camera track has been nudged —
-  /// drawn as a dot on the status row. From the read model, like everything
-  /// else this card draws.
   final bool trackCorrected;
 
   /// Settings → "Use theme colours in effect graphs" (owner, desk test). Off
@@ -2895,8 +2763,6 @@ class _EffectSection extends StatelessWidget {
   /// card asks nothing of its own in a rebuild.
   final bool themedGraphs;
 
-  /// The Curves plot's side and where a change to it is written (item 6.32).
-  /// Read from the workspace once here, for the same reason [themedGraphs] is.
   final double curvePlotSize;
   final ValueChanged<double>? onCurvePlotSize;
 
@@ -2950,7 +2816,6 @@ class _EffectSection extends StatelessWidget {
     this.onCurvePlotSize,
   });
 
-  /// What can be done to this effect, shared with its heading in the Timeline.
   EffectCommands get _commands => EffectCommands(
         info: info,
         layer: layer,
@@ -2990,17 +2855,14 @@ class _EffectSection extends StatelessWidget {
     });
   }
 
-  /// Where the Compositing fold's open state is kept.
   String get _compositingPath => 'fx-compositing-${info.id}';
 
-  /// Put one of this material's rows back to its file's value.
   void _resetMaterialRow(String param) {
     for (final instance in _instances()) {
       if (instance.id() != info.id) continue;
       try {
         layer.resetMaterialRow(material: instance, param: param);
       } catch (_) {
-        // The material went away under the press; nothing to put back.
       }
     }
     onStackChanged();
@@ -3079,8 +2941,6 @@ class _EffectSection extends StatelessWidget {
         );
 
     return FxSection(
-      // The user's own name where one is set, then the graph a Node graph
-      // effect applies, then the effect's label.
       title: (material && info.customName != null
               ? engineLabel(info.customName!)
               : info.customName) ??
@@ -3098,7 +2958,6 @@ class _EffectSection extends StatelessWidget {
       // Bypassed draws as a dashed outline round the heading (docs/15 §5), not
       // as a faded stack: the values stay readable while the effect is off.
       enabled: info.enabled,
-      // Every key on the effect, for the strip's summary lane while shut.
       summaryKeys: [
         for (final v in info.values)
           if (v.value case BridgeEffectValue_Float(
@@ -3129,7 +2988,6 @@ class _EffectSection extends StatelessWidget {
             tip: l10n.tipLfxInterface,
             keyName: 'fx-interface-$id',
             onPressed: () {
-              // The panel follows the picked instance, so this one first.
               onSelect();
               open();
             },
@@ -3177,7 +3035,6 @@ class _EffectSection extends StatelessWidget {
         }
         onStackChanged();
       },
-      // Right-click is where everything else an effect can do lives.
       onContextMenu: (at) => _commands.showMenu(
         context,
         at,
@@ -3190,16 +3047,12 @@ class _EffectSection extends StatelessWidget {
                 toggle: () => onToggleGroup(_compositingPath, true),
               ),
       ),
-      // An effect with its own display (Levels' histogram) draws it
-      // above its rows; the rows themselves are unchanged.
       rows: [
         // Above everything, because it is the reason the rows beneath it are
         // not doing anything (docs/12 §1, §2.3). An effect that is behaving
         // draws none of this.
         if (effectBadgeRow(context,
                 id: '$id',
-                // A Clone deformer set to Vector that cannot read outlines here
-                // says so, and why, as the effects that cannot run do.
                 reason: info.badgeReason ??
                     (vectorReason != null &&
                             info.values.any((v) =>
@@ -3212,8 +3065,6 @@ class _EffectSection extends StatelessWidget {
           badge,
         if (displayAt(playheadFrame) != null)
           _AtPlayhead(builder: (context, at) => displayAt(at)!),
-        // The way into a Custom shader's inner graph, drawn as its other
-        // buttons are.
         if (onOpenShaderGraph case final open?)
           fxTwoColumnRow(
             context: context,
@@ -3303,8 +3154,6 @@ class _EffectSection extends StatelessWidget {
     );
   }
 
-  /// Put [rows] back to what the schema declares, as one write, or null when
-  /// they are there already.
   VoidCallback? _resetRows(UuidValue id, List<BridgeParamInfo> rows) {
     final held = {for (final v in info.values) v.id: v.value};
     final values = <String, BridgeEffectValue>{
@@ -3319,7 +3168,6 @@ class _EffectSection extends StatelessWidget {
     return () => write(id, values);
   }
 
-  /// Where this card's rows sit in the Timeline's selection.
   String? _rowPathBase(UuidValue id) {
     final owner = layer.internallayerId.toString();
     return inputs
@@ -3348,8 +3196,6 @@ class _EffectSection extends StatelessWidget {
   ///   (with the position dropper for the declared %-of-frame pairs).
   List<Widget> _paramRows(ShareRows? named, String base, UuidValue id,
       Map<String, BridgeEffectValue> values) {
-    // In a shared project each row goes by its Timeline path. Outside one
-    // the rows come back exactly as they are made.
     Widget marked(String param, String? other, Widget row) => named == null
         ? row
         : named.row('$base/$param', row,
@@ -3388,7 +3234,6 @@ class _EffectSection extends StatelessWidget {
       for (final p in params)
         if ((stagedValue(id, p.id) ?? values[p.id]) case final v?) p.id: v,
     };
-    // A plugin greys its own rows as well, and the instance says which.
     final disabled = {
       ...disabledParams(info.name, shown),
       ...info.disabledRows,
@@ -3480,8 +3325,6 @@ class _EffectSection extends StatelessWidget {
           key: ValueKey<String>('fx-curves-$id'),
           keyPrefix: 'fx-curves-$id',
           labels: [for (final p in run) engineLabel(p.label)],
-          // A Red tab draws red (owner, desk test) — unless the setting hands
-          // the whole graph back to the theme.
           channelColours: themedGraphs
               ? null
               : [for (final p in run) curveChannelColour(p.id)],
@@ -3526,7 +3369,6 @@ class _EffectSection extends StatelessWidget {
           out.add(curveEditor(curves));
           continue;
         }
-        // Already drawn, beside its picker or slider on the Matte or Mix row.
         if (folded.contains(param.id)) {
           i += 1;
           continue;
@@ -3546,7 +3388,6 @@ class _EffectSection extends StatelessWidget {
               next.id,
               EffectPointRowFrb(
             key: ValueKey<String>('fx-row-$id-${param.id}-pair'),
-            // Both rows as one. A copy's point is one control already.
             controlRow: !onStack
                 ? null
                 : inputs
@@ -3595,8 +3436,6 @@ class _EffectSection extends StatelessWidget {
     while (i < params.length) {
       final param = params[i];
 
-      // The curve fold, for a run the schema left ungrouped. A grouped run
-      // takes the same fold inside `foldRows`.
       if (param.kind is BridgeParamKind_Curve) {
         final run = <BridgeParamInfo>[];
         while (i < params.length && params[i].kind is BridgeParamKind_Curve) {
@@ -3609,7 +3448,6 @@ class _EffectSection extends StatelessWidget {
 
       final group = byFirstMember[param.id];
       if (group != null) {
-        // Consume the whole contiguous member run.
         final run = <BridgeParamInfo>[];
         while (i < params.length && group.params.contains(params[i].id)) {
           run.add(params[i]);
@@ -3636,10 +3474,8 @@ class _EffectSection extends StatelessWidget {
         if (!folded.contains(param.id)) rows.add(rowFor(param));
         i += 1;
       } else {
-        // Flat params fold too, so an ungrouped x/y pair still joins.
         final flat = <BridgeParamInfo>[param];
         i += 1;
-        // Peek: only extend the flat run while the next is also ungrouped.
         while (i < params.length &&
             !byFirstMember.containsKey(params[i].id) &&
             !memberOf.containsKey(params[i].id) &&
@@ -3695,7 +3531,6 @@ class _EffectSection extends StatelessWidget {
             final whole = field0 == field0.roundToDouble();
             parts.add('${field0.toStringAsFixed(whole ? 0 : 1)}'
                 '${l10n.unitSymbolPercent}');
-          // Keyed, or an expression: there is no one number to give.
           case BridgeEffectValue_Float():
             parts.add(l10n.animated);
           case BridgeEffectValue_Layer(:final field0?):
@@ -3707,7 +3542,6 @@ class _EffectSection extends StatelessWidget {
           default:
         }
       }
-      // The blend reads straight after the mix.
       if (host.id != 'blend') continue;
       if ((host.kind, shown[host.id])
           case (
@@ -3720,7 +3554,6 @@ class _EffectSection extends StatelessWidget {
     return parts.isEmpty ? null : parts.join(' · ');
   }
 
-  /// One of the marks that come up on the heading under the pointer.
   Widget _headingButton(
     BuildContext context, {
     required String mark,
@@ -3752,12 +3585,9 @@ class _ParamGroupSection extends StatelessWidget {
   final VoidCallback onToggle;
   final List<Widget> rows;
 
-  /// What the heading says about its rows while it is shut, and the key its
-  /// twirl row is found by. Both are the Compositing fold's.
   final String? summary;
   final Key? headerKey;
 
-  /// Puts every row inside back to its default, or null when they all are.
   final VoidCallback? onReset;
   const _ParamGroupSection({
     super.key,
@@ -3817,19 +3647,12 @@ class _ParamGroupSection extends StatelessWidget {
       );
 }
 
-/// The Transform section: the layer's transform rows, in the panel's section
-/// chrome.
-///
-/// The rows themselves are [TransformRowsFrb], shared with the Timeline's
-/// twirl-down — this is the section around them, which is all that is particular
-/// to this panel.
 class _TransformSection extends StatelessWidget {
   final LayerReference layer;
   final CompositionReference comp;
   final BridgeTransform transform;
   final bool threeD;
 
-  /// How each two-axis property is shown.
   final BridgeAxisModes axisModes;
 
   /// What the layer is, and - on a camera - how it aims: which rows the
@@ -3844,8 +3667,6 @@ class _TransformSection extends StatelessWidget {
 
   bool get isCamera => kind == BridgeLayerKind.camera;
 
-  /// This camera's solve link carries a correction — the dot beside the
-  /// badge, and what makes Clear corrections worth offering.
   final bool corrected;
   final int playheadFrame;
   final ValueChanged<int> onSeek;
@@ -3874,7 +3695,6 @@ class _TransformSection extends StatelessWidget {
     this.filter = '',
   });
 
-  /// The panel's row filter, handed to the rows.
   final String filter;
 
   @override
@@ -3882,7 +3702,6 @@ class _TransformSection extends StatelessWidget {
     final share = ShareRows.maybeOf(context);
     final named = share != null && share.active ? share : null;
     final owner = layer.internallayerId.toString();
-    // A filter the heading's name holds keeps every row, as an effect's does.
     final title = engineLabel('Transform');
     final needle = title.toLowerCase().contains(filter) ? '' : filter;
     final rows = TransformRowsFrb(
@@ -3938,7 +3757,6 @@ class _TransformSection extends StatelessWidget {
         theirs: named == null ? const [] : named.under(transformPath(owner)),
         rows: [
           for (final row in rows)
-            // Each row by the path its twin in the Timeline has.
             named != null && row is TransformRowFrb
                 ? named.row(transformGroupPath(owner, row.group), row)
                 : row,
@@ -4009,7 +3827,6 @@ Widget? customEffectDisplay(
           playheadFrame: playheadFrame,
           onWrite: onWrite,
           onLive: onLive,
-          // A Red button draws red, on the same setting the curve tabs read.
           channelColours: themedGraphs
               ? null
               : [for (final c in levelsChannels) curveChannelColour(c)],
@@ -4024,8 +3841,6 @@ Widget? customEffectDisplay(
           pressed: pressed,
           corrected: trackCorrected,
         ),
-      // Stabilise's is the Camera track's kind of line, filed under this
-      // instance as the Planar track's is, and worded by its Mode.
       'stabilise' => StabiliseDisplayFrb(
           key: ValueKey<String>('fx-stabilise-display-$effectId'),
           layer: layer,
@@ -4046,8 +3861,6 @@ Widget? customEffectDisplay(
           onChanged: onChanged,
           pressed: pressed,
         ),
-      // Bake points' bake is filed and reported the same way, in its own words,
-      // and so is a simulation's.
       'bake_points' => PlanarTrackDisplayFrb(
           key: ValueKey<String>('fx-planar-track-display-$effectId'),
           layer: layer,
@@ -4088,8 +3901,6 @@ Widget? customEffectDisplay(
           onChanged: onChanged,
           pressed: pressed,
         ),
-      // Depth points asks for the same reading, unless a Depth layer has taken
-      // over from it.
       'depth_points' when !_namesALayer(values['depth_layer']) => PlaneDisplayFrb(
           key: ValueKey<String>('fx-depth-points-display-$effectId'),
           card: PlaneCard.depth,
@@ -4098,10 +3909,6 @@ Widget? customEffectDisplay(
           onChanged: onChanged,
           pressed: pressed,
         ),
-      // Remove background's is the same card, because it is the same job: a
-      // model reading a shot a frame at a time and filing what it found. The
-      // answer at the end of it is a matte rather than a depth, which is the
-      // one word between them.
       'remove_background' => PlaneDisplayFrb(
           key: ValueKey<String>('fx-remove-background-display-$effectId'),
           card: PlaneCard.matte,
@@ -4110,8 +3917,6 @@ Widget? customEffectDisplay(
           onChanged: onChanged,
           pressed: pressed,
         ),
-      // Denoise's is a reading and its result: the patch the noise was
-      // measured in, the noise by size, and how far it can be trusted.
       'denoise' => DenoiseDisplayFrb(
           key: ValueKey<String>('fx-denoise-display-$effectId'),
           layer: layer,
@@ -4122,8 +3927,6 @@ Widget? customEffectDisplay(
           pressed: pressed,
           onChanged: onChanged,
         ),
-      // The sound clean-up effects': what arrives around the playhead, what
-      // each works from, and what comes out.
       final name when repairEffects.contains(name) => RepairDisplayFrb(
           key: ValueKey<String>('fx-repair-display-$effectId'),
           layer: layer,
@@ -4174,7 +3977,6 @@ Widget? effectBadgeRow(
           key: ValueKey<String>('fx-badge-reason-$id'),
           style: t.small.copyWith(color: t.accent),
         ),
-        // A missing LFX effect's sentence names the extension already.
         if (detail != null && detail.isNotEmpty && reason != 'lfx_missing')
           Text(
             detail,

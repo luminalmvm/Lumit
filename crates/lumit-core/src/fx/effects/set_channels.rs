@@ -61,7 +61,6 @@ pub const SET_CHANNELS_OPTIONS: &[&str] = &[
     "Full off",
 ];
 
-/// Set channels' controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "set_channels",
@@ -95,19 +94,15 @@ pub struct SetChannels {
     #[choice(label = "Red from", options = *SET_CHANNELS_OPTIONS, default = 0)]
     pub red_from: u32,
 
-    /// Where the output's green comes from.
     #[choice(label = "Green from", options = *SET_CHANNELS_OPTIONS, default = 1)]
     pub green_from: u32,
 
-    /// Where the output's blue comes from.
     #[choice(label = "Blue from", options = *SET_CHANNELS_OPTIONS, default = 2)]
     pub blue_from: u32,
 
-    /// Where the output's alpha comes from.
     #[choice(label = "Alpha from", options = *SET_CHANNELS_OPTIONS, default = 3)]
     pub alpha_from: u32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,

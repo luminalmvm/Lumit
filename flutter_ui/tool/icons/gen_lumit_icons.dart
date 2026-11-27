@@ -13,7 +13,6 @@ import 'dart:io';
 const _input = 'tool/icons/glyphs.json';
 const _output = 'lib/icons/lumit_icons.dart';
 
-/// The one document every glyph is wrapped in: the set's grammar, in one place.
 String _document(String body) => '<svg viewBox="0 0 16 16" fill="none" '
     'stroke="currentColor" stroke-width="1.5" stroke-linecap="round" '
     'stroke-linejoin="round">$body</svg>';

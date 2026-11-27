@@ -24,10 +24,8 @@ class DragEscape {
   /// in flight, which is also what says whether this is listening.
   void Function()? _revert;
 
-  /// How to stand down from the ladder, held while this is registered.
   VoidCallback? _release;
 
-  /// Whether `Escape` has already taken this drag.
   bool _abandoned = false;
 
   /// Whether a drag is in flight and still live. False before one starts and

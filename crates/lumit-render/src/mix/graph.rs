@@ -37,13 +37,9 @@ use super::live::{place_clips, RackBakes};
 use super::order::{edges_on, order, Edges};
 use super::rack_stream::{sounds, NodeRack};
 
-/// One node of a built plan, as the bridge needs to find it again.
 #[derive(Clone, Debug, PartialEq)]
 pub struct GraphNode {
-    /// The layer it is: a sounding layer or a Bus layer of the comp, or a
-    /// node graph's Read.
     pub layer: Uuid,
-    /// A Bus layer rather than a strip.
     pub bus: bool,
     /// Its sends, in the layer's send order: the bus sent to and the send's
     /// slot in the plan's [`LiveBank`], None past [`MAX_SENDS`].
@@ -59,7 +55,6 @@ pub struct GraphInfo {
 }
 
 impl GraphInfo {
-    /// The node of `layer`, a strip or a bus.
     #[must_use]
     pub fn node_of(&self, layer: Uuid) -> Option<u16> {
         self.nodes
@@ -78,13 +73,10 @@ pub struct GraphPrev<'a> {
     pub info: &'a GraphInfo,
 }
 
-/// A build stopped because a newer one was asked for. Nothing it made was
-/// kept.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[error("the mix was stopped for a newer one")]
 pub struct Cancelled;
 
-/// One node while it is worked out, before its place in the order is known.
 struct Spec<'a> {
     layer: Uuid,
     /// None for a node graph's Read, which has no layer of the comp and
@@ -138,7 +130,6 @@ pub fn build_graph(
         .map(|(i, s)| (s.layer, i))
         .collect();
 
-    // The strip parts move from the jobs to their nodes.
     for job in &mut jobs {
         let Some(&s) = index.get(&job.layer) else {
             fold_gain(job, comp);
@@ -147,7 +138,6 @@ pub fn build_graph(
         take_strip(&mut specs[s], job);
     }
 
-    // The edges, then the order.
     let mut edges: Vec<Edges> = specs
         .iter()
         .enumerate()
@@ -203,7 +193,6 @@ pub fn build_graph(
         }
     }
 
-    // The nodes.
     let mut info = GraphInfo::default();
     let mut nodes = Vec::with_capacity(specs.len());
     let mut slots = 0usize;
@@ -281,7 +270,6 @@ pub fn build_graph(
             rack: None,
             duck,
         };
-        // A rack nobody hears is not run.
         let heard = on[i].0 || on[i].1.iter().any(|s| *s) || keys[i];
         if let Some(chain) = spec.rack.as_ref().filter(|_| heard) {
             // A rack that has to hear its whole input is baked once the plan
@@ -302,7 +290,6 @@ pub fn build_graph(
         info.nodes.push(graph_node);
     }
 
-    // The master.
     let master_keys = comp.master_keys.clone().map(|animation| Property {
         animation,
         extra: serde_json::Map::new(),
@@ -465,7 +452,6 @@ fn fold_gain(job: &mut AudioJob, comp: &Composition) {
     }
 }
 
-/// A spec's edges and what the solo rule reads, by spec index.
 fn edges_of(
     me: usize,
     spec: &Spec<'_>,

@@ -33,11 +33,10 @@ use lumit_render::headless::HeadlessRenderer;
 #[test]
 fn alternating_sizes_reuse_their_targets_instead_of_minting_handles() {
     let Ok(mut r) = HeadlessRenderer::shared() else {
-        return; // no adapter
+        return;
     };
     let mut handles: Vec<u64> = Vec::new();
     for i in 0..20 {
-        // The two shapes an outgoing and an incoming comp would present at.
         let (w, h) = if i % 2 == 0 {
             (1280, 720)
         } else {
@@ -60,7 +59,6 @@ fn alternating_sizes_reuse_their_targets_instead_of_minting_handles() {
          compositor",
         distinct.len()
     );
-    // And the two alternate rather than one having replaced the other.
     assert_eq!(handles[0], handles[2]);
     assert_eq!(handles[1], handles[3]);
 }
@@ -95,7 +93,7 @@ fn the_target_pool_is_bounded() {
 #[test]
 fn two_views_at_one_size_do_not_share_a_target() {
     let Ok(mut r) = HeadlessRenderer::shared() else {
-        return; // no adapter
+        return;
     };
     let left = r.present_probe_size(0, 1920, 1080).expect("left view");
     let right = r.present_probe_size(1, 1920, 1080).expect("right view");
@@ -104,7 +102,6 @@ fn two_views_at_one_size_do_not_share_a_target() {
         "two views at one size were handed the same texture, so each \
          overwrites the other's picture every frame"
     );
-    // And each keeps its own across the alternation a two-up produces.
     for _ in 0..8 {
         assert_eq!(r.present_probe_size(0, 1920, 1080).expect("left"), left);
         assert_eq!(r.present_probe_size(1, 1920, 1080).expect("right"), right);

@@ -30,7 +30,6 @@ use lumit_fx_macros::Effect;
 /// which is the whole reason it is a signature port rather than a parameter.
 pub const POINTS_PORT: &str = "points";
 
-/// How many particles are live this frame.
 pub const COUNT_PORT: &str = "count";
 
 /// px@comp from Position to the nearest live particle.
@@ -44,14 +43,12 @@ pub const NEAREST_PORT: &str = "nearest_distance";
 /// make an unwired driver fire everything at once. Pinned by test.
 pub const NOTHING_NEAR: f32 = 1e9;
 
-/// The stream this driver reads, and the outputs it makes of it.
 const POINTS_IN: &[Port] = &[Port::new(POINTS_PORT, "Points", PortType::Points)];
 const OUTPUTS: &[Port] = &[
     Port::new(COUNT_PORT, "Count", PortType::Number),
     Port::new(NEAREST_PORT, "Nearest distance", PortType::Number),
 ];
 
-/// Points sample's one control.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "points_sample",
@@ -75,7 +72,6 @@ pub struct PointsSample {
     pub position_y: f32,
 }
 
-/// Points sample's behaviour.
 pub struct PointsSampleDef;
 
 impl EffectDef for PointsSampleDef {
@@ -87,7 +83,6 @@ impl EffectDef for PointsSampleDef {
         false
     }
 
-    /// The first driver to declare a **data input** (points-stream.md §4.1).
     fn signature(&self) -> Signature {
         Signature::Data {
             inputs: POINTS_IN,
@@ -132,7 +127,6 @@ pub fn sample(stream: Option<&PointsStream>, at: [f32; 2]) -> (f32, f32) {
     let Some(s) = stream else {
         return (0.0, NOTHING_NEAR);
     };
-    // Squared while scanning, rooted once: the same minimum, one square root.
     let mut nearest_sq = f32::INFINITY;
     for i in 0..s.len() {
         let p = s.projected(i);

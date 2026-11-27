@@ -45,8 +45,6 @@ import 'dart:io' hide Platform;
 import 'package:lumit_flutter/state/platform.dart'
     if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
-/// What kind of installation this is, which is what decides whether Lumit can
-/// update itself and what a release attachment has to contain.
 enum InstallKind {
   /// A folder of files, the usual Windows and Linux shape. The folder's
   /// *contents* are the application, and the folder keeps its path so Start
@@ -77,8 +75,6 @@ enum InstallKind {
 /// a partial Lumit in place of a working one.
 const String stagedUpdateMarker = '.lumit-staged';
 
-/// This installation: where it is, what shape it is, and what to start again
-/// when the swap is done.
 class InstallSite {
   final InstallKind kind;
 
@@ -101,7 +97,6 @@ class InstallSite {
   /// rename rather than a copy across filesystems.
   Directory get staging => Directory('${root.path}.new');
 
-  /// Where the old version waits to be swept up, after the swap.
   Directory get previous => Directory('${root.path}.old');
 
   /// Where a download is unpacked before it is known to be whole. Also a
@@ -235,8 +230,6 @@ class InstallSite {
       path.split(RegExp(r'[/\\]')).where((p) => p.isNotEmpty).last;
 }
 
-/// Whether a complete new version is sitting in [site]'s staging folder,
-/// waiting for the swap.
 bool stagedUpdateReady(InstallSite site) =>
     File('${site.staging.path}${Platform.pathSeparator}$stagedUpdateMarker')
         .existsSync();
@@ -299,8 +292,6 @@ void swapInStagedUpdate(InstallSite site) {
       try {
         site.previous.renameSync(site.root.path);
       } catch (_) {
-        // Both renames failed, which means the filesystem is refusing us
-        // entirely. Nothing here can fix that; the error below says so.
       }
       rethrow;
     }
@@ -342,7 +333,6 @@ void tidyAfterUpdate(InstallSite site) {
     }
     _removeQuietly(site.unpacking);
   } catch (_) {
-    // Best effort by design — see the doc comment.
   }
 }
 

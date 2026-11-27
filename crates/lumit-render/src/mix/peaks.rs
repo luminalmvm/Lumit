@@ -54,7 +54,6 @@ pub fn node_peaks(
     }
 }
 
-/// [`node_peaks`] read off the mix itself.
 fn narrow(
     plan: &MixPlan,
     rate: u32,
@@ -141,8 +140,6 @@ fn reach(plan: &MixPlan, to: usize, frame: usize) -> Vec<[f32; 2]> {
     g
 }
 
-/// [`node_peaks`] for bus `to`, put together from the files' pyramids, as
-/// [`MixPlan::peaks_wide`] puts the master's together.
 fn wide(
     plan: &MixPlan,
     rate: u32,

@@ -25,16 +25,13 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// The Merge's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "merge",
     label = "Merge",
     version = 1,
     category = Compositing,
-    // Two full-frame pictures composited: the cheapest thing the walk does.
     cost = Trivial,
-    // Both pictures are laid over each other whole, so the region is the frame.
     roi = FullFrame,
     // Nothing to dissolve: the box has no picture of its own that a matte could
     // say "this much of" - its two pictures arrive on wires and its Opacity is

@@ -1,9 +1,6 @@
-//! Reading and writing how each two-axis transform pair is edited.
-
 use super::{AxisMode, AxisModes, TransformPair};
 
 impl AxisModes {
-    /// Nothing to write: every pair is where a fresh layer leaves it.
     pub fn is_default(&self) -> bool {
         *self == Self::default()
     }

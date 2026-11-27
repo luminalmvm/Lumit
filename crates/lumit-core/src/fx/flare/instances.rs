@@ -19,35 +19,26 @@ pub const FLOATS: usize = 36;
 /// meets it, and then the last elements are dropped.
 pub const MAX: usize = 16_384;
 
-/// Where the instance sits before its offset: on the light.
 pub const ON_LIGHT: u32 = 0;
 /// At `at[0]` along the axis: 0 the light, 1 the centre.
 pub const ON_AXIS: u32 = 1;
 /// At `at`, raster pixels.
 pub const ON_FRAME: u32 = 2;
 
-/// A soft round light.
 pub const GLOW: u32 = 0;
-/// A line, from the light out or both ways through it.
 pub const RAY: u32 = 1;
-/// A ring, whole or an arc.
 pub const ANNULUS: u32 = 2;
-/// A polygon or a circle with a fill and a rim.
 pub const IRIS: u32 = 3;
-/// One of the [`super::textures`]: a sprite, or dirt across the frame.
 pub const TEXTURE: u32 = 4;
 
 /// Its angle is measured from the axis rather than from the frame.
 pub const FOLLOWS_AXIS: u32 = 1;
-/// The light fading out past the frame's edge leaves it alone.
 pub const NO_EDGE_FADE: u32 = 2;
 /// The quad follows the axis but the polygon in it stays put on screen.
 pub const STILL_POLYGON: u32 = 4;
 
-/// One quad, before it is put on a light.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Instance {
-    /// [`ON_LIGHT`], [`ON_AXIS`] or [`ON_FRAME`].
     pub anchor: u32,
     pub at: [f32; 2],
     pub flags: u32,
@@ -66,9 +57,7 @@ pub struct Instance {
     pub reach: f32,
     pub colour: [f32; 3],
     pub gain: f32,
-    /// The colour at the edge, for a gradient.
     pub colour_b: [f32; 3],
-    /// How much of a spectrum is laid across it.
     pub rainbow: f32,
     /// Brighter near: the choice, its amount and its range.
     pub response: [f32; 3],
@@ -77,7 +66,6 @@ pub struct Instance {
 }
 
 impl Instance {
-    /// The layout the GPU reads.
     pub fn packed(&self) -> [f32; FLOATS] {
         let mut out = [0.0; FLOATS];
         let head = [
@@ -124,7 +112,6 @@ fn across(width: f32) -> f32 {
     2.0 * width.max(1.0) + 1.0
 }
 
-/// Every quad `design` draws in `frame`, `w` by `h` raster pixels.
 pub fn expand(design: &Design, frame: &Frame, w: u32, h: u32) -> Vec<Instance> {
     let mut out = Vec::new();
     for e in design.elements.iter().filter(|e| e.on) {
@@ -137,7 +124,6 @@ pub fn expand(design: &Design, frame: &Frame, w: u32, h: u32) -> Vec<Instance> {
     out
 }
 
-/// A shape's numbers, the rest left at 0.
 fn pad(head: &[f32]) -> [f32; 12] {
     let mut s = [0.0; 12];
     for (to, from) in s.iter_mut().zip(head) {
@@ -151,7 +137,6 @@ fn rand(seed: u32, channel: u32, i: usize) -> f32 {
     hash01(seed, channel, i as i32, 0, 0)
 }
 
-/// The two colours and the rainbow amount of copy `i`.
 fn colours(e: &Element, i: usize, seed: u32) -> ([f32; 3], [f32; 3], f32) {
     let white = [1.0; 3];
     match e.colour.mode {
@@ -430,8 +415,6 @@ fn element(e: &Element, frame: &Frame, frame_px: [f32; 2], out: &mut Vec<Instanc
     }
 }
 
-/// One ray from the light out at `angle`, its softness, taper and fringe in
-/// `look`.
 fn ray(
     out: &mut Vec<Instance>,
     base: &Instance,
@@ -454,7 +437,6 @@ fn ray(
     });
 }
 
-/// One ghost or orb of radius `size`, from the shape controls they share.
 fn iris(
     out: &mut Vec<Instance>,
     e: &Element,
@@ -476,7 +458,6 @@ fn iris(
     } else {
         1.0
     };
-    // Room for the feather, the fringe and a pixel either side.
     let margin = 1.0 + 0.5 * softness + shift + 2.0 / size;
     let sides = if ghost { e.int("sides") } else { 0 };
     let edge_width = if ghost { e.num("edge_width") } else { 0.08 };

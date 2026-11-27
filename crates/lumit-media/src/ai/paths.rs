@@ -20,7 +20,6 @@ use crate::MediaError;
 /// thousand.
 pub const MAX_POINTS: usize = 1 << 20;
 
-/// One painted path: its runs, and how it is painted.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct AiPath {
     pub contours: Vec<AiContour>,
@@ -71,7 +70,6 @@ pub(super) fn paths(bytes: Vec<u8>, index: Option<u32>) -> Result<Vec<AiPath>, M
 #[derive(Default)]
 struct Kept {
     paths: Vec<AiPath>,
-    /// The last path kept, as it was placed.
     last: Option<BezPath>,
     points: usize,
 }
@@ -84,8 +82,6 @@ impl<'a> Device<'a> for Kept {
         let placed = props.transform * path.clone();
         let colour = match &props.paint {
             Paint::Color(colour) => colour.to_rgba().to_rgba8(),
-            // ponytail: a gradient or pattern comes across as flat grey. The
-            // upgrade is the shading's own stops as a gradient fill.
             Paint::Pattern(_) => [128, 128, 128, 255],
         };
         let width = |w: f32| f64::from(w) * props.transform.determinant().abs().sqrt();
@@ -191,8 +187,6 @@ mod tests {
     use super::super::fixture::{document, Layer};
     use super::*;
 
-    /// One layer's square comes back as one closed path where it sat, in its
-    /// own colour, and the other layer's does not come with it.
     #[test]
     fn a_layer_reads_as_its_own_paths() {
         let layers = [

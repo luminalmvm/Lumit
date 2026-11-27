@@ -45,21 +45,13 @@ use std::cell::{Cell, RefCell};
 use std::sync::Arc;
 use uuid::Uuid;
 
-/// Where a frame has got to. Ordered as the render performs them, so a
-/// frontend may show them as a sequence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RenderStage {
-    /// Working out which source frames are wanted (cheap; opens nothing).
     Planning,
-    /// Reading those frames off disk — usually the long pole.
     Decoding,
-    /// Turning the document plus those pixels into a draw list.
     Building,
-    /// Walking the draw list on the graphics card.
     Compositing,
-    /// Display-encoding and handing the finished frame over.
     Presenting,
-    /// Walking a simulation up to the frame, inside compositing.
     Simulating,
 }
 
@@ -79,7 +71,6 @@ impl RenderStage {
     }
 }
 
-/// One report of how far a frame has got.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FrameProgress {
     pub comp: Uuid,
@@ -136,7 +127,6 @@ pub(crate) fn report_walk(through: f32) {
     });
 }
 
-/// One effect's measured cost within its layer.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct EffectTiming {
     /// The effect *instance* id — the row in the layer's stack, not the kind
@@ -145,7 +135,6 @@ pub struct EffectTiming {
     pub ms: f32,
 }
 
-/// One layer's measured cost: its own picture, and the effects within it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LayerTiming {
     pub layer: Uuid,
@@ -155,7 +144,6 @@ pub struct LayerTiming {
     pub effects: Vec<EffectTiming>,
 }
 
-/// What one profiled frame cost, published once the frame is made.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FrameProfile {
     pub comp: Uuid,
@@ -179,7 +167,6 @@ pub struct FrameProfile {
 /// `Send + Sync` because the render thread is not the frontend's.
 pub type ProgressSink = Arc<dyn Fn(FrameProgress) + Send + Sync>;
 
-/// Where a finished frame's timings go.
 pub type ProfileSink = Arc<dyn Fn(FrameProfile) + Send + Sync>;
 
 /// The recorder for one frame: it reports progress as the stages pass, and
@@ -201,8 +188,6 @@ pub struct FrameProfiler {
     /// composition being rendered, more inside a Precomp. Only depth 1 is
     /// reported — see the module note.
     depth: Cell<u32>,
-    /// Top-level layers finished, and how many there are, for the compositing
-    /// span of the bar.
     layers_done: Cell<u32>,
     layers_total: Cell<u32>,
     timings: RefCell<Vec<LayerTiming>>,
@@ -211,7 +196,6 @@ pub struct FrameProfiler {
     /// is closed and its elapsed time banked, so a stage the render skips
     /// simply stays at zero and nothing is double-counted.
     stage_ms: RefCell<[f32; 5]>,
-    /// When the currently open stage began, and which one it is.
     stage_mark: Cell<web_time::Instant>,
     open_stage: Cell<RenderStage>,
 }
@@ -256,8 +240,6 @@ impl FrameProfiler {
         self.open_stage.set(next);
     }
 
-    /// True when nodes are to be measured — the callers that would otherwise
-    /// pay for a fence ask this first.
     #[must_use]
     pub fn timing(&self) -> bool {
         self.timing
@@ -274,13 +256,11 @@ impl FrameProfiler {
         }
     }
 
-    /// The decode plan is written; `jobs` sources are about to be read.
     pub fn planned(&self) {
         self.advance_to(RenderStage::Decoding);
         self.report(RenderStage::Planning, PLAN_AT);
     }
 
-    /// `done` of `total` source decodes have landed.
     pub fn decoded(&self, done: u32, total: u32) {
         self.report(
             RenderStage::Decoding,
@@ -288,13 +268,11 @@ impl FrameProfiler {
         );
     }
 
-    /// The draw list is being built (the pixels are all in hand).
     pub fn building(&self) {
         self.advance_to(RenderStage::Building);
         self.report(RenderStage::Building, BUILD_AT);
     }
 
-    /// The draw list is in hand: `layers` top-level layers to composite.
     pub fn compositing(&self, layers: u32) {
         self.advance_to(RenderStage::Compositing);
         self.layers_total.set(layers);
@@ -302,25 +280,19 @@ impl FrameProfiler {
         self.report(RenderStage::Compositing, COMPOSITE_FROM);
     }
 
-    /// The frame is composited and is being display-encoded and handed over.
     pub fn presenting(&self) {
         self.advance_to(RenderStage::Presenting);
         self.report(RenderStage::Presenting, PRESENT_AT);
     }
 
-    /// Enter a composition's realise walk (the outermost one is the frame's
-    /// own; deeper ones are Precomps).
     pub fn enter_comp(&self) {
         self.depth.set(self.depth.get().saturating_add(1));
     }
 
-    /// Leave one, pairing with [`Self::enter_comp`].
     pub fn leave_comp(&self) {
         self.depth.set(self.depth.get().saturating_sub(1));
     }
 
-    /// True while the walk is in the composition being rendered rather than
-    /// inside one of its Precomps.
     #[must_use]
     pub fn at_top_level(&self) -> bool {
         self.depth.get() == 1
@@ -364,8 +336,6 @@ impl FrameProfiler {
         (out, started.elapsed().as_secs_f32() * 1000.0)
     }
 
-    /// The finished frame's timings, consuming the recorder. `None` when no
-    /// timings were asked for.
     #[must_use]
     pub fn finish(self) -> Option<FrameProfile> {
         if !self.timing {

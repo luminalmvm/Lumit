@@ -21,7 +21,6 @@ use crate::fx::names::name_of as effect_name;
 use crate::fx::noise;
 use crate::model::{Composition, EffectInstance, EffectValue, Layer, LayerKind, ProjectItem};
 
-/// The values an expression can name with no dot in front.
 const VALUES: [&str; 32] = [
     "time",
     "value",
@@ -57,7 +56,6 @@ const VALUES: [&str; 32] = [
     "colorDepth",
 ];
 
-/// The functions an expression can call with no dot in front.
 const FUNCTIONS: [&str; 54] = [
     "wiggle",
     "seedRandom",
@@ -115,7 +113,6 @@ const FUNCTIONS: [&str; 54] = [
     "Boolean",
 ];
 
-/// What a layer answers to that carries a point between its spaces.
 const CONVERSIONS: [&str; 9] = [
     "toComp",
     "fromComp",
@@ -128,7 +125,6 @@ const CONVERSIONS: [&str; 9] = [
     "fromCompToSurface",
 ];
 
-/// What a property answers to besides its value.
 const PROPERTY_METHODS: [&str; 12] = [
     "valueAtTime",
     "velocityAtTime",
@@ -144,7 +140,6 @@ const PROPERTY_METHODS: [&str; 12] = [
     "smooth",
 ];
 
-/// Whether `name` is something an expression can read without declaring it.
 pub(super) fn knows(name: &str) -> bool {
     VALUES.contains(&name) || FUNCTIONS.contains(&name)
 }
@@ -164,7 +159,6 @@ pub(super) enum Tr {
 }
 
 pub(super) enum PropRef {
-    /// The property the expression is written on.
     Own,
     Transform {
         comp: Uuid,
@@ -183,10 +177,8 @@ pub(super) enum PropRef {
     },
 }
 
-/// The things an expression holds that are not JavaScript's own.
 #[derive(Clone)]
 pub(super) enum Host {
-    /// What a bare function name is reached on.
     Global,
     Math,
     Comp(Uuid),
@@ -196,11 +188,9 @@ pub(super) enum Host {
     Prop(Rc<PropRef>),
 }
 
-/// What an evaluation knows about where it is running.
 pub(super) struct Ae<'a> {
     pub context: &'a ExpressionContext,
     pub slot: Slot,
-    /// Extra numbers in scope by name: an Expression box's inputs.
     pub vars: &'a [(&'a str, f64)],
     /// The time the expression is reading at. `posterizeTime` moves it.
     pub time: f64,
@@ -277,7 +267,6 @@ impl<'a> Ae<'a> {
         crate::model_material::instance(self.layer(comp, layer)?, effect)
     }
 
-    /// One property of `layer` at comp time `t`.
     fn sample(&self, comp: Uuid, layer: &Layer, property: &Property, t: f64) -> f64 {
         let local = t - layer.start_offset.0.to_f64();
         match &property.animation {
@@ -304,7 +293,6 @@ impl<'a> Ae<'a> {
         }
     }
 
-    /// [`Self::sample`] for a property that is another expression.
     fn sample_driven(
         &self,
         comp: Uuid,
@@ -331,7 +319,6 @@ impl<'a> Ae<'a> {
         }
     }
 
-    /// The properties behind a reference, and the layer they are on.
     fn parts(&self, prop: &PropRef) -> Option<(Uuid, &'a Layer, Parts<'a>)> {
         match prop {
             PropRef::Own => None,
@@ -342,7 +329,6 @@ impl<'a> Ae<'a> {
                     LayerKind::Camera { zoom, options, .. } => Some((zoom, options)),
                     _ => None,
                 };
-                // A 3D layer's points have a z.
                 let three_d = found.is_3d();
                 let three = |x, y, z| Parts {
                     props: [Some(x), Some(y), Some(z), None],
@@ -411,7 +397,6 @@ impl<'a> Ae<'a> {
         }
     }
 
-    /// A property's numbers at comp time `t`.
     fn read(&self, prop: &PropRef, t: f64) -> Res<Vec<f64>> {
         if matches!(prop, PropRef::Own) {
             // Keys under the expression say what the property is at `t`.
@@ -480,7 +465,6 @@ impl<'a> Ae<'a> {
             .unwrap_or_default()
     }
 
-    /// What tells one property's wander from another's.
     fn salt(&self, prop: &PropRef) -> u64 {
         match prop {
             PropRef::Own => 0,
@@ -632,7 +616,6 @@ impl<'a> Interp<'a> {
         }
     }
 
-    /// A name with nothing in front of it that no variable answers to.
     pub(super) fn global(&mut self, name: &str) -> Res<Option<Value>> {
         if let Some((_, value)) = self.ae.vars.iter().find(|(n, _)| *n == name) {
             return Ok(Some(Value::Num(*value)));
@@ -667,8 +650,6 @@ impl<'a> Interp<'a> {
                 let own = Host::Prop(Rc::new(PropRef::Own));
                 return self.host_member(&own, name);
             }
-            // Everything else is the layer's own: `inPoint` is
-            // `thisLayer.inPoint`.
             _ => {
                 let (comp, layer) = self.this_layer()?;
                 return self.host_member(&Host::Layer(comp, layer), name);
@@ -736,8 +717,6 @@ impl<'a> Interp<'a> {
                     "inPoint" => Value::Num(layer.in_point.0.to_f64()),
                     "outPoint" => Value::Num(layer.out_point.0.to_f64()),
                     "startTime" => Value::Num(layer.start_offset.0.to_f64()),
-                    // The comp's size stands in for the layer's own, which is
-                    // right for a solid and for footage that fills the frame.
                     "width" => Value::Num(f64::from(comp.width)),
                     "height" => Value::Num(f64::from(comp.height)),
                     "hasParent" => Value::Bool(layer.parent.is_some()),
@@ -789,7 +768,6 @@ impl<'a> Interp<'a> {
                     self.velocity(prop, time, name == "speed")?
                 }
                 _ if PROPERTY_METHODS.contains(&name) => return Ok(None),
-                // Anything else is asked of the value: `position.length`.
                 _ => {
                     let value = self.prop_value(prop)?;
                     if matches!(value, Value::Array(_)) && name == "length" {
@@ -802,7 +780,6 @@ impl<'a> Interp<'a> {
         }))
     }
 
-    /// A property's value at the time the expression is reading.
     pub(super) fn prop_value(&mut self, prop: &PropRef) -> Res<Value> {
         let time = self.ae.time;
         self.prop_value_at(prop, time)
@@ -1044,8 +1021,6 @@ impl<'a> Interp<'a> {
             "loopIn" | "loopOut" | "loopInDuration" | "loopOutDuration" => {
                 self.looped(prop, name, args)
             }
-            // Smoothing needs the property's whole neighbourhood sampled, and
-            // the plain value is the honest stand-in until it is written.
             "smooth" => self.prop_value(prop),
             _ => {
                 let value = self.prop_value(prop)?;
@@ -1107,7 +1082,6 @@ impl<'a> Interp<'a> {
         if keys.len() < 2 || (out && t <= last) || (!out && t >= first) {
             return self.prop_value(prop);
         }
-        // The stretch that repeats: all of the keys, or the last few.
         let by_count = |from_end: bool| {
             let k = n as usize;
             if k == 0 || k >= keys.len() {
@@ -1132,8 +1106,6 @@ impl<'a> Interp<'a> {
         let over = if out { t - b } else { a - t };
         let laps = (over / span).floor();
         let phase = over - laps * span;
-        // Where in the stretch a plain repeat reads, and where a mirrored one
-        // does.
         let (forwards, mirrored) = if out {
             (a + phase, b - phase)
         } else {

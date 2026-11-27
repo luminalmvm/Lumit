@@ -40,8 +40,6 @@ use crate::report::{ItemPath, Outcome, Reason};
 use super::props::{self, ae_map, axis_of, display_name, from_node, match_name_of};
 use super::{srgb_to_linear, Conv};
 
-/// One conversion: how a Lumit effect's controls are filled from an After
-/// Effects instance.
 type Build = for<'a, 'b, 'c> fn(&'a mut Fx<'b, 'c>);
 
 /// This half's conversions, keyed by the name `ae-effect-map.toml` calls them.
@@ -55,11 +53,9 @@ type Build = for<'a, 'b, 'c> fn(&'a mut Fx<'b, 'c>);
 /// goes unclaimed, so an edited table can never ask for code that is not here.
 fn conversion(key: &str) -> Option<Build> {
     Some(match key {
-        // --- Utility ---
         "transform" => transform as Build,
         "set_matte" => set_matte,
         "set_channels" => set_channels,
-        // --- Distortion ---
         "motion_tile" => motion_tile,
         "offset" => offset,
         "mirror" => mirror,
@@ -74,7 +70,6 @@ fn conversion(key: &str) -> Option<Build> {
         "wave_warp" => wave_warp,
         "bezier_warp" => bezier_warp,
         "warp" => warp,
-        // --- Stylise ---
         "drop_shadow" => drop_shadow,
         "roughen_edges" => roughen_edges,
         "median" => median,
@@ -82,16 +77,12 @@ fn conversion(key: &str) -> Option<Build> {
         "find_edges" => find_edges,
         "emboss" => emboss,
         "texturize" => texturize,
-        // --- Blur (the one that sits in this half because it is a wipe's
-        // neighbour in docs/11's ordering, not because it blurs) ---
         "channel_blur" => channel_blur,
-        // --- Transition ---
         "linear_wipe" => linear_wipe,
         "radial_wipe" => radial_wipe,
         "iris_wipe" => iris_wipe,
         "venetian_blinds" => venetian_blinds,
         "card_wipe" => card_wipe,
-        // --- Controls ---
         "slider_control" => slider_control,
         "angle_control" => angle_control,
         "checkbox_control" => checkbox_control,
@@ -101,11 +92,6 @@ fn conversion(key: &str) -> Option<Build> {
     })
 }
 
-/// The table's claim on one captured effect instance.
-///
-/// `None` for a match name this half does not know, which is what sends the
-/// instance to the other half and then to the placeholder road (docs/11 §5's
-/// "never the closest guess").
 pub(crate) fn claim(
     conv: &mut Conv<'_>,
     path: &ItemPath,
@@ -120,9 +106,6 @@ pub(crate) fn claim(
     Some(fx.inst)
 }
 
-// ───────────────────────────── the rows ─────────────────────────────
-
-/// AE `ADBE Geometry2` → Transform (docs/11 §5).
 fn transform(fx: &mut Fx<'_, '_>) {
     fx.point(1, "anchor_x", "anchor_y", Unit::Px);
     fx.point(2, "position_x", "position_y", Unit::Px);
@@ -276,13 +259,11 @@ fn offset(fx: &mut Fx<'_, '_>) {
     fx.carry(2, "mix", Unit::Complement);
 }
 
-/// AE `ADBE Mirror` → Mirror (docs/11 §5): one for one.
 fn mirror(fx: &mut Fx<'_, '_>) {
     fx.point(1, "centre_x", "centre_y", Unit::Px);
     fx.carry(2, "angle", Unit::Direct);
 }
 
-/// AE `ADBE Optics Compensation` → Lens distort (docs/11 §5).
 fn optics_compensation(fx: &mut Fx<'_, '_>) {
     fx.carry(1, "fov", Unit::Direct);
     fx.toggle(2, "reverse");
@@ -292,7 +273,6 @@ fn optics_compensation(fx: &mut Fx<'_, '_>) {
     fx.drop_ae(6); // Resize — effects render at the frame's raster (docs/08 §2.3)
 }
 
-/// AE `ADBE Turbulent Displace` → Turbulent displace (docs/11 §5).
 fn turbulent_displace(fx: &mut Fx<'_, '_>) {
     // Turbulent, Bulge, Vertical and Horizontal Displacement are the four
     // Lumit ships; Twist, the three Smoother variants and Cross Displacement
@@ -320,7 +300,6 @@ fn turbulent_displace(fx: &mut Fx<'_, '_>) {
     fx.drop_ae(14); // Antialiasing for Best Quality — Lumit resamples bilinearly everywhere
 }
 
-/// AE `ADBE Corner Pin` → Corner pin (docs/11 §5): the four points, one for one.
 fn corner_pin(fx: &mut Fx<'_, '_>) {
     fx.point(1, "upper_left_x", "upper_left_y", Unit::Px);
     fx.point(2, "upper_right_x", "upper_right_y", Unit::Px);
@@ -355,7 +334,6 @@ fn polar_coordinates(fx: &mut Fx<'_, '_>) {
     fx.choice(2, "conversion", &[0, 1], "Rectangular to polar");
 }
 
-/// AE `ADBE Twirl` → Twirl (docs/11 §5): the radius changes base.
 fn twirl(fx: &mut Fx<'_, '_>) {
     fx.carry(1, "angle", Unit::Direct);
     fx.carry(2, "radius", Unit::LayerPct);
@@ -373,7 +351,6 @@ fn spherize(fx: &mut Fx<'_, '_>) {
     fx.point(2, "centre_x", "centre_y", Unit::Px);
 }
 
-/// AE `ADBE Ripple` → Ripple (docs/11 §5).
 fn ripple(fx: &mut Fx<'_, '_>) {
     fx.carry(1, "radius", Unit::LayerPct);
     fx.point(2, "centre_x", "centre_y", Unit::Px);
@@ -385,7 +362,6 @@ fn ripple(fx: &mut Fx<'_, '_>) {
     fx.carry(7, "evolution", Unit::Direct);
 }
 
-/// AE `ADBE Wave Warp` → Wave warp (docs/11 §5).
 fn wave_warp(fx: &mut Fx<'_, '_>) {
     fx.choice(1, "wave_type", &[0, 1, 2, 3, 4, 5, 6, 7, 8], "Sine");
     fx.carry(2, "wave_height", Unit::Px);
@@ -516,7 +492,6 @@ fn median(fx: &mut Fx<'_, '_>) {
     fx.toggle(2, "alpha");
 }
 
-/// AE `ADBE Mosaic` → Mosaic (docs/11 §5): direct.
 fn mosaic(fx: &mut Fx<'_, '_>) {
     fx.carry(1, "horizontal_blocks", Unit::Direct);
     fx.carry(2, "vertical_blocks", Unit::Direct);
@@ -527,7 +502,6 @@ fn mosaic(fx: &mut Fx<'_, '_>) {
     );
 }
 
-/// AE `ADBE Find Edges` → Find edges (docs/11 §5).
 fn find_edges(fx: &mut Fx<'_, '_>) {
     fx.toggle(1, "invert");
     fx.carry(2, "mix", Unit::Complement);
@@ -537,7 +511,6 @@ fn find_edges(fx: &mut Fx<'_, '_>) {
     );
 }
 
-/// AE `ADBE Emboss` → Emboss (docs/11 §5).
 fn emboss(fx: &mut Fx<'_, '_>) {
     fx.carry(1, "direction", Unit::Direct);
     fx.carry(2, "relief", Unit::Px);
@@ -557,8 +530,6 @@ fn texturize(fx: &mut Fx<'_, '_>) {
     let placement = fx.raw(4).unwrap_or(1.0).round() as i64;
     fx.choice(4, "placement", &[1, 2, 0], "Stretch");
     if placement == 1 || placement == 2 {
-        // Both are the texture layer's *native* size, which the layer carriage
-        // has not preserved (docs/impl/layer-input.md).
         fx.approximated(
             "Texture Placement",
             "the texture at this composition's size",
@@ -577,7 +548,6 @@ fn channel_blur(fx: &mut Fx<'_, '_>) {
     fx.drop_ae(6); // Blur Dimensions — Lumit's is always both
 }
 
-/// AE `ADBE Linear Wipe` → Linear wipe (docs/11 §5): direct.
 fn linear_wipe(fx: &mut Fx<'_, '_>) {
     fx.carry(1, "completion", Unit::Direct);
     fx.carry(2, "angle", Unit::Direct);
@@ -662,7 +632,6 @@ fn card_wipe(fx: &mut Fx<'_, '_>) {
 // makes them worth writing down at all is what they carry: the keyframes and
 // the expressions on that one property, which is the whole of a CC-pack rig.
 
-/// AE `ADBE Slider Control` → Slider control (docs/08 §3.80): one number.
 fn slider_control(fx: &mut Fx<'_, '_>) {
     fx.carry(1, "slider", Unit::Direct);
 }
@@ -673,7 +642,6 @@ fn angle_control(fx: &mut Fx<'_, '_>) {
     fx.carry(1, "angle", Unit::Direct);
 }
 
-/// AE `ADBE Checkbox Control` → Checkbox control (docs/08 §3.82).
 fn checkbox_control(fx: &mut Fx<'_, '_>) {
     fx.toggle(1, "checkbox");
 }
@@ -692,12 +660,8 @@ fn point_control(fx: &mut Fx<'_, '_>) {
     fx.point(1, "point_x", "point_y", Unit::Px);
 }
 
-// ─────────────────────── the machinery underneath ───────────────────────
-
-/// What has to happen to a number on the way across.
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Unit {
-    /// An angle, a per cent, a count: the same thing on both sides.
     Direct,
     /// After Effects' raster pixels become px@comp (docs/08 §2.3). The number
     /// is the same and the meaning is not: Lumit scales it by the preview
@@ -712,9 +676,7 @@ enum Unit {
     /// AE's "Blend With Original" against Lumit's Mix: the same dial, read from
     /// the other end.
     Complement,
-    /// A plain multiplier, for the two places that need their own.
     Scale(f64),
-    /// A plain offset, for AE's destination points.
     Shift(f64),
 }
 
@@ -724,7 +686,6 @@ impl Unit {
     fn affine(self, diagonal: f64) -> (f64, f64) {
         match self {
             Self::Direct | Self::Px => (1.0, 0.0),
-            // A per cent of the layer's half-diagonal, in pixels.
             Self::LayerPct => ((diagonal / 2.0) / 100.0, 0.0),
             Self::Factor => (100.0, 0.0),
             Self::Complement => (-1.0, 100.0),
@@ -743,11 +704,8 @@ impl Unit {
     }
 }
 
-/// One effect being converted: the capture node, the growing Lumit instance,
-/// and everything a row needs to say what it did.
 struct Fx<'a, 'c> {
     conv: &'a mut Conv<'c>,
-    /// comp ▸ layer ▸ this effect, the path every row is filed under.
     path: ItemPath,
     node: &'a Property,
     /// The After Effects match name, and therefore the prefix of every
@@ -770,7 +728,6 @@ impl<'a, 'c> Fx<'a, 'c> {
         let (w, h) = conv.size;
         let mut inst = lumit_core::fx::builtins::instantiate_for_raster(lumit, w, h)?;
         let name = display_name(node, ae).to_string();
-        // An effect switched off in After Effects imports switched off.
         inst.enabled = node.enabled.unwrap_or(true);
         // What After Effects called it, kept where a re-import and the report
         // can find it (docs/11 §2.3's `ae` namespace).
@@ -796,8 +753,6 @@ impl<'a, 'c> Fx<'a, 'c> {
         props::find(self.node.children(), &match_name)
     }
 
-    /// Overwrite one declared Lumit parameter, leaving the schema default in
-    /// place when After Effects had nothing to say.
     fn set(&mut self, id: &str, value: EffectValue) {
         match self.inst.params.iter_mut().find(|p| p.id == id) {
             Some(param) => param.value = value,
@@ -815,7 +770,6 @@ impl<'a, 'c> Fx<'a, 'c> {
         self.conv.report.row(self.path.clone(), outcome, reason);
     }
 
-    /// docs/11 §5's "reported rather than approximated".
     fn not_carried(&mut self, param: &str) {
         let effect = self.name.clone();
         self.row(
@@ -881,12 +835,10 @@ impl<'a, 'c> Fx<'a, 'c> {
         );
     }
 
-    /// A whole animatable parameter, keyframes and all.
     fn carry(&mut self, n: u32, id: &str, unit: Unit) {
         self.carry_axis(n, 0, id, unit);
     }
 
-    /// One axis of one — an AE point is one property with two numbers in it.
     fn carry_axis(&mut self, n: u32, axis: usize, id: &str, unit: Unit) {
         let Some(leaf) = self.find(n) else { return };
         let ae_name = display_name(leaf, "").trim().to_string();
@@ -912,7 +864,6 @@ impl<'a, 'c> Fx<'a, 'c> {
         self.set(id, EffectValue::Float(converted));
     }
 
-    /// Both axes of an After Effects point.
     fn point(&mut self, n: u32, id_x: &str, id_y: &str, unit: Unit) {
         self.carry_axis(n, 0, id_x, unit);
         self.carry_axis(n, 1, id_y, unit);
@@ -961,13 +912,11 @@ impl<'a, 'c> Fx<'a, 'c> {
         }
     }
 
-    /// An After Effects checkbox.
     fn toggle(&mut self, n: u32, id: &str) {
         let Some(value) = self.still(n) else { return };
         self.set(id, EffectValue::Bool(value != 0.0));
     }
 
-    /// An After Effects random seed.
     fn seed(&mut self, n: u32, id: &str) {
         let Some(value) = self.still(n) else { return };
         let seed = value.round().clamp(0.0, f64::from(u32::MAX)) as u32;
@@ -1105,7 +1054,6 @@ impl<'a, 'c> Fx<'a, 'c> {
     }
 }
 
-/// A static Lumit parameter value.
 fn float(v: f64) -> EffectValue {
     EffectValue::Float(LumProperty::fixed(v))
 }

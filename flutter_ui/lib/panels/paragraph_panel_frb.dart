@@ -64,7 +64,6 @@ class _ParagraphPanelFrbState extends State<ParagraphPanelFrb>
               frameless: !on,
               active: on,
               padding: const EdgeInsets.symmetric(horizontal: 4),
-              // There is nowhere to move the lines to without a height.
               onPressed: paragraph.boxHeight == null
                   ? null
                   : () => commitText(
@@ -127,7 +126,6 @@ class _ParagraphPanelFrbState extends State<ParagraphPanelFrb>
                         frameless: !paragraph.justify,
                         active: paragraph.justify,
                         padding: const EdgeInsets.symmetric(horizontal: 4),
-                        // There is nothing to stretch a line to without a box.
                         onPressed: paragraph.boxWidth == null
                             ? null
                             : () => commitText(
@@ -176,7 +174,6 @@ class _ParagraphPanelFrbState extends State<ParagraphPanelFrb>
                       min: 0,
                       zeroLabel: l10n.paragraphBoxHeightAuto),
                 ),
-                // Only box text has a box to fit.
                 if ((paragraph.boxWidth ?? 0) > 0)
                   textCell(
                     t,

@@ -29,7 +29,6 @@ pub const MATCH_NAMES: [&str; 5] = [
     "ring_wave",
 ];
 
-/// The port every one of them hands its number out by.
 pub const VALUE_PORT: &str = "value";
 
 const VALUE_OUT: &[Port] = &[Port::new(VALUE_PORT, "Value", PortType::Number)];
@@ -49,9 +48,6 @@ pub(super) fn between(min: f32, max: f32, t: f32) -> f32 {
     min + (max - min) * t
 }
 
-// ---------------------------------------------------------------- Stagger
-
-/// Stagger's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "stagger",
@@ -63,15 +59,12 @@ pub(super) fn between(min: f32, max: f32, t: f32) -> f32 {
     matte = false,
 )]
 pub struct Stagger {
-    /// The value the first copy gets.
     #[slider(label = "Minimum", min = -100.0, max = 100.0, default = 0.0, unit = Raw)]
     pub minimum: f32,
 
-    /// The value the last copy gets.
     #[slider(label = "Maximum", min = -100.0, max = 100.0, default = 100.0, unit = Raw)]
     pub maximum: f32,
 
-    /// How the values are spread between the first copy and the last.
     #[curve(label = "Curve", default = [[0.0, 0.0], [1.0, 1.0]])]
     pub curve: CurvePoints,
 
@@ -110,12 +103,10 @@ pub struct Stagger {
     #[toggle(label = "Loop", default = false)]
     pub looped: bool,
 
-    /// The last copy first.
     #[toggle(label = "Reverse", default = false)]
     pub reverse: bool,
 }
 
-/// Stagger's behaviour.
 pub struct StaggerDef;
 
 impl EffectDef for StaggerDef {
@@ -183,9 +174,6 @@ pub fn ease(t: f32, out: f32, inn: f32) -> f32 {
     bez(0.0, 1.0, 0.5 * (lo + hi))
 }
 
-// ----------------------------------------------------------------- Random
-
-/// Random's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "random",
@@ -197,11 +185,9 @@ pub fn ease(t: f32, out: f32, inn: f32) -> f32 {
     matte = false,
 )]
 pub struct Random {
-    /// The lowest value it can give.
     #[slider(label = "Minimum", min = -100.0, max = 100.0, default = 0.0, unit = Raw)]
     pub minimum: f32,
 
-    /// The highest value it can give.
     #[slider(label = "Maximum", min = -100.0, max = 100.0, default = 100.0, unit = Raw)]
     pub maximum: f32,
 
@@ -220,12 +206,10 @@ pub struct Random {
     )]
     pub rate: f32,
 
-    /// Which values come out.
     #[seed]
     pub seed: u32,
 }
 
-/// Random's behaviour.
 pub struct RandomDef;
 
 impl EffectDef for RandomDef {
@@ -251,7 +235,6 @@ impl EffectDef for RandomDef {
     }
 }
 
-/// The value for copy `index` at layer time `lt`.
 #[must_use]
 pub fn random(p: &Random, index: u32, lt: f64) -> f32 {
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
@@ -267,12 +250,8 @@ pub fn random(p: &Random, index: u32, lt: f64) -> f32 {
     between(p.minimum, p.maximum, shaped)
 }
 
-// ------------------------------------------------------------- Oscillator
-
-/// The wave shapes Oscillator offers.
 pub const OSCILLATOR_SHAPES: &[&str] = &["Sine", "Triangle", "Square", "Sawtooth"];
 
-/// Oscillator's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "oscillator",
@@ -285,15 +264,12 @@ pub const OSCILLATOR_SHAPES: &[&str] = &["Sine", "Triangle", "Square", "Sawtooth
     enabled_when = OSCILLATOR_ENABLED_WHEN,
 )]
 pub struct Oscillator {
-    /// The wave's shape.
     #[choice(label = "Shape", options = OSCILLATOR_SHAPES, default = 0)]
     pub shape: u32,
 
-    /// The bottom of the wave.
     #[slider(label = "Minimum", min = -100.0, max = 100.0, default = 0.0, unit = Raw)]
     pub minimum: f32,
 
-    /// The top of the wave.
     #[slider(label = "Maximum", min = -100.0, max = 100.0, default = 100.0, unit = Raw)]
     pub maximum: f32,
 
@@ -342,11 +318,8 @@ pub struct Oscillator {
     pub wavelength: f32,
 }
 
-/// What sets an Oscillator copy's place on the wave.
 pub const PHASE_FROM: &[&str] = &["Copy", "Position"];
 
-/// Phase per copy is read on Copy, Wave angle and Wavelength on Position, so
-/// each greys out while the other mode is chosen.
 pub const OSCILLATOR_ENABLED_WHEN: &[EnabledWhen] = &[
     EnabledWhen {
         param: "phase_per_copy",
@@ -365,7 +338,6 @@ pub const OSCILLATOR_ENABLED_WHEN: &[EnabledWhen] = &[
     },
 ];
 
-/// Oscillator's behaviour.
 pub struct OscillatorDef;
 
 impl EffectDef for OscillatorDef {
@@ -429,9 +401,6 @@ pub fn oscillator(p: &Oscillator, index: u32, point: Option<[f32; 2]>, lt: f64) 
     between(p.minimum, p.maximum, 0.5 * (wave(p.shape, turns) + 1.0))
 }
 
-// ------------------------------------------------------------ Value noise
-
-/// Value noise's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "value_noise",
@@ -444,11 +413,9 @@ pub fn oscillator(p: &Oscillator, index: u32, point: Option<[f32; 2]>, lt: f64) 
     enabled_when = VALUE_NOISE_ENABLED_WHEN,
 )]
 pub struct ValueNoise {
-    /// The lowest it wanders to.
     #[slider(label = "Minimum", min = -100.0, max = 100.0, default = 0.0, unit = Raw)]
     pub minimum: f32,
 
-    /// The highest it wanders to.
     #[slider(label = "Maximum", min = -100.0, max = 100.0, default = 100.0, unit = Raw)]
     pub maximum: f32,
 
@@ -493,22 +460,18 @@ pub struct ValueNoise {
     )]
     pub noise_scale: f32,
 
-    /// Which path it wanders.
     #[seed]
     pub seed: u32,
 }
 
-/// What makes Value noise differ from copy to copy.
 pub const VARY_BY: &[&str] = &["Nothing", "Copy", "Position"];
 
-/// Noise scale is read only on Position.
 pub const VALUE_NOISE_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
     param: "noise_scale",
     on: "vary_by",
     cond: EnabledCond::ChoiceIs(2),
 }];
 
-/// Value noise's behaviour.
 pub struct ValueNoiseDef;
 
 impl EffectDef for ValueNoiseDef {
@@ -566,9 +529,6 @@ pub fn value_noise(p: &ValueNoise, index: u32, point: Option<[f32; 2]>, lt: f64)
     between(p.minimum, p.maximum, 0.5 * (sum / weight + 1.0))
 }
 
-// ------------------------------------------------------------------ Value
-
-/// Value's control.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "value",
@@ -580,13 +540,10 @@ pub fn value_noise(p: &ValueNoise, index: u32, point: Option<[f32; 2]>, lt: f64)
     matte = false,
 )]
 pub struct ValueNode {
-    /// The number it hands out. Keyframe it once and wire it into as many
-    /// parameters as should move together.
     #[slider(label = "Value", min = -1000.0, max = 1000.0, default = 0.0, unit = Raw)]
     pub value: f32,
 }
 
-/// Value's behaviour.
 pub struct ValueNodeDef;
 
 impl EffectDef for ValueNodeDef {
@@ -610,9 +567,6 @@ impl EffectDef for ValueNodeDef {
     }
 }
 
-// ------------------------------------------------------------------- Time
-
-/// Time's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "time",
@@ -624,7 +578,6 @@ impl EffectDef for ValueNodeDef {
     matte = false,
 )]
 pub struct TimeNode {
-    /// Whether it counts in seconds or in the comp's frames.
     #[choice(label = "Units", options = TIME_UNITS, default = 0)]
     pub units: u32,
 
@@ -637,10 +590,8 @@ pub struct TimeNode {
     pub offset: f32,
 }
 
-/// What Time counts in.
 pub const TIME_UNITS: &[&str] = &["Seconds", "Frames"];
 
-/// Time's behaviour.
 pub struct TimeNodeDef;
 
 impl EffectDef for TimeNodeDef {
@@ -701,11 +652,6 @@ mod tests {
         }
     }
 
-    /// The four values are what the docs promise: Stagger runs Minimum to
-    /// Maximum across the copies, Random stays inside its range and keeps a
-    /// copy's value until Rate moves it, Oscillator ripples by Phase per copy,
-    /// Value noise stays in range and differs per copy. Guards wrong values
-    /// in every project that wires one.
     #[test]
     fn siceliot_drivers_give_the_documented_values() {
         let s = stagger_with([[0.0, 0.0], [1.0, 1.0]]);
@@ -802,9 +748,6 @@ mod tests {
             value_noise(&together, 5, None, 0.37)
         );
 
-        // Position: a point a quarter wavelength along the wave's angle is a
-        // quarter turn behind, whatever its number; at 90° the wave runs
-        // down, so moving across changes nothing.
         let spatial = Oscillator {
             phase_from: 1,
             phase_per_copy: 0.0,
@@ -836,8 +779,6 @@ mod tests {
             "across a downward wave nothing changes"
         );
 
-        // Position noise: neighbours a fraction of Noise scale apart read
-        // nearly the same, points far apart read differently.
         let field = ValueNoise {
             vary_by: 2,
             detail: 1,

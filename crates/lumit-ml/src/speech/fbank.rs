@@ -19,7 +19,6 @@ use std::sync::Arc;
 
 use realfft::{RealFftPlanner, RealToComplex};
 
-/// Bands a frame is gathered into.
 pub const BANDS: usize = 80;
 /// Samples in one frame: 25 ms.
 const LENGTH: usize = 400;
@@ -28,7 +27,6 @@ const SHIFT: usize = 160;
 /// The FFT's length, the frame rounded up to a power of two.
 const FFT: usize = 512;
 
-/// A filterbank maker.
 pub struct Fbank {
     /// [`BANDS`] rows of `FFT / 2` weights.
     filters: Vec<f32>,
@@ -49,7 +47,6 @@ impl Default for Fbank {
 }
 
 impl Fbank {
-    /// The one maker the speaker models need.
     #[must_use]
     pub fn new() -> Self {
         let window = (0..LENGTH)
@@ -131,7 +128,6 @@ impl Fbank {
     }
 }
 
-/// Kaldi's triangular mel filters, built and applied on its own mel scale.
 fn kaldi_mel() -> Vec<f32> {
     let mel = |hz: f64| 1127.0 * (1.0 + hz / 700.0).ln();
     let (low, high) = (mel(20.0), mel(7600.0));

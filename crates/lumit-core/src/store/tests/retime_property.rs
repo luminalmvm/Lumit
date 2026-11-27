@@ -1,5 +1,3 @@
-//! Tests for the Retime property through undo.
-
 use super::*;
 
 /// The Retime *property* round-trips through undo, and it is what
@@ -31,10 +29,8 @@ fn retime_property_round_trips_and_maps_source_time() {
             .clone()
     };
 
-    // No retime: the layer reads its source at its own clock.
     assert!((layer_of(&store.snapshot()).source_time_at(4.0) - 4.0).abs() < 1e-9);
 
-    // Identity over ten seconds, then half of it: local 4 → source 2.
     let ten = Rational::new(10, 1).unwrap();
     let mut retime = Layer::identity_retime(Rational::ZERO, ten);
     if let crate::anim::Animation::Keyframed(keys) = &mut retime.animation {

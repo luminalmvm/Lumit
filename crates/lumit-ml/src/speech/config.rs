@@ -14,14 +14,10 @@ use serde::Deserialize;
 use super::tokens::Tokens;
 use crate::error::MlError;
 
-/// Everything the decoder needs to know about one Whisper.
 #[derive(Debug, Clone)]
 pub struct Settings {
-    /// Decoder layers, each with its own cache.
     pub layers: usize,
-    /// Attention heads in each decoder layer.
     pub heads: usize,
-    /// Mel bands the encoder reads.
     pub bands: usize,
     /// Numbers per head in each cached key and value.
     pub head_width: usize,
@@ -31,13 +27,10 @@ pub struct Settings {
     pub languages: Vec<(String, u32)>,
     /// The end of text, and the first id that is not a word piece.
     pub eot: u32,
-    /// The start of a transcript.
     pub sot: u32,
     /// The start of a prompt, for the verbatim one.
     pub prev: u32,
-    /// Transcribe and translate.
     pub transcribe: u32,
-    /// Translate into English.
     pub translate: u32,
     /// The model's guess that a window holds no speech.
     pub no_speech: u32,
@@ -134,7 +127,6 @@ impl Settings {
         })
     }
 
-    /// The token of a language, by code.
     #[must_use]
     pub fn language(&self, code: &str) -> Option<u32> {
         self.languages

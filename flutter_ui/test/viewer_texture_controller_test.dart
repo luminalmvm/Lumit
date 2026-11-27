@@ -19,9 +19,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/viewer_texture_controller.dart';
 
-/// A stand-in runner. `register` hands back an id; `frameReady` answers with
-/// whatever [drawn] returns for that call (null means "the runner told us
-/// nothing", which is the bug).
 MethodChannel fakeRunner(Object? Function(int call) drawn) {
   var calls = 0;
   final channel = const MethodChannel(ViewerTextureController.channelName);
@@ -50,7 +47,6 @@ void main() {
     expect(await controller.ensureRegistered(0, 640, 360, fd: 3), 7);
     expect(controller.available, isTrue);
 
-    // Past the grace window, so the never-drawn condition has held for a while.
     for (var i = 0; i < 20; i++) {
       await controller.frameReady();
     }

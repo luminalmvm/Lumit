@@ -37,7 +37,6 @@ fn main() {
     let (mut doc, mut report) = lumit_import::map::map_capture(&bundle.capture);
     lumit_import::note_skipped_chunks(&bundle, &mut report);
 
-    // The items, and the two facts a Project panel row cannot do without.
     let (mut folders, mut solids, mut comps, mut layers) = (0, 0, 0, 0);
     let (mut footage, mut nameless, mut pathless) = (0, 0, 0);
     for item in &doc.items {

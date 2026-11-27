@@ -43,8 +43,6 @@ const fn group(label: &'static str, params: &'static [&'static str]) -> ParamGro
     }
 }
 
-/// What the lattice is, what a cell looks like, and the line grid's own rows,
-/// which only show for Lines.
 pub const GRID_GROUPS: &[ParamGroup] = &[
     group(
         "Grid",
@@ -68,7 +66,6 @@ pub const GRID_GROUPS: &[ParamGroup] = &[
             "jitter_z",
         ],
     ),
-    // The rows Rings and Sphere read.
     ParamGroup {
         label: "",
         params: &["start_angle", "arc"],
@@ -122,7 +119,6 @@ pub const GRID_GROUPS: &[ParamGroup] = &[
     group("Point", &["size", "feather", "colour", "max_points"]),
 ];
 
-/// The rows only Points reads, which the panel leaves out for Lines.
 const POINTS_ONLY: &[&str] = &[
     "layout",
     "columns",
@@ -199,23 +195,16 @@ mod attr {
     pub const JITTER_Z: u32 = 2;
 }
 
-/// How the cells are laid out across the layer's plane.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum GridLayout {
-    /// Rows and columns.
     #[default]
     Rows,
-    /// Rows and columns, with every other row moved across by half a cell.
     OffsetRows,
-    /// Rows become rings about the centre, and Columns the points on each.
     Rings,
-    /// One spiral out from the centre, evenly dense, as a sunflower's seeds.
     Spiral,
     /// Offset rows packed as a honeycomb, so every point is the same distance
     /// from its six neighbours. The row gap comes from the column gap.
     Hexagons,
-    /// Every point at Position, on top of each other until a Jitter or an
-    /// effect below moves them apart.
     Point,
     /// Rows become circles of latitude from the top of a ball to the bottom,
     /// and Columns the points round each, so the points sit in depth. Width
@@ -251,7 +240,6 @@ impl GridLayout {
     }
 }
 
-/// Grid's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "grid",
@@ -284,7 +272,6 @@ pub struct Grid {
     #[choice(label = "Layout", options = *GridLayout::OPTIONS, default = 0)]
     pub layout: u32,
 
-    /// Cells across.
     #[counter(
         label = "Columns",
         min = 1,
@@ -296,7 +283,6 @@ pub struct Grid {
     )]
     pub columns: i32,
 
-    /// Cells down.
     #[counter(
         label = "Rows",
         min = 1,
@@ -511,7 +497,6 @@ pub struct Grid {
     #[choice(label = "Size from", options = ["Grid size", "Corner point"], default = 0)]
     pub size_from: u32,
 
-    /// Lines: cells across.
     #[counter(
         label = "Boxes x",
         min = 1,
@@ -523,7 +508,6 @@ pub struct Grid {
     )]
     pub boxes_across: i32,
 
-    /// Lines: cells down.
     #[counter(
         label = "Boxes y",
         min = 1,
@@ -703,7 +687,6 @@ pub struct Grid {
     )]
     pub max_points: i32,
 
-    /// Which jitter (§2.4). The reseed button rolls it.
     #[seed]
     pub seed: u32,
 
@@ -728,7 +711,6 @@ impl Grid {
     /// its reason.
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
 
-    /// This instance's raster factor, read back out of a resolved bag.
     #[must_use]
     pub fn px_scale_of(p: Params<'_>) -> f32 {
         p.float(Self::DERIVED_PX_SCALE, 1.0)
@@ -759,7 +741,6 @@ impl Grid {
             projection,
             ..PointsStream::default()
         };
-        // A line grid is a picture, not points.
         if self.kind == 1 {
             return out;
         }
@@ -779,15 +760,11 @@ impl Grid {
         let half = |n: i32| (n - 1) as f32 * 0.5;
         let layout = GridLayout::from_code(self.layout);
         let inner = self.inner_radius.max(0.0);
-        // Shifted rows make the lattice half a cell wider.
         let shifted = matches!(layout, GridLayout::OffsetRows | GridLayout::Hexagons);
         let lean = if shifted && rows > 1 { 0.5 } else { 0.0 };
         let over = |size: f32, gaps: f32| if gaps > 0.0 { size / gaps } else { 0.0 };
-        // The two sizes the layout reads: the spacings, or what fits Width
-        // and Height.
         let (step_x, step_y) = match (self.fit, layout) {
             (false, _) => (self.spacing_x, self.spacing_y),
-            // The rings run from Inner radius out to the edge.
             (true, GridLayout::Rings) => (0.5 * self.width - inner, 0.5 * self.height - inner),
             // The last seed lands on the edge.
             (true, GridLayout::Spiral) => {
@@ -804,9 +781,7 @@ impl Grid {
         } else {
             step_y
         };
-        // Fitted, the shifted rows are centred with the rest.
         let centre = if self.fit { 0.5 * lean } else { 0.0 };
-        // How far out ring `j` is, in steps.
         let ring = |j: i32| match (self.fit, rows) {
             (false, _) => (j + 1) as f32,
             (true, 1) => 1.0,
@@ -820,7 +795,6 @@ impl Grid {
         } else {
             (cols - 1).max(1)
         };
-        // Where cell (column, row) sits from the centre.
         let cell = |c: i32, j: i32| -> (f32, f32) {
             match layout {
                 GridLayout::Rows | GridLayout::OffsetRows | GridLayout::Hexagons => {
@@ -939,7 +913,6 @@ impl Grid {
         out
     }
 
-    /// How the stream is drawn — a feathered disc per point, and the host Mix.
     #[must_use]
     pub fn draw_style(self) -> DrawStyle {
         DrawStyle {

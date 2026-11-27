@@ -12,14 +12,12 @@ import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeTransformProp;
 import '../l10n/strings.dart';
 import '../widgets/controls.dart';
 
-/// The name a language goes by on screen.
 String expressionLanguageLabel(BridgeExpressionLanguage language) =>
     switch (language) {
       BridgeExpressionLanguage.rhai => l10n.expressionLanguageRhai,
       BridgeExpressionLanguage.javaScript => l10n.expressionLanguageJavaScript,
     };
 
-/// The word a settings file keeps a language as.
 String expressionLanguageId(BridgeExpressionLanguage language) =>
     switch (language) {
       BridgeExpressionLanguage.rhai => 'rhai',
@@ -33,24 +31,17 @@ BridgeExpressionLanguage expressionLanguageOfId(Object? id) =>
         ? BridgeExpressionLanguage.javaScript
         : BridgeExpressionLanguage.rhai;
 
-/// The grammar a language's text is coloured with, by the name the
-/// highlighter knows it under.
 String expressionGrammar(BridgeExpressionLanguage language) =>
     switch (language) {
       BridgeExpressionLanguage.rhai => 'rhai',
       BridgeExpressionLanguage.javaScript => 'javascript',
     };
 
-/// A property an expression can name: a layer, one of its transform
-/// properties, or an effect's row. [sameLayer] is whether the expression
-/// is written on that layer, which is the short form.
 class PropertyRef {
   final String layerName;
   final bool sameLayer;
   final BridgeTransformProp? transform;
 
-  /// The effect's heading name and the row's label as the effect names it,
-  /// for an effect's row.
   final String? effectName;
   final String? rowLabel;
 
@@ -87,7 +78,6 @@ String? referenceText(PropertyRef ref, BridgeExpressionLanguage language) {
       if (ref.transform case final prop?) {
         var name = _jsTransform(prop);
         if (name == null) return null;
-        // The pair as one: the index goes.
         if (ref.whole) name = name.replaceAll(RegExp(r'\[\d\]$'), '');
         return '$layer.$name';
       }
@@ -149,14 +139,11 @@ String? _rhaiTransform(BridgeTransformProp prop) => switch (prop) {
       _ => null,
     };
 
-/// The languages in the order every list of them is drawn.
 const List<BridgeExpressionLanguage> expressionLanguages = [
   BridgeExpressionLanguage.javaScript,
   BridgeExpressionLanguage.rhai,
 ];
 
-/// The dropdown that picks an expression's language. [dense] is the in-row
-/// face, for a bar or a panel's foot.
 class ExpressionLanguagePicker extends StatelessWidget {
   final BridgeExpressionLanguage value;
   final ValueChanged<BridgeExpressionLanguage> onChanged;

@@ -42,7 +42,6 @@ fn matte_toward(value: f32, neutral: f32, k: f32) -> f32 {
     return neutral * (1.0 - k) + value * k;
 }
 
-// The unpremultiplied colour of a premultiplied pixel (== cpu::unpremult).
 fn unpremult(c: vec4<f32>) -> vec3<f32> {
     if (c.a > 0.0) {
         return c.rgb / c.a;
@@ -58,7 +57,6 @@ fn gamma(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let o = textureLoad(src, xy, 0);
-    // Neutral short-circuit (== the CPU reference's early return).
     if (p.gamma == 1.0) {
         textureStore(dst, xy, o);
         return;
@@ -71,7 +69,6 @@ fn gamma(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     let inv = 1.0 / gamma;
     let u = unpremult(o);
-    // Clamp to >= 0 before the pow, byte-identical to the CPU reference.
     let curved = pow(max(u, vec3<f32>(0.0)), vec3<f32>(inv));
     let graded = curved * o.a;
     let outv = o.rgb * (1.0 - p.mix_amt) + graded * p.mix_amt;

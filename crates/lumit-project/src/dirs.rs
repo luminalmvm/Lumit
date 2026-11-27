@@ -1,9 +1,5 @@
-//! Lumit's own folders on this machine, which every path in this crate is
-//! built from.
-
 use std::path::{Path, PathBuf};
 
-/// The three folders Lumit keeps things in.
 pub(crate) struct Dirs {
     cache: PathBuf,
     data: PathBuf,

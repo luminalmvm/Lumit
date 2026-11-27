@@ -85,7 +85,6 @@ void main() {
         reason: 'every parameter has a row',
       );
 
-      // And it is gone again when flow is off.
       layer.setFlowEnabled(on_: false);
       final without = layerFoldRows(
         entry: p.comp.getModel().layers.single,

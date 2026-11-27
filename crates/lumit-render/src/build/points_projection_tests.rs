@@ -1,10 +1,5 @@
-//! The points projection: the restriction really is the camera.
-
 use super::*;
 
-/// One camera and one placement, and the full comp-space projection of a
-/// point in the layer's own pixels — the compositor's own arithmetic,
-/// written here as the thing the restriction is measured against.
 fn seen_by_the_compositor(cam: glam::Mat4, place: [[f32; 4]; 4], p: [f32; 3]) -> [f32; 2] {
     let a = (cam * glam::Mat4::from_cols_array_2d(&place)).to_cols_array_2d();
     let at = |r: usize| a[0][r] * p[0] + a[1][r] * p[1] + a[2][r] * p[2] + a[3][r];
@@ -38,7 +33,6 @@ fn a_projected_particle_lands_where_the_camera_would_have_put_it() {
         25.0,
         -40.0,
     );
-    // The restriction, built the way `points_projection` builds it.
     let a = (cam * glam::Mat4::from_cols_array_2d(&place)).to_cols_array_2d();
     let row = |r: usize| [a[0][r], a[1][r], a[2][r], a[3][r]];
     let (rx, ry, rw) = (row(0), row(1), row(3));
@@ -70,8 +64,6 @@ fn a_projected_particle_lands_where_the_camera_would_have_put_it() {
             (drawn[0] - truth[0]).abs() < 5e-2 && (drawn[1] - truth[1]).abs() < 5e-2,
             "a particle at {p:?} is drawn at {drawn:?} and belongs at {truth:?}"
         );
-        // The plane itself is untouched, and off it the scale is the
-        // perspective divide the compositor applied.
         if p[2] == 0.0 {
             assert!((scale - 1.0).abs() < 1e-4, "the plane foreshortened");
             assert!((flat[0] - p[0]).abs() < 1e-2 && (flat[1] - p[1]).abs() < 1e-2);

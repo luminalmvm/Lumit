@@ -35,7 +35,6 @@ use crate::vst3::{Vst3Instance, Vst3Module, BUNDLE_EXTENSION};
 /// spelled with, which is how a saved project names the plugin it wants back.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub enum Abi {
-    /// CLAP (clap.audio), the MIT-licensed one AP1 built against.
     #[default]
     Clap,
     /// VST3 (Steinberg), hosted under the SDK's GPLv3 branch.
@@ -43,7 +42,6 @@ pub enum Abi {
 }
 
 impl Abi {
-    /// What a plugin of this standard's `match_name` begins with.
     #[must_use]
     pub const fn prefix(self) -> &'static str {
         match self {
@@ -52,8 +50,6 @@ impl Abi {
         }
     }
 
-    /// Which standard a file on disk speaks, from its name. `None` for
-    /// anything that is neither.
     #[must_use]
     pub fn of(path: &Path) -> Option<Self> {
         match path.extension().and_then(|ext| ext.to_str()) {
@@ -64,23 +60,13 @@ impl Abi {
     }
 }
 
-/// One opened plugin file, whichever standard it speaks.
 #[derive(Clone)]
 pub enum AnyModule {
-    /// A `.clap` file.
     Clap(Arc<Module>),
-    /// A `.vst3` bundle.
     Vst3(Arc<Vst3Module>),
 }
 
 impl AnyModule {
-    /// Open a plugin file and read its list, choosing the standard by the file's
-    /// own name.
-    ///
-    /// # Errors
-    ///
-    /// [`ModuleError`] — every way a third party's file can disappoint us, plus
-    /// [`ModuleError::BadPath`] for a name that is neither standard's.
     pub fn open(path: &Path) -> Result<Self, ModuleError> {
         match Abi::of(path) {
             Some(Abi::Clap) => Module::open(path).map(|module| Self::Clap(Arc::new(module))),
@@ -89,7 +75,6 @@ impl AnyModule {
         }
     }
 
-    /// Which standard this one speaks.
     #[must_use]
     pub const fn abi(&self) -> Abi {
         match self {
@@ -98,7 +83,6 @@ impl AnyModule {
         }
     }
 
-    /// The plugins this file declares, in its own order.
     #[must_use]
     pub fn entries(&self) -> &[ModuleEntry] {
         match self {
@@ -107,7 +91,6 @@ impl AnyModule {
         }
     }
 
-    /// The file this module came out of.
     #[must_use]
     pub fn path(&self) -> &Path {
         match self {
@@ -116,18 +99,11 @@ impl AnyModule {
         }
     }
 
-    /// The file, owned — what a definition keeps so it can open a broker later.
     #[must_use]
     pub fn to_path(&self) -> PathBuf {
         self.path().to_path_buf()
     }
 
-    /// Make one plugin, by its own id.
-    ///
-    /// # Errors
-    ///
-    /// [`HostError`] — the file does not declare that id, or the plugin refused
-    /// to be created or initialised.
     pub fn create(&self, plugin_id: &str) -> Result<AnyInstance, HostError> {
         match self {
             Self::Clap(module) => {
@@ -146,14 +122,11 @@ impl AnyModule {
 /// they are asked in the order [`crate::HOST_ACTIONS`] and
 /// [`crate::VST3_HOST_ACTIONS`] pin.
 pub enum AnyInstance {
-    /// A CLAP plugin.
     Clap(Instance),
-    /// A VST3 plugin.
     Vst3(Vst3Instance),
 }
 
 impl AnyInstance {
-    /// The plugin's audio ports, both directions.
     #[must_use]
     pub fn ports(&self) -> Ports {
         match self {
@@ -162,7 +135,6 @@ impl AnyInstance {
         }
     }
 
-    /// Every parameter the plugin declares, in its own order.
     #[must_use]
     pub fn params(&self) -> Vec<ParamDescription> {
         match self {
@@ -203,7 +175,6 @@ impl AnyInstance {
         }
     }
 
-    /// Tell the plugin whether this is an export or a preview.
     pub fn set_offline(&mut self, offline: bool) -> bool {
         match self {
             Self::Clap(instance) => instance.set_offline(offline),
@@ -261,11 +232,6 @@ impl AnyInstance {
         }
     }
 
-    /// Enter the processing state.
-    ///
-    /// # Errors
-    ///
-    /// The plugin refused, including when it was never activated.
     pub fn start_processing(&mut self) -> Result<(), HostError> {
         match self {
             Self::Clap(instance) => instance.start_processing(),
@@ -298,7 +264,6 @@ impl AnyInstance {
         }
     }
 
-    /// Leave the processing state.
     pub fn stop_processing(&mut self) {
         match self {
             Self::Clap(instance) => instance.stop_processing(),
@@ -306,7 +271,6 @@ impl AnyInstance {
         }
     }
 
-    /// Undo [`AnyInstance::activate`], stopping first.
     pub fn deactivate(&mut self) {
         match self {
             Self::Clap(instance) => instance.deactivate(),

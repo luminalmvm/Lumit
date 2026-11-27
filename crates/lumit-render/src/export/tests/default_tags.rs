@@ -1,5 +1,3 @@
-//! Tests for what the default colour space writes and says.
-
 use super::*;
 
 /// The default space writes the picture the Viewer shows, tagged Rec. 709

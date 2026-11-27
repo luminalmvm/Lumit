@@ -425,7 +425,6 @@ fn levels(c: &Clock, e: &EffectInstance) -> Option<Vec<Param>> {
             }
         }
     }
-    // The alpha row, untouched.
     for (i, v) in [0.0, 1.0, 1.0, 0.0, 1.0].into_iter().enumerate() {
         if let Some(slot) = out.get_mut(31 + i) {
             *slot = (0, "", json!({"a": 0, "k": v}));
@@ -434,7 +433,6 @@ fn levels(c: &Clock, e: &EffectInstance) -> Option<Vec<Param>> {
     Some(out)
 }
 
-/// The value of the parameter `id`.
 fn param<'a>(e: &'a EffectInstance, id: &str) -> Option<&'a EffectValue> {
     e.params.iter().find(|p| p.id == id).map(|p| &p.value)
 }

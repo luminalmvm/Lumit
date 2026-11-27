@@ -372,6 +372,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeFootageFacts dco_decode_box_autoadd_bridge_footage_facts(dynamic raw);
 
   @protected
+  BridgeFrameOverBudget dco_decode_box_autoadd_bridge_frame_over_budget(
+      dynamic raw);
+
+  @protected
   BridgeFrameProfile dco_decode_box_autoadd_bridge_frame_profile(dynamic raw);
 
   @protected
@@ -1168,6 +1172,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeFormatCaps dco_decode_bridge_format_caps(dynamic raw);
 
   @protected
+  BridgeFrameOverBudget dco_decode_bridge_frame_over_budget(dynamic raw);
+
+  @protected
   BridgeFrameProfile dco_decode_bridge_frame_profile(dynamic raw);
 
   @protected
@@ -1175,6 +1182,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeGovernorReport dco_decode_bridge_governor_report(dynamic raw);
+
+  @protected
+  BridgeGpuKind dco_decode_bridge_gpu_kind(dynamic raw);
 
   @protected
   BridgeGradeGroup dco_decode_bridge_grade_group(dynamic raw);
@@ -3466,6 +3476,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeFrameOverBudget sse_decode_box_autoadd_bridge_frame_over_budget(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeFrameProfile sse_decode_box_autoadd_bridge_frame_profile(
       SseDeserializer deserializer);
 
@@ -4411,6 +4425,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeFormatCaps sse_decode_bridge_format_caps(SseDeserializer deserializer);
 
   @protected
+  BridgeFrameOverBudget sse_decode_bridge_frame_over_budget(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeFrameProfile sse_decode_bridge_frame_profile(
       SseDeserializer deserializer);
 
@@ -4420,6 +4438,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   BridgeGovernorReport sse_decode_bridge_governor_report(
       SseDeserializer deserializer);
+
+  @protected
+  BridgeGpuKind sse_decode_bridge_gpu_kind(SseDeserializer deserializer);
 
   @protected
   BridgeGradeGroup sse_decode_bridge_grade_group(SseDeserializer deserializer);
@@ -7066,6 +7087,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeFootageFacts self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_bridge_frame_over_budget(
+      BridgeFrameOverBudget self, SseSerializer serializer);
+
+  @protected
   void sse_encode_box_autoadd_bridge_frame_profile(
       BridgeFrameProfile self, SseSerializer serializer);
 
@@ -8075,6 +8100,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeFormatCaps self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_frame_over_budget(
+      BridgeFrameOverBudget self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_frame_profile(
       BridgeFrameProfile self, SseSerializer serializer);
 
@@ -8085,6 +8114,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_governor_report(
       BridgeGovernorReport self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_gpu_kind(BridgeGpuKind self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_grade_group(

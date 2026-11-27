@@ -1,6 +1,3 @@
-//! The mesh pass's shader, layouts and pipelines, made once when the first model
-//! is drawn.
-
 use super::{blur, look, samplers, shadow, MeshFx, COLOUR, INV_W};
 use crate::fx::environment;
 use crate::GpuContext;
@@ -85,7 +82,6 @@ impl MeshFx {
         );
         let mut entries = vec![uniform_entry(0, false)];
         entries.extend((1..=5).map(|b| texture_entry(b, float, false)));
-        // The opacity picture, and the picture behind for glass.
         entries.extend([11, 12].map(|b| texture_entry(b, float, false)));
         entries.push(texture_entry(14, wgpu::TextureSampleType::Depth, false));
         let material_layout = layout("mesh-material", &entries);

@@ -21,7 +21,6 @@ use crate::{set_string, ImageView};
 /// Set in the broker's environment.
 pub const GPU_ENV: &str = "LUMIT_TESTPLUG_GPU";
 
-/// What [`GPU_ENV`] asks for, if it asks.
 fn declared() -> Option<&'static CStr> {
     match std::env::var(GPU_ENV).ok()?.as_str() {
         "true" => Some(c"true"),
@@ -30,7 +29,6 @@ fn declared() -> Option<&'static CStr> {
     }
 }
 
-/// Say on the descriptor which card paths the gain can take.
 pub(crate) fn declare(props_suite: &OfxPropertySuiteV1, props: OfxPropertySetHandle) {
     let Some(value) = declared() else {
         return;
@@ -50,7 +48,6 @@ pub(crate) fn declare(props_suite: &OfxPropertySuiteV1, props: OfxPropertySetHan
     );
 }
 
-/// One render argument, nought or null when the host did not set it.
 fn argument(props_suite: &OfxPropertySuiteV1, in_args: *mut c_void, key: &CStr) -> usize {
     let mut flag = 0;
     // SAFETY: the host's own function, given the `inArgs` it passed us.
@@ -58,7 +55,6 @@ fn argument(props_suite: &OfxPropertySuiteV1, in_args: *mut c_void, key: &CStr) 
     flag.max(0) as usize
 }
 
-/// The same, for a pointer.
 fn pointer(props_suite: &OfxPropertySuiteV1, in_args: *mut c_void, key: &CStr) -> *mut c_void {
     let mut value = std::ptr::null_mut();
     // SAFETY: as above.
@@ -66,8 +62,6 @@ fn pointer(props_suite: &OfxPropertySuiteV1, in_args: *mut c_void, key: &CStr) -
     value
 }
 
-/// Render the gain on the card when the host asked for it, answering with the
-/// status. `None` means a CPU render, which the caller does itself.
 pub(crate) fn render(
     props_suite: &OfxPropertySuiteV1,
     in_args: *mut c_void,
@@ -81,7 +75,6 @@ pub(crate) fn render(
     if !cuda && !opencl {
         return (declared() == Some(c"needed")).then_some(Status::Failed.code());
     }
-    // The card path is the gain on one frame of the same size, nothing more.
     let source = source.filter(|source| {
         !temporal
             && source.width() == destination.width()
@@ -111,10 +104,6 @@ pub(crate) fn render(
     })
 }
 
-// ------------------------------------------------------------------ CUDA --
-
-/// `out[i] = in[i] * gain`, one thread a float, in PTX the driver compiles for
-/// whatever card it is on.
 const PTX: &CStr = c"
 .version 7.0
 .target sm_52
@@ -209,9 +198,6 @@ fn cuda_gain(stream: *mut c_void, from: *mut c_void, to: *mut c_void, n: u32, ga
     launched && (!stream.is_null() || unsafe { (driver.ctx_synchronize)() } == 0)
 }
 
-// ---------------------------------------------------------------- OpenCL --
-
-/// The same gain in OpenCL C.
 const OPENCL_C: &CStr = c"
 __kernel void gain(__global const float* src, __global float* dst, uint n, float g) {
     size_t i = get_global_id(0);
@@ -219,7 +205,6 @@ __kernel void gain(__global const float* src, __global float* dst, uint n, float
 }
 ";
 
-/// The loader and the built kernel, for the one context a broker has.
 static OPENCL: OnceLock<Option<(Api, usize)>> = OnceLock::new();
 
 fn opencl_kernel(queue: ClHandle) -> Option<(&'static Api, ClHandle)> {

@@ -17,23 +17,17 @@ use lumit_core::model::{Document, ProjectItem};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// What a file is to the export.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub(super) enum Kind {
     Footage,
     Proxy,
-    /// The colour config and its tables.
     Config,
-    /// A file an effect reads, such as a LUT.
     Effect,
-    /// An analysis the export reads, filed under `id`.
     Analysis,
-    /// A simulation baked for the effect `id`.
     Bake,
 }
 
-/// One file of a job.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(super) struct Entry {
     pub hash: String,
@@ -45,11 +39,9 @@ pub(super) struct Entry {
     /// Where it sits from its reference's first file's folder, with `/`
     /// between folders. The first file is listed first.
     pub path: String,
-    /// Where it is on the sender.
     pub from: String,
 }
 
-/// Every file a job needs, besides the document.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub(super) struct Manifest {
     pub files: Vec<Entry>,
@@ -125,7 +117,6 @@ pub(super) fn local_path(path: &str) -> Option<PathBuf> {
     plain.then_some(path)
 }
 
-/// The file name of `path`, as a file in the store is called.
 pub(super) fn name_of(path: &str) -> String {
     let name = path.rsplit(['/', '\\']).next().unwrap_or_default();
     if inside(name).is_some() {
@@ -199,7 +190,6 @@ impl Hashes {
         }
     }
 
-    /// The hash of the file at `path`, hashing it only when it changed since.
     pub(super) fn of(
         &self,
         path: &Path,
@@ -251,7 +241,6 @@ impl Hashes {
         Some(hash)
     }
 
-    /// Write what was learnt since the last time.
     pub(super) fn keep(&self) {
         let text = {
             let Ok(mut known) = self.known.lock() else {
@@ -273,7 +262,6 @@ impl Hashes {
     }
 }
 
-/// A file of the set before it is hashed.
 pub(super) struct Found {
     pub kind: Kind,
     pub id: Uuid,
@@ -281,7 +269,6 @@ pub(super) struct Found {
     pub from: PathBuf,
 }
 
-/// The compositions `comp` shows, itself included.
 pub(super) fn reached(doc: &Document, comp: Uuid) -> BTreeSet<Uuid> {
     let mut reached = BTreeSet::new();
     let mut next = vec![comp];
@@ -421,7 +408,6 @@ pub(super) fn walk(dir: &Path, depth: usize) -> Vec<PathBuf> {
     out
 }
 
-/// Where the store keeps the file `hash`, called `name`.
 pub(super) fn stored(root: &Path, hash: &str, name: &str) -> PathBuf {
     root.join("files").join(hash).join(name_of(name))
 }
@@ -478,7 +464,6 @@ pub(super) fn place(from: &Path, to: &Path) -> bool {
 /// has, which is what it holds and what is free on its disk.
 const STORE_MOST: u64 = 100 << 30;
 
-/// What the store holds, in bytes.
 pub(super) fn store_bytes(root: &Path) -> u64 {
     walk(&root.join("files"), 1)
         .iter()

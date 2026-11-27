@@ -21,24 +21,16 @@ use lumit_core::model::{
 use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
 use uuid::Uuid;
 
-/// The counts that define a stress document (docs/13 §2.1).
 #[derive(Debug, Clone, Copy)]
 pub struct StressParams {
-    /// Number of compositions.
     pub comps: usize,
-    /// Total layers across all comps.
     pub layers_total: usize,
-    /// Layers concentrated in the single biggest comp.
     pub biggest_comp_layers: usize,
-    /// Total keyframes across all layers.
     pub keyframes_total: usize,
-    /// Number of footage items in the Project panel.
     pub footage_items: usize,
 }
 
 impl StressParams {
-    /// The canonical stress document (docs/13 §2.1): 200 comps, 5,000 layers
-    /// (one comp holds 1,000), 250,000 keyframes, 2,000 footage items.
     pub const REFERENCE: StressParams = StressParams {
         comps: 200,
         layers_total: 5_000,
@@ -47,7 +39,6 @@ impl StressParams {
         footage_items: 2_000,
     };
 
-    /// A tiny variant for fast unit tests — same shape, trivial counts.
     pub const TINY: StressParams = StressParams {
         comps: 3,
         layers_total: 12,
@@ -63,8 +54,6 @@ fn uid(kind: u128, index: usize) -> Uuid {
     Uuid::from_u128((kind << 96) | index as u128)
 }
 
-/// Split `total` into `buckets` counts summing to exactly `total`, as evenly as
-/// possible (the first `total % buckets` buckets get one extra).
 fn spread(total: usize, buckets: usize) -> Vec<usize> {
     if buckets == 0 {
         return Vec::new();
@@ -76,8 +65,6 @@ fn spread(total: usize, buckets: usize) -> Vec<usize> {
         .collect()
 }
 
-/// Layers per comp: the biggest comp holds `biggest`, the rest share the
-/// remainder evenly (docs/13 §2.1: "one comp holding 1,000").
 fn layer_distribution(comps: usize, layers_total: usize, biggest: usize) -> Vec<usize> {
     if comps == 0 {
         return Vec::new();
@@ -228,18 +215,14 @@ pub fn stress_document(p: &StressParams) -> Document {
         items,
         item_labels: Default::default(),
         item_comments: Default::default(),
-        // No proxies: the fixture's media is small already, and the master
-        // switch is on like any new project.
         proxies: Default::default(),
         footage_trims: Default::default(),
         transcripts: Default::default(),
         footage_markers: Default::default(),
         use_proxies: true,
-        // Nothing packed: the fixture names its media by path.
         packed: Default::default(),
         auto_pack: false,
         auto_folders: AutoFolders::default(),
-        // The default, on, like any new project.
         anti_aliasing: Default::default(),
         colour_depth: Default::default(),
         graph_room: Default::default(),
@@ -250,11 +233,7 @@ pub fn stress_document(p: &StressParams) -> Document {
         notes: String::new(),
         grade_groups: Vec::new(),
         grade_memories: Vec::new(),
-        // The fixture caches wherever the application is set to, like any
-        // ordinary project.
         cache_location: None,
-        // Nor does it carry an arrangement: the fixture is a document, not a
-        // sitting in front of one.
         ui_state: None,
         extra: serde_json::Map::new(),
     }
@@ -264,8 +243,6 @@ pub fn stress_document(p: &StressParams) -> Document {
 mod tests {
     use super::*;
 
-    /// The fixture survives a `.lum` save/open round-trip unchanged (the path
-    /// the S4/S5 open/save budgets exercise).
     #[test]
     fn stress_document_saves_and_opens() {
         let doc = stress_document(&StressParams::TINY);

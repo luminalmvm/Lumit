@@ -86,7 +86,6 @@ mod autosave;
 mod awake;
 mod beats;
 mod captioning;
-// ASC CDL files, read and written.
 mod cdl;
 mod claim;
 mod closing;

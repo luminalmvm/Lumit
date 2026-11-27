@@ -1,7 +1,3 @@
-// The Timeline's mask rows: a mask and its values, and the shared opacity row
-// every item row in the fold uses.
-//
-// Split out of timeline_panel_frb.dart.
 
 import 'dart:convert';
 
@@ -61,7 +57,6 @@ BridgeMask maskWith(
       pathKeys: m.pathKeys,
     );
 
-/// What a mask mode is called on its dropdown.
 String maskModeLabel(BridgeMaskMode mode) => switch (mode) {
       BridgeMaskMode.none => l10n.maskModeNone,
       BridgeMaskMode.add => l10n.maskModeAdd,
@@ -98,7 +93,6 @@ mixin _InlineRename<T extends StatefulWidget> on State<T> {
   TextEditingController? _editor;
   final DoubleTap _nameTaps = DoubleTap();
 
-  /// What the row is called now, and how it writes a new name.
   String get renameCurrent;
   void renameCommit(String name);
 
@@ -109,7 +103,6 @@ mixin _InlineRename<T extends StatefulWidget> on State<T> {
     setState(() => _editor = TextEditingController(text: renameCurrent));
   }
 
-  /// Close the editor, writing what was typed only when [keep].
   void _endRename({required bool keep}) {
     // Both ways out can land here for one edit — submitting and then losing
     // the pointer — and the row can be gone by the time the second arrives.
@@ -157,8 +150,6 @@ mixin _InlineRename<T extends StatefulWidget> on State<T> {
           controller: editor,
           autofocus: true,
           onSubmitted: (_) => _endRename(keep: true),
-          // Clicking anywhere else finishes the edit and keeps what was typed,
-          // the same as every other inline rename here.
           onTapOutside: () => _endRename(keep: true),
         ),
       );
@@ -200,7 +191,6 @@ class MaskRow extends StatefulWidget {
   final VoidCallback onChanged;
   final VoidCallback? onLabelTap;
 
-  /// The composition, for the live preview a drag shows.
   final CompositionReference comp;
 
   const MaskRow({super.key, 
@@ -258,9 +248,6 @@ class _MaskRowState extends State<MaskRow> with _InlineRename<MaskRow> {
           lumitIcon(LumitIcon.rectangle,
               size: iconSize, color: t.textSecondary),
           const SizedBox(width: 4),
-          // The name is the row's handle, exactly as it is on a transform row:
-          // tapping it selects the mask, and Delete then acts on it. A
-          // double-click renames it in place, and so does the row menu.
           Expanded(
             child: renameName(
               nameKey: 'tl-mask-name-${mask.id}',
@@ -371,7 +358,6 @@ class _MaskRowState extends State<MaskRow> with _InlineRename<MaskRow> {
   }
 }
 
-/// What Copy path on a mask's Path row kept, for Paste path on another.
 ({List<BridgeVertex> vertices, bool closed})? _copiedMaskPath;
 
 /// The masks picked in the Timeline, by the layer each is on, in stack order.
@@ -399,8 +385,6 @@ List<(LayerReference, List<UuidValue>)> pickedMasks(LumitUiState ui) {
   ];
 }
 
-/// Put the picked masks on the clipboard, from every layer they are on. False
-/// with none picked.
 bool copyPickedMasks(LumitUiState ui) {
   final masks = <Object?>[];
   for (final (layer, ids) in pickedMasks(ui)) {
@@ -417,7 +401,6 @@ bool copyPickedMasks(LumitUiState ui) {
   return true;
 }
 
-/// Take the picked masks away, as one undo step.
 bool deletePickedMasks(LumitState app, LumitUiState ui) {
   final picked = pickedMasks(ui);
   if (picked.isEmpty) return false;
@@ -435,7 +418,6 @@ bool deletePickedMasks(LumitState app, LumitUiState ui) {
   return true;
 }
 
-/// A copy of each picked mask, right after it, as one undo step.
 bool duplicatePickedMasks(LumitState app, LumitUiState ui) {
   final picked = pickedMasks(ui);
   if (picked.isEmpty) return false;
@@ -451,7 +433,6 @@ bool duplicatePickedMasks(LumitState app, LumitUiState ui) {
   return true;
 }
 
-/// The clipboard's masks onto each of [layers], as one undo step.
 bool pasteMasksOnto(
     LumitState app, LumitUiState ui, List<LayerReference> layers) {
   final text = ui.clipboard.text;
@@ -504,7 +485,6 @@ class MaskValueRow extends StatefulWidget {
   final ValueChanged<int> onSeek;
   final VoidCallback onChanged;
 
-  /// Clicking the name selects the property and its keys.
   final VoidCallback? onLabelTap;
 
   const MaskValueRow({super.key, 
@@ -554,7 +534,6 @@ class _MaskValueRowState extends State<MaskValueRow> {
     super.dispose();
   }
 
-  /// Show the value the drag is passing through without writing it.
   void _preview(BridgeScalar v) {
     final ui = Provider.of<LumitUiState>(context, listen: false);
     _throttle.request(() {
@@ -588,7 +567,6 @@ class _MaskValueRowState extends State<MaskValueRow> {
     }
   }
 
-  /// A still value: the number typed or dragged becomes the value.
   void _commitStatic(num v) => _write(BridgeScalar.static_(v.toDouble()));
 
   @override
@@ -658,8 +636,6 @@ class _MaskValueRowState extends State<MaskValueRow> {
         SizedBox(width: widget.valueColumn.rightInset),
       ],
     );
-    // A shape is no number to type, so its menu is the shape to copy onto
-    // another mask, its keys and its curve.
     if (pathKeys != null) {
       return ParamRowMenu(
         menu: ParamMenu(
@@ -723,7 +699,6 @@ class _MaskValueRowState extends State<MaskValueRow> {
     if (copied == null) return;
     final app = Provider.of<LumitState>(context, listen: false);
     final ui = Provider.of<LumitUiState>(context, listen: false);
-    // Picked by its own row or by its Path row.
     final paths = ui.selectedProperties.value;
     final picked = [
       for (final entry in ui.model.layers)
@@ -780,7 +755,6 @@ class _MaskValueRowState extends State<MaskValueRow> {
         onChangeEnd: _commitStatic,
         onDragCancel: () {
           setState(() => _staged = null);
-          // Put the document's own value back on screen.
           _preview(scalar);
         },
       );
@@ -832,7 +806,6 @@ class ItemOpacityRow extends StatefulWidget {
   /// from inside the row's own throttle. Unused when [opacity] is null.
   final void Function(double opacity)? onPreview;
 
-  /// Commit [opacity] as one op. Unused when [opacity] is null.
   final void Function(double opacity)? onCommit;
 
   /// Write a new name, or null when this kind's name is not renamed here —
@@ -846,20 +819,12 @@ class ItemOpacityRow extends StatefulWidget {
   /// no such choice.
   final Widget? extra;
 
-  /// Rows of the item's own for its right-click menu, between Rename and
-  /// Delete — a shape item's Add and Remove. Handed the menu's close.
   final List<Widget> Function(VoidCallback close)? menuRows;
 
-  /// The rows an **Add** button beside the name opens, After Effects' "Add ▸"
-  /// on a shape's own entry rather than only on Contents. Null draws none.
   final List<Widget> Function(VoidCallback close)? addRows;
 
-  /// Draws a **Remove** button beside the name, which runs [onDelete]: a
-  /// shape modifier's. False draws none.
   final bool removeButton;
 
-  /// A twirl before the icon, for an item with rows of its own under it — a
-  /// shape item. Null draws none.
   final bool open;
   final VoidCallback? onToggle;
 
@@ -867,8 +832,6 @@ class ItemOpacityRow extends StatefulWidget {
   /// that is only renamed by hand.
   final ValueNotifier<String?>? renameRequest;
 
-  /// A tap on the name, which picks the item the way a mask's name picks the
-  /// mask.
   final VoidCallback? onLabelTap;
 
   const ItemOpacityRow({super.key,
@@ -957,7 +920,6 @@ class _ItemOpacityRowState extends State<ItemOpacityRow>
       child: Row(
         children: [
           if (widget.onToggle case final toggle?) ...[
-            // The same twirl a heading carries, and as wide to aim at.
             GestureDetector(
               key: ValueKey<String>('${widget.keyPrefix}-twirl-${widget.id}'),
               behavior: HitTestBehavior.opaque,
@@ -978,8 +940,6 @@ class _ItemOpacityRowState extends State<ItemOpacityRow>
           ],
           lumitIcon(widget.icon, size: iconSize, color: t.textSecondary),
           const SizedBox(width: 4),
-          // Named after the tool that drew it — and, where the kind supports
-          // it, renamed here: a double-click on the name, or the row menu.
           Expanded(
             child: widget.onRename == null
                 ? Text(widget.name,
@@ -1026,9 +986,6 @@ class _ItemOpacityRowState extends State<ItemOpacityRow>
                 if (widget.opacity case final opacity?)
                   SizedBox(
                     width: 56,
-                    // Staged and previewed, like every other dragged value
-                    // here: the drag shows live and commits once on release,
-                    // so it is one op and one undo step.
                     child: DragValueField(
                       key: ValueKey<String>(
                           '${widget.keyPrefix}-opacity-${widget.id}'),
@@ -1091,8 +1048,6 @@ class _ItemOpacityRowState extends State<ItemOpacityRow>
   }
 }
 
-/// A small word-button on an item row, in the accent: Add, with the arrow
-/// After Effects draws after it, or Remove.
 class RowButton extends StatelessWidget {
   final String label;
   final bool arrow;
@@ -1117,7 +1072,6 @@ class RowButton extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // A narrow heading shortens the label rather than overflowing.
               Flexible(
                 child: Text(label,
                     style: t.small.copyWith(color: colour),

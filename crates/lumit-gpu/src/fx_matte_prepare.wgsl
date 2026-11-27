@@ -30,7 +30,6 @@ struct Params {
 }
 @group(0) @binding(4) var<uniform> params: Params;
 
-// == lumit_core::fx::cpu::channel_of, the same weights in the same order.
 fn channel_of(m: vec4<f32>, which: u32) -> f32 {
     switch which {
         case 1u: { return m.a; }
