@@ -1594,7 +1594,7 @@ bool _setWorkAreaEnd(LumitState state, LumitUiState ui,
     span: workAreaWith(
       comp: comp,
       current: comp.getWorkArea(),
-      wanted: ui.playheadFrame.value,
+      wanted: ui.playheadFrame.value + (isStart ? 0 : 1),
       isStart: isStart,
     ),
   );

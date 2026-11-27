@@ -373,7 +373,8 @@ void main() {
       final work = comp.getWorkArea()!;
       expect(comp.frameAtTime(time: work.inPoint), 12,
           reason: 'setting the end leaves the start alone');
-      expect(comp.frameAtTime(time: work.outPoint), 30);
+      expect(comp.frameAtTime(time: work.outPoint), 31,
+          reason: 'the frame under the playhead is the last one inside');
     });
 
     testWidgets('Shift+1 sets marker 1 and the bare 1 returns to it',

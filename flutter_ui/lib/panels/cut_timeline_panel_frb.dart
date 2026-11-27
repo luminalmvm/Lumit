@@ -2955,7 +2955,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
             span: workAreaWith(
           comp: comp,
           current: comp.getWorkArea(),
-          wanted: frame,
+          wanted: isStart ? frame : frame + 1,
           isStart: isStart,
         ));
       } catch (_) {}

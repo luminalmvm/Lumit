@@ -37,11 +37,11 @@
   required int lastFrame,
 }) {
   final start = workStart ?? 0;
-  // A work area that ends on the comp's own end (the out point is a time, so
-  // the frame it names is one past the last) ends on the last frame: the
-  // playhead never reaches a frame the comp does not have, so the loop never
-  // turned and playback stopped at the end instead.
-  final end = workEnd == null || workEnd > lastFrame ? lastFrame : workEnd;
+  // The out point names the frame after the last one the work area holds, so
+  // the loop turns on the frame before it, where the export stops too. A work
+  // area out at the comp's end turns on the last frame: the playhead never
+  // reaches a frame the comp does not have.
+  final end = workEnd == null || workEnd > lastFrame ? lastFrame : workEnd - 1;
   // A span with no room in it is not a loop — it would restart on every frame.
   if (end <= start) return null;
   // Parked past the end: preview from there, do not snap back inside.
