@@ -26,7 +26,7 @@ File _scratch(String name) {
 }
 
 class _Broken extends StatelessWidget {
-  const _Broken();
+  const _Broken({super.key});
 
   @override
   Widget build(BuildContext context) => throw StateError('the panel broke');
@@ -84,6 +84,28 @@ void main() {
         expect(find.textContaining('could not be drawn'), findsOneWidget);
         expect(find.textContaining('the panel broke'), findsOneWidget,
             reason: 'the fault has to name itself to be worth photographing');
+      });
+    });
+
+    // A fault box that faults is the one thing worse than Flutter's own:
+    // Flutter gives up on the frame.
+    testWidgets('stands at any size it is given', (tester) async {
+      await _installed(() async {
+        for (final given in <Widget Function(Widget)>[
+          (box) => SizedBox(width: 0, height: 0, child: box),
+          (box) => SizedBox(width: 6, height: 6, child: box),
+          (box) => SizedBox(width: 300, height: 20, child: box),
+          (box) => SizedBox(width: 40, height: 300, child: box),
+          (box) => SizedBox(width: 600, height: 400, child: box),
+          // No limit either way, then a parent that asks what size it wants.
+          (box) => UnconstrainedBox(child: box),
+          (box) => IntrinsicWidth(child: IntrinsicHeight(child: box)),
+        ]) {
+          await tester.pumpWidget(
+              Center(child: given(_Broken(key: UniqueKey()))));
+          expect(tester.takeException(), isA<StateError>(),
+              reason: 'the failed build, and nothing from the box');
+        }
       });
     });
   });
