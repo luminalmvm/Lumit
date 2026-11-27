@@ -73,6 +73,7 @@ enum ProfileGroup {
             'precompose_move_attributes',
             'precompose_adjust_duration',
             'precompose_open_new_comp',
+            'last_comp_settings',
             'timeline_columns',
             'default_expression_language',
             'share_name',

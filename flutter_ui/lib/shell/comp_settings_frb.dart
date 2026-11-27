@@ -179,6 +179,48 @@ Future<bool> showCompSettingsFrb({
   return applied ?? false;
 }
 
+Map<String, dynamic> compSettingsJson(BridgeCompSettings s) => {
+      'width': s.width,
+      'height': s.height,
+      'fps': [s.fpsNum, s.fpsDen],
+      'duration': [s.duration.num, s.duration.den],
+      'background': [...s.background],
+      'shutter_angle': s.shutterAngle,
+      'samples': [s.motionBlurSamples, s.motionBlurLimit],
+    };
+
+BridgeCompSettings? compSettingsFromJson(Object? j) {
+  try {
+    if (j is! Map) return null;
+    final fps = (j['fps'] as List).cast<num>();
+    final duration = (j['duration'] as List).cast<num>();
+    final background = (j['background'] as List).cast<num>();
+    final samples = (j['samples'] as List).cast<num>();
+    final s = BridgeCompSettings(
+      name: '',
+      width: (j['width'] as num).toInt().clamp(16, 16384),
+      height: (j['height'] as num).toInt().clamp(16, 16384),
+      fpsNum: fps[0].toInt(),
+      fpsDen: fps[1].toInt(),
+      duration: BridgeRational(
+          num: duration[0].toInt(), den: duration[1].toInt()),
+      background: F32Array4(Float32List.fromList(
+          [for (final c in background) c.toDouble()])),
+      shutterAngle: (j['shutter_angle'] as num).toDouble().clamp(0.0, 720.0),
+      motionBlurSamples: samples[0].toInt().clamp(1, 256),
+      motionBlurLimit: samples[1].toInt().clamp(1, 256),
+    );
+    final valid = s.fpsNum > 0 &&
+        s.fpsDen > 0 &&
+        s.duration.num > 0 &&
+        s.duration.den > 0 &&
+        background.length == 4;
+    return valid ? s : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 /// Make a comp, asking first. Returns the new comp, or null when cancelled.
 ///
 /// `footage` is what was dropped on the New composition button: the fields open
@@ -206,11 +248,12 @@ Future<CompositionReference?> showNewCompositionFrb({
   /// a node graph is sized and timed like any comp, and only the door it goes
   /// through differs, because a comp is born one or the other.
   bool nodeGraph = false,
+  BridgeCompSettings? remembered,
 }) async {
   // Probed before the dialog opens rather than inside it: `mediaInfo` reads the
   // container with FFmpeg, and a dialog that popped up and then rearranged itself
   // is worse than one that appears already right.
-  var initial = BridgeCompSettings.defaults();
+  var initial = remembered ?? BridgeCompSettings.defaults();
   var timed = false;
   for (final item in footage) {
     final info = await item.mediaInfo();
