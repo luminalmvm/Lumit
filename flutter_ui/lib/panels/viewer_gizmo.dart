@@ -3489,7 +3489,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     final now = _pickedIn(owner);
     if (now.length != left.length) return 0;
     for (var i = 0; i < now.length; i++) {
-      if ((now[i] - left[i]).distance > 0.05) return 0;
+      if ((now[i] - now[0] - (left[i] - left[0])).distance > 0.05) return 0;
     }
     return turn.angle;
   }
