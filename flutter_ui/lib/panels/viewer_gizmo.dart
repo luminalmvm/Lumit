@@ -3443,7 +3443,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     }
     final owner = _pointsOwner(null);
     if (owner == null ||
-        pickedPointsFrame(boxes, _points, owner, 0, only: only) == null) {
+        pickedPointsFrame(boxes, _points, owner, 0) == null) {
       return;
     }
     setState(() {
@@ -3454,10 +3454,9 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   }
 
   LayerBox? _pointsOwner(UuidValue? id) {
-    final only = _pathBeingEdited;
     LayerBox? first;
     for (final box in _editablePointBoxes) {
-      if (!pathPointsOf(box, only: only).any((p) => _points.contains(p.key))) {
+      if (!pathPointsOf(box).any((p) => _points.contains(p.key))) {
         continue;
       }
       if (box.id == id) return box;
@@ -3472,13 +3471,12 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     final owner = _pointsOwner(turn.layer);
     if (owner == null) return null;
     final angle = _boxAngle(owner);
-    return pickedPointsFrame(_editablePointBoxes, _points, owner, angle,
-        only: _pathBeingEdited);
+    return pickedPointsFrame(_editablePointBoxes, _points, owner, angle);
   }
 
   List<Offset> _pickedIn(LayerBox owner, [Offset Function(Offset)? map]) => [
         for (final box in _editablePointBoxes)
-          for (final p in pathPointsOf(box, only: _pathBeingEdited))
+          for (final p in pathPointsOf(box))
             if (_points.contains(p.key))
               owner.map.layerOf(map == null ? p.at : map(p.at)),
       ];
