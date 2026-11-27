@@ -7,6 +7,8 @@ use std::sync::OnceLock;
 
 use crate::GpuContext;
 
+use super::blur::BlurParams;
+use super::gaussian::{LINES, TILE};
 use super::lens_blur::{bind_layout, scratch, Slot};
 use super::{work_texture, FxEngine};
 
@@ -112,6 +114,7 @@ pub(super) struct SpriteFlareFx {
     draw: (wgpu::BindGroupLayout, wgpu::RenderPipeline),
     add: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
     over: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
+    soft: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
     lights: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
     detect: (
         wgpu::BindGroupLayout,
@@ -219,6 +222,23 @@ impl SpriteFlareFx {
             c,
         );
         let over_pipe = compute(&over_bgl, &module, "sf_over");
+        let soft_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("fx-sprite-flare-soft"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../fx_blur.wgsl").into()),
+        });
+        let soft_bgl = bind_layout(
+            device,
+            "fx-sprite-flare-soft",
+            &[
+                (0, Slot::Tex),
+                (1, Slot::Tex),
+                (2, Slot::Store(LIGHT_FORMAT)),
+                (3, Slot::Uniform),
+                (4, Slot::Tex),
+            ],
+            c,
+        );
+        let soft_pipe = compute(&soft_bgl, &soft_module, "blur_pass");
         let lights_bgl = bind_layout(
             device,
             "fx-sprite-flare-lights",
@@ -254,6 +274,7 @@ impl SpriteFlareFx {
             draw: (draw_bgl, draw),
             add: (add_bgl, add_pipe),
             over: (over_bgl, over_pipe),
+            soft: (soft_bgl, soft_pipe),
             lights: (lights_bgl, lights_pipe),
             detect: (detect_bgl, tiles, pick),
             textures: OnceLock::new(),
@@ -504,20 +525,24 @@ impl FxEngine {
         rp.set_bind_group(0, &draw_group, &[]);
         rp.draw(0..6, 0..count);
         drop(rp);
-        let (soft, mut enc) = if op.defocus > 0.0 {
-            let over = scratch(
-                ctx,
-                w,
-                h,
-                LIGHT_FORMAT,
-                U::STORAGE_BINDING | U::TEXTURE_BINDING,
-                "fx-sprite-flare-over",
-            );
+        let soft = (op.defocus > 0.0).then(|| {
+            let half = |label| {
+                scratch(
+                    ctx,
+                    w,
+                    h,
+                    LIGHT_FORMAT,
+                    U::STORAGE_BINDING | U::TEXTURE_BINDING,
+                    label,
+                )
+            };
+            let (over, across) = (half("fx-sprite-flare-over"), half("fx-sprite-flare-across"));
+            let (v_over, v_across) = (view(&over), view(&across));
             let over_group = group(
                 &fx.over.0,
                 &[
                     entry(4, R::TextureView(&v_light)),
-                    entry(15, R::TextureView(&view(&over))),
+                    entry(15, R::TextureView(&v_over)),
                 ],
             );
             pass(
@@ -526,23 +551,45 @@ impl FxEngine {
                 &over_group,
                 [w.div_ceil(8), h.div_ceil(8)],
             );
-            drop(enc);
-            let b = self.blur(
-                ctx,
-                &over,
-                w,
-                h,
-                None,
-                &super::blur::BlurOp {
-                    radius_px: op.defocus,
+            for (dir, from, to, n) in [
+                (
+                    [1.0, 0.0],
+                    &v_over,
+                    &v_across,
+                    [w.div_ceil(TILE), h.div_ceil(LINES)],
+                ),
+                (
+                    [0.0, 1.0],
+                    &v_across,
+                    &v_over,
+                    [w.div_ceil(LINES), h.div_ceil(TILE)],
+                ),
+            ] {
+                let p = BlurParams {
+                    dir,
+                    radius: op.defocus,
+                    sigma: (op.defocus * 0.5).max(1e-3),
                     edge: 0,
-                    mix: 1.0,
-                },
-            );
-            (Some(b), ctx.encoder("fx-sprite-flare-add"))
-        } else {
-            (None, enc)
-        };
+                    mix_amt: 1.0,
+                    matte_on: 0.0,
+                    _pad0: 0.0,
+                    field: [[0.0; 4]; 3],
+                };
+                let p = buffer("fx-sprite-flare-soft", bytemuck::bytes_of(&p), B::UNIFORM);
+                let g = group(
+                    &fx.soft.0,
+                    &[
+                        entry(0, R::TextureView(from)),
+                        entry(1, R::TextureView(from)),
+                        entry(2, R::TextureView(to)),
+                        entry(3, p.as_entire_binding()),
+                        entry(4, R::TextureView(from)),
+                    ],
+                );
+                pass(&mut enc, &fx.soft.1, &g, n);
+            }
+            over
+        });
         let v_soft = view(soft.as_ref().unwrap_or(&light));
         let add_group = group(
             &fx.add.0,
@@ -561,9 +608,6 @@ impl FxEngine {
             [w.div_ceil(8), h.div_ceil(8)],
         );
         drop(enc);
-        if let Some(b) = soft {
-            ctx.recycle(b);
-        }
         out
     }
 }
