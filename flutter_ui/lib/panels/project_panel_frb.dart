@@ -923,7 +923,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
     ProjectCells cells() => _cellsFor(item, id,
         item is ItemReference_Footage && (_missing[id] ?? false));
     return switch (_sortColumn!) {
-      ProjectColumn.name => (_names[id] ?? '').toLowerCase(),
+      ProjectColumn.name => _naturalKey(_names[id] ?? ''),
       ProjectColumn.items => _childCounts[id] ?? -1,
       ProjectColumn.size => _cellNumber(cells().size),
       ProjectColumn.fps => _cellNumber(cells().fps),
@@ -932,6 +932,14 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
       ProjectColumn.path => (cells().path ?? '').toLowerCase(),
     };
   }
+
+  static final _digits = RegExp(r'\d+');
+
+  static String _naturalKey(String name) =>
+      name.toLowerCase().replaceAllMapped(_digits, (m) {
+        final n = m[0]!.replaceFirst(RegExp(r'^0+(?=\d)'), '');
+        return '${n.length.toString().padLeft(4, '0')}$n';
+      });
 
   /// A Size or fps cell as a number: the pixel count of `1920×1080`, and the
   /// leading figure of anything else (`25`, `48 kHz`).

@@ -41,7 +41,6 @@ pub const MATTE_PORT: Port = Port::new("matte", "Matte", PortType::Matte);
 pub const INPUT_PORT: Port = Port::new("input", "Input", PortType::Image);
 pub const OUTPUT_PORT: Port = Port::new("output", "Output", PortType::Image);
 pub const KEY_PORT: Port = Port::new("key", "Key", PortType::Matte);
-pub const AUDIO_PORT: Port = Port::new("audio", "Audio", PortType::Audio);
 /// The Layer out node's **Volume** — the one layer property a wire may land on
 /// (the Audio workspace board's *Duck under*). A number in decibels: driven, it
 /// overrides the layer's own Volume keyframes exactly as a wired effect
@@ -56,13 +55,12 @@ pub const OUT_VOLUME_PORT: Port = Port::new("volume", "Volume", PortType::Number
 ///
 /// Gathered in one list so the label walk ([`crate::fx::labels`]) can
 /// find their words the same way it finds an effect's.
-pub const DERIVED_PORTS: [Port; 7] = [
+pub const DERIVED_PORTS: [Port; 6] = [
     IMAGE_PORT,
     MATTE_PORT,
     INPUT_PORT,
     OUTPUT_PORT,
     KEY_PORT,
-    AUDIO_PORT,
     OUT_VOLUME_PORT,
 ];
 
