@@ -26,20 +26,156 @@ The standard OpenFX locations, scanned once at start-up:
 | Linux | `/usr/OFX/Plugins` |
 | Linux, in the Flatpak | `/usr/OFX/Plugins` on the machine, read at `/run/host/usr/OFX/Plugins` |
 
-Anything on the `OFX_PLUGIN_PATH` environment variable is scanned too. Each folder is
-searched four folders deep for `.ofx.bundle` bundles.
+Anything on the `OFX_PLUGIN_PATH` environment variable is scanned too; see
+[Add another folder](#add-another-folder). Each folder is searched four folders deep for
+`.ofx.bundle` bundles.
 
 The scan runs as Lumit starts, before its window opens, and the splash names each bundle
 as it is read. Install a plugin while Lumit is running and it appears the next time you
 launch.
 
-A plugin Lumit cannot use is turned away, and the reason is written to `plugin-scan.txt`
-beside `plugins.json`; see [Troubleshooting](/reference/troubleshooting/#a-plugin-is-missing).
-A scan that turns nothing away leaves the last report in place. The other plugins in the
-folder are unaffected. Retimer and paint plugins are turned away.
+A plugin Lumit cannot use is turned away, and the reason is written to `plugin-scan.txt`;
+see [The scan report](#the-scan-report). The other plugins in the folder are unaffected.
+Retimer and paint plugins are turned away. A plugin that checks which application is
+hosting it can refuse Lumit.
+
+After Effects `.aex` plugins are not OpenFX and are not read.
 
 An installed [extension](/use/extensions/) can carry an OpenFX bundle in its own folder.
 It is found by the same scan.
+
+## Add another folder
+
+Lumit has no setting for plugin folders. A folder outside the standard ones is named in
+the `OFX_PLUGIN_PATH` environment variable, which is set outside Lumit and read as Lumit
+starts.
+
+- The value is one folder, or several separated by `;` on Windows and `:` on macOS and
+  Linux.
+- An entry is a folder holding bundles, or one `.ofx.bundle`.
+- The standard folders are still scanned, and scanned first. Where two bundles hold the
+  same plugin, the first found is used.
+
+Lumit reads it only at start-up. With **Keep running in the background** on, closing the
+window leaves Lumit running, so choose **Quit Lumit** on the tray icon before starting it
+again.
+
+### Windows
+
+1. Open the Start menu, type `environment`, and choose **Edit environment variables for
+   your account**.
+2. Under **User variables**, choose **New…**. If `OFX_PLUGIN_PATH` is already listed,
+   select it and choose **Edit…**.
+3. Set **Variable name** to `OFX_PLUGIN_PATH` and **Variable value** to the folder, such
+   as `D:\OFX\Plugins`.
+4. Choose **OK** in both windows.
+5. Quit Lumit and start it again.
+
+A launcher or terminal that was already open starts Lumit with the old value until it is
+restarted, or until you sign out of Windows and back in.
+
+### macOS
+
+1. Open **Terminal**, in **Applications ▸ Utilities**.
+2. Run:
+
+   ```bash
+   launchctl setenv OFX_PLUGIN_PATH "/Users/you/OFX/Plugins"
+   ```
+
+3. Quit Lumit and open it again.
+
+The value lasts until you log out or the Mac restarts. Starting Lumit from Terminal sets
+it for that run alone:
+
+```bash
+OFX_PLUGIN_PATH="/Users/you/OFX/Plugins" /Applications/Lumit.app/Contents/MacOS/Lumit
+```
+
+### Linux, in the Flatpak
+
+A folder under the machine's `/usr` is named with `/run/host` in front, as
+`/run/host/usr/local/OFX/Plugins`, and needs no grant.
+
+1. Open a terminal and run:
+
+   ```bash
+   flatpak override --user --env=OFX_PLUGIN_PATH=/home/you/OFX/Plugins io.github.luminalmvm.Lumit
+   ```
+
+2. For a folder outside your home folder, `/media`, `/run/media`, `/mnt` and `/usr`, grant
+   it by its path as well:
+
+   ```bash
+   flatpak override --user --filesystem=/opt/OFX/Plugins:ro io.github.luminalmvm.Lumit
+   ```
+
+3. Quit Lumit and start it again.
+
+### Linux, the AppImage
+
+Start it from a terminal with the variable set:
+
+```bash
+OFX_PLUGIN_PATH="$HOME/OFX/Plugins" ./lumit-*.AppImage
+```
+
+To set it for every start:
+
+1. Add this line to `~/.profile`, or to `~/.bash_profile` or `~/.zprofile` where your
+   shell uses one:
+
+   ```bash
+   export OFX_PLUGIN_PATH="$HOME/OFX/Plugins"
+   ```
+
+2. Log out and back in.
+
+## The scan report
+
+When the scan turns something away, Lumit writes `plugin-scan.txt` beside `plugins.json` in
+its data folder:
+
+| Platform | Folder |
+| --- | --- |
+| Windows | `%APPDATA%\Lumit\Lumit\data` |
+| macOS | `~/Library/Application Support/dev.Lumit.Lumit` |
+| Linux, in the Flatpak | `~/.var/app/io.github.luminalmvm.Lumit/data/lumit` |
+| Linux, the AppImage | `~/.local/share/lumit` |
+
+Nothing in Lumit shows the report or opens the file. The Windows path can be pasted into
+File Explorer's address bar, and the macOS one into Finder's **Go ▸ Go to Folder…**.
+
+- It lists what was turned away, one to a line. A plugin that loaded is not in it.
+- It carries no date. Each report replaces the last, and a scan that turns nothing away
+  leaves the last report in place. The file's modified time is when it was written.
+- Extension effects and CLAP and VST3 plugins that were turned away are in it too.
+- A folder that does not exist is not in it. Nor is a bundle with no `Contents/Win64`,
+  `Contents/MacOS` or `Contents/Linux-x86-64` folder for the platform Lumit is running on,
+  a `.ofx` file that is not inside a `.ofx.bundle`, or a second copy of a plugin already
+  found.
+
+A line for an OpenFX plugin is the path of its `.ofx` file, then the reason. A reason about
+one plugin in the file has that plugin's identifier in front of it:
+
+```text
+C:\…\Contents\Win64\Example.ofx: com.example.Slow: it works only in OfxImageEffectContextRetimer, which this host does not drive
+C:\…\Contents\Win64\Example.ofx: it holds no effect this host can drive
+```
+
+| The reason | Means |
+| --- | --- |
+| `it holds no effect this host can drive` | The file loaded and offered nothing Lumit can use. At later launches Lumit does not start the file again and the line ends `(as at the last scan)`, until the file changes or Lumit is updated. |
+| `it works only in …, which this host does not drive` | The plugin is none of the kinds Lumit drives: filter, general, generator and transition. |
+| `the plugin did not load (…)`<br/>`describe failed (…)`<br/>`describe in the … context failed (…)` | The plugin failed or refused as Lumit asked it what it is. The brackets hold its answer. |
+| `the host could not describe it (…)` | Lumit failed as it read the plugin. |
+| A line naming the `broker` | The broker is the process Lumit starts for the file. It did not start, the plugin's file could not be opened, or the plugin crashed or took more than 2 minutes to describe itself. |
+| `switched off in preferences` | The plugin is [switched off](#switch-one-off). |
+| `an effect of that name is already in the catalogue` | Another effect already has the plugin's identifier. |
+| `two parameters share the id …` | The plugin gives two of its parameters the same identifier. |
+
+A plugin that refuses Lumit as its host is usually turned away with `did not load`,
+`describe failed` or `no effect this host can drive`.
 
 ## Where they appear
 
@@ -65,8 +201,8 @@ offered and stops rendering, and the choice is remembered between launches.
 An audio plugin is switched off the same way, and wears **This plugin is switched off**.
 
 Switching one off takes effect immediately. Lumit has no command that switches one back
-on. The list is kept in `plugins.json` in Lumit's data folder, and a plugin taken off that
-list is offered again at the next launch.
+on. The list is kept in `plugins.json` in Lumit's [data folder](#the-scan-report), and a
+plugin taken off that list is offered again at the next launch.
 
 Any effect already in a project using a switched-off plugin is **kept as it was saved**,
 and renders as if it were not there.
