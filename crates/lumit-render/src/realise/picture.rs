@@ -299,12 +299,7 @@ impl Realiser<'_> {
                         _ => (lumit_media::decode::PixelFormat::Srgb8, None),
                     };
                     let upload = |rgba: &[u8], nw, nh| {
-                        let up = self.upload_source(rgba, nw, nh, format, &colour_space);
-                        if l.premultiplied() {
-                            up
-                        } else {
-                            self.fx.premultiply(&self.ctx, &up)
-                        }
+                        self.upload_source(rgba, nw, nh, format, &colour_space)
                     };
                     let neighbours: Vec<(i32, wgpu::Texture)> = match self.flow {
                         Some(kept) if !l.neighbours.is_empty() => {
@@ -321,6 +316,13 @@ impl Realiser<'_> {
                             .neighbours
                             .iter()
                             .map(|(offset, rgba, nw, nh)| (*offset, upload(rgba, *nw, *nh)))
+                            .collect(),
+                    };
+                    let neighbours = match l.premultiplied() {
+                        true => neighbours,
+                        false => neighbours
+                            .into_iter()
+                            .map(|(offset, t)| (offset, self.fx.premultiply(&self.ctx, &t)))
                             .collect(),
                     };
                     // The dense motion fields, one per offset a
