@@ -462,6 +462,11 @@ bool FlutterWindow::OnCreate() {
           result->Success(flutter::EncodableValue(floating::Displays()));
           return;
         }
+        if (method == "keyboardLayout") {
+          result->Success(flutter::EncodableValue(
+              reinterpret_cast<int64_t>(::GetKeyboardLayout(0))));
+          return;
+        }
         if (method == "ghost") {
           RECT rect;
           if (args && RectArgument(*args, "rect", &rect)) {
@@ -737,6 +742,9 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     // looked at again (lib/shell/dock_widget.dart).
     case WM_DISPLAYCHANGE:
       ::SetTimer(hwnd, kDisplaysTimer, kDisplaysAfterMs, nullptr);
+      break;
+    case WM_INPUTLANGCHANGE:
+      Tell("lumit/window", "keyboardLayoutChanged");
       break;
     // Over the maximise button the frame answers the hit test
     // (win32_window.cpp), so the mouse comes here and not to Flutter. Flutter

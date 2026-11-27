@@ -53,6 +53,26 @@ bool lumitInFront() {
   }
 }
 
+typedef _MapKeyC = Uint32 Function(Uint32 code, Uint32 type, IntPtr layout);
+typedef _MapKeyD = int Function(int code, int type, int layout);
+
+final _mapKey = _user32.lookupFunction<_MapKeyC, _MapKeyD>('MapVirtualKeyExW');
+
+int winScancode(int virtualKey, int layout) =>
+    Platform.isWindows ? _mapKey(virtualKey, 0, layout) : 0;
+
+String? winKeyLayout(int layout, List<int> scancodes) {
+  if (!Platform.isWindows) return null;
+  final chars = StringBuffer();
+  for (final scancode in scancodes) {
+    final virtualKey = _mapKey(scancode, 3, layout);
+    final char = _mapKey(virtualKey, 2, layout) & 0xffff;
+    if (virtualKey == 0 || char == 0) return null;
+    chars.writeCharCode(char);
+  }
+  return chars.toString();
+}
+
 /// `CREDENTIALW`, as `wincred.h` lays it out.
 final class _Credential extends Struct {
   @Uint32()
