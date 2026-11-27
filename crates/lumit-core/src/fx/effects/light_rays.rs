@@ -525,7 +525,7 @@ fn noise4(x: [f64; 4], period: [i64; 4], octave: u32) -> f32 {
         let mut c = base;
         for (d, cd) in c.iter_mut().enumerate() {
             if k >> d & 1 == 1 {
-                *cd += 1;
+                *cd = cd.saturating_add(1);
                 weight *= t[d];
             } else {
                 weight *= 1.0 - t[d];
