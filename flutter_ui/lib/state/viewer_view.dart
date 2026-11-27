@@ -83,7 +83,6 @@ enum ViewerView {
         _ => null,
       };
 
-  /// What the picker's row reads.
   String get title => switch (this) {
         ViewerView.activeCamera => l10n.viewerViewActiveCamera,
         ViewerView.front => l10n.viewerViewFront,
@@ -99,7 +98,6 @@ enum ViewerView {
       };
 }
 
-/// What the 3D view menu shows for each way of showing models.
 extension ModelDisplayRow on BridgeModelDisplay {
   String get title => switch (this) {
         BridgeModelDisplay.final_ => l10n.viewerDisplayFinal,
@@ -110,8 +108,6 @@ extension ModelDisplayRow on BridgeModelDisplay {
       };
 }
 
-/// The 3D view shortcuts a Viewer view starts with, F10 to F12 in turn, as
-/// After Effects sets them.
 const List<ViewerView> defaultViewSlots = [
   ViewerView.front,
   ViewerView.custom1,
@@ -126,10 +122,8 @@ enum ViewerCameraCommand {
   lookAtAll,
   reset,
 
-  /// Put the selected layers on the layer or Null under the pointer.
   placeOnSurface;
 
-  /// The keymap action id this command answers.
   String get action => switch (this) {
         ViewerCameraCommand.lookAtSelected => 'viewer.3d.look.selected',
         ViewerCameraCommand.lookAtAll => 'viewer.3d.look.all',
@@ -137,7 +131,6 @@ enum ViewerCameraCommand {
         ViewerCameraCommand.placeOnSurface => 'viewer.3d.place',
       };
 
-  /// What the View menu's row reads.
   String get title => switch (this) {
         ViewerCameraCommand.lookAtSelected => l10n.menuLookAtSelectedLayers,
         ViewerCameraCommand.lookAtAll => l10n.menuLookAtAllLayers,
@@ -164,14 +157,12 @@ enum ViewerZoomCommand {
   zoomOut,
   fit;
 
-  /// The keymap action id this command answers (docs/07 §15).
   String get action => switch (this) {
         ViewerZoomCommand.zoomIn => 'viewer.zoom.in',
         ViewerZoomCommand.zoomOut => 'viewer.zoom.out',
         ViewerZoomCommand.fit => 'viewer.zoom.fit',
       };
 
-  /// What the View menu's row reads.
   String get title => switch (this) {
         ViewerZoomCommand.zoomIn => l10n.menuZoomIn,
         ViewerZoomCommand.zoomOut => l10n.menuZoomOut,
@@ -225,7 +216,6 @@ enum PreviewResolution {
         _ => null,
       };
 
-  /// What the View ▸ Resolution row and the bar dropdown read.
   String get title => switch (this) {
         PreviewResolution.auto => l10n.menuAuto,
         PreviewResolution.full => l10n.menuFull,

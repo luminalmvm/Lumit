@@ -1,5 +1,3 @@
-//! The number that names how frames are drawn, and why it last moved.
-
 /// Bump when any rendering algorithm's output changes — or when the key itself
 /// starts covering something it did not: every cached frame keyed under the old
 /// version stops being addressed, which is what makes a fix to the key safe.

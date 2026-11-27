@@ -14,16 +14,13 @@ const RED: [f32; 3] = [0.8, 0.1, 0.1];
 const GREEN: [f32; 3] = [0.1, 0.7, 0.1];
 const BLUE: [f32; 3] = [0.1, 0.1, 0.8];
 const GREY: [f32; 3] = [0.3, 0.3, 0.3];
-/// Red with little colour: `max − min` is 0.18.
 const DULL: [f32; 3] = [0.28, 0.1, 0.1];
 const COLOURS: [[f32; 3]; 5] = [RED, GREEN, BLUE, GREY, DULL];
 
-/// The key a doubled pixel was given.
 fn key(out: [f32; 3], u: [f32; 3]) -> f32 {
     out[1] / u[1] - 1.0
 }
 
-/// A doubling node with `rows`, over the five colours: each one's key.
 fn keys(rows: &[(&str, EffectValue)]) -> [f32; 5] {
     let mut all = vec![("gain", crate::support::rgb([2.0, 2.0, 2.0]))];
     all.extend(rows.iter().cloned());
@@ -40,7 +37,6 @@ fn assert_keys(got: [f32; 5], want: [f32; 5], what: &str) {
     }
 }
 
-/// The 3D key's sample at a colour: Cb and Cr doubled, and its luma.
 fn sample(u: [f32; 3]) -> (EffectValue, EffectValue) {
     let y = luma(u);
     let (cb, cr) = ((u[2] - y) / 1.8556, (u[0] - y) / 1.5748);
@@ -50,9 +46,6 @@ fn sample(u: [f32; 3]) -> (EffectValue, EffectValue) {
     )
 }
 
-/// HSL, RGB, Luma and 3D each key their own colours; Invert, the clips and
-/// Clean black act on the key as written; and Denoise, Grow and Blur keep a
-/// big patch keyed whole.
 #[test]
 fn each_qualifier_mode_keys_its_own_colours() {
     let hsl = [
@@ -113,8 +106,6 @@ fn each_qualifier_mode_keys_its_own_colours() {
     dropped.extend(near.iter().cloned());
     assert_keys(keys(&dropped), [1.0, 1.0, 0.0, 1.0, 1.0], "3d drop");
 
-    // Red on the left, blue on the right: the finesse rows soften the edge
-    // and leave the middle of each side as it was keyed.
     let (w, h) = (24u32, 8u32);
     let halves: Vec<[f32; 3]> = (0..w * h)
         .map(|i| if i % w < w / 2 { RED } else { BLUE })
@@ -134,9 +125,6 @@ fn each_qualifier_mode_keys_its_own_colours() {
     }
 }
 
-/// Each window shape keys inside its outline and nothing outside, turned,
-/// inverted, faded and subtracted as its rows say; and the GPU's uniform
-/// carries the window the CPU drew.
 #[test]
 fn each_window_keys_inside_its_shape() {
     let (w, h) = (32u32, 32u32);
@@ -185,8 +173,6 @@ fn each_window_keys_inside_its_shape() {
     cut.push(("win1_subtract", EffectValue::Bool(true)));
     check(&cut, &[(16, 16, 0.0), (2, 2, 1.0)], "a lone subtract");
 
-    // A circle 8 px round with 4 px of outer softness: the edge fades as a
-    // smoothstep of the distance past it.
     let soft = [
         ("win1_shape", EffectValue::Choice(1)),
         ("win1_w", f(16.0)),
@@ -200,7 +186,6 @@ fn each_window_keys_inside_its_shape() {
         "soft",
     );
 
-    // A square turned 45 degrees keys a diamond.
     let diamond = [
         ("win1_shape", EffectValue::Choice(2)),
         ("win1_w", f(10.0)),
@@ -221,8 +206,6 @@ fn each_window_keys_inside_its_shape() {
     assert_eq!(words[25][..2], [5.0, 5.0]);
     assert_eq!(words[44..58], pk.hdr.words());
 
-    // A triangle, straight and smooth: the smooth outline bulges past the
-    // straight one's base.
     let triangle = EffectValue::Shape(vec![[-1.0, -1.0], [1.0, -1.0], [0.0, 1.0]]);
     let polygon = [
         ("win1_shape", EffectValue::Choice(3)),
@@ -254,7 +237,6 @@ fn each_window_keys_inside_its_shape() {
     let gradient = [("win1_shape", EffectValue::Choice(4))];
     check(&gradient, &[(16, 4, 1.0), (16, 28, 0.0)], "gradient");
 
-    // A big circle less a small square.
     let ring = [
         ("win1_shape", EffectValue::Choice(1)),
         ("win1_w", f(30.0)),

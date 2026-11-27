@@ -20,7 +20,6 @@ use crate::fx::{
 use crate::model::{EffectInstance, EffectValue};
 use lumit_fx_macros::Effect;
 
-/// What the points are sorted by, in Choice order.
 pub const SORT_BY_OPTIONS: &[&str] = &[
     "Shuffle",
     "Position x",
@@ -40,15 +39,12 @@ const BY_INDEX: u32 = 5;
 /// The dice a shuffle reads, apart from every other attribute's.
 const SHUFFLE: u32 = 0x5048_5546;
 
-/// The seed is read only by Shuffle. Centre, read only by Distance and Angle,
-/// is greyed by [`SortPointsDef::row_state`].
 pub const SORT_POINTS_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
     param: "seed",
     on: "sort_by",
     cond: EnabledCond::ChoiceIs(BY_SHUFFLE),
 }];
 
-/// Sort distribution's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "sort_points",
@@ -68,7 +64,6 @@ pub struct SortPoints {
     #[choice(label = "Sort by", options = SORT_BY_OPTIONS, default = 0)]
     pub sort_by: u32,
 
-    /// The order turned round: the last first.
     #[toggle(label = "Reverse", default = false)]
     pub reverse: bool,
 
@@ -80,7 +75,6 @@ pub struct SortPoints {
     #[slider(label = "Centre Y", min = 0.0, max = 2160.0, default = 540.0, unit = Px)]
     pub centre_y: f32,
 
-    /// Which order Shuffle makes.
     #[seed]
     pub seed: u32,
 
@@ -146,7 +140,6 @@ impl SortPoints {
     }
 }
 
-/// Sort distribution's behaviour, the same shape as Pick points'.
 pub struct SortPointsDef;
 
 impl EffectDef for SortPointsDef {
@@ -154,7 +147,6 @@ impl EffectDef for SortPointsDef {
         &<SortPoints as EffectMetadata>::SCHEMA
     }
 
-    /// A stream in and a stream out, beside the picture.
     fn signature(&self) -> Signature {
         Signature::Image {
             inputs: POINTS_IN,
@@ -166,7 +158,6 @@ impl EffectDef for SortPointsDef {
         push(SortPoints::DERIVED_PX_SCALE, Value::Float(cx.px_scale));
     }
 
-    /// Centre greys where the order takes no notice of it.
     fn row_state(&self, inst: &EffectInstance) -> RowState {
         let by = match inst.param("sort_by") {
             Some(EffectValue::Choice(v)) => *v,

@@ -1,11 +1,3 @@
-//! The host's own tests.
-//!
-//! The handle tests are the ones that matter most: they are the seed corpus
-//! for the sanitiser run that comes with the out-of-process broker
-//! (docs/impl/ofx-host.md §5 item 2). Every one of them hands a suite entry
-//! point a handle it was never given and checks that the answer is a status
-//! code and that nothing moved.
-
 use std::ffi::{c_char, c_int, c_uint, c_void, CStr};
 use std::mem::{offset_of, size_of};
 use std::path::{Path, PathBuf};
@@ -34,14 +26,6 @@ use crate::suites::{memory, multi_thread, property};
 mod hidden_rows;
 mod plugin_window;
 
-// ---------------------------------------------------------------- handles --
-
-// ------------------------------------------------------------- properties --
-
-// ------------------------------------------------- the property suite, C --
-
-/// Make a property set the suite can be called against, and return its handle
-/// as the C API carries it.
 fn a_live_property_set() -> *mut c_void {
     let mut set = PropertySet::new();
     set.seed("OfxTestInt", PropValue::int(11));
@@ -76,19 +60,16 @@ fn the_property_suite_reads_and_writes_through_c() {
         );
         assert_eq!(int_out, 42);
 
-        // A double read as an int is a value error, through C as in Rust.
         assert_eq!(
             (suite.prop_get_int)(handle, c"OfxTestDouble".as_ptr(), 0, &raw mut int_out),
             Status::ErrValue.code()
         );
 
-        // A name the set does not have.
         assert_eq!(
             (suite.prop_get_int)(handle, c"OfxTestAbsent".as_ptr(), 0, &raw mut int_out),
             Status::ErrUnknown.code()
         );
 
-        // A null property name, and a null out-parameter.
         assert_eq!(
             (suite.prop_get_int)(handle, std::ptr::null(), 0, &raw mut int_out),
             Status::ErrValue.code()
@@ -98,7 +79,6 @@ fn the_property_suite_reads_and_writes_through_c() {
             Status::ErrValue.code()
         );
 
-        // A negative index is not an index.
         assert_eq!(
             (suite.prop_get_int)(handle, c"OfxTestInt".as_ptr(), -1, &raw mut int_out),
             Status::ErrBadIndex.code()
@@ -112,8 +92,6 @@ fn the_property_suite_reads_and_writes_through_c() {
         assert_eq!(CStr::from_ptr(string_out).to_bytes(), b"hello");
     }
 }
-
-// ------------------------------------------------------------ the host --
 
 #[test]
 fn the_host_property_table_says_only_true_things() {
@@ -200,7 +178,6 @@ fn fetch_suite_answers_for_what_exists_and_null_for_what_does_not() {
     assert!(!ask(c"OfxInteractSuite", 1).is_null());
     assert!(!ask(c"OfxMessageSuite", 2).is_null());
 
-    // A version we do not have is a null, not the version we do have.
     assert!(ask(c"OfxPropertySuite", 2).is_null());
     assert!(ask(c"OfxPropertySuite", 0).is_null());
 
@@ -208,8 +185,6 @@ fn fetch_suite_answers_for_what_exists_and_null_for_what_does_not() {
     // SAFETY: as above; a null name is a case the host must survive.
     assert!(unsafe { fetch(host.host, std::ptr::null(), 1) }.is_null());
 }
-
-// ----------------------------------------------------- memory and message --
 
 #[test]
 fn the_memory_suite_gives_back_only_what_it_gave_out() {
@@ -224,7 +199,6 @@ fn the_memory_suite_gives_back_only_what_it_gave_out() {
         );
         assert!(!block.is_null());
 
-        // A pointer nobody was given is refused without being followed.
         assert_eq!(
             (suite.memory_free)(0xdead_beef_usize as *mut c_void),
             Status::ErrBadHandle.code()
@@ -235,10 +209,8 @@ fn the_memory_suite_gives_back_only_what_it_gave_out() {
         );
 
         assert_eq!((suite.memory_free)(block), Status::Ok.code());
-        // Freeing it twice is the same forged pointer as any other.
         assert_eq!((suite.memory_free)(block), Status::ErrBadHandle.code());
 
-        // A zero-byte request still answers with something freeable.
         assert_eq!(
             (suite.memory_alloc)(std::ptr::null_mut(), 0, &raw mut block),
             Status::Ok.code()
@@ -246,7 +218,6 @@ fn the_memory_suite_gives_back_only_what_it_gave_out() {
         assert!(!block.is_null());
         assert_eq!((suite.memory_free)(block), Status::Ok.code());
 
-        // A null out-parameter is a value error, not a leak.
         assert_eq!(
             (suite.memory_alloc)(std::ptr::null_mut(), 16, std::ptr::null_mut()),
             Status::ErrValue.code()
@@ -254,12 +225,6 @@ fn the_memory_suite_gives_back_only_what_it_gave_out() {
     }
 }
 
-/// A plugin's allocations are billed against a ceiling, and the ceiling is what
-/// stops a runaway taking the machine with it rather than only itself.
-///
-/// The refusal is `kOfxStatErrMemory`, which every plugin already handles
-/// because a real allocator can return it — so this is the answer they have
-/// code for, not a new one they have to learn.
 #[test]
 fn a_plugin_may_not_allocate_past_its_ceiling() {
     let suite = &memory::SUITE;
@@ -270,7 +235,6 @@ fn a_plugin_may_not_allocate_past_its_ceiling() {
     unsafe {
         let before = memory::plugin_bytes_live();
 
-        // One request past the whole ceiling, refused outright.
         assert_eq!(
             (suite.memory_alloc)(
                 std::ptr::null_mut(),
@@ -279,18 +243,12 @@ fn a_plugin_may_not_allocate_past_its_ceiling() {
             ),
             Status::ErrMemory.code()
         );
-        // A size whose addition to the running total would overflow is the same
-        // refusal rather than a wrap into a small number.
         assert_eq!(
             (suite.memory_alloc)(std::ptr::null_mut(), usize::MAX, &raw mut block),
             Status::ErrMemory.code()
         );
-        // Nothing was allocated on either refusal.
         assert_eq!(memory::plugin_bytes_live(), before);
 
-        // An ordinary request is billed, and giving it back gives the budget
-        // back — a plugin that allocates and frees in a loop is not slowly
-        // refused for memory it no longer holds.
         assert_eq!(
             (suite.memory_alloc)(std::ptr::null_mut(), 4096, &raw mut block),
             Status::Ok.code()
@@ -301,17 +259,9 @@ fn a_plugin_may_not_allocate_past_its_ceiling() {
     }
 }
 
-/// A fan-out is refused rather than quietly narrowed.
-///
-/// OFX promises the plugin's function runs exactly `nThreads` times with
-/// indices 0..n-1, and plugins partition their work by that index — so running
-/// fewer would leave part of a picture unrendered without saying so, which is
-/// worse than any refusal.
 #[test]
 fn an_absurd_fan_out_is_refused_rather_than_run() {
     let suite = &multi_thread::SUITE;
-    // A function that would be called once per thread. It is never reached:
-    // every call below is refused before the fan-out starts.
     unsafe extern "C" fn never(_index: c_uint, _count: c_uint, _arg: *mut c_void) {
         // Reached only if the ceiling stopped working, and a test that fails
         // by hanging is a test nobody can read. Do nothing.
@@ -333,8 +283,6 @@ fn an_absurd_fan_out_is_refused_rather_than_run() {
     }
 }
 
-// ----------------------------------------------------------------- quirks --
-
 /// The shipped table presents Lumit to Red Giant Universe as DaVinci Resolve,
 /// because Universe reads `kOfxPropName` in `describeInContext` and answers
 /// `kOfxStatErrMissingHostFeature` to every host but a handful.
@@ -354,8 +302,6 @@ fn the_shipped_quirks_file_presents_the_host_to_universe_as_resolve() {
         "Magic Bullet takes Lumit's own name"
     );
 }
-
-// --------------------------------------------------------- struct layouts --
 
 #[test]
 fn the_c_structs_are_laid_out_as_c_lays_them_out() {
@@ -399,9 +345,6 @@ fn the_c_structs_are_laid_out_as_c_lays_them_out() {
     assert_eq!(size_of::<OfxMessageSuiteV1>(), pointer);
 }
 
-// ---------------------------------------------------------------- bundles --
-
-/// The test plugin's file name on this platform.
 fn test_plugin_file_name() -> &'static str {
     if cfg!(target_os = "windows") {
         "lumit_ofx_testplug.dll"
@@ -412,7 +355,6 @@ fn test_plugin_file_name() -> &'static str {
     }
 }
 
-/// Where Cargo put the test plugin, if it built it.
 fn test_plugin() -> Option<PathBuf> {
     let name = test_plugin_file_name();
     let exe = std::env::current_exe().ok()?;
@@ -431,9 +373,6 @@ fn test_plugin() -> Option<PathBuf> {
     None
 }
 
-/// Lay the test plugin out as a real bundle inside `root`, and answer with the
-/// path of the binary. `None` means the plugin was not built, and the caller
-/// skips.
 fn a_bundle_in(root: &Path) -> Option<PathBuf> {
     let source = test_plugin()?;
     let contents = root.join("Test.ofx.bundle").join("Contents");
@@ -444,7 +383,6 @@ fn a_bundle_in(root: &Path) -> Option<PathBuf> {
     Some(binary)
 }
 
-/// Say why a test did nothing, by name, so a skip is never silent.
 fn skipped(test: &str) {
     eprintln!(
         "{test}: skipped — {} was not found in the target directory. \
@@ -465,8 +403,6 @@ fn a_bundle_tree_is_scanned_for_its_binaries() {
 
     assert_eq!(scan_dir(root.path()), vec![binary]);
 
-    // A folder that is not a bundle, and a bundle with nothing in it, are both
-    // simply not plugins.
     let ignored = root.path().join("not-a-bundle");
     assert!(std::fs::create_dir_all(ignored.join("Contents").join(BUNDLE_ARCH_DIR)).is_ok());
     assert_eq!(scan_dir(root.path()).len(), 1);
@@ -529,7 +465,6 @@ fn the_host_is_given_to_a_plugin_once_before_it_is_loaded() {
     assert_eq!(plugin.identifier, "com.lumitlab.testplug");
     assert_eq!(plugin.version, (1, 0));
     assert!(plugin.is_supported_image_effect());
-    // Opening is not loading: nothing has been said to the plugin yet.
     assert_eq!(read(b"LumitTestPlugSetHostCalls\0"), 0);
 
     // Loading sets the process-wide host name, so it takes the name lock.
@@ -542,15 +477,12 @@ fn the_host_is_given_to_a_plugin_once_before_it_is_loaded() {
     );
     assert_eq!(read(b"LumitTestPlugHostSeenBeforeLoad\0"), 1);
 
-    // Loading twice does not hand the plugins a second host.
     bundle.load();
     assert_eq!(
         read(b"LumitTestPlugSetHostCalls\0"),
         lumit_ofx_testplug::PLUGIN_COUNT
     );
 
-    // The plugin got the six suites this host has and nothing it has not,
-    // which is the whole of `fetchSuite` proved from the plugin's side.
     let mask = read(b"LumitTestPlugSuiteMask\0");
     let expected = lumit_ofx_testplug::SUITE_PROPERTY
         | lumit_ofx_testplug::SUITE_MEMORY
@@ -560,7 +492,6 @@ fn the_host_is_given_to_a_plugin_once_before_it_is_loaded() {
         | lumit_ofx_testplug::SUITE_INTERACT;
     assert_eq!(u32::try_from(mask), Ok(expected));
 
-    // And its load message came back through the message suite.
     let message = lumit_ofx_testplug::LOAD_MESSAGE
         .to_string_lossy()
         .to_string();
@@ -596,7 +527,6 @@ fn a_plugin_finds_the_dlls_shipped_beside_it() {
     assert!(std::fs::copy(&needy, &binary).is_ok());
     assert!(std::fs::copy(&side, dir.join("lumit_side_dep.dll")).is_ok());
 
-    // Opened from somewhere else, the way the broker opens it.
     let opened = Bundle::open(&binary);
     assert!(
         opened.is_ok(),
@@ -604,8 +534,6 @@ fn a_plugin_finds_the_dlls_shipped_beside_it() {
         opened.err()
     );
 }
-
-// ---------------------------------------------------------------- describe --
 
 /// A loaded bundle of the five test plugins, or `None` if the plugin was not
 /// built. The temporary directory is handed back with it: dropping it would
@@ -626,7 +554,6 @@ fn a_loaded_bundle(test: &str) -> Option<(tempfile::TempDir, Bundle)> {
     Some((root, bundle))
 }
 
-/// One plugin from a scan, by identifier and major version.
 fn found<'a>(report: &'a ScanReport, identifier: &str, major: u32) -> Option<&'a DescribedPlugin> {
     report.effects.iter().find(|effect| {
         effect.descriptor.identifier == identifier && effect.descriptor.version.0 == major
@@ -672,7 +599,6 @@ fn a_plugin_describes_itself_into_the_schema_a_built_in_has() {
     let report = describe_bundle(&bundle);
     let full = found(&report, "com.lumitlab.testplug", 1).expect("the full plugin described");
 
-    // What it said about itself.
     assert_eq!(full.descriptor.label, "Test plug");
     assert_eq!(full.descriptor.grouping, "Lumit/Test");
     assert_eq!(
@@ -689,7 +615,6 @@ fn a_plugin_describes_itself_into_the_schema_a_built_in_has() {
             .collect::<Vec<_>>(),
         vec!["Source", "Output"]
     );
-    // The two controls Lumit has no row for are reported, never silently lost.
     assert_eq!(
         full.descriptor.unrepresented(),
         vec![
@@ -743,10 +668,6 @@ group Advanced | [\"offset_x\", \"offset_y\", \"offset_z\", \"count\"] | collaps
     );
 }
 
-// ------------------------------------------- the two new suites, through C --
-
-// ------------------------------------------------- instances and rendering --
-
 /// A picture whose every pixel says where it is and which channel it is, so an
 /// upside-down or mirrored frame is obvious rather than plausible.
 fn a_test_frame(width: usize, height: usize) -> Frame16 {
@@ -764,14 +685,12 @@ fn a_test_frame(width: usize, height: usize) -> Frame16 {
     Frame16::from_pixels(width, height, pixels).expect("the count matches the size")
 }
 
-/// A loaded bundle and its scan, ready for instances to be made from.
 fn a_described_bundle(test: &str) -> Option<(tempfile::TempDir, Bundle, ScanReport)> {
     let (root, bundle) = a_loaded_bundle(test)?;
     let report = describe_bundle(&bundle);
     Some((root, bundle, report))
 }
 
-/// The `PluginRef` in `bundle` with this identifier.
 fn plugin_of<'a>(bundle: &'a Bundle, identifier: &str) -> &'a crate::bundle::PluginRef {
     bundle
         .plugins()
@@ -780,7 +699,6 @@ fn plugin_of<'a>(bundle: &'a Bundle, identifier: &str) -> &'a crate::bundle::Plu
         .expect("the test bundle declares it")
 }
 
-/// One described plugin out of a scan, by identifier.
 fn described<'a>(report: &'a ScanReport, identifier: &str) -> &'a DescribedPlugin {
     report
         .effects
@@ -789,7 +707,6 @@ fn described<'a>(report: &'a ScanReport, identifier: &str) -> &'a DescribedPlugi
         .expect("the plugin described itself")
 }
 
-/// The action log the test plugin recorded, as the host's own action names.
 fn action_log(probe: &libloading::Library) -> Vec<String> {
     // SAFETY: the export is declared in the test plugin with this signature.
     let symbol: Result<libloading::Symbol<unsafe extern "C" fn(*mut c_char, c_int) -> c_int>, _> =
@@ -810,7 +727,6 @@ fn action_log(probe: &libloading::Library) -> Vec<String> {
     text.split(',').map(str::to_owned).collect()
 }
 
-/// Call one of the plugin's no-argument probe exports.
 fn probe_call(probe: &libloading::Library, name: &[u8]) -> c_int {
     // SAFETY: every probe named this way is declared with this signature.
     let symbol: Result<libloading::Symbol<unsafe extern "C" fn() -> c_int>, _> =
@@ -822,7 +738,6 @@ fn probe_call(probe: &libloading::Library, name: &[u8]) -> c_int {
     }
 }
 
-/// Call one of the plugin's one-argument probe setters.
 fn probe_set(probe: &libloading::Library, name: &[u8], value: c_int) {
     // SAFETY: every setter named this way is declared with this signature.
     let symbol: Result<libloading::Symbol<unsafe extern "C" fn(c_int)>, _> =
@@ -864,7 +779,6 @@ fn image_ledger() -> std::sync::MutexGuard<'static, ()> {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
-/// The whole of an instance's life in one arrangement: create, render, destroy.
 fn render_once(
     bundle: &Bundle,
     report: &ScanReport,
@@ -924,8 +838,6 @@ fn a_clip_can_be_measured_before_the_render_action() {
         1,
         "the plugin asked its Source clip how big it was during          getRegionOfDefinition, and the host could say"
     );
-    // And the pictures did not stay behind afterwards, which is the other half
-    // of binding them earlier.
     assert_eq!(crate::suites::memory::image_bytes_live(), 0);
 }
 
@@ -960,7 +872,6 @@ fn an_instance_knows_how_big_the_project_is_and_the_render_keeps_it_true() {
     assert_eq!(born.get_double(keys::EFFECT_DURATION, 0), Ok(1.0));
     assert_eq!(born.get_int(keys::SUPPORTS_TILES, 0), Ok(0));
 
-    // A render of a 9x4 frame says so, rather than leaving 1080p standing.
     let token = Epoch::new().token();
     let request = RenderRequest::filter(0.0, a_test_frame(9, 4));
     crate::render::render(plugin, &instance, &request, &token).expect("it rendered");
@@ -989,7 +900,6 @@ fn a_render_with_neighbours_tells_the_plugin_how_long_its_clip_is() {
     let mut descriptor = described(&report, "com.lumitlab.testplug.passthrough")
         .descriptor
         .clone();
-    // A second, optional input the plugin never fetches from, as RSMB Pro's.
     descriptor.clips.push(crate::describe::ClipDescription {
         name: "Vectors".to_owned(),
         props: PropertySet::new(),
@@ -1050,7 +960,6 @@ fn a_render_with_neighbours_tells_the_plugin_how_long_its_clip_is() {
     assert_eq!(vectors.get_int(keys::CLIP_CONNECTED, 0), Ok(0));
     assert_eq!(vectors.get_double(keys::FRAME_RANGE, 1), Ok(21.0));
 
-    // A plain frame afterwards is a clip of that one frame again.
     let plain = RenderRequest::filter(30.0, a_test_frame(9, 4));
     crate::render::render(plugin, &instance, &plain, &token).expect("it rendered");
     let after = source_clip(instance.handle());
@@ -1111,7 +1020,6 @@ fn a_plugin_writes_its_own_control_while_it_is_being_built() {
             Status::Ok.code()
         );
 
-        // A double.
         let amount = handle_of(param_set, c"gain");
         assert_eq!(
             (params.param_set_value)(amount, 0.75_f64),
@@ -1135,7 +1043,6 @@ fn a_plugin_writes_its_own_control_while_it_is_being_built() {
         );
         assert_eq!(keys, 0);
 
-        // An integer.
         let count = handle_of(param_set, c"count");
         assert_eq!(
             (params.param_set_value)(count, c_int::from(7_i16)),
@@ -1168,7 +1075,6 @@ fn a_plugin_writes_its_own_control_while_it_is_being_built() {
         );
         assert_eq!((x, y), (3.0, 4.0));
 
-        // A string, as the pointer OFX passes.
         let label = handle_of(param_set, c"caption");
         let text = c"written";
         assert_eq!(
@@ -1182,8 +1088,6 @@ fn a_plugin_writes_its_own_control_while_it_is_being_built() {
         );
         assert_eq!(CStr::from_ptr(read), c"written");
 
-        // A push button has no value, so writing one is still the honest no —
-        // and it is `kOfxStatErrUnsupported`, not a bad handle.
         let button = handle_of(param_set, c"trigger");
         assert_eq!(
             (params.param_set_value)(button),
@@ -1194,9 +1098,6 @@ fn a_plugin_writes_its_own_control_while_it_is_being_built() {
     instance.destroy(plugin).expect("destroyed");
 }
 
-/// The same picture whichever way the block runs. A top-down image is handed
-/// over with **negative** row bytes, the plugin steps backwards through memory
-/// because the host told it to, and the picture comes back the right way up.
 #[test]
 fn a_negative_row_bytes_image_comes_back_the_right_way_up() {
     let _ledger = image_ledger();
@@ -1222,8 +1123,6 @@ fn a_negative_row_bytes_image_comes_back_the_right_way_up() {
     }
     assert_eq!(both[0], both[1], "the two layouts disagree");
 
-    // And the sign really was negative for the top-down one, so the test above
-    // is testing what it says it is.
     let image = Image::from_frame(&source, RowOrder::TopDown).expect("an image");
     assert!(image.row_bytes() < 0, "top-down means negative row bytes");
 }
@@ -1250,9 +1149,6 @@ fn a_filter_request_hands_the_plugin_positive_row_bytes() {
     );
 }
 
-/// The action order, verbatim: the sequence the plugin observed against the
-/// listing in docs/impl/ofx-host.md §3, which `render::RENDER_ACTIONS`
-/// transcribes.
 #[test]
 fn the_action_order_is_the_one_the_note_lists() {
     let _ledger = image_ledger();
@@ -1284,8 +1180,6 @@ fn the_action_order_is_the_one_the_note_lists() {
     expected.push(actions::DESTROY_INSTANCE.to_owned());
     assert_eq!(seen, expected);
 
-    // And the constant really is the note's listing, spelled out here so that a
-    // change to either has to be a change to both.
     assert_eq!(
         expected,
         vec![
@@ -1319,7 +1213,6 @@ fn concurrent_renders_follow_the_plugins_own_declaration() {
         return;
     };
 
-    /// A `PluginRef` shared with the threads of one scope.
     struct Shared(*const crate::bundle::PluginRef);
     // SAFETY: the pointer is into the bundle's plugin list, which outlives the
     // scope that reads it; nothing mutates the `PluginRef`; and calling the
@@ -1373,8 +1266,6 @@ fn concurrent_renders_follow_the_plugins_own_declaration() {
     }
 }
 
-/// A plugin that fails its render yields a typed error, and the half-written
-/// output buffer goes with it rather than to the caller.
 #[test]
 fn a_failed_render_is_an_error_and_not_a_half_written_frame() {
     let _ledger = image_ledger();
@@ -1404,16 +1295,11 @@ fn a_failed_render_is_an_error_and_not_a_half_written_frame() {
             status: Status::Failed,
         })
     );
-    // The end action still ran, so a plugin that allocated in the begin got its
-    // chance to free.
     let seen = action_log(&probe);
     assert!(seen.iter().any(|had| had == actions::END_SEQUENCE_RENDER));
-    // And nothing is left of the pictures.
     assert_eq!(crate::suites::memory::image_bytes_live(), 0);
 }
 
-/// Cancellation: an epoch that has already turned over stops the render before
-/// the plugin is asked anything at all.
 #[test]
 fn a_stale_epoch_stops_the_render_before_the_plugin_is_asked() {
     let _ledger = image_ledger();
@@ -1453,9 +1339,6 @@ fn a_stale_epoch_stops_the_render_before_the_plugin_is_asked() {
     );
 }
 
-/// Releasing an image twice is a status, not a second free. The first release
-/// strikes the handle off; the second finds nothing, which is exactly the
-/// forged-handle path every suite call already walks.
 #[test]
 fn releasing_an_image_twice_is_a_status() {
     let _ledger = image_ledger();
@@ -1472,8 +1355,6 @@ fn releasing_an_image_twice_is_a_status() {
     )
     .expect("an instance");
 
-    // Put a picture on the instance by hand, so the fetch below has something
-    // to find without a render being in flight.
     let mut images = std::collections::BTreeMap::new();
     images.insert(
         "Source".to_owned(),
@@ -1517,11 +1398,6 @@ fn releasing_an_image_twice_is_a_status() {
     assert_eq!(crate::suites::memory::image_bytes_live(), 0);
 }
 
-// -------------------------------------------------------- the thread suite --
-
-/// `multiThreadNumCPUs` says what the host really spends, and every thread of a
-/// fan-out is told a different index — which is what plugins key their
-/// per-thread scratch by.
 #[test]
 fn the_thread_suite_counts_honestly_and_indexes_correctly() {
     let Some((_root, bundle)) = a_loaded_bundle("the_thread_suite_counts_honestly") else {
@@ -1555,15 +1431,11 @@ fn the_thread_suite_counts_honestly_and_indexes_correctly() {
     );
 }
 
-// -------------------------------------------------- a plugin as an effect --
-
 use crate::def::{LocalHost, OfxEffectDef, PluginHost, Rendering};
 use crate::describe::PluginDescriptor;
 use lumit_core::fx::{params::Params, params::Value, registry::EffectDef};
 use lumit_core::model::EffectValue;
 
-/// A host that never renders — what a disabled or crashed plugin is, from the
-/// definition's side (docs/12 §2.3).
 struct DeadHost;
 
 impl PluginHost for DeadHost {
@@ -1602,8 +1474,6 @@ impl PluginHost for DeadHost {
     }
 }
 
-/// The declaration one described plugin becomes, leaked as the catalogue holds
-/// them.
 fn a_leaked_schema(report: &ScanReport, identifier: &str, major: u32) -> &'static EffectSchema {
     let found = found(report, identifier, major).expect("the plugin described itself");
     Box::leak(Box::new(found.schema))
@@ -1628,8 +1498,6 @@ fn a_registered_plugin(test: &str, identifier: &str, major: u32) -> Option<&'sta
     registered.then_some(schema)
 }
 
-/// The seam, end to end: a real plugin describes itself, becomes an
-/// `EffectDef`, registers, and is found by the same lookup that finds Blur.
 #[test]
 fn a_plugin_registers_and_is_found_by_the_catalogue() {
     let Some(schema) = a_registered_plugin(
@@ -1650,8 +1518,6 @@ fn a_plugin_registers_and_is_found_by_the_catalogue() {
         Some(schema.label)
     );
 
-    // And it instantiates in the plugin namespace, with the plugin's own
-    // defaults, so a project that saves it round-trips as a plugin instance.
     let inst = lumit_core::fx::builtins::instantiate("ofx:com.lumitlab.testplug")
         .expect("the catalogue instantiates it");
     assert_eq!(
@@ -1661,7 +1527,6 @@ fn a_plugin_registers_and_is_found_by_the_catalogue() {
     assert_eq!(inst.effect.match_name, "ofx:com.lumitlab.testplug");
     assert!(inst.params.iter().any(|p| p.id == "gain"));
 
-    // The built-in menu order is untouched by its arrival.
     let order: Vec<&str> = lumit_core::fx::catalogue::BUILTIN_DEFS
         .iter()
         .map(|d| d.schema().match_name)
@@ -1674,9 +1539,6 @@ fn a_plugin_registers_and_is_found_by_the_catalogue() {
     assert!(order.contains(&"ofx:com.lumitlab.testplug"));
 }
 
-/// Real pixels through the definition: the bag goes out as the plugin's values,
-/// the picture goes out as fp32 and comes back multiplied by the control the
-/// host owns.
 #[test]
 fn a_plugin_definition_renders_from_the_resolved_bag() {
     let _ledger = image_ledger();
@@ -1688,7 +1550,6 @@ fn a_plugin_definition_renders_from_the_resolved_bag() {
         .get("ofx:com.lumitlab.testplug")
         .expect("registered");
 
-    // Gain of two, set on the instance exactly as the panel would set it.
     let mut inst =
         lumit_core::fx::builtins::instantiate("ofx:com.lumitlab.testplug").expect("instantiated");
     for param in &mut inst.params {
@@ -1723,13 +1584,8 @@ fn a_plugin_definition_renders_from_the_resolved_bag() {
     }
 }
 
-/// **A disabled plugin renders identity, byte for byte** (docs/12 §2.3): the
-/// layer keeps compositing and wears a badge, and the picture is not so much
-/// as rounded on its way past.
 #[test]
 fn a_disabled_plugin_renders_identity_byte_for_byte() {
-    // A declaration of its own, so this test needs no bundle at all: what is
-    // under test is what the definition does when its host will not render.
     let schema: &'static EffectSchema = Box::leak(Box::new(EffectSchema {
         match_name: "ofx:test.disabled",
         label: "Disabled test plugin",
@@ -1785,15 +1641,9 @@ fn a_disabled_plugin_renders_identity_byte_for_byte() {
         Some("the plugin is disabled for this session"),
         "the failure is reported for the badge"
     );
-    // Read once, then gone: a stale reason must never badge a later frame.
     assert_eq!(def.last_error(), None);
 }
 
-// ------------------------------------------------------------------ presses --
-
-/// A press goes to the plugin with the frame in place, and what the plugin
-/// wrote comes back: a row it changed as a row, and the blob no row carries as
-/// memory. The test plugin's Trigger writes both, the way Looks stores a look.
 #[test]
 fn a_pressed_button_brings_back_what_the_plugin_wrote() {
     let _ledger = image_ledger();
@@ -1837,14 +1687,9 @@ fn a_pressed_button_brings_back_what_the_plugin_wrote() {
     );
     assert_eq!(memory.get("gain"), None, "a row is never also memory");
 
-    // A button the plugin has not got is a sentence, not a press.
     assert!(def.press(&inst, 0.0, "nothing", &source).is_err());
 }
 
-/// What a plugin keeps beyond its rows reaches its render: the memory on the
-/// document's instance is laid over the values the plugin is rendered with,
-/// once the resolve walk has seen the instance, and comes off again when the
-/// document forgets it.
 #[test]
 fn a_plugins_memory_reaches_its_render() {
     struct Recording(std::sync::Mutex<Option<ParamSnapshot>>);
@@ -1886,7 +1731,6 @@ fn a_plugins_memory_reaches_its_render() {
         }
     }
 
-    // One parameter with no row, so there is something only memory can carry.
     let descriptor = PluginDescriptor {
         identifier: "test.memory".to_owned(),
         version: (1, 0),
@@ -1951,11 +1795,9 @@ fn a_plugins_memory_reaches_its_render() {
         pushed
     };
 
-    // Nothing has resolved this instance yet, so the render sees no memory.
     def.apply_cpu_at(inst.id, 0.0, &mut rgba, 2, 2, Params::EMPTY);
     assert_eq!(recorded().get("vendorBlob"), None);
 
-    // The resolve files the memory and puts its hash in the bag.
     let pushed = resolve(&inst);
     assert_eq!(
         pushed.len(),
@@ -1970,7 +1812,6 @@ fn a_plugins_memory_reaches_its_render() {
         "the render was handed the memory"
     );
 
-    // Forgotten in the document, forgotten in the render, and the bag says so.
     inst.plugin_state = None;
     assert_eq!(resolve(&inst)[0].1, Value::Int(0));
     def.apply_cpu_at(inst.id, 0.0, &mut rgba, 2, 2, Params::EMPTY);
@@ -2077,8 +1918,6 @@ fn a_plugin_is_told_its_frame_and_handed_its_neighbours() {
             extra: serde_json::Map::new(),
         },
         enabled: true,
-        // Driven by an expression, so its value is the playhead's, not a
-        // person's, and the plugin is not told when it moves.
         params: vec![lumit_core::model::EffectParam {
             id: "gain".to_owned(),
             value: EffectValue::Float(lumit_core::anim::Property {
@@ -2095,7 +1934,6 @@ fn a_plugin_is_told_its_frame_and_handed_its_neighbours() {
         extra: serde_json::Map::new(),
     };
 
-    // A comp at sixty frames a second, resolved half a second in: frame 30.
     let comp = Composition {
         graph: None,
         master_volume_db: 0.0,
@@ -2173,14 +2011,11 @@ fn a_plugin_is_told_its_frame_and_handed_its_neighbours() {
     assert_eq!(neighbours[1].0, 1);
     assert!((neighbours[1].1 - 0.75).abs() < 1e-3);
 
-    // A stack built by hand names no comp, and the time it gives stands.
     def.apply_cpu_at(inst.id, 7.0, &mut rgba, 2, 2, Params::EMPTY);
     let (time, neighbours) = seen();
     assert_eq!(time, 7.0);
     assert!(neighbours.is_empty());
 }
-
-// --------------------------------------------------------- console windows --
 
 /// The host keeps its brokers in a static, and a static is never dropped, so
 /// a ring file only ever went away by luck. The maker's handle now carries
@@ -2249,7 +2084,6 @@ fn a_changed_value_is_told_to_the_plugin_before_the_next_render() {
         "a value it was created with is not a change: {seen:?}"
     );
 
-    // The same values again are nothing to tell.
     instance
         .set_params(values.clone())
         .expect("the values went in");
@@ -2263,7 +2097,6 @@ fn a_changed_value_is_told_to_the_plugin_before_the_next_render() {
         "an unchanged value is not a change: {seen:?}"
     );
 
-    // A new value is.
     values.set("gain", PropValue::double(0.75));
     instance
         .set_params(values.clone())
@@ -2291,7 +2124,6 @@ fn a_changed_value_is_told_to_the_plugin_before_the_next_render() {
         .expect("it rendered");
     assert!(changed < render, "told before the render, never inside it");
 
-    // A value that moves with time is the playhead's doing, not a person's.
     values.set("gain", PropValue::double(0.9));
     values.quiet.insert("gain".to_owned());
     instance.set_params(values).expect("the values went in");

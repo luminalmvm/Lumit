@@ -52,11 +52,11 @@ fn moved(
     x: &GlyphXform,
 ) -> Option<Moved> {
     if metrics.width == 0 || metrics.height == 0 {
-        return None; // a space carries advance and no ink
+        return None;
     }
     let (sx, sy) = (x.scale[0], x.scale[1]);
     if x.opacity <= 0.0 || sx.abs() < 1e-4 || sy.abs() < 1e-4 || !x.opacity.is_finite() {
-        return None; // scaled or faded to nothing
+        return None;
     }
     // Skew, about the same middle, before the turn; its inverse undoes it.
     let skew = crate::blur::skew_matrix(x.skew, x.skew_axis).unwrap_or([1.0, 0.0, 0.0, 1.0]);
@@ -452,7 +452,7 @@ pub fn rasterise_on_path_animated(
                 0.0
             }
         } else if wanted < 0.0 || wanted > total {
-            continue; // ran off the end, exactly as the un-animated walk does
+            continue;
         } else {
             wanted
         };

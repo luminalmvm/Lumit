@@ -43,7 +43,6 @@ void main() {
         ),
       );
 
-  /// A popup showing [label], opened from [context].
   void open(BuildContext context, String label, {Offset at = Offset.zero}) {
     showLumitPopup<void>(
       context: context,
@@ -69,8 +68,6 @@ void main() {
     await tester.pump();
     expect(find.text('first'), findsOneWidget);
 
-    // The pointer crossed onto another opener before the first menu had been
-    // dismissed. Only the second one may live.
     open(anchor, 'second', at: const Offset(60, 60));
     await tester.pump();
     expect(find.text('first'), findsNothing,
@@ -123,7 +120,6 @@ void main() {
     await tester.pump();
     expect(lumitPopupOpen, isTrue);
 
-    // Well clear of both surfaces, on the barrier.
     await tester.tapAt(const Offset(400, 500));
     await tester.pump();
     expect(find.text('parent'), findsNothing);
@@ -153,8 +149,6 @@ void main() {
     await tester.pump();
     downs = 0;
 
-    // Each barrier used to hand the press to the other until the stack ran
-    // out.
     await tester.tapAt(const Offset(400, 500), buttons: kSecondaryButton);
     await tester.pump();
     expect(lumitPopupOpen, isFalse);

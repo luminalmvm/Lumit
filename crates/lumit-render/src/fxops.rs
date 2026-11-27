@@ -38,8 +38,6 @@ pub struct LoadedLut {
     pub domain_max: [f32; 3],
 }
 
-/// An OCIO effect's baked table, uploaded and ready to bind (docs/08 §3.97).
-/// The OCIO half of a [`ColourTable`] slot.
 #[derive(Clone)]
 pub struct LoadedOcio {
     pub artefact: std::sync::Arc<lumit_gpu::OcioArtefact>,
@@ -103,7 +101,6 @@ pub struct LutCache {
     ocio: Vec<(OcioKey, LoadedOcio)>,
 }
 
-/// What an OCIO effect's table is made from, for the cache and the identity.
 #[derive(Clone, PartialEq, Eq)]
 struct OcioKey {
     request: crate::colour::OcioRequest,
@@ -171,7 +168,6 @@ impl LutCache {
         Some(loaded)
     }
 
-    /// How many OCIO tables are held - the bound's test hook.
     #[must_use]
     pub fn ocio_len(&self) -> usize {
         self.ocio.len()
@@ -188,7 +184,6 @@ impl LutCache {
             .iter()
             .position(|(p, t, _)| p == path && *t == mtime)
         {
-            // Touch: this entry is now the most recently used.
             let hit = self.entries.remove(i);
             let lut = hit.2.clone();
             self.entries.insert(0, hit);
@@ -215,8 +210,6 @@ impl LutCache {
         Some(loaded)
     }
 
-    /// How many cubes are held — the bound's test hook, and a number worth
-    /// having when a profile asks where the video memory went.
     #[must_use]
     pub fn len(&self) -> usize {
         self.entries.len()
@@ -286,16 +279,6 @@ pub struct FxCache {
     /// in between — so the planner's lookup takes a handle, and the handle
     /// lives until the next frame's plan drops it.
     pins: std::collections::HashMap<u128, Tex>,
-    /// Nested frames the last frame used, kept for the one frame after it.
-    ///
-    /// Playback adds nothing to the store, so a Precomp that had not changed
-    /// was made again on every frame, and one under a flow effect's neighbour
-    /// twice. `ahead` is what this frame has used and `carried` what the last
-    /// one did; nothing here outlives the frame after the one that used it.
-    ///
-    /// ponytail: held to half the store's budget, first come. A frame with
-    /// more Precomps than that makes the rest again each frame, as all of
-    /// them were before. Order them by what they cost if that shows.
     carried: std::collections::HashMap<u128, Tex>,
     ahead: std::collections::HashMap<u128, Tex>,
     ahead_bytes: usize,
@@ -313,11 +296,8 @@ pub struct FxCache {
     /// Small and short: the few planes on screen at once, dropped with the
     /// cache.
     planes: std::collections::HashMap<(uuid::Uuid, i64, u64), Tex>,
-    /// Test hooks: how many kernels [`run_ops`] actually ran against this
-    /// cache, and how many ops it skipped because their output was held.
     runs: u64,
     hits: u64,
-    /// Test hooks: nested frames realised, and served held.
     nested_made: u64,
     nested_served: u64,
 }
@@ -387,8 +367,6 @@ impl FxCache {
         made
     }
 
-    /// The finished texture of a nested comp's frame, by the name the realiser
-    /// files it under, or `None` when it must be realised. Counted.
     pub fn nested(&mut self, key: u128) -> Option<Tex> {
         let held = self
             .pins
@@ -435,8 +413,6 @@ impl FxCache {
         }
     }
 
-    /// Keep a nested frame this frame used for the frame after it, while
-    /// there is room.
     fn carry(&mut self, key: u128, tex: &Tex) {
         let bytes = intermediate_bytes(tex.width(), tex.height());
         if self.ahead.contains_key(&key) || self.ahead_bytes + bytes > self.lru.budget_bytes() / 2 {
@@ -545,8 +521,6 @@ pub fn nested_texture_key(frame_key: u128, render_scale: f32, samples: u32) -> u
     u128::from_le_bytes(k)
 }
 
-/// One layer-input slot as [`run_ops`] receives it — the realised twin of
-/// [`crate::draw::LayerInputDraw`] (docs/impl/layer-input.md).
 pub enum LayerInput {
     /// Nothing to read: the effect degrades to its labelled no-op.
     Absent,
@@ -561,7 +535,6 @@ pub enum LayerInput {
     /// The key a Correction above made, named by its instance. Only the matte
     /// list carries one.
     EffectKey(uuid::Uuid),
-    /// Another layer, already rendered alone at this raster.
     Texture(Tex),
     /// Distance in metres rather than a picture: a 3D precomp's Scene depth
     /// or a Depth wire. With the precomp's 3D layers when rays are to meet
@@ -613,7 +586,6 @@ impl LayerInput {
     }
 }
 
-/// One layer picture as an op is handed it, at the op's own raster.
 #[derive(Clone)]
 pub struct LayerPicture {
     pub tex: Tex,
@@ -623,7 +595,6 @@ pub struct LayerPicture {
     pub size: Option<[f32; 2]>,
     /// Metres rather than a picture.
     pub depth: bool,
-    /// The 3D precomp's own layers, for rays to meet.
     pub scene: Option<std::sync::Arc<lumit_gpu::fx::lens_blur::SceneLayers>>,
 }
 
@@ -654,8 +625,6 @@ pub struct Side<'a> {
 }
 
 impl Side<'static> {
-    /// No carriages at all: what every stack with no such effect on it
-    /// passes.
     pub const NONE: Side<'static> = Side {
         roto: &[],
         planes: &[],
@@ -762,7 +731,6 @@ fn spread_room(
     [texels(across, w), texels(down, h)]
 }
 
-/// `p` with every place it names moved `by` texels right and down.
 fn places_moved(
     schema: &lumit_core::fx::schema::EffectSchema,
     p: lumit_core::fx::params::Params<'_>,
@@ -895,9 +863,6 @@ pub fn run_ops(
         .iter()
         .flat_map(|s| s.late.iter().map(|(_, slot)| *slot))
         .collect();
-    // ponytail: such an op and everything after it run every frame, because a
-    // held picture has no stream beside it. File the stream with the picture
-    // if a profile shows a stack like that re-running too much.
     let held_limit = if late_wanted.is_empty() {
         ops.len()
     } else {
@@ -928,7 +893,6 @@ pub fn run_ops(
         .position(|op| kept_for.contains(&op.instance))
         .map_or(held_limit, |i| held_limit.min(i + 1));
     let held_limit = combine::key_limit(ops, mattes, held_limit);
-    // Streams made so far this walk, by the slot of the op that made them.
     let mut late_streams: Vec<(u32, lumit_core::fx::points::PointsStream)> = Vec::new();
     if let Some((store, _)) = cache {
         let mut store = store.borrow_mut();
@@ -970,18 +934,13 @@ pub fn run_ops(
     // swap) stay off this path and out of export entirely.
     let filing =
         cache.is_some_and(|(store, _)| store.borrow().keep) && !ctx.vram_pressure().should_trim();
-    // Those pictures, as their effects make them, held to the end of the walk.
-    // ponytail: a frame-sized texture each while the walk runs, freed after
-    // the matte that reads it if a stack ever wires many.
     let mut kept: Vec<(uuid::Uuid, Tex)> = Vec::new();
     if let Some(op) = start.checked_sub(1).and_then(|i| ops.iter().nth(i)) {
         if kept_for.contains(&op.instance) {
             kept.push((op.instance, tex.clone()));
         }
     }
-    // The picture the op before this one made, once nothing can read it again.
     let mut spent: Option<Tex> = None;
-    // Parallel and Layer runs, and the keys a wire reads.
     let mut run = combine::Run::default();
     // Outputs made this walk, filed at the end rather than as they are made:
     // a flare bake queued *during* the walk means a picture of the previous
@@ -1098,7 +1057,6 @@ pub fn run_ops(
         });
         let schedule = late_input.as_ref().or(schedule);
         let asks = schedule.map(|s| s.grow).filter(|g| *g != [0, 0]);
-        // The stream this op is handed, for whoever asked to see it.
         if let Some(carriage) = schedule {
             WATCHED.with(|w| {
                 if let Some((_, seen)) = w
@@ -1388,8 +1346,6 @@ pub fn run_ops(
                     },
                 })
             };
-            // A list that waited for this op's points is made now that the
-            // stream above has been.
             let late = match layer_input {
                 Some(LayerInput::Late) => {
                     let points = schedule
@@ -1529,7 +1485,6 @@ pub fn run_ops(
                 .choice(lumit_core::fx::effects::roto_brush::MODE_ID, 0)
                 == 1;
             tex = if view == 1 {
-                // The matte itself, as an opaque grey picture.
                 fx.set_matte(
                     ctx,
                     &plane,
@@ -1979,8 +1934,6 @@ fn op_keys(
                                 .map_or(0, |d| d.as_nanos());
                             h.update(&mtime.to_le_bytes());
                         }
-                        // What the table was made from - the config's hash and
-                        // the names, or the file's stamp - folded already.
                         Some(Some(ColourTable::Ocio(o))) => {
                             h.update(&o.identity.to_le_bytes());
                         }

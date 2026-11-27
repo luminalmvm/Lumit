@@ -55,7 +55,6 @@ void main() {
     expect(
         find.byKey(const ValueKey('first-run-workspace-cut')), findsOneWidget);
 
-    // Continue waits for a workspace.
     await tester.tap(find.byKey(const ValueKey('first-run-continue')));
     await tester.pumpAndSettle();
     expect(
@@ -64,7 +63,6 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('first-run-workspace-cut')));
     await tester.tap(find.byKey(const ValueKey('first-run-keys-vegas')));
     await tester.pumpAndSettle();
-    // A choice is only a choice until Continue keeps it.
     expect(workspace.firstRunDone, isFalse);
     await tester.tap(find.byKey(const ValueKey('first-run-continue')));
     await tester.pumpAndSettle();
@@ -88,12 +86,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(workspace.autoUpdate, isFalse);
-    // The editing answer is unaffected: two questions, one screen.
     expect(workspace.interface.videoAsSequenceLayer, isTrue);
   });
 
-  /// Hovering a row of the open list draws the interface in that scheme and
-  /// saves nothing, so leaving the list or clicking away puts the old one back.
   testWidgets('hovering a scheme shows it and does not choose it',
       (tester) async {
     await tester.pumpWidget(host());
@@ -114,12 +109,10 @@ void main() {
         reason: 'the scheme under the pointer is the one drawn');
     expect(workspace.themeChoice, chosen, reason: 'and nothing was chosen');
 
-    // Off the list, with it still open.
     await mouse.moveTo(const Offset(2, 2));
     await tester.pumpAndSettle();
     expect(swatchesOf(workspace.theme), own);
 
-    // Back on the row, then a click away: dismissed while looking.
     await mouse.moveTo(tester.getCenter(find.text(other.label)));
     await tester.pumpAndSettle();
     expect(swatchesOf(workspace.theme), isNot(own));
@@ -128,7 +121,6 @@ void main() {
     expect(swatchesOf(workspace.theme), own);
     expect(workspace.themeChoice, chosen);
 
-    // And picking a row still picks it.
     await tester.tap(find.byKey(const ValueKey('first-run-scheme')));
     await tester.pumpAndSettle();
     await tester.tap(find.text(other.label));

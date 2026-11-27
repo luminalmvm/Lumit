@@ -23,7 +23,6 @@ pub mod temporal;
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests;
 
-/// One resolved Denoise, reduced to the numbers the passes read.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DenoiseParams {
     /// 0 the result, 1 the removed noise, 2 how many frames were blended.
@@ -38,7 +37,6 @@ pub struct DenoiseParams {
     pub luma_bands: [f32; 4],
     /// Each band's chroma noise relative to `chroma_sigma`.
     pub chroma_bands: [f32; 4],
-    /// Frames either side averaged in.
     pub frames: u32,
     /// Whether the neighbours are moved along the measured motion first.
     pub motion: bool,

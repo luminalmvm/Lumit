@@ -23,13 +23,10 @@ use crate::{
     session::{Feed, Held, Place, Prefer, Session},
 };
 
-/// New samples in each chunk.
 pub const CHUNK: usize = 512;
 /// Samples of the chunk before carried into each one.
 const CONTEXT: usize = 64;
-/// At or above this a chunk starts speech.
 const START: f32 = 0.5;
-/// Below this a chunk counts towards silence.
 const STOP: f32 = 0.35;
 /// Chunks of silence that end a stretch: about 300 ms.
 const QUIET: usize = 10;
@@ -38,16 +35,12 @@ const SHORTEST: usize = 8;
 /// Loudness that counts as speech when there is no model: about -40 dBFS.
 const LOUD: f32 = 1e-4;
 
-/// Something that hears speech.
 #[derive(Debug)]
 pub enum Ear {
-    /// Silero.
     Model(Box<Silero>),
-    /// Loudness alone.
     Loudness,
 }
 
-/// Silero, open, with the state it carries from chunk to chunk.
 #[derive(Debug)]
 pub struct Silero {
     session: Session,
@@ -75,7 +68,6 @@ impl Ear {
         })))
     }
 
-    /// Start again, for a new stream.
     pub fn reset(&mut self) {
         if let Ear::Model(silero) = self {
             silero.state = None;
@@ -142,16 +134,13 @@ impl Silero {
 /// One stretch of speech, in chunks: `[start, end)`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Stretch {
-    /// The first chunk of speech.
     pub start: usize,
     /// The first chunk after it.
     pub end: usize,
 }
 
-/// Turns chunk probabilities into stretches as they arrive.
 #[derive(Debug, Default)]
 pub struct Tracker {
-    /// The start of the stretch in progress.
     open: Option<usize>,
     /// The first quiet chunk since speech, while in a stretch.
     quiet_from: Option<usize>,
@@ -189,7 +178,6 @@ impl Tracker {
         }
     }
 
-    /// The start of the stretch in progress, if speech is going on.
     #[must_use]
     pub fn open(&self) -> Option<usize> {
         self.open

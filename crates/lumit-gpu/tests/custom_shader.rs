@@ -13,8 +13,6 @@ use lumit_gpu::fx::{
     common::readback_linear_f32, common::upload_linear_f32, custom_shader::validate,
 };
 
-/// A shader with one of everything the host hands in, so a change to the
-/// prologue that broke any binding fails here rather than on somebody's machine.
 const EVERYTHING: &str = r#"
 struct Params {
     /// @slider(0, 2) @default(1) Gain
@@ -39,8 +37,6 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
 }
 "#;
 
-/// Invert, the golden tiny shader: the picture's colour taken from one, its
-/// alpha left alone.
 const INVERT: &str = r#"
 fn shade(uv: vec2<f32>) -> vec4<f32> {
     let c = lumit_unpremult(lumit_sample(uv));
@@ -52,7 +48,6 @@ fn program(source: &str) -> &'static shader::ShaderProgram {
     shader::program_for(source).expect("a program")
 }
 
-/// The header the host hands in, at full resolution, Mix 100, nothing bound.
 fn header(w: u32, h: u32) -> Vec<u8> {
     let mut out = Vec::with_capacity(shader::HEADER_SIZE);
     for v in [0u32, 0, w, h] {
@@ -71,7 +66,6 @@ fn header(w: u32, h: u32) -> Vec<u8> {
     out
 }
 
-/// A small picture with an alpha edge and an HDR spike.
 fn picture(w: u32, h: u32) -> Vec<f32> {
     let mut img = vec![0.0f32; (w * h * 4) as usize];
     for y in 0..h {
@@ -88,13 +82,8 @@ fn picture(w: u32, h: u32) -> Vec<f32> {
     img
 }
 
-// ----------------------------------------------------------------- §8 item 11
-
 #[test]
 fn the_assembled_module_validates() {
-    // The host's own wrapper, round every fixture, through the validator — so a
-    // change to the prologue or the epilogue cannot ship broken. No graphics
-    // card involved.
     for (name, source) in [
         ("everything", EVERYTHING),
         ("invert", INVERT),
@@ -139,8 +128,6 @@ fn a_broken_shader_refuses_calmly_with_the_users_own_line_number() {
     assert!(!shown.is_empty());
 }
 
-// ------------------------------------------------- §8 items 12, 15, 16, 17, 18
-
 #[test]
 fn a_golden_shader_renders_deterministically() {
     let Some(ctx) = lumit_gpu::test_support::lease() else {
@@ -178,7 +165,6 @@ fn a_golden_shader_renders_deterministically() {
         first, second,
         "the same inputs render bit-identically twice"
     );
-    // And it is Invert: unpremultiplied colour taken from one, alpha untouched.
     for i in (0..first.len()).step_by(4) {
         let a = img[i + 3];
         let want = if a > 0.0 { (1.0 - img[i] / a) * a } else { 0.0 };
@@ -191,9 +177,6 @@ fn a_golden_shader_renders_deterministically() {
     }
 }
 
-// ------------------------------------------------------- §8 items 22 and 23
-
-/// A small builder so a test reads as the graph it draws.
 fn gnode(id: u32, kind: &str) -> lumit_core::fx::shader::graph::ShaderNode {
     lumit_core::fx::shader::graph::ShaderNode {
         id,
@@ -216,8 +199,6 @@ fn gedge(
     }
 }
 
-/// Every box in the v1 vocabulary, compiled and taken through the validator —
-/// so the graph compiler cannot emit WGSL the validator refuses. No card.
 #[test]
 fn a_graph_of_every_node_assembles_and_validates() {
     use lumit_core::fx::shader::graph::{ShaderGraph, ShaderNode};
@@ -333,7 +314,6 @@ fn a_nan_returned_by_a_shader_never_leaves_the_effect() {
     let fx = ctx.fx();
     let (w, h) = (8u32, 8u32);
     let tex = upload_linear_f32(&ctx, &picture(w, h), w, h);
-    // Nought over nought and one over nought, in the user's own arithmetic.
     let p = program(
         "fn shade(uv: vec2<f32>) -> vec4<f32> {\n\
          \x20   let z = uv.x * 0.0;\n\
@@ -390,7 +370,6 @@ fn a_broken_edit_keeps_the_last_good_pipeline_interactively_and_never_on_export(
     let badge = badge.expect("a stale picture always says so");
     assert!(!badge.is_empty(), "and carries the compiler's own sentence");
 
-    // An instance that has never compiled anything has nothing to fall back to.
     assert!(fx
         .shader_pipeline(&ctx, 31, broken.source_hash, &broken.assembled)
         .is_err());

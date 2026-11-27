@@ -130,7 +130,6 @@ fn comp_of(name: &str, layers: Vec<Layer>) -> Composition {
     }
 }
 
-/// A composition that holds a graph instead of layers.
 fn graph_comp(name: &str, nodes: Vec<GraphNode>, edges: Vec<GraphEdge>) -> Composition {
     let mut c = comp_of(name, Vec::new());
     c.graph = Some(CompGraph {
@@ -147,7 +146,6 @@ fn graph_comp(name: &str, nodes: Vec<GraphNode>, edges: Vec<GraphEdge>) -> Compo
     c
 }
 
-/// A fresh builtin instance with `edits` applied to its float rows.
 fn effect(name: &str, edits: &[(&str, f64)]) -> EffectInstance {
     let mut inst = lumit_core::fx::builtins::instantiate(name)
         .unwrap_or_else(|| panic!("{name} is a builtin"));
@@ -210,10 +208,6 @@ fn half() -> lumit_render::plan::Quality {
     }
 }
 
-/// **Test 9b - a fork and a Merge are a stack.** One Read into two effects,
-/// merged with a blend mode and an opacity, is byte for byte the picture two
-/// Precomp layers of the same content wearing the same effects make - at full
-/// size and at half preview resolution.
 #[test]
 fn a_fork_merged_is_the_two_layer_comp_it_claims_to_be() {
     let Ok(mut r) = HeadlessRenderer::shared() else {
@@ -231,7 +225,6 @@ fn a_fork_merged_is_the_two_layer_comp_it_claims_to_be() {
         || effect("exposure", &[("stops", 1.0)]),
     );
 
-    // The graph: one Read forked into the two effects, merged A over B.
     let mut doc_g = Document::new();
     let item = plate(&mut doc_g);
     let (src, a, b, merge, out) = (
@@ -262,8 +255,6 @@ fn a_fork_merged_is_the_two_layer_comp_it_claims_to_be() {
     doc_g.items.push(ProjectItem::Composition(comp_g));
     let doc_g = Arc::new(doc_g);
 
-    // The oracle: the same plate packed into a comp, two Precomp layers of it,
-    // the same effects, the top one Multiply at 60.
     let mut doc_p = Document::new();
     let item = plate(&mut doc_p);
     let nested = comp_of(
@@ -288,16 +279,11 @@ fn a_fork_merged_is_the_two_layer_comp_it_claims_to_be() {
     assert_eq!((w, pw), (COMP, COMP));
     assert_eq!(g, p, "a fork merged must be the two-layer picture exactly");
 
-    // And at half the render scale, where the graph's frame and the Precomp's
-    // intermediate are both half size.
     let (g, ..) = r.render_preview(&doc_g, comp_g_id, 0, half(), 1.0).unwrap();
     let (p, ..) = r.render_preview(&doc_p, comp_p_id, 0, half(), 1.0).unwrap();
     assert_eq!(g, p, "and the same at half preview resolution");
 }
 
-/// **Test 9d - the Switch.** It shows the picture its Index names, transparent
-/// out of range, and a Wiggle wired into the Index moves the picture between
-/// frames.
 #[test]
 fn a_switch_shows_the_picture_its_index_names() {
     let Ok(mut r) = HeadlessRenderer::shared() else {
@@ -350,8 +336,6 @@ fn a_switch_shows_the_picture_its_index_names() {
     let past = frame(&mut r, 7, false, 0);
     assert_eq!(past, [0, 0, 0], "out of range reads transparent");
 
-    // A driver wired into the Index: somewhere across half a second the wobble
-    // must cross from one picture to the other.
     let (doc, comp) = build(0, true);
     let wobbled: Vec<[u8; 3]> = (0..30)
         .map(|f| {
@@ -365,19 +349,12 @@ fn a_switch_shows_the_picture_its_index_names() {
     );
 }
 
-/// **Test 9e - a node graph is a comp.** Placed as a Precomp layer, used as a
-/// matte source and fed to an effect's layer row, it renders exactly as a layer
-/// comp of the same picture does - none of which has a line written for it.
 #[test]
 fn a_node_graph_is_read_wherever_a_comp_is() {
     let Ok(mut r) = HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };
-    // Two documents that differ only in whether the inner comp is a graph or a
-    // stack. `use_it` builds the parent's layers from the inner comp's id and
-    // hands back the items its own layers name, so both documents hold the
-    // same project and only the inner comp differs.
     type Parent = dyn Fn(Uuid) -> (Vec<Layer>, Vec<ProjectItem>);
     let pair = |use_it: &Parent| -> [(Arc<Document>, Uuid); 2] {
         let mut built = Vec::new();
@@ -431,7 +408,6 @@ fn a_node_graph_is_read_wherever_a_comp_is() {
         );
     };
 
-    // Placed as a Precomp layer.
     same(&mut r, "placed", &|inner| {
         (
             vec![layer("pre", LayerKind::Precomp { comp: inner })],
@@ -439,7 +415,6 @@ fn a_node_graph_is_read_wherever_a_comp_is() {
         )
     });
 
-    // As a matte source: a full-frame red gated by the box's alpha.
     same(&mut r, "matted", &|inner| {
         let source = layer("source", LayerKind::Precomp { comp: inner });
         let red = Uuid::now_v7();
@@ -456,7 +431,6 @@ fn a_node_graph_is_read_wherever_a_comp_is() {
         )
     });
 
-    // As a Light wrap's background plate, which is the layer-input carriage.
     same(&mut r, "as a plate", &|inner| {
         let plate = layer("plate", LayerKind::Precomp { comp: inner });
         let dark = Uuid::now_v7();
@@ -471,9 +445,6 @@ fn a_node_graph_is_read_wherever_a_comp_is() {
     });
 }
 
-/// **Test 9f - the Node graph effect on a solid equals the same effects
-/// applied inline.** A graph with no Read boxes is a reusable effect with a
-/// picture in and a picture out, and this is that claim, pinned.
 #[test]
 fn the_node_graph_effect_equals_the_same_effects_inline() {
     let Ok(mut r) = HeadlessRenderer::shared() else {
@@ -488,8 +459,6 @@ fn the_node_graph_effect_equals_the_same_effects_inline() {
             .push(solid(grey, "grey", [0.3, 0.4, 0.5, 1.0], COMP, COMP));
         let mut host = layer("host", LayerKind::Solid { def: grey });
         if graphed {
-            // A graph with no Read boxes: a reusable effect with a picture in
-            // and a picture out (§1.5).
             let (src, e, o) = (picture_input("src"), GraphNode::Fx(fx()), output());
             let (src_id, e_id, o_id) = (src.id(), e.id(), o.id());
             let inner = graph_comp(
@@ -525,9 +494,6 @@ fn the_node_graph_effect_equals_the_same_effects_inline() {
     );
 }
 
-/// **Test 9f, the rest.** A second picture Input fed from a layer row arrives
-/// on the depth-pass carriage; a value Input keyed on the host moves the
-/// picture; and a graph nested in a graph is the flattened graph.
 #[test]
 fn a_graphs_inputs_reach_it_from_the_host_and_from_the_graph_above() {
     let Ok(mut r) = HeadlessRenderer::shared() else {
@@ -535,8 +501,6 @@ fn a_graphs_inputs_reach_it_from_the_host_and_from_the_graph_above() {
         return;
     };
 
-    // A second picture Input: the graph lays the named layer over its own
-    // input, so the finished picture is that layer alone.
     let mut doc = Document::new();
     let (red, blue) = (Uuid::now_v7(), Uuid::now_v7());
     doc.items
@@ -577,7 +541,6 @@ fn a_graphs_inputs_reach_it_from_the_host_and_from_the_graph_above() {
         rgb(&px, w, 32, 32)
     );
 
-    // A value Input keyed on the host: two frames, two pictures.
     let mut doc = Document::new();
     let grey = Uuid::now_v7();
     doc.items
@@ -635,9 +598,6 @@ fn a_graphs_inputs_reach_it_from_the_host_and_from_the_graph_above() {
         "a keyed value Input on the host must move the picture"
     );
 
-    // And a driver on the host wired into that same row: the wire substitutes
-    // where the keyframes would have been read, exactly as it does on any
-    // other effect's parameter.
     let mut driven = (*doc).clone();
     if let Some(comp) = driven.comp_mut(comp_id) {
         let host = &mut comp.layers[0];
@@ -685,7 +645,6 @@ fn a_graphs_inputs_reach_it_from_the_host_and_from_the_graph_above() {
         "a driver on the host must reach the graph's own Input"
     );
 
-    // A graph nested in a graph is the flattened graph.
     let flat = |nested: bool| {
         let mut doc = Document::new();
         let grey = Uuid::now_v7();
@@ -748,9 +707,6 @@ fn a_graphs_inputs_reach_it_from_the_host_and_from_the_graph_above() {
     );
 }
 
-/// **Test 9g - a cycle degrades to a passthrough and renders.** A graph whose
-/// own box names the comp it sits in hands its input on, exactly as a dangling
-/// reference does everywhere else.
 #[test]
 fn a_cycle_through_a_node_graph_box_renders_a_passthrough() {
     let Ok(mut r) = HeadlessRenderer::shared() else {
@@ -761,7 +717,6 @@ fn a_cycle_through_a_node_graph_box_renders_a_passthrough() {
     let red = Uuid::now_v7();
     doc.items
         .push(solid(red, "red", [1.0, 0.0, 0.0, 1.0], COMP, COMP));
-    // The comp's own id is minted first, so its graph can name itself.
     let mut comp = graph_comp("self", Vec::new(), Vec::new());
     let comp_id = comp.id;
     let mut inst = lumit_core::fx::builtins::instantiate("node_graph").unwrap();
@@ -790,25 +745,15 @@ fn a_cycle_through_a_node_graph_box_renders_a_passthrough() {
         "a cycle hands the picture on rather than faulting: {:?}",
         rgb(&px, w, 32, 32)
     );
-    // And the frame still has a name.
     key_of(&doc, comp_id);
 }
 
-/// **Test 21 - a placed graph reads the values the layer hands it** (§5.3). A
-/// node graph placed as a Precomp layer used to be stuck on its own defaults:
-/// the layer had nowhere to put a value and the lowering had nowhere to read
-/// one. Now the layer carries a `node_graph` instance of its own, and the two
-/// claims are that a keyed value moves the picture over time, and that the
-/// picture is the very one the same graph applied as an effect makes with the
-/// same values - the two roads into one lowering.
 #[test]
 fn a_placed_graphs_own_input_values_move_its_picture() {
     let Ok(mut r) = HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };
-    // Stops ramp nought to three over the comp's first second, so which frame
-    // is on screen is a different brightness.
     let keyed = || {
         EffectValue::Float(lumit_core::anim::Property {
             animation: lumit_core::anim::Animation::Keyframed(vec![
@@ -829,8 +774,6 @@ fn a_placed_graphs_own_input_values_move_its_picture() {
         })
     };
 
-    // The graph: a Read of a grey solid through an Exposure whose Stops is an
-    // Input, so the host's value is the whole of what the picture shows.
     let build = |placed: bool| {
         let mut doc = Document::new();
         let grey = Uuid::now_v7();
@@ -855,7 +798,6 @@ fn a_placed_graphs_own_input_values_move_its_picture() {
         let mut inst = node_graph_effect(&inner);
         set_value(&mut inst, "amount", keyed());
         let host = if placed {
-            // Placed as a Precomp layer, with the values on the layer.
             let mut l = layer("placed", LayerKind::Precomp { comp: inner.id });
             l.graph_inputs = Some(inst);
             l
@@ -892,8 +834,6 @@ fn a_placed_graphs_own_input_values_move_its_picture() {
     );
     assert_eq!(late, shot(&mut r, &ad, ac, 30));
 
-    // And at half the render scale, where the graph's frame and the Precomp's
-    // intermediate are both half size.
     let (placed, ..) = r.render_preview(&pd, pc, 30, half(), 1.0).unwrap();
     let (applied, ..) = r.render_preview(&ad, ac, 30, half(), 1.0).unwrap();
     assert_eq!(placed, applied, "and the same at half preview resolution");
@@ -903,8 +843,6 @@ fn a_placed_graphs_own_input_values_move_its_picture() {
 /// differ.
 const PLATE: [f32; 4] = [0.8, 0.4, 0.2, 0.5];
 
-/// The plate read into a Split channels box, then `rest` adds the boxes and
-/// wires after it, handed the Split's id and the Output's.
 fn split_graph(
     enabled: bool,
     rest: impl FnOnce(Uuid, Uuid, &mut Vec<GraphNode>, &mut Vec<GraphEdge>),
@@ -926,8 +864,6 @@ fn split_graph(
     (Arc::new(doc), id)
 }
 
-/// The plate read straight into the Output, for the pictures above to be
-/// measured against.
 fn plate_alone() -> (Arc<Document>, Uuid) {
     let mut doc = Document::new();
     let plate = Uuid::now_v7();
@@ -954,11 +890,6 @@ fn near(a: [f32; 4], b: [f32; 4]) -> bool {
     a.iter().zip(b).all(|(x, y)| (x - y).abs() < 0.01)
 }
 
-/// **A box keeps what lands past the frame.** A plate twice the graph's size,
-/// scaled to a quarter, shows all of it and not just the middle that fitted,
-/// and so does a picture a Corner pin pulled out to that size.
-/// Taking a lens bend away pushes the corners out of the frame, and putting it
-/// back brings them in again rather than leaving them empty.
 #[test]
 fn a_box_keeps_the_picture_past_the_frame() {
     let Ok(mut r) = HeadlessRenderer::shared() else {
@@ -1001,15 +932,12 @@ fn a_box_keeps_the_picture_past_the_frame() {
         ]
         .concat(),
     );
-    // A quarter of 128 is 32 wide, from 16 to 48. The middle 64 alone would
-    // have been 16 wide, from 24 to 40.
     assert!(lit(
         &mut r,
         chain(COMP * 2, vec![quarter.clone()]),
         18,
         COMP / 2
     ));
-    // Pinned out to twice the frame, then a quarter, is the same 32 wide.
     let (lo, hi) = (-f64::from(COMP / 2), f64::from(COMP * 3 / 2));
     let pin = effect(
         "corner_pin",
@@ -1042,8 +970,6 @@ fn a_box_keeps_the_picture_past_the_frame() {
     ));
 }
 
-/// **Split then Combine is the identity** on a pixel with any alpha, and a
-/// Combine with its Alpha unwired is opaque.
 #[test]
 fn a_split_into_a_combine_gives_the_picture_back() {
     let Ok(mut r) = HeadlessRenderer::shared() else {

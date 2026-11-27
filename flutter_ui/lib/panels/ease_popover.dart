@@ -29,15 +29,10 @@ import 'timeline_extras_frb.dart' show showMenuAt;
 /// The popover's width, room for every line on one line in any language.
 const double easePopoverWidth = 224;
 
-/// The label column, so the four rows' controls line up under one another —
-/// the drawing's 56.
 const double _labelWidth = 56;
 
-/// A value well's width in this box: the drawing's 44px face.
 const double _wellWidth = 44;
 
-/// What one press of Apply asks for: a shape, and how far apart to spread the
-/// rows it lands on.
 class EaseRequest {
   final EasingCurve curve;
 
@@ -170,8 +165,6 @@ class _EasePopoverState extends State<_EasePopover> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // The header: what this box is, and what it has hold of. A raised
-            // strip, the way every small floating surface's title is.
             Container(
               height: t.density.laneRow,
               decoration: BoxDecoration(
@@ -218,8 +211,6 @@ class _EasePopoverState extends State<_EasePopover> {
     );
   }
 
-  /// One labelled line: the name in the fixed column, the control filling what
-  /// is left.
   Widget _row(LumitTheme t, String label, Widget control) => Row(
         children: [
           SizedBox(
@@ -303,7 +294,6 @@ class _EasePopoverState extends State<_EasePopover> {
         ],
       );
 
-  /// The stagger: how many frames apart the rows arrive, and from which end.
   Widget _staggerRow(LumitTheme t) => Row(
         children: [
           SizedBox(
@@ -345,7 +335,6 @@ class _EasePopoverState extends State<_EasePopover> {
         ],
       );
 
-  /// Copy ease and Paste ease: the easing of keys, without values or times.
   Widget _clipboard(LumitTheme t) {
     Widget button(String key, String label, VoidCallback? onPressed) =>
         Expanded(

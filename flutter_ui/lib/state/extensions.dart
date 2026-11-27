@@ -20,18 +20,15 @@ class ExtensionService extends ChangeNotifier {
     refresh();
   }
 
-  /// Every extension installed, by id.
   List<BridgeExtension> installed = const [];
 
   /// The ones with a panel of their own. One that carries only effects has
   /// no pane.
   Iterable<BridgeExtension> get panels => installed.where((e) => e.panel);
 
-  /// The folders extensions are found in.
   BridgeExtensionFolders scanFolders =
       const BridgeExtensionFolders(machine: [], extra: []);
 
-  /// An install is running. One at a time.
   bool busy = false;
 
   /// Moves on whenever an extension is installed over itself, so its panel
@@ -58,8 +55,6 @@ class ExtensionService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// The engine has registered or dropped effects, so the effect lists are
-  /// read again.
   Future<void> _effectsChanged() {
     effectSchema.forget();
     return refresh();
@@ -82,7 +77,6 @@ class ExtensionService extends ChangeNotifier {
 
   PaneId pane(String id) => (panel: Panel.extension, instance: slot(id));
 
-  /// The extension shown in the pane numbered [slot], if it is installed.
   BridgeExtension? inSlot(int slot) {
     for (final extension in panels) {
       if (_workspace.extensionSlots[extension.id] == slot) return extension;
@@ -90,8 +84,6 @@ class ExtensionService extends ChangeNotifier {
     return null;
   }
 
-  /// The installed extension that carries the LFX effect [matchName], and
-  /// that effect, or null when none does.
   (BridgeExtension, BridgeExtensionEffect)? carrying(String matchName) {
     for (final extension in installed) {
       for (final effect in extension.effects) {
@@ -101,7 +93,6 @@ class ExtensionService extends ChangeNotifier {
     return null;
   }
 
-  /// The folders the person has picked for [id] to watch.
   Set<String> folders(String id) => {...?_workspace.extensionFolders[id]};
 
   void setFolders(String id, Set<String> folders) =>
@@ -143,8 +134,6 @@ class ExtensionService extends ChangeNotifier {
     }
   }
 
-  /// Install the package at [path] into [folder], or Lumit's own folder
-  /// when null.
   Future<BridgeExtensionOutcome> installPackage(String path,
       {String? folder}) async {
     if (busy) return const BridgeExtensionOutcome.busy();
@@ -162,7 +151,6 @@ class ExtensionService extends ChangeNotifier {
     return outcome;
   }
 
-  /// Pack the extension in [folder] as [out], checked as an install would be.
   Future<BridgeExtensionOutcome> makePackage(String folder, String out) async {
     if (busy) return const BridgeExtensionOutcome.busy();
     busy = true;
@@ -189,12 +177,10 @@ class ExtensionService extends ChangeNotifier {
     await _effectsChanged();
   }
 
-  /// Scan [folder] for extensions too.
   Future<void> addFolder(String folder) async {
     try {
       await extensionAddFolder(folder: folder);
     } catch (_) {
-      // Nothing was added.
     }
     await _effectsChanged();
   }
@@ -204,7 +190,6 @@ class ExtensionService extends ChangeNotifier {
     try {
       await extensionRemoveFolder(folder: folder);
     } catch (_) {
-      // Nothing was taken off.
     }
     await _effectsChanged();
   }
@@ -216,7 +201,6 @@ class ExtensionService extends ChangeNotifier {
     try {
       removed = await extensionRemove(id: id);
     } catch (_) {
-      // Nothing was removed.
     }
     await _effectsChanged();
     return removed;

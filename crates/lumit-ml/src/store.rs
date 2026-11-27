@@ -26,7 +26,6 @@ use crate::{
     runtime, tarball,
 };
 
-/// The file every addon folder holds.
 pub const MANIFEST_FILE: &str = "addon.json";
 
 /// Where an install is assembled before it is renamed into place. Swept on
@@ -44,15 +43,12 @@ pub(crate) const MOST_UNPACKED: u64 = 4 << 30;
 /// released even when the installing thread unwinds.
 static SLOT: Mutex<()> = Mutex::new(());
 
-/// Somewhere other than the user's own addons folder, when a test has said so.
 static OVERRIDE: Mutex<Option<PathBuf>> = Mutex::new(None);
 
 /// What the last [`scan`] found, so the callers that ask every frame ask
 /// memory rather than the disk. Cleared whenever the folder moves.
 static SNAPSHOT: RwLock<Option<Arc<Vec<Installed>>>> = RwLock::new(None);
 
-/// Where addons live: what [`with_dir`] was last given, else the platform's
-/// own folder.
 #[must_use]
 pub fn dir() -> Option<PathBuf> {
     OVERRIDE
@@ -75,12 +71,9 @@ pub fn with_dir(dir: Option<PathBuf>) {
     forget();
 }
 
-/// One addon as the folder has it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Installed {
-    /// What its `addon.json` says.
     pub manifest: Manifest,
-    /// Its folder.
     pub path: PathBuf,
     /// A file the manifest lists is missing or the wrong size. The row still
     /// shows, with a word saying so, because the fix is to install it again.
@@ -144,11 +137,8 @@ pub fn generation() -> u64 {
     GENERATION.load(std::sync::atomic::Ordering::Relaxed)
 }
 
-/// What [`generation`] counts: an install, a remove, or the folder moving.
 static GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-/// Throw the snapshot away, so the next ask walks the folder again, and say
-/// that the folder has changed.
 fn forget() {
     if let Ok(mut held) = SNAPSHOT.write() {
         *held = None;
@@ -169,7 +159,6 @@ fn sweep() {
     }
 }
 
-/// The scan itself, without the snapshot and without the sweep.
 fn walk() -> Vec<Installed> {
     let Some(root) = dir() else {
         return Vec::new();
@@ -185,7 +174,6 @@ fn walk() -> Vec<Installed> {
     out
 }
 
-/// One addon by id, or `None` when it is not installed.
 #[must_use]
 pub fn pack(id: &str) -> Option<Installed> {
     if !manifest::is_id(id) {
@@ -197,8 +185,6 @@ pub fn pack(id: &str) -> Option<Installed> {
         .cloned()
 }
 
-/// The first working pack installed for `task`, which is what an effect asks
-/// for when its own model row says "whatever is installed".
 #[must_use]
 pub fn find(task: Task) -> Option<Installed> {
     snapshot()
@@ -314,10 +300,8 @@ pub fn installed_identity(task: Task) -> Option<[u8; 32]> {
 /// once, the first time a session is built, and the answer moves with it.
 type Known = Option<(u64, &'static str, Vec<(Task, Option<[u8; 32]>)>)>;
 
-/// The last such answer.
 static KNOWN: Mutex<Known> = Mutex::new(None);
 
-/// The reading itself, off the snapshot.
 fn named_pack(task: Task) -> Option<[u8; 32]> {
     // A pack with nothing to run it paints nothing, so those frames are the
     // built-in engine's and have to be named as the built-in engine's. The
@@ -329,7 +313,6 @@ fn named_pack(task: Task) -> Option<[u8; 32]> {
     find(task).map(|installed| identity(&installed.manifest))
 }
 
-/// Read one folder as an addon, or `None` when it is not one.
 fn read(path: &Path) -> Option<Installed> {
     let id = path.file_name()?.to_str()?;
     if !manifest::is_id(id) {
@@ -456,13 +439,6 @@ pub fn install(manifest_text: &str, files: &[PathBuf]) -> Result<Installed, MlEr
     read(&home).ok_or(MlError::PackUnreadable)
 }
 
-/// Delete an addon's folder. The row goes; nothing else is touched.
-///
-/// # Errors
-///
-/// [`MlError::NotInstalled`] when there is no addon of that id,
-/// [`MlError::RuntimeInUse`] when the runtime has already loaded, and
-/// [`MlError::Invalid`] when the folder will not delete.
 pub fn remove(id: &str) -> Result<(), MlError> {
     if !manifest::is_id(id) {
         return Err(MlError::NotInstalled);
@@ -487,8 +463,6 @@ pub fn remove(id: &str) -> Result<(), MlError> {
     gone
 }
 
-/// Copy one whole download into the staging folder, refusing a file that is
-/// not the size the manifest says it is.
 fn copy_file(from: &Path, size: u64, to: &Path) -> Result<(), MlError> {
     let meta = fs::metadata(from).map_err(|e| MlError::Invalid(e.to_string()))?;
     if meta.len() != size {
@@ -543,8 +517,6 @@ fn take_from_zip(
     Ok(())
 }
 
-/// The refusal for a file inside a download that unpacks past
-/// [`MOST_UNPACKED`].
 pub(crate) fn too_large(inside: &str) -> MlError {
     MlError::Invalid(format!(
         "\"{inside}\" unpacks to more than an addon file may hold"
@@ -568,7 +540,6 @@ fn abandon(staging: &Path, why: MlError) -> MlError {
     why
 }
 
-/// Enough to tell two staging folders apart, including one a dead build left.
 fn nonce() -> u128 {
     web_time::SystemTime::now()
         .duration_since(web_time::UNIX_EPOCH)
@@ -582,7 +553,6 @@ mod tests {
 
     use crate::test_support::serially;
 
-    /// A manifest for a pack with one plain-file download of `bytes` bytes.
     fn one_file(id: &str, bytes: u64) -> String {
         format!(
             r#"{{"format":1,"id":"{id}","kind":"model","name":"Test pack","version":"1",
@@ -594,7 +564,6 @@ mod tests {
         )
     }
 
-    /// A manifest for a pack whose one download is a zip with two entries.
     fn one_zip(id: &str, bytes: u64) -> String {
         format!(
             r#"{{"format":1,"id":"{id}","kind":"model","name":"Test pack","version":"1",
@@ -609,15 +578,12 @@ mod tests {
         )
     }
 
-    /// Write `bytes` bytes to a file and hand back its path.
     fn a_file(dir: &Path, name: &str, bytes: usize) -> PathBuf {
         let path = dir.join(name);
         fs::write(&path, vec![7u8; bytes]).unwrap();
         path
     }
 
-    /// A zip holding each of `entries`, with a third file beside them that no
-    /// manifest names.
     fn a_zip(dir: &Path, name: &str, entries: &[&str]) -> PathBuf {
         let path = dir.join(name);
         let mut writer = zip::ZipWriter::new(fs::File::create(&path).unwrap());
@@ -631,10 +597,6 @@ mod tests {
         path
     }
 
-    /// **An install from a plain file and from a zip puts exactly the named
-    /// files in place, and nothing else.** The zip's own paths are thrown
-    /// away: only the entries the manifest names come out, under the names it
-    /// gives them.
     #[test]
     fn an_install_places_the_named_files_and_no_others() {
         let _serial = serially();
@@ -665,10 +627,6 @@ mod tests {
         with_dir(None);
     }
 
-    /// **A second install of the same id replaces the first, and a remove
-    /// deletes it.** The folder is the registry, so replacing is two renames:
-    /// the old one aside, the new one into place, and only then is the old one
-    /// thrown away. What is left afterwards is one folder and no staging.
     #[test]
     fn an_install_replaces_and_a_remove_deletes() {
         let _serial = serially();
@@ -706,10 +664,6 @@ mod tests {
         with_dir(None);
     }
 
-    /// **A failure after the first file leaves no folder and the old install
-    /// untouched.** This is what the staging rename is for: the second
-    /// download of the second install is a zip missing an entry, and the pack
-    /// that was already there is still the one that was already there.
     #[test]
     fn a_failure_part_way_leaves_the_old_install_alone() {
         let _serial = serially();
@@ -723,9 +677,6 @@ mod tests {
         )
         .unwrap();
 
-        // The decoder is taken first (the entries are read in order) and the
-        // encoder is not in the zip at all, so the install fails having
-        // already placed a file.
         let half = a_zip(downloads.path(), "half.zip", &["inner/decoder.onnx"]);
         let size = fs::metadata(&half).unwrap().len();
 
@@ -744,8 +695,6 @@ mod tests {
         with_dir(None);
     }
 
-    /// **A pack is found by task, and a broken one is not.** This is what an
-    /// effect asks before it decides whether to wear the missing-addon badge.
     #[test]
     fn a_pack_is_found_by_task_unless_it_is_broken() {
         let _serial = serially();
@@ -767,19 +716,11 @@ mod tests {
         assert!(pack("nothing-here").is_none());
 
         fs::remove_file(root.path().join("depth-pack").join("model.onnx")).unwrap();
-        // A file that goes behind the store's back is noticed by the next
-        // scan, which is what the page does whenever it comes forward; the
-        // render path reads that scan rather than the folder.
         assert!(scan()[0].broken);
         assert!(find(Task::Depth).is_none(), "a broken pack is not offered");
         with_dir(None);
     }
 
-    /// **The snapshot answers without touching the disk, and every change to
-    /// the folder refreshes it.** A frame that names a model pack asks which
-    /// pack on every frame it draws, so the answer has to come from memory;
-    /// an install or a remove that left it stale would draw with a pack that
-    /// is no longer there (docs/impl/addons.md §6.3).
     #[test]
     fn the_snapshot_is_refreshed_by_an_install_and_a_remove() {
         let _serial = serially();
@@ -795,8 +736,6 @@ mod tests {
         .unwrap();
         assert_eq!(snapshot().len(), 1, "the install refreshed it");
 
-        // Written straight into the folder, which is exactly what the snapshot
-        // is allowed not to see until something scans.
         let home = root.path().join("unseen");
         fs::create_dir_all(&home).unwrap();
         fs::write(home.join(MANIFEST_FILE), one_file("unseen", 8)).unwrap();
@@ -821,8 +760,6 @@ mod tests {
         );
     }
 
-    /// The file names one folder holds, sorted, so a test can say exactly
-    /// what an install put there.
     fn held(dir: &Path) -> Vec<String> {
         let mut names: Vec<String> = fs::read_dir(dir)
             .unwrap()

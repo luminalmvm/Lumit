@@ -79,13 +79,8 @@ const H: u32 = 816;
 /// behind it to look at and the pan has built up some motion.
 const FRAME: u64 = 24;
 
-/// Comp length in seconds, and its rate.
 const DURATION_S: i64 = 2;
 const FPS: u32 = 24;
-
-// ---------------------------------------------------------------------------
-// The showcase settings
-// ---------------------------------------------------------------------------
 
 /// Parameter settings that make an effect visible in one still picture.
 ///
@@ -99,7 +94,6 @@ const FPS: u32 = 24;
 /// should be able to name the effect from the picture alone.
 fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
     match match_name {
-        // --- grades, all of which are identity until a slider moves ---
         "exposure" => vec![("stops", f(1.4))],
         "brightness" => vec![("brightness", f(14.0)), ("contrast", f(45.0))],
         "contrast" => vec![("contrast", f(138.0))],
@@ -113,8 +107,6 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
             ("gamma", colour([0.94, 1.0, 1.10, 1.0])),
             ("gain", colour([1.18, 1.0, 0.82, 1.0])),
         ],
-        // The classic S: shadows down, highlights up, the middle left alone. The
-        // master curve is a drawn curve now, so the S is four points.
         "curves" => vec![(
             "master",
             EffectValue::Curve(vec![[0.0, 0.0], [0.25, 0.17], [0.75, 0.86], [1.0, 1.0]]),
@@ -184,7 +176,6 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
             ("centre_x", f(f64::from(W) * 0.5)),
             ("centre_y", f(f64::from(H) * 0.5)),
         ],
-        // The default length is gentle at page width, so the streaks are longer.
         "vector_blur" => vec![("length", f(120.0))],
         // A four-pixel period is right on a screen and gone by the time the
         // figure has been scaled to page width, so the example uses a coarse one.
@@ -212,7 +203,6 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
         // on them. This seed lands a scale, a slide and a blur on the frame.
         "jolt" => vec![("seed", EffectValue::Seed(408))],
 
-        // --- geometry ---
         "transform" => vec![
             ("scale_x", f(72.0)),
             ("scale_y", f(72.0)),
@@ -271,20 +261,17 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
             ("scale_x", f(70.0)),
             ("scale_y", f(70.0)),
         ],
-        // Large discs that would lie on top of each other as Scatter left them.
         "relax_points" => vec![
             ("use_size", on(true)),
             ("iterations", f(40.0)),
             ("strength", f(100.0)),
         ],
-        // A second of a vortex, which twists the lattice about the middle.
         "flow_points" => vec![
             ("field", choice(1)),
             ("speed", f(170.0)),
             ("centre_y", f(f64::from(H) / 2.0)),
             ("radius", f(700.0)),
         ],
-        // Fit cell, so each copy of the plate is the size of its cell.
         "clone_to_points" => vec![
             ("fit", choice(2)),
             ("cell_width", f(280.0)),
@@ -300,7 +287,6 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
         "label_points" => vec![("offset_x", f(22.0))],
         "points_field" => vec![("radius", f(170.0))],
         "points_along_path" => vec![("count", f(40.0)), ("size", f(18.0))],
-        // The corners it followed, drawn large enough to find on the plate.
         "track_points" => vec![
             ("spacing", f(40.0)),
             ("size", f(26.0)),
@@ -312,7 +298,6 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
             ("colour", colour([1.0, 0.4, 0.05, 1.0])),
         ],
 
-        // --- the ones that read a second picture, wired in wire_aux ---
         "light_wrap" => vec![("width", f(70.0)), ("intensity", f(2.2))],
         "set_matte" => vec![("channel", choice(0))],
         // Focus is picked by pointing at the running figure rather than by
@@ -375,7 +360,6 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
         // picture is what makes the effect's job visible.
         "broadcast_safe" => vec![("maximum_signal", f(72.0))],
 
-        // --- Flash's Manual mode reads the trigger as the level ---
         "flash" => vec![("trigger", f(0.55)), ("intensity", f(70.0))],
         // Particulate's defaults are a working emitter, not a neutral one, so
         // this is not a picture that would otherwise be the plate — it is one
@@ -438,10 +422,6 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
         _ => Vec::new(),
     }
 }
-
-// ---------------------------------------------------------------------------
-// The composition
-// ---------------------------------------------------------------------------
 
 /// A stable id hashed from a name, so two runs of the same picture are filed
 /// under the same frame name and the disk cache can hit across runs. Copied
@@ -644,7 +624,6 @@ fn points_above(match_name: &str) -> Vec<(&'static str, EffectInstance)> {
             set(&mut cells, "size", f(100.0));
             vec![("points", cells)]
         }
-        // A lattice and a set of rings in two colours, drawn as one stream.
         "merge_points" => {
             let mut rows = lattice(16.0, 7.0, 105.0, 0.0);
             set(&mut rows, "colour", colour([0.1, 0.35, 1.0, 1.0]));
@@ -721,8 +700,6 @@ fn set(inst: &mut EffectInstance, id: &str, value: EffectValue) {
     }
 }
 
-/// The example composition: the plate, optionally one effect on it, and the
-/// auxiliary layer for the effects that read a second picture.
 fn example_doc(
     clip: &std::path::Path,
     depth: Option<&std::path::Path>,
@@ -764,7 +741,6 @@ fn example_doc(
     if let Some(d) = depth {
         footage("depth.mp4", d);
     }
-    // The plate is silent and Audio spectrum has to hear something.
     let hears = fx
         .as_ref()
         .is_some_and(|f| f.effect.match_name == "audio_spectrum");
@@ -847,7 +823,6 @@ fn example_doc(
                 span,
             );
             t.switches.visible = !labels;
-            // Text sits in the top left corner until it is moved.
             t.transform.position_x = Property::fixed(570.0);
             t.transform.position_y = Property::fixed(290.0);
             set(&mut f, "text_layer", EffectValue::Layer(Some(t.id)));
@@ -860,7 +835,6 @@ fn example_doc(
             },
             span,
         );
-        // The path Points along path follows goes with it.
         b.masks = std::mem::take(&mut plate.masks);
         b.graph.edges = above
             .iter()
@@ -965,8 +939,6 @@ fn wire_aux(inst: &mut EffectInstance) {
     }
 }
 
-// ---------------------------------------------------------------------------
-
 fn env_path(key: &str) -> Option<PathBuf> {
     std::env::var_os(key).map(PathBuf::from)
 }
@@ -1024,8 +996,6 @@ fn render_every_effect_example() {
     let mut skipped: Vec<String> = Vec::new();
     let mut made = 0usize;
 
-    // LUMIT_FX_EXAMPLES_ONLY=<match name> restricts the run to one effect,
-    // for iterating on a single picture without the full several-minute run.
     let only = std::env::var("LUMIT_FX_EXAMPLES_ONLY").ok();
     for e in &reference.effects {
         if only.as_deref().is_some_and(|o| o != e.match_name) {

@@ -18,8 +18,8 @@
 
 struct Params {
     m0: vec4<f32>,    // output pixel to input pixel, row 0 in xyz
-    m1: vec4<f32>,    // row 1
-    m2: vec4<f32>,    // row 2
+    m1: vec4<f32>,
+    m2: vec4<f32>,
     keep: vec4<f32>,  // the kept rectangle in output pixels: x0, y0, x1, y1
     // Fill only. The map from a pixel of the frame drawn to the same point of
     // the frame laid in this pass, row by row.

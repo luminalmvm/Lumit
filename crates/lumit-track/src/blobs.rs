@@ -10,12 +10,10 @@
 
 use crate::{FramePlane, TrackError};
 
-/// What counts as a blob, and when two of them are the same one.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct BlobSettings {
     /// Luma, 0..1. A pixel brighter than this is inside a blob.
     pub threshold: f32,
-    /// Follow dark regions on a light picture instead.
     pub invert: bool,
     /// The smallest region kept, in pixels.
     pub min_area: f64,
@@ -28,7 +26,6 @@ pub struct BlobSettings {
     pub max_blobs: usize,
 }
 
-/// Where a blob was on one frame.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct BlobPoint {
     /// Source frame index, as the caller numbered it.
@@ -36,7 +33,6 @@ pub struct BlobPoint {
     /// The centre of the region, source raster pixels.
     pub x: f64,
     pub y: f64,
-    /// How many pixels the region covers.
     pub area: f64,
 }
 
@@ -119,9 +115,6 @@ impl BlobTracker {
         let reach = self.settings.max_move * self.settings.max_move;
         let mut taken = vec![false; found.len()];
         let mut live = Vec::with_capacity(found.len());
-        // ponytail: every live track against every region, which is the
-        // square of `max_blobs` at worst. A bucket grid over the centres is
-        // the upgrade if a noisy clip makes analysis crawl.
         for &index in &self.live {
             let Some(track) = self.tracks.get_mut(index) else {
                 continue;

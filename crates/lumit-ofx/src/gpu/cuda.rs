@@ -11,22 +11,14 @@ use std::ffi::{c_char, c_int, c_uint, c_void, CStr};
 
 use libloading::Library;
 
-/// `CUresult`. Nought is success.
 pub type CuResult = c_int;
-/// `CUdevice`, an ordinal.
 pub type CuDevice = c_int;
-/// `CUcontext`.
 pub type CuContext = *mut c_void;
-/// `CUstream`.
 pub type CuStream = *mut c_void;
-/// `CUdeviceptr`: an address on the card, as a number.
 pub type CuDevicePtr = u64;
-/// `CUmodule`.
 pub type CuModule = *mut c_void;
-/// `CUfunction`.
 pub type CuFunction = *mut c_void;
 
-/// The driver's own file.
 #[cfg(windows)]
 const LIBRARY: &str = "nvcuda.dll";
 #[cfg(not(windows))]
@@ -82,7 +74,6 @@ pub struct Driver {
 }
 
 impl Driver {
-    /// Open the driver and initialise it, or `None` on a machine without one.
     #[must_use]
     pub fn load() -> Option<Self> {
         // SAFETY: loading the vendor's driver runs its own start-up code, which
@@ -118,7 +109,6 @@ impl Driver {
     }
 }
 
-/// A driver answer as a sentence, for the badge.
 fn check(what: &str, code: CuResult) -> Result<(), String> {
     if code == 0 {
         Ok(())
@@ -146,7 +136,6 @@ unsafe impl Send for Cuda {}
 unsafe impl Sync for Cuda {}
 
 impl Cuda {
-    /// Whether this machine has a CUDA card, without making a context.
     pub(crate) fn present() -> bool {
         let Some(driver) = Driver::load() else {
             return false;
@@ -156,7 +145,6 @@ impl Cuda {
         unsafe { (driver.device_get_count)(&raw mut count) == 0 && count > 0 }
     }
 
-    /// Open the card whose name Lumit's adapter starts with, or the first.
     pub(crate) fn open(adapter: Option<&str>) -> Option<Self> {
         let driver = Driver::load()?;
         let mut count = 0;

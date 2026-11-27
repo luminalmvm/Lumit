@@ -1,5 +1,3 @@
-// Tab in the whole application: it moves on from a control that has the
-// focus, and with nothing focused it leaves the menu bar alone.
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -20,7 +18,6 @@ void main() {
     final p = freshProject();
     p.uiState.setSelectedComp(p.state.project!.newComposition(name: 'Scene'));
     await tester.pumpWidget(LumitAppNew(p.state, p.uiState, welcome: false));
-    // Past the splash, to the shell.
     await tester.pump(const Duration(seconds: 3));
     await tester.pump();
     return p;
@@ -35,15 +32,12 @@ void main() {
   FocusNode? focused(WidgetTester tester) =>
       tester.binding.focusManager.primaryFocus;
 
-  /// Tab picked the File menu out of nothing, and a focused control keeps the
-  /// keys, so every shortcut was dead until something was clicked.
   testWidgets('Tab with nothing focused leaves the menu bar alone',
       (tester) async {
     final p = await mount(tester);
     expect(focused(tester), isNot(isA<ControlFocusNode>()));
 
     await press(tester, LogicalKeyboardKey.tab);
-    // Whatever Tab opened is shut again before the shortcuts are tried.
     await press(tester, LogicalKeyboardKey.escape);
     expect(focused(tester), isNot(isA<ControlFocusNode>()),
         reason: 'no control took the focus');

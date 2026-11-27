@@ -14,7 +14,6 @@ import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../widgets/controls.dart';
 
-/// The text and whether the well is up. Listeners hear both change.
 class RowFilter extends ChangeNotifier {
   final TextEditingController text = TextEditingController();
   final FocusNode focus = FocusNode();
@@ -31,7 +30,6 @@ class RowFilter extends ChangeNotifier {
   bool matches(String label) =>
       needle.isEmpty || label.toLowerCase().contains(needle);
 
-  /// Put the well up and the cursor in it.
   void show() {
     if (!open) {
       open = true;
@@ -40,7 +38,6 @@ class RowFilter extends ChangeNotifier {
     WidgetsBinding.instance.addPostFrameCallback((_) => focus.requestFocus());
   }
 
-  /// Escape: the text goes and the well with it.
   void clear() {
     text.clear();
     if (!open) return;
@@ -60,8 +57,6 @@ class RowFilter extends ChangeNotifier {
   }
 }
 
-/// The well in a header's name slot, 20 tall, with the search glyph that says
-/// what it is for.
 Widget rowFilterWell(BuildContext context, RowFilter filter, {Key? key}) {
   final t = ThemeScope.of(context).theme;
   return SizedBox(
@@ -78,8 +73,6 @@ Widget rowFilterWell(BuildContext context, RowFilter filter, {Key? key}) {
   );
 }
 
-/// The search mark a header shows while its well is down: the visible way to
-/// the filter that Ctrl+F opens.
 Widget rowFilterMark(BuildContext context, VoidCallback show, {Key? key}) {
   final t = ThemeScope.of(context).theme;
   return LumitTooltip(

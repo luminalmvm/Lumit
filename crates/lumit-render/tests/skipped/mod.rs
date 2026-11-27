@@ -1,5 +1,3 @@
-//! The effects the example frame leaves without a picture.
-
 /// Effects the example frame cannot honestly illustrate. Posterize time holds
 /// one frame for several, which is a change to the clock and shows only in
 /// motion. Matte key wants a screen to pull, and this frame has none, so every
@@ -35,14 +33,6 @@ pub(super) fn unillustrable(match_name: &str) -> Option<&'static str> {
         // And the effect that applies a graph: it shows whatever graph it is
         // bound to, and this harness has no node graph composition to bind.
         "node_graph" => Some("applies a node graph, and there is none in this project"),
-        // **Not a nature — a defect.** The physical flare adds nothing to a
-        // headless render: the frame comes back bit-identical to the plate at
-        // the defaults and still bit-identical with Intensity at 3.5 and an
-        // area light placed on the brightest part of the picture. Its showcase
-        // entry below is written and correct; it is skipped here so that the
-        // run does not stop, and so that the manual does not carry a picture of
-        // the plate with "Lens flare" under it. Take this line out the day the
-        // flare's additive pass reaches this renderer.
         "lens_flare" => Some("adds nothing to a headless render (defect, not by design)"),
         // The three config-bound OCIO effects list the project's config, and
         // this harness has no config to point at. The file transform draws

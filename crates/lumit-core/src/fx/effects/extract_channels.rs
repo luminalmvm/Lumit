@@ -42,7 +42,6 @@ use crate::fx::{
 use crate::model::EffectInstance;
 use lumit_fx_macros::Effect;
 
-/// The `extra` key the channel list lives under.
 pub const EXTRA_KEY: &str = "extract_channels";
 
 /// What a slot set to nothing reads as, and the first option of every dropdown.
@@ -108,8 +107,6 @@ pub fn stored_channels(inst: &EffectInstance) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Build the `extra` block holding `channels`, for whoever has just read them
-/// off a file — the add-effect path and the Reload channels action.
 #[must_use]
 pub fn channels_extra(channels: &[String]) -> serde_json::Value {
     serde_json::json!({ "channels": channels })
@@ -151,7 +148,6 @@ pub fn selection(inst: &EffectInstance) -> Option<[Option<String>; 4]> {
     any.then_some(out)
 }
 
-/// Extract channels' behaviour.
 pub struct ExtractChannelsDef;
 
 impl EffectDef for ExtractChannelsDef {
@@ -254,7 +250,6 @@ mod tests {
         inst
     }
 
-    /// Pick option `n` for slot `slot` on this instance.
     fn choose(inst: &mut EffectInstance, slot: usize, n: u32) {
         let id = SLOT_IDS[slot];
         inst.params.retain(|p| p.id != id);
@@ -279,9 +274,6 @@ mod tests {
         assert!(seen.iter().all(|p| *p == seen[0]), "{seen:?}");
     }
 
-    /// An index past the end of the list — a preset from a project whose render
-    /// had more passes — reads as unset rather than as a fault or a wrong
-    /// channel.
     #[test]
     fn an_index_past_the_list_reads_as_unset() {
         let mut inst = instance(&["R"]);

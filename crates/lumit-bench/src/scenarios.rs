@@ -56,9 +56,7 @@ use uuid::Uuid;
 /// | B21 | **not a time**: how many decoders are open, carried in this field so one gate covers it |
 #[derive(Debug, Clone, Copy, serde::Serialize)]
 pub struct Measurement {
-    /// The budget's name in docs/13 §2 — `"B3"` and so on.
     pub budget: &'static str,
-    /// The measured number (see the table above).
     pub value_ms: f64,
     /// How many frames the measurement is over. Context for a human, and the
     /// guard against comparing a run of 60 frames with a run of 1200.
@@ -66,7 +64,6 @@ pub struct Measurement {
 }
 
 impl Measurement {
-    /// Frames per second, for the scenarios whose budget is stated that way.
     #[must_use]
     pub fn fps(&self) -> f64 {
         if self.value_ms > 0.0 {
@@ -77,8 +74,6 @@ impl Measurement {
     }
 }
 
-/// Full resolution: what B4 refines to, what B7 plays at, and what export
-/// writes.
 const FULL: Quality = Quality {
     draft: false,
     auto_res: false,
@@ -97,22 +92,6 @@ pub(crate) const SCRUB: Quality = Quality {
     shown_size: false,
 };
 
-/// Half scale — the middle rung of the degradation ladder (docs/13 §4 step 3),
-/// used by B6 and by the idle fill.
-///
-/// ponytail: the real adaptive controller picks a tier per run and walks it up
-/// and down; it lives in `lumit-bridge`, which an engine-side harness
-/// must not depend on. Pinning the middle rung measures the same work at a
-/// fixed quality, which is what a regression gate needs — a controller that
-/// silently settled a rung lower would otherwise read as "faster".
-///
-/// The ceiling is that B6 answers "how fast is the middle rung here?", never
-/// "which rung did this machine hold?" — so the bench and the shipped build can
-/// disagree without either being wrong. The trigger is that disagreement in
-/// numbers: B6 measuring under the docs/13 §2 floor (30 fps on the reference
-/// laptop) on a machine where the app itself plays the same comp at a sustained
-/// 60, or the reverse. Then the bench is no longer describing playback, and the
-/// fix is to lift the controller into an engine crate and drive it from here.
 pub(crate) const HALF: Quality = Quality {
     draft: false,
     auto_res: true,
@@ -121,15 +100,12 @@ pub(crate) const HALF: Quality = Quality {
     shown_size: false,
 };
 
-/// Scrub jumps sampled for B3's 95th percentile.
 const SCRUB_SAMPLES: usize = 20;
-/// Refinements sampled for B4's.
 const REFINE_SAMPLES: usize = 5;
 /// Frames warmed into the card's cache for B5. At full resolution a frame is
 /// 8.3 MB, so this many sit inside the default 512 MiB budget with room to
 /// spare — a window that evicted its own start would measure re-rendering.
 const WARM_FRAMES: u64 = 48;
-/// How many times B5 replays that window.
 const WARM_LAPS: u64 = 5;
 
 /// The fraction of the work area the span-scaled scenarios measure, in
@@ -150,22 +126,17 @@ pub fn span_fraction() -> u64 {
         .map_or(100, |v| v.clamp(1, 100))
 }
 
-/// `count` scaled by [`span_fraction`], never below one frame.
 pub(crate) fn span_scaled(count: u64) -> u64 {
     (count * span_fraction() / 100).max(1)
 }
-/// A second of playback, which is what B6 and B7 report the rate of.
 const PLAY_FRAMES: u64 = 60;
 
-/// The reference comp, built once, ready to be driven by any scenario.
 pub struct Harness {
     doc: Arc<Document>,
     comp: Uuid,
 }
 
 impl Harness {
-    /// Generate (or reuse) the media in `media_dir` and build docs/13 §1's
-    /// comp over it. `Err` when the media cannot be made — no ffmpeg, say.
     pub fn new(media_dir: &Path) -> Result<Self, String> {
         let (doc, comp) = crate::comp::reference_comp(media_dir)?;
         Ok(Self {
@@ -193,7 +164,6 @@ impl Harness {
         Ok(out)
     }
 
-    /// A renderer with nothing in it — see the module note on what cold means.
     fn cold(&self) -> Result<HeadlessRenderer, String> {
         let mut r = HeadlessRenderer::new()?;
         // Named, so the files the first frame shows are probed before any
@@ -204,8 +174,6 @@ impl Harness {
         Ok(r)
     }
 
-    /// How many frames the comp's work area holds — B11's span, and the range
-    /// the other scenarios pick frames from.
     fn work_area(&self) -> (usize, usize) {
         self.doc.comp(self.comp).map_or((0, 1), work_area_frames)
     }
@@ -309,12 +277,10 @@ impl Harness {
         })
     }
 
-    /// **B6** — cold playback with degradation allowed, at [`HALF`].
     pub fn b6_cold_adaptive_playback(&self) -> Result<Measurement, String> {
         self.cold_playback("B6", HALF)
     }
 
-    /// **B7** — cold playback at Full resolution, nothing degraded.
     pub fn b7_cold_full_playback(&self) -> Result<Measurement, String> {
         self.cold_playback("B7", FULL)
     }
@@ -401,7 +367,6 @@ pub mod particulate {
     };
     use lumit_core::model::EffectValue;
 
-    /// 1080p, which is what docs/13 §1's display target and every B-row assume.
     const SIZE: (u32, u32) = (1920, 1080);
     /// Runs behind the stopwatch, after the warm-up. Submitted back to back and
     /// settled once: a flush per iteration would time the queue, not the pass.
@@ -421,15 +386,10 @@ pub mod particulate {
     /// quiet, which zeroed the row below it.)
     const REPEATS: u32 = 3;
 
-    /// One fixture: the budget it measures (`None` for the floor), emit rate,
-    /// declared cap, particle size.
     struct Case(Option<&'static str>, f64, i64, f64);
 
-    /// The floor and the three budgets, in the order they are measured.
     const CASES: [Case; 4] = [
-        // Nothing to draw: the pass's fixed cost, subtracted from the rest.
         Case(None, 0.0, CAP_DEFAULT, 4.0),
-        // ~300 live at 150 a second over a two-second life: the default look.
         Case(Some("B12"), 150.0, CAP_DEFAULT, 4.0),
         Case(Some("B13"), 10_000.0, CAP_DEFAULT, 4.0),
         Case(Some("B14"), 500_000.0, CAP_HARD, 2.0),
@@ -482,8 +442,6 @@ pub mod particulate {
             .ok_or_else(|| "particulate is not in the catalogue".to_string())?;
         for p in &mut inst.params {
             let v = match p.id.as_str() {
-                // A big soft emitter across the frame, so the draw covers real
-                // ground rather than piling every quad on one pixel.
                 "position_x" => 960.0,
                 "position_y" => 540.0,
                 "width" => 1600.0,
@@ -601,11 +559,7 @@ pub mod puppet {
     };
     use uuid::Uuid;
 
-    /// 1080p, as every other row assumes.
     const SIZE: (u32, u32) = (1920, 1080);
-    /// Timed blocks are repeated and the **fastest** kept, for the reason
-    /// [`super::particulate`] gives: these ask "how much work is this", and the
-    /// honest estimator for that is the best run.
     const REPEATS: u32 = 3;
     /// Warps and solves per timed block — both are fast enough that one of them
     /// would be timing the clock.
@@ -617,7 +571,6 @@ pub mod puppet {
     /// auto-coarsens, which is what B16 measures.
     const CAP_DENSITY: f64 = 40.0;
 
-    /// Measure all three.
     pub fn budgets(progress: &mut dyn FnMut(Measurement)) -> Result<Vec<Measurement>, String> {
         let (w, h) = SIZE;
         let alpha = vec![255u8; (w as usize) * (h as usize)];
@@ -647,7 +600,6 @@ pub mod puppet {
             return Err("the bench's pins did not take hold of the mesh".into());
         }
 
-        // B15: one warp of the whole frame, the per-frame cost of a puppet.
         let mut rgba = vec![200u8; (w as usize) * (h as usize) * 4];
         let mut warp_ms = f64::INFINITY;
         for _ in 0..REPEATS {
@@ -709,8 +661,6 @@ pub mod puppet {
         Ok(out)
     }
 
-    /// Two position pins well inside the frame — one held at rest, one dragged
-    /// a hundred pixels — and the factorisation they share.
     fn two_pins(mesh: &PuppetMesh) -> (Vec<SolvePin>, Factorisation) {
         let (w, h) = (f64::from(SIZE.0), f64::from(SIZE.1));
         let mut pins = vec![
@@ -723,7 +673,6 @@ pub mod puppet {
     }
 }
 
-/// Milliseconds since `t`, as a float.
 pub(crate) fn elapsed_ms(t: Instant) -> f64 {
     t.elapsed().as_secs_f64() * 1000.0
 }
@@ -762,7 +711,6 @@ mod tests {
             "a scrub sample measured a cache hit"
         );
         assert!(seen.iter().all(|f| *f < 1200));
-        // A work area shorter than the stride still stays inside it.
         assert!((0..SCRUB_SAMPLES).all(|i| scatter(i, 10, 12) < 12));
     }
 }

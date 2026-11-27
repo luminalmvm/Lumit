@@ -16,21 +16,14 @@
 use super::atrous::{dilation, level_of, LEVELS};
 use super::space::{oetf, pixel_to_ycc, tone, CLEAR};
 
-/// Why a measurement should not be trusted.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LearnIssue {
-    /// The patch is too small to measure the coarse bands.
     Small,
-    /// The patch has picture in it, not only noise.
     NotFlat,
-    /// Part of the patch is clipped to black or white, where there is no noise.
     Clipped,
-    /// There is too little noise to measure.
     TooLittleNoise,
 }
 
-/// What Learn found: the row values to write, where it measured, and how far
-/// to trust it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Learned {
     /// Luma noise, in eight-bit code values of encoded Y.
@@ -47,7 +40,6 @@ pub struct Learned {
     pub sample: [f32; 3],
     /// 0..1.
     pub quality: f32,
-    /// Why the quality is poor, when it is.
     pub reason: Option<LearnIssue>,
 }
 
@@ -78,13 +70,11 @@ impl Learned {
     }
 }
 
-/// A median absolute deviation's scale to a Gaussian sigma.
 const MAD_SIGMA: f32 = 1.4826;
 
 /// How far the deepest band reaches either side, in pixels: 2 x (1 + 2 + 4 + 8).
 const REACH: u32 = 32;
 
-/// The quality below which a reason is given.
 const POOR: f32 = 0.6;
 
 /// A sigma, from values whose middle is near zero but not quite.
@@ -169,7 +159,6 @@ impl Bands {
         out
     }
 
-    /// Mean squared gradient of lane `c` of level `l` inside `inner`.
     fn gradient_energy(&self, l: usize, c: usize, inner: Rect) -> f32 {
         let lv = &self.levels[l];
         let at = |x: u32, y: u32| {
@@ -192,7 +181,6 @@ impl Bands {
     }
 }
 
-/// `inner` grown by the transform's reach, inside the frame.
 fn padded(inner: Rect, w: u32, h: u32) -> Rect {
     let x = inner.x.saturating_sub(REACH);
     let y = inner.y.saturating_sub(REACH);
@@ -211,7 +199,6 @@ fn clips(v: f32) -> bool {
     !(1.0 / 255.0..=254.0 / 255.0).contains(&v)
 }
 
-/// What one block of the frame looks like to the search.
 #[derive(Clone, Copy)]
 struct Block {
     rect: Rect,
@@ -406,7 +393,6 @@ fn tones(blocks: &[Block], fine: f32, luma: f32) -> [f32; 3] {
     raw.map(|r| (r / at).clamp(0.25, 4.0))
 }
 
-/// Measure the patch `inner`.
 fn measure(
     ycc: &[f32],
     clipped: &[bool],

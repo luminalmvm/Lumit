@@ -1,6 +1,3 @@
-// A Text layer's animators in the Timeline: Add animator on the Animators
-// heading, After Effects' Animate, and Delete on an animator, on Animators and
-// on a property row.
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -76,7 +73,6 @@ void main() {
       final animators = text.getText()!.animators;
       expect(animators, hasLength(1));
       expect(animators.single.properties, ['scale']);
-      // Only what was added is listed, with the selector.
       final values = textAnimatorValuesOf(animators.single, solid: false);
       expect(values, contains(TextAnimatorValue.scaleX));
       expect(values, isNot(contains(TextAnimatorValue.opacity)));
@@ -90,7 +86,6 @@ void main() {
           find.byKey(ValueKey<String>('tl-text-animator-add-$id/animators/0')),
           findsOneWidget);
 
-      // The animator open shows its whole selector, as Effect controls does.
       await tester.tap(find.descendant(of: find.byKey(ValueKey<String>('tl-group-$id/animators/0')), matching: find.byType(Text)).first);
       await tester.pumpAndSettle();
       // Based on and Shape fold under the selector's Advanced.
@@ -107,7 +102,6 @@ void main() {
           find.byKey(const ValueKey<String>('tl-anim-0-target')), findsNothing,
           reason: 'a Range selector has no target');
 
-      // The same menu has the presets, as Animate text does.
       await tester.tap(add);
       await tester.runAsync(
           () => Future<void>.delayed(const Duration(milliseconds: 50)));
@@ -281,8 +275,6 @@ void main() {
       await tester.tap(find.descendant(of: find.byKey(ValueKey<String>('tl-group-$id/animators/0')), matching: find.byType(Text)).first);
       await tester.pumpAndSettle();
 
-      // A property row: Rotation comes off the list, the axis off the
-      // animator, by its own ×.
       await tester
           .tap(find.byKey(const ValueKey<String>('tl-anim-0-rotation-label')));
       await tester.pump();
@@ -296,14 +288,12 @@ void main() {
       first = text.getText()!.animators.first;
       expect(first.axes, isEmpty);
 
-      // An animator's heading takes that animator.
       await tester.tap(find.descendant(of: find.byKey(ValueKey<String>('tl-group-$id/animators/1')), matching: find.byType(Text)).first);
       await tester.pump();
       await delete(tester, p);
       expect(text.getText()!.animators.map((a) => a.name),
           ['Animator 1', 'Animator 3']);
 
-      // Animators takes every one.
       await tester.tap(find.descendant(of: find.byKey(ValueKey<String>('tl-group-$id/animators')), matching: find.byType(Text)).first);
       await tester.pump();
       await delete(tester, p);
@@ -313,8 +303,6 @@ void main() {
   });
 }
 
-/// Keeps [LayerReference] and [animatorsPath] imported for the reader: the
-/// paths above are the ones the fold builds.
 // ignore: unused_element
 String _path(LayerReference layer) =>
     animatorsPath(layer.internallayerId.toString());

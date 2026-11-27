@@ -14,7 +14,6 @@ use uuid::Uuid;
 /// places confidence is low. A per-pixel choice the kernel branches on last.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MbView {
-    /// The blurred picture (the default).
     Rendered,
     /// The per-pixel flow vectors, colour-coded (red = +x, green = +y, grey =
     /// still) — for checking the motion the smear follows.
@@ -95,7 +94,6 @@ impl MbQuality {
 /// are the wire form the WGSL uniform reads: 0 Final, 1 Screen matte, 2 Status.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MatteKeyView {
-    /// The keyed, despilled, matte-applied picture (the default).
     Final,
     /// The screen matte itself as greyscale (white kept, black keyed) — for
     /// seeing exactly what the key is holding out.
@@ -134,12 +132,10 @@ impl MatteKeyView {
 pub enum ReplaceMethod {
     /// Keep the original source colour (no colour replacement; alpha still keys).
     Source,
-    /// Blend in the flat replace colour where spill was removed.
     HardColour,
     /// Blend in the replace colour scaled by the pixel's own brightness (the
     /// default — it settles into shading rather than reading as a flat patch).
     SoftColour,
-    /// Leave the despilled colour untouched.
     None,
 }
 
@@ -661,7 +657,6 @@ pub(super) fn resolve_into_arena(
                 // different picture.
                 _ => CurvePoints::sanitised(default),
             }),
-            // An outline rides in the bag as a curve does.
             ParamKind::Shape => Value::Shape(match e.param(p.id) {
                 Some(EffectValue::Shape(points)) => shape_points::ShapePoints::sanitised(points),
                 _ => shape_points::ShapePoints::EMPTY,

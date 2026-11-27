@@ -19,7 +19,6 @@ use crate::block::{MixWork, RingSource};
 use crate::{meter, nanos, plan::MixPlan, put, AudioEngine, Scrub, Shared};
 use std::sync::atomic::Ordering;
 
-/// The slowest the sound is played at: an eighth of its speed.
 const SLOWEST: u32 = 8;
 
 impl AudioEngine {
@@ -35,11 +34,8 @@ impl AudioEngine {
 /// What the callback keeps between buffers while the sound is slowed. Every
 /// buffer is made when the stream opens, so the callback never allocates.
 pub(crate) struct Stretch {
-    /// The Hann window over one grain.
     window: Vec<f32>,
-    /// Half a grain: how far apart grains are laid in what is heard.
     hop: usize,
-    /// How far a grain may be moved to line up with the last.
     seek: usize,
     /// The mix around where the next grain is wanted: `seek` frames either
     /// side of it and a grain on, stereo.
@@ -49,7 +45,6 @@ pub(crate) struct Stretch {
     /// The same half as it was mixed, in mono: what the next grain is
     /// matched against.
     carry: Vec<f32>,
-    /// The half grain being handed to the card, and how much of it has gone.
     ready: Vec<f32>,
     given: usize,
     /// Where in the mix this run began, and how many frames have been heard
@@ -60,13 +55,10 @@ pub(crate) struct Stretch {
     /// Where the last buffer left the playhead. A playhead found anywhere
     /// else has been moved, and the grains start again from there.
     left_at: Option<usize>,
-    /// Whether `tail` and `carry` hold a grain to carry on from.
     joined: bool,
 }
 
 impl Stretch {
-    /// Sized for a stream at `rate`, with the grain [`crate::speed::keep_pitch`]
-    /// uses.
     pub(crate) fn new(rate: u32) -> Self {
         let grain = ((rate as usize / 25) & !1).max(64);
         let hop = grain / 2;
@@ -170,14 +162,10 @@ impl Stretch {
         true
     }
 
-    /// The mix frame being heard now.
     fn at(&self) -> usize {
         self.base + (self.heard / u64::from(self.slow.max(1))) as usize
     }
 
-    /// Lay the next grain, wanted at mix frame `want`, over the last one's
-    /// tail, and make the next half grain ready. What the mix missed comes
-    /// back.
     fn lay(
         &mut self,
         plan: &MixPlan,
@@ -244,9 +232,6 @@ mod tests {
     use lumit_media::audio::AudioBuffer;
     use std::sync::Arc;
 
-    /// Half and quarter speed through the callback: the clock moves one mix
-    /// frame for every two or four heard, a tone keeps its pitch, and the
-    /// joins between grains and between buffers do not click.
     #[test]
     fn slowed_sound_keeps_its_pitch_and_slows_the_clock() {
         let (rate, hz) = (48_000u32, 440.0f32);
@@ -275,7 +260,6 @@ mod tests {
             let moved = shared.playhead.load(Ordering::Relaxed);
             assert_eq!(moved, rate as usize / slow as usize);
 
-            // Past the first grain, which rises from nothing.
             let left = &left[2_000..];
             let rising = left
                 .windows(2)

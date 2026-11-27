@@ -26,8 +26,6 @@ import 'package:lumit_flutter/panels/graph_panel.dart';
 
 import 'frb_test_support.dart';
 
-/// A canvas that draws nothing and counts the dots it was asked for, in both
-/// the shapes a dot grid could plausibly take.
 class _DotCount implements Canvas {
   int dots = 0;
   int calls = 0;
@@ -87,7 +85,6 @@ void main() {
         .widget<CustomPaint>(find.byKey(const ValueKey('graph-ground')))
         .painter!;
 
-    /// Count the ground's dots as it stands.
     _DotCount count(WidgetTester tester) {
       final counter = _DotCount();
       ground(tester).paint(counter, size);
@@ -136,7 +133,6 @@ void main() {
       await mount(tester);
       final before = ground(tester);
 
-      // A hover over the canvas rebuilds the panel and redraws every wire.
       final centre = tester.getCenter(find.byKey(const ValueKey('graph-canvas')));
       final pointer = TestPointer(1, PointerDeviceKind.mouse);
       await tester.sendEventToBinding(pointer.hover(centre));

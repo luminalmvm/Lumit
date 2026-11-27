@@ -45,7 +45,6 @@ class PhoneLine extends ChangeNotifier {
   final LumitState app;
   final Workspace workspace;
 
-  /// What sends a preview, for an export a phone asks to have sent as one.
   final ReviewsState reviews;
 
   PhoneLine(this.account, this.app, this.workspace, this.reviews);
@@ -90,7 +89,6 @@ class PhoneLine extends ChangeNotifier {
   /// null once it is on its way there.
   Future<String?> Function(Map<dynamic, dynamic> j)? queueOn;
 
-  /// Say [j] on the line, if there is one.
   bool send(Map<String, Object?> j) {
     final socket = _live;
     if (socket == null) return false;
@@ -168,7 +166,6 @@ class PhoneLine extends ChangeNotifier {
         () => _listen(joined ? 1 : tries + 1, look));
   }
 
-  /// What this computer is and what it is exporting, when that has changed.
   void _say() {
     final socket = _live;
     if (socket == null) return;
@@ -319,7 +316,6 @@ class PhoneLine extends ChangeNotifier {
       'to': j['from'],
       if (error == null) 'ok': true else 'error': error,
     }));
-    // The queue as it is now, rather than at the next beat.
     _say();
   }
 
@@ -420,8 +416,6 @@ class PhoneLine extends ChangeNotifier {
   String? _preview(BridgeExportQueueItem item) {
     if (item.state is! BridgeExportQueueState_Done) return 'failed';
     final project = app.project;
-    // ponytail: two compositions of the same name take the first. Carry the
-    // id on the queue item if that bites.
     final comp = project == null
         ? null
         : app.comps().where((c) => c.$2 == item.compName).firstOrNull?.$1;

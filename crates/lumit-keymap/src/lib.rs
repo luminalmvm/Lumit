@@ -69,8 +69,6 @@ impl ActionId {
         if let Some(n) = self.0.strip_prefix("marker.goto.") {
             return format!("Go to marker {n}");
         }
-        // The angles of a multicam clip, nine of each, described by shape as
-        // the markers are.
         if let Some(n) = self.0.strip_prefix("multicam.cut.") {
             return format!("Cut to angle {n}");
         }
@@ -87,7 +85,6 @@ impl ActionId {
             return known.to_string();
         }
         let known = match self.0.as_str() {
-            // Transport and navigation.
             "playback.toggle" => "Play or pause",
             "playback.shuttle.reverse" => "Shuttle backwards",
             "playback.shuttle.pause" => "Shuttle pause",
@@ -109,8 +106,6 @@ impl ActionId {
             "edit.point.next" => "Next edit point",
             "marker.prev" => "Previous marker",
             "marker.next" => "Next marker",
-            // Keyframes. The plain one acts on the picked property rows, the
-            // five named ones on the selected layers.
             "keyframe.toggle" => "Add or remove a keyframe at the playhead",
             "keyframe.toggle.position" => "Add or remove a Position keyframe",
             "keyframe.toggle.scale" => "Add or remove a Scale keyframe",
@@ -236,7 +231,6 @@ impl ActionId {
             "footage.interpretation.apply" => "Apply the remembered interpretation",
             "panel.maximise" => "Maximise the panel under the pointer",
             "graph.toggle" => "Show or hide the graph editor",
-            // Tools.
             "tool.select" => "Selection tool",
             "tool.hand" => "Hand tool",
             "tool.zoom" => "Zoom tool",
@@ -251,7 +245,6 @@ impl ActionId {
             "tool.puppet" => "Puppet tool",
             "tool.camera" => "Camera tool",
             "tool.shape3d" => "3D shape tool",
-            // Timeline reveals and edits.
             "reveal.position" => "Reveal Position",
             "reveal.scale" => "Reveal Scale",
             "reveal.rotation" => "Reveal Rotation",
@@ -340,16 +333,13 @@ impl ActionId {
             "effect.duplicate" => "Duplicate the selected effects",
             "template.controls.add" => "Add to controls",
             "layer.toggle.visible" => "Show or hide the layer",
-            // Graph editor.
             "graph.ease" => "Easy ease",
             "graph.ease.in" => "Easy ease in",
             "graph.ease.out" => "Easy ease out",
             "graph.fit" => "Fit the curves to the pane",
             "graph.frame.all" => "Fit every curve to the pane",
-            // Node graph.
             "nodes.frame.selected" => "Frame the picked boxes",
             "nodes.frame.all" => "Frame every box",
-            // Viewer.
             "viewer.zoom.fit" => "Fit the picture to the panel",
             "viewer.zoom.in" => "Zoom in",
             "viewer.zoom.out" => "Zoom out",
@@ -401,7 +391,6 @@ impl ActionId {
             "viewer.look.normals" => "Show models' normals",
             "viewer.look.faces" => "Show or hide face orientation",
             "viewer.look.lines" => "Switch wireframe on or off",
-            // Panels.
             "panel.toggle.project" => "Show or hide the Project panel",
             "panel.toggle.effects" => "Show or hide Effect controls",
             "panel.toggle.presets" => "Show or hide Effects & presets",
@@ -420,33 +409,23 @@ impl ActionId {
     }
 }
 
-/// Where a binding is live. `Global` is live in every context; the rest are the
-/// focused panels a binding can be scoped to (docs/07 §15 "per-context").
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum KeyContext {
     Global,
-    /// Tool selection (the toolbar): V/H/Z/… (docs/07 §15 "Tools").
     Tools,
     Project,
     Timeline,
     Viewer,
     Graph,
-    /// The node canvases: a layer's graph, a node graph composition and the
-    /// inside of a Custom shader.
     Nodes,
-    /// Panel focus/search shortcuts (docs/07 §15 "Panels").
     Panels,
     Effects,
     /// The Cut workspace's timeline, where the editor's own letters shadow
     /// the app-wide ones.
     Cut,
-    /// The Captions panel's list.
     Captions,
-    /// The Transcript panel, where keys act on the selected words.
     Transcript,
-    /// The Colour workspace's panels: Grade, Grade nodes, Shots and Gallery.
     Colour,
-    /// The Mixer, where keys act on the picked strips.
     Mixer,
 }
 
@@ -518,12 +497,9 @@ pub struct Chord {
     pub key: String,
 }
 
-/// What went wrong parsing a [`Chord`] from text.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ChordError {
-    /// The text had no key (empty, or only modifiers).
     Empty,
-    /// A `+`-separated token before the key was not a known modifier.
     UnknownModifier(String),
 }
 
@@ -538,7 +514,6 @@ impl fmt::Display for ChordError {
 
 impl std::error::Error for ChordError {}
 
-/// One entry of a keymap: a chord, in a context, runs an action.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Binding {
     pub context: KeyContext,
@@ -557,16 +532,11 @@ pub struct Binding {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Shadow {
     pub chord: Chord,
-    /// The panel whose binding wins while it is focused.
     pub context: KeyContext,
-    /// What the chord does there.
     pub action: ActionId,
-    /// What it does everywhere else.
     pub shadowed: ActionId,
 }
 
-/// A set of chords sharing one chord that resolves to more than one action —
-/// what Settings → Keymap flags for the user to resolve (docs/07 §15).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Conflict {
     pub chord: Chord,
@@ -574,8 +544,6 @@ pub struct Conflict {
     pub actions: Vec<ActionId>,
 }
 
-/// The whole keymap: an ordered list of bindings plus the operations Settings →
-/// Keymap needs (lookup, conflict detection, search, rebinding).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Keymap {
     pub bindings: Vec<Binding>,
@@ -622,7 +590,6 @@ pub enum WheelModifier {
     Bare,
 }
 
-/// Something the scroll wheel does while a modifier is held.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum WheelAction {
     /// Zoom time about the pointer, in the Timeline, Audio timeline and Graph editor.
@@ -631,7 +598,6 @@ pub enum WheelAction {
     ScrollSideways,
     /// Zoom the value axis in the Graph editor when auto fit is off.
     ZoomValues,
-    /// Grow or shrink the dropper's sample in the Viewer.
     DropperSample,
     /// Dolly a 3D view toward the pointer in the Viewer, with any tool.
     CameraDolly,
@@ -662,7 +628,6 @@ impl WheelAction {
     }
 }
 
-/// The modifier for each wheel action.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct WheelKeys {
@@ -686,7 +651,6 @@ impl Default for WheelKeys {
 }
 
 impl WheelKeys {
-    /// The modifier `action` answers to.
     #[must_use]
     pub fn modifier(&self, action: WheelAction) -> WheelModifier {
         match action {
@@ -740,8 +704,6 @@ impl Keymap {
             .map(|b| &b.action)
     }
 
-    /// Every chord that could fire more than one action in overlapping contexts
-    /// (docs/07 §15 conflict detection). Empty when the keymap is unambiguous.
     #[must_use]
     pub fn conflicts(&self) -> Vec<Conflict> {
         // Group bindings by chord once (first-seen chord order preserved),
@@ -850,8 +812,6 @@ impl Keymap {
         }
     }
 
-    /// Remove the binding for an exact `(context, chord)`, if any. Returns
-    /// whether something was removed.
     pub fn unbind(&mut self, context: KeyContext, chord: &Chord) -> bool {
         let before = self.bindings.len();
         self.bindings
@@ -919,8 +879,6 @@ impl Keymap {
         }
     }
 
-    /// Bindings whose action id or chord text contains `query`
-    /// (case-insensitive) — the Settings → Keymap search box.
     #[must_use]
     pub fn search(&self, query: &str) -> Vec<&Binding> {
         let q = query.to_ascii_lowercase();

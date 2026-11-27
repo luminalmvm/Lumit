@@ -26,14 +26,10 @@ import '../theme/style_sheet.dart';
 import '../widgets/controls.dart';
 import '../widgets/middle_ellipsis.dart';
 
-/// The title strip, over its hairline.
 const double dialogTitleStrip = 30;
 
-/// The close mark in it, at the size the drawings render it.
 const double dialogCloseGlyph = 12;
 
-/// The page-tab row under the title strip, over its own hairline, and the gap
-/// between two tabs.
 const double dialogTabRow = 26;
 const double dialogTabGap = 2;
 
@@ -50,27 +46,19 @@ const double dialogFooterGap = 12;
 const double dialogFooterStackGap = 8;
 const double dialogFooterPad = 10;
 
-/// The inset the title strip, the footer and a body take from the dialog's
-/// edges.
 const double dialogPadding = 14;
 
 /// A dropdown's closed face, a value well, and a plain button inside the body:
 /// 22, the one height §12A.6 gives them in a dialog.
 const double dialogControlHeight = 22;
 
-/// A titled group: a hairline box with its kicker notched into the top edge,
-/// and the air between two of them. The box's corner is the shape's
-/// `sectionRadius`.
 const double dialogGroupGap = 10;
 
-/// The body of a short dialogue, inside the title strip and the footer.
 const EdgeInsets dialogBodyPadding =
     EdgeInsets.symmetric(horizontal: dialogPadding, vertical: 10);
 
-/// The row a fold's name and reading stand on.
 const double dialogFoldRow = 28;
 
-/// The factual mono lines — the footer's summary, a group's own reading.
 const double dialogMonoSize = 10;
 
 /// The frame itself: the drawing's `surface_1` out to a hairline edge.
@@ -121,9 +109,6 @@ class DialogFrame extends StatelessWidget {
   }
 }
 
-/// A dialogue's box: `surface1` out to a hairline edge drawn over its outer
-/// pixel, the float corner and shadow, with a style's `dialog` rules over it.
-/// Shared by every dialogue and the Settings window.
 Widget dialogSurface(BuildContext context, LumitTheme t, Widget child,
     {bool shadow = true}) {
   final style = partStyle(context, t, 'dialog');
@@ -272,8 +257,6 @@ Widget dialogTitleBar(
           )
         : Row(
             children: [
-              // A question for a title can be long, and is cut before the
-              // close mark is.
               if (!hasSubject)
                 Expanded(
                     child: Align(
@@ -290,7 +273,6 @@ Widget dialogTitleBar(
             ],
           ),
   );
-  // The strip's right-click puts the window back, or closes it.
   return Builder(
     builder: (context) => GestureDetector(
       onSecondaryTapUp: (d) =>
@@ -300,8 +282,6 @@ Widget dialogTitleBar(
   );
 }
 
-/// The page-tab row: kickers in a line, the one in force in the bright colour
-/// over an accent rule — §3.1's one job for the accent in a list of names.
 Widget dialogTabs<T>(
   LumitTheme t, {
   required List<(T, String)> tabs,
@@ -342,8 +322,6 @@ Widget dialogTabs<T>(
                   ),
                   child: Text(
                     t.kickerCase(label),
-                    // A page that is not in force lights towards the one
-                    // that is.
                     style: page == current
                         ? t.kickerOn
                         : t.kicker.copyWith(
@@ -449,7 +427,6 @@ Widget dialogSection(LumitTheme t, String title, List<Widget> rows) => Column(
       ],
     );
 
-/// [child] under a hover fill when [on], and bare when a press would do nothing.
 Widget _hoverIf(bool on, Widget child) => on ? HoverFill(child: child) : child;
 
 /// A part of a long dialogue that folds away. Shut, it says what it holds in
@@ -803,7 +780,6 @@ Widget dialogScroller(
       ),
     );
 
-/// A dropdown at the drawing's height, in the width the row gives it.
 Widget dialogDropdown<T>(
   LumitTheme t, {
   required String id,
@@ -813,8 +789,6 @@ Widget dialogDropdown<T>(
   required ValueChanged<T>? onChanged,
   double? width,
 
-  /// A heading over an option, for a list that comes in named runs — the
-  /// export's colour spaces, where the config's own names sit under one.
   String? Function(T)? group,
 
   /// Why an option cannot be chosen: disabled, never hidden.
@@ -834,13 +808,10 @@ Widget dialogDropdown<T>(
       ),
     );
 
-/// Text that says the whole of itself in a tooltip when there was not the
-/// room to show it all.
 class FittedText extends StatelessWidget {
   final String text;
   final TextStyle style;
 
-  /// How many lines it may run to before it is cut.
   final int lines;
   const FittedText(this.text, this.style, {super.key, this.lines = 1});
 
@@ -891,7 +862,6 @@ Widget dialogEnter({required VoidCallback onEnter, required Widget child}) =>
 Future<T?> askLumitChoice<T>({
   required BuildContext context,
   required String title,
-  /// Only where the answers do not say it all.
   String question = '',
   required List<(String, T)> answers,
   bool stacked = false,

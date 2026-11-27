@@ -1,12 +1,3 @@
-// The panel dispatcher of the flutter_rust_bridge shell — what `LumitAppNew` in
-// main.dart docks.
-//
-// This routes a Panel to its widget and nothing else; each ported panel lives in
-// a file of its own. All of them are ported.
-//
-// The dispatcher for what remains on the v0 JSON bridge is panels.dart. Panels
-// move across as the frb API grows to cover what they need — see docs/TODO.md,
-// "Bridge".
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart' show LumitUiState;
@@ -131,7 +122,6 @@ Widget _panelBody(PaneId pane) => switch (pane.panel) {
       Panel.timeline => const TimelinePanelFrb(),
       Panel.effectControls => const EffectControlsPanelFrb(),
       Panel.effectsAndPresets => const EffectsPresetsPanelFrb(),
-      // Each Scopes panel keeps its own layout and instruments.
       Panel.scopes => ScopesPanelFrb(instance: pane.instance),
       Panel.grade => const GradePanelFrb(),
       Panel.gallery => const GalleryPanelFrb(),

@@ -148,8 +148,6 @@ String shaderPortWord(String id) => switch (id) {
       _ => id,
     };
 
-/// Why a graph won't compile, said the way the canvas names things: a box by
-/// its word and its own name, an input by the word on the box.
 String shaderFaultWords(
     BridgeShaderGraphError error, List<BridgeShaderGraphNode> nodes) {
   switch (error.fault) {
@@ -176,9 +174,6 @@ String shaderFaultWords(
   }
 }
 
-/// Which theme token a shader port type draws in: the widths one to three are
-/// numbers, a vec4 is a colour, and a picture is the image family — the same
-/// legend the outer canvas keeps.
 Color shaderPortColour(LumitTheme t, BridgeShaderTy ty) => switch (ty) {
       BridgeShaderTy.f32 ||
       BridgeShaderTy.vec2 ||
@@ -228,8 +223,6 @@ class _Inner {
     return _Inner(nodes, edges, layout, ties);
   }
 
-  /// A fresh graph: one Result box, nothing wired — what entering a shader
-  /// that has never had a graph starts from.
   static _Inner fresh() => _Inner(
         [
           {'id': 1, 'kind': 'result'},
@@ -266,7 +259,6 @@ class _Inner {
   }
 }
 
-/// One socket as the canvas draws it.
 class _Sock {
   final int node;
   final int port;
@@ -276,7 +268,6 @@ class _Sock {
   const _Sock(this.node, this.port, this.isInput, this.ty, this.at);
 }
 
-/// One box, laid out.
 class _Box {
   final BridgeShaderGraphNode node;
   final Rect rect;
@@ -327,7 +318,6 @@ class _Flight {
   _Flight(this.from, this.to, {this.detached});
 }
 
-/// The inner graph inside the Graph panel: a breadcrumb strip and the canvas.
 class ShaderGraphPanel extends StatefulWidget {
   final ShaderGraphEntry entry;
   final VoidCallback onExit;
@@ -360,7 +350,6 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
   Offset _pan = Offset.zero;
   double _zoom = 1;
 
-  /// Whether a dragged box lands on the grid's pitch, as on the outer canvas.
   bool _snapToGrid = true;
 
   _Flight? _flight;
@@ -417,7 +406,6 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
     super.dispose();
   }
 
-  /// The one picked box, told to the Node panel, which draws it.
   void _publishPick() {
     final ui = _ui;
     if (ui == null || !mounted) return;
@@ -430,7 +418,6 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
 
   bool _publishing = false;
 
-  /// A box picked from the Node panel's list, or the list asked for again.
   void _onPickAsked() {
     if (_publishing || !mounted) return;
     final id = _ui?.shaderGraphNode.value;
@@ -465,7 +452,6 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
     _boxMenu(id, ask.at);
   }
 
-  /// The claim this view had to displace to take Ctrl+Space.
   bool Function()? _priorConsoleClaim;
 
   bool _consoleClaim() {
@@ -555,7 +541,6 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
     }
     final inst = _instance(stack);
     if (inst == null) {
-      // The effect has gone — an undo past the entry, a delete under it.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) widget.onExit();
       });
@@ -566,7 +551,6 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
       null => _Inner.fresh(),
     };
     final view = shaderGraphView(graph: graph.encode());
-    // The boxes that make a value, by the name the Viewer's chip gives them.
     _ui?.shaderGraphWords = {
       for (final n in view.nodes)
         if (n.outputs.isNotEmpty) n.id: n.label ?? shaderNodeWord(n.kind),
@@ -602,8 +586,6 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
     _ui?.model.refresh();
     _reload();
   }
-
-  // --- Wiring -------------------------------------------------------------
 
   /// Join two sockets, replacing whatever the input held. The candidate graph
   /// is built and the **engine** asked; a drop that turns a compiling graph
@@ -733,7 +715,6 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
               'to': id,
               'to_port': i,
             },
-            // Nothing to pass on when the box was added after an end.
             if (edge['to'] != null)
               {
                 'from': id,
@@ -750,8 +731,6 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
     }
     _commit(next);
   }
-
-  // --- Ties ---------------------------------------------------------------
 
   @override
   List<BridgeWireTie> get ties => [
@@ -841,8 +820,6 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
           w,
       ];
 
-  // --- Geometry -----------------------------------------------------------
-
   Offset _toCanvas(Offset local) => (local - _pan) / _zoom;
 
   List<_Box> _boxes() =>
@@ -871,8 +848,6 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
     }
     return null;
   }
-
-  // --- Pointers -----------------------------------------------------------
 
   void _down(PointerDownEvent event, List<_Box> boxes) {
     final at = _toCanvas(event.localPosition);
@@ -965,7 +940,6 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
     if (_drag case final drag?) {
       setState(() {
         var delta = at - drag.grab;
-        // The magnet the outer canvas keeps: boxes land on the grid's pitch.
         final origin = drag.origins[drag.node];
         if (origin != null && _snapToGrid) {
           final raw = origin + delta;
@@ -1014,8 +988,6 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
       if (landed != null) {
         _connect(flight.from, landed);
       } else if (moved) {
-        // Onto empty canvas: the console opens, and the picked box lands
-        // where the wire was let go.
         _openConsole(at);
       }
       return;
@@ -1053,16 +1025,12 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
     setState(() => _panFrom = null);
   }
 
-  // --- Menus --------------------------------------------------------------
-
-  /// A right-click on empty canvas, waiting for its release.
   bool _menuPress = false;
 
   /// The box a right press landed on, whose menu opens if the release never
   /// moved.
   int? _menuBox;
 
-  /// The stored wire nearest [at], within a wire's grab distance.
   Map<String, dynamic>? _wireAt(List<_Box> boxes, Offset at) {
     final graph = _graph;
     if (graph == null) return null;
@@ -1224,7 +1192,6 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
     _frame(_boxes());
   }
 
-  /// Fit the picked boxes, or every box when none is picked.
   void _frameSelected() {
     final picked = [
       for (final b in _boxes())
@@ -1298,8 +1265,6 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
     });
   }
 
-  // --- Drawing ------------------------------------------------------------
-
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
@@ -1352,8 +1317,6 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
       padding: const EdgeInsets.symmetric(horizontal: 6),
       child: Text('›', style: t.kicker.copyWith(color: t.textMuted)),
     );
-    // The outer canvas's toolbar, on the strip's right: the same switch,
-    // framing and zoom.
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onSecondaryTapUp: (d) => showGraphToolbarMenu(
@@ -1436,7 +1399,6 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
                 ? KeyEventResult.handled
                 : KeyEventResult.ignored;
           }
-          // Enter names the one picked box, as it renames a picked effect.
           if (event.logicalKey == LogicalKeyboardKey.enter &&
               _selection.length == 1) {
             setState(() => _renaming = _selection.single);
@@ -1579,10 +1541,8 @@ class _ShaderNodeCard extends StatelessWidget {
   final _Inner? graph;
   final bool selected;
 
-  /// The input a type fault names, ringed in the error colour.
   final int? refusedPort;
 
-  /// Takes the name's place while the box is being renamed.
   final Widget? nameEditor;
 
   const _ShaderNodeCard({
@@ -1638,7 +1598,6 @@ class _ShaderNodeCard extends StatelessWidget {
                 color: graphShaderHeader(t),
                 border: Border(bottom: BorderSide(color: t.hairline)),
               ),
-              // While it is being renamed the editor takes the whole strip.
               child: nameEditor ?? Row(
                 children: [
                   Flexible(
@@ -1649,8 +1608,6 @@ class _ShaderNodeCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  // A Parameter box wears the user's own word for its control
-                  // beside its kind, the reading a custom-named driver has.
                   if (box.node.label case final own?) ...[
                     const SizedBox(width: 6),
                     Flexible(
@@ -1745,11 +1702,9 @@ class _ShaderNodeCard extends StatelessWidget {
   }
 }
 
-/// Every wire, coloured by its source port's type, and the dashed one in hand.
 class _WirePainter extends CustomPainter {
   final List<(TieWire, Color, double)> wires;
 
-  /// The refused wire, by its tie key, drawn dashed.
   final Set<String> dashed;
   final TieView ties;
   final _Flight? flight;
@@ -1826,7 +1781,6 @@ class ShaderGraphThumb extends StatefulWidget {
 class _ShaderGraphThumbState extends State<ShaderGraphThumb> {
   LumitUiState? _ui;
 
-  /// The graph laid out, or null for a shader that holds none.
   ({List<_Box> boxes, List<Map<String, dynamic>> edges})? _drawn;
 
   @override
@@ -1862,7 +1816,6 @@ class _ShaderGraphThumbState extends State<ShaderGraphThumb> {
           .firstOrNull
           ?.shaderGraph();
     } catch (_) {
-      // The effect's home has gone; the placeholder is the honest answer.
     }
     if (json == null) {
       setState(() => _drawn = null);
@@ -1923,8 +1876,6 @@ class _ShaderGraphThumbState extends State<ShaderGraphThumb> {
   }
 }
 
-/// The whole graph fitted into the thumbnail: each box as its frame and header
-/// strip, each wire in its source socket's colour. No words at this size.
 class _ThumbPainter extends CustomPainter {
   final List<_Box> boxes;
   final List<Map<String, dynamic>> edges;
@@ -1946,7 +1897,6 @@ class _ThumbPainter extends CustomPainter {
       bounds = bounds.expandToInclude(box.rect);
     }
     const pad = 8.0;
-    // Never larger than life, so one box alone stays a box.
     final zoom = math.min(
       1.0,
       math.min((size.width - pad * 2) / bounds.width,

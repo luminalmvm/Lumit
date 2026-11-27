@@ -11,7 +11,6 @@
 
 use crate::fx::effects::correction::{maths, packed::Packed, Correction};
 
-/// CDL numbers, and whether they say exactly what the node does.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CdlFit {
     pub slope: [f32; 3],
@@ -21,10 +20,8 @@ pub struct CdlFit {
     pub exact: bool,
 }
 
-/// Points on the grey ramp the fit reads.
 const RAMP: usize = 33;
 
-/// Whether only the rows a CDL can hold have moved.
 fn primaries_only(pk: &Packed) -> bool {
     pk.pre_gain == [1.0; 3]
         && pk.shadow == [0.0; 3]
@@ -42,14 +39,12 @@ fn primaries_only(pk: &Packed) -> bool {
         && !pk.hdr.on
 }
 
-/// The node's grade of `v`, in its grading space, keyed whole.
 fn graded(pk: &Packed, v: [f32; 3]) -> [f32; 3] {
     let u = v.map(|c| maths::decode(c, pk.space));
     let out = maths::grade([u[0], u[1], u[2], 1.0], 1.0, maths::luma(v), pk);
     [0, 1, 2].map(|c| maths::encode(out[c], pk.space))
 }
 
-/// One channel's slope and offset by least squares of `y ≈ s·x + o`.
 fn line(xs: &[f64], ys: &[f64]) -> (f64, f64) {
     let n = xs.len() as f64;
     let (sx, sy) = (xs.iter().sum::<f64>(), ys.iter().sum::<f64>());
@@ -73,8 +68,6 @@ fn sop(x: f64, s: f64, o: f64, p: f64) -> f64 {
     }
 }
 
-/// For power `p`, the slope and offset that fit `t` best, and the squared
-/// error they leave.
 fn at_power(xs: &[f64], t: &[f64], p: f64) -> (f64, f64, f64) {
     let pre: Vec<f64> = t.iter().map(|v| v.powf(1.0 / p)).collect();
     let (s, o) = line(xs, &pre);
@@ -86,8 +79,6 @@ fn at_power(xs: &[f64], t: &[f64], p: f64) -> (f64, f64, f64) {
     (s, o, err)
 }
 
-/// One channel's slope, offset and power for the targets `t` over `xs`: the
-/// best of a sweep of powers, then narrowed by golden section.
 fn fit_channel(xs: &[f64], t: &[f64]) -> (f64, f64, f64) {
     let powers: Vec<f64> = (0..=60)
         .map(|i| 0.2 * 25f64.powf(i as f64 / 60.0))
@@ -117,7 +108,6 @@ fn fit_channel(xs: &[f64], t: &[f64]) -> (f64, f64, f64) {
     (s, o, p)
 }
 
-/// The CDL that does what `node` does, exactly when it can.
 #[must_use]
 pub fn cdl_of(node: &Correction) -> CdlFit {
     let mut pk = node.packed(1.0);
@@ -135,7 +125,6 @@ pub fn cdl_of(node: &Correction) -> CdlFit {
             exact: true,
         };
     }
-    // A fit: each channel to the grey ramp, then saturation to colours.
     let xs: Vec<f64> = (0..RAMP).map(|i| i as f64 / (RAMP - 1) as f64).collect();
     let greys: Vec<[f32; 3]> = xs.iter().map(|x| graded(&pk, [*x as f32; 3])).collect();
     let mut slope = [1.0f32; 3];
@@ -202,9 +191,6 @@ mod tests {
     use crate::grade_solve::test_support::with_rows;
     use crate::grade_solve::RowValue;
 
-    /// Wheels and saturation come out as the CDL that grades the same: a
-    /// CDL node with the numbers matches the Correction pixel for pixel,
-    /// inside the 0..1 the list clamps to.
     #[test]
     fn primaries_export_as_the_same_grade() {
         let mut node = with_rows(
@@ -217,7 +203,6 @@ mod tests {
                 ("saturation", RowValue::Float(90.0)),
             ],
         );
-        // Rows read from nothing leave the hue curves on the diagonal.
         let flat = crate::fx::params::CurvePoints::sanitised(&HUE_FLAT);
         for c in [
             &mut node.hue_hue,

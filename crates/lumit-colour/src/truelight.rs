@@ -24,14 +24,12 @@ fn bad(what: &str, reason: impl Into<String>) -> ColourError {
     }
 }
 
-/// Which block of the file the reader is inside.
 enum Block {
     None,
     Shaper,
     Cube,
 }
 
-/// Parse `.cub` text into a chain: the input LUT, then the cube.
 pub fn parse_cub(what: &str, text: &str) -> Result<Chain> {
     let mut lines = text.lines();
     if !lines
@@ -104,8 +102,6 @@ pub fn parse_cub(what: &str, text: &str) -> Result<Chain> {
                 "inputlut" => block = Block::Shaper,
                 "cube" => block = Block::Cube,
                 "end" => break,
-                // Any other header line, `# iDims` and `# oDims` among them,
-                // says nothing this reader needs.
                 _ => {}
             }
             continue;
@@ -195,7 +191,6 @@ mod tests {
     fn rubbish_is_a_typed_error_not_a_panic() {
         assert!(parse_cub("t.cub", "").is_err());
         assert!(parse_cub("t.cub", "LUT_3D_SIZE 2\n").is_err());
-        // The counts the header promises have to be the counts the file has.
         assert!(parse_cub(
             "t.cub",
             "# Truelight Cube v2.0\n# lutLength 4\n# InputLUT\n0 0 0\n"

@@ -35,17 +35,13 @@ import 'dialog_frame.dart';
 import 'export_queue_frb.dart' show exportQueueRow;
 import 'template_rows_export.dart';
 
-/// The row number column, a data column at its narrowest, and the header's
-/// two lines.
 const double _numberColumn = 40;
 const double _cellWidth = 132;
 const double _headerHeight = 40;
 const double _toolBarHeight = 36;
 
-/// How long a burst of edits settles before the data is read again.
 const Duration _settle = Duration(milliseconds: 120);
 
-/// Open the Data window on [comp], or point the open one at it.
 Future<void> showTemplateDataWindowFor(
     BuildContext context, CompositionReference comp) async {
   final open = _DataWindowState._open;
@@ -66,7 +62,6 @@ Future<void> showTemplateDataWindowFor(
   );
 }
 
-/// What a column can feed, as its header's menu lists it.
 class _Feed {
   final BridgeFeeds feeds;
   final String? control;
@@ -111,7 +106,6 @@ class _DataWindowState extends State<_DataWindow> {
   int? _head;
   int? _anchor;
 
-  /// The selected copy of this template, if the app's selection is one.
   CopyHost? _host;
 
   /// What the Viewer was last asked to show, so it is asked only on a change.
@@ -153,7 +147,6 @@ class _DataWindowState extends State<_DataWindow> {
     super.dispose();
   }
 
-  /// Point the window at [comp], which is what opening it again does.
   void switchTo(CompositionReference comp) {
     if (comp.internalid == _comp.internalid) return;
     _unshow();
@@ -168,15 +161,12 @@ class _DataWindowState extends State<_DataWindow> {
     _show();
   }
 
-  // ---- reading ---------------------------------------------------------------
-
   void _read() {
     try {
       _name = _comp.getSettings().name;
       _template = _comp.getTemplate();
       _data = _comp.getData();
     } catch (_) {
-      // The composition went under the window, which then shows no data.
       _template = null;
       _data = null;
     }
@@ -239,10 +229,6 @@ class _DataWindowState extends State<_DataWindow> {
     _host = found;
   }
 
-  // ---- the Viewer ------------------------------------------------------------
-
-  /// Show the row under the selection's head in the Viewer, on the selected
-  /// copy or on the template itself.
   void _show() {
     if (!mounted) return;
     final host = _host;
@@ -254,7 +240,6 @@ class _DataWindowState extends State<_DataWindow> {
     try {
       _comp.showDataRow(row: row, host: host?.layer, hostClip: host?.clip);
     } catch (_) {
-      // The template or the copy went under the window.
     }
     widget.ui.requestFrame();
   }
@@ -264,12 +249,9 @@ class _DataWindowState extends State<_DataWindow> {
     try {
       _comp.showDataRow(row: null);
     } catch (_) {
-      // The composition has gone, and with it what it showed.
     }
     widget.ui.requestFrame();
   }
-
-  // ---- picking rows ----------------------------------------------------------
 
   int get _count => _data?.rows.length ?? 0;
 
@@ -303,8 +285,6 @@ class _DataWindowState extends State<_DataWindow> {
     }
   }
 
-  /// Walk the rows with the arrow keys: one row, or with Shift a run from
-  /// the anchor.
   void _walk(int by) {
     if (_count == 0) return;
     final from = _head ?? (by > 0 ? -1 : _count);
@@ -326,7 +306,6 @@ class _DataWindowState extends State<_DataWindow> {
     _show();
   }
 
-  /// Scroll so [row] is in view.
   void _reveal(int row) {
     if (!_rows.hasClients) return;
     final top = row * exportQueueRow;
@@ -368,8 +347,6 @@ class _DataWindowState extends State<_DataWindow> {
   List<int> get _rowsAsked => _picked.isEmpty
       ? [for (var i = 0; i < _count; i++) i]
       : (_picked.toList()..sort());
-
-  // ---- acts ------------------------------------------------------------------
 
   void _edited() {
     widget.app.notifyDocumentChanged();
@@ -455,8 +432,6 @@ class _DataWindowState extends State<_DataWindow> {
     _edited();
   }
 
-  /// Place a copy for each row asked into the composition the Timeline shows,
-  /// or on a new track in Cut, from the playhead.
   void _place() {
     final ui = widget.ui;
     final target = ui.selectedComp;
@@ -506,8 +481,6 @@ class _DataWindowState extends State<_DataWindow> {
     ));
   }
 
-  // ---- the window ------------------------------------------------------------
-
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
@@ -546,7 +519,6 @@ class _DataWindowState extends State<_DataWindow> {
     );
   }
 
-  /// No data yet: the two ways to start, and nothing else.
   Widget _empty(LumitTheme t) => Center(
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -611,7 +583,6 @@ class _DataWindowState extends State<_DataWindow> {
     );
   }
 
-  /// The window's menu: the starting file, and unlinking.
   Widget _more(LumitTheme t) => LumitTooltip(
         message: l10n.templateDataMore,
         child: Builder(
@@ -657,7 +628,6 @@ class _DataWindowState extends State<_DataWindow> {
         ),
       );
 
-  /// Where the file is, cut in the middle, and how many rows it has.
   Widget _foot(LumitTheme t, BridgeData data) => dialogFooter(
         t,
         keyPrefix: 'template-data',
@@ -673,11 +643,6 @@ class _DataWindowState extends State<_DataWindow> {
         actions: const [],
       );
 
-  // ---- the table -------------------------------------------------------------
-
-  /// What a column can feed: nothing, each control, a text control's font,
-  /// size and colour where a copy may change them, its length and its file's
-  /// name.
   List<_Feed> get _feeds => [
         _Feed(BridgeFeeds.nothing, null, l10n.templateDataNothing),
         for (final c in _template?.controls ?? const <BridgeControl>[])
@@ -697,7 +662,6 @@ class _DataWindowState extends State<_DataWindow> {
         _Feed(BridgeFeeds.fileName, null, l10n.templateDataFileName),
       ];
 
-  /// What the header says a column feeds, or nothing when it feeds nothing.
   String _feedLabel(BridgeDataColumn column) {
     final label = _controls[column.control]?.label ?? '';
     return switch (column.feeds) {
@@ -770,8 +734,6 @@ class _DataWindowState extends State<_DataWindow> {
         ),
       );
 
-  /// A column's name and what it feeds. A press opens the menu choosing
-  /// that.
   Widget _headerCell(
       BuildContext context, LumitTheme t, int index, BridgeDataColumn column) {
     final quiet = column.feeds == BridgeFeeds.nothing;
@@ -867,9 +829,6 @@ class _DataWindowState extends State<_DataWindow> {
     );
   }
 
-  /// One cell: its text, mono for a number, underlined in the error ink when
-  /// it will not read. A colour shows a swatch before it, and a picture its
-  /// file's name.
   Widget _cell(LumitTheme t, BridgeDataColumn column, String text, bool fault) {
     final control = _controls[column.control];
     final quiet = column.feeds == BridgeFeeds.nothing;

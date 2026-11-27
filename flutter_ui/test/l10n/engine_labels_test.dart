@@ -43,9 +43,6 @@ Set<String> _engineLabels() {
   expect(labels.length, greaterThan(250),
       reason: 'the catalogue declares far more labels than this — the fixture '
           'has been truncated or hand-edited');
-  // Settings -> Keymap: what each shortcut does, and the heading saying where
-  // it is live. `"action.id" => "Play or pause"` and
-  // `KeyContext::Global => "Anywhere"`.
   final keymap = File('../crates/lumit-keymap/src/lib.rs');
   expect(keymap.existsSync(), isTrue);
   final keymapSrc = keymap.readAsStringSync();

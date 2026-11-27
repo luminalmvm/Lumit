@@ -21,11 +21,8 @@ use crate::capture::{Ease, Keyframe as AeKey, Property as AeProp};
 use crate::map::time::TimeBase;
 use crate::report::{ImportReport, Reason};
 
-/// The composition every test converts against.
 const W: f64 = 1920.0;
 const H: f64 = 1080.0;
-
-// --- building a capture ----------------------------------------------------
 
 fn leaf(match_name: &str, value: serde_json::Value) -> AeProp {
     AeProp {
@@ -77,8 +74,6 @@ fn effect(match_name: &str, name: &str, params: Vec<AeProp>) -> AeProp {
         ..AeProp::default()
     }
 }
-
-// --- running it ------------------------------------------------------------
 
 struct Ran {
     inst: EffectInstance,
@@ -177,10 +172,6 @@ fn close(a: f64, b: f64) -> bool {
     (a - b).abs() < 1e-9
 }
 
-// ---------------------------------------------------------------------------
-// Blur and sharpen
-// ---------------------------------------------------------------------------
-
 /// **A blur radius carries as pixels — on the still value, on every key, and
 /// on the handles.** After Effects' raster pixels are Lumit's px@comp (docs/08
 /// §2.3): the number is the same, and Lumit's preview scaling is what
@@ -226,10 +217,6 @@ fn gaussian_blur_carries_its_radius_and_its_keyframes() {
     ));
 }
 
-// ---------------------------------------------------------------------------
-// Colour
-// ---------------------------------------------------------------------------
-
 /// **Levels writes the group its Channel picker named.** The scripting DOM
 /// exposes one set of five numbers, so a green-channel grade would land on the
 /// master lane if the picker were ignored — and the master lane is the one
@@ -255,13 +242,11 @@ fn levels_writes_the_channel_its_picker_named() {
     assert!(close(ran.f("green_gamma"), 1.4));
     assert!(close(ran.f("green_out_black"), 0.05));
     assert!(close(ran.f("green_out_white"), 0.95));
-    // The master lane is left neutral.
     assert!(close(ran.f("master_in_white"), 1.0));
     assert!(ran.differs());
     assert!(ran.dropped("Clip To Output Black"));
 }
 
-/// A keyframed dropdown imports at the value it starts on, and says so.
 #[test]
 fn a_keyframed_dropdown_imports_its_first_key_and_reports_it() {
     let ran = run(&effect(
@@ -275,22 +260,6 @@ fn a_keyframed_dropdown_imports_its_first_key_and_reports_it() {
     assert_eq!(ran.choice("filter"), 20);
     assert!(ran.approximated("ADBE Photo Filter-0001"));
 }
-
-// ---------------------------------------------------------------------------
-// Generate
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Temporal
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// The deliberate placeholders
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Third-party effects (docs/11 §5a)
-// ---------------------------------------------------------------------------
 
 /// A definition that arrived at run time, the way a scanned OFX plug-in's does.
 /// Declared here rather than driven by a real bundle because what is under
@@ -344,7 +313,6 @@ fn a_discovered_plugin(
     );
 }
 
-/// A plug-in control, for the two catalogue entries below.
 const fn control(
     id: &'static str,
     label: &'static str,
@@ -373,7 +341,6 @@ const GLOW_CONTROLS: &[lumit_core::fx::schema::ParamSchema] = &[
     },
 ];
 
-/// S_DissolveLuma's one that matters: the transition itself.
 const DISSOLVE_CONTROLS: &[lumit_core::fx::schema::ParamSchema] =
     &[control("dissolve_percent", "Dissolve Percent", 0.0)];
 
@@ -389,10 +356,6 @@ fn vendor_leaf(match_name: &str, name: &str, kind: &str, value: serde_json::Valu
     }
 }
 
-/// **The user has the vendor's own OFX build installed, so the effect imports
-/// as that plug-in** — the same effect rather than a likeness. The
-/// controls the two builds share by displayed name come across; the one named
-/// alike and shaped unlike is reported rather than coerced.
 #[test]
 fn a_third_party_effect_maps_direct_to_the_ofx_plugin_the_user_has_installed() {
     a_discovered_plugin(
@@ -407,8 +370,6 @@ fn a_third_party_effect_maps_direct_to_the_ofx_plugin_the_user_has_installed() {
         vec![
             vendor_leaf("S_Glow-0004", "Brightness", "float", serde_json::json!(2.5)),
             vendor_leaf("S_Glow-0005", "Width", "float", serde_json::json!(192.0)),
-            // Named alike, shaped unlike: a colour where the plug-in declares a
-            // number. Said out loud, never coerced.
             vendor_leaf(
                 "S_Glow-0009",
                 "Centre",
@@ -459,10 +420,6 @@ fn a_third_party_effect_maps_direct_to_the_ofx_plugin_the_user_has_installed() {
     );
 }
 
-// --- the owner's dissolve curve --------------------------------------------
-
-/// The owner's curve, hand-computed: at and above 50 % fully on, below it a
-/// straight line down to nothing at 0 %.
 const CURVE: &[(f64, f64)] = &[
     (0.0, 0.0),
     (10.0, 20.0),
@@ -473,7 +430,6 @@ const CURVE: &[(f64, f64)] = &[
     (100.0, 100.0),
 ];
 
-/// One Sapphire dissolve, with its Dissolve Percent at `percent`.
 fn a_dissolve(percent: f64) -> AeProp {
     effect(
         "S_DissolveLuma",
@@ -487,7 +443,6 @@ fn a_dissolve(percent: f64) -> AeProp {
     )
 }
 
-/// The plug-in's own Dissolve Percent.
 fn dissolve_percent(inst: &EffectInstance) -> Option<LumProperty> {
     inst.params
         .iter()
@@ -537,10 +492,6 @@ fn a_sapphire_dissolve_carries_its_amount_through_the_dissolve_curve() {
         );
     }
 
-    // --- a keyframed dissolve converts key by key and keeps its eases: each
-    // key's value goes through the curve and the shape of the move around it is
-    // left alone. What that costs between two keys either side of 50 % is what
-    // the report row says.
     let mut amount = keyed(
         "S_DissolveLuma-0052",
         &[(0.0, 0.0, 3.0), (1.0, 25.0, 3.0), (2.0, 60.0, 3.0)],
@@ -575,14 +526,6 @@ fn a_sapphire_dissolve_carries_its_amount_through_the_dissolve_curve() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// The shared machinery
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// The shipped table (docs/11 §5)
-// ---------------------------------------------------------------------------
-
 /// **Every mapping the table held when it was Rust still resolves to the same
 /// Lumit effect.**
 ///
@@ -598,10 +541,7 @@ fn a_sapphire_dissolve_carries_its_amount_through_the_dissolve_curve() {
 /// placeholders are on the list too, as the effects that must NOT map.
 #[test]
 fn every_mapping_the_table_started_with_still_resolves() {
-    // (After Effects match name, the Lumit effect it becomes — or "" for the
-    // rows docs/11 §5 sends to a placeholder on purpose).
     const ROWS: &[(&str, &str)] = &[
-        // The colour / blur / generate / temporal half.
         ("ADBE Gaussian Blur 2", "blur"),
         ("ADBE Motion Blur", "directional_blur"),
         ("ADBE Radial Blur", "radial_blur"),
@@ -633,7 +573,6 @@ fn every_mapping_the_table_started_with_still_resolves() {
         ("ADBE AudWave", "audio_spectrum"),
         ("ADBE Echo", "echo"),
         ("ADBE Posterize Time", "posterize_time"),
-        // The distortion / stylise / transition / utility / controls half.
         ("ADBE Geometry2", "transform"),
         ("ADBE Set Matte3", "set_matte"),
         ("ADBE Tile", "tile"),
@@ -690,12 +629,6 @@ fn every_mapping_the_table_started_with_still_resolves() {
     }
 }
 
-// ---------------------------------------------------------------------------
-// The five rows that arrived with the file (docs/11 §5)
-// ---------------------------------------------------------------------------
-
-/// **Invert: Blend With Original is Mix read from the other end, and a Channel
-/// Lumit has not got is reported rather than quietly obeyed.**
 #[test]
 fn invert_complements_its_blend_and_reports_a_channel_it_cannot_keep() {
     let rgb = run(&effect(
@@ -708,11 +641,9 @@ fn invert_complements_its_blend_and_reports_a_channel_it_cannot_keep() {
     ));
     assert!(rgb.mapped);
     assert_eq!(rgb.inst.effect.match_name, "invert");
-    // 0 % blended back is the whole effect (Mix 100); 75 % back is Mix 25.
     let keys = rgb.keys("mix");
     assert!(close(keys[0].value, 100.0));
     assert!(close(keys[1].value, 25.0));
-    // The handle turns over with the value — the dial runs the other way.
     assert!(matches!(
         keys[0].interp_out,
         SideInterp::Bezier { speed, .. } if close(speed, -4.0)
@@ -737,9 +668,6 @@ fn invert_complements_its_blend_and_reports_a_channel_it_cannot_keep() {
     assert!(red.approximated("Channel"));
 }
 
-/// **Sharpen: a hundred of After Effects' units is Lumit's classic kernel, and
-/// the report says the dial reads differently** (docs/11 §5's
-/// undocumented-base rule).
 #[test]
 fn sharpen_converts_its_amount_onto_the_kernel_coefficient() {
     let ran = run(&effect(
@@ -760,13 +688,9 @@ fn sharpen_converts_its_amount_onto_the_kernel_coefficient() {
         SideInterp::Bezier { speed, .. } if close(speed, 0.2)
     ));
     assert!(ran.rebased("Sharpen Amount"));
-    // The neighbourhood After Effects uses, which is Lumit's default.
     assert!(close(ran.f("radius"), 1.0));
 }
 
-/// The sabre plug-in's controls are found by the plug-in's own names, the
-/// second Distortion Amount is the core's, and its defaults land on Energy
-/// line's.
 #[test]
 fn the_sabre_plugin_maps_its_controls_by_name() {
     let m = |i: u32| format!("VIDEOCOPILOT LightSaber-{i:04}");

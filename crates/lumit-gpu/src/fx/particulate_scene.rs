@@ -51,8 +51,6 @@ struct SceneUniform {
     look: [f32; 4],
 }
 
-/// The scene draw's layout and pipelines, built the first time particles are
-/// put in a scene.
 pub(super) struct ScenePipelines {
     layout: wgpu::BindGroupLayout,
     keys: wgpu::ComputePipeline,
@@ -62,7 +60,6 @@ pub(super) struct ScenePipelines {
     depth: wgpu::RenderPipeline,
 }
 
-/// The format one over clip w is laid down in.
 const INV_W: wgpu::TextureFormat = wgpu::TextureFormat::R32Float;
 const DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 

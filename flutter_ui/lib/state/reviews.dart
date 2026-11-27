@@ -37,7 +37,6 @@ int _int(Object? v) => v is num ? v.toInt() : 0;
 int? _intOrNull(Object? v) => v is num ? v.toInt() : null;
 String _text(Object? v) => v is String ? v : '';
 
-/// One upload of a link's video.
 class ReviewVersion {
   final int n, size, width, height, fpsNum, fpsDen, frames, created;
 
@@ -72,7 +71,6 @@ class ReviewVersion {
     this.approvals = const [],
   });
 
-  /// The same version with [approvals] in place of its own.
   ReviewVersion approvedBy(List<ReviewApproval> approvals) => ReviewVersion(
         n: n,
         size: size,
@@ -147,7 +145,6 @@ class ReviewApproval {
       ];
 }
 
-/// A review link as its owner sees it.
 class Review {
   final String id, url, title;
 
@@ -158,8 +155,6 @@ class Review {
   /// has not chosen one.
   final String? ownerUsername;
 
-  /// Whether reviewers may comment, may attach a picture to a comment, and
-  /// may download the file.
   final bool comments, pictures, downloads;
 
   /// Whether a password is set. The password itself never comes back.
@@ -238,8 +233,6 @@ class Review {
         ],
       );
 
-  /// The same link with [versions] in place of its own, or with [clean] as
-  /// its second address and the version that shows.
   Review changed({List<ReviewVersion>? versions, (String?, int?)? clean}) =>
       Review(
         id: id,
@@ -268,7 +261,6 @@ class Review {
       ? null
       : '${url.substring(0, url.lastIndexOf('/') + 1)}$clean';
 
-  /// Every approval on it, whichever version it is of.
   Iterable<ReviewApproval> get approvals =>
       versions.expand((v) => v.approvals);
 
@@ -279,7 +271,6 @@ class Review {
   /// The address that opens it in a browser as whoever made it.
   String get ownerUrl => ownerKey.isEmpty ? url : '$url#o=$ownerKey';
 
-  /// The address that opens the page on [comment]'s version, at its frame.
   String commentUrl(ReviewComment comment) =>
       '$url?v=${comment.version}&t=${comment.frame}';
 
@@ -288,11 +279,9 @@ class Review {
   String compareUrl(int before, int n) =>
       '$url?compare=$before,$n${ownerKey.isEmpty ? '' : '#o=$ownerKey'}';
 
-  /// Where a version's still is kept.
   String posterUrl(ReviewVersion version) =>
       '$cloudUrl/v1/reviews/$id/v/${version.n}/poster';
 
-  /// Where the picture [comment] came with is kept.
   String pictureUrl(ReviewComment comment) =>
       '$cloudUrl/v1/reviews/$id/comments/${comment.id}/picture';
 }
@@ -359,10 +348,8 @@ class ReviewComment {
   final int frame;
   final int? endFrame;
 
-  /// Whether the link's owner wrote it, and whether it has been dealt with.
   final bool owner, resolved;
 
-  /// What was drawn over the frame with it. Empty for most.
   final List<ReviewStroke> strokes;
 
   /// `like` for a mark with no words, and null for a comment. A like is
@@ -440,8 +427,6 @@ List<({int start, int end, bool me})> reviewMentions(
     String text, Iterable<String> names,
     {String me = ''}) {
   final lower = text.toLowerCase();
-  // ponytail: the few letters whose small form is longer are not searched,
-  // since a place in one string would not be the same place in the other.
   if (lower.length != text.length || !text.contains('@')) return const [];
   final known = {
     for (final name in names)
@@ -464,20 +449,16 @@ List<({int start, int end, bool me})> reviewMentions(
   return found;
 }
 
-/// Where a send has got to.
 enum SendStage { exporting, uploading, done, failed }
 
-/// A composition on its way to becoming a link, for the window to draw.
 class ReviewSend {
   SendStage stage;
 
   /// Frames exported of the frames there are, then bytes sent of the file.
   int done, total;
 
-  /// Whether it is in the export queue behind something else.
   bool waiting;
 
-  /// The link, once it has landed.
   Review? review;
 
   /// Why it failed: the server's code, or one of this file's own.
@@ -602,8 +583,6 @@ List<CommentMarker> commentMarkers(
   ];
 }
 
-/// The account's review links, the one being looked at, and the one on its
-/// way up.
 class ReviewsState extends ChangeNotifier {
   final AccountState account;
   final ProfilesState profiles;
@@ -613,7 +592,6 @@ class ReviewsState extends ChangeNotifier {
   /// Every link that has something to watch, newest activity first.
   List<Review> links = [];
 
-  /// What the account's files come to on the server, and the most it may.
   int usedBytes = 0, limitBytes = 0;
 
   /// Whether the server has answered with the list since this account was
@@ -674,8 +652,6 @@ class ReviewsState extends ChangeNotifier {
       unawaited(refresh());
     }
   }
-
-  // --- What is remembered between runs --------------------------------------
 
   String? _keptFor;
   Map<String, dynamic> _keptLinks = {};
@@ -738,7 +714,6 @@ class ReviewsState extends ChangeNotifier {
     );
   }
 
-  /// The link [comp] was last sent to, if it has been sent.
   Review? linkOf(CompositionReference comp) {
     final id = '${comp.internalid}';
     for (final review in links) {
@@ -747,8 +722,6 @@ class ReviewsState extends ChangeNotifier {
     return null;
   }
 
-  /// How many comments and approvals on [review] have come in since it was
-  /// last looked at.
   int unseenIn(Review review) {
     final held = _kept[review.id];
     // An approval is in none of the server's counts, so the ones that have
@@ -774,7 +747,6 @@ class ReviewsState extends ChangeNotifier {
   bool get wantsAttention =>
       unseen > 0 || (sending != null && sending!.stage != SendStage.done);
 
-  /// The link with the newest comment or approval nobody has looked at.
   Review? get newestUnseen {
     Review? newest;
     for (final review in links) {
@@ -800,8 +772,6 @@ class ReviewsState extends ChangeNotifier {
     held['approvals'] = approvals;
     _save();
   }
-
-  // --- The list -------------------------------------------------------------
 
   Review? link(String? id) {
     for (final review in links) {
@@ -859,8 +829,6 @@ class ReviewsState extends ChangeNotifier {
     final at = links.indexWhere((r) => r.id == review.id);
     at < 0 ? links.insert(0, review) : links[at] = review;
   }
-
-  // --- The link being looked at ---------------------------------------------
 
   /// Hold [id]'s comments and hear about new ones, or let go with null.
   Future<void> watch(String? id) async {
@@ -1021,9 +989,6 @@ class ReviewsState extends ChangeNotifier {
           if (c.id != id && c.parent != id) c,
       ];
 
-  // --- Answering comments and changing a link ------------------------------
-
-  /// Reply to [to] as the account.
   Future<void> reply(Review review, ReviewComment to, String text) async {
     final j =
         await account.call('POST', '/v1/reviews/${review.id}/comments', body: {
@@ -1057,7 +1022,6 @@ class ReviewsState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Take a reviewer's approval off [review], as whoever sent it may.
   Future<void> removeApproval(Review review, ReviewApproval approval) async {
     await account.call(
         'DELETE', '/v1/reviews/${review.id}/approvals/${approval.id}');
@@ -1148,8 +1112,6 @@ class ReviewsState extends ChangeNotifier {
             ),
     ];
   }
-
-  // --- Whether a composition has moved on -----------------------------------
 
   final Map<String, (int, String, Map<String, List<String>>)> _prints = {};
 
@@ -1264,7 +1226,6 @@ class ReviewsState extends ChangeNotifier {
     if (held is! Map || held['sent_n'] != review.versions.last.n) return null;
     final was = held['marks'], now = _made(comp).$2;
     if (was is! Map || was.isEmpty || now.isEmpty) return null;
-    // A mark's effects, by the ends of their ids.
     Map<String, String> effects(List<dynamic> mark) => {
           for (var i = 2; i + 1 < mark.length; i += 2)
             '${mark[i]}': '${mark[i + 1]}',
@@ -1301,8 +1262,6 @@ class ReviewsState extends ChangeNotifier {
     }
     return changes;
   }
-
-  // --- Comments onto the Timeline -------------------------------------------
 
   /// The markers the open comments on [version] would add to [comp]: every
   /// one whose marker is not on the composition or one of its layers now.
@@ -1404,8 +1363,6 @@ class ReviewsState extends ChangeNotifier {
     return fresh.length;
   }
 
-  // --- Sending --------------------------------------------------------------
-
   /// Export [comp] from [start] up to [end] and send it: as a new link called
   /// [title], or as the next version of [into].
   ///
@@ -1486,9 +1443,6 @@ class ReviewsState extends ChangeNotifier {
       await _export(comp, spec, file.path, send);
       if (!file.existsSync()) throw const _Stopped('export_failed');
 
-      // ponytail: the size is only known once the export is done, so one too
-      // big for the server is refused after it was made. Work it out from
-      // the bit rate first if long compositions make that hurt.
       final size = file.lengthSync();
       send
         ..stage = SendStage.uploading
@@ -1566,13 +1520,11 @@ class ReviewsState extends ChangeNotifier {
     }
   }
 
-  /// Stop the send under way, wherever it has got to.
   void cancelSend() {
     _cancel = true;
     _upload?.close(force: true);
   }
 
-  /// Put a send that has ended away, so the window can start another.
   void clearSend() {
     final stage = sending?.stage;
     if (stage != SendStage.done && stage != SendStage.failed) return;
@@ -1706,7 +1658,6 @@ class ReviewsState extends ChangeNotifier {
       request.add(png);
       await (await request.close()).drain<void>();
     } catch (_) {
-      // No still.
     }
   }
 

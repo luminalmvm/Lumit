@@ -32,8 +32,6 @@ import 'viewer_menus.dart';
 /// the default and the only one that changes as the panel is resized.
 const List<double?> viewerZoomSteps = [null, 0.25, 0.5, 1.0, 2.0, 4.0];
 
-/// The Viewer's two strips are the same height as every other panel header and
-/// bottom bar (§12A.6): 22, whichever density is set.
 const double viewerStripHeight = 22;
 
 /// The strip's height under the shape: Lantern's detached strips are pills
@@ -53,15 +51,11 @@ double viewerStripHeightFor(LumitTheme t) =>
 double viewerStripPaddingFor(LumitTheme t) =>
     t.tokens.roomed ? ShapeTokens.capsuleEnd : viewerStripPadding;
 
-/// The room either end of both strips — the drawing's `padding: 0 10px`.
 const double viewerStripPadding = 10;
 
-/// The gap between the marks on the bottom bar, and between the three pickers
-/// in the header. Two numbers because the drawing draws two.
 const double viewerBarGap = 8;
 const double viewerHeaderGap = 6;
 
-/// The gap inside the transport, which is one instrument and is spaced as one.
 const double viewerTransportGap = 10;
 
 /// **Every glyph on the Viewer's bars is 14**: the size the
@@ -70,12 +64,8 @@ const double viewerTransportGap = 10;
 /// once the mark is given air above and below.
 const double viewerBarIconSize = 14;
 
-/// The seam between the ways of looking and the snapshot beside them: a
-/// hairline 12 tall, standing in the middle of a 22px bar.
 const double viewerBarDividerHeight = 12;
 
-/// The clock on the bar, and the composition's own reading at its right-hand
-/// end: 11px mono for the time, 10 for the reading (the drawing's sizes).
 const double viewerTimecodeSize = 11;
 
 /// The 1px transparent edge every [HouseButton] carries so that a hover cannot
@@ -95,7 +85,6 @@ Widget viewerBarMark({
   required VoidCallback? onPressed,
   required String tip,
   String? action,
-  // A painted mark in place of the glyph, for what the set can't say.
   Widget? face,
   // Whether Desk draws it as a round key, as it does the deck's. The ways of
   // looking stay bare marks, like the pickers among them.
@@ -114,7 +103,6 @@ Widget viewerBarMark({
         child: HoverMark(
           builder: (context, lit) {
             final t = ThemeScope.of(context).theme;
-            // Desk draws the deck's marks as round keys on the plate.
             final key = keyed && t.shape == ThemeShape.desk;
             return Container(
               width: key ? viewerDeskKey : viewerBarIconSize,
@@ -138,7 +126,6 @@ Widget viewerBarMark({
       ),
     );
 
-/// The diameter of a round key on Desk's deck.
 const double viewerDeskKey = 24;
 
 /// The room between two marks' boxes that leaves [glyphGap] between the glyphs
@@ -146,7 +133,6 @@ const double viewerDeskKey = 24;
 Widget viewerBarGapBox(double glyphGap) =>
     SizedBox(width: glyphGap - 2 * viewerMarkEdge);
 
-/// The transport pill's height when it stands detached in the deck.
 const double viewerTransportPillHeight = 26;
 
 /// The strip's own ground: `surface_2` welded to the panel edge under Sharp,
@@ -214,15 +200,11 @@ class ViewerHeader extends StatelessWidget {
   final ValueChanged<double?> onZoom;
   final bool detached;
 
-  /// A 3D viewport's header, which says so, and the view it heads, whose
-  /// preview tier its picker shows.
   final bool viewport;
   final int? viewId;
 
-  /// The composition this header heads, quietly beside the panel's own name.
   final String? name;
 
-  /// What the pickers' right clicks open.
   final ViewerMenuHost? host;
 
   const ViewerHeader({
@@ -269,8 +251,6 @@ class ViewerHeader extends StatelessWidget {
           // it too.
           final named =
               name != null && constraints.maxWidth >= _headerMinimum;
-          // Lantern puts a small accent dot before the title; the other
-          // shapes draw the word alone.
           final title = Row(mainAxisSize: MainAxisSize.min, children: [
             if (t.tokens.headerDot) ...[
               Container(
@@ -332,8 +312,6 @@ class ViewerHeader extends StatelessWidget {
               ...pickers,
             ]);
           }
-          // Narrower still, the zoom stays and the other pickers fold into
-          // one mark, as the bar's ways of looking do.
           if (constraints.maxWidth < _headerFolds) {
             return Row(
               children: [
@@ -390,11 +368,8 @@ class ViewerHeader extends StatelessWidget {
 /// pickers at their own widths, the panel's name, and air between them.
 const double _headerMinimum = 440;
 
-/// Below this the pickers past the zoom fold into one mark.
 const double _headerFolds = 360;
 
-/// What stands between the name and the pickers once the strip is sliding and
-/// there is no free space left to hold them apart.
 const double _headerGatheredGap = 24;
 
 /// The three pickers the drawing puts at the header's right-hand end, 6 apart.
@@ -411,7 +386,6 @@ List<Widget> viewerPickers({
   required ValueChanged<double?> onZoom,
   // False under the deck, whose own two pickers answer the quality question.
   bool quality = true,
-  // The view whose tier the quality picker shows, or the one in front.
   int? viewId,
   ViewerMenuHost? host,
 }) =>
@@ -462,8 +436,6 @@ List<Widget> viewerPickers({
       ),
     ];
 
-/// [picker], whose right click opens [rows] at the pointer. Just the picker in a
-/// bare test of a strip, where there's no panel to ask.
 Widget _rightClick(
   ViewerMenuHost? host,
   List<Widget> Function(LumitUiState, ViewerMenuHost, VoidCallback) rows,
@@ -479,7 +451,6 @@ Widget _rightClick(
             ),
           );
 
-/// The zoom picker's face at Fit: the word, and its number beside it.
 class _ZoomFace extends StatelessWidget {
   final String percent;
   const _ZoomFace({required this.percent});
@@ -524,8 +495,6 @@ class ViewerSpeedPicker extends StatelessWidget {
           value: ui.playbackSlow,
           options: playbackSlows,
           label: (slow) => l10n.viewerSpeedTimes(1 / slow),
-          // The comp's own rate is what's usual, so it draws quietly and a
-          // slowed preview stands out.
           face: Flexible(
             child: Text(
               l10n.viewerSpeedTimes(1 / ui.playbackSlow),
@@ -639,7 +608,6 @@ List<Widget> viewerQualityRows(LumitUiState ui, {int? viewId}) => [
       ),
     ];
 
-/// A heading over a run of menu rows — the same aside a grouped dropdown draws.
 Widget _menuHeading(LumitTheme t, String text) => Padding(
       padding: const EdgeInsets.fromLTRB(10, 6, 10, 2),
       child: Text(text, style: t.small.copyWith(color: t.textMuted)),
@@ -851,7 +819,6 @@ class _ColourDropdown extends StatelessWidget {
               Text(l10n.viewerColourToneMap),
             ]),
           ),
-        // Where the working space and the config are set.
         if (project != null) ...[
           const MenuDivider(),
           MenuRow(

@@ -24,13 +24,9 @@ import 'files.dart' if (dart.library.js_interop) 'files_web.dart';
 export 'files.dart' if (dart.library.js_interop) 'files_web.dart'
     show handOver, importsHere;
 
-/// The `.lum` project type group (docs/10 §1). The egui open filter also lists
-/// the pre-rename `kir` leftover; a fresh frontend only ever offers `.lum`.
 XTypeGroup _projectGroup() =>
     XTypeGroup(label: l10n.fileTypeProject, extensions: const ['lum']);
 
-/// The `.lumt` graphics template type group, which Import adds to the
-/// library.
 XTypeGroup _templateGroup() => XTypeGroup(
     label: l10n.fileTypeGraphicsTemplate, extensions: const ['lumt']);
 
@@ -51,7 +47,6 @@ XTypeGroup _templateGroup() => XTypeGroup(
 /// folder yields and what the dialogue offers cannot drift apart, Lottie
 /// files aside.
 const List<String> footageExtensions = [
-  // Video containers
   'mp4', 'mov', 'mkv', 'avi', 'webm', 'm4v', 'mpg', 'mpeg', 'ts', 'mts', 'm2ts',
   'wmv', 'flv', '3gp', 'ogv', 'mxf', 'gif',
   // Stills, mirroring the engine's STILL_EXTENSIONS
@@ -59,9 +54,7 @@ const List<String> footageExtensions = [
   'webp', 'ppm', 'pgm', 'pnm', 'pbm',
   // FFmpeg reads HDR panoramas, and the browser has none.
   if (!kIsWeb) 'hdr',
-  // Layered documents, which import as a composition of their layers
   'psd', 'ai',
-  // Sound
   'wav', 'mp3', 'flac', 'aac', 'm4a', 'ogg', 'opus', 'aiff', 'aif', 'wma',
   // 3D models, and the ones the user's Blender converts
   'gltf', 'glb', 'fbx', 'obj', 'vdb', 'blend', 'usd', 'usdz', 'usdc', 'usda', 'abc',
@@ -73,7 +66,6 @@ const List<String> footageExtensions = [
 /// beside the footage stays where it is.
 const List<String> _pickerExtensions = [...footageExtensions, 'json', 'lottie'];
 
-/// The footage type group.
 XTypeGroup _footageGroup() =>
     XTypeGroup(label: l10n.fileTypeFootage, extensions: _pickerExtensions);
 
@@ -82,7 +74,6 @@ XTypeGroup _footageGroup() =>
 /// is still reachable, and the probe gives the honest answer about it.
 XTypeGroup _anyGroup() => XTypeGroup(label: l10n.fileTypeAllFiles);
 
-/// Pick one project file to open, or null when the dialogue was cancelled.
 Future<String?> pickProjectToOpen() async {
   final file = await openFile(acceptedTypeGroups: [_projectGroup()]);
   return file == null ? null : keepPicked(file);
@@ -110,7 +101,6 @@ Future<void> _allowFootage(LumitState app) async {
       final path = footage.filePath();
       if (back.contains(path)) footage.relink(path: path);
     } catch (_) {
-      // Gone with its project. Nothing to point.
     }
   }
   app.notifyDocumentChanged();
@@ -125,8 +115,6 @@ Iterable<FootageReference> _footageIn(List<ItemReference> items) sync* {
   }
 }
 
-/// Choose where to save a project, defaulting the name to `untitled.lum` (as
-/// the egui Save dialogue does), or null when cancelled.
 Future<String?> pickProjectSaveLocation(
     {String suggestedName = 'untitled.lum', String? initialDirectory}) async {
   if (kIsWeb) return pickSaveTarget(suggestedName);
@@ -156,7 +144,6 @@ Future<List<String>> pickFootage({bool projects = false}) async {
   return droppedPaths(files);
 }
 
-/// Where each of [files] is, picked or dropped, for the engine to open.
 Future<List<String>> droppedPaths(List<XFile> files) async {
   final paths = <String>[];
   for (final file in files) {
@@ -208,7 +195,6 @@ Future<String?> pickExportSaveLocation(
 XTypeGroup _easingsGroup() =>
     XTypeGroup(label: l10n.fileTypeEasings, extensions: const ['json']);
 
-/// Where to write a flare design, or null when cancelled.
 Future<String?> pickFlareSaveLocation(String suggestedName) async {
   final path = (await getSaveLocation(
     acceptedTypeGroups: [
@@ -221,7 +207,6 @@ Future<String?> pickFlareSaveLocation(String suggestedName) async {
   return '$path.flare';
 }
 
-/// Where to write a frame as a picture, or null when cancelled.
 Future<String?> pickFrameSaveLocation(String suggestedName) async {
   final path = (await getSaveLocation(
     acceptedTypeGroups: [
@@ -234,7 +219,6 @@ Future<String?> pickFrameSaveLocation(String suggestedName) async {
   return '$path.png';
 }
 
-/// Where to write a grade as a `.cube` LUT, or null when cancelled.
 Future<String?> pickLutSaveLocation(String suggestedName) async {
   final path = (await getSaveLocation(
     acceptedTypeGroups: [
@@ -247,8 +231,6 @@ Future<String?> pickLutSaveLocation(String suggestedName) async {
   return '$path.cube';
 }
 
-/// Pick a colour decision (`.cdl`, `.cc` or `.ccc`) to import, or null when
-/// cancelled.
 Future<String?> pickCdlToOpen() async => (await openFile(acceptedTypeGroups: [
       XTypeGroup(label: l10n.gradeCdl, extensions: const ['cdl', 'cc', 'ccc']),
     ]))
@@ -269,11 +251,9 @@ Future<String?> pickCdlSaveLocation(String suggestedName) async {
   return lower.endsWith('.cc') || lower.endsWith('.cdl') ? path : '$path.cc';
 }
 
-/// Pick a file of easing shapes to import, or null when cancelled.
 Future<String?> pickEasingsToOpen() async =>
     (await openFile(acceptedTypeGroups: [_easingsGroup()]))?.path;
 
-/// Where to export the saved easing shapes, or null when cancelled.
 Future<String?> pickEasingsSaveLocation() async {
   final path = (await getSaveLocation(
     acceptedTypeGroups: [_easingsGroup()],
@@ -284,8 +264,6 @@ Future<String?> pickEasingsSaveLocation() async {
   return '$path.json';
 }
 
-/// The `.lumfx` effect-preset type group, mirroring the egui Effects panel's
-/// preset filter (`crates/lumit-ui`'s `preset.rs`).
 XTypeGroup _presetGroup() =>
     XTypeGroup(label: l10n.fileTypePreset, extensions: const ['lumfx']);
 
@@ -295,7 +273,6 @@ XTypeGroup _presetGroup() =>
 XTypeGroup _presetOpenGroup() => XTypeGroup(
     label: l10n.fileTypePresetToOpen, extensions: const ['lumfx', 'ffx']);
 
-/// Pick one preset file to load, or null when cancelled.
 Future<String?> pickPresetToOpen() async {
   final file = await openFile(acceptedTypeGroups: [_presetOpenGroup()]);
   return file?.path;
@@ -308,8 +285,6 @@ Future<String?> pickPresetToOpen() async {
 XTypeGroup _shaderGroup() =>
     XTypeGroup(label: l10n.fileTypeShader, extensions: const ['wgsl']);
 
-/// Pick a script to run, JavaScript or After Effects', or null when
-/// cancelled.
 Future<String?> pickScript() async {
   final file = await openFile(acceptedTypeGroups: [
     XTypeGroup(label: l10n.fileTypeScript, extensions: const ['js', 'jsx'])
@@ -317,11 +292,8 @@ Future<String?> pickScript() async {
   return file?.path;
 }
 
-/// Pick a program, or null when cancelled.
 Future<String?> pickProgram() async => (await openFile())?.path;
 
-/// Pick a script to assemble a cut from: plain text or Final Draft. Null
-/// when cancelled.
 Future<String?> pickTranscriptScript() async {
   final file = await openFile(acceptedTypeGroups: [
     XTypeGroup(
@@ -331,7 +303,6 @@ Future<String?> pickTranscriptScript() async {
   return file?.path;
 }
 
-/// Pick one `.wgsl` shader to load, or null when cancelled.
 Future<String?> pickShaderToOpen() async {
   final file = await openFile(acceptedTypeGroups: [_shaderGroup()]);
   return file?.path;
@@ -360,7 +331,6 @@ Future<String?> pickPresetSaveLocation(String suggestedName,
 XTypeGroup _ocioGroup() =>
     XTypeGroup(label: l10n.fileTypeOcioConfig, extensions: const ['ocio']);
 
-/// Pick a colour config for the project, or null when cancelled.
 Future<String?> pickOcioConfig() async {
   final file = await openFile(acceptedTypeGroups: [_ocioGroup()]);
   return file?.path;
@@ -371,7 +341,6 @@ Future<String?> pickOcioConfig() async {
 XTypeGroup _keymapGroup() =>
     XTypeGroup(label: l10n.fileTypeKeymap, extensions: const ['json']);
 
-/// Pick a keymap file to import, or null when the dialogue was cancelled.
 Future<String?> pickKeymapToOpen() async {
   final file = await openFile(acceptedTypeGroups: [_keymapGroup()]);
   return file?.path;
@@ -392,7 +361,6 @@ Future<String?> _afterEffectsSettingsFolder() async {
   return await Directory(path).exists() ? path : null;
 }
 
-/// Pick an After Effects shortcut file to read, or null when cancelled.
 Future<String?> pickAfterEffectsShortcuts() async {
   final file = await openFile(
     acceptedTypeGroups: [_afterEffectsShortcutsGroup()],
@@ -407,14 +375,11 @@ Future<String?> pickAfterEffectsShortcuts() async {
 XTypeGroup _themeGroup() => XTypeGroup(
     label: l10n.fileTypeTheme, extensions: const [themeFileExtension]);
 
-/// Pick a theme file to import, or null when the dialogue was cancelled.
 Future<String?> pickThemeToOpen() async {
   final file = await openFile(acceptedTypeGroups: [_themeGroup()]);
   return file?.path;
 }
 
-/// Choose where to write a theme, defaulting the name to the theme's own
-/// ([suggestedName], from `themeFileName`), or null when cancelled.
 Future<String?> pickThemeSaveLocation(String suggestedName) async {
   final location = await getSaveLocation(
     acceptedTypeGroups: [_themeGroup()],
@@ -423,19 +388,14 @@ Future<String?> pickThemeSaveLocation(String suggestedName) async {
   return location?.path;
 }
 
-/// The shared-workspace type group (docs/07 §1.4), the arrangement's
-/// counterpart of the theme's.
 XTypeGroup _workspaceGroup() => XTypeGroup(
     label: l10n.fileTypeWorkspace, extensions: const [workspaceFileExtension]);
 
-/// Pick a workspace file to import, or null when the dialogue was cancelled.
 Future<String?> pickWorkspaceToOpen() async {
   final file = await openFile(acceptedTypeGroups: [_workspaceGroup()]);
   return file?.path;
 }
 
-/// Choose where to write a workspace, defaulting the name to its own, or null
-/// when cancelled.
 Future<String?> pickWorkspaceSaveLocation(String suggestedName) async {
   final location = await getSaveLocation(
     acceptedTypeGroups: [_workspaceGroup()],
@@ -444,17 +404,14 @@ Future<String?> pickWorkspaceSaveLocation(String suggestedName) async {
   return location?.path;
 }
 
-/// The saved expressions type group.
 XTypeGroup _expressionsGroup() => XTypeGroup(
     label: l10n.fileTypeExpressions, extensions: const ['lumexpressions']);
 
-/// Pick an expressions file to import, or null when the dialogue was cancelled.
 Future<String?> pickExpressionsToOpen() async {
   final file = await openFile(acceptedTypeGroups: [_expressionsGroup()]);
   return file?.path;
 }
 
-/// Choose where to write the saved expressions, or null when cancelled.
 Future<String?> pickExpressionsSaveLocation() async {
   final location = await getSaveLocation(
     acceptedTypeGroups: [_expressionsGroup()],
@@ -469,8 +426,6 @@ Future<String?> pickExpressionsSaveLocation() async {
       : '$path.lumexpressions';
 }
 
-/// The After Effects import's own type group: the project file itself,
-/// and the zip a Bridge bundle travels in.
 XTypeGroup _aeGroup() => XTypeGroup(
       label: l10n.fileTypeAeProject,
       extensions: const ['aep', 'zip'],
@@ -491,14 +446,9 @@ Future<String?> pickAeProject() async {
 Future<String?> pickAeBundle() =>
     getDirectoryPath(confirmButtonText: l10n.chooseConfirm);
 
-/// Pick a folder — Settings → Performance's cache location, where the disk tier
-/// parks its frames (docs/07 §15), or one to import. Null when the dialogue
-/// was cancelled.
 Future<String?> pickFolder() =>
     getDirectoryPath(confirmButtonText: l10n.chooseConfirm);
 
-/// Pick a CSV, TSV or JSON file of rows for a graphics template's data, or
-/// null when cancelled.
 Future<String?> pickTemplateData() async =>
     (await openFile(acceptedTypeGroups: [
       XTypeGroup(
@@ -507,8 +457,6 @@ Future<String?> pickTemplateData() async =>
     ]))
         ?.path;
 
-/// Where to write a starting CSV for a graphics template's data, or null when
-/// cancelled.
 Future<String?> pickTemplateDataSaveLocation(String suggestedName) async {
   final path = (await getSaveLocation(
     acceptedTypeGroups: [
@@ -521,8 +469,6 @@ Future<String?> pickTemplateDataSaveLocation(String suggestedName) async {
   return '$path.csv';
 }
 
-/// An addon's own description file, the `addon.json` that names what the pack
-/// is and which files belong to it (docs/impl/addons.md §4).
 XTypeGroup _addonGroup() =>
     XTypeGroup(label: l10n.fileTypeAddon, extensions: const ['json']);
 
@@ -538,14 +484,11 @@ Future<String?> pickAddonManifest() async {
 XTypeGroup _styleGroup() => XTypeGroup(
     label: l10n.fileTypeStyle, extensions: const [styleFileExtension, 'zip']);
 
-/// Pick a style to take in, or null when cancelled.
 Future<String?> pickStyleToOpen() async {
   final file = await openFile(acceptedTypeGroups: [_styleGroup()]);
   return file?.path;
 }
 
-/// Choose where to save a style's package, named [suggestedName] to begin
-/// with, or null when cancelled.
 Future<String?> pickStylePackageSaveLocation(String suggestedName) async {
   final location = await getSaveLocation(
     acceptedTypeGroups: [
@@ -562,18 +505,14 @@ Future<String?> pickStylePackageSaveLocation(String suggestedName) async {
       : '$path.$styleFileExtension';
 }
 
-/// An extension packed as one file.
 XTypeGroup _extensionPackageGroup() => XTypeGroup(
     label: l10n.fileTypeExtensionPackage, extensions: const ['lfx']);
 
-/// Pick a `.lfx` package to install, or null when cancelled.
 Future<String?> pickExtensionPackage() async {
   final file = await openFile(acceptedTypeGroups: [_extensionPackageGroup()]);
   return file?.path;
 }
 
-/// Choose where to save a package, named [suggestedName] to begin with, or
-/// null when cancelled.
 Future<String?> pickExtensionPackageSaveLocation(String suggestedName) async {
   final location = await getSaveLocation(
     acceptedTypeGroups: [_extensionPackageGroup()],
@@ -585,7 +524,6 @@ Future<String?> pickExtensionPackageSaveLocation(String suggestedName) async {
   return path.toLowerCase().endsWith('.lfx') ? path : '$path.lfx';
 }
 
-/// Choose where to write a keymap, or null when cancelled.
 Future<String?> pickKeymapSaveLocation() async {
   final location = await getSaveLocation(
     acceptedTypeGroups: [_keymapGroup()],
@@ -608,7 +546,6 @@ Future<String?> pickEffectInputFile(
   return file?.path;
 }
 
-/// The subtitle files File ▸ Import ▸ Captions… reads.
 XTypeGroup _captionsGroup() => XTypeGroup(
       label: l10n.fileTypeCaptions,
       extensions: const [
@@ -623,7 +560,6 @@ XTypeGroup _captionsGroup() => XTypeGroup(
       ],
     );
 
-/// Pick a subtitle file to make a caption layer from, or null when cancelled.
 Future<String?> pickCaptionsToOpen() async {
   final file = await openFile(acceptedTypeGroups: [_captionsGroup()]);
   return file == null ? null : keepPicked(file);
@@ -650,13 +586,11 @@ Future<String?> pickCaptionsSaveLocation(
 XTypeGroup _libraryGroup() =>
     XTypeGroup(label: l10n.libraryFileType, extensions: const ['lumlibrary']);
 
-/// Pick a library file to import, or null when the dialogue was cancelled.
 Future<String?> pickLibraryToOpen() async {
   final file = await openFile(acceptedTypeGroups: [_libraryGroup()]);
   return file?.path;
 }
 
-/// Where to write a library file, or null when cancelled.
 Future<String?> pickLibrarySaveLocation() async {
   final path = (await getSaveLocation(
     acceptedTypeGroups: [_libraryGroup()],

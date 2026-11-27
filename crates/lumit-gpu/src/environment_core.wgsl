@@ -26,7 +26,6 @@ fn env_turn(e: Environment, d: vec3<f32>) -> vec3<f32> {
     return mat3x3<f32>(e.turn0.xyz, e.turn1.xyz, e.turn2.xyz) * d;
 }
 
-// What a matte surface facing `n` takes from every way at once.
 fn env_irradiance(cube: texture_cube<f32>, s: sampler, e: Environment, n: vec3<f32>) -> vec3<f32> {
     return textureSampleLevel(cube, s, env_turn(e, n), 0.0).rgb * e.colour.rgb;
 }

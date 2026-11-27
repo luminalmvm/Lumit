@@ -18,8 +18,6 @@ import 'package:lumit_flutter/state/dock.dart';
 
 import 'frb_test_support.dart';
 
-/// Counts widget rebuilds by name, from the framework's own log. The
-/// rebuild-budget test's counter, at the size this file needs.
 class _Rebuilds {
   final Map<String, int> byName = {};
   bool counting = false;
@@ -56,7 +54,6 @@ class _Rebuilds {
   }
 }
 
-/// How many built rows are drawn lit.
 int _lit(WidgetTester tester) => find
     .byType(ProjectRowFrb)
     .evaluate()
@@ -135,7 +132,6 @@ void main() {
           reason: 'a click redrew far too much:\n${rebuilds.ranking()}');
     });
 
-    /// **A scroll costs the rows it brings in**, not the rows the project has.
     testWidgets('a scroll builds the rows it brings in', (tester) async {
       await mount(tester);
 
@@ -149,7 +145,6 @@ void main() {
         ..counting = true;
       for (var i = 0; i < 10; i++) {
         await tester.sendEventToBinding(pointer.scroll(const Offset(0, 60)));
-        // Real frames with time on the clock, as in the other budgets.
         await tester.pump(const Duration(milliseconds: 16));
       }
       rebuilds

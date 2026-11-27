@@ -20,6 +20,8 @@ struct Params {
     seed: u32,
     /// @choice("Linear", "Smooth", "Constant") @default("Linear") Interpolation
     interpolation: u32,
+    /// @choice("Linear", "Quadratic", "Easing") @default("Linear") Progression
+    progression: u32,
     /// @counter(2, 5) @default(3) Stops
     stops: i32,
     /// @default(1, 1, 1, 1) Colour 1
@@ -44,7 +46,6 @@ struct Params {
     position_5: f32,
 };
 
-// Edge repeat holds the end colours, Repeat starts again, Mirror repeat runs back.
 fn sc_spread(t: f32) -> f32 {
     if (p.spread == 1u) {
         return fract(t);
@@ -56,7 +57,6 @@ fn sc_spread(t: f32) -> f32 {
     return clamp(t, 0.0, 1.0);
 }
 
-// Inside layer paints only where the layer draws, as a Cavalry fill shader.
 fn sc_paint(uv: vec2<f32>, c: vec4<f32>) -> vec4<f32> {
     if (p.paint == 0u) {
         return c * lumit_sample(uv).a;
@@ -82,11 +82,19 @@ fn sc_scatter(t: f32, q: vec2<f32>) -> f32 {
     return t + (r - 0.5) * p.scatter / 100.0;
 }
 
-// ---- The SICELIOT ramp: the same text in every SICELIOT gradient ----
-
-// The first Stops colours, sorted by Position, read at t (0 to 1).
+// The first Stops colours, sorted by Position, read at t (0 to 1), after
+// Progression has bent t: Quadratic squares it, Easing eases it in and out.
 // Colours are mixed premultiplied, so a clear stop fades without a fringe.
-fn sc_ramp(t: f32) -> vec4<f32> {
+fn sc_ramp(t_in: f32) -> vec4<f32> {
+    var t = t_in;
+    if (p.progression != 0u) {
+        t = clamp(t, 0.0, 1.0);
+        if (p.progression == 1u) {
+            t = t * t;
+        } else {
+            t = t * t * (3.0 - 2.0 * t);
+        }
+    }
     let n = clamp(p.stops, 2, 5);
     var pos = array<f32, 5>(p.position_1, p.position_2, p.position_3, p.position_4, p.position_5);
     var col = array<vec4<f32>, 5>(p.colour_1, p.colour_2, p.colour_3, p.colour_4, p.colour_5);

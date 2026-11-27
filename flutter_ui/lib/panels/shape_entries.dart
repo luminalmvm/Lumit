@@ -8,7 +8,6 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/shape.dart';
 import 'package:uuid/uuid.dart';
 
-/// The id of whatever [entry] is.
 UuidValue shapeEntryId(BridgeShapeEntry entry) => switch (entry.kind) {
       BridgeShapeEntryKind_Item(:final field0) => field0.id,
       BridgeShapeEntryKind_Modifier(:final field0) => field0.id,
@@ -34,7 +33,6 @@ bool shapeMoves(BridgeShapeItem item) {
   ].any((s) => s is! BridgeScalar_Static);
 }
 
-/// [entry] at another depth.
 BridgeShapeEntry shapeEntryAt(BridgeShapeEntry entry, int depth) =>
     BridgeShapeEntry(depth: depth, kind: entry.kind);
 
@@ -81,7 +79,6 @@ extension ShapeEntries on List<BridgeShapeEntry> {
         _ => false,
       };
 
-  /// The list with the item [id] replaced by [change] of it.
   List<BridgeShapeEntry> withItem(
           UuidValue id, BridgeShapeItem Function(BridgeShapeItem) change) =>
       [
@@ -95,7 +92,6 @@ extension ShapeEntries on List<BridgeShapeEntry> {
           },
       ];
 
-  /// The list with the modifier [id] replaced by [change] of it.
   List<BridgeShapeEntry> withModifier(UuidValue id,
           BridgeShapeModifier Function(BridgeShapeModifier) change) =>
       [
@@ -110,11 +106,9 @@ extension ShapeEntries on List<BridgeShapeEntry> {
           },
       ];
 
-  /// The list with the group [id] renamed.
   List<BridgeShapeEntry> withGroupName(UuidValue id, String name) =>
       withGroup(id, name: name);
 
-  /// The list with the group [id] renamed, or its eye switched.
   List<BridgeShapeEntry> withGroup(UuidValue id,
           {String? name, bool? hidden}) =>
       [
@@ -153,7 +147,6 @@ extension ShapeEntries on List<BridgeShapeEntry> {
     ];
   }
 
-  /// The list with [kind] added at the end of the group [id], inside it.
   List<BridgeShapeEntry> appendedInto(UuidValue id, BridgeShapeEntryKind kind) {
     final i = _indexOf(id);
     if (i < 0) return this;
@@ -165,8 +158,6 @@ extension ShapeEntries on List<BridgeShapeEntry> {
     ];
   }
 
-  /// The list with the entry [id] and everything inside it wrapped in a new
-  /// group called [name].
   List<BridgeShapeEntry> grouped(UuidValue id, String name) {
     final i = _indexOf(id);
     if (i < 0) return this;
@@ -184,7 +175,6 @@ extension ShapeEntries on List<BridgeShapeEntry> {
     ];
   }
 
-  /// The list with the group [id] opened out: its entries take its place.
   List<BridgeShapeEntry> ungrouped(UuidValue id) {
     final i = _indexOf(id);
     if (i < 0) return this;

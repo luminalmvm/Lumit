@@ -8,9 +8,7 @@ use std::collections::HashMap;
 use std::sync::{OnceLock, RwLock};
 use uuid::Uuid;
 
-/// How many points across and down are compared.
 const GRID: (usize, usize) = (48, 27);
-/// How much of the frames so far the next frame is measured against.
 const MEMORY: f32 = 0.8;
 /// How far a frame's middle sample can sit from the frame before it, after a fit
 /// of its own, and still be the same shot. Measured on the real model: a box
@@ -18,7 +16,6 @@ const MEMORY: f32 = 0.8;
 /// the rest of the run would lock to a squashed scale.
 const NEW_SHOT: f32 = 0.07;
 
-/// Each instance's fits, with the name of the run they were made from.
 type Fits = HashMap<Uuid, (u64, Vec<[f32; 2]>)>;
 
 fn fits() -> &'static RwLock<Fits> {
@@ -26,7 +23,6 @@ fn fits() -> &'static RwLock<Fits> {
     FITS.get_or_init(Default::default)
 }
 
-/// Work out and keep `run`'s fits, on whichever thread is publishing it.
 pub(super) fn hold(instance: Uuid, run: &PlaneRun) {
     let fit = fit(&run.records);
     if let Ok(mut held) = fits().write() {
@@ -34,7 +30,6 @@ pub(super) fn hold(instance: Uuid, run: &PlaneRun) {
     }
 }
 
-/// What steadies `instance`'s plane at `frame`, as a scale and an offset.
 #[must_use]
 pub fn of(instance: Uuid, frame: i64) -> [f32; 2] {
     let found = || {
@@ -47,7 +42,6 @@ pub fn of(instance: Uuid, frame: i64) -> [f32; 2] {
     found().unwrap_or([1.0, 0.0])
 }
 
-/// A scale and offset per record, for a run of depth planes.
 pub(super) fn fit(records: &[FrameRecord]) -> Vec<[f32; 2]> {
     let mut reference: Vec<f32> = Vec::new();
     let mut previous: Vec<f32> = Vec::new();
@@ -74,7 +68,6 @@ pub(super) fn fit(records: &[FrameRecord]) -> Vec<[f32; 2]> {
         .collect()
 }
 
-/// How far `x` sits from `y` after a fit, at the middle sample.
 fn apart(x: &[f32], y: &[f32], [a, b]: [f32; 2]) -> f32 {
     let mut off: Vec<f32> = x
         .iter()
@@ -133,8 +126,6 @@ fn middle(values: &mut [f32]) -> Option<f32> {
 mod tests {
     use super::*;
 
-    /// A dark box entering rescales the plane. The fit puts the same background
-    /// back where it was.
     #[test]
     fn a_subject_entering_leaves_the_background_where_it_was() {
         let base: Vec<f32> = (0..GRID.0 * GRID.1)
@@ -142,8 +133,6 @@ mod tests {
             .collect();
         let mut reference = base.clone();
         for (lo, hi) in [(0.2, 0.9), (0.0, 1.5), (-0.3, 0.8)] {
-            // The plane's own squash, with the box taking a fifth of the frame
-            // at the new nearest.
             let frame: Vec<f32> = base
                 .iter()
                 .enumerate()
@@ -169,8 +158,6 @@ mod tests {
         }
     }
 
-    /// A cut has nothing to fit to, so it reads raw and starts afresh, however
-    /// odd the frames before it had the scale.
     #[test]
     fn a_cut_does_not_lock_the_depth() {
         let plane = |d: &dyn Fn(usize, usize) -> f32| {

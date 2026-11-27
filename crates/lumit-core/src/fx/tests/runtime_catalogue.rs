@@ -1,8 +1,4 @@
-//! Tests for effects that join the catalogue at run time, as a plugin does.
-
 use super::*;
-
-// ------------------------------------------------- the run-time catalogue --
 
 /// A definition that arrived at run time, as a plugin's does. Declared
 /// here rather than driven by a real OFX bundle because what is under test is
@@ -12,8 +8,6 @@ use super::*;
 /// of these.
 struct RegisteredDef {
     schema: &'static EffectSchema,
-    /// The frames the instance reads, as `frames_needed` answers them. `None` is
-    /// every effect but a retimer.
     window: Option<Vec<i32>>,
 }
 
@@ -26,8 +20,6 @@ impl EffectDef for RegisteredDef {
     }
 }
 
-/// A leaked declaration under a plugin-shaped name, exactly as the OFX host
-/// leaks one for a plugin it has just described.
 fn a_registered_schema(
     match_name: &'static str,
     temporal: &'static [i32],
@@ -52,8 +44,6 @@ fn a_registered_schema(
     }))
 }
 
-/// An instance of a registered effect, in the namespace a plugin's instance
-/// carries.
 fn a_plugin_instance(match_name: &str) -> EffectInstance {
     let mut inst = instantiate(match_name).expect("the catalogue knows it");
     assert_eq!(
@@ -80,7 +70,6 @@ fn a_registered_definition_joins_the_catalogue_behind_the_builtins() {
     }));
     assert!(BUILTIN_DEFS.register(def), "it registered");
 
-    // Found by name, and it is the definition that was registered.
     let found = BUILTIN_DEFS
         .get("ofx:test.core.joins")
         .expect("the catalogue answers to it");
@@ -113,7 +102,6 @@ fn a_registered_definition_joins_the_catalogue_behind_the_builtins() {
         .expect("still there");
     assert!(std::ptr::eq(still.schema(), schema));
 
-    // And a name the built-ins already own is refused too, whichever way round.
     let shadow: &'static RegisteredDef = Box::leak(Box::new(RegisteredDef {
         schema: a_registered_schema("blur", &[0]),
         window: None,
@@ -153,7 +141,6 @@ fn a_retimers_declared_frames_land_in_the_temporal_window() {
     // describe time matters.
     assert!(stack_is_temporal(one, true));
 
-    // Bypassed, disabled, and a plain built-in stack are all untouched.
     assert_eq!(stack_temporal_window(one, false, 0.0, 30.0), vec![0]);
     let mut off = inst.clone();
     off.enabled = false;
@@ -162,8 +149,6 @@ fn a_retimers_declared_frames_land_in_the_temporal_window() {
         vec![0]
     );
 
-    // A registered effect that answers `None` falls back to its declaration,
-    // exactly as every built-in does.
     let plain_schema = a_registered_schema("ofx:test.core.plain", &[-1, 0, 1]);
     let plain: &'static RegisteredDef = Box::leak(Box::new(RegisteredDef {
         schema: plain_schema,
@@ -177,8 +162,6 @@ fn a_retimers_declared_frames_land_in_the_temporal_window() {
     );
 }
 
-/// A plugin instance resolves into the arena beside the built-ins, in stack
-/// order, carrying the layer time its parameters were read at.
 #[test]
 fn a_plugin_instance_resolves_between_two_builtins() {
     let schema = a_registered_schema("ofx:test.core.stack", &[0]);

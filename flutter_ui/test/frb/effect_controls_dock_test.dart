@@ -17,7 +17,6 @@ void main() {
   setUpAll(initEngineForTests);
 
   group('Fronting a panel (frb)', () {
-    /// The tab group holding [panel], or null when it sits alone.
     DockTabs? groupOf(DockNode node, Panel panel) {
       switch (node) {
         case DockPane():

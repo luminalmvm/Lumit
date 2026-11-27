@@ -32,7 +32,6 @@ pub struct Haze {
 /// The most boxes of smoke one walk takes. A comp with more walks again.
 pub const MAX_VOLUMES: usize = 4;
 
-/// One box of smoke as the walk reads it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct VolumeLook {
     /// The box's nought to one to comp pixels: three axes, then its corner.
@@ -79,20 +78,16 @@ struct GpuVolume {
     detail_scale: [f32; 4],
 }
 
-/// Cells across one of the fine detail's patches.
 const DETAIL_CELLS: f32 = 10.0;
 
-/// A box's height in patches its detail rises each second, about as gas does.
 const DETAIL_RISE: f32 = 0.45;
 
-/// How many cells each way the detail's noise holds.
 const NOISE_CELLS: usize = 32;
 
 /// A tiling 3D noise, three channels, the same every time: a few octaves of smooth
 /// value noise, so it holds patches a good deal finer than a cell of the grid.
 fn noise_bytes() -> Vec<u8> {
     let n = NOISE_CELLS;
-    // One lattice of numbers per octave, from a plain whole-number hash.
     let hash = |x: usize, y: usize, z: usize, c: usize, o: usize| {
         let v = (x as u32).wrapping_mul(73_856_093)
             ^ (y as u32).wrapping_mul(19_349_663)
@@ -199,7 +194,6 @@ pub struct HazeOp {
     pub centre: [f32; 3],
     pub radius: f32,
     pub lights: Vec<(LightingLight, Haze)>,
-    /// The boxes of smoke on the way.
     pub volumes: Vec<VolumeOp>,
     /// The depth of the layers that take no shadow, if any don't.
     pub no_shadow: Option<wgpu::Texture>,
@@ -218,8 +212,6 @@ struct HazeParams {
     grain: [[f32; 4]; super::lighting::MAX_LIT_LIGHTS],
 }
 
-/// The passes: the light reaching a box, the walk at half size, and laying it
-/// over the picture.
 pub(super) struct HazeFx {
     march_layout: wgpu::BindGroupLayout,
     march: wgpu::ComputePipeline,
@@ -231,11 +223,8 @@ pub(super) struct HazeFx {
     boxes_layout: wgpu::BindGroupLayout,
     lit_layout: wgpu::BindGroupLayout,
     lit: wgpu::ComputePipeline,
-    /// What an unused box binds.
     no_box: wgpu::TextureView,
-    /// What no shadow binds when every layer takes one.
     takes_all: wgpu::TextureView,
-    /// The fine detail's noise, and how it is read.
     noise: wgpu::TextureView,
     noise_wrap: wgpu::Sampler,
 }
@@ -499,7 +488,6 @@ fn view_entry(binding: u32, view: &wgpu::TextureView) -> wgpu::BindGroupEntry<'_
     }
 }
 
-/// A 3D field of half floats, sized `cells`, read filtered and copied into.
 fn field_descriptor(label: &'static str, cells: [u32; 3]) -> wgpu::TextureDescriptor<'static> {
     wgpu::TextureDescriptor {
         label: Some(label),
@@ -659,7 +647,6 @@ impl FxEngine {
             },
             entries: &entries,
         });
-        // The boxes, and the light reaching each.
         let vbuf = ctx
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -672,7 +659,6 @@ impl FxEngine {
             .map(|v| v.fields.create_view(&Default::default()))
             .collect();
         let field_view = |k: usize| fields.get(k).unwrap_or(&fx.no_box);
-        // Each box's light is worked out into rows, then copied into a 3D texture.
         let lit: Vec<wgpu::Texture> = volumes
             .iter()
             .map(|v| {

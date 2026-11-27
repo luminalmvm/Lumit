@@ -429,10 +429,6 @@ fn compare_layer(got: &Layer, want: &Layer, frame: f64) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Phase B: the property trees, scored per category.
-// ---------------------------------------------------------------------------
-
 /// One property tree, flattened to `path -> node` so the two sides can be
 /// walked together. Repeated match names (two mask atoms, two effects of the
 /// same kind) are numbered so they do not collide.
@@ -451,15 +447,12 @@ fn flatten<'a>(props: &'a [Property], prefix: &str, out: &mut BTreeMap<String, &
     }
 }
 
-/// One layer's name, its parsed property tree, and the golden one, all
-/// flattened to the same paths.
 type LayerTrees = (
     String,
     BTreeMap<String, Property>,
     BTreeMap<String, Property>,
 );
 
-/// Every layer of the golden capture beside the parsed one, flattened.
 fn trees() -> Vec<LayerTrees> {
     let parsed = parsed().capture;
     let golden = golden();
@@ -547,7 +540,7 @@ fn every_stored_property_value_matches_after_effects() {
                 continue;
             }
             if node.keyframes.is_some() || other.keyframes.is_some() {
-                continue; // scored by the keyframe test below
+                continue;
             }
             // Exemption A: an enabled expression drives the property, and the
             // DOM reports what the expression *evaluated to* rather than the
@@ -717,7 +710,6 @@ fn the_curves_blob_decodes_to_the_curve_after_effects_baked() {
     }
     assert_eq!(counts, vec![2; 5], "the fixture's Curves is at its default");
 
-    // And the effect that comes out of it.
     let (doc, report) = lumit_import::map::map_capture(&bundle.capture);
     let curves = doc
         .items
@@ -851,7 +843,7 @@ fn every_keyframe_matches_after_effects() {
                             &format!("{who}: {side} ease [{axis}] influence"),
                         );
                         if path_property {
-                            continue; // the exemption above
+                            continue;
                         }
                         let (a, b) = (
                             got.speed.unwrap_or_default(),
@@ -878,11 +870,6 @@ fn every_keyframe_matches_after_effects() {
     assert_eq!(keys, 27, "keyframes recovered");
 }
 
-/// **Expressions, effect instances, masks and separated dimensions all come
-/// across.**
-///
-/// The four features that are not one value each, counted and compared in one
-/// place so the numbers can be pinned together.
 #[test]
 fn expressions_effects_masks_and_separated_dimensions_match() {
     let mut expressions = 0_usize;
@@ -1055,9 +1042,7 @@ fn damage(whole: &[u8], seed: u64) -> Vec<u8> {
 
     let mut damaged = whole.to_vec();
     match seed % 4 {
-        // Cut the file short somewhere past the header.
         0 => damaged.truncate(16 + next() % whole.len()),
-        // Flip one byte anywhere.
         1 => {
             let at = next() % damaged.len();
             damaged[at] ^= 0xFF;
@@ -1068,7 +1053,6 @@ fn damage(whole: &[u8], seed: u64) -> Vec<u8> {
             let at = next() % (damaged.len() - 4);
             damaged[at..at + 4].copy_from_slice(&u32::MAX.to_be_bytes());
         }
-        // Zero a run, which is how a partly-written file arrives.
         _ => {
             let at = next() % damaged.len();
             let end = (at + 1 + next() % 4096).min(damaged.len());

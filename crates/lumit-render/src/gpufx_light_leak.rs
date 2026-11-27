@@ -1,5 +1,3 @@
-//! Light leak's GPU pass, kept beside the dispatch table rather than in it.
-
 use lumit_core::fx::effects::light_leak::LightLeak;
 use lumit_core::fx::params::Params;
 use lumit_core::fx::registry::EffectMetadata;
@@ -27,7 +25,6 @@ impl GpuEffect for LightLeakFx {
         _aux: AuxSlot<'_>,
     ) -> wgpu::Texture {
         let l = LightLeak::read(p).packed(p, w, h);
-        // The ends of a cut have no light on them, and cost nothing.
         if l.is_identity() {
             return tex.clone();
         }

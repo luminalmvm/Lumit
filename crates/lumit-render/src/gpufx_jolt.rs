@@ -1,5 +1,3 @@
-//! Jolt's GPU pass, kept beside the dispatch table rather than in it.
-
 use lumit_core::fx::effects::jolt::Jolt;
 use lumit_core::fx::params::Params;
 use lumit_core::fx::registry::EffectMetadata;
@@ -29,7 +27,6 @@ impl GpuEffect for JoltFx {
         let j = Jolt::read(p).packed(p, w, h);
         // A time hit: the layer at another moment, in place of its input.
         let moved = aux.layer_inputs().first().and_then(|l| l.as_ref());
-        // Most frames have no jolt on them, and cost nothing.
         if j.is_identity() && moved.is_none() {
             return tex.clone();
         }

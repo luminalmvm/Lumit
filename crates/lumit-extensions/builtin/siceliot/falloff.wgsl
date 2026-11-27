@@ -52,7 +52,6 @@ fn fo_rand(a: u32, b: u32) -> f32 {
     return f32(h >> 8u) / 16777216.0;
 }
 
-// The point turned into the falloff's own axes.
 fn fo_local(px: vec2<f32>) -> vec2<f32> {
     let d = px - p.centre;
     let a = -radians(p.rotation);
@@ -112,7 +111,6 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
     }
     v = clamp(v * p.strength / 100.0, 0.0, 1.0);
     if (p.binary == 1u) {
-        // Cavalry's Probability: each cell is on with a chance of the value.
         let cell = vec2<i32>(floor(px / max(p.cell_size, 1.0)));
         v = select(0.0, 1.0, fo_rand(u32(cell.x), u32(cell.y)) < v);
     }

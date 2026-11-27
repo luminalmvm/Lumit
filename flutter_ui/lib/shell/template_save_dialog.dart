@@ -19,16 +19,12 @@ import '../widgets/escape_ladder.dart';
 import 'dialog_frame.dart';
 import 'settings_account.dart' show askBefore;
 
-/// How wide the labels stand.
 const double _labelColumn = 64;
 
-/// Open the Save graphics template dialogue for [comp]. Answers once it has
-/// closed, saved or not.
 Future<void> saveGraphicsTemplate(
     BuildContext context, CompositionReference comp) async {
   final app = Provider.of<LumitState>(context, listen: false);
   final ui = Provider.of<LumitUiState>(context, listen: false);
-  // Read once, as the dialogue opens.
   final ownId = comp.getTemplate()?.id;
   List<BridgeLibraryTemplate> library;
   try {
@@ -111,7 +107,6 @@ class _SaveTemplateState extends State<_SaveTemplate> {
   bool _packFonts = false;
   bool _saving = false;
 
-  /// Why the last save failed, said in the footer.
   String? _failed;
 
   /// Holds Escape while it saves, so the dialogue stays up.

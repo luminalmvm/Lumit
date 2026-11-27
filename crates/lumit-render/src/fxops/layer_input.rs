@@ -1,5 +1,3 @@
-//! A layer another layer reads, set down on the raster of the one reading it.
-
 use super::Tex;
 use lumit_gpu::GpuContext;
 
@@ -44,7 +42,6 @@ pub fn render_layer_input(
             size: (src_w.max(1.0), src_h.max(1.0)),
             position: (0.0, 0.0),
             anchor: (0.0, 0.0),
-            // Stretch the source to fill the whole working raster.
             scale: (
                 w as f32 / src_w.max(1.0) * 100.0,
                 h as f32 / src_h.max(1.0) * 100.0,

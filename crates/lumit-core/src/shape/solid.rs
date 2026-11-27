@@ -1,14 +1,9 @@
-//! A Shape layer's art as the outlines Geometry options make solid: what the
-//! picture would paint, with the same combines, trims and repeater copies, in
-//! the pixels of the layer's own picture.
-
 use i_overlay::mesh::stroke::offset::StrokeOffset;
 use i_overlay::mesh::style::StrokeStyle;
 
 use super::raster::{runs, Art};
 use super::{colour, contents_bounds, modifier, Affine, ShapeEntry};
 
-/// One run of a shape's art at one of its copies.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Solid {
     pub contours: Vec<Vec<[f64; 2]>>,
@@ -18,7 +13,6 @@ pub struct Solid {
     pub outline: Option<[f32; 4]>,
 }
 
-/// The shape a brush `width` wide paints along `line`.
 #[must_use]
 pub fn outline_of(line: &[[f64; 2]], width: f64) -> Vec<Vec<[f64; 2]>> {
     let round = line.len() > 2 && line.first() == line.last();
@@ -77,8 +71,6 @@ pub fn solids(contents: &[ShapeEntry], t: f64) -> Vec<Solid> {
         let stroke = item.stroke.as_ref().map(|c| colour::at(c, t).0);
         let stroke = stroke.filter(|_| width > 0.0);
         let fill = item.fill.as_ref().map(|c| colour::at(c, t).0);
-        // ponytail: a gradient fill takes its flat colour, as a vertex colour
-        // has no ramp. Read the ramp at each point if a logo needs it.
         let Some(paint) = fill.or(stroke) else {
             continue;
         };

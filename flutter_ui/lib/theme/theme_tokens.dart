@@ -18,17 +18,13 @@ import '../l10n/strings.dart';
 
 import 'theme.dart';
 
-/// One editable colour: what it is called, and how to read or write it on a
-/// theme.
 class ThemeToken {
   /// The stable key a stored custom theme files this colour under. Never
   /// shown; never changed, or every saved theme loses that colour.
   final String key;
 
-  /// The name the editor puts on the left of the row. Sentence case.
   final String label;
 
-  /// The group heading this token sits under in the editor.
   final String group;
 
   final Color Function(LumitTheme) read;
@@ -47,7 +43,6 @@ class ThemeToken {
     this.fileOnly = false,
   });
 
-  /// A file-only token. It has no row, so it needs no label.
   ThemeToken.file(this.key, this.read, this.write)
       : label = key,
         group = '',
@@ -173,7 +168,6 @@ PortColours _portWith(
       audio: audio ?? p.audio,
     );
 
-/// One curve stroke by index, preserving the rest of the ramp.
 List<Color> _curveWith(List<Color> curve, int i, Color c) {
   final next = List<Color>.of(curve);
   if (i < next.length) next[i] = c;
@@ -186,7 +180,6 @@ List<Color> _curveWith(List<Color> curve, int i, Color c) {
 /// set the whole mood), then what sits on them, then the accents, then the
 /// two areas with palettes of their own.
 List<ThemeToken> get themeTokens => [
-      // --- Surfaces -----------------------------------------------------------
       ThemeToken(
         key: 'surface0',
         label: l10n.tokenSurface0,
@@ -244,7 +237,6 @@ List<ThemeToken> get themeTokens => [
         write: (t, c) => _with(t, room: c),
       ),
 
-      // --- Text ---------------------------------------------------------------
       ThemeToken(
         key: 'textPrimary',
         label: l10n.tokenTextprimary,
@@ -274,7 +266,6 @@ List<ThemeToken> get themeTokens => [
         write: (t, c) => _with(t, textDisabled: c),
       ),
 
-      // --- Lines --------------------------------------------------------------
       ThemeToken(
         key: 'hairline',
         label: l10n.tokenHairline,
@@ -290,7 +281,6 @@ List<ThemeToken> get themeTokens => [
         write: (t, c) => _with(t, hairlineStrong: c),
       ),
 
-      // --- Roles --------------------------------------------------------------
       ThemeToken(
         key: 'accent',
         label: l10n.tokenAccent,
@@ -348,7 +338,6 @@ List<ThemeToken> get themeTokens => [
         write: (t, c) => _with(t, cacheDisk: c),
       ),
 
-      // --- Waveforms ----------------------------------------------------------
       ThemeToken(
         key: 'waveformRest',
         label: l10n.tokenWaveformrest,
@@ -378,7 +367,6 @@ List<ThemeToken> get themeTokens => [
         write: (t, c) => _with(t, waveform: _waveformWith(t.waveform, high: c)),
       ),
 
-      // --- Graph curves -------------------------------------------------------
       for (var i = 0; i < 4; i++)
         ThemeToken(
           key: 'curve$i',
@@ -388,7 +376,6 @@ List<ThemeToken> get themeTokens => [
           write: (t, c) => _with(t, curve: _curveWith(t.curve, i, c)),
         ),
 
-      // --- Layer kinds --------------------------------------------------------
       ThemeToken(
         key: 'layerFootage',
         label: l10n.tokenLayerfootage,
@@ -432,7 +419,6 @@ List<ThemeToken> get themeTokens => [
         write: (t, c) => _with(t, layer: _layerWith(t.layer, camera: c)),
       ),
 
-      // --- Only in a theme file --------------------------------------------
       ThemeToken.file('viewerSurround', (t) => t.viewerSurround,
           (t, c) => _with(t, viewerSurround: c)),
       ThemeToken.file('socketImage', (t) => t.port.image,
@@ -453,7 +439,6 @@ List<ThemeToken> get themeTokens => [
         ),
     ];
 
-/// The token groups the editor shows, in listing order and without repeats.
 List<String> get themeTokenGroups {
   final seen = <String>[];
   for (final token in themeTokens) {
@@ -462,8 +447,6 @@ List<String> get themeTokenGroups {
   return seen;
 }
 
-/// Read every token off a theme — what the editor opens with, and what a save
-/// writes down.
 Map<String, Color> tokensOf(LumitTheme theme) =>
     {for (final token in themeTokens) token.key: token.read(theme)};
 

@@ -1,13 +1,7 @@
-//! The Correction's twirls, and the rows that only mean something for one
-//! window shape.
-
 use crate::fx::schema::{EnabledCond, EnabledWhen, ParamGroup};
 
-/// Every window shape but Off.
 const WINDOW_ON: &[u32] = &[1, 2, 3, 4];
 
-/// The twirls. Node and Wheels start open; a qualifier group shows for the
-/// modes that read it, and a window's group while its shape is on.
 pub const CORRECTION_GROUPS: &[ParamGroup] = &[
     ParamGroup {
         label: "Node",
@@ -271,8 +265,6 @@ pub const CORRECTION_GROUPS: &[ParamGroup] = &[
     },
 ];
 
-/// A rectangle's roundness and a polygon's points mean nothing on another
-/// shape.
 pub const CORRECTION_ENABLED_WHEN: &[EnabledWhen] = &[
     EnabledWhen {
         param: "win1_round",

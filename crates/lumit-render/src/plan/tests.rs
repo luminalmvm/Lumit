@@ -1,10 +1,6 @@
-//! Tests of the decode plan.
-
 use super::*;
 use lumit_core::model::ProjectItem;
 
-/// A source wider or taller than the texture limit decodes shrunk to fit,
-/// whatever the quality asked for; anything that fits is left alone.
 #[test]
 fn oversize_footage_decodes_within_the_texture_limit() {
     assert_eq!(fit_texture(None, 7680, 4320), None, "8K fits");
@@ -49,10 +45,6 @@ fn a_layer_shown_smaller_decodes_no_larger_than_it_is_shown() {
     );
 }
 
-/// Full quality decodes at native width; a divisor and Auto both shrink it,
-/// and draft caps on top without ever raising the specified width. This is
-/// the policy both the decode request and the cache key read, so a bug here
-/// would file a frame under the wrong resolution.
 #[test]
 fn target_width_follows_the_quality_policy() {
     let full = Quality::default();
@@ -71,7 +63,6 @@ fn target_width_follows_the_quality_policy() {
     };
     assert_eq!(auto.target_width(1920), Some(480));
 
-    // Auto never decodes ABOVE native, however far the view is zoomed in.
     let zoomed = Quality {
         auto_res: true,
         display_scale: 4.0,
@@ -79,7 +70,6 @@ fn target_width_follows_the_quality_policy() {
     };
     assert_eq!(zoomed.target_width(1920), None);
 
-    // A source already finer than every setting decodes natively.
     let half_of_small = Quality {
         auto_res: true,
         display_scale: 0.5,
@@ -87,21 +77,18 @@ fn target_width_follows_the_quality_policy() {
     };
     assert_eq!(half_of_small.target_width(1000), Some(500));
 
-    // Draft caps a large source hard...
     let draft = Quality {
         draft: true,
         ..Quality::default()
     };
     assert_eq!(draft.target_width(3840), Some(DRAFT_MAX_WIDTH));
     assert_eq!(draft.target_width(1920), Some(DRAFT_MAX_WIDTH));
-    // ...still caps when the specified width (960) is above the cap...
     let draft_half = Quality {
         draft: true,
         divisor: 2,
         ..Quality::default()
     };
     assert_eq!(draft_half.target_width(1920), Some(DRAFT_MAX_WIDTH));
-    // ...but never RAISES an already-coarser specified width.
     let draft_quarter = Quality {
         draft: true,
         divisor: 4,
@@ -109,7 +96,6 @@ fn target_width_follows_the_quality_policy() {
     };
     assert_eq!(draft_quarter.target_width(1920), Some(480));
     assert_eq!(draft_quarter.target_width(1280), Some(320));
-    // Auto zoomed right out stays where Auto put it, under draft too.
     let draft_auto = Quality {
         draft: true,
         auto_res: true,
@@ -117,7 +103,6 @@ fn target_width_follows_the_quality_policy() {
         ..Quality::default()
     };
     assert_eq!(draft_auto.target_width(1920), Some(192));
-    // A source already smaller than the cap needs no draft decode at all.
     assert_eq!(draft.target_width(320), None);
 }
 
@@ -227,8 +212,6 @@ fn a_hidden_matte_source_decodes_for_an_adjustment_layer_too() {
             source_layer: None,
             interpretation: Default::default(),
         }));
-        // Hidden, as a matte source always is: its picture is the gate, not
-        // part of the frame.
         let mut matte_layer = layer(LayerKind::Footage { item });
         matte_layer.switches.visible = false;
         let matte_id = matte_layer.id;
@@ -374,7 +357,6 @@ fn a_retimed_precomp_plans_and_holds_by_its_mapped_time() {
     let inner = comp(vec![layer(LayerKind::Footage { item })]);
     let inner_id = inner.id;
     doc.items.push(ProjectItem::Composition(inner));
-    // Half speed: at outer time four the nested comp is at two.
     let mut placed = layer(LayerKind::Precomp { comp: inner_id });
     placed.retime = Some(Property {
         animation: Animation::Keyframed(vec![
@@ -435,11 +417,6 @@ fn a_retimed_precomp_plans_and_holds_by_its_mapped_time() {
     );
 }
 
-/// **A clip under an accumulation motion blur is planned at every moment
-/// of the shutter** (docs/08 §3.26): one shutter sample per offset, each
-/// picked between the two source frames the moment falls between, with the
-/// flow settings the in-betweens are made with. A layer above the
-/// adjustment plans none, and its job keeps the name it always had.
 #[test]
 fn a_clip_under_accumulation_mb_is_planned_at_every_shutter_moment() {
     use lumit_core::model::{
@@ -507,8 +484,6 @@ fn a_clip_under_accumulation_mb_is_planned_at_every_shutter_moment() {
         item
     };
     let (above_item, below_item) = (footage(&mut doc), footage(&mut doc));
-    // Four samples over a whole frame, centred: offsets -3/8, -1/8, 1/8,
-    // 3/8 of a comp frame.
     let mut adjust = layer(LayerKind::Adjustment);
     let mut mb = lumit_core::fx::builtins::instantiate("accumulation_mb").unwrap();
     for p in &mut mb.params {
@@ -524,8 +499,6 @@ fn a_clip_under_accumulation_mb_is_planned_at_every_shutter_moment() {
     let above = layer(LayerKind::Footage { item: above_item });
     let below = layer(LayerKind::Footage { item: below_item });
     let (above_id, below_id) = (above.id, below.id);
-    // A 30 fps comp over 60 fps clips: a quarter of a comp frame is half a
-    // source frame, so every moment lands between two frames.
     let mut comp = Composition {
         graph: None,
         master_volume_db: 0.0,
@@ -585,8 +558,6 @@ fn a_clip_under_accumulation_mb_is_planned_at_every_shutter_moment() {
         ],
         "each shutter moment is the pair of source frames it falls between"
     );
-    // Flow runs only where the user switched it on. A clip whose Retime
-    // does not use Flow crossfades its in-betweens.
     assert_eq!(
         covered.shutter_flow, None,
         "a Nearest clip crossfades its in-betweens"
@@ -607,8 +578,6 @@ fn a_clip_under_accumulation_mb_is_planned_at_every_shutter_moment() {
         std::slice::from_ref(clear)
     ));
 
-    // A clip whose Retime uses Flow has asked for synthesis, and its
-    // moments are made with its own settings.
     let flow = lumit_core::retime::FlowParams {
         smoothness: 0.25,
         ..lumit_core::retime::FlowParams::default()
@@ -623,17 +592,6 @@ fn a_clip_under_accumulation_mb_is_planned_at_every_shutter_moment() {
     );
 }
 
-/// **The decode plan sees a node graph** (docs/impl/node-graph-comp.md §7
-/// item 10).
-///
-/// Five claims, each a different road into the same walk: a Read of footage
-/// plans one job under the box's own id, which is what the draw builder
-/// looks its pixels up by; a Read of a comp plans that comp's jobs; a Node
-/// graph effect on a layer plans the graph's footage, because the graph is
-/// part of that layer's picture; a further picture Input's layer row is
-/// planned already, by the wanted-set pass that walks Layer parameters; and
-/// a Node graph box inside a graph plans the inner graph's footage, because
-/// the builder lowers those Read boxes into the same plan.
 #[test]
 fn a_node_graph_plans_the_footage_its_boxes_read() {
     use lumit_core::anim::Property;
@@ -743,7 +701,6 @@ fn a_node_graph_plans_the_footage_its_boxes_read() {
     .into_iter()
     .collect();
 
-    // A Read of footage, keyed by the box's own id.
     let (read, out) = (Uuid::now_v7(), Uuid::now_v7());
     let graph = comp_of(
         Vec::new(),
@@ -776,7 +733,6 @@ fn a_node_graph_plans_the_footage_its_boxes_read() {
     );
     assert_eq!(jobs[0].item, item);
 
-    // A Read of a comp plans that comp's jobs.
     let inner_layer = layer(LayerKind::Footage { item });
     let inner_id = inner_layer.id;
     let inner = comp_of(vec![inner_layer], None);
@@ -811,9 +767,6 @@ fn a_node_graph_plans_the_footage_its_boxes_read() {
         "keyed by the nested comp's own layer, not by the box"
     );
 
-    // A Node graph effect on a layer plans the graph's footage, and the
-    // further picture row it names is planned by the pass that already
-    // walks Layer parameters.
     let mut inst = lumit_core::fx::builtins::instantiate("node_graph").expect("the effect exists");
     lumit_core::fx::effects::node_graph::bind(
         &mut inst,
@@ -842,8 +795,6 @@ fn a_node_graph_plans_the_footage_its_boxes_read() {
     );
     assert_eq!(jobs.len(), 2, "those two, and nothing else");
 
-    // A Node graph box inside another graph: the same descent, planned by
-    // the box rather than by a layer.
     let mut nested_box =
         lumit_core::fx::builtins::instantiate("node_graph").expect("the effect exists");
     lumit_core::fx::effects::node_graph::bind(
@@ -874,8 +825,6 @@ fn a_node_graph_plans_the_footage_its_boxes_read() {
         "keyed by the inner Read's own id, which is what the lowering looks up by"
     );
 
-    // And on a live group's header, whose stack runs on the members'
-    // composite: the walk above never sees it, so it is planned here.
     let mut header =
         lumit_core::fx::builtins::instantiate("node_graph").expect("the effect exists");
     lumit_core::fx::effects::node_graph::bind(
@@ -897,9 +846,6 @@ fn a_node_graph_plans_the_footage_its_boxes_read() {
     assert_eq!(jobs.len(), 1, "a graph on a header plans its own Read");
     assert_eq!(jobs[0].layer, read);
 
-    // A Switch on Index 1 with a Read on each of two sockets fetches only
-    // the second. With a driver wired into the Index only the builder
-    // knows the pick, so both are fetched.
     let switch_jobs = |driven: bool| {
         let (a, b, out) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
         let mut switch =

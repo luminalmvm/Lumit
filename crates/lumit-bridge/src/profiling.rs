@@ -30,11 +30,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 /// question about a moving picture.
 static WANTED: AtomicBool = AtomicBool::new(true);
 
-/// Whether the first measured frame since the switch went on has been announced
-/// — see [`announce_first`].
 static ANNOUNCED: AtomicBool = AtomicBool::new(false);
 
-/// Ask for (or stop asking for) per-layer and per-effect timings.
 pub(crate) fn set_wanted(on: bool) {
     WANTED.store(on, Ordering::Relaxed);
     ANNOUNCED.store(false, Ordering::Relaxed);
@@ -56,7 +53,6 @@ pub(crate) fn announce_first(frame: u64, layers: usize, total_ms: f32) {
     }
 }
 
-/// Whether the next frame should be measured.
 pub(crate) fn wanted() -> bool {
     WANTED.load(Ordering::Relaxed)
 }

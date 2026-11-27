@@ -1,5 +1,3 @@
-// The modal window: the centred, movable, resizable surface a dialogue opens
-// on, and the count that tells the panels to stand down while one is up.
 
 import 'dart:async';
 import 'dart:math' as math;
@@ -30,10 +28,8 @@ OverlayState? Function()? mainWindowOverlay;
 /// the pointer in the rest.
 List<OverlayState> Function(OverlayState own)? otherWindowOverlays;
 
-/// What dismisses each dialogue that is up, by the overlay it is in.
 final Map<OverlayState, List<VoidCallback>> _modalsIn = {};
 
-/// Whether a dialogue is up in [overlay].
 bool modalOpenIn(OverlayState? overlay) =>
     _modalsIn[overlay]?.isNotEmpty ?? false;
 
@@ -72,7 +68,6 @@ OverlayState _overlayFor(BuildContext context) {
   return own;
 }
 
-/// Whether a floating window [size] logical pixels big can hold a dialogue.
 bool roomForDialogue(Size size) =>
     size.width >= _roomForDialogue.width &&
     size.height >= _roomForDialogue.height;
@@ -181,9 +176,6 @@ Future<T?> showLumitModal<T>({
                 // with an id holds work, such as a filled-in export, which a
                 // stray click must not throw away.
                 onTap: id == null ? () => close(null) : null,
-                // The wash comes up with the window rather than cutting in
-                // ahead of it. It takes the click from its first frame either
-                // way.
                 child: Entrance.fade(
                   spec: takesOver || still ? MotionSpec.still : motion.scrim,
                   child: ColoredBox(
@@ -224,8 +216,6 @@ Future<T?> showLumitModal<T>({
   return completer.future;
 }
 
-/// Whether a modal window has closed since the last frame, which the closing
-/// itself schedules.
 bool _modalJustLeft = false;
 
 void _noteModalLeft() {
@@ -281,11 +271,8 @@ class _MovableWindow extends StatefulWidget {
   final Size minSize;
   final Widget child;
 
-  /// What Escape means here, or null for a window that cannot be dismissed.
   final VoidCallback? onDismiss;
 
-  /// A floating panel rather than a dialogue, which the panels go on working
-  /// beside.
   final bool modeless;
 
   const _MovableWindow({
@@ -347,7 +334,6 @@ class _MovableWindowState extends State<_MovableWindow> {
     modalPlacementStore?.rememberWindow(id, WindowPlacement(_offset, _size));
   }
 
-  /// Back in the middle at the size it opens at, and remembered so.
   void _reset() {
     setState(() {
       _offset = Offset.zero;
@@ -356,8 +342,6 @@ class _MovableWindowState extends State<_MovableWindow> {
     _remember();
   }
 
-  /// Keep the middle of the window inside the app window, so however far it is
-  /// dragged there is always something left to grab.
   Offset _clampOffset(Offset o, BoxConstraints box) => Offset(
         o.dx.clamp(-box.maxWidth / 2, box.maxWidth / 2),
         o.dy.clamp(-box.maxHeight / 2, box.maxHeight / 2),
@@ -467,7 +451,6 @@ class _MovableWindowState extends State<_MovableWindow> {
   }
 }
 
-/// The window a title strip is in, for the strip's right-click.
 class _WindowScope extends InheritedWidget {
   const _WindowScope({required this.window, required super.child});
   final _MovableWindowState window;
@@ -476,8 +459,6 @@ class _WindowScope extends InheritedWidget {
   bool updateShouldNotify(_WindowScope old) => false;
 }
 
-/// A window's title strip right-click at [at]: put the window back where and
-/// as big as it opens, and [onClose] where the strip has a close mark.
 void showWindowMenu(BuildContext context, Offset at, {VoidCallback? onClose}) {
   final window = context.getInheritedWidgetOfExactType<_WindowScope>()?.window;
   if (window == null) return;
@@ -518,7 +499,6 @@ void showWindowMenu(BuildContext context, Offset at, {VoidCallback? onClose}) {
   );
 }
 
-/// The three short diagonals that say "drag this corner".
 class _GripPainter extends CustomPainter {
   final Color color;
   const _GripPainter(this.color);

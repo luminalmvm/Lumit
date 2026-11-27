@@ -1,7 +1,3 @@
-// One keyed property's lane in the Timeline, and the row dividers drawn behind
-// the lanes.
-//
-// Split out of timeline_panel_frb.dart.
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
@@ -92,8 +88,6 @@ class KeyLane extends StatefulWidget {
   /// rows this lane does not have.
   final ValueChanged<KeyStretch> onMoveKeys;
 
-  /// The selected keys' rows in the groups and order a stagger drag moves
-  /// them in, asked for when one starts.
   final List<List<String>> Function()? staggerUnits;
   final VoidCallback onChanged;
 
@@ -216,7 +210,6 @@ class _KeyLaneState extends State<KeyLane> {
     _hScroll = null;
   }
 
-  /// The pointer has moved with a key in hand.
   void _dragBy(DragUpdateDetails d) {
     setState(() => _deltaPx += d.delta.dx);
     _publish();
@@ -261,7 +254,6 @@ class _KeyLaneState extends State<KeyLane> {
     return best;
   }
 
-  /// A key drag begins — the strip and the per-key detectors share this.
   void _beginKeyDrag(int i) {
     final keyboard = HardwareKeyboard.instance;
     // Read at the gesture's **start**, because the modifier decides what the
@@ -308,11 +300,6 @@ class _KeyLaneState extends State<KeyLane> {
     // handle and the diamond are two gestures on one pointer — so the stretch
     // is answered first and answered whole.
     final held = widget.stretch.value;
-    // **Interpolated, not escaped.** This read `'\${widget.rowId}#\$i'` — a
-    // literal dollar sign and a literal `i` — so the set never held a matching
-    // id, the test never passed, and every diamond sat still while the box
-    // moved over it until the release put them somewhere they had not been
-    // seen to travel (§4.3).
     if (held != null && held.keys.contains('${widget.rowId}#$i')) {
       return held.frameOf(
         base,
@@ -388,8 +375,6 @@ class _KeyLaneState extends State<KeyLane> {
     }
   }
 
-  /// Put the key back where the drag found it, leaving nothing behind — what
-  /// `Escape` does, and what a cancelled gesture does.
   void _abandon() {
     _stopScroll();
     widget.stretch.value = null;
@@ -492,8 +477,6 @@ class _KeyLaneState extends State<KeyLane> {
             ),
           ),
         ),
-        // What the drag landed on, marked while it holds it (docs/07 §4.5:
-        // the snapped-to target MUST be indicated at the moment of capture).
         if (caught != null)
           Positioned(
             key: const ValueKey<String>('tl-lane-snap-caught'),
@@ -576,9 +559,6 @@ class _KeyLaneState extends State<KeyLane> {
                   // the lanes (F9, the bottom bar's buttons) had nothing to act
                   // on and looked like it did nothing.
                   supportedDevices: dragDevices,
-                  // The key's own menu — Linear / Easy ease / Hold / Ease… /
-                  // Delete key, the graph key's menu, on the mark the lanes
-                  // draw.
                   onSecondaryTapUp: (d) =>
                       widget.onKeyMenu(i, d.globalPosition),
                   onHorizontalDragStart: (_) => _beginKeyDrag(i),
@@ -743,7 +723,6 @@ List<double> rowSeamOffsets({
         break;
       }
     }
-    // Only a seam that has been slid comes in from outside.
     if (y == base && (base < first - 0.5 || base > height)) continue;
     if (y < 0 || y > height) continue;
     if (lifted != null && y > lifted.$1 + 0.5 && y < lifted.$2 - 0.5) continue;
@@ -842,7 +821,6 @@ class RowDividerPainter extends CustomPainter {
   bool? hitTest(Offset position) => false;
 }
 
-/// The width a key's menu opens at, on every surface.
 const double keyMenuWidth = 218;
 
 /// The rows of a key's right-click menu, on every surface that draws keys, so

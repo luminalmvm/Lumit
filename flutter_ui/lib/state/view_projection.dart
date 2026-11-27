@@ -9,7 +9,6 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/orient.dart';
 
-/// The rows that draw a 3D layer flat, for while the engine can't say.
 const List<double> flatView = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1];
 
 /// The engine's view rows per Viewer, asked again only when the comp, the
@@ -35,14 +34,11 @@ class ViewProjections {
     try {
       rows = comp.viewProjection(frame: frame, view: view);
     } catch (_) {
-      // No worker yet, or a comp that has gone. Asked again once the frame,
-      // the document or the view moves.
     }
     _byView[viewId] = _Held(key, rows);
     return rows;
   }
 
-  /// Let go of a closed view's rows.
   void forget(int viewId) => _byView.remove(viewId);
 }
 
@@ -72,7 +68,6 @@ class OrientTurns {
     try {
       turn = entry.layer.orientTurnAt(frame: frame);
     } catch (_) {
-      // A layer that has gone. Asked again once the document moves.
     }
     _byLayer[id] = (key, turn);
     return turn;
@@ -100,7 +95,6 @@ class CameraPoses {
     try {
       pose = layer.cameraAimAt(frame: frame)?.pose;
     } catch (_) {
-      // A camera that has gone. Asked again once the document moves.
     }
     _byLayer[id] = (key, pose);
     return pose;
@@ -124,7 +118,6 @@ class CameraPoses {
     try {
       pose = layer.cameraOwnPoseAt(frame: frame);
     } catch (_) {
-      // A camera that has gone. Asked again once the document moves.
     }
     _ownByLayer[id] = (key, pose);
     return pose;

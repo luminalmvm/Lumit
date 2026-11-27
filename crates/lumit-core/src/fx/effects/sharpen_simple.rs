@@ -10,8 +10,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Sharpen's controls. One job, cheap, one pixel of reach — the honest "just
-/// sharpen it" control next to the Unsharp mask's radius/threshold/luma knobs.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "sharpen_simple",
@@ -49,7 +47,6 @@ pub struct SharpenSimple {
     #[slider(min = 1.0, max = 8.0, default = 1.0, hard_min = 1.0, unit = Raw)]
     pub radius: f32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -75,7 +72,6 @@ impl SharpenSimple {
     }
 }
 
-/// Sharpen's behaviour.
 pub struct SharpenSimpleDef;
 
 impl EffectDef for SharpenSimpleDef {

@@ -102,8 +102,6 @@ void main() {
   group('New composition metrics (frb)', () {
     setUpAll(initEngineForTests);
 
-    /// The two sections the drawing added are real edits, not decoration: a
-    /// shutter set here reaches the composition it makes.
     testWidgets('the shutter the dialog sets is the comp\'s own',
         (tester) async {
       tester.view.physicalSize = const Size(1000, 800);

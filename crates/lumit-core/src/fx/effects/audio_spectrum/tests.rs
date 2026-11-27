@@ -11,7 +11,6 @@ use crate::fx::markers::MarkerContext;
 use crate::fx::registry::AudioTap;
 use crate::model::EffectValue;
 
-/// A steady tone at one pitch, full scale, with a chosen sign of life.
 struct Tone(f64);
 
 impl AudioTap for Tone {
@@ -49,8 +48,6 @@ fn context() -> Arc<ExpressionContext> {
     Arc::new(ExpressionContext::detached())
 }
 
-/// A 1 kHz tone has to light the band that holds 1 kHz and leave the far ends
-/// dark, or the bars draw the wrong picture.
 #[test]
 fn a_tone_lights_the_band_it_is_in() {
     let mut e = instance();
@@ -62,7 +59,6 @@ fn a_tone_lights_the_band_it_is_in() {
             (0, 0.0f32),
             |held, (i, l)| if *l > held.1 { (i, *l) } else { held },
         );
-    // 40 Hz to 16 kHz is about 8.6 octaves; 1 kHz sits 4.6 of them up.
     let expected = (32.0 * (1000.0f64 / 40.0).log2() / (16000.0f64 / 40.0).log2()) as usize;
     assert!(
         loudest.abs_diff(expected) <= 1,
@@ -75,7 +71,6 @@ fn a_tone_lights_the_band_it_is_in() {
     assert!(levels[0] < 0.2 && levels[31] < 0.2, "{levels:?}");
 }
 
-/// The Waveform shape reads the wave, signed. No tap is silence, never a fault.
 #[test]
 fn a_waveform_reads_signed_samples_and_no_sound_is_silence() {
     let mut e = instance();
@@ -93,8 +88,6 @@ fn a_waveform_reads_signed_samples_and_no_sound_is_silence() {
     assert!(quiet.iter().all(|s| *s == 0.0));
 }
 
-/// A bar reaches Height at full level and stays put at silence, in the colours
-/// the rows give it, which is the picture the rows promise.
 #[test]
 fn a_bar_at_full_level_reaches_height_in_the_outside_colour() {
     let e = instance();
@@ -124,17 +117,13 @@ fn a_bar_at_full_level_reaches_height_in_the_outside_colour() {
         let i = (y * w + x) as usize * 4;
         [rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]]
     };
-    // The first bar, at x 50: blue at its base, red at its tip, nothing past it.
     assert!(at(50, 148)[2] > 0.9, "{:?}", at(50, 148));
     assert!(at(50, 53)[0] > 0.9, "{:?}", at(50, 53));
     assert_eq!(at(50, 40)[3], 0.0);
-    // The second, at silence, is a dot on the line and no more.
     assert!(at(150, 150)[3] > 0.9);
     assert_eq!(at(150, 120)[3], 0.0);
 }
 
-/// Particulate emits from the socket: the stream has one point per band and each
-/// sits at its bar's tip, or it has nothing to emit from.
 #[test]
 fn the_points_socket_hands_on_the_tips() {
     let mut e = instance();

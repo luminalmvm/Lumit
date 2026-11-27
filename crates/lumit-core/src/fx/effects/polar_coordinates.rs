@@ -18,17 +18,13 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Polar coordinates' controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "polar_coordinates",
     label = "Polar coordinates",
     version = 1,
     category = Distortion,
-    // Three transcendentals and one bilinear tap a pixel.
     cost = Cheap,
-    // A ring at the frame's edge is drawn from a row at the picture's bottom:
-    // any output pixel can come from anywhere.
     roi = FullFrame,
     premultiplied = true,
 )]
@@ -56,7 +52,6 @@ pub struct PolarCoordinates {
     )]
     pub interpolation: f32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -85,7 +80,6 @@ impl PolarCoordinates {
     }
 }
 
-/// Polar coordinates' behaviour.
 pub struct PolarCoordinatesDef;
 
 impl EffectDef for PolarCoordinatesDef {

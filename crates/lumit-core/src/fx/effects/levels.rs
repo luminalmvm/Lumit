@@ -1,15 +1,9 @@
-//! Levels (docs/08 §3.31): input black/white, gamma and output black/white,
-//! per channel — the five numbers an eye can aim, where Curves is a shape.
-
 use crate::fx::{
     cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
     schema::ParamGroup,
 };
 use lumit_fx_macros::Effect;
 
-/// Levels' four channel groups (docs/08 §3.31), the same shape Curves uses:
-/// Master open, the three colour channels closed, each a contiguous run of the
-/// schema's `params`.
 pub const LEVELS_GROUPS: &[ParamGroup] = &[
     ParamGroup {
         label: "Master",
@@ -88,71 +82,51 @@ pub const LEVELS_GROUPS: &[ParamGroup] = &[
     groups = LEVELS_GROUPS,
 )]
 pub struct Levels {
-    /// The Master input value that maps to Output black.
     #[slider(min = 0.0, max = 1.0, default = 0.0, label = "Input black", unit = Raw)]
     pub master_in_black: f32,
-    /// The Master input value that maps to Output white.
     #[slider(min = 0.0, max = 1.0, default = 1.0, label = "Input white", unit = Raw)]
     pub master_in_white: f32,
     /// Master's mid-tone bend; above 1 lifts, below 1 lowers.
     #[slider(min = 0.1, max = 4.0, default = 1.0, hard_min = 0.01, label = "Gamma", unit = Raw)]
     pub master_gamma: f32,
-    /// What Master's input black comes out as.
     #[slider(min = 0.0, max = 1.0, default = 0.0, label = "Output black", unit = Raw)]
     pub master_out_black: f32,
-    /// What Master's input white comes out as.
     #[slider(min = 0.0, max = 1.0, default = 1.0, label = "Output white", unit = Raw)]
     pub master_out_white: f32,
 
-    /// The Red input value that maps to its Output black.
     #[slider(min = 0.0, max = 1.0, default = 0.0, label = "Input black", unit = Raw)]
     pub red_in_black: f32,
-    /// The Red input value that maps to its Output white.
     #[slider(min = 0.0, max = 1.0, default = 1.0, label = "Input white", unit = Raw)]
     pub red_in_white: f32,
-    /// Red's mid-tone bend.
     #[slider(min = 0.1, max = 4.0, default = 1.0, hard_min = 0.01, label = "Gamma", unit = Raw)]
     pub red_gamma: f32,
-    /// What Red's input black comes out as.
     #[slider(min = 0.0, max = 1.0, default = 0.0, label = "Output black", unit = Raw)]
     pub red_out_black: f32,
-    /// What Red's input white comes out as.
     #[slider(min = 0.0, max = 1.0, default = 1.0, label = "Output white", unit = Raw)]
     pub red_out_white: f32,
 
-    /// The Green input value that maps to its Output black.
     #[slider(min = 0.0, max = 1.0, default = 0.0, label = "Input black", unit = Raw)]
     pub green_in_black: f32,
-    /// The Green input value that maps to its Output white.
     #[slider(min = 0.0, max = 1.0, default = 1.0, label = "Input white", unit = Raw)]
     pub green_in_white: f32,
-    /// Green's mid-tone bend.
     #[slider(min = 0.1, max = 4.0, default = 1.0, hard_min = 0.01, label = "Gamma", unit = Raw)]
     pub green_gamma: f32,
-    /// What Green's input black comes out as.
     #[slider(min = 0.0, max = 1.0, default = 0.0, label = "Output black", unit = Raw)]
     pub green_out_black: f32,
-    /// What Green's input white comes out as.
     #[slider(min = 0.0, max = 1.0, default = 1.0, label = "Output white", unit = Raw)]
     pub green_out_white: f32,
 
-    /// The Blue input value that maps to its Output black.
     #[slider(min = 0.0, max = 1.0, default = 0.0, label = "Input black", unit = Raw)]
     pub blue_in_black: f32,
-    /// The Blue input value that maps to its Output white.
     #[slider(min = 0.0, max = 1.0, default = 1.0, label = "Input white", unit = Raw)]
     pub blue_in_white: f32,
-    /// Blue's mid-tone bend.
     #[slider(min = 0.1, max = 4.0, default = 1.0, hard_min = 0.01, label = "Gamma", unit = Raw)]
     pub blue_gamma: f32,
-    /// What Blue's input black comes out as.
     #[slider(min = 0.0, max = 1.0, default = 0.0, label = "Output black", unit = Raw)]
     pub blue_out_black: f32,
-    /// What Blue's input white comes out as.
     #[slider(min = 0.0, max = 1.0, default = 1.0, label = "Output white", unit = Raw)]
     pub blue_out_white: f32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -218,7 +192,6 @@ impl Levels {
     }
 }
 
-/// Levels' behaviour.
 pub struct LevelsDef;
 
 impl EffectDef for LevelsDef {

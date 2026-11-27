@@ -1,12 +1,7 @@
-//! The spatial half: four bands of detail, each kept in proportion to how far
-//! it stands above the noise expected there, then the picture put back
-//! together and returned to linear RGB.
-
 use super::atrous::{dilation, level, LEVELS};
 use super::space::{eotf, from_ycc, tone, ycc_to_linear, CLEAR};
 use super::DenoiseParams;
 
-/// How far the window a band's local energy is read over reaches either side.
 const REACH: i32 = 2;
 
 /// The mean of `(a - b)^2` in lane `c` over the 5x5 window round `(x, y)`,
@@ -43,7 +38,6 @@ pub fn band_gain(e: f32, var: f32, band: usize, amount: f32, p: &DenoiseParams) 
     (g, 1.0 - amount * (1.0 - g))
 }
 
-/// The noise sigma of band `band` in lane `c` at a pixel whose luma is `y`.
 #[must_use]
 pub fn band_sigma(c: usize, band: usize, y: f32, p: &DenoiseParams) -> f32 {
     if c == 0 {

@@ -26,7 +26,6 @@ use flate2::bufread::GzDecoder;
 
 use crate::{error::MlError, manifest, store};
 
-/// A tar header, and the unit every file inside is padded to.
 const BLOCK: u64 = 512;
 
 /// Take exactly the named entries out of a `.tar.gz` and no others. An entry
@@ -101,7 +100,6 @@ pub(crate) fn take(
     }
 }
 
-/// The entry's path: the ustar prefix, when there is one, then the name.
 fn path_of(header: &[u8; BLOCK as usize]) -> String {
     let field = |from: usize, to: usize| {
         let bytes = &header[from..to];
@@ -137,7 +135,6 @@ fn size_of(header: &[u8; BLOCK as usize]) -> Option<u64> {
     u64::from_str_radix(digits, 8).ok()
 }
 
-/// Step over `count` bytes of the archive.
 fn skip(tar: &mut impl Read, count: u64) -> Result<(), MlError> {
     let skipped = io::copy(&mut tar.take(count), &mut io::sink()).map_err(invalid)?;
     if skipped == count {
@@ -172,18 +169,14 @@ fn to_the_end(mut tar: GzDecoder<BufReader<fs::File>>) -> Result<(), MlError> {
     }
 }
 
-/// The refusal for an archive whose checksum fails or that has something
-/// after its end.
 fn damaged() -> MlError {
     MlError::Invalid("the download is damaged".into())
 }
 
-/// The refusal for an archive that stops part way through.
 fn cut_short() -> MlError {
     MlError::Invalid("the download ends part way through".into())
 }
 
-/// The system's own sentence, for a file that will not open or write.
 fn invalid(e: io::Error) -> MlError {
     MlError::Invalid(e.to_string())
 }
@@ -193,7 +186,6 @@ fn invalid(e: io::Error) -> MlError {
 mod tests {
     use super::*;
 
-    /// A `.tar.gz` holding each named file with its bytes, as ustar writes it.
     fn a_tarball(dir: &Path, files: &[(&str, &[u8])]) -> std::path::PathBuf {
         let mut tar = Vec::new();
         for (name, bytes) in files {
@@ -210,7 +202,6 @@ mod tests {
         gzipped(dir, "pack.tar.gz", &tar)
     }
 
-    /// `tar` gzipped into `dir` as `name`.
     fn gzipped(dir: &Path, name: &str, tar: &[u8]) -> std::path::PathBuf {
         let path = dir.join(name);
         let mut gz = flate2::write::GzEncoder::new(
@@ -222,18 +213,11 @@ mod tests {
         path
     }
 
-    /// What `take` answers for the archive at `path`, which must be a refusal.
     fn refused(path: &Path, wanted: &BTreeMap<String, String>, into: &Path) -> MlError {
         let size = fs::metadata(path).unwrap().len();
         take(path, size, wanted, into).unwrap_err()
     }
 
-    /// **A tar.gz gives up exactly the named files, and refuses a name that
-    /// leaves the folder, a download of the wrong size, an archive cut short,
-    /// a size field that overflows, an entry past the ceiling, and a damaged
-    /// gzip or bytes after the end.** The download arrives over the network
-    /// or from disk, so each of these is a file written where it should not
-    /// be, a disk filled, or a pack that installs broken.
     #[test]
     fn a_tarball_gives_up_the_named_files_and_refuses_the_rest() {
         let downloads = tempfile::tempdir().unwrap();
@@ -280,7 +264,6 @@ mod tests {
         };
         assert!(why.contains("the manifest says"), "{why}");
 
-        // The same archive with its last file's bytes cut off before the end.
         let bytes = fs::read(&archive).unwrap();
         let mut tar = Vec::new();
         flate2::read::GzDecoder::new(bytes.as_slice())
@@ -291,8 +274,6 @@ mod tests {
         let short = gzipped(downloads.path(), "short.tar.gz", &tar);
         assert_eq!(refused(&short, &wanted, into.path()), cut_short());
 
-        // A file nobody asked for whose base-256 size is all ones: padded to
-        // a whole block it passes the top of a u64.
         let mut huge = [0u8; 512];
         huge[..9].copy_from_slice(b"stray.bin");
         huge[124] = 0x80;
@@ -303,8 +284,6 @@ mod tests {
         let overflowing = gzipped(downloads.path(), "overflow.tar.gz", &tar);
         assert_eq!(refused(&overflowing, &wanted, into.path()), cut_short());
 
-        // A wanted file whose header claims a byte past the ceiling. It is
-        // refused before anything is written, so the bytes need not be there.
         let fresh = tempfile::tempdir().unwrap();
         let mut big = [0u8; 512];
         big[..19].copy_from_slice(b"tmp/export/enc.onnx");
@@ -324,20 +303,17 @@ mod tests {
             "nothing written"
         );
 
-        // The whole archive with something after its end marker.
         let mut tar = whole.clone();
         tar.extend_from_slice(b"and then some");
         let trailing = gzipped(downloads.path(), "trailing.tar.gz", &tar);
         assert_eq!(refused(&trailing, &wanted, into.path()), damaged());
 
-        // The whole archive with bytes after the gzip trailer.
         let mut bytes = fs::read(gzipped(downloads.path(), "after.tar.gz", &whole)).unwrap();
         bytes.extend_from_slice(b"junk");
         let after = downloads.path().join("after.tar.gz");
         fs::write(&after, &bytes).unwrap();
         assert_eq!(refused(&after, &wanted, into.path()), damaged());
 
-        // The whole archive with its checksum wrong: the trailer's first byte.
         let mut bytes = fs::read(gzipped(downloads.path(), "crc.tar.gz", &whole)).unwrap();
         let at = bytes.len() - 8;
         bytes[at] ^= 0xff;

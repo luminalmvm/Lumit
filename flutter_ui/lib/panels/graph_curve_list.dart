@@ -1,8 +1,3 @@
-// The curves on the graph, named, in the corner of the plot: each row wears its
-// curve's colour, a click puts the curve away or brings it back, and a right
-// click is the curve's menu. There is no list while there is one curve to name.
-// The arrow at its top folds it away, down to a stroke of each curve's colour,
-// so it covers almost nothing of the plot.
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -13,23 +8,17 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'graph_channels.dart';
 
-/// How wide the list may grow before a name is cut.
 const double _listWidth = 280;
 const double _rowHeight = 16;
 
-/// The fold arrow's row, shorter than a curve's so it adds little to the box.
 const double _foldHeight = 12;
 
 /// Whether the list is folded away. For the session and every graph, so a
 /// list put away stays away as the selection changes.
 final ValueNotifier<bool> curveListFolded = ValueNotifier(false);
 
-/// How wide the property's name is with a layer's name beside it, so the
-/// layers' names share one edge.
 const double _nameWidth = 96;
 
-/// A row's property name: all the room when it is alone, a column of its own
-/// when a layer's name follows it.
 Widget _name(bool alone, Widget text) =>
     alone ? Flexible(child: text) : SizedBox(width: _nameWidth, child: text);
 
@@ -99,8 +88,6 @@ class GraphCurveList extends StatelessWidget {
     );
   }
 
-  /// The list's own top row: the arrow that folds it and, folded, a short
-  /// stroke in each curve's colour in place of the names.
   Widget _fold(LumitTheme t, bool folded, Set<String> hidden) => HoverMark(
         builder: (context, lit) => GestureDetector(
           key: const ValueKey<String>('graph-curve-list-fold'),
@@ -160,7 +147,6 @@ class GraphCurveList extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 6),
             child: Row(
               children: [
-                // The curve's own stroke, or its outline once it is put away.
                 Container(
                   width: 10,
                   height: off ? 1 : 2,

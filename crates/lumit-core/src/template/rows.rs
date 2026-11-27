@@ -38,7 +38,6 @@ fn is_colour(props: &[TransformProp]) -> bool {
     )
 }
 
-/// The effect or style `effect` on `layer`.
 fn instance(layer: &Layer, effect: Uuid) -> Option<&EffectInstance> {
     layer
         .effects
@@ -82,7 +81,6 @@ fn set_param(inst: &mut EffectInstance, param: &str, value: EffectValue) {
     }
 }
 
-/// The shape `item` among `entries`, inside any group.
 fn shape(entries: &[ShapeEntry], item: Uuid) -> Option<&ShapeItem> {
     entries.iter().find_map(|entry| match entry {
         ShapeEntry::Item(s) if s.id == item => Some(s),
@@ -289,8 +287,6 @@ fn write_copy(doc: &mut Document, comp: Uuid, layer: Uuid, control: &str, value:
     crate::fx::effects::template::set_value(inst, inner, value)
 }
 
-/// The rows of one layer. `None` when the row is not there or the value is
-/// not its kind.
 fn write_layer(layer: &mut Layer, target: &Target, value: &Value) -> Option<()> {
     match (target, value) {
         (Target::Transform { props, .. }, value) => {
@@ -418,7 +414,6 @@ fn write_layer(layer: &mut Layer, target: &Target, value: &Value) -> Option<()> 
 pub fn of_layer(doc: &Document, comp: &Composition, layer: &Layer) -> Vec<(Target, Value)> {
     let id = layer.id;
     let mut targets: Vec<Target> = Vec::new();
-    // Transform rows, a point's rows together as the Timeline shows them.
     let mut seen: Vec<TransformProp> = Vec::new();
     for prop in TRANSFORM_ROWS {
         if seen.contains(prop) || layer.prop(*prop).is_none() {

@@ -1,9 +1,3 @@
-// What a Camera row and a Light row are made of (docs/impl/camera.md §1).
-//
-// The rows a layer shows come out of `transformGroups`, and the two cells that
-// differ on these kinds come out of two predicates beside it - so the whole
-// answer is arithmetic and is checked here rather than by clicking in a widget
-// tree, exactly as timeline_rows_test.dart checks the fold-out's own rules.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/layer_fold_frb.dart';

@@ -63,7 +63,6 @@ fn ball(pos: vec3<f32>, l: Light) -> f32 {
     return irradiance(pos, ld, l) * seen;
 }
 
-// The light reaching `pos`, a plane's or a particle's.
 fn lit_by(pos: vec3<f32>, l: Light) -> f32 {
     if (p.casters_head.w > 0.5) {
         return ball(pos, l);
@@ -79,7 +78,6 @@ fn lit_by(pos: vec3<f32>, l: Light) -> f32 {
 @group(0) @binding(13) var env_sampler: sampler;
 @group(0) @binding(14) var<uniform> environment: Environment;
 
-// Blinn-Phong, as lumit_core::lighting::highlight.
 fn highlight(pos: vec3<f32>, n: vec3<f32>, l: Light) -> f32 {
     var to_light = vec3<f32>(0.0);
     let strength = arrival(pos, l, &to_light);

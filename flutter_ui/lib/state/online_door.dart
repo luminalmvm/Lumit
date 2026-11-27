@@ -50,19 +50,14 @@ const int _batchLimit = 64 << 20;
 const int _snapshotLimit = 95000000;
 const int _partLimit = 1 << 20;
 
-/// How long the server has to answer, and how long it may go quiet in the
-/// middle of an answer.
 const Duration _patience = Duration(seconds: 30);
 
-/// How long a fetch that was cut goes on asking for the rest with nothing
-/// more of it arriving, before the line is taken for gone.
 const Duration _lineGone = Duration(minutes: 2);
 
 /// How often the socket is asked whether it is still there. One that has
 /// died without saying so is dropped after two of these.
 const Duration _alive = Duration(seconds: 15);
 
-/// How long a line that is being left has to finish what it was doing.
 const Duration _leave = Duration(seconds: 2);
 
 final Random _random = Random.secure();
@@ -78,7 +73,6 @@ int _u64(Uint8List bytes, int at) {
   return number;
 }
 
-/// The whole of an answer, when it is no longer than [limit].
 Future<Uint8List> _whole(HttpClientResponse answer, int limit) async {
   final bytes = BytesBuilder(copy: false);
   await for (final chunk in answer.timeout(_patience)) {
@@ -106,7 +100,6 @@ class OnlineDoor {
   /// for good (`share_online_door`).
   final void Function(int? port) tell;
 
-  /// Where Lumit's server is.
   final String base;
 
   OnlineDoor(this.account, this.tell, {String? base})
@@ -118,10 +111,8 @@ class OnlineDoor {
 
   ServerSocket? _server;
 
-  /// The port the door is on, or null while it is shut.
   int? get port => _server?.port;
 
-  /// Every connection the engine has through the door now.
   final Set<Socket> _callers = {};
 
   /// The last thing the engine was told had failed, as the server's code or
@@ -149,7 +140,6 @@ class OnlineDoor {
     }
   }
 
-  /// Shut the door for good, and end every connection through it.
   Future<void> dispose() async {
     await _shut();
     for (final local in _callers.toList()) {
@@ -289,7 +279,6 @@ class OnlineDoor {
         }
         if (!e.offline) rethrow;
       } catch (_) {
-        // Cut on its way.
       }
       if (DateTime.now().difference(last) > _lineGone) {
         throw const CloudError('offline');
@@ -300,7 +289,6 @@ class OnlineDoor {
   }
 }
 
-/// One caller at the door: one connection from the engine, for one project.
 class _Caller {
   final OnlineDoor door;
   final Socket local;
@@ -309,7 +297,6 @@ class _Caller {
 
   late final String id, access, token, name;
 
-  /// What the engine has sent that no frame has used yet.
   Uint8List rest = Uint8List(0);
 
   /// The last frame said to the engine, done once the engine has taken it.
@@ -374,8 +361,6 @@ class _Caller {
     if (head == null) return null;
     final length = ByteData.sublistView(head).getUint32(1, Endian.little);
     final limit = switch (head[0]) {
-      // ponytail: a batch is held whole on its way through, up to its
-      // 64 MiB. Pour it into the upload as it comes if that ever shows.
       _append => 20 + _batchLimit,
       _part => _partLimit,
       // Everything else has to fit in one socket message.
@@ -642,10 +627,6 @@ class _Caller {
       while (await heard.moveNext()) {
         final message = heard.current;
         if (message is! Uint8List) continue;
-        // Anything Lumit's server would not say ends the socket.
-        // ponytail: room has been made for a message before its length can
-        // be seen here, so this trusts the server not to send a vast one.
-        // Reading the socket's frames by hand would let it be refused first.
         if (message.isEmpty ||
             message.length > _messageLimit ||
             message[0] >= _create) {

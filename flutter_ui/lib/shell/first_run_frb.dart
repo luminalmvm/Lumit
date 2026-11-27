@@ -18,13 +18,14 @@ import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import '../l10n/strings.dart';
 import '../state/dock.dart';
 import '../state/keymap.dart';
+import '../state/usage_data.dart';
 import '../state/workspace.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/theme_swatches.dart';
 import 'dialog_frame.dart';
+import 'usage_notice.dart';
 
-/// The workspaces offered, in the strip's order.
 const _workspaces = [
   WorkspacePreset.edit,
   WorkspacePreset.cut,
@@ -36,6 +37,7 @@ typedef FirstRunAnswer = ({
   WorkspacePreset? workspace,
   BridgeKeymapPreset keys,
   bool autoUpdate,
+  bool shareUsage,
 });
 
 /// Show the screen if this machine has never answered it, and record the
@@ -44,7 +46,7 @@ typedef FirstRunAnswer = ({
 ///
 /// [keymap] is what the After Effects or Vegas shortcuts load into.
 Future<void> maybeShowFirstRunFrb(BuildContext context, Workspace workspace,
-    {KeymapState? keymap}) async {
+    {KeymapState? keymap, UsageData? usage}) async {
   if (workspace.firstRunDone) return;
   // The look as it stood, which is what Skip goes back to.
   final shape = workspace.themeShape;
@@ -54,13 +56,15 @@ Future<void> maybeShowFirstRunFrb(BuildContext context, Workspace workspace,
     context: context,
     // An id, so a stray click beside the window doesn't skip the questions.
     id: 'first-run',
-    initialSize: const Size(640, 440),
+    initialSize: const Size(640, 480),
     minSize: const Size(520, 380),
-    builder: (close) => _FirstRun(workspace: workspace, onChoose: close),
+    builder: (close) =>
+        _FirstRun(workspace: workspace, usage: usage, onChoose: close),
   );
   // Escape is the same as Skip: the questions have been put, so they are not
   // put again, and Lumit's defaults stand.
   workspace.setAutoUpdate(answer?.autoUpdate ?? true);
+  workspace.setShareUsage(answer?.shareUsage ?? true);
   final preset = answer?.workspace;
   if (answer == null || preset == null) {
     workspace.setShape(shape);
@@ -79,7 +83,6 @@ Future<void> maybeShowFirstRunFrb(BuildContext context, Workspace workspace,
     await keymap?.loadPreset(answer.keys);
   }
   if (vegas) {
-    // Vegas's mouse too, and a clip dropped over another crossfades into it.
     workspace.interface
       ..cutVegasDrags = true
       ..cutAutoCrossfade = true;
@@ -90,8 +93,10 @@ Future<void> maybeShowFirstRunFrb(BuildContext context, Workspace workspace,
 
 class _FirstRun extends StatefulWidget {
   final Workspace workspace;
+  final UsageData? usage;
   final ValueChanged<FirstRunAnswer?> onChoose;
-  const _FirstRun({required this.workspace, required this.onChoose});
+  const _FirstRun(
+      {required this.workspace, required this.usage, required this.onChoose});
 
   @override
   State<_FirstRun> createState() => _FirstRunState();
@@ -106,10 +111,13 @@ class _FirstRunState extends State<_FirstRun> {
   /// Permission to look for new versions, not to fetch them.
   bool _autoUpdate = true;
 
+  bool _shareUsage = true;
+
   void _answer(WorkspacePreset? workspace) => widget.onChoose((
         workspace: workspace,
         keys: _keys,
         autoUpdate: _autoUpdate,
+        shareUsage: _shareUsage,
       ));
 
   @override
@@ -119,7 +127,6 @@ class _FirstRunState extends State<_FirstRun> {
     return DialogFrame(
       children: [
         Expanded(
-          // The look is the workspace's, and each choice here changes it.
           child: ListenableBuilder(
             listenable: workspace,
             builder: (context, _) => Column(
@@ -129,8 +136,6 @@ class _FirstRunState extends State<_FirstRun> {
                     title: l10n.firstRunSetup,
                     onClose: () => _answer(null),
                     keyPrefix: 'first-run'),
-                // Scrolls when the window is too short for all of it, so no
-                // question is ever out of reach.
                 Expanded(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.fromLTRB(
@@ -217,8 +222,6 @@ class _FirstRunState extends State<_FirstRun> {
                                   label: (c) => c.label,
                                   group: (c) => c.group,
                                   onChanged: workspace.choose,
-                                  // Hovering a row previews that scheme, on the
-                                  // window behind too.
                                   onPreview: workspace.previewChoice,
                                   onPreviewEnd: () =>
                                       workspace.previewChoice(null),
@@ -251,6 +254,46 @@ class _FirstRunState extends State<_FirstRun> {
                             ),
                           ),
                         ),
+                        if (!kIsWeb)
+                          _row(
+                            t,
+                            l10n.settingsGroupPrivacy,
+                            Wrap(
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              spacing: 8,
+                              children: [
+                                GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: () => setState(
+                                      () => _shareUsage = !_shareUsage),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      HouseCheckbox(
+                                        key: const ValueKey('first-run-usage'),
+                                        value: _shareUsage,
+                                        onChanged: (on) =>
+                                            setState(() => _shareUsage = on),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(l10n.usageShare, style: t.body),
+                                    ],
+                                  ),
+                                ),
+                                if (widget.usage case final usage?)
+                                  HouseButton(
+                                    key: const ValueKey(
+                                        'first-run-usage-sent'),
+                                    small: true,
+                                    frameless: true,
+                                    onPressed: () =>
+                                        showUsageSent(context, usage),
+                                    child: Text(l10n.usageWhatIsSent,
+                                        style: t.small),
+                                  ),
+                              ],
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -303,7 +346,6 @@ class _FirstRunState extends State<_FirstRun> {
     );
   }
 
-  /// A question that is one line: its name, then its control.
   Widget _row(LumitTheme t, String label, Widget control) => Padding(
         padding: const EdgeInsets.only(bottom: 10),
         child: Row(
@@ -315,7 +357,6 @@ class _FirstRunState extends State<_FirstRun> {
       );
 }
 
-/// How tall a one-line question's control stands.
 const double _rowControl = 22;
 
 /// A big button: one of the answers that has a picture to show.
@@ -401,8 +442,6 @@ class _CardState extends State<_Card> {
   }
 }
 
-/// One workspace: a drawing of the window as it arranges it, in the style in
-/// force, then its name and what it is for.
 class _WorkspaceChoice extends StatelessWidget {
   final WorkspacePreset preset;
   final bool chosen;
@@ -417,13 +456,11 @@ class _WorkspaceChoice extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    // The drawing's corner sits inside the card's, the padding between them.
     final inner = (t.tokens.sectionRadius - 8).clamp(0.0, 8.0);
     return _Card(
       id: 'first-run-workspace-${preset.name}',
       chosen: chosen,
       onTap: onTap,
-      // The drawing and the name are the card. What it is for is the tip.
       child: LumitTooltip(
         message: switch (preset) {
           WorkspacePreset.cut => l10n.firstRunWorkspaceCut,
@@ -450,8 +487,15 @@ class _WorkspaceChoice extends StatelessWidget {
   }
 }
 
-/// The size the workspace drawings are made at, then scaled to the card.
 const Size _drawing = Size(160, 100);
+
+Widget windowThumbnail(LumitTheme theme) => AspectRatio(
+      aspectRatio: _drawing.aspectRatio,
+      child: CustomPaint(
+        painter: _WorkspacePainter(WorkspacePreset.edit, theme,
+            (theme.tokens.sectionRadius - 8).clamp(0.0, 8.0).toDouble()),
+      ),
+    );
 
 /// The window in outline, as one workspace arranges it and one style draws it.
 ///
@@ -485,7 +529,6 @@ class _WorkspacePainter extends CustomPainter {
     final mark = Paint()..color = t.textMuted;
     final lit = Paint()..color = t.accent;
 
-    // The menu line, the same in all three.
     const menu = 7.0;
     if (!lantern) {
       canvas.drawRect(Rect.fromLTWH(0, 0, full.width, menu), pane);
@@ -494,7 +537,6 @@ class _WorkspacePainter extends CustomPainter {
       canvas.drawRect(Rect.fromLTWH(4 + i * 9.0, 3, 6, 1.5), mark);
     }
 
-    // The tools: a strip, a rail, or a pill.
     var top = menu;
     var left = 0.0;
     if (desk) {
@@ -555,7 +597,6 @@ class _WorkspacePainter extends CustomPainter {
     );
   }
 
-  /// Hand each pane of [node] its rectangle in [r], tabs as their front pane.
   void _lay(DockNode node, Rect r, double gap,
       void Function(Panel panel, Rect rect) pane) {
     switch (node) {
@@ -582,7 +623,6 @@ class _WorkspacePainter extends CustomPainter {
     }
   }
 
-  /// What a pane holds, drawn small.
   void _content(Canvas canvas, Panel panel, Rect r, bool lantern) {
     final t = theme;
     final mark = Paint()..color = t.textMuted;
@@ -597,7 +637,6 @@ class _WorkspacePainter extends CustomPainter {
                 r.deflate(lantern ? 3 : 4), Radius.circular(lantern ? 3 : 0)),
             Paint()..color = t.surface0);
       case Panel.timeline:
-        // Layer names, and a bar each; the first one lit.
         for (var i = 0; i < 6; i++) {
           final y = r.top + 5 + i * 5.5;
           if (y + 3 > r.bottom - 2) break;
@@ -610,8 +649,6 @@ class _WorkspacePainter extends CustomPainter {
               i == 0 ? lit : seam);
         }
       case Panel.cutTimeline:
-        // Two rows of picture over two of sound, cut into clips, with one
-        // picture clip and its sound lit together.
         final row = (r.height - 6) / 4;
         final lanes =
             Rect.fromLTRB(r.left + 14, r.top + 3, r.right - 3, r.bottom - 3);
@@ -637,7 +674,6 @@ class _WorkspacePainter extends CustomPainter {
                     ? (Paint()..color = t.accent.withValues(alpha: 0.35))
                     : clip);
             if (i >= 2) {
-              // A sound clip's wave, flat at this size.
               canvas.drawRect(
                   Rect.fromLTRB(box.left + 2, box.outerRect.center.dy - 0.4,
                       box.right - 2, box.outerRect.center.dy + 0.4),
@@ -646,7 +682,6 @@ class _WorkspacePainter extends CustomPainter {
           }
         }
       case Panel.graph:
-        // Three nodes wired into a fourth, which is lit.
         final w = 16.0, h = 7.0;
         final inputs = [
           Offset(r.left + r.width * 0.16, r.top + r.height * 0.22),
@@ -681,7 +716,6 @@ class _WorkspacePainter extends CustomPainter {
                 const Radius.circular(1.5)),
             lit);
       case Panel.mixer:
-        // Two faders.
         for (var i = 0; i < 2; i++) {
           final x = r.left + r.width * (i + 1) / 3;
           canvas.drawRect(

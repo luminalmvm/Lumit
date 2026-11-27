@@ -18,8 +18,6 @@ use lumit_core::model::{ColourManagement, Document, FootageItem, MediaRef, Proje
 use lumit_render::colour::{ColourState, Edge};
 use uuid::Uuid;
 
-/// A small, complete config: one space that is not the reference, one display
-/// with one view, and the roles the bridge reads.
 const GOOD: &str = r#"
 ocio_profile_version: 1
 roles:
@@ -89,7 +87,6 @@ fn a_config_that_loads_is_usable_and_offers_its_vocabulary() {
     assert_eq!(displays[0].0, "sRGB");
     assert_eq!(displays[0].1, vec!["Standard".to_string()]);
 
-    // And all three edges bake.
     assert!(loaded
         .artefact(&Edge::Input("srgb_texture".into()))
         .is_some());
@@ -97,8 +94,6 @@ fn a_config_that_loads_is_usable_and_offers_its_vocabulary() {
         .artefact(&Edge::DisplayView("sRGB".into(), "Standard".into()))
         .is_some());
     assert!(loaded.artefact(&Edge::Output("out_srgb".into())).is_some());
-    // A name the config does not have is simply not there — not a panic, and
-    // not a wrong table.
     assert!(loaded.artefact(&Edge::Input("nonsense".into())).is_none());
 }
 
@@ -123,11 +118,8 @@ fn a_config_that_vanished_degrades_calmly_and_says_so() {
         why.contains("could not be read") && why.contains("built-in"),
         "the sentence must name the fault and the fallback: {why}"
     );
-    // Rendering falls back to the built-in family, which is what "no config"
-    // means for a frame's name.
     assert_eq!(state.frame_identity(), 0);
     assert_ne!(named_with, 0, "a usable config does name frames");
-    // Every edge is refused rather than approximated.
     assert!(loaded
         .artefact(&Edge::Input("srgb_texture".into()))
         .is_none());
@@ -144,24 +136,16 @@ fn editing_the_config_on_disk_gives_every_frame_a_new_name() {
     state.sync(&doc);
     let before = state.frame_identity();
 
-    // The same config with one number changed: different bytes, different
-    // pictures, so different names (docs/impl/ocio.md §5.5).
     std::fs::write(&path, GOOD.replace("2.4, 2.4, 2.4", "2.2, 2.2, 2.2")).unwrap();
     state.sync(&doc);
     let after = state.frame_identity();
     assert_ne!(before, after, "an edited config must retire its frames");
     assert!(state.loaded().unwrap().usable());
 
-    // And syncing again with nothing changed keeps the name, so a project that
-    // is merely being redrawn does not throw its cache away every frame.
     state.sync(&doc);
     assert_eq!(state.frame_identity(), after);
 }
 
-/// **The asymmetry, in one test.** The preview of a project whose config
-/// is missing still renders — the state above says so — but the export of a
-/// file into one of that config's colour spaces refuses, and the refusal says
-/// what went wrong rather than "not available in this build".
 #[test]
 fn preview_degrades_where_delivery_refuses() {
     use lumit_render::export::{ColourSpace, ExportSpec};
@@ -176,17 +160,14 @@ fn preview_degrades_where_delivery_refuses() {
         ..Default::default()
     };
 
-    // With no config at all, the refusal stands untouched.
     let none = ColourState::default();
     assert!(spec.check_with_colour(&none).is_err());
 
-    // With the config loaded, the name is honoured.
     let mut state = ColourState::default();
     state.sync(&doc);
     spec.check_with_colour(&state)
         .expect("a name the loaded config has must be deliverable");
 
-    // A name the config does not have still refuses, and names itself.
     let wrong = ExportSpec {
         colour_space: ColourSpace::Ocio("no_such_space".into()),
         ..Default::default()
@@ -194,8 +175,6 @@ fn preview_degrades_where_delivery_refuses() {
     let err = wrong.check_with_colour(&state).expect_err("refuses");
     assert!(err.contains("no_such_space"), "{err}");
 
-    // And the moment the config goes, the export that worked a second ago
-    // refuses — with the missing-file sentence, not a generic one.
     std::fs::remove_file(&path).unwrap();
     state.sync(&doc);
     let err = spec.check_with_colour(&state).expect_err("refuses");
@@ -205,8 +184,6 @@ fn preview_degrades_where_delivery_refuses() {
     );
 }
 
-/// An ACES-shaped config: AP0 reference with the interchange role, ACEScg as
-/// `scene_linear`, and an sRGB view, for the working-space tests.
 fn aces_shaped() -> String {
     use lumit_colour::matrix;
     let m = matrix::rgb_to_rgb(&matrix::AP1, &matrix::AP0).unwrap();
@@ -236,9 +213,6 @@ colorspaces:
     )
 }
 
-/// The config-defined working space (docs/impl/ocio.md §2.1): the project
-/// composites in `scene_linear`, untagged footage and the built-in view are
-/// carried across by the interchange matrix, and the choice renames frames.
 #[test]
 fn a_config_defined_working_space_carries_the_built_in_edges_across() {
     use lumit_core::model::WorkingSpace;
@@ -285,7 +259,6 @@ fn a_config_defined_working_space_carries_the_built_in_edges_across() {
         "Rec.709 red has green and blue in AP1: {red:?}"
     );
 
-    // The built-in view undoes it: the same bytes come back.
     let shown = theirs.artefact(&Edge::BuiltinDisplay).expect("bakes");
     for c in [[0.5f32; 3], [1.0, 0.0, 0.0], [0.2, 0.7, 0.9]] {
         let back = shown.eval(untagged.eval(c));
@@ -327,7 +300,6 @@ fn a_footage_layers_pixels_carry_the_items_colour_space() {
         Some("srgb_texture")
     );
 
-    // Anything that is not footage has no interpretation to state.
     assert_eq!(
         footage_colour_space(
             &doc,
@@ -338,7 +310,6 @@ fn a_footage_layers_pixels_carry_the_items_colour_space() {
         None
     );
 
-    // Nor does a footage item nobody has assigned.
     let mut plain = doc.clone();
     if let Some(ProjectItem::Footage(f)) = plain.items.first_mut() {
         f.colour_space = None;

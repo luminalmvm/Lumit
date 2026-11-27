@@ -37,7 +37,6 @@ import 'dialog_frame.dart';
 import 'question_window.dart';
 import 'review_link_parts.dart' show reviewRowMenu;
 
-/// Show the report for a finished import. Returns when the window closes.
 Future<void> showAeImportReport({
   required BuildContext context,
   required BridgeImportReport report,
@@ -49,7 +48,6 @@ Future<void> showAeImportReport({
       builder: (close) => _ReportBody(report: report, onClose: () => close(null)),
     );
 
-/// As tall as what there is to say, up to where it scrolls.
 double _heightFor(BridgeImportReport report) {
   final sections = reportSections(report);
   final lines = sections.fold<int>(0, (n, s) => n + s.$3.length);
@@ -61,7 +59,6 @@ double _heightFor(BridgeImportReport report) {
       .clamp(180.0, 560.0);
 }
 
-/// The grade a section is headed with.
 String outcomeLabel(BridgeImportOutcome outcome) => switch (outcome) {
       BridgeImportOutcome.imported => l10n.aeOutcomeImported,
       BridgeImportOutcome.adjusted => l10n.aeOutcomeAdjusted,
@@ -75,7 +72,6 @@ String reasonLine(BridgeImportRow row) =>
     importReason(row.reason, {for (final a in row.args) a.name: a.value}) ??
     row.english;
 
-/// Rows that say the same thing, and every place they say it about.
 class ReportGroup {
   final String said;
   final List<String> places = [];
@@ -126,7 +122,6 @@ class _ReportBodyState extends State<_ReportBody> {
   late final _sections = reportSections(widget.report);
   final _scroll = ScrollController();
 
-  /// The lines opened to show where they apply.
   final Set<ReportGroup> _open = {};
 
   @override
@@ -138,7 +133,6 @@ class _ReportBodyState extends State<_ReportBody> {
   void _copy(String text) =>
       unawaited(Clipboard.setData(ClipboardData(text: text)));
 
-  /// The whole report as text, for pasting into a message.
   String get _asText => [
         for (final (outcome, _, groups) in _sections) ...[
           outcomeLabel(outcome),
@@ -241,10 +235,6 @@ class _ReportBodyState extends State<_ReportBody> {
         ),
       );
 
-  /// One thing the report says. Said about one place, the place sits under
-  /// it; said about several, it is a line with a count that opens to list
-  /// them. Every line starts at one edge, with the twirl hanging in the margin
-  /// before it.
   Widget _group(LumitTheme t, ReportGroup group) {
     final quiet = t.small.copyWith(color: t.textMuted);
     final several = group.places.length > 1;
@@ -321,5 +311,4 @@ class _ReportBodyState extends State<_ReportBody> {
   }
 }
 
-/// How far a line's words stand in, which is the room its twirl takes.
 const double _placeInset = 18;

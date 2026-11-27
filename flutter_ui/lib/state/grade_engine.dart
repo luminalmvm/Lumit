@@ -17,10 +17,8 @@ import 'package:uuid/uuid.dart';
 
 import 'grade_target.dart';
 
-/// How a new node meets the one it is added after.
 enum GradeNodeKind { serial, parallel, layer, outside }
 
-/// Which way a window is tracked from the playhead.
 enum GradeTrackDirection { backward, forward }
 
 /// A circle on the picture, in comp pixels: the samples a pick reads.
@@ -30,12 +28,9 @@ class GradeCircle {
   const GradeCircle(this.centre, this.radius);
 }
 
-/// Where a window track has got to.
 class GradeTrackProgress {
-  /// Frames tracked so far, of [total].
   final int done, total;
 
-  /// The comp frame tracking was lost at, when it was.
   final int? lostAt;
   const GradeTrackProgress(
       {required this.done, required this.total, this.lostAt});
@@ -58,8 +53,6 @@ typedef GradeRows = Map<String, BridgeEffectValue>;
 
 class GradeEngine {
   const GradeEngine();
-
-  // --- Nodes ---------------------------------------------------------------
 
   /// Whether [addNode] can make [kind] on [shot]. An outside node needs a
   /// key wire, which only a layer's stack carries, not a clip's.
@@ -86,7 +79,6 @@ class GradeEngine {
           GradeNodeKind.outside => layer.addOutsideGradeNode(after: after),
         };
       }
-      // Nothing to come after: a plain Correction at the top of the stack.
       if (kind == GradeNodeKind.outside) return null;
       final before = {for (final e in _stack(shot)) e.id()};
       clip == null
@@ -98,7 +90,6 @@ class GradeEngine {
       layer.reorderEffect(effect: made, newIndex: 0);
       return made.id();
     } catch (_) {
-      // A locked layer, or a node that has gone.
       return null;
     }
   }
@@ -106,8 +97,6 @@ class GradeEngine {
   List<BridgeEffectInstance> _stack(GradeShot shot) => shot.clip == null
       ? shot.layer.getEffects()
       : shot.layer.getClipEffects(clip: shot.clip!, onCompClock: true);
-
-  // --- Matte view ----------------------------------------------------------
 
   bool get matteReady => true;
 
@@ -139,11 +128,8 @@ class GradeEngine {
             GradeMatteBackdrop.mono => BridgeMatteBackdrop.mono,
           });
     } catch (_) {
-      // No worker yet. The next change asks again.
     }
   }
-
-  // --- Solvers -------------------------------------------------------------
 
   bool get solversReady => true;
 
@@ -266,11 +252,8 @@ class GradeEngine {
   static GradeRows _rows(List<BridgeSolvedRow> rows) =>
       {for (final r in rows) r.id: r.value};
 
-  // --- Window tracking -----------------------------------------------------
-
   bool get trackingReady => true;
 
-  /// The node being tracked, so [stopTracking] knows what to stop.
   static UuidValue? _tracking;
 
   /// Track window [slot] (1 to 4) of [node] from comp [frame] to the end of

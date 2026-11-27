@@ -4,7 +4,6 @@
 use crate::anim::Property;
 use crate::model::{EffectInstance, EffectValue};
 
-/// One control's value in a look.
 enum Set {
     Number(f32),
     On(bool),
@@ -13,7 +12,6 @@ enum Set {
 
 use Set::{Number, On, Pick};
 
-/// Film's presets: each a name and a Film set up as the look says.
 pub fn presets() -> Vec<(&'static str, EffectInstance)> {
     let looks: [(&str, &[(&str, Set)]); 9] = [
         (

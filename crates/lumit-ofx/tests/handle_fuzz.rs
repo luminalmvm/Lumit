@@ -37,18 +37,14 @@ use lumit_ofx::props::PropertySet;
 use lumit_ofx::status::{OfxStatus, Status};
 use lumit_ofx::suites::{image_effect, memory, message, multi_thread, parameter, property};
 
-/// How many random handles to try, unless the environment says otherwise.
 const DEFAULT_ITERATIONS: usize = 2_000;
 
 /// The default seed. A fixed number, because a test that fails only on Tuesdays
 /// is a test nobody can bisect (docs/14 §8).
 const DEFAULT_SEED: u64 = 0x0F0C_5EED_1F0C_5EED;
 
-/// What an entry point is allowed to answer when the handle it was given is
-/// not one of ours.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Expect {
-    /// It must say so: `kOfxStatErrBadHandle`.
     BadHandle,
     /// It never looks at the handle (the memory and message suites take one
     /// only for the host's convenience, and the OFX spec lets it be null), so
@@ -59,7 +55,6 @@ enum Expect {
     Flag,
 }
 
-/// One entry point under test.
 struct Entry {
     name: &'static str,
     expect: Expect,
@@ -137,7 +132,6 @@ fn entries() -> Vec<Entry> {
     }
 
     vec![
-        // ------------------------------------------------ property suite --
         entry!("propSetPointer", Expect::BadHandle, |h| unsafe {
             (property::SUITE.prop_set_pointer)(h, KEY.as_ptr(), 0, std::ptr::null_mut())
         }),
@@ -196,7 +190,6 @@ fn entries() -> Vec<Entry> {
         entry!("propGetDimension", Expect::BadHandle, |h| unsafe {
             (property::SUITE.prop_get_dimension)(h, KEY.as_ptr(), out::int_slot())
         }),
-        // -------------------------------------------- image effect suite --
         entry!("getPropertySet", Expect::BadHandle, |h| unsafe {
             (image_effect::SUITE.get_property_set)(h, out::handle_slot())
         }),
@@ -241,7 +234,6 @@ fn entries() -> Vec<Entry> {
         entry!("imageMemoryUnlock", Expect::AnyStatus, |h| unsafe {
             (image_effect::SUITE.image_memory_unlock)(h)
         }),
-        // ----------------------------------------------- parameter suite --
         entry!("paramDefine", Expect::BadHandle, |h| unsafe {
             (parameter::SUITE.param_define)(
                 h,
@@ -306,7 +298,6 @@ fn entries() -> Vec<Entry> {
         entry!("paramEditEnd", Expect::BadHandle, |h| unsafe {
             (parameter::SUITE.param_edit_end)(h)
         }),
-        // -------------------------------------------- multi-thread suite --
         entry!("mutexDestroy", Expect::BadHandle, |h| unsafe {
             (multi_thread::SUITE.mutex_destroy)(h)
         }),
@@ -328,7 +319,6 @@ fn entries() -> Vec<Entry> {
         entry!("multiThreadIsSpawnedThread", Expect::Flag, |_h| unsafe {
             (multi_thread::SUITE.multi_thread_is_spawned_thread)()
         }),
-        // ---------------------------------------- memory and message suites --
         entry!("memoryFree", Expect::AnyStatus, |h| unsafe {
             (memory::SUITE.memory_free)(h)
         }),
@@ -343,8 +333,6 @@ fn entries() -> Vec<Entry> {
     ]
 }
 
-/// A small deterministic generator. Not cryptography — a spread of bit patterns
-/// that is the same on every machine and every run.
 struct Xorshift(u64);
 
 impl Xorshift {
@@ -358,7 +346,6 @@ impl Xorshift {
     }
 }
 
-/// A number from the environment, or the default.
 fn from_env<T: std::str::FromStr>(name: &str, fallback: T) -> T {
     std::env::var(name)
         .ok()
@@ -366,8 +353,6 @@ fn from_env<T: std::str::FromStr>(name: &str, fallback: T) -> T {
         .unwrap_or(fallback)
 }
 
-/// The handles the host really minted, which are the only ones a call is
-/// allowed to accept. Everything else in the corpus must be refused.
 fn live_handles() -> Vec<usize> {
     let mut live = Vec::new();
     if let Ok(handle) = host_props_handle() {
@@ -383,8 +368,6 @@ fn live_handles() -> Vec<usize> {
     live
 }
 
-/// Forged, stale, wrong-kind, freed and mutated handles: everything a plugin
-/// can hand back that is not a handle.
 fn corpus(live: &[usize]) -> Vec<(String, *mut c_void)> {
     let mut corpus: Vec<(String, *mut c_void)> = vec![
         ("null".to_owned(), std::ptr::null_mut()),
@@ -406,7 +389,6 @@ fn corpus(live: &[usize]) -> Vec<(String, *mut c_void)> {
     };
     corpus.push(("stale".to_owned(), stale.as_ptr()));
 
-    // Wrong kind and past the end, for every kind of handle there is.
     for (name, kind) in [
         ("property set", HandleKind::PropertySet),
         ("image effect", HandleKind::ImageEffect),
@@ -426,21 +408,16 @@ fn corpus(live: &[usize]) -> Vec<(String, *mut c_void)> {
         }
     }
 
-    // And the mutations: real handle bits with the magic, the kind or the index
-    // pulled about, plus plain random words.
     let mut rng = Xorshift(from_env("LUMIT_OFX_FUZZ_SEED", DEFAULT_SEED));
     let seeds: Vec<usize> = corpus.iter().map(|(_, ptr)| *ptr as usize).collect();
     for _ in 0..from_env("LUMIT_OFX_FUZZ_ITERS", DEFAULT_ITERATIONS) {
         let word = rng.next() as usize;
         let bits = match rng.next() % 3 {
-            // A whole random word.
             0 => word,
-            // One bit of a handle we have, flipped.
             1 => {
                 let seed = seeds[(word >> 8) % seeds.len()];
                 seed ^ (1_usize << (word % usize::BITS as usize))
             }
-            // A handle whose fields are each random.
             _ => word & ((1 << 56) - 1),
         };
         if live.contains(&bits) {
@@ -451,8 +428,6 @@ fn corpus(live: &[usize]) -> Vec<(String, *mut c_void)> {
     corpus
 }
 
-/// The whole point: no entry point of any suite may accept a handle the host
-/// never minted, and none may do anything but answer.
 #[test]
 fn no_suite_entry_point_accepts_a_handle_that_is_not_one() {
     let live = live_handles();
@@ -484,8 +459,6 @@ fn no_suite_entry_point_accepts_a_handle_that_is_not_one() {
         }
     }
 
-    // The host is still itself afterwards: its own property set is live, holds
-    // what it held, and nothing in the corpus reached it.
     let handle = host_props_handle().expect("the host has a property set");
     let state = state();
     let set = state.props.get(handle).expect("the host's set is live");

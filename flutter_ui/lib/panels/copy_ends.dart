@@ -5,7 +5,6 @@ import 'dart:math';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/template/copy.dart';
 
-/// How strongly a copy's intro and outro are shaded on its bar.
 const double copyEndsAlpha = 0.28;
 
 /// Shade the stretches of `box` a copy of a graphics template plays its intro
@@ -36,7 +35,6 @@ void paintCopyEnds(Canvas canvas, Rect box, BridgeCopy? copy,
   canvas.restore();
 }
 
-/// [paintCopyEnds] on a widget's whole size.
 class CopyEndsPainter extends CustomPainter {
   final BridgeCopy? copy;
   final double pxPerSecond;

@@ -1,6 +1,3 @@
-//! The frame key's share of an effect that shows its own input at other
-//! moments (`lumit_core::fx::moments`).
-
 use std::sync::Arc;
 
 use lumit_core::model::{Composition, Document};

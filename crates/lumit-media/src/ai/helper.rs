@@ -154,7 +154,6 @@ pub fn serve(args: &[OsString], out: &mut dyn Write) -> Result<(), MediaError> {
     Ok(())
 }
 
-/// Whether a side the helper states is one that is ever drawn.
 fn side_in_range(side: u32) -> bool {
     (1..=MAX_SIDE).contains(&side)
 }
@@ -168,8 +167,6 @@ fn list(out: &mut dyn Write, value: &impl serde::Serialize) -> Result<(), MediaE
     Ok(())
 }
 
-/// What [`list`] wrote, off the helper's output, when it is no longer than
-/// `most` bytes.
 fn listed<T: serde::de::DeserializeOwned>(from: &mut dyn Read, most: u32) -> Option<T> {
     let mut length = [0u8; 4];
     from.read_exact(&mut length).ok()?;
@@ -182,7 +179,6 @@ fn listed<T: serde::de::DeserializeOwned>(from: &mut dyn Read, most: u32) -> Opt
     bincode::deserialize(&list).ok()
 }
 
-/// The layer list off the helper's output.
 fn read_document(from: &mut dyn Read) -> Option<AiDocument> {
     let doc: AiDocument = listed(from, MAX_LIST)?;
     (side_in_range(doc.width) && side_in_range(doc.height)).then_some(doc)
@@ -220,7 +216,6 @@ fn no_console(command: &mut Command) {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        /// `CREATE_NO_WINDOW`, from winbase.h.
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         command.creation_flags(CREATE_NO_WINDOW);
     }
@@ -293,10 +288,6 @@ fn said(reason: impl Read) -> MediaError {
         .find(|known| text.trim_end().ends_with(**known));
     bad(known.copied().unwrap_or(UNREADABLE))
 }
-
-// ---------------------------------------------------------------------------
-// The memory cap
-// ---------------------------------------------------------------------------
 
 /// A Windows job object holding the helper to [`MEMORY_CAP`]. Closing it ends
 /// the helper, so one is never left running after Lumit has gone.
@@ -548,8 +539,6 @@ mod tests {
     use std::process::Command;
     use std::time::Duration;
 
-    /// Set for the copy of this test program that is the process being held,
-    /// to which of the two ways it is held.
     const HELD: &str = "LUMIT_TEST_HELD_TO_A_CAP";
     const MIB: u64 = 1 << 20;
 

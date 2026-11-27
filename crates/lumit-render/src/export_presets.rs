@@ -21,7 +21,6 @@ use crate::export::format::ExportFormat;
 use crate::export::{Bitrate, ExportPreset, ExportSpec, PRESET_AUDIO_BPS};
 use std::path::{Path, PathBuf};
 
-/// One preset: a name and the whole settings payload behind it.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct NamedPreset {
     pub name: String,
@@ -81,7 +80,6 @@ pub fn is_built_in(name: &str) -> bool {
     built_ins().iter().any(|p| p.name == name)
 }
 
-/// The built-ins plus whatever the user has saved.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct PresetLibrary {
     user: Vec<NamedPreset>,
@@ -99,7 +97,6 @@ impl PresetLibrary {
         Self { user }
     }
 
-    /// Read from [`default_path`], or an empty library when there is none.
     pub fn load_default() -> Self {
         default_path().map(|p| Self::load(&p)).unwrap_or_default()
     }
@@ -115,8 +112,6 @@ impl PresetLibrary {
         std::fs::write(path, text).map_err(|e| format!("export presets: {e}"))
     }
 
-    /// Save to [`default_path`]; a platform with no home directory keeps the
-    /// library for the session and says so calmly.
     pub fn save_default(&self) -> Result<(), String> {
         match default_path() {
             Some(path) => self.save(&path),
@@ -134,7 +129,6 @@ impl PresetLibrary {
             .collect()
     }
 
-    /// The settings behind a name, built-in or the user's.
     pub fn get(&self, name: &str) -> Option<ExportSpec> {
         self.user
             .iter()
@@ -188,8 +182,6 @@ impl PresetLibrary {
         Ok(())
     }
 
-    /// How many presets the user has saved (the built-ins are not counted —
-    /// they are always there).
     pub fn user_count(&self) -> usize {
         self.user.len()
     }
@@ -221,9 +213,6 @@ mod tests {
         spec
     }
 
-    /// The whole settings payload survives a save and a reload — every field,
-    /// not just the ones the dialog happens to show today. A preset that
-    /// silently dropped a setting would be worse than no preset at all.
     #[test]
     fn a_user_preset_round_trips_through_the_file() {
         let dir = tempfile::tempdir().unwrap();
@@ -239,8 +228,6 @@ mod tests {
         assert_eq!(spec, a_spec());
     }
 
-    /// The list is built-ins first, all marked read-only, and every one of
-    /// them resolves to a spec that would actually run.
     #[test]
     fn the_built_ins_lead_the_list_and_every_one_resolves() {
         let lib = PresetLibrary::default();
@@ -253,7 +240,6 @@ mod tests {
                 .unwrap_or_else(|e| panic!("built-in {name} is not exportable: {e}"));
             assert!(is_built_in(name));
         }
-        // "Master" follows the composition's own frame.
         assert_eq!(lib.get("Master").unwrap().target, None);
     }
 }

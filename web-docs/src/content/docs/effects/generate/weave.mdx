@@ -1,0 +1,58 @@
+---
+title: Weave
+description: "A plain-woven cloth of warp and weft threads."
+---
+
+Weave is a **Textures** effect.
+
+## What it does
+
+Draws warp threads running up the layer and weft threads running across it. Each thread
+passes over one and under the next.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Thread spacing** | Slider | 2 to 500; any value by typing | 40 | Pixels at composition size |
+| **Warp width** | Slider | 5 to 100 | 80 | - |
+| **Weft width** | Slider | 5 to 100 | 80 | - |
+| **Warp colour** | Colour | Each channel 0 to 1 | 0.55, 0.12, 0.08 | - |
+| **Weft colour** | Colour | Each channel 0 to 1 | 0.75, 0.6, 0.35 | - |
+| **Gap colour** | Colour | Each channel 0 to 1 | 0.02, 0.02, 0.02 | - |
+| **Thread shading** | Slider | 0 to 100 | 60 | - |
+| **Wave** | Slider | 0 to 100 | 50 | - |
+| **Brightness variation** | Slider | 0 to 100 | 20 | - |
+| **Width variation** | Slider | 0 to 100 | 10 | - |
+| **Rotation** | Dial | Any angle | 0° | Degrees |
+| **Centre** | Point | Any position | 960, 540 | Pixels at composition size |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Paint** | Dropdown | Inside layer · Whole frame | Inside layer | - |
+
+## What each control does
+
+- **Thread spacing**: how far apart the threads are.
+- **Warp width** and **Weft width**: how wide each thread is, as a per cent of Thread
+  spacing.
+- **Warp colour** and **Weft colour**: the colours of the threads.
+- **Gap colour**: the colour between them.
+- **Thread shading**: how much a thread darkens toward its edges.
+- **Wave**: how much a thread darkens where it passes under.
+- **Brightness variation**: how much the threads differ in brightness.
+- **Width variation**: how much the threads differ in width.
+- **Rotation**: turns the cloth.
+- **Centre**: the point the cloth is laid out from and turns about.
+- **Seed**: which threads are brighter or thinner.
+- **Paint**: **Inside layer** paints only where the layer draws, and **Whole frame** fills
+  the whole of the layer's picture.
+- **Mix**: how much of the result replaces the original.
+- **Blend**: the blend mode the result is laid over the original with.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
+
+## Related
+
+- [Chainmail](/effects/generate/chainmail/)
+- [Checkerboard](/effects/generate/checkerboard/)
+- [Textures](/effects/#textures)
+- [Effects](/use/effects/)

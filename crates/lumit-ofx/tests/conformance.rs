@@ -60,26 +60,19 @@ fn default_bench_dir() -> PathBuf {
     std::env::temp_dir().join("lumit-ofx-bench")
 }
 
-/// What happened to one plugin in one context.
 enum Outcome {
-    /// It described, instanced and rendered.
     Passed {
         /// Whether the frame that came back differs from the one that went in.
         /// Not asserted — a plugin at its defaults is often an identity — but
         /// reported, because a whole bench that changed nothing means the
         /// pictures never reached anybody.
         changed: bool,
-        /// Whether the plugin short-circuited the render by answering
-        /// `isIdentity`.
         identity: bool,
     },
-    /// It cannot be an effect in this host, and said why. Not a failure.
     Rejected(String),
-    /// It should have worked and did not.
     Failed(String),
 }
 
-/// One row of the table.
 struct Row {
     /// Whether this bundle is Lumit's own. Ours must pass; somebody else's is
     /// measured (see the assertions at the end of this file).
@@ -91,7 +84,6 @@ struct Row {
     outcome: Outcome,
 }
 
-/// The test plugin's file name on this platform.
 fn test_plugin_file_name() -> &'static str {
     if cfg!(target_os = "windows") {
         "lumit_ofx_testplug.dll"
@@ -102,7 +94,6 @@ fn test_plugin_file_name() -> &'static str {
     }
 }
 
-/// Where Cargo put the test plugin, if it built it.
 fn test_plugin() -> Option<PathBuf> {
     let name = test_plugin_file_name();
     let exe = std::env::current_exe().ok()?;
@@ -118,7 +109,6 @@ fn test_plugin() -> Option<PathBuf> {
     None
 }
 
-/// Lay the test plugin out as a real bundle inside `root`.
 fn a_fixture_bundle(root: &Path) -> Option<PathBuf> {
     let source = test_plugin()?;
     let dir = root
@@ -131,8 +121,6 @@ fn a_fixture_bundle(root: &Path) -> Option<PathBuf> {
     Some(binary)
 }
 
-/// Every bundle binary under the bench folders, and the folders themselves, so
-/// a message can name where nothing was found.
 fn bench_bundles() -> (Vec<PathBuf>, Vec<PathBuf>) {
     let dirs: Vec<PathBuf> = match std::env::var_os("LUMIT_OFX_BENCH") {
         Some(value) => std::env::split_paths(&value).collect(),
@@ -163,8 +151,6 @@ fn fixture_frame() -> Frame16 {
     Frame16::from_pixels(width, height, pixels).expect("the count matches the size")
 }
 
-/// One frame's worth of question for a plugin with these clips: a picture for
-/// every input it defined, at the fixture size.
 fn request_for(clips: &[String], source: &Frame16) -> RenderRequest {
     let (width, height) = FIXTURE;
     let mut inputs = BTreeMap::new();
@@ -187,7 +173,6 @@ fn request_for(clips: &[String], source: &Frame16) -> RenderRequest {
     }
 }
 
-/// Drive one plugin in one context, all the way to a frame.
 fn drive(
     plugin: &lumit_ofx::bundle::PluginRef,
     context: Context,
@@ -263,7 +248,6 @@ fn drive(
     })
 }
 
-/// Every plugin in one bundle, in every context it declares.
 fn drive_bundle(path: &Path, ours: bool, source: &Frame16, rows: &mut Vec<Row>) {
     let label = path.file_name().map_or_else(
         || path.display().to_string(),
@@ -320,7 +304,6 @@ fn drive_bundle(path: &Path, ours: bool, source: &Frame16, rows: &mut Vec<Row>) 
     bundle.unload();
 }
 
-/// The table, as the markdown that goes in the pull request.
 fn table(rows: &[Row], bad_handle: u64, bad_value: u64) -> String {
     let mut out = String::new();
     let _ = writeln!(out, "| bundle | plugin | version | context | result |");
@@ -363,7 +346,6 @@ fn table(rows: &[Row], bad_handle: u64, bad_value: u64) -> String {
     out
 }
 
-/// Where the table is written, so CI can put it in the pull request body.
 fn out_path() -> PathBuf {
     if let Some(named) = std::env::var_os("OFX_CONFORMANCE_OUT") {
         return PathBuf::from(named);
@@ -420,16 +402,6 @@ fn the_bench_describes_instances_and_renders_with_no_refused_suite_call() {
         eprintln!("the table could not be written to {}: {e}", out.display());
     }
 
-    // **Three assertions, and they are about the host rather than about the
-    // plugins.** No suite call was refused, no frame came back broken, and
-    // every plugin Lumit wrote worked. What a *third party's* plugin does with
-    // a host still missing features it needs is measured and printed, not
-    // asserted: today the biggest shortfall is that openfx-misc writes
-    // parameter values during `kOfxActionCreateInstance` and this host cannot
-    // accept a write (docs/impl/ofx-host.md §5), and a suite that went
-    // red for a feature nobody has built yet would block everything else
-    // while proving nothing. `LUMIT_OFX_BENCH_STRICT` turns the third
-    // column into an assertion, and it is set the day the host can carry it.
     assert_eq!(
         bad_handle, 0,
         "the host had to answer kOfxStatErrBadHandle during the pass:

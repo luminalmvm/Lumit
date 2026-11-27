@@ -106,8 +106,6 @@ fn radial_blur(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     let pos = vec2<f32>(xy) + vec2<f32>(0.5);
     let d = pos - centre;
-    // Zoom steps along d itself (a ray through Centre); Spin steps along
-    // its perpendicular (the tangent to the arc).
     var step = d;
     if (p.kind == 1u) {
         step = vec2<f32>(-d.y, d.x);

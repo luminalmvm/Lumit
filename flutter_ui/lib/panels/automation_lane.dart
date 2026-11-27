@@ -40,10 +40,8 @@ import 'timeline_extras_frb.dart' show TimelineAxis, laneRowGap, rowSelectionFil
 import 'volume_band_frb.dart';
 import 'waveform_frb.dart';
 
-/// How many lane rows a lane stands on until its bottom edge is dragged.
 const int automationLaneMinRows = 2;
 
-/// Which value a lane draws.
 enum LaneKind { volume, pan, send }
 
 /// The paths a lane's keys are picked and shared under. Volume keeps the
@@ -55,8 +53,6 @@ String lanePanPath(String layerId) => '${audioPath(layerId)}/pan';
 String laneSendPath(String layerId, UuidValue bus) =>
     '${sendsPath(layerId)}/$bus';
 
-/// One lane under a track: what it draws, where its keys are picked, and how
-/// tall it stands.
 class AutomationLane {
   final LaneKind kind;
   final BridgeScalar scalar;
@@ -98,8 +94,6 @@ class AutomationLane {
         LaneKind.pan => null,
       };
 
-  /// The control this lane rides in the live mix, on [layer], or the
-  /// master's Volume with none.
   LiveTarget live(LayerReference? layer) =>
       (layer: layer, kind: kind, bus: send?.bus);
 
@@ -131,13 +125,10 @@ class AutomationLane {
           ),
       };
 
-  /// The lane's value written whole.
   void write(BridgeLayerEntry entry, BridgeScalar next) =>
       _target(entry).write(next);
 }
 
-/// [base] with its drags handed to the live mix while the comp plays and
-/// [mode] records, so they are heard at once and written by the pass.
 BandTarget recordingBand(
   BandTarget base, {
   required CompositionReference comp,
@@ -152,8 +143,6 @@ BandTarget recordingBand(
       release: () => laneRelease(comp, target),
     );
 
-/// [entry]'s Volume or Pan band over its clips, its drags handed to the live
-/// mix while the track records. The plain band with no [comp].
 BandTarget trackBand(BridgeLayerEntry entry, BandKind kind,
     {required CompositionReference? comp,
     required ValueListenable<bool> playing}) {
@@ -170,8 +159,6 @@ BandTarget trackBand(BridgeLayerEntry entry, BandKind kind,
       playing: playing);
 }
 
-/// The lanes under [entry]: Volume, Pan, then a lane per send. [rows] is how
-/// tall each has been dragged, by lane id.
 List<AutomationLane> automationLanesOf({
   required BridgeLayerEntry entry,
   required double rowHeight,
@@ -200,7 +187,6 @@ List<AutomationLane> automationLanesOf({
   ];
 }
 
-/// A lane's name.
 String laneLabel(LumitTheme t, AutomationLane lane) => switch (lane.kind) {
       LaneKind.volume => t.propertyCase(l10n.volume),
       LaneKind.pan => t.propertyCase(l10n.audioPan),
@@ -215,39 +201,29 @@ class AutomationLaneOutline extends StatefulWidget {
   final CompositionReference comp;
   final AutomationLane lane;
 
-  /// The lane's name, and the write a finished edit makes.
   final String label;
   final void Function(BridgeScalar next) write;
 
-  /// Where the value well goes, and how far in from the twirl the name starts.
   final ValueColumn valueColumn;
   final double indent;
 
-  /// This lane is the picked property, so it draws lit.
   final bool selected;
   final VoidCallback onSelect;
   final ValueChanged<int> onSeek;
   final VoidCallback onChanged;
 
-  /// A locked layer's lane is read and not touched.
   final bool locked;
 
-  /// The send's Pre switch, where the lane is a send's.
   final Widget? trailing;
 
-  /// The layer the lane is on, for Mute send in a send lane's menu and the
-  /// live value; null on the master's.
   final LayerReference? layer;
 
   /// While the comp plays, where the control stands now, shown in place of
   /// the curve's value so the head agrees with the fader during a ride.
   final AutomationPassFeed? pass;
 
-  /// The lane's band, whose live hooks a drag of the field goes through
-  /// while the track records ([BandTarget.touch]).
   final BandTarget? live;
 
-  /// The drag on the lane's bottom edge, as on a track's.
   final ValueChanged<double>? onResize;
   final VoidCallback? onResizeStart;
   final VoidCallback? onResizeReset;
@@ -283,7 +259,6 @@ class _AutomationLaneOutlineState extends State<AutomationLaneOutline> {
   /// tick only holds the number and the release commits it.
   double? _staged;
 
-  /// The live mix took this drag's moves, so its release writes nothing.
   bool _live = false;
 
   void _commitAt(BridgeScalar scalar, num value, int frame) {
@@ -302,7 +277,6 @@ class _AutomationLaneOutlineState extends State<AutomationLaneOutline> {
     setState(() => _staged = value.toDouble());
   }
 
-  /// A drag the live mix took, let go of.
   void _dropLive() {
     if (!_live) return;
     _live = false;
@@ -364,12 +338,8 @@ class _AutomationLaneOutlineState extends State<AutomationLaneOutline> {
         final suffix = pan ? null : ' dB';
         final decimals = pan ? 0 : 1;
         final speed = pan ? 1.0 : 0.2;
-        // Pan reads as the Mixer reads it: C, L 30, R 20.
         final reading = pan ? (num v) => panLabel(v.toDouble()) : null;
         final fieldKey = ValueKey<String>('atl-lane-value-${lane.id}');
-        // A lane stands on two rows at least, so the name and a send's Pre
-        // switch take the first and the navigator and the value the second:
-        // at the column's usual width the name keeps its room.
         final body = Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -446,7 +416,6 @@ class _AutomationLaneOutlineState extends State<AutomationLaneOutline> {
                     muteSendRow(layer, send,
                         close: close, onChanged: widget.onChanged),
                   ],
-                  // A muted send reads dimmed, as a muted layer's row does.
                   child: Opacity(
                       opacity: send.muted ? dimmedRowOpacity : 1,
                       child: menu),
@@ -501,9 +470,6 @@ class _AutomationLaneOutlineState extends State<AutomationLaneOutline> {
   }
 }
 
-/// The time area of a lane: the value as a curve across the lane's full
-/// height, with the track's wave faint behind it. The curve is the clips'
-/// band with the lane's target, so it takes the same drags, clicks and menu.
 class AutomationLaneArea extends StatelessWidget {
   final AutomationLane lane;
   final BandTarget target;
@@ -513,8 +479,6 @@ class AutomationLaneArea extends StatelessWidget {
   final int fpsDen;
   final double height;
 
-  /// The track's wave over the lanes' window, or a bus's mix, or null for
-  /// none.
   final BridgeAudioPeaks? peaks;
   final double originSeconds;
   final double secondsPerPixel;
@@ -522,21 +486,15 @@ class AutomationLaneArea extends StatelessWidget {
   final double right;
   final WaveformStyle style;
 
-  /// The lane's keys that are picked, by index.
   final Set<int> selected;
   final void Function(int index, bool additive) onSelectKey;
   final VoidCallback onChanged;
 
-  /// The stretch a pass is writing, drawn over the curve while it runs.
   final AutomationPassFeed pass;
   final CompositionReference? comp;
 
-  /// The wave's colours, where they are not the faint stack: a bus draws
-  /// its mix in its own colour.
   final WaveformColours? waveColours;
 
-  /// A converted track's clips, and each one's wave by clip id as the clips
-  /// above fetched it, drawn faint where [peaks] would be.
   final List<BridgeClip> clips;
   final ValueListenable<Map<String, BridgeAudioPeaks>>? clipWaves;
 
@@ -571,7 +529,6 @@ class AutomationLaneArea extends StatelessWidget {
     this.onMarquee,
   });
 
-  /// The keys inside [rect], by index.
   Set<int> _keysIn(Rect rect) => {
         for (var i = 0; i < lane.keys.length; i++)
           if (rect.left <= axis.xOf(laneKeyFrame(lane.keys[i], fps)) &&

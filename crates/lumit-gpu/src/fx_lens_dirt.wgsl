@@ -26,7 +26,6 @@ struct P {
     alone: u32,
     // Pixels per unit.
     k: f32,
-    // The dirt pattern's own scale.
     scale: f32,
     // How far out of focus the glass is, in pattern units.
     rd: f32,
@@ -161,7 +160,6 @@ fn tinted(d: vec4<f32>) -> vec3<f32> {
     return max(col, vec3<f32>(0.0)) * (1.0 + (d.w - 0.5) * p.variation);
 }
 
-// One speck's colour, drawn from its cell.
 fn speck_colour(c: vec2<i32>, channel: u32, i: i32) -> vec3<f32> {
     return tinted(vec4<f32>(
         h01(c, channel, i),
@@ -171,7 +169,6 @@ fn speck_colour(c: vec2<i32>, channel: u32, i: i32) -> vec3<f32> {
     ));
 }
 
-// The same for dirt that spreads, varying slowly across the glass.
 fn colour_at(q: vec2<f32>, channel: u32) -> vec3<f32> {
     if (p.variation <= 0.0 && p.gradient == 0u) {
         return p.tint.rgb;

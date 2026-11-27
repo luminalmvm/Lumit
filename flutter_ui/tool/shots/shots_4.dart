@@ -59,7 +59,6 @@ Future<void> main() async {
     ),
   );
 
-  // Bottom of the stack upwards, the running order of a title sequence.
   comp.addFootageLayer(
     footage: project.importFootage(path: '$fixtures/Music.wav'),
     asSequence: false,
@@ -78,8 +77,6 @@ Future<void> main() async {
       fill: BridgeColourRgba(r: 1, g: 1, b: 1, a: 1),
     ),
   );
-  // The anchor is the middle of the line, so a long line runs off to the right
-  // of the starter document's centre unless Position is pulled back.
   title.setTransforms(props: const [
     BridgeTransformProp.positionX,
     BridgeTransformProp.positionY,
@@ -104,7 +101,6 @@ Future<void> main() async {
   ui.playheadFrame.value = 48;
   ui.setSelection([title]);
 
-  // The sweeps photograph the shell; the welcome screen has its own sweep.
   runApp(shotRoot(LumitAppNew(state, ui, welcome: false)));
   await pause(2);
   await sizeWindow(1720, 1000);
@@ -133,7 +129,6 @@ Future<void> main() async {
     );
   }
 
-  /// A point of the composition, in window coordinates.
   Offset onPicture(double x, double y) {
     final fitted = stage();
     final size = comp.getSize();
@@ -143,7 +138,6 @@ Future<void> main() async {
     );
   }
 
-  /// Move the splitter between the upper band and the Timeline.
   Future<void> timelineShare(double share) async {
     ui.workspace.dock.shares[0] = 1 - share;
     ui.workspace.dock.shares[1] = share;
@@ -151,13 +145,8 @@ Future<void> main() async {
     await pause(2);
   }
 
-  /// The Viewer panel, bar and all.
   Rect viewerBox() => spanOfType(ViewerPanelFrb)!;
 
-  // ---- Shot: the toolbar --------------------------------------------------
-  // The brush in hand, so the strip shows both halves of what it is: the tools
-  // on the left with one of them lit, and the armed tool's own options — the
-  // colour it lays down, its size, hardness and opacity — beside them.
   ui.tools.select(ToolMode.brush);
   await pause(1.5);
   final firstTool = boxOf('tool-select')!;
@@ -185,11 +174,6 @@ Future<void> main() async {
     ),
   );
 
-  // ---- Shot: a shape group's flyout ---------------------------------------
-  // Right-clicked open, which is one of the two ways it opens (the other is a
-  // press and hold). The pointer is back on the strip's own default first, so
-  // what is lit beside the flyout is the Selection tool rather than whatever
-  // the shot before this one had in hand.
   ui.tools.select(ToolMode.select);
   await pause(1);
   await rightTapKey('tool-shape');
@@ -205,7 +189,6 @@ Future<void> main() async {
       (lastMember?.bottom ?? shapeButton.bottom + 200) + 8,
     ),
   );
-  // Off the flyout again, and back to the pointer.
   await tapAt(Offset(shapeButton.left - 200, shapeButton.top - 5), settle: 0.8);
   ui.tools.select(ToolMode.select);
   await pause(1);
@@ -221,11 +204,6 @@ Future<void> main() async {
     crop: barBox.inflate(6),
   );
 
-  // ---- Shot: a text layer being edited in the Viewer -----------------------
-  // The Type tool clicked into the words already on the picture, which is what
-  // puts a caret in them. The toolbar's options change with the tool, so the
-  // crop reaches up to the strip: the fill and the point size the edit is
-  // using are part of what "being edited" looks like.
   ui.tools.select(ToolMode.typeHorizontal);
   await pause(1.2);
   await tapAt(onPicture(430, 830), settle: 1.6);
@@ -238,10 +216,6 @@ Future<void> main() async {
   ui.tools.select(ToolMode.select);
   await pause(1.5);
 
-  // ---- Shot: a shape layer's contents in the Timeline ----------------------
-  // A badge behind the words: a star with a fill and a stroke, and a bar under
-  // it — two pieces of art on one layer, which is what a Contents heading is
-  // for.
   final badge = comp.addShapeLayer(name: 'Badge', contents: [
     BridgeShapeItem(
       hidden: false,
@@ -344,11 +318,6 @@ Future<void> main() async {
   await tapKey('tl-twirl-$badgeId');
   await timelineShare(0.32);
 
-  // ---- Shot: a mask on a layer, gating its alpha ---------------------------
-  // An ellipse over the gameplay, softened — the vignette somebody would draw
-  // by hand. The layers above it come off so the picture the mask is cutting
-  // is the one on screen, and the mask's own layer is selected, because that is
-  // what draws the path and its feather over the picture.
   card.setSwitch(switch_: BridgeLayerSwitch.visible, on_: false);
   title.setSwitch(switch_: BridgeLayerSwitch.visible, on_: false);
   badge.setSwitch(switch_: BridgeLayerSwitch.visible, on_: false);

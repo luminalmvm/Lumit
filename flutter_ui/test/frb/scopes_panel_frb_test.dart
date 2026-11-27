@@ -1,4 +1,3 @@
-// The Scopes panel's own chrome, and when it asks the engine for a trace.
 
 import 'dart:io' hide Platform;
 
@@ -80,21 +79,16 @@ void main() {
       final settled = counter.renders;
       expect(settled, greaterThan(0), reason: 'the panel traces on mount');
 
-      // Rebuilds that change neither the frame nor the picture ask for nothing.
       await tester.pumpWidget(host);
       await tester.pump();
       expect(counter.renders, settled,
           reason: 'a plain rebuild must not cost a trace');
 
-      // The edit's frame reaches the Viewer: the playhead has not moved, but
-      // the picture under it has.
       p.uiState.frameArrived.value++;
       await tester.pump();
       expect(counter.renders, settled + 1,
           reason: 'the arrival is worth exactly one trace');
 
-      // And the rebuilds that follow it — the trace landing, a hover — do not
-      // ask again.
       await tester.pumpWidget(host);
       await tester.pump();
       expect(counter.renders, settled + 1,

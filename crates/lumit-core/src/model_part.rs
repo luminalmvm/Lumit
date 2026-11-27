@@ -11,11 +11,9 @@ use crate::model_layer::Take;
 use lumit_fx_macros::Effect;
 use uuid::Uuid;
 
-/// What [`ModelPlayback`] and [`ModelPart`] are known by.
 pub const PLAYBACK_NAME: &str = "model_playback";
 pub const PART_NAME: &str = "model_part";
 
-/// How a Model layer plays its file's takes.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "model_playback",
@@ -37,7 +35,6 @@ pub struct ModelPlayback {
     pub offset: f32,
 }
 
-/// What the user has done to one node of the file.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "model_part",
@@ -109,7 +106,6 @@ pub fn part_id(layer: Uuid, node: usize) -> Uuid {
     Uuid::from_u128(layer.as_u128() ^ (MARK | (node as u128 + 1)))
 }
 
-/// The id of Model layer `layer`'s playback rows.
 #[must_use]
 pub fn playback_id(layer: Uuid) -> Uuid {
     Uuid::from_u128(layer.as_u128() ^ MARK)
@@ -124,7 +120,6 @@ pub fn node_of(layer: Uuid, id: Uuid) -> Option<usize> {
     (x & !0xffff_ffff == MARK).then(|| n.checked_sub(1))?
 }
 
-/// Whether `id` names rows of Model layer `layer`.
 #[must_use]
 pub fn owns(layer: Uuid, id: Uuid) -> bool {
     (layer.as_u128() ^ id.as_u128()) & !0xffff_ffff == MARK
@@ -204,9 +199,6 @@ mod tests {
     use super::*;
     use crate::fx::builtins::instantiate;
 
-    /// Ids find their way back, a take is kept by name however the file's list
-    /// moves, one the file has lost reads past the list, and only rows somebody
-    /// changed count as changed.
     #[test]
     fn rows_and_takes_read_back() {
         let layer = Uuid::now_v7();
@@ -233,8 +225,6 @@ mod tests {
         assert!(!untouched(&rows));
     }
 
-    /// What somebody keyed on a part comes back from a saved project, finds its
-    /// part again and reads the same. Only a Model layer keeps any.
     #[test]
     fn a_parts_rows_survive_a_save() {
         use crate::anim::{Animation, Keyframe, Property, SideInterp};

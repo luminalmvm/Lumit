@@ -1,5 +1,3 @@
-//! Depth of field pro's passes, built once on first use.
-
 use std::sync::Mutex;
 
 use super::lens_blur::{bind_layout, LensBlurFx, Slot, SCENE_LAYERS_MAX};

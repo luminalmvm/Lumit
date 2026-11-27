@@ -33,17 +33,12 @@ class TranscriptToken {
   final TranscriptKind kind;
   final String text;
 
-  /// The stretch an edit takes.
   final int startFrame;
   final int endFrame;
 
-  /// The stretch the word is actually heard over.
   final int heardStartFrame;
   final int heardEndFrame;
 
-  /// Which footage item the word is in, by its place in the read and by its
-  /// id, its index in that item's own transcript, the clip it is heard
-  /// through, and who says it. Null for none.
   final int? item;
   final String? itemId;
   final int? index;
@@ -51,14 +46,12 @@ class TranscriptToken {
   final int? speaker;
   final double confidence;
 
-  /// Whether a paragraph starts here.
   final bool paragraph;
   final TranscriptFiller filler;
 
   /// A filler too close to the words round it to cut cleanly.
   final bool tight;
 
-  /// Whether an edit point sits just before this token.
   final bool editBefore;
 
   /// Whether a space goes before the text: not between the characters of a
@@ -121,8 +114,6 @@ class TranscriptModel {
   double secondsOf(int frames) =>
       fpsNum <= 0 ? 0 : frames * fpsDen / fpsNum;
 
-  /// The words of [from] up to [to], as a line of text, spaced as the page
-  /// shows them.
   String textOf(int from, int to) {
     final out = StringBuffer();
     for (var i = from; i < to && i < tokens.length; i++) {
@@ -134,14 +125,12 @@ class TranscriptModel {
     return out.toString();
   }
 
-  /// The frame stretches a selection covers, one per range.
   List<({int start, int end})> spansOf(List<(int, int)> ranges) => [
         for (final (from, to) in ranges)
           if (to > from)
             (start: tokens[from].startFrame, end: tokens[to - 1].endFrame),
       ];
 
-  /// The words a filler review lists, by its switches.
   List<int> fillers({
     required bool hesitations,
     required bool phrases,
@@ -172,7 +161,6 @@ class TranscriptModel {
             i,
       ];
 
-  /// Every token [speaker] says.
   List<int> saidBy(int speaker) => [
         for (var i = 0; i < tokens.length; i++)
           if (tokens[i].speaker == speaker && tokens[i].kind != TranscriptKind.gap)
@@ -189,7 +177,6 @@ class TranscriptModel {
     final page = StringBuffer();
     final starts = List<int>.filled(tokens.length, -1);
     final ends = List<int>.filled(tokens.length, -1);
-    // A pause or a break is a gap in the words either way, written once.
     var gap = false;
     for (var i = 0; i < tokens.length; i++) {
       final t = tokens[i];
@@ -248,7 +235,6 @@ class TranscriptSelection {
   bool contains(int token) =>
       ranges.any((r) => token >= r.$1 && token < r.$2);
 
-  /// The first and last token picked, or null with none.
   (int, int)? get bounds {
     if (ranges.isEmpty) return null;
     var lo = ranges.first.$1, hi = ranges.first.$2;
@@ -267,7 +253,6 @@ class TranscriptSelection {
     return n;
   }
 
-  /// With [range] added, overlapping ranges joined, sorted.
   TranscriptSelection adding((int, int) range, {int? caret}) {
     final all = [...ranges, range]..sort((a, b) => a.$1.compareTo(b.$1));
     final joined = <(int, int)>[];
@@ -282,14 +267,12 @@ class TranscriptSelection {
     return TranscriptSelection(ranges: joined, caret: caret ?? this.caret);
   }
 
-  /// A fresh selection of one range.
   static TranscriptSelection of(int a, int b, {int? caret}) =>
       TranscriptSelection(
           ranges: [(math.min(a, b), math.max(a, b))],
           caret: caret ?? math.max(a, b));
 }
 
-/// The type the page is set in, read off the theme by the panel.
 class TranscriptStyles {
   final TextStyle word;
   final TextStyle filler;
@@ -307,7 +290,6 @@ class TranscriptStyles {
     required this.size,
   });
 
-  /// The line's pitch, about one and a half times the type.
   static const double lineHeight = 1.55;
 }
 
@@ -319,7 +301,6 @@ sealed class TranscriptBlock {
   const TranscriptBlock(this.from, this.to);
 }
 
-/// A break: a line of its own saying how long the silence runs.
 class TranscriptBreakBlock extends TranscriptBlock {
   @override
   final double height;
@@ -329,8 +310,6 @@ class TranscriptBreakBlock extends TranscriptBlock {
 /// A run of words and pauses, with a heading when the speaker changed or a
 /// minute has passed since the last one, laid out as one paragraph of text.
 class TranscriptParagraph extends TranscriptBlock {
-  /// Whether a heading line stands above it, and the speaker it names, or
-  /// null for a heading with the timecode alone.
   final bool heading;
   final int? speaker;
   final double headingHeight;
@@ -359,7 +338,6 @@ class TranscriptParagraph extends TranscriptBlock {
   @override
   double get height => headingHeight + painter.height;
 
-  /// The top of the text within the block.
   double get textTop => headingHeight;
 
   List<LineMetrics>? _lines;
@@ -396,7 +374,6 @@ class TranscriptParagraph extends TranscriptBlock {
     return _textBoxes(charStart[i], charEnd[i]);
   }
 
-  /// The boxes of tokens [a] up to [b] as one run, joined through the gaps.
   List<Rect> rectsOfRun(int a, int b) {
     final i = math.max(0, a - from), j = math.min(charStart.length, b - from);
     if (j <= i) return const [];
@@ -419,7 +396,6 @@ class TranscriptParagraph extends TranscriptBlock {
     }
     if (boxes.isEmpty) return null;
     final b = after ? boxes.last : boxes.first;
-    // A word written right to left starts at its right edge.
     final rtl = b.direction == TextDirection.rtl;
     return (x: after != rtl ? b.right : b.left, top: b.top, bottom: b.bottom);
   }
@@ -455,12 +431,10 @@ class TranscriptParagraph extends TranscriptBlock {
         : pos.offset;
   }
 
-  /// The token nearest [x] on line [line].
   int tokenOnLine(int line, double x) {
     final m = lines[line.clamp(0, lines.length - 1)];
     final y = m.baseline - m.ascent + m.height / 2;
     final i = _tokenOfChar(_charAt(Offset(x, y))) ?? charStart.length - 1;
-    // Past the line's end the caret lands after its last word.
     final r = rectsOf(from + i);
     if (r.isNotEmpty && x > r.last.right && from + i + 1 < to) {
       final next = rectsOf(from + i + 1);
@@ -469,7 +443,6 @@ class TranscriptParagraph extends TranscriptBlock {
     return from + i;
   }
 
-  /// Which line the caret before [token] is on.
   int lineOf(int token) {
     final c = caretAt(token);
     if (c == null) return 0;
@@ -481,7 +454,6 @@ class TranscriptParagraph extends TranscriptBlock {
     return lines.length - 1;
   }
 
-  /// The first and last tokens on line [line].
   (int, int) lineTokens(int line) {
     var first = to, last = from;
     for (var i = 0; i < charStart.length; i++) {
@@ -508,23 +480,19 @@ class TranscriptParagraph extends TranscriptBlock {
   }
 }
 
-/// The page laid out at one width and type size.
 class TranscriptLayout {
   final TranscriptModel model;
   final TranscriptStyles styles;
   final double width;
   final List<TranscriptBlock> blocks;
 
-  /// Which block each token is in.
   final List<int> blockOfToken;
 
-  /// Whether a pause chip carries its length, which widens it.
   final bool pauseLabels;
 
   TranscriptLayout._(this.model, this.styles, this.width, this.blocks,
       this.blockOfToken, this.pauseLabels);
 
-  /// Each paragraph laid out once, at [width].
   factory TranscriptLayout.lay({
     required TranscriptModel model,
     required TranscriptStyles styles,
@@ -592,12 +560,9 @@ class TranscriptLayout {
     return null;
   }
 
-  /// How wide a pause's chip is for its length: a little, plus a little a
-  /// second, within bounds.
   static double chipWidth(double seconds) =>
       (8 + 10 * seconds).clamp(10.0, 48.0);
 
-  /// About the x-height of the type.
   static double chipHeight(double size) => (size * 0.55).roundToDouble();
 
   static TranscriptParagraph _lay(
@@ -682,13 +647,10 @@ class TranscriptLayout {
     );
   }
 
-  /// A pause's or a break's length as the page writes it.
   static String pauseText(double seconds) => '${seconds.toStringAsFixed(1)} s';
 
   double heightOf(int block) => blocks[block].height;
 
-  /// Where each block starts down the page, and the page's whole height
-  /// after them, summed once.
   late final List<double> tops = () {
     final out = List<double>.filled(blocks.length + 1, 0);
     for (var i = 0; i < blocks.length; i++) {
@@ -697,12 +659,10 @@ class TranscriptLayout {
     return out;
   }();
 
-  /// How far down the page block [block] starts.
   double topOf(int block) => tops[block.clamp(0, blocks.length)];
 
   double get totalHeight => tops.last;
 
-  /// The block at [y] down the page, or null off it.
   int? blockAt(double y) {
     if (blocks.isEmpty || y < 0 || y >= totalHeight) return null;
     var lo = 0, hi = blocks.length - 1;
@@ -738,7 +698,6 @@ class TranscriptLayout {
     return block.tokenOnLine(line, x).clamp(block.from, block.to - 1);
   }
 
-  /// The paragraph holding [token], or null for a break or off the page.
   TranscriptParagraph? paragraphOf(int token) {
     if (token < 0 || token >= blockOfToken.length) return null;
     final block = blocks[blockOfToken[token]];
@@ -781,24 +740,18 @@ class TranscriptLayout {
   }
 }
 
-/// What the painter lights up over the words.
 class TranscriptMarks {
   final TranscriptSelection selection;
 
-  /// The word the playhead is on.
   final int? current;
 
-  /// The results of a search or a review, and the one in hand.
   final Set<int> found;
   final int? foundCurrent;
 
-  /// The words of the clips picked in the Cut timeline.
   final Set<String> pickedClips;
 
-  /// A drop caret while words are dragged: before this token.
   final int? drop;
 
-  /// Whether the caret is drawn this blink.
   final bool caretOn;
 
   const TranscriptMarks({
@@ -812,7 +765,6 @@ class TranscriptMarks {
   });
 }
 
-/// The colours the page is painted in, from the theme.
 class TranscriptPaint {
   final Color accent;
   final Color selectionFill;
@@ -831,7 +783,6 @@ class TranscriptPaint {
   });
 }
 
-/// One paragraph: its fills, its words, its chips, its carets.
 class TranscriptParagraphPainter extends CustomPainter {
   final TranscriptParagraph paragraph;
   final TranscriptModel model;
@@ -867,7 +818,6 @@ class TranscriptParagraphPainter extends CustomPainter {
       }
     }
 
-    // The clips picked in the Cut timeline, faintest and underneath.
     if (marks.pickedClips.isNotEmpty) {
       var run = -1;
       for (var i = p.from; i <= p.to; i++) {
@@ -881,8 +831,6 @@ class TranscriptParagraphPainter extends CustomPainter {
         }
       }
     }
-    // Search results and review items, the one in hand stronger and
-    // outlined.
     for (final i in marks.found) {
       if (i < p.from || i >= p.to) continue;
       final current = i == marks.foundCurrent;
@@ -890,19 +838,16 @@ class TranscriptParagraphPainter extends CustomPainter {
           inset: 1);
       if (current) fill(p.rectsOf(i), colours.accent, inset: 0.5, stroke: true);
     }
-    // The selection, joined through the gaps between neighbours.
     for (final (a, b) in marks.selection.ranges) {
       final lo = math.max(a, p.from), hi = math.min(b, p.to);
       if (hi > lo) fill(p.rectsOfRun(lo, hi), colours.selectionFill);
     }
-    // The word the playhead is on.
     if (marks.current case final c? when c >= p.from && c < p.to) {
       fill(p.rectsOf(c), colours.accent.withValues(alpha: 0.42), inset: 1);
     }
 
     p.painter.paint(canvas, Offset(0, p.headingHeight));
 
-    // Pause chips at their placeholders.
     final boxes = p.painter.inlinePlaceholderBoxes ?? const [];
     final chip = Paint()..color = colours.surface3;
     for (var i = 0; i < p.placeholderOf.length; i++) {
@@ -925,7 +870,6 @@ class TranscriptParagraphPainter extends CustomPainter {
         label.dispose();
       }
     }
-    // Edit points: a hairline between the words, x-height tall.
     final edit = Paint()
       ..color = colours.hairlineStrong
       ..strokeWidth = 1;
@@ -948,7 +892,6 @@ class TranscriptParagraphPainter extends CustomPainter {
       canvas.drawLine(
           Offset(x, mid - xHeight / 2), Offset(x, mid + xHeight / 2), edit);
     }
-    // The caret, and the drop caret while words are in hand.
     void caret(int token, Color colour) {
       final c = p.caretAt(token);
       if (c == null) return;

@@ -18,7 +18,6 @@ import '../widgets/controls.dart';
 /// Asks the system every few seconds whether it is saving power, and shows
 /// [wrap] of a short warning while it is.
 class PowerSavingMark extends StatefulWidget {
-  /// Puts the mark in the status line's own pill and divider.
   final Widget Function(Widget mark) wrap;
 
   /// The question, which the tests answer themselves.

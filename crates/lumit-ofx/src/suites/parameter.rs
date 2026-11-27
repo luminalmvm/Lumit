@@ -49,9 +49,6 @@ use crate::props::{PropValue, PropertySet};
 use crate::status::{Status, StatusResult};
 use crate::suites::{cstr, guard, out_handle};
 
-// The four C-variadic entry points, defined in `variadic.c` (see the note at
-// the top of that file, and `OfxParameterSuiteV1` for why they are not Rust),
-// and the one call that tells the C where the Rust halves are.
 extern "C" {
     fn lumit_ofx_param_get_value(param: OfxParamHandle, ...) -> c_int;
     fn lumit_ofx_param_get_value_at_time(param: OfxParamHandle, time: OfxTime, ...) -> c_int;
@@ -86,7 +83,6 @@ pub(crate) fn bind() {
     });
 }
 
-/// The table handed out by `fetchSuite`.
 pub static SUITE: OfxParameterSuiteV1 = OfxParameterSuiteV1 {
     param_define,
     param_get_handle,
@@ -108,7 +104,6 @@ pub static SUITE: OfxParameterSuiteV1 = OfxParameterSuiteV1 {
     param_edit_end,
 };
 
-/// The effect a param-set handle belongs to (see [`HandleKind::ParamSet`]).
 fn effect_of(param_set: OfxParamSetHandle) -> Result<Handle, Status> {
     let handle = Handle::from_ptr(param_set);
     if handle.kind() != Some(HandleKind::ParamSet) {
@@ -233,7 +228,6 @@ fn param_property_set(name: &str, param_type: &str) -> PropertySet {
             );
             seed_string(&mut set, keys::PARAM_DOUBLE_TYPE, double_types::PLAIN);
         }
-        // A colour channel is nought to one until the plugin says otherwise.
         param_types::RGB | param_types::RGBA => {
             let mut default = vec![0.0; dimensions];
             if param_type == param_types::RGBA {
@@ -284,11 +278,9 @@ fn param_property_set(name: &str, param_type: &str) -> PropertySet {
         _ => {}
     }
 
-    // Shown and live until the plugin says otherwise, which it reads back.
     set.seed(keys::PARAM_SECRET, PropValue::int(0));
     set.seed(keys::PARAM_ENABLED, PropValue::int(1));
 
-    // Whether a parameter animates is the plugin's to say, and P3's to honour.
     set.seed(
         keys::PARAM_ANIMATES,
         PropValue::int(i32::from(!matches!(
@@ -350,8 +342,6 @@ unsafe extern "C" fn param_get_property_set(
         unsafe { out_handle(prop_handle, props) }
     })
 }
-
-// ---------------------------------------------------------- reading values --
 
 /// Write one parameter's value into the plugin's out-parameters.
 ///
@@ -475,8 +465,6 @@ fn live_param(param: OfxParamHandle) -> Result<(), Status> {
     state().params.get(Handle::from_ptr(param)).map(|_| ())
 }
 
-/// As [`live_param`], for the entry points that take the bag rather than one
-/// parameter.
 fn live_param_set(param_set: OfxParamSetHandle) -> Result<(), Status> {
     let effect = effect_of(param_set)?;
     state().effects.get(effect).map(|_| ())
@@ -502,8 +490,6 @@ unsafe extern "C" fn param_get_integral(
     })
 }
 
-// ---------------------------------------------------------- writing values --
-
 /// Which of the three shapes a trailing argument is. The numbers are the
 /// contract with `variadic.c`, which pulls an `int`, a `double` or a
 /// `const char *` off the list accordingly.
@@ -515,8 +501,6 @@ enum Reading {
     Text = 2,
 }
 
-/// How many trailing arguments a parameter of this type carries, and how to
-/// read them. `None` for the types that have no value to write at all.
 fn slots_of(param_type: &str) -> Option<(usize, Reading)> {
     match param_type {
         param_types::INTEGER | param_types::BOOLEAN | param_types::CHOICE => {
@@ -690,7 +674,6 @@ unsafe extern "C" fn param_get_key_time(
     time: *mut OfxTime,
 ) -> c_int {
     let _ = (nth_key, time);
-    // No keys, so no nth one.
     guard(|| {
         live_param(param)?;
         Err(Status::ErrBadIndex)
@@ -704,7 +687,6 @@ unsafe extern "C" fn param_get_key_index(
     index: *mut c_int,
 ) -> c_int {
     let _ = (time, direction, index);
-    // No keys, so none near `time`.
     guard(|| {
         live_param(param)?;
         Err(Status::Failed)

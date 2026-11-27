@@ -25,7 +25,6 @@ use super::cie;
 use super::fft::{fft2_inplace, fftshift2, Cx};
 use super::lens_library::LENS_LIBRARY;
 
-/// Resolved Lens flare parameters (docs/08 §3.27).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LensFlareParams {
     /// Light position in RASTER PIXELS (px@comp converted through the §2.3
@@ -55,7 +54,6 @@ pub struct LensFlareParams {
     /// 0..1: softens the iris edge (feathers the pupil mask and with it
     /// every ghost's rim).
     pub aperture_softness: f32,
-    /// Gain on the ghost train alone.
     pub ghost_intensity: f32,
     /// Softens the rendered ghosts: a box-blur radius in raster
     /// pixels (3 passes approximate a Gaussian), px@comp.
@@ -80,7 +78,6 @@ pub struct LensFlareParams {
     /// element count are ignored, and a lens with more elements than
     /// [`MAX_COATING_ELEMENTS`] keeps its file's coating on the rest.
     pub coating_elements: [u32; MAX_COATING_ELEMENTS],
-    /// Gain on the starburst alone.
     pub starburst_intensity: f32,
     /// Scale of the WHOLE flare about the optical centre (ghost train and
     /// starburst together); 1 is natural size.
@@ -112,7 +109,6 @@ pub struct LensFlareParams {
     /// Matte mode: linear luma at/above which a detected source flares fully
     /// (open above; a soft gate, see `threshold_softness`).
     pub threshold: f32,
-    /// Matte mode: half-width of the soft gate around the threshold.
     pub threshold_softness: f32,
     /// Scene-linear RGB multiplying every light's colour, in every source
     /// mode: in Manual it *is* the flare's colour (the light is
@@ -202,8 +198,6 @@ pub const BLEND_ADD: u32 = 1;
 /// black; the alpha clamp at the end is the caller's, not this function's.
 pub fn flare_blend(mode: u32, d: [f32; 4], e: [f32; 4]) -> [f32; 4] {
     match mode {
-        // Normal: the element replaces the layer, on the opaque black it
-        // was rendered against. The old Background = Black, as a blend.
         BLEND_NORMAL => [e[0], e[1], e[2], 1.0],
         // 1..: the light-combine table Echo's combine shares, the
         // layer as backdrop. Index 1 (Add) is bit-identical to the pre-menu
@@ -234,9 +228,7 @@ pub const SENSOR_MM: [f32; 2] = [36.0, 24.0];
 
 /// Baked starburst sprite side (power of two — the FFT needs it).
 pub const STARBURST_RES: u32 = 256;
-/// Spectral samples integrated into the starburst bake.
 pub const STARBURST_SAMPLES: u32 = 100;
-/// Aperture-image side for the starburst FFT.
 pub const APERTURE_RES: u32 = 256;
 
 /// The iris radius as a fraction of the aperture image's half-extent: the
@@ -322,7 +314,6 @@ pub const FOUR_BOUNCE_PROBE_CAP: usize = 1500;
 /// and would render at the Quality ladder's base grid, which is what an
 /// unmeasurable pair has always done.
 pub const MAX_RENDERED_PAIRS: usize = 200;
-/// Rays start this far in front of the first surface, mm.
 pub const START_Z_BACKOFF_MM: f32 = 20.0;
 
 /// One flare source: where it sits (raster fraction) and its colour already
@@ -365,7 +356,6 @@ pub struct FlareLight {
 /// than by the compiler, because the shader's copy of each literal is
 /// compared against this one bit for bit by test.
 pub const PHI_U: f32 = 0.754_877_7;
-/// See [`PHI_U`].
 pub const PHI_V: f32 = 0.682_327_8;
 
 /// Phase step between wavelength bands in the source rectangle: band
@@ -423,7 +413,6 @@ pub(crate) fn source_jitter(i: usize, j: usize, band: usize, extent: [f32; 2]) -
 /// The fraction of the raster below which a source's starburst is a single
 /// stamp — that is, below which the source is a point of light.
 pub const SB_MIN_EXTENT: f32 = 0.004;
-/// Starburst stamps per axis across a source wider than [`SB_MIN_EXTENT`].
 pub const SB_STAMPS: u32 = 3;
 
 /// How many starburst stamps a source spends on each axis.
@@ -457,7 +446,6 @@ pub(crate) fn starburst_stamp_offset(i: u32, n: u32) -> f32 {
     i as f32 / (n - 1) as f32 * 2.0 - 1.0
 }
 
-/// A dead light slot — the value the fixed `lights` array is padded with.
 pub const DEAD_LIGHT: FlareLight = FlareLight {
     pos: [0.0, 0.0],
     rgb: [0.0, 0.0, 0.0],
@@ -678,7 +666,6 @@ pub fn detect_lights(
             }
         }
     }
-    // A tile is lit when its brightest pixel passes the gate.
     let lit: Vec<bool> = tiles
         .iter()
         .map(|s| s.luma_max > 0.0 && threshold_gate(s.luma_max, threshold, softness) > 0.0)
@@ -727,7 +714,6 @@ pub fn detect_lights(
             }
         }
     }
-    // Each patch's light, summed tile by tile in reading order.
     let mut acc = vec![[0.0_f32; 3]; tiles.len()];
     // Per patch: the flux centroid as (Σ f·x, Σ f·y, Σ f), and the second
     // moment (Σ f·x², Σ f·y²) that gives the source its EXTENT — how wide the
@@ -830,10 +816,6 @@ pub fn detect_lights(
         .collect()
 }
 
-// ---------------------------------------------------------------------------
-// The lens prescription (parsed from the embedded .lens library).
-// ---------------------------------------------------------------------------
-
 /// One optical surface, flattened for the trace and mirrored field-for-field
 /// by the WGSL struct. The Cauchy pair describes the medium AFTER this
 /// surface (1.0/0.0 = air); `coating_layers` is the .lens coating column
@@ -882,7 +864,6 @@ pub struct FlareBaked {
     /// Native f-number (from the collection filename; estimated from the
     /// front aperture when unknown).
     pub native_fstop: f32,
-    /// Front-element clear semi-aperture, mm.
     pub front_semi_ap: f32,
     /// The pupil spray's radius, mm: the entrance pupil
     /// `focal / (2 · native_fstop)` with half again as margin (ghost paths
@@ -890,7 +871,6 @@ pub struct FlareBaked {
     /// element. Spraying the whole front bezel instead wastes most rays —
     /// the Master Prime's 63 mm bezel passes ~4% of a full-width spray.
     pub pupil_mm: f32,
-    /// Ray start z, mm (in front of the first surface).
     pub start_z_mm: f32,
     /// Ranked ghost paths, brightest first; the frame renders the first
     /// `max_ghosts`. Two-bounce and four-bounce paths share one list and one
@@ -924,9 +904,7 @@ pub struct FlareBaked {
     pub starburst: Vec<f32>,
 }
 
-/// A parsed .lens prescription before flattening.
 pub struct Prescription {
-    /// The stated focal length, mm.
     pub focal_mm: f32,
     /// Surfaces front to back with running vertex z.
     pub surfaces: Vec<FlareSurface>,
@@ -980,10 +958,6 @@ pub fn fstop_scale(native_fstop: f32, fstop: f32) -> f32 {
     (native_fstop / fstop).clamp(0.05, 1.0)
 }
 
-// ---------------------------------------------------------------------------
-// Optics primitives — the exact maths the WGSL splat kernel mirrors.
-// ---------------------------------------------------------------------------
-
 /// Cauchy dispersion pair from a prescription's (n_d, V) — impl note §1
 /// deviation D1. Returns (A, B[µm²]); air (n ≤ 1 or V ≤ 0) is (n_d, 0).
 pub(crate) fn cauchy_from_abbe(n_d: f32, v: f32) -> (f32, f32) {
@@ -999,7 +973,6 @@ pub(crate) fn cauchy_from_abbe(n_d: f32, v: f32) -> (f32, f32) {
     (a as f32, b as f32)
 }
 
-/// Refractive index at `lambda_nm` from a Cauchy pair.
 pub fn cauchy_ior(a: f32, b: f32, lambda_nm: f32) -> f32 {
     let um = lambda_nm * 1e-3;
     a + b / (um * um)
@@ -1012,7 +985,7 @@ pub fn fresnel_cos(cos_i: f32, n1: f32, n2: f32) -> f32 {
     let eta = n1 / n2;
     let sin2_t = eta * eta * (1.0 - cos_i * cos_i);
     if sin2_t >= 1.0 {
-        return 1.0; // total internal reflection
+        return 1.0;
     }
     let cos_t = (1.0 - sin2_t).sqrt();
     let rs = (n1 * cos_i - n2 * cos_t) / (n1 * cos_i + n2 * cos_t);
@@ -1050,7 +1023,6 @@ pub fn coating_reflectance(
     (num / den).clamp(0.0, 1.0)
 }
 
-/// The design wavelength every coating in the library is cut for, nm.
 pub const COATING_DESIGN_NM: f32 = 550.0;
 /// Magnesium fluoride — the classic single-layer AR, and the outer layer of
 /// every stack below.
@@ -1059,7 +1031,6 @@ pub const MGF2_N: f32 = 1.38;
 pub const AL2O3_N: f32 = 1.63;
 /// Zirconia, the high-index layer.
 pub const ZRO2_N: f32 = 2.10;
-/// Most layers a stack may have.
 pub const MAX_COATING_LAYERS: usize = 6;
 
 /// The canonical stack for a `.lens` coating column, **outermost first** —
@@ -1118,7 +1089,6 @@ pub fn coating_stack(layers: f32) -> [(f32, f32); MAX_COATING_LAYERS] {
 /// held before per-element coatings existed.
 pub const COATING_AS_FILE: u32 = 0;
 
-/// How many entries [`coating_design`] offers, including [`COATING_AS_FILE`].
 pub const COATING_DESIGNS: u32 = 7;
 
 /// Most glass elements a lens may have its coatings set on individually. The
@@ -1134,7 +1104,6 @@ pub struct CoatingDesign {
     /// `(refractive index, optical thickness in quarter waves)` per layer,
     /// outermost first; a zero index ends the stack.
     pub stack: [(f32, f32); MAX_COATING_LAYERS],
-    /// The wavelength the quarter waves are cut at, nm.
     pub design_nm: f32,
 }
 
@@ -1282,8 +1251,6 @@ pub fn library_element_counts() -> Vec<u32> {
         .collect()
 }
 
-/// Which lenses have at least `n` glass elements, as [`LENS_LIBRARY`]
-/// indices: the set an element row's group is shown for.
 #[must_use]
 pub fn lenses_with_at_least(n: u32) -> Vec<u32> {
     library_element_counts()
@@ -1294,8 +1261,6 @@ pub fn lenses_with_at_least(n: u32) -> Vec<u32> {
         .collect()
 }
 
-/// The palette's labels, in index order — the Choice options the per-element
-/// coating rows offer.
 pub const COATING_DESIGN_OPTIONS: &[&str] = &[
     "As the lens file",
     "Uncoated",
@@ -1333,19 +1298,15 @@ pub fn surface_elements(surfaces: &[FlareSurface]) -> Vec<i32> {
     for (i, s) in surfaces.iter().enumerate() {
         let glass_after = s.cauchy_a > 1.0001;
         if glass_after {
-            // This row opens a new piece of glass.
             element += 1;
             out[i] = element;
         } else if element >= 0 && i > 0 && surfaces[i - 1].cauchy_a > 1.0001 {
-            // …and this one closes the piece the row before opened.
             out[i] = element;
         }
     }
     out
 }
 
-/// How many glass elements a surface table has — what the panel shows
-/// a coating row for.
 #[must_use]
 pub fn element_count(surfaces: &[FlareSurface]) -> usize {
     surfaces.iter().filter(|s| s.cauchy_a > 1.0001).count()
@@ -1412,7 +1373,6 @@ pub fn stack_reflectance(
         }
         return stack_reflectance((1.0 - s * s).sqrt(), n2, n1, design, lambda_nm);
     }
-    // Snell's invariant: n·sinθ is the same in every medium of the stack.
     let sin_i = n1 * (1.0 - cos_i * cos_i).max(0.0).sqrt();
     let cos_in_medium = |n: f32| -> Option<f32> {
         let s = sin_i / n.max(1e-6);
@@ -1425,13 +1385,11 @@ pub fn stack_reflectance(
         return fresnel_cos(cos_i, n1, n2);
     };
 
-    // `s` polarisation then `p`; unpolarised light is their mean.
     let mut total = 0.0;
     for pol in 0..2 {
         let admittance = |n: f32, c: f32| if pol == 0 { n * c } else { n / c };
         let eta0 = admittance(n1, cos_i);
         let eta_sub = admittance(n2, cos_sub);
-        // The identity matrix, as (m00, m01, m10, m11) of complex pairs.
         let mut m = [(1.0f32, 0.0f32), (0.0, 0.0), (0.0, 0.0), (1.0, 0.0)];
         let mut valid = true;
         for &(n, quarters) in stack.iter() {
@@ -1442,14 +1400,11 @@ pub fn stack_reflectance(
                 valid = false;
                 break;
             };
-            // Physical thickness from the optical one: `quarters` quarter
-            // waves at the design wavelength.
             let d_nm = quarters * design.design_nm.max(1.0) / (4.0 * n);
             let delta = 2.0 * std::f32::consts::PI * n * d_nm * cos_l / lambda_nm.max(1e-6);
             let eta = admittance(n, cos_l);
             let (cd, sd) = (delta.cos(), delta.sin());
             let l = [(cd, 0.0), (0.0, sd / eta), (0.0, eta * sd), (cd, 0.0)];
-            // m = m · l
             let a = [
                 (
                     cmul(m[0], l[0]).0 + cmul(m[1], l[2]).0,
@@ -1473,10 +1428,8 @@ pub fn stack_reflectance(
         if !valid {
             return fresnel_cos(cos_i, n1, n2);
         }
-        // [B, C] = M · [1, η_sub]
         let b = (m[0].0 + m[1].0 * eta_sub, m[0].1 + m[1].1 * eta_sub);
         let c = (m[2].0 + m[3].0 * eta_sub, m[2].1 + m[3].1 * eta_sub);
-        // r = (η₀·B − C) / (η₀·B + C)
         let num = (eta0 * b.0 - c.0, eta0 * b.1 - c.1);
         let den = (eta0 * b.0 + c.0, eta0 * b.1 + c.1);
         let dm = den.0 * den.0 + den.1 * den.1;
@@ -1548,7 +1501,6 @@ pub(crate) fn refract3(i: [f32; 3], n: [f32; 3], o: f32) -> Option<[f32; 3]> {
     Some([v[0] * inv, v[1] * inv, v[2] * inv])
 }
 
-/// Mirror reflection of incidence `i` about unit normal `n`.
 pub(crate) fn reflect3(i: [f32; 3], n: [f32; 3]) -> [f32; 3] {
     let d = 2.0 * (i[0] * n[0] + i[1] * n[1] + i[2] * n[2]);
     let v = [i[0] - d * n[0], i[1] - d * n[1], i[2] - d * n[2]];
@@ -1829,7 +1781,6 @@ pub fn trace_splat(
         Some(())
     };
 
-    // Phase 1: forward through 0..=b, reflecting at b.
     for (s_idx, s) in surfs.iter().enumerate().take(b_idx + 1) {
         step(&mut ray, s, ior_at(s), s_idx == b_idx)?;
     }
@@ -1863,13 +1814,11 @@ pub fn trace_splat(
                 ray.ior = ior_at(s);
             }
         }
-        // Phase 5: forward through d+1..n.
         for s in surfs.iter().skip(d_idx + 1) {
             step(&mut ray, s, ior_at(s), false)?;
         }
     }
 
-    // Propagate to the (focus-shifted) sensor plane.
     if ray.dir[2].abs() < 1e-12 {
         return None;
     }
@@ -1882,7 +1831,6 @@ pub fn trace_splat(
     if !x.is_finite() || !y.is_finite() || !ray.weight.is_finite() {
         return None;
     }
-    // Housing feather: full inside 0.95, gone at 1.0 (smoothstep).
     let ft = ((1.0 - ray.rrel2.sqrt()) / 0.05).clamp(0.0, 1.0);
     Some(([x, y], ray.weight * (ft * ft * (3.0 - 2.0 * ft))))
 }
@@ -1935,7 +1883,6 @@ pub fn trace_transmit(
             rrel2 = rrel2.max((pos[0] * pos[0] + pos[1] * pos[1]) / (semi_r * semi_r));
         }
         let n2 = cauchy_ior(s.cauchy_a, s.cauchy_b, lambda_nm);
-        // TIR on the imaging path means nothing transmits along it.
         d = refract3(d, norm, ior / n2)?;
         ior = n2;
     }
@@ -2064,12 +2011,10 @@ pub fn trace_splat_spectral(
         Some(())
     };
 
-    // Phase 1: forward through 0..=b, reflecting at b.
     for s_idx in 0..=b_idx {
         let n2 = ior_at(&surfs[s_idx]);
         step(&mut ray, s_idx, n2, s_idx == b_idx, false)?;
     }
-    // Phase 2: backward through b-1..=a, reflecting at a.
     for s_idx in (a_idx..b_idx).rev() {
         let reflect = s_idx == a_idx;
         let n2 = ior_before(s_idx);
@@ -2097,7 +2042,6 @@ pub fn trace_splat_spectral(
                 ray.ior = ior_at(&surfs[s_idx]);
             }
         }
-        // Phase 5: forward through d+1..n.
         for s_idx in (d_idx + 1)..n {
             let n2 = ior_at(&surfs[s_idx]);
             step(&mut ray, s_idx, n2, false, false)?;
@@ -2118,7 +2062,6 @@ pub fn trace_splat_spectral(
     if !x.is_finite() || !y.is_finite() {
         return None;
     }
-    // Band-integrate: rgb = sum over subs of throughput × CIE weight.
     let mut rgb = [0.0_f32; 3];
     for k in 0..SPECTRAL_SUB {
         let t = ray.thru[k];
@@ -2129,15 +2072,9 @@ pub fn trace_splat_spectral(
         rgb[1] += t * band.sub_rgb[k][1];
         rgb[2] += t * band.sub_rgb[k][2];
     }
-    // Housing feather: full inside 0.95, gone at 1.0 (smoothstep).
     let ft = ((1.0 - ray.rrel2.sqrt()) / 0.05).clamp(0.0, 1.0);
     Some(([x, y], ft * ft * (3.0 - 2.0 * ft), rgb))
 }
-
-// ---------------------------------------------------------------------------
-// Pupil sampling: deterministic Halton spray over the front element,
-// masked by the iris polygon with roundness and softness.
-// ---------------------------------------------------------------------------
 
 /// The pupil mask weight for a unit-disc point: 1 inside the iris shape,
 /// feathering to 0 at the edge over `softness`. The polygon bound blends
@@ -2153,7 +2090,6 @@ pub fn pupil_mask(u: f32, v: f32, blades: u32, rot_rad: f32, roundness: f32, sof
     if a < 0.0 {
         a += sector;
     }
-    // Polygon radial bound at this angle, blended toward the unit circle.
     let poly_bound = apothem / (a - sector * 0.5).cos();
     let bound = poly_bound + (1.0 - poly_bound) * roundness.clamp(0.0, 1.0);
     let soft = (softness.clamp(0.0, 1.0) * bound).max(1e-4);
@@ -2328,7 +2264,6 @@ pub fn plan_frame_grids(base_side: u32, spreads: &[f32], needs: &[f32]) -> Vec<u
         let grant = if extra <= budget {
             want
         } else {
-            // Partial grant: the side whose square spends what remains.
             ((budget + sq(rung[i])) as f64).sqrt().floor() as u32
         };
         let grant = grant.clamp(rung[i], 512);
@@ -2425,10 +2360,6 @@ pub fn effective_roundness(roundness: f32, fstop: f32, native_fstop: f32) -> f32
     roundness.max(wide_open)
 }
 
-// ---------------------------------------------------------------------------
-// Bake
-// ---------------------------------------------------------------------------
-
 /// A twentieth of a stop — the step [`bake_params`] snaps the working
 /// f-number to. A stop is a factor of √2 in f-number, so the step is
 /// `2^(1/40)`, about 1.7%.
@@ -2437,7 +2368,6 @@ pub const FSTOP_BAKE_STEP_STOPS: f32 = 0.05;
 /// The step the remaining continuous iris dials snap to (degrees for the
 /// rotation, a fraction of the 0..1 range for roundness and softness).
 pub const APERTURE_ROTATION_BAKE_STEP_DEG: f32 = 0.5;
-/// The bake step for Roundness and Iris softness, both 0..1 dials.
 pub const APERTURE_BAKE_STEP: f32 = 1.0 / 256.0;
 
 fn snap(v: f32, step: f32) -> f32 {
@@ -2634,7 +2564,6 @@ pub(crate) fn bake_starburst(aperture: &[f32], res: u32) -> Vec<f32> {
     // starbursts read (the core clips to white either way).
     let pattern: Vec<f32> = cx.iter().map(|z| z.norm_sq().sqrt() as f32).collect();
 
-    // Spectral integration into RGB.
     let samples = STARBURST_SAMPLES;
     let mut out = vec![0.0_f32; n * n * 3];
     let range = cie::LAMBDA_MAX - cie::LAMBDA_MIN;
@@ -2653,11 +2582,6 @@ pub(crate) fn bake_starburst(aperture: &[f32], res: u32) -> Vec<f32> {
         let b = pattern[y1 * n + x0] * (1.0 - tx) + pattern[y1 * n + x1] * tx;
         a * (1.0 - ty) + b * ty
     };
-    // The spectral ladder, built ONCE: its chromatic scale and its
-    // colour-matching weights are the same for every texel of the sprite, but
-    // they used to be derived inside the per-texel loop — so the CIE table was
-    // interpolated 6.5 million times to produce a hundred distinct answers.
-    // Same numbers, same order, hoisted out.
     let bands: Vec<(f32, [f32; 3])> = (0..samples)
         .map(|k| {
             let step = k as f32 / samples as f32;
@@ -2716,10 +2640,6 @@ pub(crate) fn bake_starburst(aperture: &[f32], res: u32) -> Vec<f32> {
     }
     out
 }
-
-// ---------------------------------------------------------------------------
-// Ghost-edge Fresnel ringing: the knife-edge rim.
-// ---------------------------------------------------------------------------
 
 /// The **Fresnel number** of one ghost's own edge diffraction.
 ///
@@ -3335,10 +3255,6 @@ pub fn bake_with(p: &LensFlareParams, lens_text: Option<&str>) -> FlareBaked {
     baked
 }
 
-// ---------------------------------------------------------------------------
-// Frame-time shared derivations (CPU reference and GPU uniforms).
-// ---------------------------------------------------------------------------
-
 /// The traced wavelengths with their linear-RGB weights. Each traced λ
 /// *represents its whole band* of the visible range, so its weight is the
 /// band's INTEGRAL of the colour-matching functions (sampled at 2 nm), not a
@@ -3383,10 +3299,6 @@ pub fn lambda_weights(count: u32, dispersion: f32) -> Vec<(f32, [f32; 3])> {
         })
         .collect()
 }
-
-// ---------------------------------------------------------------------------
-// Spectral radiometry (entry A2)
-// ---------------------------------------------------------------------------
 
 /// Lambda samples in the baked reflectance table: [`cie::LAMBDA_MIN`] to
 /// [`cie::LAMBDA_MAX`] inclusive at 5 nm - fine enough to resolve a 7-layer
@@ -3741,7 +3653,6 @@ pub(crate) fn ray_axes(
     let at = |x: usize, y: usize| corners[y * side + x].map(|(p, _, _)| p);
     let axis = |lo: Option<[f32; 2]>, here: [f32; 2], hi: Option<[f32; 2]>| -> Option<[f32; 2]> {
         match (lo, hi) {
-            // Both neighbours live: the longer one-sided step.
             (Some(a), Some(b)) => {
                 let lov = [here[0] - a[0], here[1] - a[1]];
                 let hiv = [b[0] - here[0], b[1] - here[1]];
@@ -3769,8 +3680,6 @@ pub(crate) fn ray_axes(
     let half = |v: [f32; 2]| [v[0] / 2.0, v[1] / 2.0];
     match (ax, ay) {
         (Some(x), Some(y)) => (half(x), half(y)),
-        // One live axis: give the dead one the anti-alias floor, at right
-        // angles, so the splat is a thin quad along the live direction.
         (Some(x), None) => {
             let len = (x[0] * x[0] + x[1] * x[1]).sqrt().max(1e-6);
             let n = [
@@ -3787,7 +3696,6 @@ pub(crate) fn ray_axes(
             ];
             (n, half(y))
         }
-        // A lone survivor: the floor in both directions.
         (None, None) => ([MIN_SPLAT_AXIS_PX, 0.0], [0.0, MIN_SPLAT_AXIS_PX]),
     }
 }
@@ -3868,7 +3776,6 @@ pub(crate) fn splat_ray(
     flux_rgb: [f32; 3],
     cell_area_px: f32,
 ) {
-    // The anti-alias floor per axis, preserving direction.
     let floor_axis = |a: [f32; 2], fallback: [f32; 2]| -> [f32; 2] {
         let len = (a[0] * a[0] + a[1] * a[1]).sqrt();
         if len < 1e-6 {
@@ -3984,8 +3891,6 @@ pub fn cpu_flare(
     if w == 0 || h == 0 || p.ghost_intensity <= 0.0 {
         return out;
     }
-    // The deposit pyramid: splats land at the level their size
-    // affords, and the resolve below sums the levels into `out`.
     let mut deposit = DepositLevels::new(rw, rh);
     let (tier_base, tier_lambda, _) = quality_ladder(p.quality);
     // The Detail dial scales the tier's base AND its wavelength count
@@ -4189,8 +4094,6 @@ pub fn cpu_flare(
             }
         }
     }
-    // The pyramid's levels sum into the flat buffer — the WGSL
-    // resolve, op for op.
     deposit.resolve(&mut out);
     // The radius is a distance the padding does not change, applied
     // over the padded raster; the flare buffer's own divisor is what it is
@@ -4217,7 +4120,6 @@ pub(crate) fn blur_flare(buf: &mut [f32], w: u32, h: u32, radius_px: u32, passes
     let norm = 1.0 / (2 * r + 1) as f32;
     let mut tmp = vec![0.0_f32; buf.len()];
     for _ in 0..passes.max(1) {
-        // Horizontal into tmp.
         for y in 0..h {
             for x in 0..w {
                 let mut acc = [0.0_f32; 3];
@@ -4234,7 +4136,6 @@ pub(crate) fn blur_flare(buf: &mut [f32], w: u32, h: u32, radius_px: u32, passes
                 tmp[o + 2] = acc[2] * norm;
             }
         }
-        // Vertical back into buf.
         for y in 0..h {
             for x in 0..w {
                 let mut acc = [0.0_f32; 3];
@@ -4273,7 +4174,6 @@ pub fn ghost_blur_radius(softness_px: f32, flare_div: u32) -> u32 {
     (r.round() as u32).min(MAX_BLUR_RADIUS_PX)
 }
 
-/// See [`ghost_blur_radius`].
 pub const MAX_BLUR_RADIUS_PX: u32 = 80;
 
 /// The combine stage, mirrored by the WGSL combine kernel: `out = orig +

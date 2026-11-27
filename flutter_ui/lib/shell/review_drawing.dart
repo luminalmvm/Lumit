@@ -51,7 +51,6 @@ class ReviewDrawing extends StatelessWidget {
   }
 }
 
-/// The hairline round the box, over the picture and not beside it.
 class _EdgePainter extends CustomPainter {
   final Color colour;
   final double radius;
@@ -90,7 +89,6 @@ class _DrawingPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final box = Offset.zero & size;
     canvas.drawRect(box, Paint()..color = ground);
-    // The picture, whole, as large as the box lets it be, and in its middle.
     final wide = math.min(size.width, size.height * aspect);
     final picture = Rect.fromCenter(
         center: box.center, width: wide, height: wide / aspect);

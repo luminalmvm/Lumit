@@ -67,7 +67,6 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
   final ExpressionTextEditingController _code =
       ExpressionTextEditingController();
 
-  /// The saved expression the editor was loaded from, by name.
   String? _picked;
 
   /// The language the text in the editor is written in. It is saved with the
@@ -91,11 +90,9 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
   @override
   void initState() {
     super.initState();
-    // The list filters as you type, and the buttons follow the two fields.
     for (final field in [_search, _name, _code]) {
       field.addListener(_redraw);
     }
-    // Ctrl+F asks the focused panel for its search box.
     _boundUi = Provider.of<LumitUiState>(context, listen: false);
     _boundUi!.panelSearchRequest.addListener(_onSearchRequested);
     _language = _boundUi!.workspace.defaultExpressionLanguage;
@@ -104,7 +101,6 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
     _follow();
   }
 
-  /// Show the picked property's expression, when the editor is free to.
   void _follow() {
     if (!mounted) return;
     GraphChannel? driven;
@@ -218,8 +214,6 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
     _follow();
   }
 
-  /// The property the text is for, which is where Apply writes, then what the
-  /// text comes to at the playhead or why it comes to nothing.
   Widget _readout(LumitTheme t, LumitUiState ui) {
     final targets = _targets(ui);
     final on = _linked ?? targets.firstOrNull;
@@ -282,7 +276,6 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
     );
   }
 
-  /// A saved expression's menu.
   void _rowMenu(LumitState app, LumitUiState ui, String name, Offset at) {
     final canApply = _targets(ui).isNotEmpty;
     // One of the set that comes with Lumit, which is not the user's to rename
@@ -332,7 +325,6 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
     );
   }
 
-  /// The menu on the list's ground.
   void _groundMenu(LumitState app, LumitUiState ui, Offset at) {
     final any = ui.workspace.savedExpressions.isNotEmpty;
     showMenuAt<void>(
@@ -441,7 +433,6 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
     setState(() => _picked = name);
   }
 
-  /// Write every saved expression to one file, to hand to someone.
   Future<void> _export(LumitState app, LumitUiState ui) async {
     final path = await pickExpressionsSaveLocation();
     if (path == null) return;
@@ -453,7 +444,6 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
     }
   }
 
-  /// Add the expressions in a file to the saved ones.
   Future<void> _import(LumitState app, LumitUiState ui) async {
     final path = await pickExpressionsToOpen();
     if (path == null) return;
@@ -488,7 +478,6 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
     final app = Provider.of<LumitState>(context, listen: false);
     final ui = Provider.of<LumitUiState>(context);
     final saved = ui.workspace.savedExpressions;
-    // The editor is coloured in the language the dropdown shows.
     _code.language = expressionGrammar(_language);
     final needle = _search.text.trim().toLowerCase();
     // A search reads the script as well as the name, so "noise" finds every
@@ -499,7 +488,6 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
             value.toLowerCase().contains(needle))
           key,
     ]..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-    // The starters after the user's own, less any kept under the same name.
     final starters = [
       for (final (name, code) in _starters)
         if (!saved.containsKey(name) &&
@@ -508,7 +496,6 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
           name,
     ];
 
-    // A mark on the bar over the list, greyed when it can do nothing.
     Widget mark(String key, String tip, String icon, VoidCallback? onPressed) =>
         LumitTooltip(
           message: tip,
@@ -595,7 +582,6 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
           flex: 3,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
-            // Ctrl+Enter keeps the edit without leaving the text.
             child: Focus(
               canRequestFocus: false,
               skipTraversal: true,

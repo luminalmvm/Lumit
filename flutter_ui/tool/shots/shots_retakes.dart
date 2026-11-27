@@ -1,44 +1,3 @@
-// Manual screenshots, retakes: the six shots the first pass got wrong.
-//
-// workspace · export · blend-modes · keyframes-lane · waveform · speed-ramp
-//
-// Each is restaged rather than re-cropped, because five of the six were wrong
-// in the staging rather than in the frame. What changed, shot by shot:
-//
-// * `workspace.png` — the Debug View tab is gone. It is not a dev-mode
-//   accident: `defaultLayout()` in `state/dock.dart` puts `Panel.debug` in the
-//   right-hand tab group of *every* shipped preset, so no preset excludes it.
-//   It is hidden here the one way a user can hide it — Window ▸ Debug View,
-//   whose menu item calls `setPanelVisible(ui.split, Panel.debug, false)`, the
-//   same call made straight from the sweep.
-// * `export.png` — nothing to restage: the dialogue now opens on the
-//   `youtube_1080p60` preset with its 16 Mb/s stamp instead of Custom and a
-//   zero. Reshot against the rebuilt bridge.
-// * `blend-modes.png` — likewise: the compound modes now cross as sentence
-//   case ("Colour burn", "Soft light") rather than as identifier names.
-// * `keyframes-lane.png` — the crop reaches the outline's left edge, so the
-//   property names sit beside the lanes they belong to. A row of diamonds with
-//   nothing naming it is a picture of diamonds, not of a property lane.
-// * `waveform.png` — three changes, because the lane is 22 logical pixels tall
-//   and nothing in the panel makes it taller. The fixture is regenerated as a
-//   full-scale beat pattern (four on the floor, hats, bass, pad) instead of the
-//   quiet bed it was; the wave is stood on the floor of its row rather than
-//   centred about silence (Settings ▸ Interface ▸ *Waveforms from bottom*),
-//   which puts the whole row's height under signal instead of half of it
-//   mirroring the other half; and the crop is pulled in to the fold.
-// * `speed-ramp.png` — the ramp's last key was at frame 240 of a 250-frame
-//   composition, so the last ten frames held their value and the speed lens
-//   drew them, correctly, as a cliff to zero. The map now runs to the end of
-//   the composition and the curve reads as one ramp.
-//
-// Three projects, staged one after another in the same process: the six shots
-// belong to three different sweeps (1/7, 2 and 3) and three different projects,
-// and `newProject` is exactly what File ▸ New does.
-//
-//   cargo build -p lumit_bridge
-//   cd flutter_ui
-//   $env:LUMIT_SHOTS=1   # PowerShell; LUMIT_SHOTS=1 elsewhere
-//   flutter run -d windows -t tool/shots/shots_retakes.dart
 
 // `_context` is not held across the gaps — it is re-read from the live tree at
 // every use, which is what the lint is there to make you do.
@@ -118,11 +77,6 @@ Future<void> main() async {
   exit(0);
 }
 
-// ---------------------------------------------------------------------------
-// Stage 1 — the plain title sequence, for the whole-workspace shot and the
-// export dialogue that opens over it.
-// ---------------------------------------------------------------------------
-
 Future<void> _stageTitles() async {
   final project = state.project!;
   final comp =
@@ -193,8 +147,6 @@ Future<void> _workspaceAndExport() async {
   await tapKey('export-close', settle: 1.5);
 }
 
-/// The floating window currently on screen, with a margin of the scrimmed
-/// editor around it — worked out from the window rather than guessed.
 Rect _window() {
   final root = shotRootKey.currentContext!.findRenderObject()! as RenderBox;
   final screen = Offset.zero & root.size;
@@ -202,11 +154,6 @@ Rect _window() {
   if (box == null) return screen;
   return box.inflate(56).intersect(screen);
 }
-
-// ---------------------------------------------------------------------------
-// Stage 2 — the full title sequence of sweep 2: seven layers, a card at
-// Screen, a keyed title and a music bed.
-// ---------------------------------------------------------------------------
 
 Future<void> _blendKeysAndWaveform() async {
   state.newProject();
@@ -346,10 +293,6 @@ Future<void> _blendKeysAndWaveform() async {
   await tapKey('tl-twirl-$musicId');
 }
 
-// ---------------------------------------------------------------------------
-// Stage 3 — the rough cut of sweep 3, for the speed ramp.
-// ---------------------------------------------------------------------------
-
 Future<void> _speedRamp() async {
   state.newProject();
   await pause(1.5);
@@ -450,8 +393,6 @@ Rect _blendCrop(String cardId) {
   return Rect.fromLTRB(2, list.top, boxOf('tl-ruler')!.left + 40, list.bottom);
 }
 
-/// Move the splitter between the upper band and the Timeline, and let the
-/// relayout settle — what anybody does when a deep fold will not fit.
 Future<void> _timelineShare(double share) async {
   ui.workspace.dock.shares[0] = 1 - share;
   ui.workspace.dock.shares[1] = share;

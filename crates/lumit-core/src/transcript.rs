@@ -28,7 +28,6 @@ use crate::{
     time::SourceTime,
 };
 
-/// One footage item's words, in its own source time.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Transcript {
     /// The language the words are in, as the speech model names it: `en`,
@@ -47,12 +46,10 @@ pub struct Transcript {
     /// The model pack that heard it, as its id and version.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub model: String,
-    /// Unknown fields from newer Lumit versions (docs/10-FILE-FORMAT.md §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
-/// One word as it was heard.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Word {
     /// As shown, with its punctuation attached and no space in front.
@@ -68,12 +65,10 @@ pub struct Word {
     /// This word starts a paragraph, or somebody else's turn.
     #[serde(default, skip_serializing_if = "is_false")]
     pub paragraph: bool,
-    /// Unknown fields from newer Lumit versions.
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
-/// Someone who speaks in a transcript.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Speaker {
     pub id: Uuid,
@@ -85,7 +80,6 @@ fn is_false(value: &bool) -> bool {
 }
 
 impl Word {
-    /// A word the model heard, with nobody named and no paragraph.
     #[must_use]
     pub fn new(
         text: impl Into<String>,
@@ -106,7 +100,6 @@ impl Word {
 }
 
 impl Transcript {
-    /// The word being said at `t`, if one is.
     #[must_use]
     pub fn word_at(&self, t: SourceTime) -> Option<usize> {
         let after = self.words.partition_point(|w| w.start <= t);
@@ -122,7 +115,6 @@ impl Transcript {
         first..last.max(first)
     }
 
-    /// The name of the speaker `id`, if this transcript has them.
     #[must_use]
     pub fn speaker_name(&self, id: Uuid) -> Option<&str> {
         self.speakers
@@ -132,11 +124,8 @@ impl Transcript {
     }
 }
 
-/// One change to a footage item's transcript, carried by
-/// [`Op::EditTranscript`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum TranscriptEdit {
-    /// Land a transcript, replace one, or take it away with `None`.
     Set(Option<Arc<Transcript>>),
     /// Put `words` where the `remove` words from `at` were. Corrections, a
     /// run's speaker, and splitting or joining words all go through this, and
@@ -146,12 +135,10 @@ pub enum TranscriptEdit {
         remove: usize,
         words: Vec<Word>,
     },
-    /// The whole list of speakers: a rename, a new one, one taken away.
     Speakers(Vec<Speaker>),
 }
 
 impl TranscriptEdit {
-    /// What the History list calls it.
     #[must_use]
     pub fn name(&self) -> &'static str {
         match self {
@@ -289,7 +276,6 @@ pub fn rename_speaker(doc: &Document, speaker: Uuid, name: &str) -> Vec<Op> {
         .collect()
 }
 
-/// A whole transcript, checked before it lands.
 fn check(transcript: &Transcript) -> Result<(), OpError> {
     check_words(&transcript.words)?;
     check_speakers(transcript)
@@ -357,10 +343,6 @@ mod tests {
         id
     }
 
-    /// **Every edit undoes exactly.** A transcript lands, a word is corrected,
-    /// a speaker is renamed, and walking the inverses back leaves the document
-    /// as it was. Corrections are journalled as these splices, so an inverse
-    /// that lost a word would lose it from the project.
     #[test]
     fn every_edit_undoes_exactly() {
         let mut doc = Document::new();
@@ -405,8 +387,6 @@ mod tests {
         assert_eq!(rename_speaker(&doc, alex.id, "Sam").len(), 1);
         assert!(rename_speaker(&doc, Uuid::now_v7(), "Nobody").is_empty());
 
-        // A splice past the end, a word over its neighbour, a speaker the
-        // list does not have and an item that is not footage change nothing.
         let held = doc.clone();
         let mut stranger = word("who?", 1000, 1200);
         stranger.speaker = Some(Uuid::now_v7());

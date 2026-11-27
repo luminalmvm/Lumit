@@ -22,35 +22,28 @@ use std::path::Path;
 
 use crate::{error::MlError, runtime};
 
-/// Which execution provider a session asks for first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Prefer {
     /// The platform's accelerator, with ONNX Runtime's own CPU fallback
     /// behind it.
     #[default]
     Platform,
-    /// The CPU, chosen deliberately.
     Cpu,
 }
 
-/// One tensor a run hands back: its name, its shape and its numbers.
 pub type Output = (String, Vec<usize>, Vec<f32>);
 
-/// One named input to [`Session::bound`].
 #[derive(Debug, Clone, Copy)]
 pub enum Feed<'a> {
-    /// Numbers, with their shape.
     F32(&'a [usize], &'a [f32]),
     /// Whole numbers, such as word piece ids, with their shape. An empty
     /// shape is a scalar.
     I64(&'a [usize], &'a [i64]),
-    /// Flags, with their shape.
     Bool(&'a [usize], &'a [bool]),
     /// Something an earlier run handed back, fed in where it already is.
     Held(&'a Held),
 }
 
-/// Where an output of [`Session::bound`] is left.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Place {
     /// In ordinary memory, so [`Held::read`] can read it.
@@ -60,7 +53,6 @@ pub enum Place {
     Device,
 }
 
-/// A tensor the runtime keeps between runs.
 #[derive(Debug)]
 pub struct Held {
     #[cfg(not(target_arch = "wasm32"))]
@@ -97,7 +89,6 @@ impl Held {
     }
 }
 
-/// An open model.
 #[derive(Debug)]
 pub struct Session {
     #[cfg(not(target_arch = "wasm32"))]
@@ -323,8 +314,6 @@ impl Session {
     }
 }
 
-/// One input made into a tensor the runtime owns, with its shape checked
-/// against its data first.
 #[cfg(not(target_arch = "wasm32"))]
 fn tensor<T>(shape: &[usize], data: &[T]) -> Result<ort::value::DynValue, MlError>
 where
@@ -338,7 +327,6 @@ where
         .map_err(|_| MlError::ShapeMismatch)
 }
 
-/// The browser build has no ONNX Runtime, so a session never opens there.
 #[cfg(target_arch = "wasm32")]
 impl Session {
     pub fn open(_pack_dir: &Path, _file: &str, _prefer: Prefer) -> Result<Self, MlError> {
@@ -367,7 +355,6 @@ impl Session {
     }
 }
 
-/// The model file inside a pack's folder, with the runtime open.
 #[cfg(not(target_arch = "wasm32"))]
 fn located(pack_dir: &Path, file: &str) -> Result<std::path::PathBuf, MlError> {
     let path = pack_dir.join(file);
@@ -403,7 +390,6 @@ fn accelerated(path: &Path) -> Option<ort::session::Session> {
     builder.commit_from_file(path).ok()
 }
 
-/// The same, on Apple silicon and Intel Macs.
 #[cfg(target_os = "macos")]
 fn accelerated(path: &Path) -> Option<ort::session::Session> {
     let mut builder = ort::session::Session::builder()
@@ -420,7 +406,6 @@ fn accelerated(_path: &Path) -> Option<ort::session::Session> {
     None
 }
 
-/// ONNX Runtime's own sentence, kept for the badge's detail slot.
 #[cfg(not(target_arch = "wasm32"))]
 fn failed<E: std::fmt::Display>(e: E) -> MlError {
     MlError::ModelFailed(e.to_string())

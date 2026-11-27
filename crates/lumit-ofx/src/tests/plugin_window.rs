@@ -1,5 +1,3 @@
-//! A plugin's window is asked with its own values.
-
 use super::*;
 
 /// **A plugin is asked for its frames with the instance's own values.** A
@@ -8,7 +6,6 @@ use super::*;
 /// nobody had touched and the frames it then read were never fetched.
 #[test]
 fn a_plugins_window_is_asked_with_its_own_values() {
-    /// Reads `radius` frames either side of its own.
     struct Windowed;
 
     impl PluginHost for Windowed {

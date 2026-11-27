@@ -35,20 +35,15 @@ import 'viewer_menus.dart';
 /// feature of the picture rather than a control.
 const double _grabRadius = 10;
 
-/// The dot's radius at the far end of the cloud and at the near end.
 const double _farDot = 1.5;
 const double _nearDot = 4.0;
 
-/// The point cloud, its selection, and the Create null / Create solid
-/// affordance.
 class ViewerTrackLayer extends StatefulWidget {
   /// The tracked layer whose solve is drawn, or null when the comp has none —
   /// or when its Camera track's Show points is off. Found by the panel from
   /// the read model it already holds, so this costs no call of its own.
   final LayerReference? tracked;
 
-  /// Where the picture is on screen, and how big the composition is, so a
-  /// composition pixel can be put in the right place.
   final Rect fitted;
   final Size compSize;
 
@@ -75,7 +70,6 @@ class ViewerTrackLayer extends StatefulWidget {
   /// selected.
   final bool selecting;
 
-  /// A layer was added at the selection: the panels re-read.
   final VoidCallback onChanged;
 
   /// Where the cloud comes from. Null is the engine's own
@@ -88,7 +82,6 @@ class ViewerTrackLayer extends StatefulWidget {
   /// is a trait so the job can be tested with no asset.
   final List<BridgeTrackPoint> Function(LayerReference layer, int frame)? fetch;
 
-  /// Where a right click away from the cloud goes.
   final void Function(TapUpDetails)? onPictureMenu;
 
   const ViewerTrackLayer({
@@ -118,8 +111,6 @@ class _ViewerTrackLayerState extends State<ViewerTrackLayer> {
   /// of features is a thing you are doing, not a thing the document holds.
   final Set<int> _picked = <int>{};
 
-  /// What the last read was for, so a rebuild that changed neither does not
-  /// ask again.
   int? _askedFrame;
   int? _askedRevision;
   int? _askedGeneration;
@@ -144,7 +135,6 @@ class _ViewerTrackLayerState extends State<ViewerTrackLayer> {
     super.dispose();
   }
 
-  /// How to stand down from the ladder.
   VoidCallback? _release;
 
   /// Escape clears the selection — the same thing it does everywhere a
@@ -179,14 +169,12 @@ class _ViewerTrackLayerState extends State<ViewerTrackLayer> {
     try {
       next = (widget.fetch ?? _fromEngine)(tracked, widget.playheadFrame);
     } catch (_) {
-      // The layer went away under the overlay; the cloud simply empties.
       next = const [];
     }
     if (!mounted) return;
     setState(() => _points = next);
   }
 
-  /// A composition point on the panel.
   Offset _at(BridgeTrackPoint p) {
     final f = widget.fitted;
     final w = widget.compSize.width == 0 ? 1.0 : widget.compSize.width;
@@ -194,7 +182,6 @@ class _ViewerTrackLayerState extends State<ViewerTrackLayer> {
     return Offset(f.left + p.x * f.width / w, f.top + p.y * f.height / h);
   }
 
-  /// The nearest point to [where], within reach.
   BridgeTrackPoint? _hit(Offset where) {
     BridgeTrackPoint? best;
     var bestD = _grabRadius;
@@ -232,7 +219,6 @@ class _ViewerTrackLayerState extends State<ViewerTrackLayer> {
     });
   }
 
-  /// Where the affordance sits: under the picked points, kept on the panel.
   Offset _affordanceAt(Size size) {
     var box = Rect.zero;
     for (final p in _points) {
@@ -382,7 +368,6 @@ class _ViewerTrackLayerState extends State<ViewerTrackLayer> {
   }
 }
 
-/// The engine's own answer — what the application always uses.
 List<BridgeTrackPoint> _fromEngine(LayerReference layer, int frame) =>
     trackedPoints(layer: layer, frame: frame);
 

@@ -33,7 +33,6 @@
 // bindings.
 
 struct Params {
-    // Emitter.
     em_pos: vec2<f32>,
     em_wh: vec2<f32>,
     em_angle: f32,
@@ -46,7 +45,6 @@ struct Params {
     seed: u32,
     cap: u32,
 
-    // Particle.
     life: f32,
     life_jitter: f32,
     size: f32,
@@ -60,7 +58,6 @@ struct Params {
     colour: vec4<f32>,
     end_colour: vec4<f32>,
 
-    // Forces.
     wind: vec2<f32>,
     gravity: f32,
     drag: f32,
@@ -70,7 +67,6 @@ struct Params {
     turb_speed: f32,
     eps: f32,
 
-    // Schedule and the frame.
     dt: f32,
     // Seconds on from now the head is drawn at, the tail following it.
     lead: f32,
@@ -82,7 +78,6 @@ struct Params {
     path_total: f32,
     tail: f32,
 
-    // Draw.
     feather: f32,
     mix: f32,
     mode: u32,
@@ -151,7 +146,6 @@ struct Params {
     colour_by: u32,
     speed_min: f32,
     speed_max: f32,
-    // Whether births follow `density_tex`.
     density: u32,
     // How particles combine where they overlap: an index into
     // lumit_core::model::BlendMode::ALL, 0 being Normal.
@@ -241,7 +235,6 @@ const SCAN_BLOCK: u32 = 256u;
 // Each scan block's own total, then its running offset; the last slot holds the
 // grand total.
 @group(0) @binding(5) var<storage, read_write> block_sums: array<u32>;
-// The compacted stream (see the header).
 @group(0) @binding(6) var<storage, read_write> stream: array<u32>;
 // `draw_indirect`'s four words, so the draw never waits on a read-back.
 @group(0) @binding(7) var<storage, read_write> args: array<u32>;
@@ -399,7 +392,6 @@ fn pt_path_at(s_in: f32) -> vec2<f32> {
 fn pt_surface(u: f32, v: f32, w_die: f32) -> vec4<f32> {
     let n = p.path_len / 3u;
     let s = u * path[(n - 1u) * 3u].w;
-    // The first triangle whose running area passes s.
     var lo = 0u;
     var hi = n - 1u;
     loop {
@@ -658,8 +650,6 @@ fn pt_wrapped(b: vec4<f32>, q: vec3<f32>) -> vec3<f32> {
     return vec3<f32>(q.xy - span * floor((q.xy - b.xy) / span), q.z);
 }
 
-// ---------------------------------------------------------------- pass 1
-
 @compute @workgroup_size(64)
 fn pt_alive(@builtin(global_invocation_id) gid: vec3<u32>) {
     let c = gid.x;
@@ -685,8 +675,6 @@ fn pt_alive(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     ranks[c] = live;
 }
-
-// ---------------------------------------------------------------- pass 2
 
 var<workgroup> scan_tile: array<u32, SCAN_BLOCK>;
 
@@ -723,20 +711,10 @@ fn pt_scan(
     }
 }
 
-// ---------------------------------------------------------------- pass 3
-
 @compute @workgroup_size(1)
 fn pt_blocks() {
     let blocks = (p.candidates + SCAN_BLOCK - 1u) / SCAN_BLOCK;
     var total = 0u;
-    // ponytail: one lane walks the block totals, and the arithmetic says it
-    // always can. There is one entry per SCAN_BLOCK = 256 candidates, so the
-    // million-particle hard cap (`points::CAP_HARD`) gives 3907 iterations of
-    // two loads and an add — single-digit microseconds even at one lane's
-    // share of the card, against the 16 ms docs/13 B14 allows the whole effect
-    // at that cap. There is no trigger, because there is no input that can
-    // make this loop longer: the cap bounds it outright. A second level of
-    // parallel scan would buy back microseconds of a 16 ms budget.
     for (var b = 0u; b < blocks; b = b + 1u) {
         let n = block_sums[b];
         block_sums[b] = total;
@@ -809,7 +787,6 @@ fn pt_write(
     stream[r_life(cap) + dst] = bitcast<u32>(life);
     stream[r_size(cap) + dst] = bitcast<u32>(size);
     stream[r_rot(cap) + dst] = bitcast<u32>(rot);
-    // Half precision, as particulate.md §4 declares the colour region.
     stream[r_colour(cap) + dst * 2u] = pack2x16float(colour.rg);
     stream[r_colour(cap) + dst * 2u + 1u] = pack2x16float(colour.ba);
     stream[r_id(cap) + dst * 2u] = id.x;
@@ -818,8 +795,6 @@ fn pt_write(
     stream[r_tail(cap) + dst * 3u + 1u] = bitcast<u32>(tail.y);
     stream[r_tail(cap) + dst * 3u + 2u] = bitcast<u32>(tail.z);
 }
-
-// ---------------------------------------------------------------- pass 4
 
 @compute @workgroup_size(64)
 fn pt_scatter(@builtin(global_invocation_id) gid: vec3<u32>) {
@@ -894,8 +869,6 @@ fn pt_scatter(@builtin(global_invocation_id) gid: vec3<u32>) {
     pt_write(dst, vec2<u32>(lo, hi), vec2<u32>(lo, hi), age, life, speed_out, head, tail, 1.0);
 }
 
-// ---------------------------------------------------------------- the draw
-
 @group(1) @binding(0) var<uniform> dp: Params;
 @group(1) @binding(1) var<storage, read> dstream: array<u32>;
 @group(1) @binding(2) var sprite: texture_2d<f32>;
@@ -954,7 +927,6 @@ fn pt_seen(ii: u32) -> Seen {
     return out;
 }
 
-// The rest of particle `ii` as drawn, given where it is seen and its size.
 fn pt_geo(ii: u32, head: vec2<f32>, tail: vec2<f32>, size: f32) -> Geo {
     let cap = dp.cap;
     let rot = bitcast<f32>(dstream[r_rot(cap) + ii]);
@@ -1239,7 +1211,6 @@ fn pt_cover(q: vec2<f32>, v: VsOut) -> vec4<f32> {
 // Five rows a particle: head and tail, colour, geom, stretch, and the quad's
 // box as `(left, top, right, bottom)`.
 @group(2) @binding(1) var<storage, read_write> prep: array<vec4<f32>>;
-// The particles' own layer.
 @group(2) @binding(2) var tile_out: texture_storage_2d<rgba16float, write>;
 // (tile, particle) pairs, sorted from one into the other and back.
 @group(2) @binding(3) var<storage, read_write> pairs_src: array<vec2<u32>>;
@@ -1256,7 +1227,6 @@ fn pt_cover(q: vec2<f32>, v: VsOut) -> vec4<f32> {
 const PREP: u32 = 5u;
 const TILE: u32 = 16u;
 const LANES: u32 = 256u;
-// The words at the head of `scan`.
 const CTL_DRAWN: u32 = 0u;
 const CTL_PAIRS: u32 = 1u;
 const CTL_BLOCKS: u32 = 2u;
@@ -1379,8 +1349,6 @@ fn pt_scan_block(
 fn pt_scan_sums() {
     let blocks = (scan[CTL_LEN] + LANES - 1u) / LANES;
     var total = 0u;
-    // ponytail: one lane walks the block totals, as `pt_blocks` does. There
-    // are at most `scan_len / 256` of them, eight thousand at the most.
     for (var b = 0u; b < blocks; b = b + 1u) {
         let n = scan[pt_sums_at() + b];
         scan[pt_sums_at() + b] = total;
@@ -1578,7 +1546,6 @@ fn pt_tile(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) 
     }
 }
 
-// One triangle over the whole target.
 @vertex
 fn pt_full_vs(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4<f32> {
     let uv = vec2<f32>(f32((vi << 1u) & 2u), f32(vi & 2u));

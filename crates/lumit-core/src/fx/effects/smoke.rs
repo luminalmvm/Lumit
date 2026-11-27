@@ -15,7 +15,6 @@ use crate::fx::{
 use crate::model::{Composition, Document, EffectInstance, EffectValue, Layer, LayerKind};
 use lumit_fx_macros::Effect;
 
-/// The effect's match name.
 pub const MATCH_NAME: &str = "smoke";
 
 /// The Resolution row's words, and the cells along the box's longest side each
@@ -131,7 +130,6 @@ const ENABLED_WHEN: &[EnabledWhen] = &[
     },
 ];
 
-/// Smoke and fire's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "smoke",
@@ -166,11 +164,9 @@ pub struct Smoke {
     )]
     pub sub_steps: i32,
 
-    /// Bake the simulation to the project's cache.
     #[action(label = "Bake")]
     pub bake: (),
 
-    /// Stop a running bake.
     #[action(label = "Cancel")]
     pub cancel: (),
 
@@ -179,7 +175,6 @@ pub struct Smoke {
     #[choice(label = "Resolution", options = RESOLUTION_OPTIONS, default = 2)]
     pub resolution: u32,
 
-    /// What the gas comes from.
     #[choice(label = "Emit from", options = EMIT_OPTIONS, default = 0)]
     pub emit_from: u32,
 
@@ -199,7 +194,6 @@ pub struct Smoke {
     )]
     pub emit_size: f32,
 
-    /// How much smoke it gives off.
     #[slider(
         label = "Density",
         min = 0.0,
@@ -233,7 +227,6 @@ pub struct Smoke {
     )]
     pub fuel: f32,
 
-    /// How hard burning swells the gas. A lot makes a fireball.
     #[slider(
         label = "Expansion",
         min = 0.0,
@@ -254,7 +247,6 @@ pub struct Smoke {
     )]
     pub buoyancy: f32,
 
-    /// How much the gas is broken up into small swirls.
     #[slider(
         label = "Turbulence",
         min = 0.0,
@@ -265,7 +257,6 @@ pub struct Smoke {
     )]
     pub turbulence: f32,
 
-    /// How much curls are kept alive.
     #[slider(
         label = "Vorticity",
         min = 0.0,
@@ -276,7 +267,6 @@ pub struct Smoke {
     )]
     pub vorticity: f32,
 
-    /// How fast smoke thins and heat fades.
     #[slider(
         label = "Dissipation",
         min = 0.0,
@@ -291,11 +281,9 @@ pub struct Smoke {
     #[slider(label = "Wind x", min = -1000.0, max = 1000.0, default = 0.0, unit = Raw)]
     pub wind_across: f32,
 
-    /// Along its height.
     #[slider(label = "Wind y", min = -1000.0, max = 1000.0, default = 0.0, unit = Raw)]
     pub wind_vertical: f32,
 
-    /// Along its depth.
     #[slider(label = "Wind z", min = -1000.0, max = 1000.0, default = 0.0, unit = Raw)]
     pub wind_depth: f32,
 
@@ -308,11 +296,9 @@ pub struct Smoke {
     #[layer(label = "Collide with", self_default = false)]
     pub collide_with: bool,
 
-    /// The gas goes round every 3D layer and Model layer in the comp as well.
     #[toggle(label = "All 3D layers", default = false)]
     pub collide_all: bool,
 
-    /// The smoke's colour, as light falling on it shows it.
     #[colour(label = "Smoke colour", default = [0.18, 0.18, 0.19, 1.0], max = 4.0)]
     pub smoke_colour: [f32; 4],
 
@@ -327,15 +313,12 @@ pub struct Smoke {
     )]
     pub fire_brightness: f32,
 
-    /// The fire at its coolest.
     #[colour(label = "Fire colour", default = [1.0, 0.15, 0.008, 1.0], max = 16.0)]
     pub fire_colour: [f32; 4],
 
-    /// The fire at its hottest.
     #[colour(label = "Fire core", default = [3.0, 1.3, 0.12, 1.0], max = 16.0)]
     pub fire_core: [f32; 4],
 
-    /// How dark the smoke's shadows are, on itself and on what is under it.
     #[slider(
         label = "Shadow strength",
         min = 0.0,
@@ -465,19 +448,16 @@ pub const LOOK_ROWS: &[&str] = &[
     "simulate",
 ];
 
-/// Whether the effect called `match_name` has a Bake that walks its frames.
 #[must_use]
 pub fn bakes_a_walk(match_name: &str) -> bool {
     matches!(match_name, "bake_points" | "particulate" | MATCH_NAME)
 }
 
-/// Whether `e` is a Smoke effect that is on.
 #[must_use]
 pub fn is_smoke(e: &EffectInstance) -> bool {
     e.enabled && e.effect.match_name == MATCH_NAME
 }
 
-/// The Smoke effect `layer` draws as a box of smoke, if it has one and is 3D.
 #[must_use]
 pub fn on_layer(layer: &Layer) -> Option<&EffectInstance> {
     if !layer.switches.three_d || !layer.switches.fx {
@@ -494,8 +474,6 @@ pub fn keeps_own_comp(l: &Layer) -> bool {
         || on_layer(l).is_some()
 }
 
-/// The effect a volume file's layer starts with: the look of a box of smoke, with
-/// nothing to simulate.
 #[must_use]
 pub fn for_volume() -> Option<EffectInstance> {
     let mut e = crate::fx::builtins::instantiate(MATCH_NAME)?;
@@ -531,7 +509,6 @@ pub struct Grid {
     pub cell_px: f32,
 }
 
-/// The fewest cells a box has along any side.
 const FEWEST_CELLS: u32 = 8;
 
 /// `e`'s grid on `layer`. Scale after the first frame stretches the box and
@@ -565,7 +542,6 @@ pub fn solid_layers<'a>(
     crate::fx::points::stepped::sim::hit_layers(comp, inst, owner).filter(|l| on_layer(l).is_none())
 }
 
-/// The layer `e`'s Emit layer row names, if it emits from one.
 #[must_use]
 pub fn emit_layer<'a>(comp: &'a Composition, e: &EffectInstance) -> Option<&'a Layer> {
     if !matches!(e.param("emit_from"), Some(EffectValue::Choice(1 | 2))) {
@@ -621,7 +597,6 @@ pub fn definition(
         feed_place(comp, layer, &mut h);
         feed_shape(doc, source, &mut h);
         feed_place(comp, source, &mut h);
-        // Particles' own walk, by what names it.
         for e in source
             .effects
             .iter()
@@ -635,7 +610,6 @@ pub fn definition(
     *h.finalize().as_bytes()
 }
 
-/// What a step reads, each row reduced once, in cells and seconds.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Physics {
     pub steps: u32,
@@ -674,7 +648,6 @@ pub struct Physics {
     pub swell: f32,
 }
 
-/// The heat a flame starts to glow at.
 pub const FLAME_STARTS: f32 = 0.33;
 
 /// `rows` on a grid reduced to what a step reads. Nought for what is not a
@@ -724,7 +697,6 @@ pub fn physics(rows: &Smoke, g: &Grid) -> Physics {
     }
 }
 
-/// How `rows` look on a box whose longest side is `longest` comp pixels.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Look {
     pub thickness: f32,
@@ -742,10 +714,8 @@ pub struct Look {
 const THICK_ACROSS: f32 = 15.0;
 const FLAME_ACROSS: f32 = 6.0;
 
-/// How strongly flames light the gas round them.
 const GLOW: f32 = 0.05;
 
-/// How many cells the march pushes gas about by, for detail finer than a cell.
 const DETAIL: f32 = 2.5;
 
 /// `rows`' look. The layer's Opacity thins the smoke.
@@ -804,8 +774,6 @@ mod tests {
         }
     }
 
-    /// What it looks like keeps every state, and moving the box too, while what
-    /// the gas does renames the walk.
     #[test]
     fn looks_and_moves_keep_the_walk_and_physics_rename_it() {
         let e = crate::fx::builtins::instantiate(MATCH_NAME).unwrap();
@@ -838,8 +806,6 @@ mod tests {
         assert_ne!(walk, name(&e, &scaled), "a different shape of grid");
     }
 
-    /// A preset's value off its row's range, or one that reaches the walk as
-    /// not a number, is wrong pixels in every frame after.
     #[test]
     fn every_preset_stays_in_range_and_gives_finite_numbers() {
         use crate::fx::presets::{apply, PresetValue};
@@ -905,7 +871,6 @@ mod tests {
         }
     }
 
-    /// The longest side gets the row's cells and the rest keep the box's shape.
     #[test]
     fn a_grid_keeps_the_shape_of_its_box() {
         let e = crate::fx::builtins::instantiate(MATCH_NAME).unwrap();

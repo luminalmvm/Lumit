@@ -88,7 +88,6 @@ class PopOutWindow {
   /// Linux when it moves.
   Listenable get changes => _controller;
 
-  /// The view Flutter draws the window in.
   int get viewId => _controller.rootView.viewId;
 
   /// The native window as the runner knows it: an HWND, an NSWindow or a
@@ -119,7 +118,6 @@ class PopOutWindow {
     try {
       act();
     } catch (_) {
-      // Gone.
     }
   }
 }
@@ -145,8 +143,6 @@ class _Delegate with RegularWindowControllerDelegate {
   }
 }
 
-// --- What the runner says about windows and displays ----------------------
-
 const MethodChannel _channel = MethodChannel('lumit/window');
 
 /// Where a window stands, as the runner reports it.
@@ -170,7 +166,6 @@ typedef NativeFrame = ({
   bool placed,
 });
 
-/// One display, as the runner reports it.
 typedef NativeDisplay = ({
   String name,
   Rect bounds,
@@ -182,10 +177,8 @@ typedef NativeDisplay = ({
 /// Calls into the runner about windows. Each answers null, or does nothing,
 /// where no runner listens: a widget test, or a browser.
 abstract final class NativeWindows {
-  /// Told when a window the runner watches has stopped moving, by its handle.
   static void Function(int window)? moved;
 
-  /// Told when a display comes, goes or changes.
   static VoidCallback? displaysChanged;
 
   /// The set of displays Lumit last took stock of, as [displaySetupOf] names
@@ -262,7 +255,6 @@ abstract final class NativeWindows {
         'maximised': maximised,
       });
 
-  /// Keep [window] above every other program's windows, or not.
   static Future<void> setOnTop(int window, bool on) =>
       _call<void>('onTop', {'window': window, 'on': on});
 
@@ -317,8 +309,6 @@ abstract final class NativeWindows {
     return r.isFinite && r.width > 0 && r.height > 0 ? r : null;
   }
 }
-
-// --- Where a window goes --------------------------------------------------
 
 /// Which displays there are, as one string an arrangement is remembered
 /// against: each display's place and size, in order. Empty with none known.
@@ -416,7 +406,6 @@ NativeDisplay? _displayAt(List<NativeDisplay> displays, Rect? rect) {
   return best;
 }
 
-/// Whether enough of a window's top is in [work] to take hold of and move.
 bool _withinReach(Rect window, Rect work) {
   final top = Rect.fromLTWH(
       window.left, window.top, window.width, min(window.height, 40));

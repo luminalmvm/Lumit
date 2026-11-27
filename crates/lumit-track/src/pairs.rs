@@ -41,8 +41,6 @@ use crate::geom::{
 };
 use crate::{Correspondence, TrackSet};
 
-/// Every knob the two-view geometry takes. The defaults are
-/// docs/impl/tracking.md §3's numbers.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct GeometrySettings {
     /// Inlier threshold in source raster pixels (§3: ~1.5 px). Converted to the
@@ -59,7 +57,6 @@ pub struct GeometrySettings {
     /// The probability the search is required to have drawn at least one clean
     /// sample, which is what the early exit is computed from.
     pub confidence: f64,
-    /// Correspondences below which a pair is not worth estimating at all.
     pub min_correspondences: usize,
     /// Inlier ratio below which no model explains the pair and it is called
     /// [`PairVerdict::Degenerate`].
@@ -67,7 +64,6 @@ pub struct GeometrySettings {
     /// Parallax, in source pixels, a pair must carry before keyframe selection
     /// will take it (§3: pairs are picked by parallax and inlier support).
     pub min_parallax_px: f64,
-    /// Frames beyond an anchor that keyframe selection will look for a partner.
     pub max_keyframe_span: i64,
 }
 
@@ -86,7 +82,6 @@ impl Default for GeometrySettings {
     }
 }
 
-/// What the GRIC gate decided a pair is (docs/impl/tracking.md §3).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PairVerdict {
     /// The fundamental matrix earns its extra freedom: the pair carries
@@ -107,16 +102,13 @@ pub enum PairVerdict {
 pub struct PairGeometry {
     pub from: i64,
     pub to: i64,
-    /// The dominant epipolar geometry.
     pub fundamental: Mat3,
     /// The best homography over the same correspondences — the gate's other
     /// half, and the compensation [`Self::parallax`] is measured against.
     pub homography: Mat3,
     /// Track ids agreeing with [`Self::fundamental`], ascending.
     pub inliers: Vec<u32>,
-    /// How many correspondences the pair had in all.
     pub correspondences: usize,
-    /// `inliers.len() / correspondences`.
     pub inlier_ratio: f64,
     /// Median displacement left over once the homography's rotation and zoom
     /// are taken out, in source pixels. This is the number that says whether
@@ -128,7 +120,6 @@ pub struct PairGeometry {
 }
 
 impl PairGeometry {
-    /// Whether the track with `id` agreed with the dominant model.
     #[must_use]
     pub fn is_inlier(&self, id: u32) -> bool {
         self.inliers.binary_search(&id).is_ok()
@@ -388,8 +379,6 @@ pub fn select_keyframes(set: &TrackSet, settings: &GeometrySettings) -> Vec<Pair
     out
 }
 
-// --- LO-RANSAC --------------------------------------------------------------
-
 pub(crate) struct Budget {
     pub(crate) thr: f64,
     pub(crate) max_iterations: usize,
@@ -565,8 +554,6 @@ fn gric(residuals: &[f64], sigma: f64, dimension: usize, parameters: usize) -> f
     sum + r.ln() * dimension as f64 * n as f64 + (r * n as f64).ln() * parameters as f64
 }
 
-// --- Determinism ------------------------------------------------------------
-
 /// Splitmix64's finaliser — the same mixer `tests.rs` builds its texture hash
 /// from, and the house style for "a number derived from these numbers".
 pub(crate) fn mix(mut z: u64) -> u64 {
@@ -593,8 +580,6 @@ impl SplitMix {
         mix(self.0)
     }
 }
-
-// --- Raster conditioning ----------------------------------------------------
 
 /// The fixed similarity that puts the frame's centre at the origin and its long
 /// edge at ±1.

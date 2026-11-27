@@ -1,7 +1,3 @@
-//! The passes that carry their own bespoke bind-group layout rather than the
-//! shared two-input one: depth-of-field lens blur (docs/08 DoF foundation),
-//! the 3-D LUT lookup (docs/08 §3.11) and the adjustment-layer blend.
-
 use crate::GpuContext;
 
 use super::{work_texture, FxEngine};
@@ -602,9 +598,6 @@ impl FxEngine {
         out
     }
 
-    /// One pass on the adjustment layout — three sampled inputs, a storage
-    /// output and a uniform — the shape `matte_prepare` and `blend_mix` share
-    /// with `matte_mix`.
     #[allow(clippy::too_many_arguments)]
     fn three_input_pass(
         &self,

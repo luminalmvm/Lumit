@@ -19,17 +19,13 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Mosaic's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "mosaic",
     label = "Mosaic",
     version = 1,
     category = Stylise,
-    // At most 64 taps a pixel, and one in the sharp mode.
     cost = Cheap,
-    // A block reaches across the frame at one block wide, so no padding radius
-    // describes it.
     roi = FullFrame,
     // Averaging premultiplied colour is what compositing means, and the alpha is
     // blocked with it so a cut-out gets blocky edges rather than smooth ones
@@ -50,7 +46,6 @@ pub struct Mosaic {
     )]
     pub horizontal_blocks: i32,
 
-    /// See [`horizontal_blocks`](Self::horizontal_blocks).
     #[counter(
         label = "Vertical blocks",
         min = 1,
@@ -68,7 +63,6 @@ pub struct Mosaic {
     #[toggle(label = "Sharp colours", default = false)]
     pub sharp_colours: bool,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -85,7 +79,6 @@ impl Mosaic {
     /// squared is 64 taps, which is a blur's worth of work and no more.
     pub const MAX_SAMPLES: i32 = 8;
 
-    /// The bundle both kernels consume (docs/impl/effect-registry.md §2.4).
     #[must_use]
     pub fn packed(self) -> cpu::MosaicParams {
         cpu::MosaicParams {
@@ -99,7 +92,6 @@ impl Mosaic {
     }
 }
 
-/// Mosaic's behaviour.
 pub struct MosaicDef;
 
 impl EffectDef for MosaicDef {

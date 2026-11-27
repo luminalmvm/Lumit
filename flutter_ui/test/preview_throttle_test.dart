@@ -23,7 +23,6 @@ void main() {
         reason: 'the newest held tick goes, not the one it superseded');
     expect(throttle.holding, isFalse);
 
-    // And the interval starts again from that send.
     throttle.request(() => sent.add(4));
     expect(sent, [1, 3]);
     await tester.pump(const Duration(seconds: 1));

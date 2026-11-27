@@ -1,5 +1,3 @@
-// The pressable controls: the house button and the three little state marks
-// (checkbox, toggle, radio), which share one keyboard-activation shortcut set.
 
 import 'dart:math' as math;
 
@@ -109,16 +107,12 @@ class _HouseButtonState extends State<HouseButton> {
     final enabled = widget.onPressed != null;
     Color? fill;
     Color? edge;
-    // The label, when the fill under it decides what colour it has to be.
     Color? label;
-    // The label's own style, for the one face that sets it: mono capitals,
-    // at the size of every other button's label.
     TextStyle? labelStyle;
     final capitals = t.kicker.copyWith(
         fontSize: t.body.fontSize,
         letterSpacing:
             t.kicker.letterSpacing! * t.body.fontSize! / t.kicker.fontSize!);
-    // Desk's 2px accent index on the leading edge of the control in force.
     var index = false;
     // Desk: a button is a flat plate with a shade line under it, and a
     // dropdown an underlined word; nothing is boxed.
@@ -127,7 +121,6 @@ class _HouseButtonState extends State<HouseButton> {
         !widget.primary &&
         !widget.active &&
         !widget.frameless;
-    // The fill an accent face takes in the hand: a step past its hover.
     Color pressedAccent() => Color.alphaBlend(hoverTint(t, 2), t.accentHover);
     if (!enabled) {
       // No fill and a plain hairline, so a dead button reads lighter than a
@@ -212,7 +205,6 @@ class _HouseButtonState extends State<HouseButton> {
     // a stadium and a rounded corner keeps its margin at the corner too.
     final radius = BorderRadius.circular(
         math.max(0, t.tokens.actionRadius - inset).toDouble());
-    // The fill comes up quickly and leaves a little slower (docs/15 §8).
     final step = _hover || _down ? scope.motion.hoverIn : scope.motion.hoverOut;
     // A press gives a little under the finger, at Full only: Desk's
     // controls stop dead, and Minimal keeps no manner.
@@ -232,8 +224,6 @@ class _HouseButtonState extends State<HouseButton> {
       label = dressed.colour;
       labelStyle = labelStyle?.copyWith(color: label);
     }
-    // Keyboard-reachable (docs/15 §9): Tab lands here in reading order,
-    // Enter/Space press it, and the accent edge is the focus ring (§6.5).
     return FocusableActionDetector(
       focusNode: _focusNode,
       enabled: enabled,
@@ -410,7 +400,6 @@ double markCorner(LumitTheme t) => t.tokens.wellRadius == 0
     ? 0
     : (t.tokens.wellRadius / 2).clamp(2.0, 3.5).toDouble();
 
-/// The tick in a ticked box: two strokes in the ink, round at the ends.
 class _TickPainter extends CustomPainter {
   final Color colour;
   const _TickPainter(this.colour);
@@ -448,7 +437,6 @@ class HouseCheckbox extends StatefulWidget {
   final bool value;
   final ValueChanged<bool>? onChanged;
 
-  /// The words beside the box, which a click on ticks it too.
   final String? label;
   const HouseCheckbox(
       {super.key, required this.value, required this.onChanged, this.label});
@@ -531,9 +519,6 @@ class _HouseCheckboxState extends State<HouseCheckbox> {
         ),
       );
     }
-    // The box, with its words after it inside the same hit area. One line of
-    // text with the box in it, so it fits a row of any width and ends in an
-    // ellipsis in a narrow one.
     Widget labelled(double lit) {
       final label = widget.label;
       if (label == null) return mark(lit);
@@ -553,7 +538,6 @@ class _HouseCheckboxState extends State<HouseCheckbox> {
       );
     }
 
-    // Disabled: no gesture, no focus, no shortcut — just the reading.
     if (onChanged == null) return labelled(0);
     return FocusableActionDetector(
       focusNode: _focusNode,
@@ -599,7 +583,6 @@ class _HouseToggleState extends State<HouseToggle> {
   bool _focused = false;
   final ControlFocusNode _focusNode = ControlFocusNode(debugLabel: 'toggle');
 
-  /// The track, and the knob that runs inside it. The drawing's own numbers.
   static const double _width = 22;
   static const double _height = 12;
   static const double _knob = 8;
@@ -652,7 +635,6 @@ class _HouseToggleState extends State<HouseToggle> {
             width: _width,
             height: _height,
             decoration: BoxDecoration(
-              // Lifted a little under the pointer, whichever way it is set.
               color: widget.value
                   ? Color.lerp(t.accent, t.accentHover, lit)
                   : Color.lerp(t.hairlineStrong, t.textMuted, 0.6 * lit),
@@ -711,8 +693,6 @@ class _HouseRadioState extends State<HouseRadio> {
   bool _focused = false;
   final ControlFocusNode _focusNode = ControlFocusNode(debugLabel: 'radio');
 
-  /// How many times this one has been chosen while on screen, for the same
-  /// reason [HouseCheckbox] counts its ticks.
   int _chosen = 0;
 
   @override

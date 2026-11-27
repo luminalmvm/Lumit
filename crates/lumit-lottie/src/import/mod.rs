@@ -40,25 +40,19 @@ use uuid::Uuid;
 use crate::LottieError;
 use read::{Clock, Read, Version};
 
-/// What an import made, ready to add.
 #[derive(Debug, Clone)]
 pub struct Imported {
     /// Comps (the main one first), solids, folders and footage, in the order to
     /// add them.
     pub items: Vec<ProjectItem>,
-    /// The main comp.
     pub main: Uuid,
     /// Pictures to write to disk before the items are added: where, and the
     /// bytes.
     pub files: Vec<(PathBuf, Vec<u8>)>,
-    /// What didn't come across as it was.
     pub report: Vec<ReportRow>,
-    /// How many of the file's layers came across.
     pub layers: u32,
 }
 
-/// What an import may spend: a quarter of a gigabyte of file, a million keys,
-/// vertices and layers, and nesting 64 deep.
 pub const LIMITS: Limits = Limits {
     bytes: 256 << 20,
     items: 1_000_000,
@@ -176,12 +170,10 @@ pub fn import(bytes: &[u8], source: &Path) -> Result<Imported, LottieError> {
     })
 }
 
-/// A comp's side in pixels, held to what a comp can be.
 fn dimension(v: Option<&Value>) -> u32 {
     read::num(v).map_or(512, |n| n.round().clamp(1.0, 16384.0) as u32)
 }
 
-/// An id written as text or as a number.
 fn id_text(v: &Value) -> Option<String> {
     match v {
         Value::String(s) => Some(s.clone()),
@@ -190,36 +182,25 @@ fn id_text(v: &Value) -> Option<String> {
     }
 }
 
-/// How deep comps may nest inside each other, as the budget's depth.
 const MAX_DEPTH: u32 = LIMITS.depth;
 
-/// The import's running state.
 struct Cx<'a> {
     clock: Clock,
     budget: Budget,
     version: Version,
     report: Vec<ReportRow>,
-    /// The file's assets by id: pictures and precomps.
     assets: BTreeMap<String, &'a Value>,
-    /// Font names as text documents give them, as family and face.
     fonts: BTreeMap<String, (String, String)>,
-    /// Picture assets already made into footage.
     images: BTreeMap<String, Uuid>,
     /// Precomp assets already made into comps; `None` while one is being made,
     /// so a precomp that places itself is caught.
     comps: BTreeMap<String, Option<Uuid>>,
-    /// Items made on the way: precomps, solids and footage.
     made: Vec<ProjectItem>,
     files: Vec<(PathBuf, Vec<u8>)>,
-    /// A `.lottie`'s pictures, by their path in the zip.
     zipped: BTreeMap<String, Vec<u8>>,
-    /// Where each zip entry already taken was written, by its path in the zip.
     written: BTreeMap<String, PathBuf>,
-    /// Where pictures carried in the file are written.
     folder: PathBuf,
-    /// The folder the file sits in, which a linked picture is found from.
     beside: PathBuf,
-    /// How many precomps deep the walk is.
     depth: u32,
     /// The start (`st`) of the layer being read, in frames: its keys are in
     /// its comp's frames, and Lumit keeps them on the layer's own clock.
@@ -228,7 +209,6 @@ struct Cx<'a> {
 }
 
 impl Cx<'_> {
-    /// Add a row to the report.
     fn row(&mut self, path: ItemPath, outcome: Outcome, reason: Reason) {
         self.report.push(ReportRow {
             path,
@@ -237,7 +217,6 @@ impl Cx<'_> {
         });
     }
 
-    /// Something left out, by name.
     fn left_out(&mut self, path: ItemPath, name: &str) {
         self.row(
             path,
@@ -248,7 +227,6 @@ impl Cx<'_> {
         );
     }
 
-    /// Something drawn another way, by name.
     fn approximated(&mut self, path: ItemPath, name: &str) {
         self.row(
             path,
@@ -270,7 +248,6 @@ impl Cx<'_> {
         self.read_mapped(path, name, p, &|v| v)
     }
 
-    /// [`Self::read`], each value put through `map`.
     fn read_mapped(
         &mut self,
         path: &ItemPath,
@@ -290,7 +267,6 @@ impl Cx<'_> {
         Ok(read)
     }
 
-    /// One number of a property, or `default`.
     fn one(
         &mut self,
         path: &ItemPath,
@@ -302,7 +278,6 @@ impl Cx<'_> {
         Ok(keys::one(read.as_ref(), 0, &self.clock, default))
     }
 
-    /// A keyed or still path property: its shape at rest and its keys.
     fn path(
         &mut self,
         p: Option<&Value>,

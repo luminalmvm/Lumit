@@ -1,5 +1,3 @@
-//! Animated GIF: palettes picked and dithered by FFmpeg's own filters.
-
 #[cfg(not(target_arch = "wasm32"))]
 use super::planes::{copy_pixels_into, frame_len};
 #[cfg(not(target_arch = "wasm32"))]
@@ -19,7 +17,6 @@ use std::ffi::{CStr, CString};
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
 
-/// How a GIF spreads a picture over its 256 colours.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum GifDither {
     /// Error diffusion, the smoothest gradients.
@@ -28,7 +25,6 @@ pub enum GifDither {
     /// An ordered pattern, which holds still from frame to frame and makes a
     /// smaller file.
     Pattern,
-    /// The nearest colour and nothing else.
     None,
 }
 
@@ -44,7 +40,6 @@ impl GifDither {
     }
 }
 
-/// The choices a GIF has that no other format does.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct GifOptions {
@@ -135,7 +130,6 @@ fn quieten_palettegen() {
     static ONCE: std::sync::Once = std::sync::Once::new();
     ONCE.call_once(|| unsafe { ffi::av_log_set_callback(Some(quiet_palettegen)) });
 }
-/// Add one filter to `graph`, named `name`.
 #[cfg(not(target_arch = "wasm32"))]
 fn add_filter<'g>(
     graph: &'g rsmpeg::avfilter::AVFilterGraph,
@@ -155,7 +149,6 @@ fn add_filter<'g>(
         .map_err(|e| MediaError::Ffmpeg(format!("setting up {}: {e}", what())))
 }
 
-/// The arguments for a `buffer` source taking `w`×`h` frames of `pix_fmt`.
 #[cfg(not(target_arch = "wasm32"))]
 fn buffer_args(w: i32, h: i32, pix_fmt: i32, time_base: AVRational) -> String {
     format!(
@@ -306,7 +299,6 @@ impl GifEncoder {
         })
     }
 
-    /// Encode one tightly-packed eight-bit RGBA frame.
     pub fn write_rgba(&mut self, rgba: &[u8]) -> Result<(), MediaError> {
         let expect = frame_len(self.width, self.height, 4)?;
         if rgba.len() != expect {
@@ -350,7 +342,6 @@ impl GifEncoder {
         drain_packets(&mut self.video, &mut self.output, 0, frame.is_none())
     }
 
-    /// Flush the filters and the encoder and close the file. Idempotent.
     pub fn finish(&mut self) -> Result<(), MediaError> {
         if self.finished {
             return Ok(());
@@ -364,7 +355,6 @@ impl GifEncoder {
                     self.encode(Some(&frame))?;
                 }
             }
-            // No frames, no palette, and nothing to write.
             Some(spool) => {
                 if let Some(palette) = out.pop() {
                     self.write_spooled(spool, &palette)?;
@@ -378,7 +368,6 @@ impl GifEncoder {
         Ok(())
     }
 
-    /// Dither every kept frame onto the one palette and encode it.
     fn write_spooled(
         &mut self,
         spool: std::io::BufWriter<std::fs::File>,
@@ -420,7 +409,6 @@ impl GifEncoder {
             link(&mut using, 0, &mut sink, 0)?;
         }
         graph.config().map_err(at("setting up the GIF palette"))?;
-        // The palette stands for every frame after it.
         let mut out = Vec::new();
         let mut palette = palette.clone();
         palette.set_pts(0);
@@ -450,9 +438,6 @@ impl GifEncoder {
 mod tests {
     use super::*;
 
-    /// A GIF opens with every frame, keeps its colour and its clear pixels,
-    /// and a frame does not show the one before it through its clear part.
-    /// Both palette kinds, as they take different roads to the file.
     #[test]
     fn a_gif_keeps_its_frames_colour_and_clear_pixels() {
         let dir = tempfile::tempdir().unwrap();
@@ -464,7 +449,6 @@ mod tests {
                 ..GifOptions::default()
             };
             let mut enc = GifEncoder::open(&path, w as u32, h as u32, 10, 1, options).unwrap();
-            // A red square over nothing, moving right eight pixels a frame.
             for f in 0..3 {
                 let mut rgba = vec![0u8; w * h * 4];
                 for y in 4..12 {

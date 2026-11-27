@@ -1,4 +1,3 @@
-// The house slider: a thin track with a handle and an optional reading.
 
 import 'package:flutter/material.dart';
 
@@ -16,8 +15,6 @@ class HouseSlider extends StatefulWidget {
   final String? suffix;
   final bool commitOnRelease;
 
-  /// How wide the track is drawn. The default suits a settings row; a control
-  /// in a toolbar wants less.
   final double width;
 
   /// Whether the number is drawn beside the track.
@@ -40,7 +37,6 @@ class HouseSlider extends StatefulWidget {
   /// Omitted by callers with nothing to fix.
   final VoidCallback? onChangeStart;
 
-  /// Fired once when a drag ends, after the last tick.
   final VoidCallback? onChangeEnd;
 
   const HouseSlider({
@@ -68,8 +64,6 @@ class _HouseSliderState extends State<HouseSlider>
     with TickerProviderStateMixin {
   double? _pending;
 
-  /// The handle lighting, and growing a pixel, under the pointer and in the
-  /// hand.
   late final HoverGlow _glow = HoverGlow(this, () => setState(() {}));
 
   @override

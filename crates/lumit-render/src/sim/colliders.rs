@@ -1,5 +1,3 @@
-//! What a simulation's particles hit at one time, flattened for the card.
-
 use std::sync::Arc;
 
 use glam::Mat4;
@@ -14,22 +12,17 @@ use lumit_gpu::GpuContext;
 use super::distances::{self, Distances};
 use super::Source;
 
-/// The most layers a simulation hits.
 const MAX_COLLIDERS: usize = 32;
 
-/// The most edges all its colliders' shapes hold between them.
 const MAX_EDGES: usize = 1 << 14;
 
-/// The models a walk hits, with their distances once on the card.
 #[derive(Default)]
 pub(super) struct Models {
-    /// Each model and take's distances, and where they start in `buffer`.
     list: Vec<(uuid::Uuid, Option<String>, Arc<Distances>, u32)>,
     buffer: Option<wgpu::Buffer>,
     /// What was hit at the last time asked, and when, which is where the next
     /// frame's sweep starts.
     last: Option<(f64, Vec<SimCollider>)>,
-    /// The surface a Layer emitter gives birth on, gathered once a walk.
     surface: Option<Option<Arc<[[f32; 4]]>>>,
 }
 
@@ -118,7 +111,6 @@ impl Models {
         let (mut out, edges) = self.posed(ctx, src, lt + offset, rows_now);
         let was = match self.last.take() {
             Some((at, poses)) if at == start => poses,
-            // A walk that picked up here poses the start with the rows at the start.
             _ => {
                 let then = src.inputs(start);
                 let rows = then.as_ref().map_or(rows_now, |i| &i.rows);
@@ -210,7 +202,6 @@ impl Models {
     }
 }
 
-/// A card or walls, its edges put with the rest, and walls' grid too.
 fn flat(c: &Collider, edges: &mut Vec<[f32; 4]>, grids: &mut Vec<u32>) -> SimCollider {
     let first = edges.len() as u32;
     let mut lo = [f32::INFINITY; 2];

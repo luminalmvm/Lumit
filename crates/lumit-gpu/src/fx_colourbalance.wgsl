@@ -11,7 +11,7 @@ struct Params {
     gamma: vec4<f32>,  // rgb used, > 0
     gain: vec4<f32>,   // rgb used
     mix_amt: f32,      // 0..1, blended against the unprocessed input
-    matte_on: f32,     // 1 = the matte drives the control below
+    matte_on: f32,
     _pad1: f32,
     _pad2: f32,
 };
@@ -40,7 +40,6 @@ fn matte_toward(value: f32, neutral: f32, k: f32) -> f32 {
     return neutral * (1.0 - k) + value * k;
 }
 
-// The unpremultiplied colour of a premultiplied pixel (== cpu::unpremult).
 fn unpremult(c: vec4<f32>) -> vec3<f32> {
     if (c.a > 0.0) {
         return c.rgb / c.a;
@@ -48,7 +47,6 @@ fn unpremult(c: vec4<f32>) -> vec3<f32> {
     return vec3<f32>(0.0);
 }
 
-// One channel through gain → lift → gamma (== the cpu channel loop).
 fn channel(x0: f32, gain: f32, lift: f32, gamma: f32) -> f32 {
     var x = max(x0 * gain + lift, 0.0);
     if (gamma != 1.0) {
@@ -65,7 +63,6 @@ fn colour_balance(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let o = textureLoad(src, xy, 0);
-    // Neutral short-circuit (== the CPU reference's early return).
     if (all(p.lift.rgb == vec3<f32>(0.0))
         && all(p.gamma.rgb == vec3<f32>(1.0))
         && all(p.gain.rgb == vec3<f32>(1.0))) {

@@ -12,7 +12,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Channel blur's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "channel_blur",
@@ -46,7 +45,6 @@ pub struct ChannelBlur {
     )]
     pub red: f32,
 
-    /// Green's kernel half-width; see [`red`](Self::red).
     #[slider(
         label = "Green blur",
         min = 0.0,
@@ -76,8 +74,6 @@ pub struct ChannelBlur {
     )]
     pub blue: f32,
 
-    /// Alpha's kernel half-width; see [`red`](Self::red). Feathering a matte
-    /// without touching the colour inside it is what this row is for.
     #[slider(
         label = "Alpha blur",
         min = 0.0,
@@ -97,7 +93,6 @@ pub struct ChannelBlur {
     #[toggle(label = "Repeat edge pixels", default = true)]
     pub repeat_edge_pixels: bool,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -131,7 +126,6 @@ impl ChannelBlur {
     }
 }
 
-/// Channel blur's behaviour.
 pub struct ChannelBlurDef;
 
 impl EffectDef for ChannelBlurDef {
@@ -146,7 +140,6 @@ impl EffectDef for ChannelBlurDef {
 
     fn spread_px(&self, p: Params<'_>) -> [f32; 2] {
         let (radii, edge, mix) = ChannelBlur::read(p).packed();
-        // As far as the widest of the four reads.
         let reach = if edge == 0 && mix > 0.0 {
             radii.into_iter().fold(0.0, f32::max)
         } else {

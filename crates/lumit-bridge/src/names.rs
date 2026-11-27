@@ -35,7 +35,6 @@ const MAX_NAMES: usize = 65_536;
 /// The memo. One per worker thread, owned by its state; never shared.
 #[derive(Default)]
 pub(crate) struct NameCache {
-    /// The document revision the held names were computed against.
     revision: u64,
     map: HashMap<(u32, Uuid, u64, u32), u128>,
 }
@@ -98,9 +97,6 @@ impl NameCache {
 mod tests {
     use super::*;
 
-    /// The memo's whole point: the second identical ask answers without
-    /// computing. The walk it saves is a hash of the entire composition, paid
-    /// hundreds of times per redraw of the cache bar before this existed.
     #[test]
     fn a_name_is_computed_once_per_revision() {
         let mut names = NameCache::default();
@@ -116,8 +112,6 @@ mod tests {
         assert_eq!(ask(&mut names, 1), Some(42));
         assert_eq!(computed.get(), 1, "the second ask is remembered");
 
-        // An edit moves the revision: everything is recomputed, because an edit
-        // renames an unknown set of frames and a memo must never guess.
         assert_eq!(ask(&mut names, 2), Some(42));
         assert_eq!(computed.get(), 2, "a new revision recomputes");
     }
@@ -140,13 +134,10 @@ mod tests {
             Some(2),
             "the second view must compute its own name, not be served the first's"
         );
-        // And each is remembered separately.
         assert_eq!(names.get_or_compute(1, 0, comp, 4, 1000, || None), Some(1));
         assert_eq!(names.get_or_compute(1, 1, comp, 4, 1000, || None), Some(2));
     }
 
-    /// The cap empties rather than growing without bound — crude, correct, and
-    /// effectively never hit inside one revision.
     #[test]
     fn the_cap_bounds_the_memo() {
         let mut names = NameCache::default();
@@ -155,7 +146,6 @@ mod tests {
             names.get_or_compute(1, 0, comp, frame, 1000, || Some(u128::from(frame)));
         }
         assert!(names.map.len() <= MAX_NAMES);
-        // Still answers correctly after the clear-out.
         assert_eq!(
             names.get_or_compute(1, 0, comp, 3, 1000, || Some(77)),
             Some(77),

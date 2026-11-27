@@ -22,13 +22,8 @@ import 'effect_param_row_frb.dart';
 import 'extension_panel.dart';
 import 'keyframe_controls_frb.dart' show scalarWithValueAt;
 
-/// The interfaces open now, by match name, so a second press does not open
-/// a second one.
 final Set<String> _open = {};
 
-/// Open the interface of the LFX effect [matchName], titled [title], unless
-/// it is open already. The page and its size come from the extension list
-/// already held.
 Future<void> showLfxInterface(BuildContext context,
     {required String matchName, required String title}) async {
   if (_open.contains(matchName)) return;
@@ -59,7 +54,6 @@ Future<void> showLfxInterface(BuildContext context,
   }
 }
 
-/// The extension as the page host knows it, showing [page].
 BridgeExtension _showing(BridgeExtension owner, BridgeExtensionEffect page) =>
     BridgeExtension(
       id: owner.id,
@@ -78,9 +72,6 @@ BridgeExtension _showing(BridgeExtension owner, BridgeExtensionEffect page) =>
       native: owner.native,
     );
 
-/// The floating panel itself: its title strip, and the page once there has
-/// been an instance to follow. It closes when its extension is removed and
-/// loads the page again when it is updated.
 class LfxInterfaceWindow extends StatefulWidget {
   final BridgeExtension extension;
   final String matchName;
@@ -107,7 +98,6 @@ class _LfxInterfaceWindowState extends State<LfxInterfaceWindow> {
       context.read<LumitUiState>().extensions;
   late BridgeExtension _extension = widget.extension;
 
-  /// The page has been put up.
   bool _paged = false;
 
   @override
@@ -194,12 +184,10 @@ class LfxFollow extends ChangeNotifier implements EffectChannel {
   @override
   void Function(String event, Map<String, Object?> data)? onEvent;
 
-  /// The layer and the instance on it being followed, or null.
   ({LayerReference layer, BridgeEffectInstanceInfo info})? target;
 
   final EffectStackEditor _editor = EffectStackEditor();
 
-  /// A drag is running, and what it has set so far.
   bool _dragging = false;
   final Map<String, BridgeEffectValue> _staged = {};
 
@@ -207,7 +195,6 @@ class LfxFollow extends ChangeNotifier implements EffectChannel {
   /// still sets for it is refused until it ends or a new one begins.
   bool _dropped = false;
 
-  /// The values last told to the page, so only a change is told.
   String? _told;
 
   @override
@@ -279,7 +266,6 @@ class LfxFollow extends ChangeNotifier implements EffectChannel {
         _ => null,
       };
 
-  /// A scalar at the playhead. Null for one an expression drives.
   double? _at(BridgeScalar scalar) {
     final comp = ui.selectedComp;
     if (comp == null) return null;
@@ -359,7 +345,6 @@ class LfxFollow extends ChangeNotifier implements EffectChannel {
     ];
   }
 
-  /// Drop a drag and its preview without keeping anything.
   void _drop() {
     _editor.clear();
     _dragging = false;
@@ -368,7 +353,6 @@ class LfxFollow extends ChangeNotifier implements EffectChannel {
     _staged.clear();
   }
 
-  /// The page went or came, so a drag it left open is dropped.
   @override
   void cancel() {
     _drop();

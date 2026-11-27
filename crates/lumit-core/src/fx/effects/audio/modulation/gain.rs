@@ -34,7 +34,6 @@ use crate::fx::{
 /// enough that a quick fade still lands where it was drawn.
 const SMOOTH_MS: f64 = 5.0;
 
-/// The Gain effect's rows.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "audio_gain",
@@ -43,8 +42,6 @@ const SMOOTH_MS: f64 = 5.0;
     category = Audio,
     cost = Trivial,
     roi = Exact,
-    // Sound, so no matte and no picture: the Audio family's rule
-    // (docs/impl/audio-effects.md §2).
     matte = false,
 )]
 pub struct AudioGain {
@@ -64,7 +61,6 @@ pub struct AudioGain {
     pub invert: i32,
 }
 
-/// The Gain effect's behaviour.
 pub struct AudioGainDef;
 
 impl EffectDef for AudioGainDef {
@@ -111,13 +107,11 @@ fn multipliers(values: &[(ParamId, f64)]) -> (f64, f64) {
     )
 }
 
-/// The two multipliers on their way to what this block asked for.
 struct GainState {
     left: Smoother,
     right: Smoother,
 }
 
-/// One open Gain.
 struct GainAudio {
     /// Behind a mutex because `process` takes `&self`; uncontended by
     /// construction, since one instance is driven by one bake.
@@ -159,7 +153,6 @@ mod tests {
     use super::super::harness;
     use super::*;
 
-    /// The level of a run, as the loudest sample a side.
     fn peaks(samples: &[f32]) -> (f32, f32) {
         samples
             .chunks_exact(AUDIO_CHANNELS)
@@ -188,7 +181,6 @@ mod tests {
         let dry = harness::run(&*harness::open(&AudioGainDef, &plain), &input, &plain);
         let wet = harness::run(&*harness::open(&AudioGainDef, &louder), &input, &louder);
 
-        // Unity is the input, sample for sample.
         assert_eq!(dry, input);
         // Six dB is a shade under twice, and the smoothing is long past by the
         // end of eight blocks.

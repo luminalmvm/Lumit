@@ -79,7 +79,6 @@ fn motion(which: u32, p: vec2<f32>) -> vec2<f32> {
     return sample(which, p / s).xy * s;
 }
 
-// a towards b by mix_amt.
 @compute @workgroup_size(8, 8)
 fn tw_mix(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (gid.x >= P.w || gid.y >= P.h) {

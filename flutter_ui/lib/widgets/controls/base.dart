@@ -1,5 +1,3 @@
-// The foundations every house control stands on: which pointer devices count
-// as a drag, the focus node they all hold, and the theme scope they all read.
 
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
@@ -54,13 +52,11 @@ class ControlFocusNode extends FocusNode {
   ControlFocusNode({super.debugLabel});
 }
 
-/// The theme + workspace scope: an InheritedWidget the whole tree reads.
 class ThemeScope extends InheritedWidget {
   final LumitTheme theme;
   final AnimationLevel animationLevel;
   final bool showTooltips;
 
-  /// How node graph wires run, read by every wire painter.
   final WireStyle wireStyle;
 
   const ThemeScope({
@@ -80,8 +76,6 @@ class ThemeScope extends InheritedWidget {
   static ThemeScope? maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<ThemeScope>();
 
-  /// How the chrome moves under this shape at this animation level
-  /// (docs/15-DESIGN.md §8). Every animated widget reads its timing here.
   Motion get motion => Motion.of(theme.shape, animationLevel);
 
   @override

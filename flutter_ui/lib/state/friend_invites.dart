@@ -21,7 +21,6 @@ import 'secret_store.dart';
 /// only look.
 typedef InviteText = ({String link, String? password, String project, bool look});
 
-/// An invite a friend sent, opened.
 typedef FriendInvite = ({String id, Friend from, InviteText text});
 
 const _info = 'lumit friend invite v1';
@@ -73,7 +72,6 @@ Future<List<int>?> openBox(String sealed, SimpleKeyPair keys,
   }
 }
 
-/// An invite sealed for [to], as [sealBox] seals it.
 Future<String> sealInvite(InviteText text, List<int> to) => sealBox(
     utf8.encode(jsonEncode({
       'link': text.link,
@@ -84,8 +82,6 @@ Future<String> sealInvite(InviteText text, List<int> to) => sealBox(
     to,
     info: _info);
 
-/// What [sealed] says, opened with [keys]. Null for anything that is not an
-/// invite sealed to them.
 Future<InviteText?> openInvite(String sealed, SimpleKeyPair keys) async {
   try {
     final opened = await openBox(sealed, keys, info: _info);
@@ -111,7 +107,6 @@ List<int> unhex(String hex) => [
         int.parse(hex.substring(i, i + 2), radix: 16)
     ];
 
-/// The invites waiting for this computer, and sending them.
 class FriendInvites extends ChangeNotifier {
   final AccountState account;
 
@@ -120,7 +115,6 @@ class FriendInvites extends ChangeNotifier {
   /// Newest first.
   List<FriendInvite> waiting = const [];
 
-  /// Called once for each invite that comes while Lumit is open, to say so.
   void Function(FriendInvite)? onNew;
 
   SimpleKeyPair? _keys;
@@ -132,7 +126,6 @@ class FriendInvites extends ChangeNotifier {
   Timer? _poll;
   final Set<String> _seen = {};
 
-  /// Begin following the account. Not called by a test.
   void start() {
     account.addListener(_accountChanged);
     _accountChanged();
@@ -149,8 +142,6 @@ class FriendInvites extends ChangeNotifier {
     notifyListeners();
     if (who == null) return;
     unawaited(_ready(who));
-    // ponytail: asked once a minute while signed in. A computer on Pro's line
-    // to the account could be told instead, if the minute ever matters.
     _poll = Timer.periodic(const Duration(minutes: 1), (_) => unawaited(check()));
   }
 
@@ -176,7 +167,6 @@ class FriendInvites extends ChangeNotifier {
     await check();
   }
 
-  /// Read the invites waiting for this computer again.
   Future<void> check() async {
     final keys = _keys, who = _for;
     if (keys == null || who == null) return;
@@ -248,7 +238,6 @@ class FriendInvites extends ChangeNotifier {
   }
 }
 
-/// For a test: a key pair from its private half.
 @visibleForTesting
 Future<SimpleKeyPair> inviteKeys(Uint8List seed) =>
     _x25519.newKeyPairFromSeed(seed);

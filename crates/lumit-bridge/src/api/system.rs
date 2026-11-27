@@ -489,6 +489,34 @@ fn short_of_memory(total: u64, free: u64) -> bool {
     total > 0 && free > 0 && free < low_memory_floor(total)
 }
 
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeGpuKind {
+    pub vendor: u32,
+    pub kind: String,
+}
+
+#[frb(sync)]
+pub fn gpu_kind() -> BridgeGpuKind {
+    let summary = lumit_gpu::adapter_summary().unwrap_or_default();
+    let vendor = match lumit_gpu::adapter_ids() {
+        Some((vendor, _)) if vendor != 0 => vendor,
+        _ if summary.starts_with("Apple") => 0x106B,
+        _ => 0,
+    };
+    let kind = if summary.contains("(DiscreteGpu,") {
+        "discrete"
+    } else if summary.contains("(IntegratedGpu,") {
+        "integrated"
+    } else {
+        "unknown"
+    };
+    BridgeGpuKind {
+        vendor,
+        kind: kind.to_owned(),
+    }
+}
+
 /// The graphics card's memory in bytes, or 0 where it cannot be asked.
 ///
 /// On Windows, the dedicated memory of the adapter the renderer opened, matched

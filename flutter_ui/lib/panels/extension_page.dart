@@ -33,8 +33,6 @@ import '../widgets/controls.dart';
 import 'package:lumit_flutter/state/platform.dart'
     if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
-/// The two ends of one page: what the panel is told, and what it can ask of
-/// the page once it is up.
 class ExtensionPageLink {
   ExtensionPageLink({
     required this.onMessage,
@@ -43,10 +41,8 @@ class ExtensionPageLink {
     required this.onFailed,
   });
 
-  /// A message the page sent.
   final void Function(Object? message) onMessage;
 
-  /// The address the view is at, each time it changes.
   final void Function(String url) onUrl;
 
   /// The view is up and [post] and [load] can be used.
@@ -62,7 +58,6 @@ class ExtensionPageLink {
   void Function(String url)? load;
 }
 
-/// An extension's page, drawn by this platform's web view.
 class ExtensionPage extends StatelessWidget {
   final BridgeExtension extension;
   final ExtensionPageLink link;
@@ -99,8 +94,6 @@ String _newKey() {
       random.nextInt(256).toRadixString(16).padLeft(2, '0'),
   ].join();
 }
-
-// --- Windows ------------------------------------------------------------
 
 /// The one web view environment every extension's page shares, made the
 /// first time a panel needs it. Each page still keeps its own storage: they
@@ -195,8 +188,6 @@ class _WebView2PageState extends State<_WebView2Page> {
       : ColoredBox(color: ThemeScope.of(context).theme.surface1);
 }
 
-// --- macOS --------------------------------------------------------------
-
 class _AppKitPage extends StatefulWidget {
   final BridgeExtension extension;
   final ExtensionPageLink link;
@@ -211,7 +202,6 @@ class _AppKitPageState extends State<_AppKitPage> {
   final String _key = _newKey();
   late final String _origin = extensionOrigin(widget.extension.id);
 
-  /// The view's own channel, named by the number Flutter gave the view.
   MethodChannel? _channel;
 
   @override
@@ -230,7 +220,6 @@ class _AppKitPageState extends State<_AppKitPage> {
     try {
       await _channel?.invokeMethod<void>(method, argument);
     } catch (_) {
-      // The view has gone.
     }
   }
 
@@ -277,8 +266,6 @@ class _AppKitPageState extends State<_AppKitPage> {
         onPlatformViewCreated: _created,
       );
 }
-
-// --- Linux --------------------------------------------------------------
 
 class _GtkPage extends StatefulWidget {
   final BridgeExtension extension;
@@ -350,23 +337,19 @@ class _GtkPageState extends State<_GtkPage> {
   final String _key = _newKey();
   late final String _origin = extensionOrigin(widget.extension.id);
 
-  /// The runner has made the view.
   bool _made = false;
 
-  /// What the runner was last told of where the view is.
   Rect _sentRect = Rect.zero;
   double _sentScale = 1;
   bool _sentShown = false;
   List<double> _sentCuts = const [];
   bool _sentInput = true;
 
-  /// Something Flutter draws over the whole panel can be seen through.
   bool _covered = false;
 
   /// The view is cut away for it, which waits for [_still] to be on screen.
   bool _hidden = false;
 
-  /// A picture of the page as it was when it was covered.
   ui.Image? _still;
 
   /// Moves on each time [_covered] changes, so a picture that arrives late
@@ -413,7 +396,6 @@ class _GtkPageState extends State<_GtkPage> {
     WidgetsBinding.instance.scheduleFrame();
   }
 
-  /// Whether [box] is under a tab that is not the one in front.
   static bool _offstage(RenderObject box) {
     for (RenderObject? node = box; node != null; node = node.parent) {
       if (node is RenderOffstage && node.offstage) return true;

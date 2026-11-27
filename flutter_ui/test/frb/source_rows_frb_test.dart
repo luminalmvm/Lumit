@@ -67,9 +67,6 @@ void main() {
       expect(text.getText()!.size, 96);
     });
 
-    // Text on a path: the words follow one of the layer's own masks,
-    // picked by name, and the offset dial only appears once there is a curve
-    // to slide along.
     testWidgets('a text layer runs its words along one of its masks',
         (tester) async {
       final p = withComp();
@@ -97,7 +94,6 @@ void main() {
       p.uiState.selectedLayer.value = text;
       await mount(tester, p);
 
-      // Straight to begin with, so there is nothing to slide.
       expect(text.getText()!.path, isNull);
       expect(find.byKey(const ValueKey('src-text-path-offset')), findsNothing);
 
@@ -119,7 +115,6 @@ void main() {
       expect(
           (text.getText()!.pathOffset as BridgeScalar_Static).field0, 25);
 
-      // And typing into the layer leaves the curve alone.
       await tester.enterText(find.byKey(const ValueKey('src-text')), 'Lumit');
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pump();

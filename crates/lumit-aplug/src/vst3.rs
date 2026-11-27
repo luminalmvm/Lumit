@@ -84,10 +84,7 @@ use crate::process::{Block, ParamEvent, BLOCK_FRAMES, CHANNELS};
 /// classes and other furniture, and only this one is an effect.
 const AUDIO_MODULE_CLASS: &str = "Audio Module Class";
 
-/// The bundle extension.
 pub const BUNDLE_EXTENSION: &str = "vst3";
-
-// ------------------------------------------------------------- the bundle --
 
 /// The binary inside a `.vst3` bundle, or the bundle itself where it is a plain
 /// library.
@@ -109,9 +106,6 @@ pub fn payload(bundle: &Path) -> Option<PathBuf> {
             return Some(found);
         }
     }
-    // ponytail: an unknown architecture folder falls through to the first file
-    // under Contents, sorted. A bundle that ships two architectures we cannot
-    // name would be a coin toss, which is why the named folders are tried first.
     let mut folders: Vec<PathBuf> = std::fs::read_dir(&contents)
         .ok()?
         .flatten()
@@ -122,8 +116,6 @@ pub fn payload(bundle: &Path) -> Option<PathBuf> {
     folders.iter().find_map(|dir| first_file(dir))
 }
 
-/// The architecture folder names this platform's plugins are installed under,
-/// most likely first.
 fn architecture_folders() -> &'static [&'static str] {
     #[cfg(target_os = "windows")]
     {
@@ -139,9 +131,6 @@ fn architecture_folders() -> &'static [&'static str] {
     }
 }
 
-/// The first file in a directory, by name. `None` for a directory that is not
-/// there, which is the ordinary answer for an architecture this bundle does not
-/// ship.
 fn first_file(dir: &Path) -> Option<PathBuf> {
     let mut files: Vec<PathBuf> = std::fs::read_dir(dir)
         .ok()?
@@ -153,8 +142,6 @@ fn first_file(dir: &Path) -> Option<PathBuf> {
     files.into_iter().next()
 }
 
-// ------------------------------------------------------------- the module --
-
 /// One loaded `.vst3` bundle.
 ///
 /// The mirror of [`crate::module::Module`], and **not `Sync`** for the same
@@ -165,7 +152,6 @@ pub struct Vst3Module {
     /// is why it is an `Option` rather than a plain pointer: `Drop` has to take
     /// it out in order.
     factory: Option<ComPtr<IPluginFactory>>,
-    /// The module's own shutdown, if it exports one.
     exit: Option<unsafe extern "system" fn() -> bool>,
     /// Kept so the library outlives every pointer taken out of it.
     library: libloading::Library,
@@ -184,12 +170,6 @@ unsafe impl Send for Vst3Module {}
 unsafe impl Sync for Vst3Module {}
 
 impl Vst3Module {
-    /// Open a bundle, start it, and read its class list.
-    ///
-    /// # Errors
-    ///
-    /// Every way a third party's bundle can disappoint us, each a report line
-    /// rather than a dialogue (docs/12 §2.6).
     pub fn open(bundle: &Path) -> Result<Self, ModuleError> {
         let binary = payload(bundle).ok_or(ModuleError::BadPath)?;
         // SAFETY: loading a library runs its initialisers, which is inherently
@@ -250,19 +230,16 @@ impl Vst3Module {
         Ok(module)
     }
 
-    /// The plugins this bundle declares, in the factory's own order.
     #[must_use]
     pub fn entries(&self) -> &[ModuleEntry] {
         &self.entries
     }
 
-    /// The bundle this module came out of.
     #[must_use]
     pub fn path(&self) -> &Path {
         &self.path
     }
 
-    /// Walk the factory's class list once, keeping the classes that make sound.
     fn read_entries(&self) -> Vec<ModuleEntry> {
         let Some(factory) = self.factory.as_ref() else {
             return Vec::new();
@@ -312,7 +289,6 @@ impl Vst3Module {
         entries
     }
 
-    /// The class id one of this module's plugin identifiers names.
     fn cid_of(&self, plugin_id: &str) -> Option<TUID> {
         self.entries
             .iter()
@@ -320,7 +296,6 @@ impl Vst3Module {
             .and_then(|_| tuid_from_hex(plugin_id))
     }
 
-    /// Make one object, by class id and interface.
     fn create<I: vst3::Interface>(&self, cid: &TUID) -> Option<ComPtr<I>> {
         let factory = self.factory.as_ref()?;
         let mut obj: *mut c_void = std::ptr::null_mut();
@@ -358,7 +333,6 @@ impl Drop for Vst3Module {
     }
 }
 
-/// The module start-up symbols, by platform.
 fn entry_symbols() -> &'static [&'static [u8]] {
     #[cfg(target_os = "windows")]
     {
@@ -374,7 +348,6 @@ fn entry_symbols() -> &'static [&'static [u8]] {
     }
 }
 
-/// The module shutdown symbols, by platform.
 fn exit_symbols() -> &'static [&'static [u8]] {
     #[cfg(target_os = "windows")]
     {
@@ -390,10 +363,6 @@ fn exit_symbols() -> &'static [&'static [u8]] {
     }
 }
 
-// ----------------------------------------------------------- the instance --
-
-/// One live VST3 plugin: its two halves, and everything they were brought up
-/// with.
 pub struct Vst3Instance {
     /// Kept so the module outlives the plugin.
     module: Arc<Vst3Module>,
@@ -430,13 +399,6 @@ pub struct Vst3Instance {
 unsafe impl Send for Vst3Instance {}
 
 impl Vst3Instance {
-    /// Create one plugin from a module and initialise both its halves.
-    ///
-    /// # Errors
-    ///
-    /// [`HostError::NoSuchPlugin`] for a class this bundle does not declare,
-    /// [`HostError::NotCreated`] when the factory refuses, and
-    /// [`HostError::InitRefused`] when the component will not start.
     pub fn create(module: Arc<Vst3Module>, plugin_id: &str) -> Result<Self, HostError> {
         let cid = module
             .cid_of(plugin_id)
@@ -509,7 +471,6 @@ impl Vst3Instance {
         })
     }
 
-    /// The module this plugin came out of.
     #[must_use]
     pub fn module(&self) -> &Arc<Vst3Module> {
         &self.module
@@ -523,7 +484,6 @@ impl Vst3Instance {
         self.handler.restart.load(Ordering::Relaxed)
     }
 
-    /// The plugin's audio buses, in Lumit's own words.
     #[must_use]
     pub fn ports(&self) -> Ports {
         Ports {
@@ -611,9 +571,6 @@ impl Vst3Instance {
             params.push(ParamDescription {
                 id: info.id,
                 name: wide_text(&info.title),
-                // VST3 groups parameters by unit rather than by a path string,
-                // and a unit needs `IUnitInfo` — which is a panel question
-                // (AP5), not a describe one. Top-level until then.
                 module: String::new(),
                 min,
                 max,
@@ -827,12 +784,6 @@ impl Vst3Instance {
         Ok(())
     }
 
-    /// Enter the processing state.
-    ///
-    /// # Errors
-    ///
-    /// [`HostError::StartRefused`], including when the plugin was never
-    /// activated.
     pub fn start_processing(&mut self) -> Result<(), HostError> {
         if self.processing {
             return Ok(());
@@ -848,12 +799,6 @@ impl Vst3Instance {
         Ok(())
     }
 
-    /// One block: the input planes in, the output planes out.
-    ///
-    /// # Errors
-    ///
-    /// [`HostError::NotProcessing`] before `start_processing`, and
-    /// [`HostError::ProcessFailed`] when the plugin answers with an error.
     pub fn process(&mut self, block: &mut Block, events: &[ParamEvent]) -> Result<(), HostError> {
         if !self.processing {
             return Err(HostError::NotProcessing);
@@ -890,8 +835,6 @@ impl Vst3Instance {
             outputParameterChanges: std::ptr::null_mut(),
             inputEvents: std::ptr::null_mut(),
             outputEvents: std::ptr::null_mut(),
-            // No transport in v1, as CLAP: tempo is supplied only where the comp
-            // has a confirmed BPM grid (§3).
             processContext: std::ptr::null_mut(),
         };
 
@@ -938,7 +881,6 @@ impl Vst3Instance {
         }
     }
 
-    /// Leave the processing state.
     pub fn stop_processing(&mut self) {
         if !self.processing {
             return;
@@ -987,7 +929,6 @@ impl Drop for Vst3Instance {
     }
 }
 
-/// One block's audio, as a bus.
 fn bus_buffers(planes: &mut [*mut f32; CHANNELS]) -> vst3::Steinberg::Vst::AudioBusBuffers {
     vst3::Steinberg::Vst::AudioBusBuffers {
         numChannels: i32::try_from(CHANNELS).unwrap_or(2),
@@ -997,8 +938,6 @@ fn bus_buffers(planes: &mut [*mut f32; CHANNELS]) -> vst3::Steinberg::Vst::Audio
         },
     }
 }
-
-// -------------------------------------------------- what the plugin calls --
 
 /// The host, as the plugin sees it.
 ///
@@ -1067,7 +1006,6 @@ impl IComponentHandlerTrait for Handler {
     }
 }
 
-/// A state blob, as VST3 wants to read and write one.
 #[derive(Default)]
 struct Stream {
     bytes: RefCell<Vec<u8>>,
@@ -1075,7 +1013,6 @@ struct Stream {
 }
 
 impl Stream {
-    /// A stream the plugin will read from.
     fn over(bytes: Vec<u8>) -> Self {
         Self {
             bytes: RefCell::new(bytes),
@@ -1084,12 +1021,8 @@ impl Stream {
     }
 }
 
-/// The two things a caller does with a stream after the plugin has finished
-/// with it.
 trait Rewind {
-    /// Put the cursor back at the start, so a second reader sees the whole blob.
     fn rewind(&self);
-    /// The bytes, taken.
     fn taken(&self) -> Vec<u8>;
 }
 
@@ -1179,11 +1112,8 @@ impl IBStreamTrait for Stream {
         let Ok(bytes) = self.bytes.try_borrow() else {
             return kInvalidArgument;
         };
-        /// From the start.
         const SET: i32 = 0;
-        /// From where we are.
         const CUR: i32 = 1;
-        /// From the end.
         const END: i32 = 2;
         let base = match mode {
             SET => 0,
@@ -1210,7 +1140,6 @@ impl IBStreamTrait for Stream {
     }
 }
 
-/// One parameter's points inside one block.
 #[derive(Default)]
 struct Queue {
     id: Cell<u32>,
@@ -1279,7 +1208,6 @@ impl Class for Changes {
 }
 
 impl Changes {
-    /// Forget last block's points.
     fn reset(&self) {
         self.live.set(0);
         if let Ok(queues) = self.queues.try_borrow() {
@@ -1357,8 +1285,6 @@ impl IParameterChangesTrait for Changes {
     }
 }
 
-// ------------------------------------------------------------ translation --
-
 /// One VST3 parameter's flags, in CLAP's word.
 ///
 /// The two standards ask the same four questions with different spellings, so
@@ -1389,7 +1315,6 @@ fn clap_flags_of(info: &ParameterInfo) -> u32 {
     flags
 }
 
-/// How many bytes of a saved blob belong to the processor.
 const PROCESSOR_LENGTH: usize = 4;
 
 /// The two halves of a VST3 state, as one blob.
@@ -1439,7 +1364,6 @@ pub fn hex_of(cid: &TUID) -> String {
     text
 }
 
-/// The class id 32 hex digits name, or `None` for anything else.
 #[must_use]
 pub fn tuid_from_hex(text: &str) -> Option<TUID> {
     if text.len() != 32 {
@@ -1486,7 +1410,6 @@ fn write_wide(field: &mut [TChar], text: &str) {
     }
 }
 
-/// An empty class description for the factory to fill in.
 fn blank_class_info() -> PClassInfo {
     PClassInfo {
         cid: [0; 16],
@@ -1496,7 +1419,6 @@ fn blank_class_info() -> PClassInfo {
     }
 }
 
-/// The wider one.
 fn blank_class_info2() -> PClassInfo2 {
     PClassInfo2 {
         cid: [0; 16],
@@ -1511,7 +1433,6 @@ fn blank_class_info2() -> PClassInfo2 {
     }
 }
 
-/// An empty bus description for the plugin to fill in.
 fn blank_bus_info() -> BusInfo {
     BusInfo {
         mediaType: 0,
@@ -1523,7 +1444,6 @@ fn blank_bus_info() -> BusInfo {
     }
 }
 
-/// An empty parameter description for the controller to fill in.
 fn blank_parameter_info() -> ParameterInfo {
     ParameterInfo {
         id: 0,

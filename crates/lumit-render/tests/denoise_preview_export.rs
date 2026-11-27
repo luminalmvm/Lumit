@@ -29,8 +29,6 @@ const W: u32 = 96;
 const H: u32 = 64;
 const FRAMES: u32 = 8;
 
-/// Frame `n` of the run `name`: a pattern moving `slide` px a frame right (and
-/// a third of that down), under noise that is different every frame.
 fn frame(dir: &Path, name: &str, n: u32, slide: f32) {
     let file = std::fs::File::create(dir.join(format!("{name}_{n:04}.png"))).unwrap();
     let mut png = png::Encoder::new(std::io::BufWriter::new(file), W, H);
@@ -58,7 +56,6 @@ fn frame(dir: &Path, name: &str, n: u32, slide: f32) {
     png.write_header().unwrap().write_image_data(&px).unwrap();
 }
 
-/// A comp the size of the frames, at 25 fps.
 fn comp_doc() -> (Document, Uuid) {
     let mut doc = Document::new();
     let settings = CompSettings {
@@ -75,8 +72,6 @@ fn comp_doc() -> (Document, Uuid) {
     (doc, comp)
 }
 
-/// A footage item for `file` in `dir`: the run it starts, or with `run` off
-/// that one picture alone.
 fn footage(doc: &mut Document, dir: &Path, file: &str, run: bool) -> Uuid {
     let item = Uuid::now_v7();
     doc.items.push(ProjectItem::Footage(FootageItem {
@@ -97,7 +92,6 @@ fn footage(doc: &mut Document, dir: &Path, file: &str, run: bool) -> Uuid {
     item
 }
 
-/// A layer of `kind` over the whole comp, with `effects`.
 fn layer(doc: &Document, comp: Uuid, kind: LayerKind, effects: Vec<EffectInstance>) -> Layer {
     let mut layer = base_layer(
         "Layer".into(),
@@ -109,7 +103,6 @@ fn layer(doc: &Document, comp: Uuid, kind: LayerKind, effects: Vec<EffectInstanc
     layer
 }
 
-/// `layer` put on top of `comp`.
 fn add(doc: &mut Document, comp: Uuid, layer: Layer) {
     let op = Op::AddLayer {
         comp,
@@ -131,7 +124,6 @@ fn denoise(view: u32) -> EffectInstance {
     denoise_over(view, 2.0)
 }
 
-/// Denoise showing `view`, reading `frames` either side.
 fn denoise_over(view: u32, frames: f64) -> EffectInstance {
     let mut e = lumit_core::fx::builtins::instantiate("denoise").unwrap();
     for p in &mut e.params {
@@ -169,15 +161,12 @@ fn a_denoised_frame_is_the_same_whichever_frames_came_before_it() {
     let q = Quality::default();
     for view in [0, 2] {
         let (doc, comp) = scene(dir.path(), denoise(view));
-        // As an export runs: forward from the first frame, through the
-        // pipelined path it reads its bytes from.
         let walked: Vec<Vec<u8>> = (0..u64::from(FRAMES))
             .map(|f| {
                 let pending = export.start_preview(&doc, comp, f, q).unwrap();
                 export.finish_preview(pending).unwrap()
             })
             .collect();
-        // As the Viewer might: the middle first, cold, then backwards.
         let mut order: Vec<u64> = vec![4];
         order.extend((0..u64::from(FRAMES)).rev());
         for f in order {
@@ -188,8 +177,6 @@ fn a_denoised_frame_is_the_same_whichever_frames_came_before_it() {
             );
         }
         if view == 2 {
-            // The neighbours really were averaged in the middle of the run,
-            // and at the held first frame only the frames after it were.
             let grey =
                 |px: &[u8]| px.chunks_exact(4).map(|p| u32::from(p[0])).sum::<u32>() / (W * H);
             let (start, middle) = (grey(&walked[0]), grey(&walked[4]));
@@ -202,9 +189,6 @@ fn a_denoised_frame_is_the_same_whichever_frames_came_before_it() {
     }
 }
 
-/// Over a still, a Precomp or adjustment layer's neighbours are its own
-/// picture built again, the same pixels to the bit. They are the same noise,
-/// so Frames blended must show that nothing was blended.
 #[test]
 fn a_rebuilt_neighbour_that_is_the_same_picture_is_not_blended() {
     if HeadlessRenderer::new().is_err() {
@@ -213,7 +197,6 @@ fn a_rebuilt_neighbour_that_is_the_same_picture_is_not_blended() {
     }
     let dir = tempfile::tempdir().unwrap();
     frame(dir.path(), "still", 0, 0.0);
-    // Denoise on an adjustment layer over the still.
     let (mut doc, comp) = comp_doc();
     let item = footage(&mut doc, dir.path(), "still_0000.png", false);
     let still = layer(&doc, comp, LayerKind::Footage { item }, Vec::new());
@@ -221,7 +204,6 @@ fn a_rebuilt_neighbour_that_is_the_same_picture_is_not_blended() {
     let adjust = layer(&doc, comp, LayerKind::Adjustment, vec![denoise(2)]);
     add(&mut doc, comp, adjust);
     let over_adjustment = (Arc::new(doc), comp);
-    // And on a Precomp layer of a comp holding it.
     let (mut doc, nested) = comp_doc();
     let item = footage(&mut doc, dir.path(), "still_0000.png", false);
     let still = layer(&doc, nested, LayerKind::Footage { item }, Vec::new());
@@ -283,9 +265,6 @@ fn a_denoise_after_a_correction_leaves_the_correction_alone() {
     );
 }
 
-/// A Sequence layer cut inside one source, with the middle taken out: the
-/// frames across the cut are another part of the footage, so the frame
-/// before it is denoised as if the next clip were another file's.
 #[test]
 fn a_cut_inside_one_source_is_not_averaged_across() {
     if HeadlessRenderer::new().is_err() {

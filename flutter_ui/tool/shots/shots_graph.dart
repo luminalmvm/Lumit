@@ -90,7 +90,6 @@ Future<void> main() async {
   );
   ui.setSelection([layer]);
 
-  // The Nodes workspace, applied the way its tab in the toolbar applies it.
   ui.workspace.applyWorkspacePreset(WorkspacePreset.nodes);
 
   runApp(shotRoot(LumitAppNew(state, ui, welcome: false)));

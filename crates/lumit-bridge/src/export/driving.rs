@@ -5,7 +5,6 @@ use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 use uuid::Uuid;
 
-/// The terminal/progress state a poll reports, held between polls.
 enum State {
     Idle,
     Running {
@@ -21,7 +20,6 @@ enum State {
     },
 }
 
-/// What an item exports.
 enum Source {
     /// A composition of this document, snapshotted when the item was added
     /// (docs/06 §7.1), so later edits never alter what it renders.
@@ -36,7 +34,6 @@ enum Source {
     },
 }
 
-/// One item waiting its turn.
 struct Item {
     id: u32,
     comp_name: String,
@@ -51,15 +48,12 @@ struct Item {
     /// Held by someone. Waiting, it is passed over; running, it waits
     /// between two frames.
     paused: bool,
-    /// When it started encoding, for how long it took.
     started: Option<std::time::Instant>,
     /// Edits made to `doc` when the item starts, and not before: one row's
     /// version of a graphics template. So many rows queued together share
     /// one snapshot, and are not each a project in memory. Empty for every
     /// other item.
     version: Vec<lumit_core::ops::Op>,
-    /// The run of rows this item was queued with, which the queue folds
-    /// under one heading.
     group: Option<u32>,
 }
 
@@ -89,7 +83,6 @@ struct Run {
     handle: Option<ExportHandle>,
     child: Option<super::child::Child>,
     queue: Vec<Item>,
-    /// What each run of rows is called, by its number.
     groups: Vec<(u32, String)>,
     next_id: u32,
     /// Whether the queue may start things. Adding holds by default —
@@ -103,9 +96,7 @@ struct Run {
     /// nothing meanwhile, or the next item would take over the state its
     /// poll is waiting to read.
     direct_unread: bool,
-    /// Keeps the computer awake while an export is in flight.
     awake: Option<crate::awake::Awake>,
-    /// Remote exports whose row was removed once done, until their job asks.
     landed_jobs: Vec<Uuid>,
 }
 
@@ -182,7 +173,6 @@ fn launch(
     spec: &BridgeExportSpec,
     out_path: &str,
 ) -> Result<(), String> {
-    // The comp's own size, which the crop is resolved against.
     let (cw, ch) = doc
         .comp(comp)
         .map(|c| (c.width, c.height))
@@ -250,7 +240,6 @@ pub(super) fn queue_add(
     )
 }
 
-/// A number for a run of rows queued together, called `name`.
 pub(super) fn queue_group(name: String) -> u32 {
     let mut guard = slot().lock().unwrap_or_else(|p| p.into_inner());
     let id = guard.next_id;
@@ -259,8 +248,6 @@ pub(super) fn queue_group(name: String) -> u32 {
     id
 }
 
-/// [`queue_add`] for one row's version of a template: `version` is applied
-/// to `doc` when the item starts.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn queue_add_version(
     doc: std::sync::Arc<lumit_core::model::Document>,
@@ -350,7 +337,6 @@ fn add(
     id
 }
 
-/// The job item `id` has all its files and may run.
 pub(super) fn job_ready(id: u32) {
     let mut guard = slot().lock().unwrap_or_else(|p| p.into_inner());
     for item in guard.queue.iter_mut().filter(|item| item.id == id) {
@@ -412,6 +398,16 @@ pub(super) fn queue_list() -> Vec<super::QueueRow> {
                 },
                 ItemState::Failed(error) => super::QueueRowState::Failed(error.clone()),
             },
+            height: match (item.spec.height, &item.source) {
+                (0, Source::Document(doc)) => doc.comp(item.comp).map_or(0, |c| c.height),
+                (height, _) => height,
+            },
+            fps: match &item.source {
+                Source::Document(doc) if item.spec.fps <= 0.0 => {
+                    doc.comp(item.comp).map_or(0.0, |c| c.frame_rate.fps())
+                }
+                _ => item.spec.fps,
+            },
             job: match &item.source {
                 Source::Job { job, .. } => Some(*job),
                 Source::Document(_) => None,
@@ -442,7 +438,6 @@ pub(super) fn queue_goes_on() -> bool {
     slot().lock().unwrap_or_else(|p| p.into_inner()).running
 }
 
-/// Stop what is in flight: the export at its next frame, or a job's child.
 fn stop_current(run: &mut Run) {
     if let Some(handle) = &run.handle {
         handle.cancel();
@@ -465,7 +460,6 @@ pub(super) fn queue_cancel(id: u32) {
         .retain(|item| item.id != id || !matches!(item.state, ItemState::Waiting));
 }
 
-/// Hold item `id` where it is, or let it go on.
 pub(super) fn queue_pause(id: u32, paused: bool) {
     let mut guard = slot().lock().unwrap_or_else(|p| p.into_inner());
     let Some(item) = guard.queue.iter_mut().find(|item| item.id == id) else {
@@ -498,7 +492,6 @@ pub(super) fn move_refusal(state: &ItemState) -> Option<&'static str> {
     }
 }
 
-/// What it says about an id the list no longer holds.
 pub(super) const GONE: &str = "that export is no longer in the queue";
 
 /// Move a waiting item to `index`. The pump is not turned here: reordering
@@ -575,7 +568,6 @@ pub(super) fn job_landed(job: Uuid) -> bool {
     guard.landed_jobs.len() != before
 }
 
-/// Mark item `id` done, as an export that has just ended.
 #[cfg(all(test, feature = "media"))]
 pub(super) fn queue_done_for_test(id: u32) {
     let mut guard = slot().lock().unwrap_or_else(|p| p.into_inner());
@@ -632,7 +624,6 @@ fn pump(run: &mut Run) {
     keep_awake(run);
 }
 
-/// Hold the computer awake while an export is in flight, and only then.
 fn keep_awake(run: &mut Run) {
     if !run.in_flight() {
         run.awake = None;
@@ -641,7 +632,6 @@ fn keep_awake(run: &mut Run) {
     }
 }
 
-/// The document an item renders: its snapshot, with its row's edits made.
 fn versioned(
     doc: &std::sync::Arc<lumit_core::model::Document>,
     version: &[lumit_core::ops::Op],
@@ -687,7 +677,6 @@ pub(super) fn queue_again(id: u32) -> Option<u32> {
     Some(new)
 }
 
-/// Whether an export is rendering now.
 pub(super) fn running() -> bool {
     let mut guard = slot().lock().unwrap_or_else(|p| p.into_inner());
     drain(&mut guard);
@@ -827,8 +816,6 @@ fn drain(run: &mut Run) {
     }
 }
 
-/// An export of this computer's own has ended: the ticks the dialogue set,
-/// and the news of it.
 fn landed(item: &Item) {
     // The ticks the dialogue set, honoured here rather than by whatever
     // window happens to be watching: an export that lands after its dialogue

@@ -1,0 +1,70 @@
+---
+title: Cylinder
+description: "Wraps the layer round an open tube and lights it."
+---
+
+Cylinder is a **Distortion** effect.
+
+## What it does
+
+Wraps the layer round an open tube: left to right round it, and top to bottom along it. The
+tube is drawn without perspective and lit by one light. A tube seen straight down its length
+draws nothing.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Rotation X** | Dial | Any angle | 0° | Degrees |
+| **Rotation Y** | Dial | Any angle | 0° | Degrees |
+| **Rotation Z** | Dial | Any angle | 0° | Degrees |
+| **Rotation order** | Dropdown | XYZ · XZY · YXZ · YZX · ZXY · ZYX | XYZ | - |
+| **Radius** | Slider | 0 to 4000; any value by typing | 200 | Pixels at composition size |
+| **Height** | Slider | 0 to 8000; any value by typing | 600 | Pixels at composition size |
+| **Offset X (%)**, **Offset Y (%)** | Slider | -50 to 150 | 50 | - |
+| **Render** | Dropdown | Full · Outside · Inside | Full | - |
+| **Light intensity** | Slider | 0 to 400; any value by typing | 100 | - |
+| **Light colour** | Colour | Each channel 0 to 1 | White | - |
+| **Light height** | Slider | -100 to 100; any value by typing | 35 | - |
+| **Light direction** | Dial | Any angle | -60° | Degrees |
+| **Ambient** | Slider | 0 to 100 | 25 | - |
+| **Diffuse** | Slider | 0 to 100 | 75 | - |
+| **Specular** | Slider | 0 to 100 | 30 | - |
+| **Roughness** | Slider | 1 to 100 | 20 | - |
+| **Metal** | Slider | 0 to 100 | 100 | - |
+| **Transparency falloff** | Checkbox | On or off | Off | - |
+
+## What each control does
+
+- **Rotation X**, **Rotation Y** and **Rotation Z**: turn the tube about each axis. The
+  tube's length runs along Y.
+- **Rotation order**: the order the three turns are made in.
+- **Radius**: the radius of the tube.
+- **Height**: the length of the tube.
+- **Offset X (%)** and **Offset Y (%)**: where the middle of the tube sits, as a share of
+  the layer.
+- **Render**: **Outside** draws the outside of the tube, **Inside** draws the inside, and
+  **Full** draws both, the inside showing through the clear parts of the outside.
+- **Light intensity**: how bright the light is, as a per cent.
+- **Light colour**: the colour of the light.
+- **Light height**: how far the light is lifted toward the viewer. At 0 it shines from the
+  side, and below 0 from behind.
+- **Light direction**: the side the light comes from. 0° is above.
+- **Ambient**: light that reaches every part of the tube alike.
+- **Diffuse**: how much the light brightens the parts that face it.
+- **Specular**: how strong the highlight is.
+- **Roughness**: how wide the highlight is.
+- **Metal**: how much of the layer's own colour the highlight takes. At 0 it is the colour
+  of the light.
+- **Transparency falloff**: fades the outside of the tube toward its two edges.
+- **Mix**: how much of the result replaces the original.
+- **Blend**: the blend mode the result is laid over the original with.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
+
+## Related
+
+- [Bend](/effects/distortion/bend/)
+- [Spherize](/effects/distortion/spherize/)
+- [Distortion](/effects/#distortion)
+- [Effects](/use/effects/)

@@ -1,6 +1,3 @@
-//! The Captions panel's edits: text, timing, splitting, joining, limits,
-//! find and replace, and speakers. Each is one op and one undo step.
-
 use super::*;
 
 /// Words for new text in a cue, keeping the times of the words that stayed the
@@ -19,7 +16,6 @@ fn retimed(old: &Cue, text: &str) -> Cue {
         }
         words.extend(line.split_whitespace().map(str::to_owned));
     }
-    // The longest run of words both versions share, in order.
     let (n, m) = (old.words.len(), words.len());
     let mut table = vec![vec![0u32; m + 1]; n + 1];
     for i in (0..n).rev() {
@@ -55,7 +51,6 @@ fn retimed(old: &Cue, text: &str) -> Cue {
             k += 1;
             continue;
         }
-        // A run of new words, between the kept word before and the one after.
         let run_end = (k..m).find(|&r| same[r].is_some()).unwrap_or(m);
         let from = out.last().map_or(old.start, |w| w.end);
         let to = same
@@ -220,7 +215,6 @@ pub(crate) fn split_at(
     };
     let shown = show::at(&held.captions, &context);
     let index = shown.cue.ok_or(BridgeError::NothingToSplit)?;
-    // The first word that starts at or after the playhead begins the new one.
     let lt = t - held.layer.start_offset.0.to_f64();
     let after = shown
         .words
@@ -304,7 +298,6 @@ pub(crate) fn add(
     Ok(u32::try_from(index).unwrap_or(u32::MAX))
 }
 
-/// The room a new cue of `item` starting at `start` has before the next.
 fn neighbours_of_new(
     captions: &Captions,
     item: Option<Uuid>,
@@ -476,8 +469,6 @@ pub(crate) fn set_limits(
     commit_all(layer, next)
 }
 
-/// Every cue cut again from its words under the captions' own limits, one
-/// footage item at a time.
 fn rebuilt(captions: &Captions) -> Vec<Cue> {
     let names = |id: Uuid| {
         captions
@@ -549,7 +540,6 @@ pub(crate) fn replace(
     Ok(count)
 }
 
-/// A cue's text without the label and dashes [`Cue::lines`] puts in.
 fn strip_marks(text: &str, label: Option<&str>, dashes: bool) -> String {
     let mut lines: Vec<String> = text.lines().map(str::to_owned).collect();
     if let (Some(label), Some(first)) = (label.filter(|l| !l.is_empty()), lines.first_mut()) {
@@ -567,7 +557,6 @@ fn strip_marks(text: &str, label: Option<&str>, dashes: bool) -> String {
     lines.join("\n")
 }
 
-/// `text` with every `find` swapped for `with`, and how many there were.
 fn replaced(
     text: &str,
     find: &str,
@@ -607,10 +596,6 @@ fn replaced(
     (out, count)
 }
 
-// ---- Speakers ----------------------------------------------------------------
-
-/// The edits that rename `speaker` on every caption layer that has them, and
-/// put the new name on their labels.
 pub(crate) fn renamed(doc: &Document, speaker: Uuid, name: &str) -> Vec<Op> {
     let mut ops = Vec::new();
     for item in &doc.items {

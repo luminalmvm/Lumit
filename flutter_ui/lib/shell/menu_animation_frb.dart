@@ -103,7 +103,6 @@ bool editKeysAtPlayhead(
   return true;
 }
 
-/// Which of the four a side currently is.
 KeyframeInterp interpOf(BridgeSideInterp side) => switch (side) {
       BridgeSideInterp_Hold() => KeyframeInterp.hold,
       BridgeSideInterp_Linear() => KeyframeInterp.linear,
@@ -136,7 +135,6 @@ BridgeSideInterp sideFor(
   };
 }
 
-/// [key] with one or both sides replaced.
 BridgeKeyframe _keyWith(
   BridgeKeyframe key, {
   BridgeSideInterp? inSide,
@@ -293,8 +291,6 @@ MenuEntry toggleHoldRow(LumitState app, LumitUiState ui) {
   );
 }
 
-/// Animation ▸ Keyframe interpolation…: how the keys under the playhead are
-/// approached and left.
 MenuEntry keyframeInterpolationRow(
     BuildContext context, LumitState app, LumitUiState ui) {
   final at = keyAtPlayhead(ui);
@@ -355,8 +351,6 @@ MenuEntry keyframeSpeedRow(
   );
 }
 
-/// Animation ▸ Animate text: a blank animator or a named animation on every
-/// selected Text layer.
 MenuEntry animateTextRow(LumitState app, LumitUiState ui) =>
     MenuEntry.submenu(l10n.menuAnimateText, textPresetRows(app, ui));
 
@@ -448,7 +442,6 @@ MenuEntry trackCameraRow(LumitState app, LumitUiState ui) => MenuEntry(
       ),
     );
 
-/// The tracker's own name in the effect registry.
 const String _cameraTrack = 'camera_track';
 
 /// Animation ▸ Stabilise: adds the effect, whose analysis starts by itself,
@@ -467,12 +460,7 @@ MenuEntry stabiliseRow(LumitState app, LumitUiState ui) => MenuEntry(
       action: 'layer.stabilise',
     );
 
-/// Stabilise's own name in the effect registry.
 const String _stabilise = 'stabilise';
-
-// ---------------------------------------------------------------------------
-// Presets
-// ---------------------------------------------------------------------------
 
 /// The file the save row writes, which a test names, and the open row's file
 /// dialogue, which a test replaces: no plugin channel opens a real dialogue in
@@ -520,7 +508,6 @@ MenuEntry applyAnimationPresetRow(LumitState app, LumitUiState ui) {
   );
 }
 
-/// The preset at [path] onto [layer], as one undo step.
 Future<void> applyPresetFile(
     LumitState app, LayerReference layer, String path, int frame) async {
   final String text;

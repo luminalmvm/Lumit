@@ -15,7 +15,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Colour cycle's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "colour_cycle",
@@ -54,10 +53,8 @@ pub struct ColourCycle {
     pub brightness: f32,
 }
 
-/// The port the colour leaves by.
 pub const COLOUR_PORT: &str = "colour";
 
-/// Colour cycle's behaviour.
 pub struct ColourCycleDef;
 
 impl EffectDef for ColourCycleDef {

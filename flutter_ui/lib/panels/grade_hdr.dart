@@ -43,7 +43,6 @@ mixin _GradeHdr on _GradeModel, _GradePrimaries {
         _ => l10n.gradeZoneSpecular,
       };
 
-  /// The zone whose range is being dragged on the strip.
   String? _zoneHeld;
 
   /// The range in hand while the strip's drag runs, in stops.
@@ -191,8 +190,6 @@ mixin _GradeHdr on _GradeModel, _GradePrimaries {
     return (room.height - _stripHeight - 112).clamp(48.0, 96.0).toDouble();
   }
 
-  // --- The zone strip ----------------------------------------------------------
-
   static const double _stripHeight = 46;
 
   /// Where each zone reaches, -8 to 8 stops across. A drag near a zone's
@@ -298,8 +295,6 @@ mixin _GradeHdr on _GradeModel, _GradePrimaries {
   }
 }
 
-/// The zone strip: a stop scale, one line a zone for how much of the zone
-/// reaches each stop, and a handle at each zone's range.
 class _ZoneStripPainter extends CustomPainter {
   final List<({String zone, double range, bool down, bool lit, bool changed})>
       zones;
@@ -355,7 +350,6 @@ class _ZoneStripPainter extends CustomPainter {
       final dx = (x - text.width / 2).clamp(0.0, w - text.width);
       text.paint(canvas, Offset(dx, bottom + 2));
     }
-    // Grey, where Shadow and Light meet.
     canvas.drawLine(Offset(xOf(0), top), Offset(xOf(0), bottom), hair);
     // The lit zone last, so it is drawn over the rest.
     final order = [...zones]..sort((a, b) => (a.lit ? 1 : 0) - (b.lit ? 1 : 0));
@@ -380,8 +374,6 @@ class _ZoneStripPainter extends CustomPainter {
             ..style = PaintingStyle.stroke
             ..strokeWidth = z.lit ? 1.5 : 1
             ..color = colour);
-      // The range's handle: a small notch on the top edge, pointing the
-      // way the zone reaches.
       final x = xOf(z.range.clamp(-_hdrSpan, _hdrSpan));
       final dir = z.down ? -1.0 : 1.0;
       final notch = Path()

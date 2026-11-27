@@ -23,10 +23,8 @@ use lumit_core::stabilise::motion::AGREE_TRACKED_PX;
 
 use crate::Correspondence;
 
-/// The most ways of moving one step is split into.
 pub(super) const MOST: usize = 3;
 
-/// The coarse grid a layer's cover is counted on, cells across and down.
 const GRID: (usize, usize) = (8, 6);
 
 /// Specks in one cell past which the cell counts no more, so one textured
@@ -40,11 +38,8 @@ const EDGE: f64 = 2.0;
 /// worth, against a layer covering the whole frame, which is worth one.
 const SHARE: f64 = 0.5;
 
-/// The most specks whose slide the search for one layer tries.
 const DRAWS: usize = 100;
 
-/// The most times a layer's slide, turn and growth is refitted to what it
-/// carries.
 const GROWTHS: usize = 10;
 
 /// What two layers count as sharing where too few specks live across both
@@ -55,7 +50,6 @@ const UNSURE: f64 = 0.5;
 /// two layers are one.
 const MIN_ACROSS: usize = 4;
 
-/// One way the specks of a step move.
 pub(super) struct Layer {
     /// The specks moving this way, by id, ascending.
     pub(super) members: Vec<u32>,
@@ -94,7 +88,6 @@ pub(super) fn split(pts: &[Correspondence], size: (usize, usize), from: i64) -> 
 /// `x' = a·x − b·y + tx`, `y' = b·x + a·y + ty`.
 type Similar = ([f64; 2], [f64; 2]);
 
-/// How far `s` misses taking `c.from` to `c.to`, squared.
 fn miss(s: &Similar, c: &Correspondence) -> f64 {
     let ([a, b], [tx, ty]) = *s;
     let (x, y) = (c.from[0], c.from[1]);
@@ -111,7 +104,6 @@ fn anchored(a: f64, b: f64, p: [f64; 2], q: [f64; 2]) -> Similar {
     )
 }
 
-/// The least-squares similarity over the pairs of `pts` that `which` names.
 fn least_squares(pts: &[Correspondence], which: &[usize]) -> Option<Similar> {
     if which.len() < 2 {
         return None;
@@ -309,9 +301,6 @@ pub(super) fn choose(
 mod tests {
     use super::*;
 
-    /// One step of a 960 by 540 raster: forty specks of background round the
-    /// frame's edges sliding one way, and a hundred and twenty on a subject in
-    /// the middle, reaching the bottom edge, moving its own way.
     fn step(t: i64) -> Vec<Correspondence> {
         let mut out = Vec::new();
         let bg = [1.0 + 0.3 * (t as f64).sin(), 0.5];

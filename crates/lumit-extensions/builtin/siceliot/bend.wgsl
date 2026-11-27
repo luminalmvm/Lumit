@@ -31,11 +31,9 @@ fn bd_source(l: vec2<f32>) -> vec2<f32> {
     let s = sign(r);
     let v = l - c;
     let a = atan2(s * v.x, -s * v.y);
-    // On the arc while the turn has the bend's sign and stays within it.
     if (a * s >= 0.0 && abs(a) <= abs(theta)) {
         return vec2<f32>(a * r, r - s * length(v));
     }
-    // Past the arc: straight on from its end.
     let e = c + r * vec2<f32>(sin(theta), -cos(theta));
     let t = vec2<f32>(cos(theta), sin(theta));
     let n = vec2<f32>(-sin(theta), cos(theta));

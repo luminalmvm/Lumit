@@ -46,7 +46,6 @@ List<double> wheelRgb(double master, Offset chroma) => [
             chroma.dy * math.sin(deg * math.pi / 180),
     ];
 
-/// The master of a colour: its mean channel.
 double wheelMaster(List<double> rgb) => (rgb[0] + rgb[1] + rgb[2]) / 3;
 
 /// The soft middle: the dot [u] of the way to the rim leans this much of the
@@ -70,7 +69,6 @@ const double _dragRadius = 48;
 /// lean is a matter of moving slowly, not of hitting a pixel. A double-click
 /// puts the dot back in the middle. The bar works the same way up and down.
 class GradeWheel extends StatefulWidget {
-  /// The three channels as the document holds them, at the playhead.
   final List<double> rgb;
 
   /// What the colour is at rest: the master every channel sits at.
@@ -79,7 +77,6 @@ class GradeWheel extends StatefulWidget {
   /// How much chroma the disc's rim stands for.
   final double reach;
 
-  /// The master bar's travel, either side of [neutral].
   final double masterSpan;
 
   /// The disc's diameter in logical pixels.
@@ -90,16 +87,12 @@ class GradeWheel extends StatefulWidget {
   final bool bar;
   final bool enabled;
 
-  /// Whether any channel has keyframes, so the dot wears the animated colour.
   final bool keyed;
 
-  /// The start of a gesture, before anything moves.
   final VoidCallback onStart;
 
-  /// A drag tick, with the three channels to preview.
   final ValueChanged<List<double>> onLive;
 
-  /// The end of a gesture, with the three channels to commit.
   final ValueChanged<List<double>> onCommit;
 
   /// A gesture that began and wrote nothing.
@@ -126,13 +119,10 @@ class GradeWheel extends StatefulWidget {
 }
 
 class _GradeWheelState extends State<GradeWheel> {
-  /// The colour in hand while a drag is in flight, as master and where the
-  /// dot sits, a fraction of the radius with y up.
   double? _master;
   Offset? _dot;
   bool _onBar = false;
 
-  /// Where the pointer was at the last tick, in the wheel's own space.
   Offset _at = Offset.zero;
 
   double get _liveMaster => _master ?? wheelMaster(widget.rgb);
@@ -319,7 +309,6 @@ class _WheelPainter extends CustomPainter {
     required this.enabled,
   });
 
-  /// The width of the ring of hues at the rim.
   static const double _rim = 5;
 
   /// The hues round the disc as a sweep, [s] and [v] their saturation and
@@ -349,7 +338,6 @@ class _WheelPainter extends CustomPainter {
     final rect = Rect.fromCircle(center: c, radius: r);
     final reach = chroma.distance.clamp(0.0, 1.0);
     canvas.drawCircle(c, r, Paint()..color = centre);
-    // The face takes the hues as the dot moves out, darkest in the middle.
     if (reach > 0) {
       canvas.drawCircle(
           c, r - _rim, Paint()..shader = _sweep(rect, 0.55, 0.85, 0.15 + 0.55 * reach));
@@ -398,7 +386,6 @@ class _WheelPainter extends CustomPainter {
       old.centre != centre;
 }
 
-/// The master bar: a track with a mark at the neutral point and a knob.
 class _BarPainter extends CustomPainter {
   /// The knob, -1 at the bottom to 1 at the top.
   final double at;

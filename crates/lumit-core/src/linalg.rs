@@ -83,7 +83,6 @@ pub fn cholesky(a: &Dense) -> Option<Dense> {
     Some(l)
 }
 
-/// Solve `L·Lᵀ·x = b` for the factor `L` from [`cholesky`].
 pub fn cholesky_solve(l: &Dense, b: &[f64]) -> Vec<f64> {
     let n = l.size();
     let mut y = vec![0.0f64; n];

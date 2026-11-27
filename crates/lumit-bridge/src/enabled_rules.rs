@@ -1,5 +1,3 @@
-//! A greying rule's condition, as the bridge carries it.
-
 use crate::api::effect::BridgeEnabledCond;
 use lumit_core::fx::schema::EnabledCond;
 

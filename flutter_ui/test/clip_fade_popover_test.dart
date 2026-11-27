@@ -1,9 +1,3 @@
-// The custom fade editor (docs/impl/audio-timeline.md §3): a crossfade opens
-// with both curves and the Keep level box, a lone fade opens with neither, and
-// a preset pressed there lands on both sides when Apply is pressed.
-//
-// The curve drawing itself is checked in clip_fades_test.dart, where it needs
-// no widget tree.
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';

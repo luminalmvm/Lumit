@@ -103,7 +103,6 @@
 
 use super::packed::{Packed, Qualifier, Window, POLY_AT, TABLE};
 
-/// Rec. 709 luma weights, as the rest of the colour family reads them.
 pub const LUMA: [f32; 3] = crate::fx::cpu::LUMA;
 
 /// The biggest value a graded channel may hold: fp16's largest, so a stored
@@ -147,7 +146,6 @@ pub fn held(v: [f32; 3]) -> [f32; 3] {
     v.map(|c| c.clamp(-BOUND, BOUND))
 }
 
-/// Scene linear into the grading space.
 #[must_use]
 pub fn encode(x: f32, space: u32) -> f32 {
     match space {
@@ -163,7 +161,6 @@ pub fn encode(x: f32, space: u32) -> f32 {
     }
 }
 
-/// The grading space back to scene linear.
 #[must_use]
 pub fn decode(y: f32, space: u32) -> f32 {
     match space {
@@ -179,20 +176,17 @@ pub fn decode(y: f32, space: u32) -> f32 {
     }
 }
 
-/// Rec. 709 luma.
 #[must_use]
 pub fn luma(v: [f32; 3]) -> f32 {
     v[0] * LUMA[0] + v[1] * LUMA[1] + v[2] * LUMA[2]
 }
 
-/// `Y, Cb, Cr` of a value.
 #[must_use]
 pub fn ycc(v: [f32; 3]) -> [f32; 3] {
     let y = luma(v);
     [y, (v[2] - y) / 1.8556, (v[0] - y) / 1.5748]
 }
 
-/// The value with this `Y, Cb, Cr`.
 #[must_use]
 pub fn rgb_of(c: [f32; 3]) -> [f32; 3] {
     let r = c[0] + 1.5748 * c[2];
@@ -236,7 +230,6 @@ pub fn band(x: f32, lo: f32, hi: f32, soft: f32) -> f32 {
     low * high
 }
 
-/// Entry `i` of table `t` in `data`.
 fn entry(data: &[f32], t: usize, i: usize) -> f32 {
     data.get(t * TABLE + i).copied().unwrap_or(0.0)
 }
@@ -427,7 +420,6 @@ pub fn unpremult(o: [f32; 4]) -> [f32; 3] {
     }
 }
 
-/// The picture as it came, in the grading space.
 #[must_use]
 pub fn v_in(o: [f32; 4], space: u32) -> [f32; 3] {
     unpremult(o).map(|c| encode(c, space))
@@ -446,7 +438,6 @@ pub fn grade(o: [f32; 4], key: f32, detail: f32, pk: &Packed) -> [f32; 4] {
     }
     let mut v = ug.map(|c| encode(c, space));
 
-    // Wheels.
     let y0 = luma(v);
     v = [0, 1, 2].map(|c| {
         let x = v[c] + pk.offset[c];
@@ -462,7 +453,6 @@ pub fn grade(o: [f32; 4], key: f32, detail: f32, pk: &Packed) -> [f32; 4] {
     let back = (1.0 - pk.lum_mix) * (y0 - luma(v));
     v = v.map(|c| c + back);
 
-    // Adjust.
     v = v.map(|c| (c - pk.pivot) * pk.contrast + pk.pivot);
     let y = luma(v);
     let tonal = pk.tonal[0] * (1.0 - ss(0.0, 0.5, y)) + pk.tonal[1] * ss(0.5, 1.0, y);
@@ -487,7 +477,6 @@ pub fn grade(o: [f32; 4], key: f32, detail: f32, pk: &Packed) -> [f32; 4] {
         v = v.map(|c| c + lift);
     }
 
-    // Curves.
     if pk.curves_on {
         v = [0, 1, 2].map(|c| table_at(&pk.data, 0, table_at(&pk.data, c + 1, v[c])));
     }
@@ -516,7 +505,6 @@ pub fn grade(o: [f32; 4], key: f32, detail: f32, pk: &Packed) -> [f32; 4] {
     }
     v = held(v);
 
-    // Out.
     let k = key * pk.mix;
     let a = o[3];
     let out = [0, 1, 2].map(|c| {

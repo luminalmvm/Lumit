@@ -21,7 +21,6 @@
 use crate::fx::{registry::EffectDef, registry::EffectMetadata, schema::EffectSchema};
 use lumit_fx_macros::Effect;
 
-/// Feature density's option labels, in index order (Low / Normal / High).
 pub const DENSITY_OPTIONS: &[&str] = &["Low", "Normal", "High"];
 
 /// The default Feature density index — Normal, which is
@@ -52,7 +51,6 @@ pub fn density(index: u32) -> (usize, usize, usize) {
         .unwrap_or(&DENSITY[DENSITY_DEFAULT as usize])
 }
 
-/// The Camera track effect's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "camera_track",
@@ -66,16 +64,12 @@ pub fn density(index: u32) -> (usize, usize, usize) {
     matte = false,
 )]
 pub struct CameraTrack {
-    /// Start the analysis. A button, not a value.
     #[action(label = "Analyse")]
     pub analyse: (),
     /// Stop a running analysis. Live only while one is running, which is job
     /// state and so is the panel's business in stage 3, not the schema's.
     #[action(label = "Cancel")]
     pub cancel: (),
-    /// How many features the tracker chases: [`DENSITY`]'s grid and per-bucket
-    /// counts. More is slower and more robust; the middle option is the
-    /// tracker's own default.
     #[choice(options = DENSITY_OPTIONS, default = DENSITY_DEFAULT, label = "Feature density")]
     pub density: u32,
     /// The lens in millimetres on 35 mm film, as a camera's own Focal length row
@@ -94,16 +88,12 @@ pub struct CameraTrack {
     /// tracked layer is almost always drawn round the thing that moves.
     #[toggle(default = true, label = "Use masks")]
     pub use_masks: bool,
-    /// Which frames Analyse tracks - see [`crate::planes::FRAMES_OPTIONS`].
     #[choice(options = *crate::planes::FRAMES_OPTIONS, default = 0, label = "Frames")]
     pub frames: u32,
-    /// Whether the solved point cloud draws over the picture on this layer.
-    /// On after a solve.
     #[toggle(default = true, label = "Show points")]
     pub show_points: bool,
 }
 
-/// The Camera track's behaviour: none, by design.
 pub struct CameraTrackDef;
 
 impl EffectDef for CameraTrackDef {

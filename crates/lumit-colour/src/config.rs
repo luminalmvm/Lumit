@@ -45,10 +45,6 @@ use crate::op::Direction;
 /// getting it into memory in the first place.
 const CONFIG_FILE_BYTES: u64 = 64 << 20;
 
-// ---------------------------------------------------------------------------
-// A tagged YAML tree — the shape this module walks.
-// ---------------------------------------------------------------------------
-
 #[derive(Debug, Clone, Default)]
 enum Node {
     #[default]
@@ -112,7 +108,6 @@ impl Tagged {
         )
     }
 
-    /// A value that may be one number or three: OCIO writes both.
     fn triple(&self, key: &str, default: f32) -> [f32; 3] {
         let Some(value) = self.get(key) else {
             return [default; 3];
@@ -166,7 +161,6 @@ impl Tagged {
             .unwrap_or_default()
     }
 
-    /// A value that may be a list of strings or one comma/colon-separated string.
     fn string_list(&self, key: &str, separators: &[char]) -> Vec<String> {
         let Some(value) = self.get(key) else {
             return Vec::new();
@@ -216,16 +210,12 @@ fn tag_name(tag: &Option<Tag>) -> Option<String> {
 /// here is charged what it expands to and not what it is written as.
 #[derive(Debug, Clone, Copy, Default)]
 struct Weight {
-    /// Nodes in the subtree, counting itself.
     nodes: u64,
-    /// Bytes of string the subtree holds, keys and scalars alike.
     bytes: u64,
-    /// How many levels the subtree is tall, counting itself.
     depth: u32,
 }
 
 impl Weight {
-    /// A leaf holding `bytes` of text.
     fn leaf(bytes: u64) -> Self {
         Weight {
             nodes: 1,
@@ -234,8 +224,6 @@ impl Weight {
         }
     }
 
-    /// This weight with a child's folded in — one more node, its bytes, and
-    /// tall enough to hold it.
     fn with_child(self, child: Weight) -> Self {
         Weight {
             nodes: self.nodes.saturating_add(child.nodes),
@@ -244,7 +232,6 @@ impl Weight {
         }
     }
 
-    /// Charge this subtree to the budget: its nodes as items, its text as bytes.
     fn charge(self, budget: &mut Budget) -> Result<()> {
         budget.take_items(self.nodes)?;
         budget.take_bytes(self.bytes)?;
@@ -260,7 +247,6 @@ fn parse_document(what: &str, text: &str, budget: &mut Budget) -> Result<Tagged>
         reason,
     };
 
-    // Walk to the first document's root node.
     loop {
         let (event, _) = parser
             .peek()
@@ -309,7 +295,6 @@ fn weigh(node: &Tagged, budget: &mut Budget) -> Result<Weight> {
     Ok(weight)
 }
 
-/// A string's length as a `u64`, for charging.
 fn text_bytes(s: &str) -> u64 {
     u64::try_from(s.len()).unwrap_or(u64::MAX)
 }
@@ -451,11 +436,6 @@ fn parse_node(
     })
 }
 
-// ---------------------------------------------------------------------------
-// What a config says.
-// ---------------------------------------------------------------------------
-
-/// A transform as the config states it, before anything is followed up.
 #[derive(Debug, Clone, PartialEq)]
 pub enum TransformSpec {
     Group(Vec<TransformSpec>, Direction),
@@ -526,9 +506,7 @@ pub enum Allocation {
 pub struct ColourSpace {
     pub name: String,
     pub family: String,
-    /// Other names the space answers to, good anywhere the name itself is.
     pub aliases: Vec<String>,
-    /// A data space carries no colour and is never transformed.
     pub is_data: bool,
     pub to_reference: Option<TransformSpec>,
     pub from_reference: Option<TransformSpec>,
@@ -541,10 +519,7 @@ pub struct ColourSpace {
 #[derive(Debug, Clone, Default)]
 pub struct View {
     pub name: String,
-    /// The v1 spelling: the display colour space, directly.
     pub colour_space: Option<String>,
-    /// The v2 spelling: a view transform into the display reference, then a
-    /// display colour space out of it.
     pub view_transform: Option<String>,
     pub display_colour_space: Option<String>,
     /// `looks:` — comma-separated, `+name` forward, `-name` inverted.
@@ -568,9 +543,7 @@ pub struct Look {
 #[derive(Debug, Clone, Default)]
 pub struct ViewTransform {
     pub name: String,
-    /// Scene reference → display reference.
     pub from_scene_reference: Option<TransformSpec>,
-    /// Display reference → scene reference.
     pub to_scene_reference: Option<TransformSpec>,
     /// The display-referred half, kept apart from the scene-referred one
     /// because they are not two spellings of the same thing. A view transform
@@ -584,7 +557,6 @@ pub struct ViewTransform {
     pub to_display_reference: Option<TransformSpec>,
 }
 
-/// Everything a `config.ocio` states.
 #[derive(Debug, Clone, Default)]
 pub struct Config {
     pub version: u32,
@@ -598,9 +570,7 @@ pub struct Config {
     pub search_paths: Vec<String>,
     pub roles: BTreeMap<String, String>,
     pub spaces: BTreeMap<String, ColourSpace>,
-    /// Declaration order, which is the order lists are shown in.
     pub space_order: Vec<String>,
-    /// Every alias a space declares, to the space's own name.
     pub aliases: BTreeMap<String, String>,
     /// Every space name and alias lowercased, to the space's own name. The
     /// reference library matches names without regard to case, and the
@@ -618,8 +588,6 @@ pub struct Config {
     pub default_view_transform: Option<String>,
 }
 
-/// Transform tags a config may legally carry that v1 does not implement. Named
-/// here so the refusal says the config's own word back to the user.
 const REFUSED_TRANSFORMS: [&str; 6] = [
     "FixedFunctionTransform",
     "GradingRGBCurveTransform",
@@ -856,10 +824,8 @@ fn parse_transform_kind(what: &str, value: &Tagged) -> Result<TransformSpec> {
                 },
                 "uniform" => TransformSpec::Matrix {
                     matrix: [
-                        scale, 0.0, 0.0, 0.0, //
-                        0.0, scale, 0.0, 0.0, //
-                        0.0, 0.0, scale, 0.0, //
-                        0.0, 0.0, 0.0, 1.0,
+                        scale, 0.0, 0.0, 0.0, 0.0, scale, 0.0, 0.0, 0.0, 0.0, scale, 0.0, 0.0, 0.0,
+                        0.0, 1.0,
                     ],
                     offset: [shift, shift, shift, 0.0],
                     dir,
@@ -1062,13 +1028,10 @@ impl Config {
         Self::parse(&dir, &text)
     }
 
-    /// The grammar half of [`Config::load`], split out so tests need no files.
     pub fn parse(dir: &Path, text: &str) -> Result<Self> {
         Self::parse_within(dir, text, &mut Budget::new(Limits::COLOUR_CONFIG))
     }
 
-    /// [`Config::parse`] against a budget the caller owns, for a reader already
-    /// spending one — and for the tests that set a ceiling low enough to reach.
     pub fn parse_within(dir: &Path, text: &str, budget: &mut Budget) -> Result<Self> {
         let what = "this config";
         let root = parse_document(what, text, budget)?;
@@ -1210,7 +1173,6 @@ impl Config {
                 views: Vec::new(),
             };
             for entry in views.seq() {
-                // `!<Views> [a, b]` names shared views; `!<View> {…}` states one.
                 if entry.tag.as_deref() == Some("Views") {
                     for shared in entry.seq() {
                         if let Some(view_name) = shared.scalar() {
@@ -1241,13 +1203,11 @@ impl Config {
             .collect()
     }
 
-    /// The looks a picker should list, by name.
     #[must_use]
     pub fn look_names(&self) -> Vec<&str> {
         self.looks.keys().map(String::as_str).collect()
     }
 
-    /// Follow a role to the space it names, one indirection (§4.2).
     #[must_use]
     pub fn role(&self, name: &str) -> Option<&str> {
         self.roles.get(name).map(String::as_str)
@@ -1273,8 +1233,6 @@ impl Config {
         self.displays.iter().find(|d| d.name == name)
     }
 
-    /// A display's view by name, falling back to the shared views a `!<Views>`
-    /// entry refers to.
     #[must_use]
     pub fn view(&self, display: &str, view: &str) -> Option<&View> {
         let found = self
@@ -1337,7 +1295,6 @@ colorspaces:
 
     #[test]
     fn a_log_camera_transform_may_spell_its_keys_snake_case() {
-        // Blender's own config, one camera log space, as it writes it.
         let text = r#"
 ocio_profile_version: 2
 colorspaces:
@@ -1363,10 +1320,6 @@ colorspaces:
         assert!(Config::parse(Path::new("."), "").is_err());
     }
 
-    /// The "billion laughs" shape: each anchor names the one above it twice, so
-    /// the node count doubles per line while the file grows by a few bytes.
-    /// Twenty-eight lines of this is a quarter of a billion nodes out of a file
-    /// that fits on a postcard, and the reader must charge what it expands to.
     #[test]
     fn an_alias_bomb_is_refused_rather_than_expanded() {
         let mut text = String::from("ocio_profile_version: 1\na0: &a0 [x, x, x, x, x, x, x, x]\n");
@@ -1380,7 +1333,6 @@ colorspaces:
         );
     }
 
-    /// The same shape against a ceiling it cannot fit under.
     #[test]
     fn a_merge_key_bomb_meets_the_ceiling() {
         let mut text = String::from("ocio_profile_version: 1\nbase: &base\n");
@@ -1422,18 +1374,12 @@ colorspaces:
         assert!(Config::parse(Path::new("."), &deep).is_err());
     }
 
-    /// An alias declared shallow and used deep adds its whole height at once,
-    /// so the depth check has to look at where it lands, not where it was
-    /// written. Otherwise the finished tree is taller than the parse ever went
-    /// and the walkers over it — `parse_transform` through its groups — recurse
-    /// past the ceiling the parse promised them.
     #[test]
     fn an_alias_may_not_graft_a_subtree_past_the_depth_ceiling() {
         let mut budget = Budget::new(Limits {
             depth: 6,
             ..Limits::COLOUR_CONFIG
         });
-        // `tall` is five deep; naming it four levels down would make nine.
         let text = "ocio_profile_version: 1\ntall: &tall [[[[[x]]]]]\nhere: [[[[*tall]]]]\n";
         let out = Config::parse_within(Path::new("."), text, &mut budget);
         assert!(

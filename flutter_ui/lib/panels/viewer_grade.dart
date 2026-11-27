@@ -39,8 +39,6 @@ import 'viewer_view_cube.dart' show ViewLookTag;
 
 const GradeEngine _engine = GradeEngine();
 
-// --- The shot and its node ---------------------------------------------------
-
 /// A clip's stack on the comp's clock, read once per document revision.
 final Map<String, (int?, List<BridgeEffectInstanceInfo>)> _clipStacks = {};
 
@@ -150,8 +148,6 @@ class ViewerGradeWriter {
   void clear() => editor.clear();
 }
 
-// --- Reference compare ---------------------------------------------------------
-
 /// The reference's picture, loaded once a reference is set: a still's PNG,
 /// or a shot's frame at the comp's size.
 class _ReferencePicture {
@@ -192,7 +188,6 @@ class _ReferencePicture {
         }
       }
     } catch (_) {
-      // A still whose file has gone, or a shot that has: nothing to draw.
     }
     if (_key != key) {
       got?.dispose();
@@ -298,7 +293,6 @@ class ViewerReferenceLayer extends StatelessWidget {
       case GradeCompare.mix:
         opacity = at;
     }
-    // The reference's side named, as a snapshot's is.
     final tagLeft = switch (style) {
       GradeCompare.wipe || GradeCompare.split => swapped ? null : x + 8,
       _ => null,
@@ -348,8 +342,6 @@ class ViewerReferenceLayer extends StatelessWidget {
 
   static const double _grab = 11;
 
-  /// The divider and its grab strip. A drag moves it, a double click puts it
-  /// back in the middle, a right click offers the reference's menu.
   Widget _seam(BuildContext context, LumitTheme t, double length, double at,
       {required bool vertical}) {
     final g = uiState.grade;
@@ -417,7 +409,6 @@ class _ReferencePainter extends CustomPainter {
       old.opacity != opacity;
 }
 
-/// What the split-screen grid shows, as its chip and menus name it.
 String gradeGridName(GradeGrid g) => switch (g) {
       GradeGrid.versions => l10n.gradeGridVersions,
       GradeGrid.stills => l10n.gradeGridStills,
@@ -432,7 +423,6 @@ String gradeCompareName(GradeCompare c) => switch (c) {
       GradeCompare.mix => l10n.gradeCompareMix,
     };
 
-/// The reference's menu: show it or not, how, which side, and clear it.
 void showReferenceMenu(BuildContext context, LumitUiState ui, Offset at) {
   final g = ui.grade;
   if (g.reference.value == null) return;
@@ -467,11 +457,6 @@ void showReferenceMenu(BuildContext context, LumitUiState ui, Offset at) {
   );
 }
 
-// --- The Viewer bar's chips ---------------------------------------------------
-
-/// The reference and the matte view, named on the Viewer bar while either is
-/// set. A click on the reference shows or hides it; on the matte view, puts
-/// the picture back. Each right-clicks for its choices.
 class ViewerGradeChips extends StatelessWidget {
   const ViewerGradeChips({super.key});
 
@@ -552,7 +537,6 @@ class ViewerGradeChips extends StatelessWidget {
                         id: 'viewer-matte-${m.name}',
                         ticked: m == matte),
                   const MenuDivider(),
-                  // What Highlight shows around the key; picking one shows it.
                   for (final b in GradeMatteBackdrop.values)
                     viewerRow(
                         switch (b) {
@@ -615,8 +599,6 @@ class ViewerGradeChips extends StatelessWidget {
       );
 }
 
-// --- Matte view, pick and chart ---------------------------------------------
-
 /// The grading tools that take the pointer, and the matte view kept in step
 /// with the current node. Above the layer controls, so a drag meant for a pick
 /// or a corner never moves a layer.
@@ -672,8 +654,6 @@ class _ViewerGradeToolsState extends State<ViewerGradeTools> {
       widget.viewId == _ui.activeViewId &&
       widget.comp.internalid == _ui.selectedComp?.internalid;
 
-  // --- Matte view ---
-
   /// What the engine was last told, so an unchanged state asks nothing.
   (GradeMatte, GradeMatteBackdrop, String, UuidValue?)? _sent;
   GradeShot? _sentShot;
@@ -707,8 +687,6 @@ class _ViewerGradeToolsState extends State<ViewerGradeTools> {
     _sentShot = target;
     _ui.requestFrame();
   }
-
-  // --- Qualifier pick ---
 
   final ViewerGradeWriter _writer = ViewerGradeWriter();
 
@@ -788,7 +766,6 @@ class _ViewerGradeToolsState extends State<ViewerGradeTools> {
     unawaited(_solve());
   }
 
-  /// A Correction at the end of a group's grade, as one with the step open.
   UuidValue? _addToGroup(
       GradeShot shot, ({UuidValue group, BridgeGradePart part}) scope) {
     try {
@@ -904,7 +881,6 @@ class _ViewerGradeToolsState extends State<ViewerGradeTools> {
     final at = _pickAt;
     final shot = _g.shot.value;
     final node = shot == null ? null : gradeNodeOf(_ui, shot);
-    // A 3D key's strokes so far, faint, and the one being drawn.
     final kept = _keys3d(node)
         ? [
             for (final s in _g.strokes.value[node!.id] ?? const <GradeStroke>[])
@@ -933,7 +909,6 @@ class _ViewerGradeToolsState extends State<ViewerGradeTools> {
       child: MouseRegion(
         cursor: SystemMouseCursors.precise,
         child: Listener(
-          // A right click puts the tool down.
           onPointerDown: (e) {
             if (e.buttons == kSecondaryButton) _g.pick.value = null;
           },
@@ -954,8 +929,6 @@ class _ViewerGradeToolsState extends State<ViewerGradeTools> {
       ),
     );
   }
-
-  // --- Chart ---
 
   /// Which corner a drag holds, 0 to 3 from the top left round clockwise,
   /// or 4 for the whole chart.
@@ -1005,7 +978,6 @@ class _ViewerGradeToolsState extends State<ViewerGradeTools> {
             ),
           ),
         ),
-        // The middle moves the whole chart.
         Positioned.fromRect(
           rect: Rect.fromPoints(
               Offset.lerp(shown[0], shown[2], 0.4)!,
@@ -1074,8 +1046,6 @@ class _ViewerGradeToolsState extends State<ViewerGradeTools> {
   }
 }
 
-/// A 3D key's strokes: the ones already drawn on the node faintly, kept in
-/// the accent and dropped in the error colour, and the stroke in hand.
 class _StrokePainter extends CustomPainter {
   final List<({bool drop, List<Offset> points})> kept;
   final List<Offset>? live;
@@ -1124,7 +1094,6 @@ class _StrokePainter extends CustomPainter {
   bool shouldRepaint(_StrokePainter old) => true;
 }
 
-/// A pick's circle: the samples it reads.
 class _CirclePainter extends CustomPainter {
   final Offset at;
   final double radius;
@@ -1206,7 +1175,6 @@ class _ChartPainter extends CustomPainter {
       old.line != line || old.corners.join() != corners.join();
 }
 
-/// A square grip on a handle, filled while held.
 class _HandlePainter extends CustomPainter {
   final Color line, under;
   final bool lit;

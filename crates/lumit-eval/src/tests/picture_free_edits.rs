@@ -1,11 +1,5 @@
-//! Tests for edits that keep every frame key.
-
 use super::*;
 
-/// Edits that cannot reach a pixel keep every key — the whole reason the
-/// cache is content-keyed rather than emptied on every commit. The work
-/// area is where the playhead loops, a marker is a label, a label colour is
-/// Timeline chrome, and volume is sound: none of them is in the picture.
 #[test]
 fn picture_free_edits_keep_every_key() {
     let doc = Document::new();
@@ -41,9 +35,6 @@ fn picture_free_edits_keep_every_key() {
         "label, volume, audio and the Timeline switches change no pixel"
     );
 
-    // And a node graph's canvas is presentation too (docs/impl/
-    // node-graph-comp.md §2.5): moving a box, twirling one open and
-    // naming a wash draw nothing at all.
     let (gdoc, graphed, read, ..) = node_graph_doc();
     let base = key(&gdoc, &graphed, 1.0);
     let mut arranged = graphed.clone();

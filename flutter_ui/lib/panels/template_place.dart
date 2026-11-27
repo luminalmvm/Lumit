@@ -1,7 +1,3 @@
-// Graphics templates from the library put to use: brought into the project
-// once, then placed as a composition from the Project panel is, in the
-// Timeline as a Precomp layer or in the Cut timeline as a clip. And a `.lumt`
-// handed to Lumit, put into the library.
 
 import 'dart:io';
 import 'dart:math' show max;
@@ -23,7 +19,6 @@ import '../state/dock.dart';
 import '../state/template_library.dart';
 import 'layer_fold_frb.dart' show timeOfSubframe;
 
-/// How long Insert title makes a template that has an intro or an outro.
 const int _titleSeconds = 5;
 
 /// Bring the library template at [path] into the open project, filed in the
@@ -45,7 +40,6 @@ Future<CompositionReference?> bringTemplate(LumitState app, String path) async {
   }
 }
 
-/// **Open**: bring the template in and front its composition for editing.
 Future<void> openTemplate(LumitState app, LumitUiState ui, String path) async {
   final comp = await bringTemplate(app, path);
   if (comp == null) return;
@@ -80,7 +74,6 @@ Future<void> placeTemplateInTimeline(LumitState app, LumitUiState ui,
   if (made case final layer?) ui.setSelection([layer]);
 }
 
-/// Move [layer] so its in point is at [frame], keeping its length.
 void _startAt(CompositionReference comp, LayerReference layer, int frame) {
   final settings = comp.getSettings();
   final (fpsNum, fpsDen) = (settings.fpsNum, settings.fpsDen);
@@ -121,7 +114,6 @@ Future<({LayerReference layer, UuidValue clip})?> placeTemplateInCut(
     };
     result = comp.cutPlaceComp(target: target, comp: template, atFrame: frame);
     if (result == BridgeCutResult.done) {
-      // A new track goes to the top of the stack.
       final layer = target ?? comp.getLayers().first;
       final clip = layer
           .getClips()
@@ -146,7 +138,6 @@ Future<({LayerReference layer, UuidValue clip})?> placeTemplateInCut(
       }
     }
   } catch (_) {
-    // A clip that went away between the draw and the press.
   } finally {
     project.endUndoGroup();
   }
@@ -155,7 +146,6 @@ Future<({LayerReference layer, UuidValue clip})?> placeTemplateInCut(
   app.notifyDocumentChanged();
   ui.model.refresh();
   if (made case final picked?) {
-    // The Cut timeline lights it, and Effect controls shows its card.
     ui.cutPickRequest.value = {picked.clip.toString()};
     ui.cutClip.value = picked;
     ui.setSelection([picked.layer]);
@@ -212,7 +202,6 @@ bool insertTitleTemplate(LumitState app, LumitUiState ui,
   return true;
 }
 
-/// What a `.lumt` is called before it has been read: its file's name.
 String _stem(String path) {
   final name = path.split(RegExp(r'[/\\]')).last;
   final dot = name.lastIndexOf('.');

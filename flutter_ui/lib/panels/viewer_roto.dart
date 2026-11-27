@@ -128,9 +128,6 @@ Color rotoStrokeColour(BridgeRotoStrokeKind kind, LumitTheme t) =>
 /// what its base frame is seeded from.
 typedef RotoTarget = ({UuidValue effect, int view, int seed});
 
-/// What a Roto tool writes on: a footage layer's stack, or a Roto brush box in
-/// a node graph. Everything the gesture asks of either is here, so the code
-/// that lays a stroke down reads the same for both.
 class _Surface {
   final LayerReference? layer;
   final CompositionReference? graph;
@@ -142,11 +139,9 @@ class _Surface {
   const _Surface.graph(CompositionReference this.graph, this.map)
       : layer = null;
 
-  /// The instances a stroke is staged on, freshly read.
   List<BridgeEffectInstance> instances() =>
       graph?.getNodeGraphInstances() ?? layer!.getEffects();
 
-  /// One commit, one undo step: the stack's own op, or the graph's.
   void commit(List<BridgeEffectInstance> staged) {
     final graph = this.graph;
     if (graph == null) {
@@ -162,21 +157,15 @@ class _Surface {
       rotoStatus(layer: layer!, effect: effect);
 }
 
-/// The Roto tools over the picture.
 class ViewerRotoLayer extends StatefulWidget {
-  /// Whether a Roto tool is armed. Inert otherwise.
   final bool active;
 
   final ToolMode tool;
   final LumitState state;
   final LumitUiState uiState;
 
-  /// Every layer with its box, top first — for the layer being scribbled on and
-  /// the map that carries the pointer into the file's own pixels.
   final List<LayerBox> boxes;
 
-  /// The Roto brush on the selected layer, or null when it has none. Found by
-  /// the Viewer from the read model it already holds.
   final RotoTarget? target;
 
   /// The node graph on screen, when the fronted composition is one, and the
@@ -247,10 +236,8 @@ class ViewerRotoLayer extends StatefulWidget {
 }
 
 class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
-  /// Where the pointer is, for the ring.
   Offset? _pointer;
 
-  /// The scribble in flight, in screen coordinates.
   final List<Offset> _stroke = [];
 
   /// Where the press landed. The framework only reports a drag once it has
@@ -270,7 +257,6 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
   int? _baseFrame;
   Float32List _boundary = Float32List(0);
 
-  /// What the last read was for.
   ({
     int frame,
     int? revision,
@@ -283,10 +269,8 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
 
   VoidCallback? _escapeRelease;
 
-  /// The poll waiting for a release-time solve to land, or null.
   Timer? _solveTimer;
 
-  /// A stroke released while that solve ran, asked for again once it lands.
   ({_Surface on, UuidValue effect, int frame})? _solveAgain;
 
   @override
@@ -318,8 +302,6 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
     return true;
   }
 
-  /// The layer being scribbled on: the primary selection, as every other
-  /// drawing tool uses.
   LayerBox? get _target =>
       primarySelectedBox(widget.boxes, widget.uiState.selectedLayerIds);
 
@@ -333,12 +315,8 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
   /// tells an unwired box from one whose file will not read.
   bool _graphWired = false;
 
-  /// The brush in hand: the selected layer's, or the picked box's.
   RotoTarget? get _brush => widget.graph == null ? widget.target : _graphBrush;
 
-  /// What a stroke would be written on, or null when there is nothing to
-  /// stroke: no layer selected, or in a node graph no brush box picked with
-  /// footage wired into it.
   _Surface? get _surface {
     final graph = widget.graph;
     if (graph == null) {
@@ -366,7 +344,6 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
     );
   }
 
-  /// Why there is nothing to stroke on, in the words for where the user is.
   String get _noSurface {
     if (widget.graph == null) return l10n.rotoSelectALayer;
     if (_graphBrush == null) return l10n.rotoPickABox;
@@ -628,8 +605,6 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
     );
   }
 
-  // --- The gesture ----------------------------------------------------------
-
   void _onPanStart(DragStartDetails details) {
     setState(() {
       _stroke
@@ -815,7 +790,6 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
       try {
         s = on.status(effect);
       } catch (_) {
-        // The layer or the effect went away under the poll.
         timer.cancel();
         _solveAgain = null;
         return;
@@ -835,7 +809,6 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
   }
 }
 
-/// The engine's own answers — what the application always uses.
 int _sourceFrameFromEngine(LayerReference layer, int frame) =>
     rotoSourceFrame(layer: layer, frame: frame);
 
@@ -848,8 +821,6 @@ bool _solveFrameFromEngine(LayerReference layer, UuidValue effect, int frame) =>
 /// The scribble under the pointer, on its own layer so a drag does not redraw
 /// the edge underneath it.
 class _ScribblePainter extends CustomPainter {
-  /// The scribble in screen coordinates, and the colour of the claim it is
-  /// about to make.
   final List<Offset> points;
   final Color colour;
 
@@ -876,14 +847,8 @@ class _ScribblePainter extends CustomPainter {
       old.width != width;
 }
 
-/// How wide a prompt's ring is drawn, in screen pixels. Big enough to find and
-/// small enough to see what is under it.
 const double _promptRadius = 5;
 
-/// The scribbles and the taps on this frame and, in the Boundary view, the
-/// propagated matte's edge.
-///
-/// Every colour arrives from the theme struct; nothing here chooses one.
 class RotoOverlayPainter extends CustomPainter {
   /// The layer↔screen map, or null when nothing is selected.
   final ViewerLayerMap? map;

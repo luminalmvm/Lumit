@@ -16,11 +16,8 @@ use std::sync::Mutex;
 #[cfg(not(target_os = "macos"))]
 const WHY: &str = "Lumit is exporting";
 
-/// One hold. Dropping it lets go.
 pub(crate) struct Awake(());
 
-/// How many holds there are, and what keeps the computer awake while there
-/// are any.
 static HOLDS: Mutex<(usize, Option<Keeper>)> = Mutex::new((0, None));
 
 /// Keep the computer awake until the answer is dropped. Overlapping holds are
@@ -49,7 +46,6 @@ impl Drop for Awake {
     }
 }
 
-/// The system's own request, while it stands.
 #[cfg(windows)]
 struct Keeper(isize);
 
@@ -96,7 +92,6 @@ impl Keeper {
     }
 }
 
-/// A program of the system's that keeps it awake while it runs.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 struct Keeper(std::process::Child);
 
@@ -111,14 +106,6 @@ impl Keeper {
             command.args(["-i", "-w", &std::process::id().to_string()]);
             command
         };
-        // ponytail: a Flatpak or a system without systemd has no
-        // systemd-inhibit, and the export carries on without a hold. Ask the
-        // portal's Inhibit if sleeping exports are ever reported from one.
-        //
-        // What it holds for is `cat` reading a pipe from here, not `sleep
-        // infinity`: closing the pipe ends both, where killing the inhibitor
-        // would leave a sleep behind each time, and the pipe closes by itself
-        // should this process die first.
         #[cfg(target_os = "linux")]
         let mut command = {
             let mut command = Command::new("systemd-inhibit");
@@ -148,7 +135,6 @@ impl Keeper {
     }
 }
 
-/// Nowhere else has a way to ask.
 #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
 struct Keeper;
 

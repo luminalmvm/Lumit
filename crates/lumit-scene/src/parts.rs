@@ -18,7 +18,6 @@ fn number(layer: &[u8; 16], key: &str) -> u32 {
     folded.max(1)
 }
 
-/// The number a whole 3D layer goes by.
 #[must_use]
 pub fn layer_number(layer: &[u8; 16]) -> u32 {
     number(layer, "")
@@ -116,7 +115,6 @@ mod tests {
             primitives: vec![drawn(None)],
             ..Mesh::default()
         };
-        // The same model, its nodes and materials the other way round.
         let material = |name: &str| Material {
             name: name.into(),
             ..Material::default()

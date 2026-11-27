@@ -156,6 +156,9 @@ features = [
     # coverage by accident, and would vanish the day that dependency changed.
     "Win32_System_ProcessStatus",
     "Win32_System_Threading",
+    "Win32_System_Memory",
+    "Win32_System_LibraryLoader",
+    "Win32_Security",
     # `GetCursorPos`/`SetCursorPos`, for the camera tools' pointer lock.
     "Win32_UI_WindowsAndMessaging",
     # `timeBeginPeriod`, so the worker's present-pacing sleeps are 1 ms-grained
@@ -167,6 +170,8 @@ features = [
     # `GetSystemPowerStatus`, so the status line can say the laptop is on
     # battery or saving power (`power_saving`).
     "Win32_System_Power",
+    # `PeekNamedPipe`, so a Discord that never answers cannot hang its thread.
+    "Win32_System_Pipes",
 ]
 
 # The live endpoint's pipe. The browser build has no other programs to talk to.

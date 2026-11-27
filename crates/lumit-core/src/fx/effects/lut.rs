@@ -22,14 +22,12 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// LUT's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "lut",
     label = "LUT",
     version = 1,
     category = Colour,
-    // A per-pixel 3D lookup.
     cost = Moderate,
     roi = Exact,
     // §2.2: an arbitrary colour map must see straight colour.
@@ -59,7 +57,6 @@ pub struct Lut {
     )]
     pub input_space: u32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,

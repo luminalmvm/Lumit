@@ -19,7 +19,6 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/lib.dart';
 import 'package:uuid/uuid.dart';
 
-/// The motion paths of the layers being drawn, held per document revision.
 class MotionPaths {
   /// By layer id. A null value is an answer too: the layer's Position is
   /// still, so there is no path to draw and nothing to ask again.
@@ -42,8 +41,6 @@ class MotionPaths {
     try {
       path = layer.motionPath();
     } catch (_) {
-      // The layer went away between the model being read and this ask. No
-      // path, and no asking again until the document moves.
     }
     _byLayer[id] = path;
     return path;

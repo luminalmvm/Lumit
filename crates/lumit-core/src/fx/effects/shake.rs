@@ -36,7 +36,6 @@ use lumit_fx_macros::Effect;
 
 mod resolve;
 
-/// `derived.mb_noise_<n>` for each listed n, as one const array.
 macro_rules! mb_noise_ids {
     ($($n:literal),* $(,)?) => {
         [$(ParamId::new(concat!("derived.mb_noise_", $n))),*]
@@ -50,7 +49,6 @@ macro_rules! mb_noise_ids {
 /// shutter, samples). Each group's ids are a contiguous run of the schema's
 /// `params`.
 pub const SHAKE_GROUPS: &[ParamGroup] = &[
-    // Each Style's own rows, shown only while that style is picked.
     ParamGroup {
         label: "",
         params: &["stillness", "twitch_freq"],
@@ -124,7 +122,6 @@ pub const SHAKE_GROUPS: &[ParamGroup] = &[
     },
 ];
 
-/// Shake's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "shake",
@@ -269,7 +266,6 @@ pub struct Shake {
     )]
     pub x_freq: f32,
 
-    /// See [`x_amp`](Self::x_amp).
     #[slider(
         label = "Y amount",
         min = 0.0,
@@ -280,7 +276,6 @@ pub struct Shake {
     )]
     pub y_amp: f32,
 
-    /// See [`x_freq`](Self::x_freq).
     #[slider(
         label = "Y frequency",
         min = 0.0,
@@ -306,7 +301,6 @@ pub struct Shake {
     )]
     pub z_amp: f32,
 
-    /// See [`x_freq`](Self::x_freq).
     #[slider(
         label = "Z frequency",
         min = 0.0,
@@ -346,7 +340,6 @@ pub struct Shake {
     #[slider(label = "X wave phase", min = 0.0, max = 360.0, default = 0.0, unit = Degrees)]
     pub x_wave_phase: f32,
 
-    /// See [`x_wave`](Self::x_wave).
     #[slider(
         label = "Y wave",
         min = 0.0,
@@ -357,7 +350,6 @@ pub struct Shake {
     )]
     pub y_wave: f32,
 
-    /// See [`x_wave_freq`](Self::x_wave_freq).
     #[slider(
         label = "Y wave frequency",
         min = 0.0,
@@ -368,7 +360,6 @@ pub struct Shake {
     )]
     pub y_wave_freq: f32,
 
-    /// See [`x_wave_phase`](Self::x_wave_phase).
     #[slider(label = "Y wave phase", min = 0.0, max = 360.0, default = 0.0, unit = Degrees)]
     pub y_wave_phase: f32,
 
@@ -384,7 +375,6 @@ pub struct Shake {
     )]
     pub z_wave: f32,
 
-    /// See [`x_wave_freq`](Self::x_wave_freq).
     #[slider(
         label = "Z wave frequency",
         min = 0.0,
@@ -395,7 +385,6 @@ pub struct Shake {
     )]
     pub z_wave_freq: f32,
 
-    /// See [`x_wave_phase`](Self::x_wave_phase).
     #[slider(label = "Z wave phase", min = 0.0, max = 360.0, default = 0.0, unit = Degrees)]
     pub z_wave_phase: f32,
 
@@ -411,7 +400,6 @@ pub struct Shake {
     )]
     pub rot_wave: f32,
 
-    /// See [`x_wave_freq`](Self::x_wave_freq).
     #[slider(
         label = "Rotation wave frequency",
         min = 0.0,
@@ -422,7 +410,6 @@ pub struct Shake {
     )]
     pub rot_wave_freq: f32,
 
-    /// See [`x_wave_phase`](Self::x_wave_phase).
     #[slider(label = "Rotation wave phase", min = 0.0, max = 360.0, default = 0.0, unit = Degrees)]
     pub rot_wave_phase: f32,
 
@@ -436,19 +423,15 @@ pub struct Shake {
     #[slider(label = "Red phase", min = -1.0, max = 1.0, default = 0.0, unit = Seconds)]
     pub red_phase: f32,
 
-    /// See [`red_amount`](Self::red_amount).
     #[slider(label = "Green amount", min = 0.0, max = 2.0, default = 1.0, hard_min = -4.0, hard_max = 4.0, unit = Raw)]
     pub green_amount: f32,
 
-    /// See [`red_phase`](Self::red_phase).
     #[slider(label = "Green phase", min = -1.0, max = 1.0, default = 0.0, unit = Seconds)]
     pub green_phase: f32,
 
-    /// See [`red_amount`](Self::red_amount).
     #[slider(label = "Blue amount", min = 0.0, max = 2.0, default = 1.0, hard_min = -4.0, hard_max = 4.0, unit = Raw)]
     pub blue_amount: f32,
 
-    /// See [`red_phase`](Self::red_phase).
     #[slider(label = "Blue phase", min = -1.0, max = 1.0, default = 0.0, unit = Seconds)]
     pub blue_phase: f32,
 
@@ -461,8 +444,6 @@ pub struct Shake {
     #[slider(label = "Random rate", min = 0.0, max = 4.0, default = 1.0, hard_min = 0.0, unit = Raw)]
     pub rgb_freq: f32,
 
-    /// The shake's own motion blur (T18), smeared along the wobble's
-    /// inter-frame movement and applied to this effect alone.
     #[toggle(label = "Motion blur", default = false)]
     pub motion_blur: bool,
 
@@ -531,15 +512,12 @@ pub struct Shake {
     #[slider(label = "Crop left", min = 0.0, max = 50.0, default = 0.0, hard_min = 0.0, hard_max = 100.0, unit = Percent)]
     pub crop_left: f32,
 
-    /// See [`crop_left`](Self::crop_left).
     #[slider(label = "Crop right", min = 0.0, max = 50.0, default = 0.0, hard_min = 0.0, hard_max = 100.0, unit = Percent)]
     pub crop_right: f32,
 
-    /// See [`crop_left`](Self::crop_left).
     #[slider(label = "Crop top", min = 0.0, max = 50.0, default = 0.0, hard_min = 0.0, hard_max = 100.0, unit = Percent)]
     pub crop_top: f32,
 
-    /// See [`crop_left`](Self::crop_left).
     #[slider(label = "Crop bottom", min = 0.0, max = 50.0, default = 0.0, hard_min = 0.0, hard_max = 100.0, unit = Percent)]
     pub crop_bottom: f32,
 
@@ -547,7 +525,6 @@ pub struct Shake {
     #[seed]
     pub seed: u32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -607,7 +584,6 @@ pub enum Shaken {
     /// The plain single resample through the Transform kernel: no smear,
     /// no Channels and no Crop.
     Plain {
-        /// This frame's wobble.
         wobble: ShakeSample,
         /// [`EdgesMode`] wire code for the revealed border.
         edge: u32,
@@ -682,10 +658,8 @@ impl Shake {
     /// The edge policy, with an old project's `auto_scale` bool folded in.
     pub const DERIVED_EDGE: ParamId = ParamId::new("derived.edge");
 
-    /// Whether the noise is prescaled (see [`ShakeDerived::prescaled`]).
     pub const DERIVED_PRESCALED: ParamId = ParamId::new("derived.prescaled");
 
-    /// Whether the channels shake apart (see [`ShakeDerived::split`]).
     pub const DERIVED_SPLIT: ParamId = ParamId::new("derived.split");
 
     /// Everything [`Shake::packed`] needs that is not a declared row, out of a
@@ -864,7 +838,6 @@ pub fn migrate(e: &mut EffectInstance, wired: &dyn Fn(&str) -> bool) {
     }
 }
 
-/// Shake's behaviour.
 pub struct ShakeDef;
 
 impl EffectDef for ShakeDef {
@@ -872,7 +845,6 @@ impl EffectDef for ShakeDef {
         &<Shake as EffectMetadata>::SCHEMA
     }
 
-    /// A hit that lands on the playhead.
     fn presets(&self) -> &'static [crate::fx::presets::EffectPreset] {
         use crate::fx::presets::PresetValue::{Bool, Keys};
         &[crate::fx::presets::EffectPreset {
@@ -909,8 +881,6 @@ impl EffectDef for ShakeDef {
             Shaken::Plain { wobble, edge, mix } => {
                 let (anchor, position, scale, rot) =
                     shake_affine(w, h, wobble.offset_px, wobble.rotation_deg, wobble.zoom);
-                // A wobble is an offset, a turn and a zoom; the Shake has no
-                // Skew control, so it passes none.
                 cpu::transform(
                     rgba, w, h, anchor, position, scale, rot, NO_SKEW, edge, 1.0, mix,
                 );

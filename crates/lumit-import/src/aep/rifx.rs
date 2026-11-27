@@ -32,17 +32,12 @@ pub type FourCc = [u8; 4];
 /// trusted.
 pub const MAX_DEPTH: u32 = 64;
 
-/// What can go wrong reading the container itself, as opposed to what any
-/// chunk means.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum RifxError {
-    /// The file does not begin with `RIFX`.
     #[error("not an .aep project: the file does not start with RIFX")]
     NotRifx,
-    /// The form type is not `Egg!` — a RIFX that is not an `.aep`.
     #[error("not an .aep project: form type is {found}, not Egg!")]
     WrongForm { found: String },
-    /// A header or body ran off the end of the bytes it was read from.
     #[error("truncated: {what} wanted {wanted} bytes but only {available} remain")]
     Truncated {
         what: &'static str,
@@ -58,7 +53,6 @@ pub enum RifxError {
         size: u64,
         available: u64,
     },
-    /// The nesting cap was hit.
     #[error("chunks nested deeper than {MAX_DEPTH} levels")]
     TooDeep,
 }
@@ -70,19 +64,14 @@ pub enum RifxError {
 /// reading of the file to its caller.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Chunk<'a> {
-    /// The four-letter name: `idta`, `cdta`, `ldta`, `LIST`, …
     pub id: FourCc,
-    /// For a `LIST` (or the root `RIFX`), the list's own four-letter type:
-    /// `Fold`, `Item`, `Layr`, `tdgp`, …
     pub list_type: Option<FourCc>,
     /// The chunk's contents, with the list type already stripped off a `LIST`.
     pub body: &'a [u8],
-    /// How deep this chunk sits, so [`Chunk::children`] can enforce the cap.
     depth: u32,
 }
 
 impl<'a> Chunk<'a> {
-    /// Whether this is a `LIST` of the given type.
     pub fn is_list(&self, list_type: &FourCc) -> bool {
         self.list_type.as_ref() == Some(list_type)
     }
@@ -121,7 +110,6 @@ pub struct Chunks<'a> {
 }
 
 impl<'a> Chunks<'a> {
-    /// Walk `body` as a sequence of chunks at the top of the tree.
     pub fn new(body: &'a [u8]) -> Self {
         Self::at_depth(body, 0)
     }
@@ -337,8 +325,6 @@ pub fn rational_at(body: &[u8], dividend: usize, divisor: usize) -> Option<f64> 
 mod tests {
     use super::*;
 
-    /// A chunk: four-letter name, big-endian size, body, and a pad byte when
-    /// the body is odd.
     fn chunk(id: &[u8; 4], body: &[u8]) -> Vec<u8> {
         let mut out = id.to_vec();
         out.extend_from_slice(&(body.len() as u32).to_be_bytes());
@@ -349,7 +335,6 @@ mod tests {
         out
     }
 
-    /// A whole file: `RIFX`, a size, the form type, then the given body.
     fn file(form: &[u8; 4], body: &[u8]) -> Vec<u8> {
         let mut out = b"RIFX".to_vec();
         out.extend_from_slice(&((body.len() + 4) as u32).to_be_bytes());
@@ -411,7 +396,6 @@ mod tests {
     /// deeply-nested project costs an error and not the stack.
     #[test]
     fn nesting_deeper_than_the_cap_is_refused() {
-        // Wrap one leaf in enough lists to pass the cap.
         let mut nested = chunk(b"leaf", &[1, 2]);
         for _ in 0..=MAX_DEPTH {
             let mut list = b"deep".to_vec();

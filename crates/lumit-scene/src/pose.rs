@@ -19,24 +19,18 @@ pub struct PartEdit {
     pub hidden: bool,
 }
 
-/// Every node of a scene at one moment.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Pose {
-    /// Each node's place in model space.
     pub worlds: Vec<Mat4>,
-    /// Each node, and whether it or a parent is hidden.
     pub hidden: Vec<bool>,
-    /// Every skin's joint matrices, skin after skin.
     pub palette: Vec<Mat4>,
     /// Morph weights, a run for each node whose mesh has targets, in node
     /// order.
     pub weights: Vec<f32>,
-    /// The box round what shows.
     pub bounds: Bounds,
 }
 
 impl ModelScene {
-    /// How many morph targets node `k`'s mesh has.
     #[must_use]
     pub fn targets_of(&self, k: usize) -> usize {
         let mesh = self.nodes.get(k).and_then(|n| self.meshes.get(n.mesh?));
@@ -69,7 +63,6 @@ impl Pose {
     }
 }
 
-/// A node's part of a pose: where its vertices go.
 pub struct Mover<'a> {
     weights: &'a [f32],
     skin: Option<&'a [Mat4]>,
@@ -243,7 +236,6 @@ fn posed_bounds(scene: &ModelScene, pose: &Pose, starts: &[usize]) -> Bounds {
         if pose.hidden.get(k).copied().unwrap_or(false) {
             continue;
         }
-        // How far the targets can carry a corner, weighted now.
         let (mut below, mut above) = (Vec3::ZERO, Vec3::ZERO);
         for p in &mesh.primitives {
             for (i, target) in p.morph_targets.iter().enumerate() {
@@ -344,7 +336,6 @@ fn sample(channel: &Channel, at: f32, n: usize, mut out: impl FnMut((usize, f32)
     Some(())
 }
 
-/// `channel`'s one number at `at`.
 #[must_use]
 pub fn sampled(channel: &Channel, at: f32) -> Option<f32> {
     let mut one = None;
@@ -431,7 +422,6 @@ pub fn take_time(at: f64, length: f64, looping: Looping) -> Option<f64> {
     }
 }
 
-/// What a take does past its ends.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Looping {
     Off,
@@ -482,8 +472,6 @@ mod tests {
         }
     }
 
-    /// The same moment gives the same pose however it is reached, children
-    /// follow their parents, and a part's rows carry its children with it.
     #[test]
     fn a_pose_comes_from_the_moment_alone() {
         let s = scene();
@@ -506,7 +494,6 @@ mod tests {
         let edited = pose(&s, None, &[moved]);
         assert_eq!(edited.worlds[1].w_axis.y, 3.0);
         assert!(edited.hidden[1], "hiding a part hides what hangs off it");
-        // A bone hidden collapses what it moves.
         let mut rig = scene();
         rig.skins.push(Skin {
             joints: vec![1],
@@ -517,7 +504,6 @@ mod tests {
         assert_eq!(palette[0].transform_vector3(Vec3::ONE), Vec3::ZERO);
     }
 
-    /// A file with broken lists draws at rest rather than panicking.
     #[test]
     fn broken_channels_leave_the_node_at_rest() {
         let s = scene();
@@ -540,7 +526,6 @@ mod tests {
                 pose(&s, None, &[]).worlds
             );
         }
-        // A skin naming nodes that aren't there holds still too.
         let mut s = s;
         s.skins.push(Skin {
             joints: vec![42],

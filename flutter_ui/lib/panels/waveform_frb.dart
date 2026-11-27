@@ -74,9 +74,6 @@ import '../theme/theme.dart';
 /// would mean a lane whose buckets and columns quietly disagree.
 const int maxPeakBuckets = 4096;
 
-/// How many pixel columns share one bucket. One each is the honest answer and
-/// what this uses: the wave is drawn a column at a time, so a bucket per
-/// column is exactly enough detail and no more.
 const double pixelsPerBucket = 1;
 
 /// A lane's ask: which stretch of a source to summarise, and how finely.
@@ -120,8 +117,6 @@ class WaveformRequest {
     // and change the window twice as often for no more coverage.
     final from = ((startSeconds - pad) / grid).floorToDouble() * grid;
     final to = from + ((span + pad * 2) / grid).ceilToDouble() * grid;
-    // The padded window is drawn over the same pixels, so it wants
-    // proportionally more buckets to keep one per column.
     final wanted = pixels / pixelsPerBucket * (to - from) / span;
     final buckets = _roundUpToPowerOfTwo(wanted.ceil()).clamp(64, maxPeakBuckets);
     return WaveformRequest(startSeconds: from, endSeconds: to, buckets: buckets);
@@ -146,8 +141,6 @@ class WaveformRequest {
 /// The rate the engine takes a wave's samples at, as it takes its peaks.
 const double waveSampleRate = 48000;
 
-/// Whether a wave drawn at [secondsPerPixel] has passed one sample per pixel,
-/// where the samples themselves are drawn rather than a summary of them.
 bool waveWantsSamples(double secondsPerPixel) =>
     secondsPerPixel > 0 && secondsPerPixel * waveSampleRate < 1;
 
@@ -169,7 +162,6 @@ Future<BridgeAudioPeaks> withSamples(
     final samples = await fetch(request.startSeconds, request.endSeconds);
     if (samples.frames > 0) _samplesOf[peaks] = samples;
   } catch (_) {
-    // No samples: the summary is drawn as it was.
   }
   return peaks;
 }
@@ -209,8 +201,6 @@ int _roundUpToPowerOfTwo(int n) {
 /// The maps are written in place and the word is said once at the end of a
 /// pass, because a pass over the layers usually settles several of them.
 class AudioLaneSummaries extends ChangeNotifier {
-  /// Each layer's peaks, by layer id — the stretch of its source the lanes are
-  /// showing, summarised to one bucket per pixel column.
   final Map<String, BridgeAudioPeaks> peaks = {};
 
   /// Each spectral-mode lane's spectrogram window, the same bargain for the
@@ -220,11 +210,8 @@ class AudioLaneSummaries extends ChangeNotifier {
   void changed() => notifyListeners();
 }
 
-/// How a waveform is drawn — the two choices Settings offers, together,
-/// because a painter wants them together and neither means much alone.
 @immutable
 class WaveformStyle {
-  /// Draw the three-band stack rather than one full-range wave.
   final bool multiwave;
 
   /// Stand the wave on the floor of its row, rectified, instead of centring it
@@ -290,17 +277,13 @@ class WaveformPainter extends CustomPainter {
   final double originSeconds;
   final double secondsPerPixel;
 
-  /// The columns to draw between — the visible part of the bar or clip.
   final double left;
   final double right;
 
   final WaveformColours colours;
 
-  /// Where the wave sits and whether the bands are stacked.
   final WaveformStyle style;
 
-  /// Vertical breathing room top and bottom, so a full-scale wave does not
-  /// touch the row's edges.
   final double inset;
 
   /// How tall to draw, when that is taller than the row the painter sits in.
@@ -365,8 +348,6 @@ class WaveformPainter extends CustomPainter {
       return;
     }
     if (held.buckets == 0 || held.values.isEmpty) return;
-    // Two channels: the left over the right, each in half the room, as
-    // Vegas stacks them.
     if (held.channels == 2) {
       final half = Size(size.width, size.height / 2);
       for (var c = 0; c < 2; c++) {
@@ -447,7 +428,6 @@ class WaveformPainter extends CustomPainter {
     for (var drawn = 0; drawn < bands.length; drawn++) {
       final band = bands[drawn].band;
       final colour = bands[drawn].colour;
-      // Back to front, each a little higher than the last.
       final floor = baseline - step * drawn;
       // The single wave keeps its softened envelope and its solid energy core
       // — the shape people already read. A band in the stack is drawn solid
@@ -484,8 +464,6 @@ class WaveformPainter extends CustomPainter {
         var n = over ? fullAt : bodyAt;
         lines[n++] = x + 0.5;
         if (style.fromBottom) {
-          // Rectified: the column reaches up by how far the signal swung
-          // either way, whichever was further.
           final amp = math.max(hi.abs(), lo.abs());
           lines[n++] = floor;
           lines[n++] = x + 0.5;

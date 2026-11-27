@@ -14,7 +14,6 @@ use super::{Edge, Input, Placed, State};
 /// is a conflict.
 const CONFLICT: f64 = 0.020;
 
-/// Place `inputs` from the accepted `edges`.
 pub(super) fn place(inputs: &[Input], edges: &[Edge]) -> Vec<Placed> {
     let n = inputs.len();
     let seconds: Vec<f64> = inputs.iter().map(|i| i.onsets.seconds).collect();
@@ -172,7 +171,6 @@ pub(super) fn place(inputs: &[Input], edges: &[Edge]) -> Vec<Placed> {
     out
 }
 
-/// The root of `i`'s set, halving the path on the way.
 fn find(root: &mut [usize], mut i: usize) -> usize {
     while root[i] != i {
         root[i] = root[root[i]];
@@ -206,7 +204,6 @@ fn least_squares(
         a[i * n + i] = 1.0;
         rhs[i] = 0.0;
     }
-    // Gaussian elimination with partial pivoting; n is the number of files.
     for col in 0..n {
         let pivot = (col..n)
             .max_by(|&x, &y| a[x * n + col].abs().total_cmp(&a[y * n + col].abs()))

@@ -14,7 +14,6 @@ use std::sync::Arc;
 use crate::{expression::ExpressionContext, time::Rational};
 use serde::{Deserialize, Serialize};
 
-/// Per-side interpolation of a keyframe (docs/03-DATA-MODEL.md §6.2).
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum SideInterp {
     Hold,
@@ -43,8 +42,6 @@ pub enum SideInterp {
     },
 }
 
-/// Which of the three tangent modes a side is in — the graph strip's
-/// Auto / Clamp / Free (docs/impl/timeline-interaction.md §6.3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TangentMode {
     Auto,
@@ -53,7 +50,6 @@ pub enum TangentMode {
 }
 
 impl SideInterp {
-    /// Which mode this side is in.
     #[must_use]
     pub fn tangent_mode(self) -> TangentMode {
         match self {
@@ -105,13 +101,10 @@ impl SideInterp {
 pub struct Keyframe {
     pub time: Rational,
     pub value: f64,
-    /// Approaching this key.
     pub interp_in: SideInterp,
-    /// Leaving this key.
     pub interp_out: SideInterp,
 }
 
-/// Easy-ease preset: speed 0, influence 33.33% (the AE constant).
 pub const EASY_EASE: SideInterp = SideInterp::Bezier {
     speed: 0.0,
     influence: 1.0 / 3.0,
@@ -158,8 +151,6 @@ pub fn ae_ease(speed: Option<f64>, influence: Option<f64>) -> SideInterp {
 }
 
 impl Keyframe {
-    /// This keyframe made linear on both sides — straight lines to its
-    /// neighbours, the default for a fresh key.
     pub fn to_linear(self) -> Keyframe {
         Keyframe {
             interp_in: SideInterp::Linear,
@@ -168,10 +159,6 @@ impl Keyframe {
         }
     }
 
-    /// This keyframe eased on both sides — the After Effects "easy ease" (F9):
-    /// speed 0, influence 1/3, so the curve arrives and leaves flat and the
-    /// tangent handles can then be dragged. The value is unchanged, so the curve
-    /// still passes exactly through the key.
     pub fn to_bezier(self) -> Keyframe {
         Keyframe {
             interp_in: EASY_EASE,
@@ -322,9 +309,6 @@ fn span_index(keys: &[Keyframe], t: f64) -> usize {
     p.saturating_sub(1).min(keys.len().saturating_sub(2))
 }
 
-/// One span's slope, matching [`evaluate_span`]'s side handling: a Hold-out span
-/// is flat (0), a straight span is the chord slope, and a bezier span is the
-/// value curve's exact derivative.
 fn evaluate_speed_span(keys: &[Keyframe], i: usize, t: f64) -> f64 {
     let (a, b) = (&keys[i], &keys[i + 1]);
     let (t1, t2) = (a.time.to_f64(), b.time.to_f64());
@@ -355,9 +339,6 @@ fn evaluate_span(keys: &[Keyframe], i: usize, t: f64) -> f64 {
     }
 }
 
-/// The cubic across the span leaving `keys[i]`, its two sides resolved
-/// ([`resolved_side`]) so an automatic tangent is the one the neighbours
-/// dictate.
 fn span_cubic(keys: &[Keyframe], i: usize) -> CubicSpan {
     let (a, b) = (&keys[i], &keys[i + 1]);
     let (t1, t2) = (a.time.to_f64(), b.time.to_f64());
@@ -378,7 +359,6 @@ fn span_cubic(keys: &[Keyframe], i: usize) -> CubicSpan {
 fn side_params(side: SideInterp, chord_slope: f64) -> (f64, f64) {
     match side {
         SideInterp::Bezier { speed, influence } => (speed, influence),
-        // Linear (or hold-in, which only matters as an out-side) on the chord.
         _ => (chord_slope, 1.0 / 3.0),
     }
 }
@@ -426,7 +406,6 @@ impl CubicSpan {
         Self { x, y }
     }
 
-    /// The four control points, x and y.
     #[must_use]
     pub fn control_points(&self) -> ([f64; 4], [f64; 4]) {
         (self.x, self.y)
@@ -450,7 +429,7 @@ impl CubicSpan {
             return 0.0;
         }
         let (mut lo, mut hi) = (0.0f64, 1.0f64);
-        let mut u = ((t - x0) / (x3 - x0)).clamp(0.0, 1.0); // x ≈ identity guess
+        let mut u = ((t - x0) / (x3 - x0)).clamp(0.0, 1.0);
         for _ in 0..16 {
             let xu = Self::bezier(&self.x, u);
             if (xu - t).abs() < 1e-12 {
@@ -516,7 +495,6 @@ impl CubicSpan {
         }
     }
 
-    /// The same for the side approaching this span's end.
     #[must_use]
     pub fn in_side(&self) -> SideInterp {
         let dt = self.x[3] - self.x[0];
@@ -544,10 +522,6 @@ impl CubicSpan {
     }
 }
 
-/// An animatable scalar slot (docs/03-DATA-MODEL.md §6.1; the expression slot
-/// joins in Phase 4). Phase 1 starts with separated scalar dimensions —
-/// coupled Vec2 spatial paths and roving keyframes arrive with the
-/// motion-path work (status-noted in the data model doc).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Animation {
     Static(f64),
@@ -577,7 +551,6 @@ impl Property {
         }
     }
 
-    /// Evaluate at a time in the owner's timebase (seconds).
     pub fn value_at(&self, t: f64) -> f64 {
         match &self.animation {
             Animation::Static(v) => *v,
@@ -682,7 +655,6 @@ impl Property {
         crate::expression::script::Language::of(&self.extra)
     }
 
-    /// Say which language this property's expression is written in.
     pub fn set_expression_language(&mut self, language: crate::expression::script::Language) {
         use crate::expression::script::Slot;
         Slot::read(&self.extra)
@@ -885,13 +857,8 @@ impl Property {
 /// most of a fade's length in the part you can actually hear.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FadeShape {
-    /// Straight in dB: flat handles nowhere, an even ramp.
     Linear,
-    /// Easy-ease at both ends — the default, and the one a fade under a
-    /// title wants.
     Ease,
-    /// Eased at the loud end, straight at the silent one: the level hangs
-    /// where it was and then drops away.
     Exponential,
 }
 

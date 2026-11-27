@@ -191,7 +191,6 @@ typedef _Turn = (BridgeScalar, BridgeScalar, BridgeScalar);
 final Map<(_Turn, BridgeRational), (double, double, double)>
     _orientationSamples = {};
 
-/// The Orientations asked for at [_hotTime], as [_hot] is for the rows.
 Set<_Turn> _hotTurns = {};
 
 /// The miss, and everything the last frame wanted that this one has not been

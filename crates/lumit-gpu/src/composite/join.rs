@@ -1,6 +1,3 @@
-//! How a model's picture joins a run of 3D layers: drawn full frame, each
-//! pixel at the model's own depth there (`model_join.wgsl`).
-
 use super::{Compositor, CUT_DEPTH, OVER};
 use crate::mesh::ModelPicture;
 use crate::GpuContext;
@@ -91,8 +88,6 @@ impl Compositor {
         })
     }
 
-    /// The seven join draws at `samples`, built the first time they are asked
-    /// for.
     pub(super) fn join_set(
         &self,
         ctx: &GpuContext,
@@ -101,7 +96,6 @@ impl Compositor {
         self.join_set_as(ctx, samples, ctx.working())
     }
 
-    /// As [`Self::join_set`], drawing into `format`.
     pub(super) fn join_set_as(
         &self,
         ctx: &GpuContext,
@@ -190,9 +184,6 @@ impl Compositor {
         }
     }
 
-    /// A model's picture placed full frame, with `params` and `flags` as
-    /// `model_join.wgsl` reads them, and `plate` what was under its run, for
-    /// a holdout.
     pub(super) fn join_group(
         &self,
         ctx: &GpuContext,

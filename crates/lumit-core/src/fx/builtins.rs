@@ -4,13 +4,8 @@ use crate::model::{
     EffectInstance, EffectKey, EffectNamespace, EffectParam, EffectValue, FileParam,
 };
 
-/// Edge-policy option labels shared by the blur family (docs/08 §3.8) and
-/// Shake (§3.4). Backed by the reusable [`EdgesMode`] enum (P3), so the
-/// labels and the 0/1/2 codes stay in one place.
 pub const EDGE_OPTIONS: &[&str] = EdgesMode::OPTIONS;
 
-/// "No group dividers" for a [`ParamKind::Choice`]'s `dividers_after` (T21) —
-/// the common case, spelled once so every ungrouped Choice reads the same.
 pub const CHOICE_UNGROUPED: &[u32] = &[];
 
 /// Which channel of an auxiliary picture an effect reads as a single number —
@@ -47,20 +42,13 @@ pub const CHANNEL_OPTIONS: &[&str] = &["Luminance", "Alpha", "Red", "Green", "Bl
 /// a depth row, which is read as placed.
 pub const MAP_PLACEMENT_OPTIONS: &[&str] = &["As placed in comp", "Stretch to fit", "Centre"];
 
-/// The three readings of a Map placement row, in [`MAP_PLACEMENT_OPTIONS`]
-/// order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MapPlacement {
-    /// Where the layer sits in the composition, after its transform and its
-    /// parents.
     AsPlaced,
-    /// Stretched over the effect's whole picture.
     Stretch,
-    /// Centred on the effect's picture at the layer's own size.
     Centre,
 }
 
-/// How `e` places the picture it reads through its Layer row `row`.
 #[must_use]
 pub fn map_placement(e: &EffectInstance, row: &str) -> MapPlacement {
     // Each Clone to points copy is its layer as placed in the comp: the
@@ -273,7 +261,6 @@ pub fn instantiate_for_raster(match_name: &str, w: f64, h: f64) -> Option<Effect
             // are lengths, not positions, so they need no centring.
             ("twirl" | "spherize" | "ripple" | "iris_wipe", "centre_x") => w * 0.5,
             ("twirl" | "spherize" | "ripple" | "iris_wipe", "centre_y") => h * 0.5,
-            // These four said they were centred here and never were.
             ("radial_wipe" | "lens_distort" | "mirror" | "radio_waves", "centre_x") => w * 0.5,
             ("radial_wipe" | "lens_distort" | "mirror" | "radio_waves", "centre_y") => h * 0.5,
             // The Point control is the same default once more: a fresh
@@ -427,10 +414,8 @@ pub fn default_param_value(kind: &ParamKind) -> Option<EffectValue> {
         // shape for an over-life curve, which is a *look* rather than a no-op
         // (particulate.md §2).
         ParamKind::Curve { default } => EffectValue::Curve(default.to_vec()),
-        // A fresh outline has no points: the user draws them.
         ParamKind::Shape => EffectValue::Shape(Vec::new()),
         ParamKind::Gradient { .. } => EffectValue::Gradient(Vec::new()),
-        // A button holds nothing — see the doc comment above.
         ParamKind::Action => return None,
     })
 }
@@ -481,7 +466,7 @@ pub fn backfill_builtin_params(effects: &mut [EffectInstance]) {
         }
         for p in s.params {
             let Some(mut value) = default_param_value(&p.kind) else {
-                continue; // a button has nothing to backfill
+                continue;
             };
             if stretched.contains(&p.id) {
                 value = EffectValue::Choice(MapPlacement::Stretch as u32);
@@ -632,11 +617,6 @@ pub fn migrate_percent_to_px(effects: &mut [EffectInstance], w: f64, h: f64) {
     }
 }
 
-/// Bring effects from outside, a file, a preset or the clipboard, up to this
-/// build's schemas: [`backfill_builtin_params`], [`migrate_percent_to_px`]
-/// against the `comp` size, an old Sprite flare carried over about the
-/// middle of the `own` picture it runs on, and an old Shake's rows. `wired`
-/// says whether an instance's row has a wire into it.
 pub fn migrate_in(
     effects: &mut [EffectInstance],
     comp: (f64, f64),
@@ -660,7 +640,6 @@ pub fn migrate_in(
     }
 }
 
-/// Whether a row of an effect on the stack beside `graph` has a wire into it.
 pub fn wired_in(graph: &crate::graph::LayerGraph) -> impl Fn(uuid::Uuid, &str) -> bool + '_ {
     move |effect, row| {
         let to = crate::graph::InputRef::Param {
@@ -691,9 +670,6 @@ pub fn picture_size(
     .unwrap_or(size(comp.width, comp.height))
 }
 
-/// [`migrate_in`] for every effect `doc` holds: a layer's effects, styles,
-/// graph boxes and graph inputs, a Sequence layer's clips, a group's header
-/// and the comp's node graph.
 pub fn migrate_document(doc: &mut crate::model::Document) {
     use crate::model::{LayerKind, ProjectItem};
     let read = &*doc;
@@ -738,7 +714,6 @@ pub fn migrate_document(doc: &mut crate::model::Document) {
     }
 }
 
-/// [`migrate_in`] for the boxes of a comp's node graph, `size` its comp's.
 pub fn migrate_graph(graph: &mut crate::comp_graph::CompGraph, size: (f64, f64)) {
     graph.migrate_dof_pro_depth();
     let edges = graph.edges.clone();
@@ -986,8 +961,6 @@ pub fn instantiate(match_name: &str) -> Option<EffectInstance> {
             .filter(|_| !s.params.iter().any(|p| p.id == SCALE_PAIR))
             .map(|pair| pair.stem.to_owned())
             .collect(),
-        // A fresh audio plugin has no memory of itself yet; it is the plugin's
-        // own defaults until something saves one.
         plugin_state: None,
         // A fresh Roto brush has no strokes and no base frame, which is what
         // makes Propagate refuse with `NoBaseFrame` rather than guess.

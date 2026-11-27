@@ -113,8 +113,6 @@ void main() {
       await tester.pump();
     }
 
-    /// New composition asks for its settings first, so every route to a
-    /// comp goes through the dialogue: choose the command, then press Create.
     Future<void> makeComp(WidgetTester tester) async {
       await choose(tester, 'Composition', 'New composition…');
       await tester.pump();
@@ -151,8 +149,6 @@ void main() {
     testWidgets('a dead project reference builds the bar, not an error',
         (tester) async {
       final p = await mount(tester);
-      // Close the project in the engine while the state keeps the reference -
-      // exactly what the mid-swap window holds.
       p.state.project!.close();
       await tester.pump();
       // A selection notification is what rebuilt the bar in the wild. A new
@@ -167,9 +163,6 @@ void main() {
 
     testWidgets('Copy and Paste carry a layer, landing it at the playhead',
         (tester) async {
-      // Copy takes the selected layer whole and Paste puts it in the comp on
-      // screen, at the playhead. The engine does the carrying; what is tested
-      // here is that the menu is wired to it and to the setting.
       final p = await mount(tester);
       await makeComp(tester);
       final comp = p.uiState.selectedComp!;
@@ -191,14 +184,12 @@ void main() {
           reason: 'and selected it, as every editor does');
       expect(pasted.getName(), 'Hero', reason: 'the name travels');
       expect(pasted.getEffects().length, 1, reason: 'and so does the stack');
-      // Frame 30 in seconds, on whatever rate the comp actually runs at.
       final settings = comp.getSettings();
       final atFrame30 = 30 * settings.fpsDen / settings.fpsNum;
       final span = pasted.getSpan();
       expect(span.inPoint.num / span.inPoint.den, closeTo(atFrame30, 1e-9),
           reason: 'the in point lands on the playhead');
 
-      // The setting sends it to the time it was copied from instead.
       p.uiState.workspace.interface.pasteLayersAtOriginalTime = true;
       p.uiState.playheadFrame.value = 60;
       await choose(tester, 'Edit', 'Paste');
@@ -240,7 +231,6 @@ void main() {
         comps.single.field0.internalid,
         reason: 'a comp you just made is the one you want to work on',
       );
-      // A blank name is passed through so the engine picks the next "Comp N".
       expect(comps.single.name(), 'Comp 1');
     });
 
@@ -299,15 +289,12 @@ void main() {
       Color? colourOf(String label) =>
           tester.widget<Text>(find.text(label)).style?.color;
 
-      // A fresh document has nothing either way.
       await tester.tap(find.byKey(const ValueKey<String>('menu-Edit')));
       await tester.pump();
       expect(colourOf('Undo'), t.textDisabled);
       expect(colourOf('Redo'), t.textDisabled);
       await dismiss(tester);
 
-      // One edit, and Undo lights up and names it, in the History window's
-      // own words.
       await makeComp(tester);
       expect(p.state.project!.history().canUndo, isTrue);
       final step = engineLabel(p.state.project!.historyEntries().last.name);
@@ -324,7 +311,6 @@ void main() {
           reason: 'Undo reached the engine, not just the menu');
       expect(p.state.project!.history().canRedo, isTrue);
 
-      // Undone: the pair swaps over, and the name goes with it.
       await tester.tap(find.byKey(const ValueKey<String>('menu-Edit')));
       await tester.pump();
       expect(colourOf('Undo'), t.textDisabled);
@@ -358,7 +344,6 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('review-close')));
       await tester.pump();
 
-      // With Pro the row is an ordinary one.
       p.uiState.account.account =
           const CloudAccount(id: '1', email: '', name: '', pro: true);
       await tester.tap(find.byKey(const ValueKey<String>('menu-File')));
@@ -381,8 +366,6 @@ void main() {
         final p = await mount(tester);
         List<PlatformMenuItem> menus() =>
             tester.widget<PlatformMenuBar>(find.byType(PlatformMenuBar)).menus;
-        // Every row under [rows], through the menus and the groups rows are
-        // divided into.
         Iterable<PlatformMenuItem> under(List<PlatformMenuItem> rows) =>
             rows.expand((row) => [
                   row,
@@ -396,14 +379,11 @@ void main() {
         expect(kept, isNotEmpty);
         expect(undo().onSelected, isNull, reason: 'nothing to undo yet');
 
-        // The shell rebuilding for a reason of its own, as a window being
-        // resized does on every frame.
         tester.element(find.byType(LumitMenuBarFrb)).markNeedsBuild();
         await tester.pump();
         expect(identical(menus(), kept), isTrue,
             reason: 'a rebuild hands over what was read, and reads nothing');
 
-        // An edit, and the rows are read again.
         p.state.project!.newFolder(name: 'Footage');
         p.state.notifyDocumentChanged();
         await tester.pump();
@@ -411,7 +391,6 @@ void main() {
         expect(undo().onSelected, isNotNull,
             reason: 'Undo lights up with the edit');
 
-        // So does the selection, which tells nobody but its own listeners.
         final afterEdit = menus();
         p.uiState.selectedLayers.value =
             List.of(p.uiState.selectedLayers.value);
@@ -476,20 +455,17 @@ void main() {
       );
       await makeComp(tester);
 
-      // Never saved: Save has to ask where.
       await choose(tester, 'File', 'Save');
       await settleFrb(tester, until: () => File(first).existsSync());
       expect(prompts, 1);
       expect(File(first).existsSync(), isTrue);
       expect(p.state.project!.path(), first);
 
-      // Saved once: Save now writes in place without asking again.
       await choose(tester, 'File', 'Save');
       await settleFrb(tester);
       expect(prompts, 1,
           reason: 'a project with a path is saved, not asked about');
 
-      // Save as asks every time, and moves the project to the new location.
       await choose(tester, 'File', 'Save as…');
       await settleFrb(tester, until: () => File(second).existsSync());
       expect(prompts, 2);
@@ -518,7 +494,6 @@ void main() {
       expect(File(path).existsSync(), isTrue,
           reason: 'nothing to open otherwise');
 
-      // A new, empty project, then open the saved one over the top of it.
       await choose(tester, 'File', 'New');
       await tester.pump();
       expect(p.state.project!.getItems(), isEmpty);
@@ -535,11 +510,6 @@ void main() {
       expect(names, contains('Comp 1'),
           reason: 'the composition came back, filed where it was');
     });
-    // Without the built library there is nothing to test against; the harness
-    // throws with the command to run.
-    /// The port shipped a menu with three items per menu where the previous
-    /// frontend had layer creation, clip and marker commands, beat detection
-    /// and a Window menu. Each of these reaches the document.
     testWidgets('Layer ▸ New creates every kind of layer', (tester) async {
       final p = await mount(tester);
       await makeComp(tester);
@@ -555,7 +525,6 @@ void main() {
         final before = comp.getLayers().length;
         await choose(tester, 'Layer', item, under: 'New');
         await tester.pump();
-        // A solid asks for its settings first.
         if (item == 'Solid…') {
           await tester.pumpAndSettle();
           await tester.tap(find.byKey(const ValueKey('layer-settings-confirm')));
@@ -566,8 +535,6 @@ void main() {
       }
     });
 
-    // Text to shapes and Text to points: the copy lands beside the
-    // original, which is still there and still a Type layer.
     testWidgets('Layer ▸ Create turns a text layer into shapes and into points',
         (tester) async {
       final p = await mount(tester);
@@ -609,10 +576,6 @@ void main() {
           reason: 'it landed on the playhead, not at zero');
     });
 
-    /// The palette's four categories (docs/07 §12): commands, and now every
-    /// effect, comp and panel under its own badge; Enter on each does its
-    /// kind of thing. The taught shortcut shows only where a real binding
-    /// exists.
     testWidgets('the palette carries effects, comps and panels',
         (tester) async {
       final p = await mount(tester);
@@ -647,7 +610,6 @@ void main() {
       expect(find.text('Ctrl+Z'), findsOneWidget,
           reason: 'undo teaches its real shortcut, and only real ones taught');
 
-      // An effect entry applies to the selected layer.
       await tester.enterText(query, 'gaussian');
       await tester.pump();
       expect(find.text('Effect'), findsWidgets);
@@ -656,7 +618,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(layer.getEffects().single.name(), 'blur');
 
-      // A comp entry fronts its comp; the recent run ranks it first next time.
       await choose(tester, 'Window', 'Command palette…');
       await tester.pump();
       await tester.enterText(
@@ -668,14 +629,10 @@ void main() {
       expect(p.uiState.selectedComp?.internalid, comp.internalid);
     });
 
-    /// The four shipped workspace presets (docs/07 §1.6): each rearranges the
-    /// dock to its factory layout; the same panel inventory throughout, and a
-    /// distinct arrangement per preset.
     testWidgets('the Window menu applies the four workspace presets',
         (tester) async {
       final p = await mount(tester);
 
-      // The presets live under their own heading now.
       await choose(tester, 'Window', 'Effects', under: 'Workspace');
       await tester.pump();
       expect(panelsIn(p.uiState.split),
@@ -696,7 +653,6 @@ void main() {
       expect(p.uiState.split.toJson(),
           presetLayout(WorkspacePreset.audio).toJson());
 
-      // Reset still means the default (Edit) arrangement.
       await choose(tester, 'Window', 'Reset workspace', under: 'Workspace');
       await tester.pump();
       expect(panelsIn(p.uiState.split), panelsIn(defaultLayout()));
@@ -708,7 +664,6 @@ void main() {
     testWidgets('View ▸ Resolution changes what the engine is asked for',
         (tester) async {
       final p = await mount(tester);
-      // The tier is per composition, so there has to be one.
       await makeComp(tester);
       expect(p.uiState.previewResolution, PreviewResolution.full,
           reason: 'Full is the default — comp resolution whatever the '
@@ -803,7 +758,6 @@ void main() {
       await tester.tap(find.text('Command palette…'));
       await tester.pump();
       await mouse.removePointer();
-      // In a menu: the panel's own tab is back in the dock by now.
       expect(
           find.descendant(
               of: find.byType(FloatSurface),
@@ -813,7 +767,6 @@ void main() {
       await dismiss(tester);
     });
 
-    /// Only a web address is ever handed over, whatever a caller passes.
     test('the launcher refuses anything that is not a web address', () async {
       expect(await launchInDefaultBrowser('file:///etc/passwd'), isFalse);
       expect(await launchInDefaultBrowser('javascript:alert(1)'), isFalse);
@@ -821,17 +774,12 @@ void main() {
       expect(await launchInDefaultBrowser('not a url at all'), isFalse);
     });
 
-    /// The Effect menu is the browser as a menu: a submenu per category, each
-    /// effect applying to every selected layer as one undo step, and the whole
-    /// thing dead with nothing selected.
     testWidgets('the Effect menu applies to every selected layer',
         (tester) async {
       final p = await mount(tester);
       await makeComp(tester);
       final comp = p.uiState.selectedComp!;
 
-      // Nothing selected: the rows are there and do nothing, and the menu
-      // stays up.
       await choose(tester, 'Effect', 'Gaussian blur', under: 'Blur & sharpen');
       await tester.pump();
       expect(comp.getLayers(), isEmpty);
@@ -848,7 +796,6 @@ void main() {
       expect(a.getEffects().single.name(), 'blur');
       expect(b.getEffects().single.name(), 'blur',
           reason: 'every selected layer, as the Layer rows act');
-      // One step takes both away.
       undoFrb(p.state);
       expect(a.getEffects(), isEmpty);
       expect(b.getEffects(), isEmpty);

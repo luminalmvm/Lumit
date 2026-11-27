@@ -50,10 +50,8 @@ Future<Uint8List?> lottieFramePng(Uint8List bytes,
 }
 
 class LottiePlayer extends StatefulWidget {
-  /// The file, as the export would write it.
   final Uint8List bytes;
 
-  /// Whether [bytes] is a `.lottie` zip rather than a `.json`.
   final bool zip;
 
   /// Where the player is, 0 at the file's first frame and 1 at its last.

@@ -421,6 +421,7 @@ extension WorkerResponsePatterns on WorkerResponse {
     TResult Function(WorkerResponse_RenderProgress value)? renderProgress,
     TResult Function(WorkerResponse_FrameProfile value)? frameProfile,
     TResult Function(WorkerResponse_DeviceReset value)? deviceReset,
+    TResult Function(WorkerResponse_FrameOverBudget value)? frameOverBudget,
     required TResult orElse(),
   }) {
     final _that = this;
@@ -444,6 +445,8 @@ extension WorkerResponsePatterns on WorkerResponse {
         return frameProfile(_that);
       case WorkerResponse_DeviceReset() when deviceReset != null:
         return deviceReset(_that);
+      case WorkerResponse_FrameOverBudget() when frameOverBudget != null:
+        return frameOverBudget(_that);
       case _:
         return orElse();
     }
@@ -476,6 +479,8 @@ extension WorkerResponsePatterns on WorkerResponse {
         renderProgress,
     required TResult Function(WorkerResponse_FrameProfile value) frameProfile,
     required TResult Function(WorkerResponse_DeviceReset value) deviceReset,
+    required TResult Function(WorkerResponse_FrameOverBudget value)
+        frameOverBudget,
   }) {
     final _that = this;
     switch (_that) {
@@ -497,6 +502,8 @@ extension WorkerResponsePatterns on WorkerResponse {
         return frameProfile(_that);
       case WorkerResponse_DeviceReset():
         return deviceReset(_that);
+      case WorkerResponse_FrameOverBudget():
+        return frameOverBudget(_that);
     }
   }
 
@@ -524,6 +531,7 @@ extension WorkerResponsePatterns on WorkerResponse {
     TResult? Function(WorkerResponse_RenderProgress value)? renderProgress,
     TResult? Function(WorkerResponse_FrameProfile value)? frameProfile,
     TResult? Function(WorkerResponse_DeviceReset value)? deviceReset,
+    TResult? Function(WorkerResponse_FrameOverBudget value)? frameOverBudget,
   }) {
     final _that = this;
     switch (_that) {
@@ -546,6 +554,8 @@ extension WorkerResponsePatterns on WorkerResponse {
         return frameProfile(_that);
       case WorkerResponse_DeviceReset() when deviceReset != null:
         return deviceReset(_that);
+      case WorkerResponse_FrameOverBudget() when frameOverBudget != null:
+        return frameOverBudget(_that);
       case _:
         return null;
     }
@@ -574,6 +584,7 @@ extension WorkerResponsePatterns on WorkerResponse {
     TResult Function(BridgeRenderProgress field0)? renderProgress,
     TResult Function(BridgeFrameProfile field0)? frameProfile,
     TResult Function()? deviceReset,
+    TResult Function(BridgeFrameOverBudget field0)? frameOverBudget,
     required TResult orElse(),
   }) {
     final _that = this;
@@ -597,6 +608,8 @@ extension WorkerResponsePatterns on WorkerResponse {
         return frameProfile(_that.field0);
       case WorkerResponse_DeviceReset() when deviceReset != null:
         return deviceReset();
+      case WorkerResponse_FrameOverBudget() when frameOverBudget != null:
+        return frameOverBudget(_that.field0);
       case _:
         return orElse();
     }
@@ -627,6 +640,7 @@ extension WorkerResponsePatterns on WorkerResponse {
     required TResult Function(BridgeRenderProgress field0) renderProgress,
     required TResult Function(BridgeFrameProfile field0) frameProfile,
     required TResult Function() deviceReset,
+    required TResult Function(BridgeFrameOverBudget field0) frameOverBudget,
   }) {
     final _that = this;
     switch (_that) {
@@ -648,6 +662,8 @@ extension WorkerResponsePatterns on WorkerResponse {
         return frameProfile(_that.field0);
       case WorkerResponse_DeviceReset():
         return deviceReset();
+      case WorkerResponse_FrameOverBudget():
+        return frameOverBudget(_that.field0);
     }
   }
 
@@ -674,6 +690,7 @@ extension WorkerResponsePatterns on WorkerResponse {
     TResult? Function(BridgeRenderProgress field0)? renderProgress,
     TResult? Function(BridgeFrameProfile field0)? frameProfile,
     TResult? Function()? deviceReset,
+    TResult? Function(BridgeFrameOverBudget field0)? frameOverBudget,
   }) {
     final _that = this;
     switch (_that) {
@@ -696,6 +713,8 @@ extension WorkerResponsePatterns on WorkerResponse {
         return frameProfile(_that.field0);
       case WorkerResponse_DeviceReset() when deviceReset != null:
         return deviceReset();
+      case WorkerResponse_FrameOverBudget() when frameOverBudget != null:
+        return frameOverBudget(_that.field0);
       case _:
         return null;
     }
@@ -1157,6 +1176,72 @@ class WorkerResponse_DeviceReset extends WorkerResponse {
   @override
   String toString() {
     return 'WorkerResponse.deviceReset()';
+  }
+}
+
+/// @nodoc
+
+class WorkerResponse_FrameOverBudget extends WorkerResponse {
+  const WorkerResponse_FrameOverBudget(this.field0) : super._();
+
+  final BridgeFrameOverBudget field0;
+
+  /// Create a copy of WorkerResponse
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @pragma('vm:prefer-inline')
+  $WorkerResponse_FrameOverBudgetCopyWith<WorkerResponse_FrameOverBudget>
+      get copyWith => _$WorkerResponse_FrameOverBudgetCopyWithImpl<
+          WorkerResponse_FrameOverBudget>(this, _$identity);
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is WorkerResponse_FrameOverBudget &&
+            (identical(other.field0, field0) || other.field0 == field0));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, field0);
+
+  @override
+  String toString() {
+    return 'WorkerResponse.frameOverBudget(field0: $field0)';
+  }
+}
+
+/// @nodoc
+abstract mixin class $WorkerResponse_FrameOverBudgetCopyWith<$Res>
+    implements $WorkerResponseCopyWith<$Res> {
+  factory $WorkerResponse_FrameOverBudgetCopyWith(
+          WorkerResponse_FrameOverBudget value,
+          $Res Function(WorkerResponse_FrameOverBudget) _then) =
+      _$WorkerResponse_FrameOverBudgetCopyWithImpl;
+  @useResult
+  $Res call({BridgeFrameOverBudget field0});
+}
+
+/// @nodoc
+class _$WorkerResponse_FrameOverBudgetCopyWithImpl<$Res>
+    implements $WorkerResponse_FrameOverBudgetCopyWith<$Res> {
+  _$WorkerResponse_FrameOverBudgetCopyWithImpl(this._self, this._then);
+
+  final WorkerResponse_FrameOverBudget _self;
+  final $Res Function(WorkerResponse_FrameOverBudget) _then;
+
+  /// Create a copy of WorkerResponse
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  $Res call({
+    Object? field0 = null,
+  }) {
+    return _then(WorkerResponse_FrameOverBudget(
+      null == field0
+          ? _self.field0
+          : field0 // ignore: cast_nullable_to_non_nullable
+              as BridgeFrameOverBudget,
+    ));
   }
 }
 

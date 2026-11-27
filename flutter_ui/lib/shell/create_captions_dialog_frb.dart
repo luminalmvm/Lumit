@@ -1,10 +1,3 @@
-// Create captions (Layer ▸ Audio ▸ Create captions…) and File ▸ Import ▸
-// Captions…: the two ways a caption layer is made.
-//
-// Create asks how the captions should read, closes, hears whatever the layer
-// plays that has not been heard yet (the status line and the Captions panel
-// show it going), then makes the caption layer at the top of the stack and
-// fronts the Captions panel on it. The answers are kept for next time.
 
 import 'dart:async';
 
@@ -29,8 +22,6 @@ import '../widgets/controls.dart';
 import 'dialog_frame.dart';
 import 'speech_install_dialog_frb.dart';
 
-/// How the captions should read, and how the speech should be heard, as the
-/// dialogue keeps them between uses.
 class CaptionSettings {
   /// A language code, or empty to have it heard.
   final String language;
@@ -53,7 +44,6 @@ class CaptionSettings {
     required this.translate,
   });
 
-  /// The last answers, or the composition's usual ones for [language].
   factory CaptionSettings.remembered(
       Workspace workspace, CompositionReference comp) {
     final j = workspace.captionSettings;
@@ -101,7 +91,6 @@ class CaptionSettings {
         'translate': translate,
       };
 
-  /// What the engine is asked when the speech has to be heard first.
   BridgeTranscribeOptions transcribe({int? stream}) => BridgeTranscribeOptions(
         language: language,
         speakers: speakers,
@@ -112,8 +101,6 @@ class CaptionSettings {
       );
 }
 
-/// How the Create captions dialogue last asked for speech to be heard, for
-/// hearing footage on its own, from the Project panel.
 BridgeTranscribeOptions rememberedTranscribeOptions(Workspace workspace) {
   final j = workspace.captionSettings;
   return BridgeTranscribeOptions(
@@ -151,8 +138,6 @@ bool _heard(FootageReference item) {
   }
 }
 
-/// Make a caption layer from what [source] says: ask how, hear it where it
-/// has not been heard, then make the layer and front the Captions panel on it.
 Future<void> createCaptionsFrb(
     BuildContext context, LayerReference source) async {
   final app = context.read<LumitState>();
@@ -246,7 +231,6 @@ Future<void> createCaptionsFrb(
   }
 }
 
-/// A caption layer just made in [comp]: picked, and the panel fronted on it.
 void _landed(LumitState app, LumitUiState ui, CompositionReference comp,
     LayerReference layer) {
   noteCaptionLayer(layer);
@@ -257,8 +241,6 @@ void _landed(LumitState app, LumitUiState ui, CompositionReference comp,
   frontCaptionsPanel(ui);
 }
 
-/// Make a caption layer in the fronted composition from a subtitle file, in
-/// the style last chosen. [path] skips the picker.
 Future<void> importCaptionsFrb(BuildContext context, {String? path}) async {
   final app = context.read<LumitState>();
   final ui = context.read<LumitUiState>();
@@ -291,8 +273,6 @@ class CreateCaptionsBody extends StatefulWidget {
   final Workspace workspace;
   final List<BridgeLanguage> languages;
 
-  /// Some of what the layer plays has not been heard, so the questions about
-  /// hearing it are asked.
   final bool hears;
   final BridgeSpeechReady ready;
   final List<BridgeAudioStream> streams;
@@ -668,7 +648,6 @@ class _CreateCaptionsBodyState extends State<CreateCaptionsBody> {
   }
 }
 
-/// What a choice of speaker labels is called.
 String speakerLabelsName(BridgeSpeakerLabels labels) => switch (labels) {
       BridgeSpeakerLabels.off => l10n.captionsOff,
       BridgeSpeakerLabels.names => l10n.captionsSpeakerNamesNames,

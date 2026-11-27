@@ -6,7 +6,6 @@
 @group(0) @binding(6) var out_sum: texture_storage_2d<rgba32float, write>;
 @group(0) @binding(7) var out_sq: texture_storage_2d<r32float, write>;
 
-// The current frame (in0) as the first term.
 @compute @workgroup_size(8, 8)
 fn init(@builtin(global_invocation_id) g: vec3<u32>) {
     if (g.x >= p.dims.x || g.y >= p.dims.y) {
@@ -28,12 +27,10 @@ fn accumulate(@builtin(global_invocation_id) g: vec3<u32>) {
     let x = i32(g.x);
     let y = i32(g.y);
     let cur = textureLoad(in0, q, 0);
-    // == temporal::inverse_noise.
     let sl = p.sig.x * tone_at(cur.x);
     let sc = p.sig.y;
     let il = 1.0 / (2.0 * max(sl * sl, 1e-12));
     let ic = 1.0 / (2.0 * max(sc * sc, 1e-12));
-    // == temporal::patch_distance.
     var d = 0.0;
     for (var dy = -1; dy <= 1; dy = dy + 1) {
         for (var dx = -1; dx <= 1; dx = dx + 1) {
@@ -46,7 +43,6 @@ fn accumulate(@builtin(global_invocation_id) g: vec3<u32>) {
         }
     }
     d = d / 27.0;
-    // == temporal::agreement.
     var wgt = 0.0;
     if (p.tone.w > 0.0 && p.sig.w > 0.0) {
         let k = clamp(1.0 - (d - p.sig.z) / p.sig.w, 0.0, 1.0);

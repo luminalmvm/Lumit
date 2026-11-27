@@ -18,12 +18,9 @@
 
 use std::f64::consts::TAU;
 
-/// How the LFO's cycle is shaped.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Shape {
-    /// The plain sine: what a vibrato and most tremolos want.
     Sine,
-    /// Straight ramps up and down.
     Triangle,
     /// Two levels with a short slope between them. The slope is
     /// [`SQUARE_SLEW_FRAMES`] long, because a true step is a click.
@@ -82,7 +79,6 @@ fn triangle(phase: f64) -> f64 {
 /// The square at a phase, with both edges slewed over `width` cycles.
 fn square(phase: f64, width: f64) -> f64 {
     let half = (width * 0.5).clamp(1e-9, 0.24);
-    // Signed distance to each edge, the wrap taken into account.
     let to_rise = if phase > 0.5 { phase - 1.0 } else { phase };
     let to_fall = phase - 0.5;
     if to_rise.abs() < half {
@@ -110,7 +106,6 @@ pub struct Lfo {
 }
 
 impl Lfo {
-    /// An oscillator at `rate_hz`, its cycle read `offset_deg` along.
     #[must_use]
     pub fn new(shape: Shape, rate_hz: f64, offset_deg: f64) -> Self {
         Self {
@@ -141,7 +136,6 @@ mod tests {
 
     const RATE: f64 = 48_000.0;
 
-    /// One run of `frames` frames at a steady rate, every value kept.
     fn walk(lfo: &Lfo, frames: usize) -> Vec<f64> {
         let mut phase = Phase::default();
         (0..frames)
@@ -163,7 +157,6 @@ mod tests {
             let sine = (TAU * index as f64 / RATE).sin();
             assert!((here - sine).abs() < 1e-9, "{index}: {here} vs {sine}");
         }
-        // The same walk twice is the same numbers.
         assert_eq!(run, walk(&lfo, 72_000));
     }
 

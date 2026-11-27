@@ -29,14 +29,12 @@ use crate::fx::{
     registry::EffectMetadata, schema::EffectSchema,
 };
 
-/// How long a moved row takes to arrive.
 const SMOOTH_MS: f64 = 10.0;
 
 /// Below this the crossover is off. A one pole at 20 Hz takes nothing
 /// audible out of the side, and a row's bottom end has to mean something.
 const CROSSOVER_OFF_HZ: f64 = 20.0;
 
-/// The Stereo width effect's rows.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "audio_stereo_width",
@@ -64,7 +62,6 @@ pub struct AudioStereoWidth {
     pub mono_below: f32,
 }
 
-/// The Stereo width effect's behaviour.
 pub struct AudioStereoWidthDef;
 
 impl EffectDef for AudioStereoWidthDef {
@@ -98,7 +95,6 @@ impl EffectDef for AudioStereoWidthDef {
     }
 }
 
-/// The width row as a multiplier on the side signal.
 fn width_of(values: &[(ParamId, f64)]) -> f64 {
     row(values, AudioStereoWidth::WIDTH, 100.0).max(0.0) / 100.0
 }
@@ -114,7 +110,6 @@ fn balance_gains(values: &[(ParamId, f64)]) -> (f64, f64) {
     (angle.cos() * SQRT_2, angle.sin() * SQRT_2)
 }
 
-/// The smoothed rows and the crossover's one pole.
 struct WidthState {
     width: Smoother,
     left: Smoother,
@@ -125,7 +120,6 @@ struct WidthState {
     keep: f64,
 }
 
-/// One open Stereo width.
 struct WidthAudio {
     rate: f64,
     state: Mutex<WidthState>,
@@ -185,7 +179,6 @@ mod tests {
     use super::super::harness;
     use super::*;
 
-    /// A run's two channels, told apart.
     fn sides(samples: &[f32]) -> (Vec<f32>, Vec<f32>) {
         samples.chunks_exact(AUDIO_CHANNELS).map(frame).unzip()
     }
@@ -214,7 +207,6 @@ mod tests {
         for (l, r) in left.iter().zip(&right) {
             assert!((l - r).abs() < 1e-6, "{l} and {r} are not one sound");
         }
-        // And the mid is what came in: neither channel invented level.
         let (was_left, was_right) = sides(&input);
         for (n, l) in left.iter().enumerate() {
             let mid = (was_left[n] + was_right[n]) * 0.5;

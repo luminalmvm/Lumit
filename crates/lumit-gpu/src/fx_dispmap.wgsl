@@ -18,7 +18,7 @@ struct Params {
     mix_amt: f32,        // 0..1, blended against the unprocessed input
     matte_on: f32,       // 0 = no map bound; the pass is a passthrough
     chan_x: u32,         // CHANNEL_OPTIONS index steering x
-    chan_y: u32,         // ... and y
+    chan_y: u32,
     edge: u32,           // 0 transparent, 1 repeat, 2 mirror
     invert: u32,         // 1 = read the map the other way round
 };

@@ -37,17 +37,14 @@ pub(crate) fn set_touch_return_ms(ms: u32) {
     TOUCH_RETURN_MS.store(ms, Ordering::Relaxed);
 }
 
-/// The edit count now, for a prepare to carry.
 pub(super) fn edits() -> u64 {
     EDITS.load(Ordering::Acquire)
 }
 
-/// The held controls and the pass being written.
 #[derive(Default)]
 pub(crate) struct Live {
     holds: Vec<Hold>,
     tracks: Vec<Track>,
-    /// The comp they are all on.
     comp: Option<Uuid>,
     /// Where the pass began, in comp seconds, and when: a clock read before
     /// the engine has taken the seek that began it is not this pass's.
@@ -68,7 +65,6 @@ pub(crate) struct Live {
 const CLOCK_SLACK_S: f64 = 0.5;
 
 impl Live {
-    /// The log starts again for a pass of its own.
     fn new_log(&mut self) {
         self.log.clear();
         self.log_id = self.log_id.wrapping_add(1);
@@ -87,23 +83,19 @@ impl Live {
     }
 }
 
-/// One control held in the bank.
 struct Hold {
     target: BridgeMixTarget,
     /// The value heard: dB for a Volume, a send or the master, -100 to 100
     /// for a Pan. For a trim, the change from `base`.
     value: f64,
     trim: bool,
-    /// What the control read when it was taken.
     base: f64,
-    /// The pointer is on it.
     touching: bool,
     wait: Wait,
 }
 
 #[derive(Clone, Copy, PartialEq)]
 enum Wait {
-    /// Held as it is.
     No,
     /// Its value is being written by a release.
     Edit,
@@ -135,7 +127,6 @@ pub(crate) fn value_at(doc: &Document, comp: Uuid, target: BridgeMixTarget, t: f
     }
 }
 
-/// The master fader at comp second `t`.
 pub(crate) fn master_at(c: &Composition, t: f64) -> f64 {
     match &c.master_keys {
         Some(lumit_core::anim::Animation::Keyframed(keys)) => {
@@ -150,7 +141,6 @@ pub(crate) fn layer_of(c: &Composition, id: Uuid) -> Option<&Layer> {
     c.layers.iter().find(|l| l.id == id)
 }
 
-/// The layer a target belongs to; None for the master.
 pub(crate) fn layer_in(target: BridgeMixTarget) -> Option<Uuid> {
     match target {
         BridgeMixTarget::Volume { layer }
@@ -160,7 +150,6 @@ pub(crate) fn layer_in(target: BridgeMixTarget) -> Option<Uuid> {
     }
 }
 
-/// How `target` writes its keys while the comp plays.
 fn mode_of(doc: &Document, comp: Uuid, target: BridgeMixTarget) -> AutomationMode {
     let Some(c) = doc.comp(comp) else {
         return AutomationMode::Read;
@@ -171,14 +160,12 @@ fn mode_of(doc: &Document, comp: Uuid, target: BridgeMixTarget) -> AutomationMod
     }
 }
 
-/// The plan held for `comp`, if it is the one loaded.
 fn loaded_for(st: &AudioState, comp: Uuid) -> Option<&Loaded> {
     st.loaded_plan
         .as_ref()
         .filter(|_| st.loaded_comp == Some(comp))
 }
 
-/// A Volume and a Pan as a node's two gains.
 fn stereo(db: f64, pan: f64) -> [f32; 2] {
     let g = db_to_gain(db);
     let p = pan_gains(pan);
@@ -194,7 +181,6 @@ fn apply(st: &AudioState, comp: Uuid, target: BridgeMixTarget, doc: &Document, t
     };
     let bank: &LiveBank = &loaded.plan.live;
     let held = |target: BridgeMixTarget| st.live.holds.iter().find(|h| h.target == target);
-    // What the control is heard at, and what its keys say.
     let level = |target: BridgeMixTarget| {
         let base = value_at(doc, comp, target, t).unwrap_or(0.0);
         match held(target) {
@@ -242,7 +228,6 @@ fn apply(st: &AudioState, comp: Uuid, target: BridgeMixTarget, doc: &Document, t
     }
 }
 
-/// A mono fader held at `db`, or trimmed by the held change.
 fn hold_fader(fader: &lumit_audio::live::LiveFader, db: f64, held: Option<&Hold>) {
     match held {
         Some(h) if h.trim => fader.trim([db_to_gain(h.value); 2]),
@@ -250,7 +235,6 @@ fn hold_fader(fader: &lumit_audio::live::LiveFader, db: f64, held: Option<&Hold>
     }
 }
 
-/// The bank slot of `layer`'s send to `bus`.
 fn send_slot(loaded: &Loaded, layer: Uuid, bus: Uuid) -> Option<usize> {
     let node = loaded.info.node_of(layer)?;
     let sends = &loaded.info.nodes.get(usize::from(node))?.sends;
@@ -448,7 +432,6 @@ pub(crate) fn written(comp: Uuid, doc: Arc<Document>) {
     landing(comp, doc, Wait::Edit);
 }
 
-/// The holds waiting as `waiting` on `comp` go once the mix of `doc` lands.
 fn landing(comp: Uuid, doc: Arc<Document>, waiting: Wait) {
     let seq = EDITS.fetch_add(1, Ordering::AcqRel) + 1;
     let mut st = lock();
@@ -585,7 +568,6 @@ pub(super) fn end_pass(st: &mut AudioState) {
     });
 }
 
-/// The project holding `comp`.
 fn project_of(comp: Uuid) -> Option<Arc<std::sync::RwLock<crate::api::state::LumitBridgeState>>> {
     let projects = crate::api::state::PROJECTS.read().ok()?;
     projects
@@ -618,7 +600,6 @@ pub(super) fn landed(st: &mut AudioState, seq: u64) {
     }
 }
 
-/// Let go of everything held and forget the pass.
 pub(super) fn clear(st: &mut AudioState) {
     let holds = std::mem::take(&mut st.live.holds);
     st.live.tracks.clear();
@@ -737,12 +718,10 @@ pub(crate) fn pass_since(comp: Uuid, pass: u32, from: usize) -> (u32, usize, Vec
     (id, log.len(), lines)
 }
 
-/// Do `work` on a thread of its own, away from the caller.
 pub(crate) fn later(work: impl FnOnce() + Send + 'static) {
     super::engine::spawn(work);
 }
 
-/// The document the mix playing `comp` was built from, if it is loaded.
 pub(crate) fn loaded_doc(comp: Uuid) -> Option<Arc<Document>> {
     let st = lock();
     loaded_for(&st, comp).and_then(|l| l.doc.clone())

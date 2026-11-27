@@ -47,7 +47,6 @@ enum TextAnimationPreset {
       };
 }
 
-/// The animators [preset] adds, its keys from [frame] for a second.
 List<BridgeTextAnimator> textPresetAnimators(
   TextAnimationPreset preset,
   CompositionReference comp,
@@ -279,7 +278,6 @@ List<MenuEntry> textPresetRows(LumitState app, LumitUiState ui) {
     if (style != null && style.family.isNotEmpty)
       MenuEntry.live(fontAxesArrived, () {
         final axes = axesNow();
-        // A font with no axes says so by the row being off.
         if (axes.isEmpty) return MenuEntry(l10n.textFontAxes, null);
         return MenuEntry.submenu(l10n.textFontAxes, [
           for (final axis in axes)
@@ -381,8 +379,6 @@ BridgeTextAnimator captionPresetAnimator(CaptionAnimationPreset preset) {
   };
 }
 
-/// The caption presets as their own group of menu rows, for a caption layer's
-/// menus to show.
 List<MenuEntry> captionPresetRows(LumitState app, LumitUiState ui) {
   bool isText(BridgeLayerEntry entry) => entry.info.kind == BridgeLayerKind.text;
   return [
@@ -418,7 +414,6 @@ BridgeScalar reversedScalar(BridgeScalar scalar) {
   ]);
 }
 
-/// [a] played backwards, so an in becomes an out.
 BridgeTextAnimator reversedAnimator(BridgeTextAnimator a) {
   // A selector's timing (Delay, its ease, the bounce) plays the same way
   // backwards; its range and amounts run the other way round.

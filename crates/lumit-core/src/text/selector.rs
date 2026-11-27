@@ -1,5 +1,3 @@
-//! Selectors: which letters an animator moves, and by how much.
-
 use serde::{Deserialize, Serialize};
 
 use super::{hundred, is_default, is_static_hundred, is_static_zero, is_zero};
@@ -95,13 +93,9 @@ pub enum SelectorShape {
 pub enum SelectorMode {
     #[default]
     Range,
-    /// The word being said.
     Current,
-    /// Every word said so far.
     Said,
-    /// The words still to come.
     Unsaid,
-    /// The words picked out by hand.
     Emphasis,
 }
 
@@ -196,7 +190,6 @@ fn is_zero_u32(v: &u32) -> bool {
     *v == 0
 }
 
-/// serde default for [`RangeSelector::radius`].
 fn two_hundred() -> Property {
     Property::fixed(200.0)
 }
@@ -359,7 +352,6 @@ pub struct RangeSelector {
         skip_serializing_if = "is_static_fifty"
     )]
     pub correlation: Property,
-    /// Picks another wander for the same settings.
     #[serde(default, skip_serializing_if = "is_zero_u32")]
     pub seed: u32,
     /// How this selector is put together with the ones above it; see
@@ -442,7 +434,6 @@ impl Default for RangeSelector {
 }
 
 impl RangeSelector {
-    /// The weight a Wiggly selector gives each of `units` at layer time `lt`.
     #[must_use]
     pub fn wiggly_weights(&self, units: usize, lt: f64) -> Vec<f32> {
         let rate = self.wiggles.value_at(lt);
@@ -455,10 +446,10 @@ impl RangeSelector {
         let shared = crate::fx::maths::value_noise_1d(self.seed, 0, x);
         (0..units)
             .map(|i| {
-                #[allow(clippy::cast_possible_truncation)] // a line is short
+                #[allow(clippy::cast_possible_truncation)]
                 let own = crate::fx::maths::value_noise_1d(self.seed, 1 + i as u32, x);
                 let n = together * shared + (1.0 - together) * own;
-                #[allow(clippy::cast_possible_truncation)] // a weight
+                #[allow(clippy::cast_possible_truncation)]
                 let w = (lo + (hi - lo) * (n + 1.0) * 0.5) as f32;
                 if w.is_finite() {
                     w
@@ -692,7 +683,7 @@ impl RangeSelector {
         let Some(target) = target else {
             return vec![0.0; middles.len()];
         };
-        #[allow(clippy::cast_possible_truncation)] // px
+        #[allow(clippy::cast_possible_truncation)]
         let radius = self.radius.value_at(lt).max(0.0) as f32;
         middles
             .iter()
@@ -792,7 +783,7 @@ fn weight(shape: SelectorShape, lo: f64, hi: f64, p: f64, ease: Ease) -> f32 {
         _ if hi <= lo => f64::from(u8::from(p >= hi)),
         _ => super::spoken::curve(shape, ease.bend((p - lo) / (hi - lo))),
     };
-    #[allow(clippy::cast_possible_truncation)] // 0–1
+    #[allow(clippy::cast_possible_truncation)]
     let w = w as f32;
     w
 }
@@ -838,7 +829,7 @@ pub fn near_of(
     if ids.is_empty() {
         return Near::default();
     }
-    #[allow(clippy::cast_possible_truncation)] // px
+    #[allow(clippy::cast_possible_truncation)]
     let targets = ids
         .into_iter()
         .filter(|id| *id != layer.id)

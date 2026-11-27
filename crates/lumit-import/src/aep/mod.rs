@@ -72,24 +72,18 @@ use rifx::{
 /// (docs/11 §7: "a parse failure on one chunk skips that chunk and continues").
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum AepError {
-    /// The bytes are not a RIFX `Egg!` container at all.
     #[error(transparent)]
     Container(#[from] RifxError),
-    /// The container is fine but holds no item tree, so there is no project in
-    /// it to speak of.
     #[error("this .aep project has no item tree")]
     NoItemTree,
 }
 
-/// Everything one parse produced.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Parsed {
-    /// The capture, in exactly the shape the Bridge's bundle carries.
     pub capture: Capture,
     /// The After Effects build that wrote the file, e.g. `26.0x67`, read from
     /// the `head` chunk's packed version word.
     pub ae_version: Option<String>,
-    /// Everything skipped along the way, ready to be report rows.
     pub skipped: Vec<Unreadable>,
     /// The item tree could not be found, so the capture holds only the
     /// footage references carved out of the file — no project block, no
@@ -281,7 +275,6 @@ pub fn parse_capture(bytes: &[u8]) -> Result<Parsed, AepError> {
     })
 }
 
-/// One skipped chunk, said the way a report row says it.
 fn skip(where_: &str, what: &str, why: &str) -> Unreadable {
     Unreadable {
         comp: Some(where_.to_string()),
@@ -748,7 +741,6 @@ fn alias_record(within: &[Chunk<'_>]) -> Option<serde_json::Value> {
     serde_json::from_str(&alias).ok()
 }
 
-/// Standard base64, or `None` if it isn't.
 fn base64(text: &str) -> Option<Vec<u8>> {
     let mut out = Vec::with_capacity(text.len() * 3 / 4);
     let (mut acc, mut bits) = (0_u32, 0_u32);
@@ -1301,9 +1293,6 @@ mod tests {
         chunk(b"idta", &body)
     }
 
-    /// A footage item: an empty name chunk (the file's name is the name), a
-    /// `Pin ` holding the source settings, the alias record with the path, and
-    /// whatever asset record the caller wants.
     fn footage_item(id: u32, path: &str, missing: u8, asset: &[u8]) -> Vec<u8> {
         let mut sspc = vec![0_u8; 222];
         sspc.splice(32..34, 1920_u16.to_be_bytes());
@@ -1405,8 +1394,6 @@ mod tests {
         );
     }
 
-    /// A layer descriptor: stretch 1, and the three rationals the timing is
-    /// read from, each given as dividend over `divisor`.
     fn ldta(divisor: u32, start: i32, in_point: i32, out_point: i32) -> Vec<u8> {
         let mut body = vec![0_u8; 164];
         let mut put = |at: usize, value: i32| {
@@ -1423,7 +1410,6 @@ mod tests {
         chunk(b"ldta", &body)
     }
 
-    /// One comp holding the given layer records, with settings enough to read.
     fn comp_with(id: u32, name: &[u8], layers: &[Vec<u8>]) -> Vec<u8> {
         let mut comp = idta(ITEM_COMP_KIND, id);
         comp.extend(chunk(b"Utf8", name));
@@ -1444,7 +1430,6 @@ mod tests {
     /// each clip sits at 0 rather than where it was cut.
     #[test]
     fn a_layers_in_and_out_are_counted_from_its_own_start() {
-        // Start 2.4 s, a bar 2.48 s long on the layer's clock.
         let bytes = comp_with(3, b"Clips", &[ldta(1000, 2400, 0, 2480)]);
         let parsed = parse_capture(&bytes).expect("the walk survives");
         let layer = &parsed.capture.comps[0].layers[0];
@@ -1486,7 +1471,6 @@ mod tests {
         assert_eq!(item.sequence_suffix.as_deref(), Some("_depth.exr"));
         assert_eq!(item.path.as_deref(), Some(r"C:\Clips\Cine3\Depth"));
 
-        // The same shape without either signal: one file, as before.
         let alias = br#"{"fullpath":"C:\\Clips\\Cine3\\World.avi"}"#;
         let mut pin = chunk(b"sspc", &[0; 222]);
         pin.extend(chunk(b"Utf8", b""));
@@ -1505,11 +1489,6 @@ mod tests {
         assert_eq!(item.sequence_prefix, None);
     }
 
-    /// A small project with every kind of item in it: a folder holding a
-    /// clip that was missing at save, a plate at the root, a placeholder, a
-    /// solid, and a comp with one layer. The shapes are the ones the tests
-    /// above pin one at a time, put together so the fallback has to tell
-    /// them apart.
     fn project_with_every_kind_of_item() -> Vec<u8> {
         let mut folder = idta(ITEM_FOLDER_KIND, 1);
         folder.extend(chunk(b"Utf8", b"Shots"));
@@ -1631,8 +1610,6 @@ mod tests {
             assert_eq!(placeholder.is_placeholder, Some(true));
             assert_eq!(placeholder.path, None);
 
-            // Everything the fallback says about a reference, the whole read
-            // said too — nothing is read differently for having been carved.
             for item in items {
                 let same = intact
                     .capture

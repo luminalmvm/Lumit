@@ -43,7 +43,6 @@ pub struct Embedding {
     /// The encoder's three outputs, in the order the decoder is fed them:
     /// the embedding first, then the two high-resolution feature maps.
     feats: [(Vec<usize>, Vec<f32>); 3],
-    /// The frame this was made of.
     width: usize,
     height: usize,
     /// How much of the model's square the frame was fitted into, the rest of
@@ -51,7 +50,6 @@ pub struct Embedding {
     fed: (usize, usize),
 }
 
-/// An open segmentation model: the encoder, the decoder, and what the pack is.
 #[derive(Debug)]
 pub struct Segment {
     encoder: Session,
@@ -112,7 +110,6 @@ impl Segment {
         &self.pack
     }
 
-    /// Which provider took the sessions: part of the same answer (§8).
     #[must_use]
     pub fn provider(&self) -> &'static str {
         self.encoder.provider()
@@ -333,8 +330,6 @@ fn sample(plane: &[f32], width: usize, height: usize, x: f32, y: f32) -> f32 {
     top + (bottom - top) * ty
 }
 
-/// The logistic curve: what turns "how sure the model is" into "how much of the
-/// pixel", the same step BiRefNet's coverage goes through.
 fn sigmoid(value: f32) -> f32 {
     if value.is_finite() {
         1.0 / (1.0 + (-value).exp())
@@ -349,7 +344,6 @@ mod tests {
     use super::*;
     use std::path::{Path, PathBuf};
 
-    /// A manifest for a segmentation pack whose two files are that many bytes.
     fn a_manifest(encoder: u64, decoder: u64) -> String {
         let one = "5c0f6e4bd0ee1f9dfbee4e8e5ba75d84bd3d5b93bd0e9e0e4e1c8f4b0a2d6e11";
         let two = "9a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9";
@@ -368,9 +362,6 @@ mod tests {
         )
     }
 
-    /// Where the real SAM 2 files sit on the reference machine: a folder of
-    /// their own under the packs folder, since the pack is two files rather
-    /// than one.
     fn real_pack() -> Option<(PathBuf, PathBuf)> {
         let home = crate::test_support::packs_dir()?.join("sam2");
         let named = |part: &str| {
@@ -383,7 +374,6 @@ mod tests {
         Some((named("encoder")?, named("decoder")?))
     }
 
-    /// Write the pack into `root` as the store expects to find it.
     fn a_pack(root: &Path, encoder: &Path, decoder: &Path) {
         let home = root.join("sam2-tiny");
         std::fs::create_dir_all(&home).unwrap();
@@ -398,7 +388,6 @@ mod tests {
         store::with_dir(Some(root.to_path_buf()));
     }
 
-    /// A bright disc on a dark ground, and whether each pixel is inside it.
     fn disc(width: usize, height: usize) -> (Vec<u8>, Vec<bool>) {
         let (cx, cy) = (width as f32 / 2.0, height as f32 / 2.0);
         let radius = (width.min(height) as f32) * 0.3;
@@ -487,7 +476,6 @@ mod tests {
             .expect("the decoder again");
         assert_eq!(again, mask, "the same taps on the same frame, twice");
 
-        // A tap list nobody can read is refused rather than guessed at.
         assert_eq!(
             segment.mask(&frame, &[], &[]).unwrap_err(),
             MlError::ShapeMismatch

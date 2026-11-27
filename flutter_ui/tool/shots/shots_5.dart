@@ -96,14 +96,8 @@ Future<void> main() async {
     value: const BridgeScalar.static_(55),
   );
 
-  // Two effects on one layer: a grade and a bloom, in the order somebody would
-  // put them — the stack runs top to bottom, so the glow is picking up an
-  // already-graded picture.
   gameplay.addEffect(name: 'exposure');
   gameplay.addEffect(name: 'glow');
-  // Moved off their defaults, so the panel reads as a grade somebody set rather
-  // than as two effects dropped on a layer a second ago. Staged on the handles
-  // and committed in one `setEffects`, which is the shape every stack edit has.
   final stack = gameplay.getEffects();
   stack[0].setValue(
       id: 'stops',
@@ -144,17 +138,13 @@ Future<void> main() async {
   ui.setSelectedComp(comp);
   ui.playheadFrame.value = 48;
   ui.setSelection([gameplay]);
-  // The arrangement these pages are about.
   ui.workspace.applyWorkspacePreset(WorkspacePreset.effects);
 
-  // The sweeps photograph the shell; the welcome screen has its own sweep.
   runApp(shotRoot(LumitAppNew(state, ui, welcome: false)));
   await pause(2);
   await sizeWindow(1720, 1000);
   await pause(7);
 
-  /// The whole of a docked panel, chrome and all — grown out to the pane card
-  /// it sits in, which under Round is the rounded edge the design is made of.
   Rect panel(Type type) => dockedPanelBox(type)!.inflate(paneCardInset);
 
   /// The same, with the dock's tab strip above it — for the shots whose caption
@@ -182,16 +172,12 @@ Future<void> main() async {
         (lastRow?.bottom ?? controls.bottom - 24) + 24),
   );
 
-  // ---- Shot: the Effects & presets panel ----------------------------------
   await captureUi(
     'effects-presets.png',
     scale: 2,
     crop: tabbed(EffectsPresetsPanelFrb),
   );
 
-  // ---- Shot: saved presets at the top of the panel ------------------------
-  // The library sits above the built-ins, so the crop is the top of the same
-  // panel: the two saved names, and the first heading under them for context.
   final browser = panel(EffectsPresetsPanelFrb);
   await captureUi(
     'presets.png',
@@ -200,10 +186,6 @@ Future<void> main() async {
         browser.left, browser.top, browser.right, browser.top + 190),
   );
 
-  // ---- Shot: the Effect menu, category by category ------------------------
-  // Opened from the bar and then one category opened off it, because the whole
-  // of what this menu is is categories with effects behind them — a shot of the
-  // six headings alone would not show that.
   await tapKey('menu-Effect', settle: 1.2);
   await tapKey('menu-sub-Colour', settle: 1.4);
   // From the corner, because the bar the menu drops out of is half the subject.

@@ -90,7 +90,6 @@ part 'export_rows.dart';
 part 'export_formats.dart';
 part 'export_also.dart';
 
-/// The frame the drawing gives this dialog.
 const double exportDialogWidth = 640;
 
 /// The label column and the gap after it, and a row's own height — the
@@ -111,14 +110,9 @@ const double exportRowHeight = 28;
 /// one right edge down the whole column.
 const double exportLabelColumnPaired = 78;
 
-/// The air between the body's edges and its groups, and between two columns of
-/// short rows.
 const EdgeInsets exportBodyPadding = EdgeInsets.fromLTRB(14, 10, 14, 12);
 const double exportColumnGap = 20;
 
-/// The room the frame's own bands take: the title strip and the footer, plus a
-/// little air: what the body has to fit
-/// inside when the window is short.
 const double exportChromeHeight = 116;
 
 const double exportButtonWidth = 72;
@@ -186,17 +180,14 @@ const String exportTokenDate = '{date}';
 /// row beside the region tick and the final-size reading.
 const double exportCropWell = 40;
 
-/// The loudness and true peak wells.
 const double exportLoudnessWell = 76;
 
-/// The audio row's five faces, as the drawing measures them.
 const double exportAudioSourceWidth = 110;
 const double exportAudioRateWidth = 90;
 const double exportAudioDepthWidth = 70;
 const double exportAudioLayoutWidth = 80;
 const double exportAudioBitRateWidth = 90;
 
-/// The resample-quality face at the end of the Resize row.
 const double exportResampleWidth = 80;
 
 /// A field-of-one's-own's **name** well in the Metadata section, standing in
@@ -212,14 +203,12 @@ const List<int> _audioRates = [320000, 256000, 192000, 128000];
 /// image sequence of one frame, which the span already says.
 enum ExportOutputType { video, imageSequence, audioOnly }
 
-/// A part of the window that folds away, under what every export needs.
 enum ExportSection { composition, time, picture, colour, audio, metadata }
 
 /// Which folds stand open. For the session, not the window: somebody who works
 /// in Audio finds it where they left it.
 final Set<ExportSection> exportOpenSections = {};
 
-/// How much of the composition to write.
 enum _Span { workArea, wholeComp, custom }
 
 /// The other computer last chosen to export on in this run of Lumit, which
@@ -237,11 +226,9 @@ String? exportLastComputer;
 /// so it is typed like any other — [name] is that editor, and it is null for
 /// the five classics, whose keys are the standard's and not ours to change.
 class _MetaField {
-  /// The classic five: a fixed key and a translated label above it.
   final String? fixedKey;
   final String? label;
 
-  /// A field of one's own: its key, typed. Null for the classics.
   final TextEditingController? name;
 
   final TextEditingController value;
@@ -251,7 +238,6 @@ class _MetaField {
         name = null,
         value = TextEditingController(text: initial);
 
-  /// A field of one's own, seeded with a key to start from.
   _MetaField.own(String key)
       : fixedKey = null,
         label = null,
@@ -330,7 +316,6 @@ class _ExportDialog extends StatefulWidget {
   /// was raised without one, which leaves the config section off.
   final ProjectReference? project;
 
-  /// The colour config's names as the shell holds them.
   final BridgeColourSummary colour;
   final Future<String?> Function()? picker;
   final List<double>? region;
@@ -362,8 +347,6 @@ class _ExportDialog extends StatefulWidget {
 class _ExportDialogState extends State<_ExportDialog> {
   final ScrollController _scroll = ScrollController();
 
-  // ---- what is being asked for ---------------------------------------------
-
   String _preset = '';
   List<BridgeExportPresetEntry> _presets = const [];
   bool _naming = false;
@@ -378,7 +361,6 @@ class _ExportDialogState extends State<_ExportDialog> {
   int _peak = 0;
   bool _autoBitrate = true;
 
-  /// Constant bitrate (CBR) rather than variable (VBR) up to [_peak].
   bool _constantBitrate = false;
   double _fps = 60;
   bool _ownRate = false;
@@ -408,12 +390,8 @@ class _ExportDialogState extends State<_ExportDialog> {
   static const Object _targetPick = #target;
   static const Object _customPick = #custom;
 
-  /// A file of each bus's sound beside the main one.
   bool _stems = false;
 
-  /// Other files written beside the main one from the same frames, the
-  /// formats the engine would write beside it, and while that is being
-  /// asked, the files asked about.
   final List<_Also> _also = [];
   List<String> _alsoOffered = const [];
   List<BridgeExportAlso>? _alsoProbe;
@@ -440,7 +418,6 @@ class _ExportDialogState extends State<_ExportDialog> {
   /// of, in a shared project. Empty everywhere else.
   List<BridgeFootageLack> _lacking = const [];
 
-  /// The 3D models this comp draws that can't be read right now.
   List<String> _unread = const [];
 
   /// What the export does about [_lacking]: one of the three below, or the
@@ -478,7 +455,6 @@ class _ExportDialogState extends State<_ExportDialog> {
   int _resizeWidth = 1920;
   int _resizeHeight = 1080;
 
-  /// The render settings (`RenderOptions`) and what the picture carries.
   int _quality = 1;
   bool _effects = true;
   bool _honourSolo = true;
@@ -652,7 +628,6 @@ class _ExportDialogState extends State<_ExportDialog> {
       _lacking = widget.comp.shareLacking();
       _unread = widget.comp.unreadModels();
     } catch (_) {
-      // No engine to ask, as in a widget test.
     }
     // The frames it reads, where everything can be had from someone: the
     // least to send that still delivers at full quality.
@@ -672,7 +647,6 @@ class _ExportDialogState extends State<_ExportDialog> {
         _watchComputers();
       }
     } catch (_) {
-      // No account or no engine to ask, as in a widget test.
     }
     final queued = widget.queued;
     final spec = queued == null ? null : exportQueueSpec(id: queued);
@@ -722,7 +696,6 @@ class _ExportDialogState extends State<_ExportDialog> {
     });
   }
 
-  /// Where the queued item wrote when the dialogue opened on it.
   String? _queuedPath;
 
   @override
@@ -739,8 +712,6 @@ class _ExportDialogState extends State<_ExportDialog> {
     }
     super.dispose();
   }
-
-  // ---- what the fields add up to -------------------------------------------
 
   bool get _images => _format.type == ExportOutputType.imageSequence;
 
@@ -780,7 +751,6 @@ class _ExportDialogState extends State<_ExportDialog> {
     return most > 0 && rate > most ? most.toDouble() : rate;
   }
 
-  /// The footer's line: what pressing the button would produce.
   String get _summary {
     final (start, end) = _range;
     final span = (end - start).clamp(0, 1 << 30);
@@ -814,7 +784,6 @@ class _ExportDialogState extends State<_ExportDialog> {
     return '$line · $size';
   }
 
-  /// The loudness the dialogue asks for, null for none.
   BridgeExportLoudness? get _loudness {
     final pick = _loudnessPick;
     final lufs = pick is double
@@ -921,8 +890,6 @@ class _ExportDialogState extends State<_ExportDialog> {
     _recomputeAlso();
   }
 
-  // ---- the frame -----------------------------------------------------------
-
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
@@ -975,7 +942,6 @@ class _ExportDialogState extends State<_ExportDialog> {
               : null,
           keyPrefix: 'export',
           actions: [
-            // While footage is on its way there is one thing to press.
             if (_waiting != null)
               HouseButton(
                 key: const ValueKey('export-footage-cancel'),
@@ -983,8 +949,6 @@ class _ExportDialogState extends State<_ExportDialog> {
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Text(l10n.cancel),
               ),
-            // Only beside the one refusal that has somewhere to go: the page
-            // where the missing addon is installed.
             if (_refusedForAddon)
               HouseButton(
                 key: const ValueKey('export-open-addons'),
@@ -993,8 +957,6 @@ class _ExportDialogState extends State<_ExportDialog> {
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Text(l10n.openAddons),
               ),
-            // Opened from the queue, the one thing to do is keep the changes,
-            // or for a row that failed, queue it again with them.
             if (widget.queued != null)
               HouseButton(
                 key: const ValueKey('export-save-queued'),
@@ -1016,8 +978,6 @@ class _ExportDialogState extends State<_ExportDialog> {
                 ),
               HouseButton(
                 key: const ValueKey('export-start'),
-                // The window's default action: Enter exports unless a field is
-                // being typed in.
                 primary: true,
                 autofocus: true,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1041,7 +1001,6 @@ class _ExportDialogState extends State<_ExportDialog> {
   /// the button asks.
   bool get _canQueue => _check.isEmpty && _waiting == null;
 
-  /// What a shut fold says it holds.
   String _foldReading(ExportSection section) {
     final (width, height) = _outputSize;
     final (start, end) = _range;
@@ -1076,7 +1035,6 @@ class _ExportDialogState extends State<_ExportDialog> {
                 loudnessTargetLabel(loudness.lufs),
             ]
           : [l10n.off],
-      // Nothing to say until somebody has written something in it.
       ExportSection.metadata => [
           for (final field in _metadata)
             if (field.value.text.isNotEmpty) field.value.text,
@@ -1084,10 +1042,6 @@ class _ExportDialogState extends State<_ExportDialog> {
     }.join(' · ');
   }
 
-  // ---- the groups ----------------------------------------------------------
-
-  /// What every export needs, on show with nothing to open: the preset, what
-  /// to write, where, and what to do after.
   Widget _essentials(LumitTheme t) => Padding(
         key: const ValueKey('export-preset-strip'),
         padding: const EdgeInsets.symmetric(
@@ -1188,7 +1142,6 @@ class _ExportDialogState extends State<_ExportDialog> {
                         ? null
                         : (d) => _pathMenu(d.globalPosition),
                     child: _remoteStays
-                        // Only the name: the folder is the other computer's.
                         ? _well(t, _stayingName,
                             key: const ValueKey('export-path'),
                             tone: t.textMuted,
@@ -1239,7 +1192,6 @@ class _ExportDialogState extends State<_ExportDialog> {
         ),
       );
 
-  /// The preset's quieter acts, behind the three dots.
   Widget _presetMore(LumitTheme t) => LumitTooltip(
         message: l10n.exportPresetMore,
         child: Builder(
@@ -1311,8 +1263,6 @@ class _ExportDialogState extends State<_ExportDialog> {
     ];
   }
 
-  /// The file's right-click: its path to the clipboard, another place, and
-  /// the folder it goes in.
   void _pathMenu(Offset at) {
     final path = _path;
     final folder = path == null || kIsWeb ? null : File(path).parent.path;
@@ -1339,7 +1289,6 @@ class _ExportDialogState extends State<_ExportDialog> {
             },
             child: Text(l10n.exportBrowseEllipsis),
           ),
-          // The file itself once it is there, else the folder it will be in.
           MenuRow(
             key: const ValueKey('export-path-folder'),
             enabled: folderThere,
@@ -1787,14 +1736,12 @@ class _ExportDialogState extends State<_ExportDialog> {
                           value: _bitrate,
                           min: 0,
                           max: 400,
-                          // The unit alone: the reading with no number in it.
                           suffix: _bitrate == 0
                               ? null
                               : l10n.exportReadingVideoRate(''),
                           fill: t.surface0,
                           onChanged: (v) => _edit(() {
                             _bitrate = v.toInt();
-                            // A rate of one's own has no preset peak behind it.
                             _peak = 0;
                           }),
                         ),
@@ -1805,8 +1752,6 @@ class _ExportDialogState extends State<_ExportDialog> {
             dimmed: dim,
           ),
         ),
-        // How the bitrate is spent: varying with the picture up to a
-        // maximum (VBR), or held at the bitrate throughout (CBR).
         _columns(
           _row(
             t,
@@ -2062,8 +2007,6 @@ class _ExportDialogState extends State<_ExportDialog> {
   List<String> get _colourOptions => [
         if (_caps.colourSpaces.isEmpty) _colourSpace,
         ..._caps.colourSpaces,
-        // Only where the container carries a picture at all: a sound file has
-        // no colour to write, and its empty capability row says so.
         if (_caps.colourSpaces.isNotEmpty)
           for (final space in widget.colour.spaces)
             if (!_caps.colourSpaces.contains(space)) space,
@@ -2092,7 +2035,6 @@ class _ExportDialogState extends State<_ExportDialog> {
   /// goes dead entire rather than offering four rows that write nothing.
   Widget _audioGroup(LumitTheme t) {
     final dim = !_caps.audio;
-    // Why the settings after the first list are dead while it reads Off.
     final off = _audio ? null : l10n.tipExportAudioOff;
     final live = _caps.audio && _audio;
     return _group(
@@ -2295,7 +2237,6 @@ class _ExportDialogState extends State<_ExportDialog> {
     );
   }
 
-  /// A loudness choice as the list reads it.
   String _loudnessLabel(Object? pick) => switch (pick) {
         final double lufs => loudnessTargetLabel(lufs),
         _targetPick => l10n.exportLoudnessTarget(
@@ -2407,10 +2348,6 @@ class _ExportDialogState extends State<_ExportDialog> {
     );
   }
 
-  // ---- the pieces a row is made of -----------------------------------------
-
-  /// A titled group that knows which section it belongs to, so a tab can light
-  /// it briefly when it is jumped to.
   Widget _group(
     LumitTheme t,
     ExportSection section,
@@ -2464,7 +2401,6 @@ class _ExportDialogState extends State<_ExportDialog> {
         dimmed: dimmed,
       );
 
-  /// Two short rows side by side, as the drawing sets them.
   Widget _columns(Widget left, Widget? right) => Row(
         children: [
           Expanded(child: left),
@@ -2473,7 +2409,6 @@ class _ExportDialogState extends State<_ExportDialog> {
         ],
       );
 
-  /// A tick with its word beside it.
   Widget _tick(LumitTheme t, String id, String label, bool value,
           ValueChanged<bool>? onChanged) =>
       HouseCheckbox(
@@ -2506,7 +2441,6 @@ class _ExportDialogState extends State<_ExportDialog> {
       ? control
       : LumitTooltip(message: reason, child: control);
 
-  /// The colour depth, offered only where the format carries more than one.
   Widget _depthDropdown(LumitTheme t, String id) => _why(
         _caps.depths.length > 1 ? null : l10n.tipExportFormatLimit,
         dialogDropdown<int>(
@@ -2590,12 +2524,9 @@ class _ExportDialogState extends State<_ExportDialog> {
     );
   }
 
-  /// What to do about footage this computer has no original of: the choices
-  /// that can be had, the least to send first.
   Widget _footageGroup(LumitTheme t) {
     final share = context.read<LumitState>().share;
     final everyone = _lacking.every((l) => l.holders.isNotEmpty);
-    // The people who have every one of them, and so could do the export.
     final able = [
       if (everyone)
         for (final person in share.others)
@@ -2642,8 +2573,6 @@ class _ExportDialogState extends State<_ExportDialog> {
     if (mounted) setState(() => _waiting = null);
   }
 
-  /// Get the footage first, or hand the export to someone who has it, and
-  /// say in the footer how that is going until it is done.
   void _queueWithFootage(String path, {required bool start}) {
     final app = context.read<LumitState>();
     try {
@@ -2707,8 +2636,6 @@ class _ExportDialogState extends State<_ExportDialog> {
         case BridgeShareFetching_Idle():
           text = l10n.exportFootageStarting;
         case BridgeShareFetching_Working(:final done, :final total):
-          // Nothing has crossed while the others' computers are still
-          // making what was asked for.
           text = total == 0
               ? l10n.exportFootageMaking
               : l10n.exportFootageFetching(percent(done, total));
@@ -2724,14 +2651,12 @@ class _ExportDialogState extends State<_ExportDialog> {
     if (text != _waiting) setState(() => _waiting = text);
   }
 
-  /// A factual line under a group's rows, in the label column's own indent.
   Widget _reading(LumitTheme t, String text, {Key? key}) => Padding(
         padding: const EdgeInsetsDirectional.only(
             start: exportLabelColumn + exportRowGap, top: 2, bottom: 4),
         child: Text(text, key: key, style: dialogMono(t)),
       );
 
-  /// A line the user has to act on, where a reading would go.
   Widget _warning(LumitTheme t, String text, {Key? key}) => Padding(
         padding: const EdgeInsetsDirectional.only(
             start: exportLabelColumn + exportRowGap, top: 2, bottom: 4),
@@ -2786,8 +2711,6 @@ class _ExportDialogState extends State<_ExportDialog> {
         3 => l10n.exportQualityThird,
         _ => l10n.exportQualityQuarter,
       };
-
-  // ---- what the controls do ------------------------------------------------
 
   void _setFormat(_Format format) => _edit(() {
         _format = format;
@@ -2903,7 +2826,6 @@ class _ExportDialogState extends State<_ExportDialog> {
     try {
       project = widget.project?.path();
     } catch (_) {
-      // Closed meanwhile: no folder to be beside.
     }
     _path = exportDefaultPath(defaults,
             preset: _preset,
@@ -2911,7 +2833,6 @@ class _ExportDialogState extends State<_ExportDialog> {
             codec: _format.key,
             projectPath: project) ??
         _path;
-    // A page has no folders, so only the name is chosen here.
     if (kIsWeb) {
       _path ??= exportPreset(
               preset: _preset,
@@ -2986,8 +2907,6 @@ class _ExportDialogState extends State<_ExportDialog> {
     });
   }
 
-  /// Editing one side of the output size, carrying the other with it when the
-  /// aspect is locked.
   void _setResize({int? width, int? height}) => _edit(() {
         if (width != null) {
           final ratio = _resizeHeight / _resizeWidth;
@@ -3098,9 +3017,6 @@ class _ExportDialogState extends State<_ExportDialog> {
     return path;
   }
 
-  /// Send the export to the computer chosen, and show the queue, where it
-  /// sits under that computer's name. A file that comes back is asked for
-  /// here first, as one exported here is.
   Future<void> _send() async {
     final path = _stays ? _stayingName : await _where();
     if (path == null || !mounted) return;
@@ -3123,8 +3039,6 @@ class _ExportDialogState extends State<_ExportDialog> {
     widget.onClose();
   }
 
-  // ---- another computer ----------------------------------------------------
-
   /// The account's other computers, and how each stands for this export,
   /// read off the engine. Asking how one stands asks it, when it hasn't been
   /// since the project changed, so it is asked as the dialogue opens and has
@@ -3135,7 +3049,6 @@ class _ExportDialogState extends State<_ExportDialog> {
       for (final c in _computers)
         if (c.online && c.takes) c.id: widget.comp.remoteFit(computer: c.id),
     };
-    // One that has gone from the list can't be exported on.
     if ((_on == '*' && _computers.length < 2) ||
         (_on.isNotEmpty &&
             _on != '*' &&
@@ -3167,7 +3080,6 @@ class _ExportDialogState extends State<_ExportDialog> {
 
   bool get _remoteStays => _on.isNotEmpty && _stays;
 
-  /// The name the file is written under on the other computer.
   String get _stayingName =>
       _path != null ? _leaf(_path!) : '$_compName.${_format.extension}';
 
@@ -3175,14 +3087,12 @@ class _ExportDialogState extends State<_ExportDialog> {
       ? l10n.remoteThatComputer
       : _computers.where((c) => c.id == id).firstOrNull?.name ?? '';
 
-  /// What a computer lacks for this export, as a count of each kind.
   static String _lacks(BridgeRemoteFit_Lacks lacks) => l10n.remoteLacks([
         if (lacks.plugins.isNotEmpty) l10n.remotePlugins(lacks.plugins.length),
         if (lacks.fonts.isNotEmpty) l10n.remoteFonts(lacks.fonts.length),
         if (lacks.models.isNotEmpty) l10n.remoteModels(lacks.models.length),
       ].join(', '));
 
-  /// Why a computer can't be picked, or null when it can.
   String? _cannot(String id) {
     final computer = _computers.where((c) => c.id == id).firstOrNull;
     if (computer == null) return null;
@@ -3204,7 +3114,6 @@ class _ExportDialogState extends State<_ExportDialog> {
         : computer.gpu;
   }
 
-  /// How a computer stands, in a few words beside its name.
   String? _standing(String id) {
     final computer = _computers.where((c) => c.id == id).firstOrNull;
     if (computer == null) return null;
@@ -3218,7 +3127,6 @@ class _ExportDialogState extends State<_ExportDialog> {
     return fit is BridgeRemoteFit_Ready ? l10n.remoteReady : null;
   }
 
-  /// Export on, and with another computer chosen, where its file goes.
   List<Widget> _remoteRows(LumitTheme t) => [
         _row(
           t,
@@ -3268,9 +3176,6 @@ class _ExportDialogState extends State<_ExportDialog> {
           ),
       ];
 
-  /// One of the two places the file can go, as Format's chips are drawn.
-  /// Tab reaches each, ringed in the accent while it has the focus, and
-  /// Enter or Space picks it.
   Widget _landsChip(LumitTheme t, bool stays, String label) {
     final on = _stays == stays;
     return FocusableActionDetector(
@@ -3314,7 +3219,6 @@ class _ExportDialogState extends State<_ExportDialog> {
     );
   }
 
-  /// The footer's line for a computer that is away, or null for the usual.
   String? get _remoteSummary {
     if (_on.isEmpty || _on == '*') return null;
     final computer = _computers.where((c) => c.id == _on).firstOrNull;
@@ -3322,8 +3226,6 @@ class _ExportDialogState extends State<_ExportDialog> {
     return l10n.remoteWaitsFor(computer.name);
   }
 
-  /// The footer's line for a computer that lacks what the export uses, in
-  /// the warning colour, with their names on hover. Null for the usual.
   Widget? _lacksLine(LumitTheme t) {
     if (_on.isEmpty || _on == '*') return null;
     final fit = _fits[_on];
@@ -3342,8 +3244,6 @@ class _ExportDialogState extends State<_ExportDialog> {
     );
   }
 
-  /// Give the queued item these settings. A file it would newly write over is
-  /// asked about first, as when it was queued.
   Future<void> _saveQueued() async {
     var path = _path;
     final id = widget.queued;
@@ -3390,7 +3290,6 @@ class _ExportDialogState extends State<_ExportDialog> {
     try {
       exportQueueUpdate(id: id, spec: _spec, path: path);
     } catch (_) {
-      // It started, or went, while the dialogue was open.
       setState(() => _refused = l10n.exportQueueNotWaiting);
       return;
     }

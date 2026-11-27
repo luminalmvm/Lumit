@@ -61,7 +61,6 @@ const double _listWidth = 280;
 const double _listMargin = 8;
 const double _bodyHeight = _listMargin + 9.5 * reviewLinkRowHeight;
 
-/// The two pages of the chosen link: what people said, and the link itself.
 enum _Page { comments, link }
 
 /// Open the Previews window: on [link] when one is named, and straight on
@@ -98,7 +97,6 @@ class _ReviewWindow extends StatefulWidget {
   final String? link;
   final CompositionReference? send;
 
-  /// Why the last send failed, when it did so with the window shut.
   final String? failure;
   final VoidCallback close;
 
@@ -125,7 +123,6 @@ class _ReviewWindowState extends State<_ReviewWindow> {
   /// are on the list of links, which is where they start.
   String? _at;
 
-  /// Each listed comment's place in the tree, to bring it into view by.
   final _rowKeys = <String, GlobalKey>{};
 
   /// The link on the right, the version of it whose comments are shown (the
@@ -140,29 +137,18 @@ class _ReviewWindowState extends State<_ReviewWindow> {
   /// small entrance of its own.
   int _pageTurns = 0;
 
-  /// The composition being sent, while the window is on its other face.
   CompositionReference? _sendFor;
 
-  /// The chosen link's composition, when the open project has it, and the
-  /// link that was looked up for.
   CompositionReference? _comp;
   String? _compFor;
 
-  /// How many markers Add to Timeline would make, and what that was counted
-  /// from.
   int _pending = 0;
   Object? _counted;
 
-  /// The layer under the place each comment points at, by the comment's id,
-  /// which is the layer its marker goes on. Found with the count above.
   Map<String, BridgeLayerEntry> _layers = {};
 
-  /// The links whose composition has been edited since their newest version
-  /// went out.
   Set<String> _moved = {};
 
-  /// The comment whose drawing is being shown, and its frame of the
-  /// composition once the engine has drawn it.
   String? _drawingOf;
   ui.Image? _frame;
 
@@ -171,7 +157,6 @@ class _ReviewWindowState extends State<_ReviewWindow> {
   /// in view to put it away with.
   double _drawingRoom = 240;
 
-  /// The link a new version was asked for from its own page.
   Review? _sendInto;
 
   String? _replyTo, _error;
@@ -279,7 +264,6 @@ class _ReviewWindowState extends State<_ReviewWindow> {
               link.id,
         };
       } catch (_) {
-        // A composition that has gone has not moved on.
       }
     }
     final review = _reviews.link(_chosen);
@@ -317,7 +301,6 @@ class _ReviewWindowState extends State<_ReviewWindow> {
           .pendingMarkers(review, version, comp, layers: _layers)
           .length;
     } catch (_) {
-      // The composition has gone since it was found.
       _comp = null;
     }
   }
@@ -336,7 +319,6 @@ class _ReviewWindowState extends State<_ReviewWindow> {
         if (called == name) named ??= comp;
       }
     } catch (_) {
-      // No project to look in.
     }
     return named;
   }
@@ -364,7 +346,6 @@ class _ReviewWindowState extends State<_ReviewWindow> {
     return listed;
   }
 
-  /// The comment a listed thing is, or the first like of a line of them.
   static ReviewComment _first(Object listed) =>
       listed is ReviewComment ? listed : (listed as List<ReviewComment>).first;
 
@@ -427,7 +408,6 @@ class _ReviewWindowState extends State<_ReviewWindow> {
     return KeyEventResult.handled;
   }
 
-  /// Put the keys on the comment called [id], and bring it into view.
   void _onComment(String id) {
     _focus.requestFocus();
     setState(() => _at = id);
@@ -450,7 +430,6 @@ class _ReviewWindowState extends State<_ReviewWindow> {
     });
   }
 
-  /// Scroll the list as little as brings the link at [index] into view.
   void _revealLink(int index) {
     if (!_listScroll.hasClients) return;
     final at = _listScroll.position;
@@ -506,7 +485,6 @@ class _ReviewWindowState extends State<_ReviewWindow> {
         me: me);
   }
 
-  /// Run something the server may refuse, and say why if it does.
   Future<void> _do(Future<void> Function() call) async {
     setState(() => _error = null);
     try {
@@ -516,15 +494,12 @@ class _ReviewWindowState extends State<_ReviewWindow> {
     }
   }
 
-  /// The composition frame a comment on [version] is on.
   int _frameOf(
       CompositionReference comp, ReviewVersion version, ReviewComment comment) {
     final last = comp.durationFrames() - 1;
     return (version.startFrame + comment.frame).clamp(0, last < 0 ? 0 : last);
   }
 
-  /// Put the playhead on [comment]'s frame, in its own composition, and
-  /// select the layer it points at when it points at one.
   void _jump(ReviewVersion version, ReviewComment comment) {
     final comp = _comp;
     if (comp == null) return;
@@ -538,7 +513,6 @@ class _ReviewWindowState extends State<_ReviewWindow> {
         ui.setSelection([under.layer]);
       }
     } catch (_) {
-      // The composition has gone.
     }
   }
 
@@ -558,7 +532,6 @@ class _ReviewWindowState extends State<_ReviewWindow> {
     });
     // Once the frame that drew it has gone by.
     WidgetsBinding.instance.addPostFrameCallback((_) => was?.dispose());
-    // And its comment is brought into the window with it.
     _reveal(comment.id);
     final comp = _comp;
     if (shown == null || comp == null) return;
@@ -573,7 +546,6 @@ class _ReviewWindowState extends State<_ReviewWindow> {
         }
         setState(() => _frame = image);
       } catch (_) {
-        // The strokes are shown without the frame.
       }
     }());
   }
@@ -583,7 +555,6 @@ class _ReviewWindowState extends State<_ReviewWindow> {
     widget.app.postNotice(l10n.reviewCopied);
   }
 
-  /// Everything there is to do with [review] from its row in the list.
   void _linkMenu(BuildContext row, Review review, Offset at) {
     final comp = _moved.contains(review.id) ? _compOf(review) : null;
     reviewRowMenu(row, at, [
@@ -658,7 +629,6 @@ class _ReviewWindowState extends State<_ReviewWindow> {
     ]);
   }
 
-  /// [_pickFriend], under the button that asked.
   void _pickFriendUnder(BuildContext button, Review review) {
     final box = button.findRenderObject()! as RenderBox;
     unawaited(_pickFriend(
@@ -793,8 +763,6 @@ class _ReviewWindowState extends State<_ReviewWindow> {
       _error ??
       (_reviews.failure == null ? null : reviewErrorText(_reviews.failure!));
 
-  // --- Without Pro, and with no links yet -----------------------------------
-
   Widget _offer(LumitTheme t) => DialogFrame(
         width: reviewNarrowWidth,
         children: [
@@ -838,8 +806,6 @@ class _ReviewWindowState extends State<_ReviewWindow> {
     );
   }
 
-  // --- The links -------------------------------------------------------------
-
   Widget _links(LumitTheme t) {
     final review = _reviews.link(_chosen);
     return Focus(
@@ -857,7 +823,6 @@ class _ReviewWindowState extends State<_ReviewWindow> {
               children: [
                 SizedBox(
                   width: _listWidth,
-                  // The ground under the rows has what the list itself can do.
                   child: Builder(
                     builder: (list) => GestureDetector(
                       behavior: HitTestBehavior.translucent,
@@ -882,7 +847,6 @@ class _ReviewWindowState extends State<_ReviewWindow> {
                                     chosen: link.id == _chosen,
                                     unseen: _reviews.unseenIn(link) > 0,
                                     moved: _moved.contains(link.id),
-                                    // The keys come back to the list with it.
                                     onPick: () {
                                       _focus.requestFocus();
                                       setState(() => link.id == _chosen
@@ -910,7 +874,6 @@ class _ReviewWindowState extends State<_ReviewWindow> {
           ),
           dialogFooter(
             t,
-            // How much of the account's room on the server is taken.
             summary: _reviews.limitBytes <= 0
                 ? ''
                 : l10n.reviewStorage(writtenBytes(_reviews.usedBytes),
@@ -923,21 +886,17 @@ class _ReviewWindowState extends State<_ReviewWindow> {
     );
   }
 
-  // --- The chosen link -----------------------------------------------------
-
   /// The chosen link: its still and its address, which stay put, over the
   /// two pages that scroll under them. The comments are the page it opens on,
   /// since they are what the window is opened for.
   Widget _detail(LumitTheme t, Review review) {
     final version = _versionOf(review);
     final failure = _failure;
-    // Comments on frames, which are what there is to filter and to add.
     final said = [
       for (final c in _reviews.comments)
         if (c.version == version.n && c.parent == null && c.reaction == null)
           c,
     ];
-    // Nothing on this version at all: no comment, no like, nobody's yes.
     final bare = version.approvals.isEmpty &&
         !_reviews.comments.any((c) => c.version == version.n);
     // What the tab shows is keyed by it, so a new page comes up into place as
@@ -974,8 +933,6 @@ class _ReviewWindowState extends State<_ReviewWindow> {
                 key: const ValueKey('review-error'),
                 style: t.small.copyWith(color: t.warning, height: 1.4)),
           ),
-        // The composition has moved on since this went out, and the next
-        // version is one press away.
         if (_moved.contains(review.id) && _comp != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -1011,7 +968,6 @@ class _ReviewWindowState extends State<_ReviewWindow> {
           ],
           current: _page,
           onPick: (page) {
-            // A page opens at its top, wherever the other was scrolled to.
             if (_detailScroll.hasClients) _detailScroll.jumpTo(0);
             setState(() {
               if (page != _page) _pageTurns++;
@@ -1021,8 +977,6 @@ class _ReviewWindowState extends State<_ReviewWindow> {
           },
           keyPrefix: 'review',
         ),
-        // What is shown and the way onto the Timeline stay put over the
-        // comments, and are not there at all until there is one.
         if (_page == _Page.comments && said.isNotEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
@@ -1082,11 +1036,7 @@ class _ReviewWindowState extends State<_ReviewWindow> {
         if (c.version == version.n) c,
     ];
     final listed = _listed(version);
-    // ponytail: every listed comment is built at once, which a few hundred
-    // are fine with. A link at the server's ceiling of 2000 wants a list
-    // that builds what is in view, and the keys a way to find a row in it.
     return [
-      // A reviewer's yes to this version, before what anyone said about it.
       if (version.approvals.isNotEmpty) ...[
         if (listed.isNotEmpty) Container(height: 1, color: t.hairline),
         ReviewApprovedRow(
@@ -1197,8 +1147,6 @@ class _ReviewWindowState extends State<_ReviewWindow> {
                   version.fpsDen)
               : null,
           layer: _layers[top.id]?.info.name,
-          // What was drawn, over its frame, as large as the column and the
-          // window's height leave room for.
           drawing: _drawingOf != top.id
               ? null
               : ConstrainedBox(
@@ -1304,7 +1252,6 @@ class ReviewChip extends StatelessWidget {
                 else
                   swept(glyph.LumitIcon(LumitIcons.comment,
                       size: 14, colour: t.textPrimary)),
-                // The sweep is the mark's. The count is said plainly.
                 if (unseen > 0) ...[
                   const SizedBox(width: 4),
                   Text('$unseen',

@@ -1,5 +1,3 @@
-// Copies of a graphics template: what a copy is called where its name is
-// shown, and the request that puts the cursor in a copy's first text box.
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
@@ -19,7 +17,6 @@ String shownLayerName(BridgeLayerInfo info) {
   return copy.title ?? info.name;
 }
 
-/// What a clip is called on its bar in the Cut timeline.
 String shownClipName(BridgeClip clip) =>
     clip.angle?.name ?? clip.copy?.title ?? clip.sourceName;
 
@@ -36,7 +33,6 @@ Set<String> copyRowsWithoutLane(BridgeCopy copy) => {
       ],
     };
 
-/// Whether a copy has words to type: a text control.
 bool copyHasWords(BridgeCopy? copy) =>
     copy != null &&
     copy.controls.any((c) => c.kind == BridgeControlKind.text);

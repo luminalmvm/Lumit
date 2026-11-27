@@ -31,7 +31,6 @@ import 'pro_window.dart';
 import 'profile_chip.dart';
 import 'sign_in_window.dart';
 
-/// The width of the window's narrow faces, which is the Lumit Pro window's.
 const double reviewNarrowWidth = proWindowWidth;
 const double _labelColumn = 96;
 
@@ -61,12 +60,8 @@ bool _fitsThePage(String words) {
 /// added. The two largest kinds are said, and a word that there was more.
 /// Empty for nothing.
 String reviewChangedNote(ReviewChanges changes) {
-  // An effect as a person would call it: their own name for it, or the
-  // effect's.
   String effect(String name) =>
       name.startsWith('=') ? name.substring(1) : effectLabelOf(name);
-  // Each kind: how many, its place in a tie, its words by count, and its
-  // words by name for when there is one of it.
   final kinds = [
     (
       changes.changed.length,
@@ -102,7 +97,6 @@ String reviewChangedNote(ReviewChanges changes) {
           changes.effectsRemoved.single.$2),
     ),
   ].where((kind) => kind.$1 > 0).toList()
-    // The most of anything first, and a tie in the order above.
     ..sort((a, b) =>
         a.$1 == b.$1 ? a.$2.compareTo(b.$2) : b.$1.compareTo(a.$1));
   if (kinds.isEmpty) return '';
@@ -127,8 +121,6 @@ String reviewChangedNote(ReviewChanges changes) {
       orElse: () => tries.reduce((a, b) => a.length <= b.length ? a : b));
 }
 
-/// What a failure is called in the person's own language. The codes are the
-/// server's, and the two the export can fail with here.
 String reviewErrorText(String code) => switch (code) {
       'pro_required' => l10n.reviewErrorPro,
       'storage_full' => l10n.reviewErrorStorage,
@@ -155,7 +147,6 @@ class ReviewSendFace extends StatefulWidget {
   /// of a link it was showing. Without it, the composition's own is found.
   final Review? link;
 
-  /// Leave without sending, and close the window.
   final VoidCallback onBack, onClose;
 
   const ReviewSendFace({
@@ -178,13 +169,11 @@ class _ReviewSendFaceState extends State<ReviewSendFace> {
   int _edge = 1080;
   bool _workArea = false, _comments = true, _separate = false;
 
-  // The composition as it stood when the form opened.
   String _name = '';
   int _width = 0, _height = 0, _fpsNum = 30, _fpsDen = 1, _frames = 0;
   ({int start, int end, bool whole}) _area = (start: 0, end: 0, whole: true);
   bool _lacking = false;
 
-  // The address stands aside for a second after it is clicked.
   bool _copied = false;
   Timer? _copiedFor;
 
@@ -206,7 +195,6 @@ class _ReviewSendFaceState extends State<ReviewSendFace> {
       _area = workAreaFrames(comp);
       _lacking = comp.shareLacking().isNotEmpty;
     } catch (_) {
-      // A composition that has gone sends nothing, and the engine says so.
     }
     _title.text = _name;
     _workArea = !_area.whole;
@@ -218,7 +206,6 @@ class _ReviewSendFaceState extends State<ReviewSendFace> {
       final changes = _reviews.changedSince(link, comp);
       if (changes != null) _note.text = reviewChangedNote(changes);
     } catch (_) {
-      // The composition has gone, and the line stays empty.
     }
   }
 
@@ -257,7 +244,6 @@ class _ReviewSendFaceState extends State<ReviewSendFace> {
       start: start,
       end: end,
       comments: _comments,
-      // A new link has nothing to have changed from.
       note: into == null ? '' : _note.text,
       project: widget.app.project?.path() ?? '',
     ));
@@ -291,8 +277,6 @@ class _ReviewSendFaceState extends State<ReviewSendFace> {
       },
     );
   }
-
-  // --- The form -------------------------------------------------------------
 
   List<Widget> _form(LumitTheme t, String? failure) {
     final existing = widget.comp == null
@@ -367,7 +351,6 @@ class _ReviewSendFaceState extends State<ReviewSendFace> {
                 labelColumn: _labelColumn,
               )
             else
-              // One line for the people watching, and nothing has to go in it.
               dialogRow(
                 t,
                 l10n.reviewWhatChanged,
@@ -452,7 +435,6 @@ class _ReviewSendFaceState extends State<ReviewSendFace> {
       ),
       dialogFooter(
         t,
-        // How long what is sent will run.
         summary: timecodeOfRate(end - start, _fpsNum, _fpsDen),
         keyPrefix: 'review-send',
         actions: [
@@ -506,10 +488,6 @@ class _ReviewSendFaceState extends State<ReviewSendFace> {
             style: t.small.copyWith(color: t.warning, height: 1.4)),
       );
 
-  // --- The wait, and the link -----------------------------------------------
-
-  /// The ground the wait and the link stand on: the Pro wash, a little
-  /// brighter once the link has landed.
   Widget _washed(LumitTheme t, {required bool landed, required Widget child}) =>
       ClipRect(
         child: CustomPaint(
@@ -547,7 +525,6 @@ class _ReviewSendFaceState extends State<ReviewSendFace> {
           ),
           const SizedBox(height: 8),
           Text(
-            // Nothing to count until the exporter has said how many there are.
             send.total <= 0 || send.waiting
                 ? ''
                 : exporting
@@ -603,8 +580,6 @@ class _ReviewSendFaceState extends State<ReviewSendFace> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Center(
-            // The tick draws itself once, and is simply there when
-            // animation is off.
             child: TweenAnimationBuilder<double>(
               tween: Tween(begin: 0, end: 1),
               duration: scope.animationLevel == AnimationLevel.none
@@ -624,7 +599,6 @@ class _ReviewSendFaceState extends State<ReviewSendFace> {
             style: t.heading.copyWith(fontSize: 20, height: 1.2),
           ),
           const SizedBox(height: 14),
-          // Clicking the address copies it again, and says so in its place.
           MouseRegion(
             cursor: SystemMouseCursors.click,
             child: GestureDetector(
@@ -690,8 +664,6 @@ Widget reviewLinkWell(LumitTheme t, String url,
       ),
     );
 
-/// A ring and the tick inside it, in the sweep, drawn as far as [drawn] says:
-/// the ring first, then the tick.
 class _TickPainter extends CustomPainter {
   final double drawn;
   final Color track;

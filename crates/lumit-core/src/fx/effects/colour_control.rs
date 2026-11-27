@@ -7,7 +7,6 @@
 use crate::fx::{registry::EffectDef, registry::EffectMetadata, schema::EffectSchema};
 use lumit_fx_macros::Effect;
 
-/// The Colour control's one control.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "colour_control",
@@ -26,7 +25,6 @@ pub struct ColourControl {
     pub colour: [f32; 4],
 }
 
-/// The Colour control's behaviour: none, by design.
 pub struct ColourControlDef;
 
 impl EffectDef for ColourControlDef {

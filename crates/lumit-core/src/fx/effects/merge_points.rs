@@ -16,7 +16,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// The four streams it takes in.
 const MERGE_IN: &[Port] = &[
     Port::new(POINTS_PORT, "Points", PortType::Points),
     Port::new("points_b", "Points B", PortType::Points),
@@ -32,14 +31,12 @@ pub const MERGE_POINTS_GROUPS: &[ParamGroup] = &[ParamGroup {
     visible_when_lens_elements: None,
 }];
 
-/// Count nested inputs has nothing to count while Number by input is off.
 pub const MERGE_POINTS_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
     param: "count_nested",
     on: "number_by_input",
     cond: EnabledCond::BoolIs(true),
 }];
 
-/// Merge points' controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "merge_points",
@@ -66,7 +63,6 @@ pub struct MergePoints {
     #[toggle(label = "Count nested inputs", default = false)]
     pub count_nested: bool,
 
-    /// How soft the disc a point is drawn as is, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -103,9 +99,7 @@ impl MergePoints {
             out.projection = first.projection;
             out.px_scale = first.px_scale;
         }
-        // The first number the next input may use, under Count nested inputs.
         let mut next = 0.0f32;
-        // The same for the sources written under a name.
         let mut source = 0.0f32;
         for (k, input) in inputs.iter().take(MERGE_IN.len()).enumerate() {
             let mut part = (*input).clone();
@@ -159,7 +153,6 @@ impl MergePoints {
     }
 }
 
-/// Merge points' behaviour.
 pub struct MergePointsDef;
 
 impl EffectDef for MergePointsDef {
@@ -167,7 +160,6 @@ impl EffectDef for MergePointsDef {
         &<MergePoints as EffectMetadata>::SCHEMA
     }
 
-    /// Four streams in and one out, beside the picture.
     fn signature(&self) -> Signature {
         Signature::Image {
             inputs: MERGE_IN,

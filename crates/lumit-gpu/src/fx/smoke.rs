@@ -10,35 +10,29 @@ use wgpu::util::DeviceExt;
 use super::FxEngine;
 use crate::GpuContext;
 
-/// The bytes a cell of state takes, speed and fields.
 const CELL_BYTES: u64 = 16;
 
 /// The bytes a cell of a walk's working buffers takes: three of state, two of
 /// pressure, one of spread, and density and heat twice over for the marcher.
 const WORK_CELL_BYTES: u64 = 3 * CELL_BYTES + 3 * 4 + 2 * 4;
 
-/// How far a uniform is from the next.
 const UNIFORM_STEP: u64 = 256;
 
-/// How many cells a grid of `cells` holds.
 #[must_use]
 pub fn cell_count(cells: [u32; 3]) -> u64 {
     cells.iter().map(|c| u64::from(*c)).product()
 }
 
-/// The bytes one state of `cells` takes.
 #[must_use]
 pub fn state_bytes(cells: [u32; 3]) -> u64 {
     cell_count(cells) * CELL_BYTES
 }
 
-/// The bytes a walk of `cells` holds to step through.
 #[must_use]
 pub fn work_bytes(cells: [u32; 3]) -> u64 {
     cell_count(cells) * WORK_CELL_BYTES
 }
 
-/// What a walk emits from, as the kernel reads it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
 pub enum EmitKind {
@@ -66,7 +60,6 @@ pub struct SmokeStep {
     pub drift: [f32; 4],
 }
 
-/// A layer or a model the gas goes round, as the kernel reads it.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct SmokeSolid {
@@ -83,14 +76,11 @@ pub struct SmokeSolid {
     pub kind: [u32; 4],
 }
 
-/// What a walk emits from beyond its numbers.
 pub struct SmokeEmit<'a> {
     /// Every model's distances the walk reads, one after another, negative
     /// inside.
     pub distances: Option<&'a [f32]>,
-    /// Whether particles are laid into the grid each frame.
     pub particles: bool,
-    /// Whether gas goes round layers or models.
     pub solids: bool,
 }
 
@@ -110,7 +100,6 @@ pub struct SmokeWork {
     passes: Passes,
 }
 
-/// A step's passes, bound once.
 struct Passes {
     curl: wgpu::BindGroup,
     force: wgpu::BindGroup,
@@ -123,7 +112,6 @@ struct Passes {
 }
 
 impl SmokeWork {
-    /// The bytes it holds.
     #[must_use]
     pub fn bytes(&self) -> u64 {
         work_bytes(self.cells) + self.emitted.size()
@@ -137,7 +125,6 @@ impl SmokeWork {
     }
 }
 
-/// The kernels' layouts and pipelines, built the first time smoke runs.
 pub(super) struct SmokePipelines {
     step_layout: wgpu::BindGroupLayout,
     curl: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
@@ -274,7 +261,6 @@ fn drawn_pitch(width: u32) -> u32 {
     (width * 4).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT) / 4
 }
 
-/// A 3D field of density and heat `cells` big, that a buffer is copied into.
 #[must_use]
 pub fn field_texture(ctx: &GpuContext, cells: [u32; 3]) -> wgpu::Texture {
     use wgpu::TextureUsages as U;
@@ -294,8 +280,6 @@ pub fn field_texture(ctx: &GpuContext, cells: [u32; 3]) -> wgpu::Texture {
     })
 }
 
-/// A 3D field `cells` big from half floats, density then heat, a row of `pitch`
-/// cells at a time.
 #[must_use]
 pub fn field_from(ctx: &GpuContext, cells: [u32; 3], pitch: u32, values: &[u16]) -> wgpu::Texture {
     let texture = field_texture(ctx, cells);
@@ -330,7 +314,6 @@ impl FxEngine {
         self.smoke.get_or_init(|| SmokePipelines::new(ctx))
     }
 
-    /// The buffers a walk of `cells` steps through, with nothing in them.
     pub fn smoke_work(&self, ctx: &GpuContext, cells: [u32; 3], emit: &SmokeEmit<'_>) -> SmokeWork {
         use wgpu::BufferUsages as U;
         let fx = self.smoke_pipes(ctx);
@@ -395,7 +378,6 @@ impl FxEngine {
             })
         };
         let [a, b, c] = &state;
-        // Which buffer is which at each pass: see `smoke_steps`.
         let passes = Passes {
             curl: group(&fx.curl.0, &[(0, a), (2, c)]),
             force: group(
@@ -450,13 +432,11 @@ impl FxEngine {
         }
     }
 
-    /// Empties `work`: no speed, no smoke.
     pub fn smoke_clear(&self, ctx: &GpuContext, work: &SmokeWork) {
         ctx.encoder("fx-smoke-clear")
             .clear_buffer(&work.state[0], 0, None);
     }
 
-    /// A copy of where `work` has got to, for later.
     pub fn smoke_keep(&self, ctx: &GpuContext, work: &SmokeWork) -> wgpu::Buffer {
         use wgpu::BufferUsages as U;
         let kept = ctx.device.create_buffer(&wgpu::BufferDescriptor {
@@ -475,7 +455,6 @@ impl FxEngine {
         kept
     }
 
-    /// `work` back to a state [`Self::smoke_keep`] kept.
     pub fn smoke_restore(&self, ctx: &GpuContext, work: &SmokeWork, kept: &wgpu::Buffer) {
         let size = kept.size().min(work.state[0].size());
         ctx.encoder("fx-smoke-restore")
@@ -577,8 +556,6 @@ impl FxEngine {
         pass.dispatch_workgroups(cap.div_ceil(64), 1, 1);
     }
 
-    /// Works out which cells `solids` are in this frame, for the steps after. `each`
-    /// is a step's numbers.
     pub fn smoke_solids(
         &self,
         ctx: &GpuContext,
@@ -699,7 +676,6 @@ impl FxEngine {
         }
     }
 
-    /// Brings [`SmokeWork::fields`] up to where the walk has got to.
     pub fn smoke_draw(&self, ctx: &GpuContext, work: &SmokeWork) {
         let fx = self.smoke_pipes(ctx);
         let mut step: SmokeStep = bytemuck::Zeroable::zeroed();
@@ -765,8 +741,6 @@ mod tests {
         }
     }
 
-    /// Walked twice from empty, or from a state kept part way, a grid comes to
-    /// the same bytes, and heat lifts what is emitted off the floor.
     #[test]
     fn the_same_steps_come_to_the_same_bytes_and_heat_rises() {
         let Some(ctx) = crate::test_support::lease() else {
@@ -804,7 +778,6 @@ mod tests {
             "from a kept state"
         );
 
-        // Density by row of cells, top of the grid first.
         let mut rows = vec![0.0f32; cells[1] as usize];
         for z in 0..cells[2] as usize {
             for (y, sum) in rows.iter_mut().enumerate() {

@@ -69,11 +69,9 @@ struct Params {
     fin2: [f32; 4],
 }
 
-/// A field is bound to this pass.
 const HAS_FIELD: u32 = 1;
 /// The finest band: there is no sum before it.
 const FIRST_BAND: u32 = 2;
-/// A matte is bound to the last pass.
 const HAS_MATTE: u32 = 4;
 
 impl Params {
@@ -92,7 +90,6 @@ impl Params {
     }
 }
 
-/// One module's layout and its entry points.
 struct Module {
     layout: wgpu::BindGroupLayout,
     pipes: Vec<(&'static str, wgpu::ComputePipeline)>,
@@ -232,12 +229,10 @@ impl Module {
     }
 }
 
-/// Denoise's pipelines on one device.
 pub struct DenoiseKernels {
     mid: Module,
     sum: Module,
     out: Module,
-    /// The format the working pictures are kept in.
     mid_format: wgpu::TextureFormat,
     /// The working format the last pass writes, which they were built for.
     working: wgpu::TextureFormat,
@@ -245,7 +240,6 @@ pub struct DenoiseKernels {
     spare: std::cell::RefCell<Spare>,
 }
 
-/// Pictures a run gave back, kept for the next.
 #[derive(Default)]
 struct Spare {
     free: Vec<wgpu::Texture>,
@@ -307,7 +301,6 @@ impl DenoiseKernels {
         self.working
     }
 
-    /// A working picture, a spare one when one matches.
     fn mid(&self, ctx: &GpuContext, w: u32, h: u32) -> wgpu::Texture {
         self.picture(ctx, w, h, self.mid_format, "fx-denoise-mid")
     }
@@ -349,7 +342,6 @@ impl DenoiseKernels {
         })
     }
 
-    /// Give a picture back for a later pass, or the next run, to use.
     fn done(&self, t: wgpu::Texture) {
         self.spare.borrow_mut().free.push(t);
     }
@@ -412,7 +404,6 @@ impl DenoiseKernels {
         let current = self.mid(ctx, w, h);
         self.mid.run(ctx, "prep", [input; 6], &[&current], &base);
         let averaged = self.average(ctx, &current, w, h, neighbours, op, &base);
-        // The bands, finest first, each shrunk into the running sum.
         let mut sum: Option<wgpu::Texture> = None;
         let mut level: Option<wgpu::Texture> = None;
         for band in 0..4u32 {

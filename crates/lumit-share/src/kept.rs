@@ -31,14 +31,12 @@ use std::time::{Duration, SystemTime};
 use uuid::Uuid;
 use web_time::Instant;
 
-/// An edit and what it replaced where it was made.
 pub(crate) type Pair = (Op, Op);
 
 fn file(kind: &str, id: Uuid) -> Option<PathBuf> {
     Some(lumit_project::shared_dir()?.join(format!("{kind}-{id}.jsonl")))
 }
 
-/// How long a kept file nobody has written to is kept for.
 const STALE: Duration = Duration::from_secs(30 * 24 * 60 * 60);
 
 /// Clear out what was kept for projects nobody came back to: the kept files
@@ -99,7 +97,6 @@ fn appending(path: &Path) -> Option<File> {
     Some(file)
 }
 
-/// The edits in `lines`. One that does not read is passed over.
 fn pairs(lines: impl Iterator<Item = std::io::Result<String>>) -> Vec<Pair> {
     let lines = lines.map_while(Result::ok);
     lines
@@ -107,7 +104,6 @@ fn pairs(lines: impl Iterator<Item = std::io::Result<String>>) -> Vec<Pair> {
         .collect()
 }
 
-/// The longest a kept edit waits to be synced to the disk.
 const SYNC_EVERY: Duration = Duration::from_secs(1);
 
 /// A host's edits since its project was last saved.
@@ -116,9 +112,7 @@ const SYNC_EVERY: Duration = Duration::from_secs(1);
 pub(crate) struct HostLog {
     path: PathBuf,
     file: Option<File>,
-    /// How many edits the file holds.
     count: usize,
-    /// When the file was last synced to the disk.
     synced: Instant,
 }
 
@@ -177,12 +171,10 @@ impl HostLog {
         }
     }
 
-    /// How many edits are held, to hand back to [`Self::saved`].
     pub(crate) fn mark(&self) -> usize {
         self.count
     }
 
-    /// The project was saved with the first `mark` edits in it, so they go.
     pub(crate) fn saved(&mut self, mark: usize) {
         self.file = None;
         let rest: Vec<String> = File::open(&self.path)
@@ -199,7 +191,6 @@ impl HostLog {
         self.count = rest.len();
     }
 
-    /// Sharing has stopped for good, so there is nobody to keep them for.
     pub(crate) fn remove(self) {
         drop(self.file);
         let _ = fs::remove_file(&self.path);
@@ -224,18 +215,14 @@ fn before(copy: Uuid) -> Option<[PathBuf; 2]> {
     Some([file(""), file("-latest")])
 }
 
-/// What a return dropped, as it is kept beside the document from before it:
-/// how many edits, and what the first [`MAX_DROPPED`] of them were to.
 #[derive(Default, Serialize, Deserialize)]
 struct Lost {
     refused: usize,
     dropped: Vec<Dropped>,
 }
 
-/// The most of a [`Lost`] that is read back.
 const LOST_LIMIT: u64 = 1 << 20;
 
-/// Where the [`Lost`] of the document kept at `path` is.
 fn lost(path: &Path) -> PathBuf {
     path.with_extension("json")
 }
@@ -262,8 +249,6 @@ pub(crate) fn keep_before(document: &Document, refused: usize, dropped: &[Droppe
     fs::write(lost(&path), said).ok()
 }
 
-/// A copy's own project from just before a return to a shared project that
-/// held back or dropped any of its edits, and what that return dropped.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BeforeReturn {
     /// The project file. Everything the person had made by then is in it.
@@ -311,8 +296,6 @@ pub fn before_returns(copy: Uuid) -> Vec<BeforeReturn> {
     files.filter_map(kept).collect()
 }
 
-/// Let go of what [`before_returns`] answers for the copy `copy`: the person
-/// has been shown what the returns did and wants no way back.
 pub fn forget_before_return(copy: Uuid) {
     for path in before(copy).into_iter().flatten() {
         let _ = fs::remove_file(lost(&path));
@@ -320,13 +303,11 @@ pub fn forget_before_return(copy: Uuid) {
     }
 }
 
-/// How a guest finds its host again, kept with what it has to merge.
 #[derive(Serialize, Deserialize)]
 pub(crate) struct Finding {
     /// Edits are the wire format, so a file another version wrote is not
     /// read. But see [`reads`].
     pub(crate) version: String,
-    /// The host's own id for the project.
     pub(crate) project: Uuid,
     pub(crate) invite: String,
     pub(crate) name: String,
@@ -337,8 +318,6 @@ pub(crate) struct Finding {
     pub(crate) online: Option<Online>,
 }
 
-/// What a copy of a project kept online keeps besides, to carry on with
-/// Lumit's server where it left off.
 #[derive(Default, Serialize, Deserialize)]
 pub(crate) struct Online {
     /// What the server knows this copy's edits by. Only there to ask after
@@ -357,16 +336,10 @@ pub(crate) struct Online {
     /// is kept as it is handed out, which is not what opens the project.
     #[serde(default)]
     pub(crate) lock: Option<String>,
-    /// How far along the order the person here has seen who changed what.
-    /// What the others did past it is new to them when the copy opens.
     #[serde(default)]
     pub(crate) seen: u64,
-    /// The schema the document kept under this is written at, for a later
-    /// Lumit to read it by.
     #[serde(default)]
     pub(crate) schema: String,
-    /// Notes this copy's person wrote that the server had not been sent
-    /// when this was written. They are sent when it is found.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) notes: Vec<crate::activity::Note>,
 }
@@ -408,7 +381,6 @@ pub(crate) fn note(copy: Uuid, finding: &Finding) -> Option<()> {
     fs::rename(&fresh, &path).ok()
 }
 
-/// Let go of whatever is kept for the copy `copy`.
 pub(crate) fn unkeep(copy: Uuid) {
     if let Some(path) = file("guest", copy) {
         let _ = fs::remove_file(path);
@@ -430,7 +402,6 @@ pub(crate) struct Kept {
     /// The file is out of date: the host is looked for by a new invite, or
     /// a conflict in it was answered. Written again at the next chance.
     pub(crate) stale: bool,
-    /// How many edits the file holds.
     pub(crate) written: usize,
     /// How many of them the copy's own file holds, which is what a close
     /// without saving goes back to.
@@ -476,7 +447,6 @@ impl Kept {
             }
             self.written += 1;
         }
-        // One sync for the run, so a power cut keeps what was just kept.
         let _ = self.file.sync_data();
     }
 
@@ -535,7 +505,6 @@ impl Kept {
         Some((finding, base, since, held))
     }
 
-    /// The merge is made, or the guest has left.
     pub(crate) fn remove(self) {
         drop(self.file);
         let _ = fs::remove_file(&self.path);

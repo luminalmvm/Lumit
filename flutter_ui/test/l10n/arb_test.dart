@@ -1,9 +1,3 @@
-// What app_en.arb is allowed to say (docs/07-UI-SPEC.md §13.2).
-//
-// The .arb is the one file a translator reads, so the rules that used to live in
-// reviewers' heads live here instead: a tooltip is the control's name, not a
-// sentence about it; every string carries a note saying where it appears; and
-// the glossary's banned words stay banned in the copy as well as in the code.
 
 import 'dart:convert';
 import 'dart:io';
@@ -58,17 +52,12 @@ const _bannedWordIsAnotherSense = {
   'menuTrackMatte',
   'toolCameraPan',
   'fxCameraTrack',
-  // The planar tracker is the same verb sense as the camera's.
   'fxPlanarTrack',
-  // And Track points follows things in the picture, the verb again.
   'fxTrackPoints',
-  // A grade window following the picture, the verb again.
   'gradeTrack',
   'gradeTrackBack',
   'gradeTrackForwards',
-  // The Audio timeline's own column header.
   'columnTrack',
-  // The Cut timeline's notices about its own rows.
   'cutRefusedOverlap',
   'keyCutEveryTrackAtThePlayhead',
   'keyMoveClipsUpATrack',
@@ -77,13 +66,10 @@ const _bannedWordIsAnotherSense = {
   'cutRefusedLocked',
   'cutSoundOnItsOwnTrack',
   'cutRefusedBusTrack',
-  // The Cut and Audio timelines' clip menu, handing a clip back its row's.
   'clipColourFromTrack',
-  // The Cut timeline's menus, picking every clip on the row.
   'cutSelectTrack',
 };
 
-/// Every `.arb` in lib/l10n, source and translations alike, in a stable order.
 List<File> _arbFiles() => (Directory('lib/l10n')
     .listSync()
     .whereType<File>()

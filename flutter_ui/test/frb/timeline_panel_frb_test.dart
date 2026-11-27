@@ -1,9 +1,3 @@
-// The Timeline panel on frb, tested against the real engine.
-//
-// New coverage: the v0 Timeline's tests are spread across several files and
-// written against a fake bridge and a snapshot mirror, neither of which this
-// panel has. What they assert about *behaviour* is reproduced here against the
-// document itself — a switch that does not reach the engine is not a switch.
 
 import 'dart:io';
 import 'dart:typed_data';
@@ -64,16 +58,11 @@ void main() {
       await tester.pump();
     }
 
-    /// Open the toolbar's ⋯ menu, where the layer/work-area/marker commands
-    /// live now that the toolbar row belongs to the readouts and the search.
     Future<void> openMore(WidgetTester tester) async {
       await tester.tap(find.byKey(const ValueKey('tl-more')));
       await tester.pumpAndSettle();
     }
 
-    /// Dragging the window pans and nothing else. Each pointer move used to
-    /// zoom out a little, so the window crept wider for as long as it was
-    /// dragged.
     testWidgets('dragging the navigator window pans without zooming',
         (tester) async {
       final p = withComp();
@@ -85,7 +74,6 @@ void main() {
           tester.widget<TimelineRuler>(find.byType(TimelineRuler)).axis.width;
 
       final box = tester.getRect(find.byKey(const ValueKey('tl-navigator')));
-      // Zoom in to about a third of the comp first, so there is room to pan.
       await tester.dragFrom(
         Offset(box.right - TimelineNavigator.handleGrab / 2, box.center.dy),
         Offset(-box.width * 2 / 3, 0),
@@ -93,8 +81,6 @@ void main() {
       await tester.pumpAndSettle();
       final zoomed = laneWidth();
 
-      // Take hold of the window's middle and drag it along in small steps,
-      // the way a mouse reports a drag, then back.
       final gesture = await tester.startGesture(
           Offset(box.left + box.width / 6, box.center.dy),
           kind: PointerDeviceKind.mouse);
@@ -113,9 +99,6 @@ void main() {
           reason: 'a pan is not a zoom, however many moves it is made of');
     });
 
-    /// The Razor tool. Clicking a bar cuts that layer **where the
-    /// pointer is**, not at the playhead — the difference between a razor and
-    /// the Cut-at-playhead command.
     testWidgets('the razor splits a layer in two where it is clicked',
         (tester) async {
       final p = withComp();
@@ -131,14 +114,11 @@ void main() {
           find.byKey(ValueKey<String>('tl-bar-body-${layer.internallayerId}'));
       expect(bar, findsOneWidget);
       final box = tester.getRect(bar);
-      // A third of the way along the bar, well inside it.
       await tester.tapAt(Offset(box.left + box.width / 3, box.center.dy));
       await tester.pumpAndSettle();
 
       final after = p.comp.getLayers();
       expect(after.length, 2, reason: 'one layer became two');
-      // The halves meet: the first ends where the second begins, and together
-      // they cover exactly what the layer covered.
       final spans = [for (final l in after) l.getSpan()];
       final ins = [for (final s in spans) s.inPoint.num / s.inPoint.den];
       final outs = [for (final s in spans) s.outPoint.num / s.outPoint.den];
@@ -150,9 +130,6 @@ void main() {
           reason: 'no gap and no overlap at the cut');
     });
 
-    /// **Cut at playhead is a command, not a tool (docs/07 §4.4).** The chord
-    /// went nowhere: `layer.split` was bound in the Timeline context but no
-    /// handler answered it, so the only way to cut was to arm the razor.
     testWidgets('Ctrl+Shift+D cuts the selected layer at the playhead',
         (tester) async {
       final p = withComp();
@@ -183,8 +160,6 @@ void main() {
       expect(outs.last, closeTo(span.outPoint.num / span.outPoint.den, 1e-9));
       expect(outs.first, closeTo(ins.last, 1e-9),
           reason: 'the halves meet at the cut');
-      // The playhead is where they meet: this cut is at the playhead, not
-      // wherever a pointer happened to be.
       expect(
           outs.first,
           closeTo(
@@ -193,14 +168,11 @@ void main() {
               1e-9));
     });
 
-    /// The field a readout turns into when it is clicked.
     Finder fieldIn(String key) => find.descendant(
           of: find.byKey(ValueKey<String>(key)),
           matching: find.byType(EditableText),
         );
 
-    /// The toolbar's two readouts are typed into, not merely read,
-    /// and neither can send the playhead out of the composition.
     testWidgets('typing a timecode moves the playhead, clamped to the comp',
         (tester) async {
       final p = withComp();
@@ -227,9 +199,6 @@ void main() {
           reason: 'past the end of the comp is the end of the comp');
     });
 
-    /// The two modes are words, not glyphs, and the one in force is the one
-    /// wearing the frame (§12A.1). Clicking the other switches; §3.1 keeps the
-    /// accent off both.
     testWidgets('the mode tabs read Layers and Graph, and switch',
         (tester) async {
       final p = withComp();
@@ -238,7 +207,6 @@ void main() {
       expect(find.text('Layers'), findsOneWidget);
       expect(find.text('Graph'), findsOneWidget);
 
-      // Layers is in force to begin with, so the graph editor is not up.
       expect(find.byType(GraphEditorFrb), findsNothing);
       await tester.tap(find.byKey(const ValueKey('tl-graph')));
       await tester.pumpAndSettle();
@@ -309,8 +277,6 @@ void main() {
       }
     });
 
-    /// Masks appear in the fold-out under their own heading, and only once the
-    /// layer has one — the same rule Effects follows.
     testWidgets('a masked layer grows a Masks heading in its twirl-down',
         (tester) async {
       final p = withComp();
@@ -352,13 +318,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Masks'), findsOneWidget);
-      // And it opens onto the mask itself.
       await tester.tap(find
           .byKey(ValueKey<String>('tl-group-${layer.internallayerId}/masks')));
       await tester.pumpAndSettle();
       expect(find.text('Ellipse'), findsOneWidget);
 
-      // The invert switch writes through to the document.
       final masks = layer.getMasks();
       await tester.tap(
           find.byKey(ValueKey<String>('tl-mask-invert-${masks.single.id}')));
@@ -366,7 +330,6 @@ void main() {
       expect(layer.getMasks().single.inverted, isTrue);
     });
 
-    /// Give [layer] a mask, mount, and open the twirls that show its row.
     Future<void> openMaskRow(WidgetTester tester, dynamic p,
         LayerReference layer, String name) async {
       layer.addMask(
@@ -398,10 +361,6 @@ void main() {
       expect(find.text(name), findsOneWidget);
     }
 
-    /// **A mask's opacity was not undoable.** Its field wrote on every
-    /// drag tick, so a drag left a stack of near-identical steps and one Ctrl+Z
-    /// backed out a single percent — which looks like nothing happening. The
-    /// drag is staged now, exactly as every other value row here stages its.
     testWidgets('dragging a mask opacity is ONE undo step', (tester) async {
       final p = withComp();
       final layer = p.comp.addSolidLayer();
@@ -426,8 +385,6 @@ void main() {
           reason: 'ONE undo returns the opacity it had before the drag');
     });
 
-    /// Drag [field] left by [ticks] steps, releasing unless told otherwise —
-    /// the same gesture the opacity tests above make by hand.
     Future<TestGesture> dragLeft(WidgetTester tester, Finder field, int ticks,
         {bool release = true}) async {
       final gesture = await tester.startGesture(tester.getCenter(field));
@@ -443,10 +400,6 @@ void main() {
       return gesture;
     }
 
-    /// **Every mask value keyframes, with the same stopwatch as everything
-    /// else.** The branch that added mask animation exposed none of it
-    /// to the frontend: there was no Path row at all, and no mask property
-    /// carried a clock.
     testWidgets('every mask property has a stopwatch and keys with it',
         (tester) async {
       final p = withComp();
@@ -454,7 +407,6 @@ void main() {
       await openMaskRow(tester, p, layer, 'Ellipse');
       final id = layer.getMasks().single.id;
 
-      // All four rows exist, shape first.
       expect(find.text('Path'), findsOneWidget);
       expect(find.text('Opacity'), findsOneWidget);
       expect(find.text('Feather'), findsOneWidget);
@@ -473,8 +425,6 @@ void main() {
         expect(scalar, isA<BridgeScalar_Keyframed>(),
             reason: 'the stopwatch planted a key holding what was there');
       }
-      // Turning it on never moves the picture: the key holds the value that
-      // was already showing.
       expect(
           sampleScalar(
               scalar: mask.opacity, time: p.comp.timeOfFrame(frame: 0)),
@@ -490,7 +440,6 @@ void main() {
       final p = withComp();
       final layer = p.comp.addSolidLayer();
       await openMaskRow(tester, p, layer, 'Ellipse');
-      // The layer is selected too, which is the case that used to delete it.
       p.uiState.setSelection([layer]);
       p.uiState.activePane.value = Panel.timeline.pane();
       await tester.pump();
@@ -540,8 +489,6 @@ void main() {
             tester.getCenter(find.byKey(ValueKey<String>('tl-mask-name-$id'))),
             buttons: kSecondaryButton);
         await tester.pumpAndSettle();
-        // The row's menu is the Layer menu's own Mask rows: the feather
-        // switch is named by what it will do.
         await tester.tap(find.byWidgetPredicate((w) =>
             w is Text &&
             (w.data == 'Feather per point' || w.data == 'One feather width')));
@@ -558,8 +505,6 @@ void main() {
       expect(find.text('Point 1 feather'), findsOneWidget);
       expect(find.text('Point 3 feather'), findsOneWidget);
 
-      // A per-point row is a value row like any other: its field writes
-      // through to that point alone.
       await dragLeft(tester,
           find.byKey(ValueKey<String>('tl-mask-vertexFeather-$id-0')), 20);
       final dragged = layer.getMasks().single;
@@ -574,8 +519,6 @@ void main() {
       expect(find.text('Point 1 feather'), findsNothing);
     });
 
-    /// Paint strokes list under their own heading, between Masks and Effects —
-    /// the order the picture is built in.
     testWidgets('a painted layer grows a Paint heading in its twirl-down',
         (tester) async {
       final p = withComp();
@@ -620,7 +563,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Brush 1'), findsOneWidget);
 
-      // And the row's opacity writes through to the document.
       final stroke = layer.getPaint().single;
       await tester
           .tap(find.byKey(ValueKey<String>('tl-stroke-opacity-${stroke.id}')));
@@ -632,8 +574,6 @@ void main() {
       expect(layer.getPaint().single.opacity, 40);
     });
 
-    /// A shape layer lists its art under a Contents heading, above Masks and
-    /// Effects — the order the picture is built in.
     testWidgets('a shape layer grows a Contents heading in its twirl-down',
         (tester) async {
       final p = withComp();
@@ -695,13 +635,11 @@ void main() {
       BridgeShapeItem item() => layer.getShapeContents().items.single;
       final itemId = item().id;
 
-      // The item's rows sit under it, shut until its own twirl opens it.
       expect(find.text('Opacity'), findsNothing);
       await tester
           .tap(find.byKey(ValueKey<String>('tl-shape-twirl-$itemId')));
       await tester.pumpAndSettle();
 
-      // The opacity is a row under the item, and writes through.
       final opacity =
           find.byKey(ValueKey<String>('tl-shape-opacity-$itemId'));
       await tester.tap(opacity);
@@ -711,8 +649,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(item().opacity, const BridgeScalar.static_(30));
 
-      // The item and its fill each have an eye in the layer's switch
-      // column, which leaves that part out and keeps it.
       Finder eye(bool Function(String path) which) =>
           find.byWidgetPredicate((w) =>
               w.key is ValueKey<String> &&
@@ -733,8 +669,6 @@ void main() {
       expect(item().fillHidden, isTrue);
       expect(item().hidden, isFalse, reason: 'the fill alone');
 
-      // A trim is an entry of its own, added from the item's menu, with its
-      // three rows under its own twirl.
       Future<void> addFromMenu(String add) async {
         await tester.tapAt(
             tester.getCenter(find.byKey(ValueKey<String>('tl-shape-name-$itemId'))),
@@ -756,7 +690,6 @@ void main() {
       expect(find.text('Trim start'), findsOneWidget);
       expect(find.text('Trim end'), findsOneWidget);
       expect(find.text('Trim offset'), findsOneWidget);
-      // A modifier's eye switches off what it does.
       await tester.tap(eye((k) => k.endsWith('${trim.id}')));
       await tester.pumpAndSettle();
       expect(layer.getShapeContents().modifiers.single.hidden, isTrue);
@@ -773,8 +706,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(trimEnd(), const BridgeScalar.static_(40));
 
-      // Keyed, an edit after the playhead moves adds a key there and leaves
-      // the first one alone.
       await tester.tap(find.byKey(
           ValueKey<String>('kf-stopwatch-tl-shape-trimEnd-${trim.id}')));
       await tester.pumpAndSettle();
@@ -794,11 +725,8 @@ void main() {
           },
           [40, 80]);
 
-      // This item has no outline, so it has no dashes to set.
       expect(find.text('Dash'), findsNothing);
 
-      // An offset is another entry, after the item and before the trim it
-      // was added before, and reads as one length.
       await addFromMenu('offset');
       final offset = layer.getShapeContents().modifiers.first;
       expect(offset.name, 'Offset paths');
@@ -816,8 +744,6 @@ void main() {
       expect(layer.getShapeContents().modifiers.first.kind,
           const BridgeShapeModifierKind.offset(BridgeScalar.static_(-4)));
 
-      // A gradient stop keyed on its own row keeps its keys when the editor
-      // writes the stops back with another one added.
       await tester
           .tap(find.byKey(ValueKey<String>('tl-shape-gradient-$itemId')));
       await tester.pumpAndSettle();
@@ -913,9 +839,6 @@ void main() {
       expect(find.text('Transform'), findsNothing);
     });
 
-    /// Dropping footage with nothing open offers to make the composition it
-    /// would go in, rather than dead-ending on the placeholder: the drag used
-    /// to lift, show its feedback and drop into nothing.
     testWidgets('footage dropped on an empty Timeline offers a new comp',
         (tester) async {
       final p = freshProject();
@@ -984,7 +907,6 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.text(kind));
         await tester.pumpAndSettle();
-        // A solid asks for its settings first.
         if (kind == 'Solid…') {
           await tester.tap(find.byKey(const ValueKey('layer-settings-confirm')));
           await tester.pumpAndSettle();
@@ -1001,8 +923,6 @@ void main() {
           findsOneWidget);
     });
 
-    /// The empty ground under the outline's rows opens the same menu as the
-    /// lane ground, which is where After Effects offers New.
     testWidgets('a right-click under the outline rows offers New layer',
         (tester) async {
       final p = withComp();
@@ -1012,7 +932,6 @@ void main() {
           find.byKey(ValueKey<String>('tl-twirl-${layer.internallayerId}')));
       await tester.pump();
 
-      // A heading has a menu of its own, which is not the ground's.
       await tester.tapAt(tester.getCenter(find.text('Transform')),
           buttons: kSecondaryButton);
       await tester.pumpAndSettle();
@@ -1094,7 +1013,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(p.comp.getLayers(), hasLength(2));
 
-      // The bottom row can be brought forward but not sent back.
       final bottom = p.comp.getLayers()[1];
       await tester.tapAt(
         tester.getCenter(
@@ -1102,8 +1020,6 @@ void main() {
         buttons: kSecondaryButton,
       );
       await tester.pumpAndSettle();
-      // The order rows are the Layer menu's own Arrange flyout, and a row
-      // that cannot move is greyed rather than gone.
       await tester.tap(find.text('Arrange'));
       await tester.pumpAndSettle();
       expect(
@@ -1141,7 +1057,6 @@ void main() {
       final bar =
           find.byKey(ValueKey<String>('tl-bar-${layer.internallayerId}'));
       final rect = tester.getRect(bar);
-      // Well inside the bar, so this is a move rather than a trim.
       await tester.dragFrom(
         Offset(rect.left + rect.width * 0.5, rect.center.dy),
         const Offset(80, 0),
@@ -1153,7 +1068,6 @@ void main() {
       expect(afterIn, greaterThan(beforeIn),
           reason: 'the bar moved later in the comp');
 
-      // One op for the whole gesture: a single undo puts it back.
       p.state.project!.undo();
       expect(p.comp.frameAtTime(time: layer.getSpan().inPoint), beforeIn);
     });
@@ -1201,10 +1115,6 @@ void main() {
           reason: 'frames come from the pixel total, not per-event rounding');
     });
 
-    /// Retime is an ordinary property row: hidden until the layer is
-    /// given one, then sitting above Transform — outside it, not inside — and
-    /// editable exactly like Opacity. Fails if it is filed under Transform, or
-    /// if it shows on a layer with no Retime.
     testWidgets('Retime shows above Transform only once the layer has one',
         (tester) async {
       final p = withComp();
@@ -1227,7 +1137,6 @@ void main() {
       // twirled open would be inside it, whatever its indent says.
       expect(find.text('Opacity'), findsNothing);
 
-      // The identity map is keyed, so the field edits the key at the playhead.
       List<BridgeKeyframe> keys() =>
           (layer.getRetimeProperty() as BridgeScalar_Keyframed).field0;
       expect(keys(), hasLength(2));
@@ -1241,10 +1150,6 @@ void main() {
           reason: 'the edit landed in the key under the playhead');
     });
 
-    /// An animated value stays editable in the outline (docs/07 §4.3): on a
-    /// keyframe the edit lands in that key; between keyframes it plants one.
-    /// Fails if the cell falls back to a read-only "animated" label, or if it
-    /// writes a static value over the curve.
     testWidgets('editing an animated value edits the key under the playhead',
         (tester) async {
       final p = withComp();
@@ -1267,7 +1172,6 @@ void main() {
       List<BridgeKeyframe> keys() =>
           (layer.getTransform().opacity as BridgeScalar_Keyframed).field0;
 
-      // On the first key: the drag edits that key, not the curve's shape.
       p.uiState.playheadFrame.value = 0;
       await tester.pump();
       await tester.drag(
@@ -1277,7 +1181,6 @@ void main() {
       expect(keys().first.value, greaterThan(20),
           reason: 'the edit landed in the key under the playhead');
 
-      // Between keys: the drag plants a new one there.
       p.uiState.playheadFrame.value = 30;
       await tester.pump();
       await tester.drag(
@@ -1288,9 +1191,6 @@ void main() {
       expect(p.comp.frameAtTime(time: keys()[1].time), 30);
     });
 
-    /// The ◆ button acts at the playhead's *current* frame — the diamond used
-    /// to read the frame captured when the panel last drew, so after a scrub
-    /// it removed the wrong key.
     testWidgets('the key diamond follows the playhead as it scrubs',
         (tester) async {
       final p = withComp();
@@ -1313,14 +1213,12 @@ void main() {
       List<BridgeKeyframe> keys() =>
           (layer.getTransform().opacity as BridgeScalar_Keyframed).field0;
 
-      // On the second key: ◆ removes it.
       p.uiState.playheadFrame.value = 60;
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('kf-toggle-tl-tf-opacity')));
       await tester.pumpAndSettle();
       expect(keys(), hasLength(1), reason: 'the key under the playhead went');
 
-      // Off any key: ◆ adds one exactly there.
       p.uiState.playheadFrame.value = 30;
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('kf-toggle-tl-tf-opacity')));
@@ -1370,9 +1268,6 @@ void main() {
           reason: 'and only that one');
     });
 
-    /// Dragging a lane diamond moves the keyframe in time — one op — and the
-    /// magnet decides whether it lands on a whole frame or between two
-    /// (docs/07 §4.5).
     testWidgets('a lane keyframe drags in time, and the magnet snaps it',
         (tester) async {
       final p = withComp();
@@ -1409,8 +1304,6 @@ void main() {
           (tester.getRect(find.byKey(laneKey)).width - TimelineAxis.pad * 2) /
               p.comp.durationFrames();
 
-      // Magnet on (the default): a drag of ten and a half frames still lands
-      // on a whole one.
       await tester.drag(handle, Offset(perFrame * 10.5, 0));
       await tester.pumpAndSettle();
       final snapped = keys().first.time;
@@ -1420,11 +1313,9 @@ void main() {
           reason: 'with the magnet on it sits exactly on a frame');
       expect(keys(), hasLength(2), reason: 'no key added or lost');
 
-      // One op for the gesture: a single undo puts it back.
       p.state.project!.undo();
       expect(p.comp.frameAtTime(time: keys().first.time), 600);
 
-      // Magnet off: the same half-frame drag lands between two frames.
       await tester.tap(find.byKey(const ValueKey('tl-magnet')));
       await tester.pump();
       await tester.drag(handle, Offset(perFrame * 10.5, 0));
@@ -1461,8 +1352,6 @@ void main() {
             ),
         ]),
       );
-      // A marker in the middle of the journey, so the drag is certain to be
-      // caught by a snap on its way past — the moment the indicator appears.
       const markerFrame = 800;
       writeMarkers(p.comp, [
         BridgeMarker(
@@ -1481,13 +1370,10 @@ void main() {
           'tl-keys-${layer.internallayerId}/transform/opacity');
       final handle = find.byKey(ValueKey<String>(
           'tl-key-${layer.internallayerId}/transform/opacity#0'));
-      // The row is the axis's whole width, padding included (§12A.1), so the
-      // frames' own span is what one frame is worth in pixels.
       final perFrame =
           (tester.getRect(find.byKey(laneKey)).width - TimelineAxis.pad * 2) /
               p.comp.durationFrames();
 
-      // The little push that gets the gesture past the pointer slop.
       const nudge = 3.0;
 
       // A drag as one really arrives: a nudge to start it, then a run of small
@@ -1525,8 +1411,6 @@ void main() {
           reason: 'the key travelled the whole drag, not its first moments');
       expect(keys(), hasLength(2), reason: 'no key added or lost');
 
-      // And again from where it now is: the second drag carries on rather than
-      // being pulled back to what caught the first.
       final again = await dragOn(travel);
       expect(again.toDouble(), closeTo(landed + travel, slack),
           reason: 'a second drag moves it on again, not back');
@@ -1558,8 +1442,6 @@ void main() {
       List<BridgeKeyframe> keys() =>
           (layer.getTransform().opacity as BridgeScalar_Keyframed).field0;
 
-      // On the first key, dragged in many small steps — the shape that used
-      // to write one op each.
       p.uiState.playheadFrame.value = 0;
       await tester.pump();
       final field = find.byKey(const ValueKey('tl-tf-opacity'));
@@ -1581,9 +1463,6 @@ void main() {
           reason: 'ONE undo returns the value it had before the drag');
     });
 
-    /// Clicking a property row selects it, and everything containing it —
-    /// its group heading and its layer's row — marks itself, so switching to
-    /// the graph knows which curve is meant (docs/07 §4.3).
     testWidgets('clicking a property selects it and marks its parents',
         (tester) async {
       final p = withComp();
@@ -1598,7 +1477,6 @@ void main() {
       await tester.pump();
 
       final t = LumitTheme.dark();
-      // The innermost Container over a row's label is that row's own.
       Color? fillOver(String text) {
         final box = find.ancestor(
             of: find.text(text), matching: find.byType(Container));
@@ -1626,10 +1504,6 @@ void main() {
           reason: "and so does the property's layer");
     });
 
-    /// **The reveal keys went nowhere.** `P`, `S`, `R`, `T` and `A` were bound
-    /// in the Timeline context with no handler to answer them (docs/07 §4.3),
-    /// so the only way to see one property was to twirl the whole Transform
-    /// group open and read past the other four.
     testWidgets('P reveals Position alone, and a second press shuts the layer',
         (tester) async {
       final p = withComp();
@@ -1651,9 +1525,6 @@ void main() {
           reason: 'the key is a toggle, as AE\'s is');
     });
 
-    /// **`[` and `]` were bound and unanswered too.** They move the layer so
-    /// that end lands on the playhead; with `Alt` they trim it there instead,
-    /// under the same rules the bar's own drag follows.
     testWidgets('[ moves the layer to the playhead and Alt+] trims it there',
         (tester) async {
       final p = withComp();
@@ -1717,7 +1588,6 @@ void main() {
           containsAll(
               <UuidValue>[upper.internallayerId, lower.internallayerId]));
 
-      // And out again: the same click on a chosen layer un-chooses it.
       await tester.tap(
           find.byKey(ValueKey<String>('tl-name-${lower.internallayerId}')));
       await tester.pump(const Duration(milliseconds: 400));
@@ -1749,7 +1619,6 @@ void main() {
 
       final slider = find.byKey(const ValueKey('tl-zoom-slider'));
       expect(slider, findsOneWidget, reason: 'the buttons became a slider');
-      // Drag the handle a third of the way along its track.
       final track = tester.getRect(slider);
       await tester.dragFrom(
         Offset(track.left + 2, track.center.dy),
@@ -1778,13 +1647,9 @@ void main() {
           reason: '29.97: one second is 29 whole frames');
     });
 
-    /// A Precomp layer cannot be trimmed past the comp it holds — and turning
-    /// Retime on takes the limit off. Fails without the clamp: the
-    /// tail simply followed the pointer.
     testWidgets('a precomp bar stops at the end of its source', (tester) async {
       final p = withComp();
       final inner = p.state.project!.newComposition(name: 'Inner');
-      // A short source, so the tail can reach the end of it in one drag.
       final settings = inner.getSettings();
       inner.setSettings(
         settings: BridgeCompSettings(
@@ -1802,7 +1667,6 @@ void main() {
       );
       final layer = p.comp.addPrecompLayer(comp: inner);
       final sourceFrames = inner.durationFrames().toInt();
-      // Well inside the source, so there is room to drag outward.
       layer.setSpan(
         span: BridgeSpan(
           inPoint: p.comp.timeOfFrame(frame: 0),
@@ -1814,7 +1678,6 @@ void main() {
 
       final fill =
           find.byKey(ValueKey<String>('tl-bar-fill-${layer.internallayerId}'));
-      // Far more than the source has left: the tail must stop, not follow.
       await tester.dragFrom(
         Offset(tester.getRect(fill).right - 2, tester.getRect(fill).center.dy),
         const Offset(400, 0),
@@ -1823,12 +1686,10 @@ void main() {
       expect(p.comp.frameAtTime(time: layer.getSpan().outPoint), sourceFrames,
           reason: 'the tail landed on the source\'s last frame');
 
-      // The corner mark says why it stopped.
       final marks = tester.widget<CustomPaint>(
           find.byKey(ValueKey<String>('tl-bar-ends-${layer.internallayerId}')));
       expect((marks.painter as BarEndMarksPainter).atOut, isTrue);
 
-      // Retime on: the layer now decides its own source times, so it stretches.
       layer.toggleRetimeProperty();
       p.uiState.model.refresh();
       await tester.pumpAndSettle();
@@ -1879,8 +1740,6 @@ void main() {
       await gesture.up();
       await tester.pumpAndSettle();
 
-      // Forty pixels of pointer, at this zoom, is far more than the couple of
-      // frames one event carries.
       final after = p.comp.frameAtTime(time: layer.getSpan().outPoint);
       final perPixel = (before - after) / 40;
       expect(perPixel, greaterThan(3),
@@ -1891,9 +1750,6 @@ void main() {
           reason: 'and the ghost that used to break it is on screen');
     });
 
-    /// Trimming by the bar edges (docs/TODO: "drag start/end to adjust/crop"):
-    /// the in edge crops without moving the content, and the out edge crops
-    /// the tail.
     testWidgets('the bar edges trim in and out', (tester) async {
       final p = withComp();
       final layer = p.comp.addAdjustmentLayer();
@@ -1908,7 +1764,6 @@ void main() {
       final bar =
           find.byKey(ValueKey<String>('tl-bar-body-${layer.internallayerId}'));
       var rect = tester.getRect(bar);
-      // Near the left edge: a trim of the in point, content unmoved.
       await tester.dragFrom(
           Offset(rect.left + 2, rect.center.dy), const Offset(60, 0));
       await tester.pumpAndSettle();
@@ -1918,7 +1773,6 @@ void main() {
           p.comp.frameAtTime(time: before.startOffset),
           reason: 'trimming never retimes the content');
 
-      // Near the right edge: a trim of the out point.
       rect = tester.getRect(bar);
       await tester.dragFrom(
           Offset(rect.right - 2, rect.center.dy), const Offset(-60, 0));
@@ -1964,7 +1818,6 @@ void main() {
 
       final gesture = await tester.startGesture(end);
       await tester.pump();
-      // Cross a good stretch of the span in steps, as a hand does.
       final step = Offset((start.dx - end.dx) / 12, 0);
       for (var i = 0; i < 6; i++) {
         await gesture.moveBy(step);
@@ -2075,7 +1928,6 @@ void main() {
       ));
       await tester.pump();
 
-      // Let go over the second layer's row, which is not the top of the stack.
       final onto = find.byKey(ValueKey<String>('tl-row-${before[1]}'));
       expect(onto, findsOneWidget);
       final target = tester.getCenter(onto);
@@ -2109,8 +1961,6 @@ void main() {
       );
     });
 
-    /// **The Timeline on a node graph** (docs/impl/node-graph-comp.md §4.4):
-    /// there are no layers to draw, so it draws the ruler and the canvas.
     testWidgets('a node graph shows the ruler and the canvas', (tester) async {
       final p = withComp();
       final graph = p.state.project!.newNodeGraph(name: 'Wires');
@@ -2131,7 +1981,6 @@ void main() {
           findsOneWidget);
       expect(find.byKey(const ValueKey('tl-export')), findsOneWidget);
 
-      // The ruler spans the panel and scrubs the playhead.
       final box = tester.getRect(find.byKey(const ValueKey('tl-ruler')));
       expect(box.width, 1280);
       await tester.tapAt(Offset(box.left + box.width * 0.5, box.center.dy));
@@ -2140,10 +1989,6 @@ void main() {
       expect(p.uiState.playheadFrame.value, closeTo(frames * 0.5, 2));
     });
 
-    /// The twirl-down the port dropped. A layer opens onto its *section
-    /// headings* — Transform always, Effects when it has any, Audio only when
-    /// its source carries sound — and each heading opens onto its own rows
-    /// (docs/07 §4.3).
     testWidgets('a layer opens onto its section headings', (tester) async {
       final p = withComp();
       final layer = p.comp.addSolidLayer();
@@ -2197,14 +2042,11 @@ void main() {
         buttons: kSecondaryButton,
       );
       await tester.pumpAndSettle();
-      // Stretch sits under the row menu's Retime flyout.
       await tester.tap(find.text('Retime'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Stretch…'));
       await tester.pumpAndSettle();
 
-      // The two wells are one number seen twice: asking for half speed puts
-      // twice the frames in the duration well before anything is committed.
       expect(find.byKey(const ValueKey('stretch-duration')), findsOneWidget);
       tester
           .widget<DragValueField>(find.byKey(const ValueKey('stretch-speed')))
@@ -2229,8 +2071,6 @@ void main() {
           reason: 'the stretch is the map, not a hidden multiplier');
     });
 
-    /// Precompose is on the row's own menu as well as the Layer menu, and it
-    /// is the same dialogue either way (docs/07 §13.4).
     testWidgets('Precompose on the row menu packs the layer', (tester) async {
       final p = withComp();
       final layer = p.comp.addSolidLayer();
@@ -2256,9 +2096,6 @@ void main() {
           reason: 'the solid is inside the new comp now');
     });
 
-    /// Dragging a layer by its name moves it up or down the stack — layers
-    /// used to be stuck in the order they were added, reorderable only from
-    /// the row menu one place at a time (docs/07 §4.7).
     testWidgets('dragging a layer by its name reorders the stack',
         (tester) async {
       final p = withComp();
@@ -2272,7 +2109,6 @@ void main() {
       expect(stack(), ['Top', 'Middle', 'Bottom'],
           reason: 'newest on top, as added');
 
-      // Drag the top layer's name down onto the bottom row.
       final from = find.byKey(ValueKey<String>(
           'tl-name-${p.comp.getLayers().first.internallayerId}'));
       final onto = find.byKey(ValueKey<String>(
@@ -2291,7 +2127,6 @@ void main() {
       expect(stack(), ['Middle', 'Bottom', 'Top'],
           reason: 'the dragged layer took the row it was dropped on');
 
-      // One op: a single undo puts the stack back.
       p.state.project!.undo();
       p.uiState.model.refresh();
       expect(stack(), ['Top', 'Middle', 'Bottom']);
@@ -2327,7 +2162,6 @@ void main() {
       await tester.pump();
       expect(find.text('Backplate'), findsNothing);
 
-      // The topmost row on show, dropped on the bottom one.
       final visible = p.comp.getLayers().sublist(1);
       final from = find.byKey(
           ValueKey<String>('tl-name-${visible.first.internallayerId}'));
@@ -2349,8 +2183,6 @@ void main() {
               'which is one place short of the stack with a row hidden');
     });
 
-    /// Lock (docs/07 §4.2): a locked layer's bar refuses the drag and its
-    /// name refuses the rename, until it is unlocked.
     testWidgets('a locked layer cannot be dragged or renamed', (tester) async {
       final p = withComp();
       final layer = p.comp.addSolidLayer();
@@ -2418,7 +2250,6 @@ void main() {
           reason: 'Copy took the picked effect, not the layer under it');
     });
 
-    /// Delete on picked effect rows removes those effects and leaves the layer.
     testWidgets('Delete removes picked effects and leaves their layer',
         (tester) async {
       final p = withComp();
@@ -2446,9 +2277,6 @@ void main() {
       expect(p.uiState.selectedEffects.value, isEmpty);
     });
 
-    /// Enter turns the selected layer's name into an editor; submitting
-    /// renames the layer through the document (one op, undoable like any
-    /// other). It used to be a double-click, which now opens the layer.
     testWidgets('Enter renames the selected layer', (tester) async {
       final p = withComp();
       final layer = p.comp.addSolidLayer();
@@ -2474,7 +2302,6 @@ void main() {
       expect(find.byKey(ValueKey<String>('tl-rename-$id')), findsNothing,
           reason: 'submitting leaves the editor');
 
-      // Escape leaves it the other way: editor shut, nothing written.
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pump();
       await tester.enterText(
@@ -2487,9 +2314,6 @@ void main() {
           reason: 'and the layer keeps the name it had');
     });
 
-    /// Double-clicking a Precomp layer opens the comp it draws — the
-    /// same thing the Project panel and the Hierarchy do, and what a
-    /// double-click means everywhere else in the application.
     testWidgets('double-clicking a precomp layer opens its comp',
         (tester) async {
       final p = withComp();
@@ -2510,8 +2334,6 @@ void main() {
           reason: 'and nothing is being renamed');
     });
 
-    /// Clicking anywhere on a layer selects it — including its bar in the
-    /// lane area, which is most of what "the layer" is on screen.
     testWidgets('clicking a bar selects its layer', (tester) async {
       final p = withComp();
       p.comp.addSolidLayer();
@@ -2526,8 +2348,6 @@ void main() {
           p.uiState.selectedLayer.value?.internallayerId, top.internallayerId);
     });
 
-    /// The matte cell: pick a source layer and the mode toggles appear; the
-    /// choice reaches the document, luma and invert flip on their toggles.
     testWidgets('the matte cell sets, retargets and flips the matte',
         (tester) async {
       final p = withComp();
@@ -2540,7 +2360,6 @@ void main() {
       expect(consumer.getMatte(), isNull);
       await tester.tap(find.byKey(ValueKey<String>('tl-matte-$id')));
       await tester.pumpAndSettle();
-      // The entry leads with the layer's number, in a text of its own.
       await tester.tap(find.textContaining('Matte source').last);
       await tester.pumpAndSettle();
 
@@ -2577,9 +2396,6 @@ void main() {
           reason: 'the drag committed, exactly as it does in Effect controls');
     });
 
-    /// An effect adds its own group, and each effect in it opens onto its
-    /// parameters — the same rows, and the same drag, the Effect controls panel
-    /// shows.
     testWidgets('an effect adds a group whose parameters can be dragged',
         (tester) async {
       final p = withComp();
@@ -2599,7 +2415,6 @@ void main() {
           reason: 'and its parameters wait until it is opened');
 
       final id = layer.getEffects().single.id();
-      // The name picks the effect and leaves it shut, the twirl opens it.
       await tester.tap(find.text('Gaussian blur'));
       await tester.pump();
       expect(find.text('Radius'), findsNothing);
@@ -2625,9 +2440,6 @@ void main() {
           reason: 'the parameter drag reached the document');
     });
 
-    /// The Audio group is offered only where there is sound to set. Both halves
-    /// matter: a silent layer must not carry a volume control, and one with
-    /// audio must.
     testWidgets('the Audio group follows whether the layer can be heard',
         (tester) async {
       final p = withComp();
@@ -2652,8 +2464,6 @@ void main() {
       await tester.pump();
       expect(find.text('Volume'), findsOneWidget);
 
-      // The waveform lane: behind its own twirl under Audio, and its
-      // lane paints once opened.
       expect(find.text('Waveform'), findsOneWidget);
       expect(
           find.byKey(
@@ -2686,8 +2496,6 @@ void main() {
       expect(peaks.values.any((v) => v.abs() > 0.01), isTrue,
           reason: 'a tone is not silence');
 
-      // The multiwave stack: the same buckets three times over, bass, middle
-      // and treble.
       final stack = await tester.runAsync(() => footageLayer.audioPeaks(
             startSeconds: 0,
             endSeconds: 0.1,
@@ -2696,8 +2504,6 @@ void main() {
           ));
       expect(stack!.bands, 3);
       expect(stack.values, hasLength(3 * 64 * 3));
-      // A 440 Hz square is a middle-band sound: its own band carries far more
-      // than the treble one, which is the whole point of the stack.
       double loudest(int band) {
         var most = 0.0;
         for (var i = 0; i < 64; i++) {
@@ -2710,9 +2516,6 @@ void main() {
       expect(loudest(1), greaterThan(loudest(2)),
           reason: 'the middle band hears the tone, the treble barely does');
 
-      // Zooming in asks for a shorter window, and what comes back is a summary
-      // of *that* window — which is what makes the drawn detail follow the
-      // zoom instead of stretching one fixed summary.
       final zoomed = await tester.runAsync(() => footageLayer.audioPeaks(
             startSeconds: 0.02,
             endSeconds: 0.03,
@@ -2738,7 +2541,6 @@ void main() {
     testWidgets('a retimed layer\'s waveform stretches with the map',
         (tester) async {
       final p = withComp();
-      // Silence for the first half of the file, a tone for the second.
       final audible = p.state.project!
           .importFootage(path: _wavFile('ramp.wav', halfSilent: true));
       p.comp.addFootageLayer(footage: audible, asSequence: false);
@@ -2764,21 +2566,17 @@ void main() {
         return most;
       }
 
-      // Un-retimed: the layer's clock is the source's, so the file's two
-      // halves land in the lane's two halves.
       final plain = await band(0, 0.1);
       expect(loudest(plain, 0, 30), lessThan(0.05),
           reason: 'the first half of the file is silent');
       expect(loudest(plain, 34, 64), greaterThan(0.2),
           reason: 'and the second half carries the tone');
 
-      // The identity map changes nothing: switching Retime on is not retiming.
       expect(layer.toggleRetimeProperty(), isTrue);
       final identity = await band(0, 0.1);
       expect(loudest(identity, 0, 30), lessThan(0.05));
       expect(loudest(identity, 34, 64), greaterThan(0.2));
 
-      // Half speed: layer time 0.2 s reaches source time 0.1 s.
       layer.setRetimeProperty(
         value: BridgeScalar.keyframed([
           const BridgeKeyframe(
@@ -2796,48 +2594,19 @@ void main() {
         ]),
       );
 
-      // The same tenth of a second of the bar now reads the first twentieth
-      // of the file, which is silence all the way across.
       final slow = await band(0, 0.1);
       expect(loudest(slow, 0, 64), lessThan(0.05),
           reason: 'at half speed the whole window is still the silent half');
-      // And twice the window reaches the tone again, in the same place the
-      // un-retimed lane found it: the drawing has stretched, not moved.
       final wide = await band(0, 0.2);
       expect(loudest(wide, 0, 30), lessThan(0.05));
       expect(loudest(wide, 34, 64), greaterThan(0.2));
     });
 
-    // ---------------------------------------------------------------------
-    // The keyframe block and the bottom bar's strip, in Layers mode.
-    //
-    // Keys mode — the dope sheet these were written against — is gone, and
-    // the strip came with them to the Layers bar. The machinery
-    // never was the sheet's: the block box, its stretch handles, the Ease
-    // popover and the seven commands all act on the lane key selection, which
-    // is the same selection in every view.
-    // ---------------------------------------------------------------------
-
-    /// Twirl a layer open onto its Transform group, which is how a keyed
-    /// property's lane is reached (it used to be a tap on the Keys
-    /// tab, and the sheet opened every layer for you).
     Future<void> openKeyLane(WidgetTester tester, LayerReference layer) async {
       await openFold(tester, layer.internallayerId, group: 'Transform');
       await tester.pumpAndSettle();
     }
 
-    // ---------------------------------------------------------------------
-    // The block tools: the selection box with its stretch handles and
-    // badge, the Ease popover, and the Keys bottom bar's strip.
-    //
-    // All of it lives in the machinery both modes share, so the claims below
-    // are made in Keys mode — where the drawing puts them — and one of them is
-    // made again in Layers mode, which is the claim that they are *shared*
-    // rather than copied.
-    // ---------------------------------------------------------------------
-
-    /// A solid with [frames] keyed on Opacity, each key's value its own frame
-    /// number — so a test can tell whether a value travelled with its key.
     LayerReference blockLayer(dynamic p, List<int> frames) {
       final layer = (p.comp as CompositionReference).addSolidLayer();
       layer.setTransform(
@@ -2856,9 +2625,6 @@ void main() {
       return layer;
     }
 
-    /// Box the whole of one lane row, which is how a block is made: the
-    /// marquee sits behind the keys, so a drag that starts on empty lane
-    /// gathers everything it encloses (docs/07 §4.3).
     Future<void> boxRow(WidgetTester tester, Key laneKey) async {
       final rect = tester.getRect(find.byKey(laneKey));
       final gesture =
@@ -2886,7 +2652,6 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    /// The frames a layer's Opacity keys read, in order.
     List<int> framesOf(dynamic p, LayerReference layer) => [
           for (final k
               in (layer.getTransform().opacity as BridgeScalar_Keyframed)
@@ -2901,15 +2666,10 @@ void main() {
             k.value
         ];
 
-    /// Pixels per frame on the lane axis, for turning a wanted frame move into
-    /// a drag.
     double perFrameOf(dynamic p, WidgetTester tester, Key laneKey) =>
         (tester.getRect(find.byKey(laneKey)).width - TimelineAxis.pad * 2) /
         (p.comp as CompositionReference).durationFrames();
 
-    /// The gesture the whole box exists for: the anchored end stays put, the
-    /// dragged end lands where it was put, and the key between keeps its share
-    /// of the span — landed on whole frames, and undone in one step.
     testWidgets('dragging a handle stretches the block proportionally',
         (tester) async {
       final p = withComp();
@@ -2922,8 +2682,6 @@ void main() {
       await boxRow(tester, laneKey);
       expect(find.text('3 keys · 900 f'), findsOneWidget);
 
-      // Drag the later end 450 frames further out: the span goes 900 → 1350,
-      // a scale of 1.5 about the anchored first key.
       final perFrame = perFrameOf(p, tester, laneKey);
       await tester.drag(find.byKey(const ValueKey('tl-block-handle-end')),
           Offset(perFrame * 450, 0));
@@ -2941,8 +2699,6 @@ void main() {
           reason: 'one gesture, one undo step — every row of it');
     });
 
-    /// The Ease popover, opened where the drawing anchors it — on the block's
-    /// own badge — and applied to every span the selection covers, in one step.
     testWidgets('the badge opens the Ease popover, which eases the block',
         (tester) async {
       final p = withComp();
@@ -2962,7 +2718,6 @@ void main() {
       expect(find.byKey(const ValueKey('ease-count')), findsOneWidget);
       expect(find.text('2 keys'), findsWidgets,
           reason: 'it says back what it has hold of');
-      // The drawing's four lines.
       expect(find.byKey(const ValueKey('ease-curve')), findsOneWidget);
       expect(find.byKey(const ValueKey('ease-influence-out')), findsOneWidget);
       expect(find.byKey(const ValueKey('ease-influence-in')), findsOneWidget);
@@ -2989,8 +2744,6 @@ void main() {
           reason: 'one press, one undo step');
     });
 
-    /// Interpolation, from the strip: the selected keys' two sides, set at a
-    /// press, using the keys' own vocabulary — and drawn with their shapes.
     testWidgets(
         'the strip\'s Interpolation words set the selected keys\' sides',
         (tester) async {
@@ -3020,18 +2773,6 @@ void main() {
       expect(keyShapeOf(keys().first), (KeyShape.diamond, KeyShape.diamond));
     });
 
-    // Reverse's and the Copy/Paste buttons' widget tests went with the
-    // buttons (owner, 2026-08-31): the copy/paste road that remains is
-    // the chord, round-tripped below; Reverse's arithmetic keeps its pins in
-    // key_block_test.dart.
-
-    // ---------------------------------------------------------------------
-    // The owner's desktop-testing batch.
-    // ---------------------------------------------------------------------
-
-    /// **`Ctrl+C` then `Ctrl+V` round-trips a block of keys — in Layers.**
-    /// The chord goes through the shell's own copy/paste, which hands it to
-    /// whichever panel has claimed it.
     testWidgets('Ctrl+C and Ctrl+V round-trip keys in Layers mode',
         (tester) async {
       final p = withComp();
@@ -3059,9 +2800,6 @@ void main() {
               'the paste added rather than moved');
     });
 
-    /// Keys pasted with layers picked and no rows land on the same property
-    /// of each layer. One without the effect gets a copy of it, settings and
-    /// all, and one undo takes the whole paste back.
     testWidgets('keys paste onto a picked layer and bring their effect',
         (tester) async {
       final p = withComp();
@@ -3136,7 +2874,6 @@ void main() {
     // when this row is in it, this row alone when it is not.
     // ---------------------------------------------------------------------
 
-    /// Open a row's context menu.
     Future<void> openRowMenu(WidgetTester tester, LayerReference l) async {
       await tester.tapAt(
         tester.getCenter(
@@ -3171,8 +2908,6 @@ void main() {
           reason: 'one undo restored the whole selection');
     });
 
-    /// The other half of the rule, and the half that keeps a right-click
-    /// honest: a menu opened on a row that is *not* picked is about that row.
     testWidgets('a row menu on an unpicked row acts on that row alone',
         (tester) async {
       final p = withComp();
@@ -3193,12 +2928,6 @@ void main() {
       ];
       expect(left, [picked.internallayerId]);
     });
-
-    // ---------------------------------------------------------------------
-    // Dragging one selected bar drags the whole selection: every
-    // selected bar previews the travel live, and release commits ONE batched
-    // slide — so one undo puts the whole set back.
-    // ---------------------------------------------------------------------
 
     testWidgets('dragging a selected bar moves the whole selection as one step',
         (tester) async {
@@ -3230,8 +2959,6 @@ void main() {
         await gesture.moveBy(const Offset(20, 0));
         await tester.pump();
       }
-      // Mid-gesture, the selection-mate's bar travels live with the drag —
-      // not on release, and not only the grabbed bar.
       expect(tester.getRect(mate).left, greaterThan(mateBefore.left + 60),
           reason: 'the mate\'s bar previews the same travel');
       await gesture.up();
@@ -3242,8 +2969,6 @@ void main() {
       expect(inOf(lower) - lowerIn, moved,
           reason: 'the mate moved by exactly the same frames');
 
-      // One undo puts the whole selection back: the release was one batched
-      // commit, never one write per layer.
       p.state.project!.undo();
       expect(inOf(upper), upperIn);
       expect(inOf(lower), lowerIn,
@@ -3253,11 +2978,6 @@ void main() {
   }, skip: !engineAvailable);
 }
 
-/// Twirl a layer open, and optionally open one group heading under it — the
-/// four-line block the fold-out tests were repeating everywhere. [group] taps
-/// the heading by its visible label; [groupPath] by its key suffix
-/// (`masks`, `paint`, ...). [settle] pumps each tap to rest, for the flows
-/// whose fold has async follow-up to finish.
 Future<void> openFold(
   WidgetTester tester,
   Object layerId, {
@@ -3292,9 +3012,6 @@ String _wavFile(String name, {bool halfSilent = false}) {
   return file.path;
 }
 
-/// `halfSilent` puts the tone in the second half of the file and silence in
-/// the first, so a test can tell *which stretch of the source* a lane is
-/// showing — which is the whole question a retimed waveform asks.
 Uint8List _tinyWav({bool halfSilent = false}) {
   const rate = 8000;
   const samples = 800;
@@ -3309,17 +3026,15 @@ Uint8List _tinyWav({bool halfSilent = false}) {
   u32(36 + dataBytes);
   ascii('WAVE');
   ascii('fmt ');
-  u32(16); // PCM header length
-  u16(1); // PCM
-  u16(1); // mono
+  u32(16);
+  u16(1);
+  u16(1);
   u32(rate);
-  u32(rate * 2); // byte rate
-  u16(2); // block align
-  u16(16); // bits per sample
+  u32(rate * 2);
+  u16(2);
+  u16(16);
   ascii('data');
   u32(dataBytes);
-  // An actual tone, not silence: a ~440 Hz square wave at half amplitude, so
-  // a test asking "does the waveform carry signal" has signal to find.
   final data = Uint8List(dataBytes);
   for (var i = 0; i < samples; i++) {
     if (halfSilent && i < samples ~/ 2) continue;

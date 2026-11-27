@@ -24,8 +24,6 @@ fn tdmn(name: &str) -> Vec<u8> {
     chunk(b"tdmn", &body)
 }
 
-/// A 124-byte metadata record: dimension count, the colour bit and the
-/// animated flag — the three fields the reader keys on.
 fn tdb4_record(dimensions: u16, colour: bool, animated: bool) -> Vec<u8> {
     let mut body = vec![0_u8; 124];
     body.splice(2..4, dimensions.to_be_bytes());
@@ -53,7 +51,6 @@ fn lhd3_record(count: u16, item_size: u16, kind: u8) -> Vec<u8> {
     chunk(b"lhd3", &body)
 }
 
-/// One property inside a group, named and wrapped exactly as the file does.
 fn leaf(name: &str, meta: Vec<u8>, tail: Vec<u8>) -> Vec<u8> {
     let mut inside = chunk(b"tdsb", &[0, 0, 0, 1]);
     inside.extend(chunk(b"tdsn", &chunk(b"Utf8", b"")));
@@ -64,7 +61,6 @@ fn leaf(name: &str, meta: Vec<u8>, tail: Vec<u8>) -> Vec<u8> {
     out
 }
 
-/// A whole `LIST tdgp` around the given runs, closed the way a real one is.
 fn group(runs: Vec<u8>) -> Vec<u8> {
     let mut inside = chunk(b"tdsb", &[0, 0, 0, 1]);
     inside.extend(chunk(b"tdsn", &chunk(b"Utf8", b"")));
@@ -86,7 +82,6 @@ fn ctx() -> Ctx<'static> {
     }
 }
 
-/// Read one synthetic `LIST tdgp` the way [`read_group`] would.
 fn read(bytes: &[u8]) -> Read {
     let chunk = Chunks::new(bytes)
         .ok()
@@ -232,7 +227,6 @@ fn an_unknown_keyframe_class_falls_back_rather_than_guessing_a_curve() {
 #[test]
 fn a_keyframe_list_that_overstates_its_length_reads_only_what_is_there() {
     let mut animation = lhd3_record(50, 48, 4);
-    // Two whole 48-byte records, and no more.
     let mut records = Vec::new();
     for (index, value) in [10.0_f64, 20.0].into_iter().enumerate() {
         #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]

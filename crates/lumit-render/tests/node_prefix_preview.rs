@@ -140,7 +140,6 @@ fn project(layer_id: Uuid, effects: Vec<EffectInstance>) -> (Arc<Document>, Uuid
     (Arc::new(doc), comp_id)
 }
 
-/// The red channel of the middle pixel.
 fn grey(rgba: &[u8], w: u32) -> u8 {
     let (x, y) = (w / 2, COMP / 2);
     rgba[((y * w + x) * 4) as usize]
@@ -158,7 +157,6 @@ fn the_picture_at_a_node_is_the_stack_cut_off_at_that_node() {
     let second = exposure(1.0);
     let (doc, comp_id) = project(layer_id, vec![first.clone(), second.clone()]);
 
-    // The three prefixes the panel can ask for, as lengths.
     let at_source = graph::prefix_len(&[first.clone(), second.clone()], NodeRef::Source)
         .expect("the source is a picture");
     let at_first = graph::prefix_len(&[first.clone(), second.clone()], NodeRef::Effect(first.id))
@@ -167,8 +165,6 @@ fn the_picture_at_a_node_is_the_stack_cut_off_at_that_node() {
         .expect("the layer out is a picture");
     assert_eq!((at_source, at_first, at_out), (0, 1, 2));
 
-    // **The Layer out node cuts nothing**, so it is the Viewer's own frame: no
-    // clone, no second render, the cached frame as it stands.
     assert!(
         graph::truncated_effects(&doc, comp_id, layer_id, at_out).is_none(),
         "the whole stack is the frame the Viewer already shows"
@@ -190,18 +186,12 @@ fn the_picture_at_a_node_is_the_stack_cut_off_at_that_node() {
         .expect("the first node's preview");
     assert_eq!((w, h), (COMP, COMP), "rendered at comp size");
 
-    // Three plainly different pictures, brightening down the chain — the
-    // premise everything below rests on.
     let (a, b, c) = (grey(&source, w), grey(&after_first, w), grey(&full, w));
     assert!(
         a < b && b < c,
         "each effect must show: source {a}, after the first {b}, the whole stack {c}"
     );
 
-    // **The claim of the seam** (the note's WP5 test): the preview of the first
-    // node is exactly what a project authored with only that effect renders —
-    // the same bytes, so the cut is the honest one and not merely a darker
-    // picture.
     let (only_first_doc, only_first_comp) = project(layer_id, vec![first.clone()]);
     let (only_first, ..) = r
         .render_rgba(&only_first_doc, only_first_comp, 0, 1.0)
@@ -220,7 +210,6 @@ fn the_picture_at_a_node_is_the_stack_cut_off_at_that_node() {
         "the Source node is the layer before its stack"
     );
 
-    // Determinism at this seam: the same cut, twice, byte-identical.
     let (again, ..) = r
         .render_rgba(&cut_first, comp_id, 0, 1.0)
         .expect("the same preview again");

@@ -1,6 +1,3 @@
-//! The suggested file name an export starts with: a preset's own, or the
-//! filename template with its tokens filled in.
-
 use super::preset_default_file_name;
 
 /// The suggested file name for `preset` — a faithful port of
@@ -60,7 +57,6 @@ fn sanitise_windows_filename(raw: &str) -> String {
     }
 }
 
-/// [`today_utc_date`], for a row's file name.
 pub(super) fn today() -> String {
     today_utc_date()
 }

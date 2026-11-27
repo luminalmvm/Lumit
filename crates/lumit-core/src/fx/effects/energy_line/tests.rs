@@ -30,10 +30,6 @@ fn drawn_over(e: &EffectInstance, w: u32, h: u32, lt: f64, ground: f32) -> Vec<f
     rgba
 }
 
-/// A line lights its own pixels white-hot with the glow colour round them,
-/// and leaves the far corner dark. Mix 0 draws nothing, nothing lit leaves
-/// nothing of the picture when the light is all there is, and the noise and
-/// the flicker move the picture on from one moment to the next.
 #[test]
 fn a_line_draws_a_hot_core_inside_its_glow() {
     let (w, h) = (96u32, 48u32);
@@ -63,7 +59,6 @@ fn a_line_draws_a_hot_core_inside_its_glow() {
         glow[2] > 0.05 && glow[2] > glow[0] * 3.0,
         "the glow is blue: {glow:?}"
     );
-    // Straight alpha, so the light is the colour times its alpha.
     let far = px(&still, 1, 1);
     assert!(
         far[2] * far[3] < glow[2] * glow[3] * 0.25,
@@ -91,12 +86,9 @@ fn a_line_draws_a_hot_core_inside_its_glow() {
     assert_ne!(drawn(&e, w, h, 0.0), drawn(&e, w, h, 0.5));
 }
 
-/// Two paths in one run light one after another, or all at once, each from
-/// its own start.
 #[test]
 fn a_run_of_paths_draws_on_in_turn_or_together() {
     use crate::mask::MaskPolyline;
-    // Two 100 px lines, the step between them having no length.
     let run = MaskPolyline {
         points: vec![[0.0, 0.0], [100.0, 0.0], [0.0, 50.0], [100.0, 50.0]],
         arc: vec![0.0, 100.0, 100.0, 200.0],
@@ -111,8 +103,6 @@ fn a_run_of_paths_draws_on_in_turn_or_together() {
     assert!(together.segs.iter().all(|s| (s[2] - 40.0).abs() < 1e-4));
 }
 
-/// Picking a look writes its rows, and editing one of them puts the Preset
-/// row back to Custom so it never names a look the light has left.
 #[test]
 fn a_preset_writes_its_look_and_an_edit_makes_it_custom() {
     let plain = crate::fx::builtins::instantiate("energy_line").unwrap_or_else(|| unreachable!());

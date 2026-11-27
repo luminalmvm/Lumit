@@ -1,6 +1,3 @@
-// The graph editor's channel model: what a curve is, where it came from, and
-// the small helpers every part of the pane reads keys through. Split out of
-// graph_editor_frb.dart, which re-exports it.
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart' show BridgeSelectorKind;
@@ -36,18 +33,14 @@ import 'keyframe_controls_frb.dart' show asKeyed, keysOfScalar;
 /// a glyph would say it was.
 final ValueNotifier<RowValueDrag?> rowValueDrag = ValueNotifier(null);
 
-/// One tick of a layer-area value drag: which channel, and what it holds.
 class RowValueDrag {
   final String layer;
 
-  /// A transform axis (`BridgeTransformProp.name`), or null.
   final String? prop;
 
-  /// An effect parameter, or nulls.
   final String? effectId;
   final String? paramId;
 
-  /// The layer's Retime channel.
   final bool retime;
 
   final int frame;
@@ -67,7 +60,6 @@ class RowValueDrag {
     this.keys,
   });
 
-  /// Whether [channel] is the curve this drag is editing.
   bool matches(GraphChannel channel) {
     if (channel.entry.layer.internallayerId.toString() != layer) return false;
     if (prop != null) return channel.prop?.name == prop;
@@ -84,16 +76,10 @@ class RowValueDrag {
 /// the pane when the Timeline goes back to its layers.
 final ValueNotifier<Set<String>> hiddenCurves = ValueNotifier(const {});
 
-/// Which reading of the curve is on screen (docs/07 §5.1): the value, how
-/// fast it changes, or how fast that changes.
 enum GraphLens { value, speed, acceleration }
 
-/// Whose curves the graph draws: the picked properties, every animated one
-/// of the picked layers, or every animated one in the composition.
 enum GraphScope { selected, layer, comp }
 
-/// One animatable channel on the graph: a single scalar curve, where it came
-/// from, and how to write it back.
 class GraphChannel {
   /// The fold-row path of the property row this channel belongs to — the
   /// outline's selection speaks in these.
@@ -109,7 +95,6 @@ class GraphChannel {
   final BridgeScalar scalar;
   final BridgeLayerEntry entry;
 
-  /// Set for a transform channel; null for an effect parameter.
   final BridgeTransformProp? prop;
 
   /// The axis that follows this one while the row is linked, or null. Not a
@@ -121,14 +106,11 @@ class GraphChannel {
   /// that may be keyed apart ([rowKeysOf]). Null where lane and channel are one.
   final List<BridgeKeyframe>? rowKeys;
 
-  /// This channel's own key for the lane's key [index], or null when this axis
-  /// has no key at that time.
   int? ownKeyIndex(int index) => switch (rowKeys) {
         final row? => axisKeyIndex(row, index, keys),
         null => index,
       };
 
-  /// Set for an effect parameter channel.
   final BridgeEffectInstanceInfo? effect;
   final BridgeParamInfo? param;
 
@@ -144,8 +126,6 @@ class GraphChannel {
   /// `setVolumeDb` the way the Retime goes through its own setter.
   final bool volume;
 
-  /// Set for one of a mask's values: the mask it belongs to, and which
-  /// of its values this is.
   final BridgeMask? mask;
   final MaskValue? maskValue;
 
@@ -153,8 +133,6 @@ class GraphChannel {
   /// other channel.
   final int maskVertex;
 
-  /// Set for one of a Text layer's animator numbers: which animator in
-  /// the layer's list, and which of its numbers this is.
   final int animator;
   final TextAnimatorValue? animatorValue;
 
@@ -186,10 +164,8 @@ class GraphChannel {
   /// draws for a mask path.
   bool get isMaskPath => maskValue == MaskValue.path;
 
-  /// True for a shape item's outline, which keys whole paths as a mask does.
   bool get isShapePath => shapeValue == ShapeValue.path;
 
-  /// Either kind of path: keys that hold a shape rather than a number.
   bool get isPath => isMaskPath || isShapePath;
 
   /// The row an expression on this channel sits on, so it reads its own
@@ -248,13 +224,10 @@ class GraphChannel {
             hardMin?.toDouble(),
             hardMax?.toDouble()
           ),
-        // A closed range is the travel *and* the bound — that is what closed
-        // means.
         BridgeParamKind_Slider(:final min, :final max) => (min, max),
         _ => (null, null),
       };
 
-  /// [value] held inside this channel's hard bounds.
   double clampToBounds(double value) {
     final (low, high) = hardBounds;
     if (low != null && value < low) return low;
@@ -481,8 +454,6 @@ List<GraphChannel> graphChannels({
                 break;
             }
           }
-          // A Colour or a Point: one curve per channel, as a two-axis
-          // transform row has one per axis.
           if (parts != null) {
             final names = parts.length == 4
                 ? const ['R', 'G', 'B', 'A']
@@ -587,7 +558,6 @@ List<GraphChannel> graphChannels({
       final value = ShapeValue.values.where((v) => v.name == name).firstOrNull;
       if (value == null) continue;
       final owner = rest.substring(0, slash);
-      // A modifier entry's numbers, off the same read model.
       for (final modifier in entry.info.shapeContents.modifiers) {
         if (modifier.id.toString() != owner) continue;
         out.add(GraphChannel(
@@ -605,8 +575,6 @@ List<GraphChannel> graphChannels({
       for (final item in entry.info.shapeContents.items) {
         if (item.id.toString() != owner) continue;
         if (value == ShapeValue.path && item.pathKeys.isEmpty) break;
-        // A colour is three curves under the row's one stopwatch, one for
-        // each channel, the way a position is one for each axis.
         if (isColourValue(value)) {
           for (final (channel, letter) in const ['R', 'G', 'B'].indexed) {
             out.add(GraphChannel(

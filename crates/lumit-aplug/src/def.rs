@@ -60,11 +60,8 @@ use crate::schema::{value_routes, ValueRoute};
 /// (docs/impl/audio-plugins.md §4).
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct InstanceSetup {
-    /// Which plugin inside the module.
     pub plugin_id: String,
-    /// The blob the `.lum` saved, if this instance has been here before.
     pub state: Option<Vec<u8>>,
-    /// The values the project holds, by the plugin's own stable parameter id.
     pub params: Vec<(u32, f64)>,
     /// The rate the bake runs at, in hertz: the export's own, not the
     /// preview's, so a 96 kHz export activates the plugin at 96 kHz.
@@ -75,7 +72,6 @@ pub struct InstanceSetup {
 }
 
 impl InstanceSetup {
-    /// The same five things, in the shape the pipe carries.
     #[must_use]
     pub fn to_bring(&self) -> Bring {
         Bring {
@@ -135,7 +131,6 @@ pub struct LocalHost {
     warning: Option<String>,
 }
 
-/// The plugin and its scratch, together because a block needs both.
 struct Running {
     instance: AnyInstance,
     block: Block,
@@ -212,7 +207,6 @@ impl LocalHost {
         self.with(|running| running.instance.wants_restart())
     }
 
-    /// Run `body` with the instance in hand.
     fn with<T>(&self, body: impl FnOnce(&mut Running) -> T) -> T {
         let mut running = self.running.lock().unwrap_or_else(PoisonError::into_inner);
         body(&mut running)
@@ -258,10 +252,7 @@ impl AudioHost for LocalHost {
     }
 }
 
-/// The length of the interleaved buffers [`AudioHost::process`] takes.
 pub const BLOCK_SAMPLES: usize = INTERLEAVED_LEN;
-
-// ------------------------------------------------------------ the broker --
 
 /// The lookahead a full ring buys: eight blocks, about eighty-five milliseconds
 /// (docs/impl/audio-plugins.md §3).
@@ -271,13 +262,9 @@ pub const BLOCK_SAMPLES: usize = INTERLEAVED_LEN;
 /// it actually is says so per block, through [`BlockJob::margin`].
 pub const LOOKAHEAD_MARGIN: Duration = Duration::from_nanos(8 * 10_666_667);
 
-/// One block, as a batch asks for it.
 pub struct BlockJob<'a> {
-    /// Lumit's interleaved stereo, [`INTERLEAVED_LEN`] samples.
     pub input: &'a [f32],
-    /// The parameter values for this block. Need not be sorted.
     pub events: &'a [ParamEvent],
-    /// The running frame count since the chain started.
     pub steady: i64,
     /// How much lookahead the caller has left when it asks. This **is** the
     /// deadline, floored at one block period: a plugin gets exactly as long as
@@ -286,8 +273,6 @@ pub struct BlockJob<'a> {
 }
 
 impl<'a> BlockJob<'a> {
-    /// One block with the full ring's margin, which is what a chain worker that
-    /// has kept up has.
     #[must_use]
     pub fn new(input: &'a [f32], events: &'a [ParamEvent], steady: i64) -> Self {
         Self {
@@ -321,12 +306,6 @@ pub struct BrokerHost {
 }
 
 impl BrokerHost {
-    /// Bring one plugin up inside an already-spawned, already-described broker.
-    ///
-    /// # Errors
-    ///
-    /// [`BrokerError`] — the broker would not make the instance, or the plugin
-    /// has already been put away for the session.
     pub fn open(broker: Arc<Mutex<Broker>>, setup: &InstanceSetup) -> Result<Self, BrokerError> {
         let created = {
             let mut held = broker.lock().unwrap_or_else(PoisonError::into_inner);
@@ -341,14 +320,11 @@ impl BrokerHost {
         })
     }
 
-    /// What went wrong bringing this plugin up that did not stop it coming up.
     #[must_use]
     pub fn warning(&self) -> Option<&str> {
         self.warning.as_deref()
     }
 
-    /// The broker this plugin lives in, so a second plugin of the same module
-    /// can be opened in the same process.
     #[must_use]
     pub fn broker(&self) -> &Arc<Mutex<Broker>> {
         &self.broker
@@ -436,10 +412,6 @@ impl Drop for BrokerHost {
     }
 }
 
-/// An audio plugin, as an entry in the effect catalogue.
-///
-/// One type for both standards, and both really do fill it: nothing downstream
-/// of describe knows which standard a plugin speaks.
 pub struct AudioEffectDef {
     schema: &'static EffectSchema,
     routes: Vec<ValueRoute>,
@@ -483,7 +455,6 @@ impl AudioEffectDef {
         Box::leak(Box::new(self))
     }
 
-    /// Every row's route back to the plugin's own parameter id.
     #[must_use]
     pub fn routes(&self) -> &[ValueRoute] {
         &self.routes
@@ -500,25 +471,21 @@ impl AudioEffectDef {
             .map(|route| route.param)
     }
 
-    /// What a fresh instance of this effect holds, by plugin parameter id.
     #[must_use]
     pub fn defaults(&self) -> &[(u32, f64)] {
         &self.defaults
     }
 
-    /// The `.clap` file or `.vst3` bundle this came out of.
     #[must_use]
     pub fn module(&self) -> &Path {
         &self.module
     }
 
-    /// The plugin's own id inside that file.
     #[must_use]
     pub fn plugin_id(&self) -> &str {
         &self.plugin_id
     }
 
-    /// The setup that opens this effect with the values given, by row.
     #[must_use]
     pub fn setup(
         &self,
@@ -613,8 +580,6 @@ pub struct HostedAudio {
 }
 
 impl HostedAudio {
-    /// A processor over any host — what a test uses to drive a
-    /// [`LocalHost`] through the mixer's own seam without a broker process.
     #[must_use]
     pub fn new(host: Box<dyn AudioHost>, routes: Vec<ValueRoute>) -> Self {
         Self {

@@ -25,7 +25,6 @@ static ASKED: AtomicU32 = AtomicU32::new(DEFAULT_SIDE);
 static CARD: AtomicU32 = AtomicU32::new(DEFAULT_SIDE);
 static CUTS: AtomicU64 = AtomicU64::new(0);
 
-/// The largest side in pixels: what was asked for, held to what the card takes.
 #[must_use]
 pub fn side() -> u32 {
     ASKED.load(Relaxed).min(CARD.load(Relaxed))
@@ -36,33 +35,24 @@ pub fn set(side: u32) {
     ASKED.store(side.max(DEFAULT_SIDE), Relaxed);
 }
 
-/// The most the graphics card takes, once a device is open on it.
 #[must_use]
 pub fn card() -> u32 {
     CARD.load(Relaxed)
 }
 
-/// Said by whoever opens the device, with the side it was opened with.
 pub fn set_card(side: u32) {
     CARD.store(side.max(DEFAULT_SIDE), Relaxed);
 }
 
-/// Something was made smaller, or cut, to stay inside [`side`].
 pub fn note_cut() {
     CUTS.fetch_add(1, Relaxed);
 }
 
-/// How many times anything has been cut. Read before and after a frame: if
-/// it moved, that frame was cut.
-// ponytail: one count for the whole process, so a frame made while another
-// render is cut at the same moment is told it was cut too. Carry the count on
-// the render if that shows.
 #[must_use]
 pub fn cuts() -> u64 {
     CUTS.load(Relaxed)
 }
 
-/// `want` pixels, or [`side`] if that is fewer.
 #[must_use]
 pub fn fit(want: u32) -> u32 {
     let most = side();
@@ -73,8 +63,6 @@ pub fn fit(want: u32) -> u32 {
     want
 }
 
-/// `want` pixels of room on each side of an `n`-pixel picture, or as many as
-/// keep the whole inside [`side`].
 #[must_use]
 pub fn room(want: u32, n: u32) -> u32 {
     let most = side().saturating_sub(n) / 2;
