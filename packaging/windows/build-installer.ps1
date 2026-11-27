@@ -89,9 +89,7 @@ $generator = (& $cmake --help) -join "`n" |
     Select-String -Pattern "Visual Studio $vsMajor \d{4}" |
     ForEach-Object { $_.Matches[0].Value }
 if (-not $generator) { throw "CMake has no generator for Visual Studio $vsMajor" }
-# CUDA 12.9, kept for the GTX 10 series, takes no compiler past 2022's, so the
-# plugin builds with 2022's toolset, which GitHub's 2026 image also carries.
-& $cmake -S "$root\ofx" -B "$root\flutter_ui\build\resolve-ofx" -G $generator -A x64 -T v143 -DLUMIT_REQUIRE_GPU=ON
+& $cmake -S "$root\ofx" -B "$root\flutter_ui\build\resolve-ofx" -G $generator -A x64 -DLUMIT_REQUIRE_GPU=ON
 if ($LASTEXITCODE) { throw 'Resolve plugin configure failed' }
 & $cmake --build "$root\flutter_ui\build\resolve-ofx" --config Release -j4
 if ($LASTEXITCODE) { throw 'Resolve plugin build failed' }
