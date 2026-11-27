@@ -1,27 +1,21 @@
-// Light rays: the light (lr_light), gathered back towards the source point in
-// four passes that each reach eight times as far (lr_gather), then coloured
-// and put onto the picture (lr_combine). Mirrors
-// lumit_core::fx::effects::light_rays op for op; fx_blend_core.wgsl is
-// prepended for the layer modes.
-
 struct Params {
-    source: vec2<f32>,  // raster px
-    threshold: f32,     // 0..1 of lightness
-    colourise: u32,     // 0 None, 1 One colour, 2 three, 3 five
-    mask: vec2<f32>,    // radius, feather; radius < 0 is no mask
-    edge: f32,          // Alpha edges' reach, raster px
+    source: vec2<f32>,
+    threshold: f32,
+    colourise: u32,
+    mask: vec2<f32>,
+    edge: f32,
     based_on: u32,
-    gain: f32,          // RAY_GAIN times 1 + Boost light
+    gain: f32,
     source_opacity: f32,
     rays_opacity: f32,
-    blend: u32,         // 0 None, 1 Normal, else a layer mode + 2
+    blend: u32,
     mix_amt: f32,
-    scale: f32,         // this pass's step per unit of ray length
-    count: u32,         // gradient stops in use
-    total: f32,         // the sum of this pass's weights
+    scale: f32,
+    count: u32,
+    total: f32,
     weights: array<vec4<f32>, 2>,
-    stops: array<vec4<f32>, 7>,       // rgb, and where the stop sits in w
-    lengths: array<vec4<f32>, 256>,   // the ray length round the circle
+    stops: array<vec4<f32>, 7>,
+    lengths: array<vec4<f32>, 256>,
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -34,14 +28,12 @@ const TAU: f32 = 6.28318530718;
 const TABLE: i32 = 1024;
 const TAPS: i32 = 8;
 
-// One integer tap; outside the frame reads transparent.
 fn tap(x: i32, y: i32, size: vec2<i32>) -> vec4<f32> {
     let c = clamp(vec2<i32>(x, y), vec2<i32>(0, 0), size - vec2<i32>(1, 1));
     let outside = x < 0 || y < 0 || x >= size.x || y >= size.y;
     return select(textureLoad(src, c, 0), vec4<f32>(0.0), outside);
 }
 
-// == cpu::bilinear_edge with Edges None.
 fn bilinear(sx: f32, sy: f32, size: vec2<i32>) -> vec4<f32> {
     let fx = sx - 0.5;
     let fy = sy - 0.5;
@@ -64,7 +56,6 @@ fn table(i: i32) -> f32 {
     return p.lengths[i / 4][i % 4];
 }
 
-// == light_rays::length_at.
 fn length_at(d: vec2<f32>) -> f32 {
     let turn = atan2(d.y, d.x) / TAU;
     let x = (turn - floor(turn)) * f32(TABLE);
@@ -79,7 +70,6 @@ fn lightness(c: vec3<f32>) -> f32 {
     return 0.5 * (max(max(c.r, c.g), c.b) + min(min(c.r, c.g), c.b));
 }
 
-// == light_rays::light_at.
 @compute @workgroup_size(8, 8)
 fn lr_light(@builtin(global_invocation_id) gid: vec3<u32>) {
     let size = vec2<i32>(textureDimensions(src));
@@ -148,7 +138,6 @@ fn lr_light(@builtin(global_invocation_id) gid: vec3<u32>) {
     textureStore(dst, xy, vec4<f32>(v, v, v, alpha * k));
 }
 
-// == light_rays::gather: eight taps back along the line to the source.
 @compute @workgroup_size(8, 8)
 fn lr_gather(@builtin(global_invocation_id) gid: vec3<u32>) {
     let size = vec2<i32>(textureDimensions(src));
@@ -168,7 +157,6 @@ fn lr_gather(@builtin(global_invocation_id) gid: vec3<u32>) {
     textureStore(dst, xy, sum / p.total);
 }
 
-// == light_rays::gradient.
 fn gradient(t: f32) -> vec3<f32> {
     let n = i32(p.count);
     for (var s = 1; s < n; s++) {
@@ -186,7 +174,6 @@ fn gradient(t: f32) -> vec3<f32> {
     return p.stops[n - 1].rgb;
 }
 
-// == light_rays::rays_of.
 fn rays_of(r: vec4<f32>) -> vec4<f32> {
     let g = p.gain;
     if (p.colourise == 0u) {
@@ -200,7 +187,6 @@ fn rays_of(r: vec4<f32>) -> vec4<f32> {
     return vec4<f32>(c * k, a);
 }
 
-// == light_rays::combine.
 fn combine(d: vec4<f32>, s: vec4<f32>) -> vec4<f32> {
     if (p.blend == 0u) {
         return s;

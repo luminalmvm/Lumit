@@ -720,10 +720,6 @@ pub fn take_watched_points() -> Option<lumit_core::fx::points::PointsStream> {
 /// list passes its picture through, exactly as a missing LUT does.
 /// The room an op that spreads past its picture is given, in texels on each
 /// side across and down, kept inside the widest texture there is.
-///
-/// The picture is `w` by `h` and reaches `moved` texels left of and above the
-/// layer's own frame, where the op's places are measured from: ops before it
-/// grew it by that much on every side.
 fn spread_room(
     def: &dyn lumit_core::fx::registry::EffectDef,
     p: lumit_core::fx::params::Params<'_>,

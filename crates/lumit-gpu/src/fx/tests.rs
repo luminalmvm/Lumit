@@ -16643,9 +16643,6 @@ fn depth_of_field_pro_blurs_up_to_the_frame_edge() {
     }
 }
 
-/// Light rays: the six passes agree with the CPU oracle across Colourise,
-/// Based on, the mask, the threshold, the shimmer and the blend modes, with
-/// the source on the picture and off it.
 #[test]
 fn wgsl_light_rays_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::light_rays::{self as lr, LightRays, LightRaysParams};

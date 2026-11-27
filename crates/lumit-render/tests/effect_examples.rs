@@ -418,8 +418,6 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
             ("tilt_y", f(6.0)),
             ("backdrop", choice(3)),
         ],
-        // Rays down from the sky, the source above the frame, coloured by the
-        // Ember look.
         "light_rays" => vec![
             ("threshold", f(50.0)),
             ("boost_light", f(3.0)),

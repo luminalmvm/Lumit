@@ -1,26 +1,16 @@
-//! Light rays' passes (`fx_light_rays.wgsl`): the light, four gathering
-//! passes back towards the source point, and the rays put onto the picture.
-//! Six dispatches whatever the ray length. Built the first time one is drawn.
-
 use std::sync::OnceLock;
 
 use crate::GpuContext;
 
 use super::{work_texture, FxEngine};
 
-/// Gathering passes and taps a pass, as
-/// `lumit_core::fx::effects::light_rays::{PASSES, TAPS}`.
 pub const PASSES: usize = 4;
 pub const TAPS: usize = 8;
-/// Entries in the ray length table.
 pub const TABLE: usize = 1024;
 
-/// One frame of Light rays. Mirrors
-/// `lumit_core::fx::effects::light_rays::LightRaysParams`.
 #[derive(Debug, Clone)]
 pub struct LightRaysOp {
     pub source: [f32; 2],
-    /// [`TABLE`] ray lengths round the source point.
     pub lengths: Vec<f32>,
     pub threshold: f32,
     pub mask: [f32; 2],
@@ -35,9 +25,7 @@ pub struct LightRaysOp {
     pub rays_opacity: f32,
     pub blend: u32,
     pub mix: f32,
-    /// Each pass's weights, tap by tap.
     pub weights: [[f32; TAPS]; PASSES],
-    /// Each pass's step per unit of ray length.
     pub scales: [f32; PASSES],
 }
 
@@ -111,8 +99,6 @@ impl LightRaysFx {
 }
 
 impl FxEngine {
-    /// Apply one frame of Light rays to a linear working texture, returning a
-    /// new texture of the same size.
     pub fn light_rays(
         &self,
         ctx: &GpuContext,

@@ -2460,7 +2460,6 @@ Map<String, String> get _built => {
       "Soft pastel satin": l10n.fxSoftPastelSatin,
       "Light leak": l10n.fxLightLeak,
       "Film burn": l10n.fxFilmBurn,
-      // Light rays, and its colourings.
       "Light rays": l10n.fxLightRays,
       "Pre-process": l10n.fxPreProcess,
       "Use mask": l10n.fxUseMask,

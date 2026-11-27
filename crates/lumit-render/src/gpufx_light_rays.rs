@@ -1,5 +1,3 @@
-//! Light rays' GPU passes, kept beside the dispatch table rather than in it.
-
 use lumit_core::fx::effects::light_rays::{LightRays, LightRaysParams, PASSES, TAPS};
 use lumit_core::fx::params::Params;
 use lumit_core::fx::registry::EffectMetadata;
@@ -11,7 +9,6 @@ use crate::gpufx::{AuxSlot, GpuEffect};
 
 pub(crate) struct LightRaysFx;
 
-/// The op both the render and the oracle test hand the GPU.
 pub(crate) fn op(l: LightRaysParams) -> LightRaysOp {
     let weights = std::array::from_fn(|k| std::array::from_fn(|j| LightRaysParams::weight(k, j)));
     let scales = std::array::from_fn(|k| LightRaysParams::step(k, 1.0));

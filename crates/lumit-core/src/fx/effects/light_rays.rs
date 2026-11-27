@@ -1,23 +1,3 @@
-//! Light rays: light streaming out of the picture's bright parts, away from a
-//! source point, as through haze.
-//!
-//! Each pixel gathers the picture along the straight line back towards the
-//! source point, nearer parts counting more, so whatever is bright throws a
-//! streak outward. The gathering runs in a fixed number of passes, each one
-//! reaching [`TAPS`] times as far as the last (Kenny Mitchell's radial
-//! accumulation, GPU Gems 3 ch. 13, done in log steps), so Ray length costs
-//! nothing: a ray across the whole frame takes the same work as a short one.
-//!
-//! The steps are even in the logarithm of the distance to the source, so a
-//! pass is the same picture scaled about the source point, and the fade along
-//! a ray, an exponential in that logarithm, splits into one fixed set of
-//! weights for each pass.
-//!
-//! Shimmer changes the ray length with the angle around the source, from a
-//! fractal noise made here, once a frame, as a table of lengths that both
-//! render paths read. The noise wraps around the circle and, under Use loop,
-//! in Phase too.
-
 use crate::fx::{
     cpu, params::ParamId, params::Params, params::Value, registry::EffectDef,
     registry::EffectMetadata, registry::Pressed, registry::ResolveCx, schema::EffectSchema,
@@ -26,26 +6,17 @@ use crate::fx::{
 use crate::model::{EffectInstance, EffectValue};
 use lumit_fx_macros::Effect;
 
-/// Gathering passes. Each reaches [`TAPS`] times as far as the one before.
 pub const PASSES: usize = 4;
-/// Taps a pass. `TAPS ^ PASSES` even steps cover the whole ray.
 pub const TAPS: usize = 8;
-/// How far the light fades along a ray, in e-folds over its full length.
 pub const FALL: f32 = 1.5;
-/// How much brighter the rays are than the picture they come from, before
-/// Boost light.
 pub const RAY_GAIN: f32 = 1.5;
-/// Entries in the ray length table, once round the source point.
 pub const TABLE: usize = 1024;
 
-/// Colourise's modes, before its presets.
 pub const COLOURISE_NONE: u32 = 0;
 pub const COLOURISE_ONE: u32 = 1;
 pub const COLOURISE_THREE: u32 = 2;
 pub const COLOURISE_FIVE: u32 = 3;
 
-/// The Colourise menu: the four modes, then the three-colour looks, then the
-/// five-colour ones.
 pub const COLOURISE_OPTIONS: &[&str] = &[
     "None",
     "One colour",
@@ -66,14 +37,9 @@ pub const COLOURISE_OPTIONS: &[&str] = &[
     "Thermal",
 ];
 
-/// The first look on the menu, and the first five-colour one.
 const FIRST_LOOK: u32 = 4;
 const FIRST_FIVE_LOOK: u32 = 14;
 
-/// The looks' colours, sRGB bytes, from highlights to shadows: three for the
-/// first ten, five (Highlights, Mid-high, Midtones, Mid-low, Shadows) for the
-/// rest. Read off pictures of light rays in each colouring, at the lightness
-/// each colour stands for.
 const LOOKS: &[&[[u8; 3]]] = &[
     &[[240, 214, 162], [182, 103, 2], [69, 3, 0]],
     &[[255, 205, 161], [181, 85, 1], [57, 14, 0]],
@@ -108,7 +74,6 @@ const LOOKS: &[&[[u8; 3]]] = &[
     ],
 ];
 
-/// Based on's options.
 pub const BASED_ON_OPTIONS: &[&str] = &[
     "Lightness",
     "Luminance",
@@ -120,9 +85,6 @@ pub const BASED_ON_OPTIONS: &[&str] = &[
 ];
 pub const BASED_ON_ALPHA_EDGES: u32 = 3;
 
-/// Blend mode's options, and the layer mode each stands for
-/// ([`BlendMode::ALL`](crate::model::BlendMode::ALL) index). None is the
-/// rays alone and Normal the rays over the picture.
 pub const BLEND_OPTIONS: &[&str] = &[
     "None",
     "Normal",
@@ -143,12 +105,9 @@ pub const BLEND_NONE: u32 = 0;
 pub const BLEND_NORMAL: u32 = 1;
 pub const BLEND_ADD: u32 = 2;
 
-/// The colour rows each Colourise choice shows.
 const THREE_AND_FIVE: &[u32] = &[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
 const FIVE: &[u32] = &[3, 14, 15, 16];
 
-/// Light rays' panel: Pre-process and Shimmer fold away; the colour rows
-/// come and go with Colourise.
 pub const LIGHT_RAYS_GROUPS: &[ParamGroup] = &[
     ParamGroup {
         label: "Pre-process",
@@ -217,10 +176,6 @@ pub const LIGHT_RAYS_GROUPS: &[ParamGroup] = &[
     },
 ];
 
-/// Rows that only mean something under another: the mask's size under Use
-/// mask, the shimmer's travel under its switch, the loop's length under Use
-/// loop, Based on under any Colourise but None, Edge thickness under Alpha
-/// edges.
 pub const LIGHT_RAYS_ENABLED_WHEN: &[EnabledWhen] = &[
     EnabledWhen {
         param: "mask_radius",
@@ -259,23 +214,18 @@ pub const LIGHT_RAYS_ENABLED_WHEN: &[EnabledWhen] = &[
     },
 ];
 
-/// Light rays' controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "light_rays",
     label = "Light rays",
     version = 1,
     category = Stylise,
-    // A fixed 32 taps a pixel over four passes, whatever the ray length.
     cost = Moderate,
-    // A ray is read from anywhere on the line back to the source.
     roi = FullFrame,
     groups = LIGHT_RAYS_GROUPS,
     enabled_when = LIGHT_RAYS_ENABLED_WHEN,
 )]
 pub struct LightRays {
-    /// Per cent of full lightness. Only what is brighter throws rays, and by
-    /// as much as it is brighter.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -286,11 +236,9 @@ pub struct LightRays {
     )]
     pub threshold: f32,
 
-    /// Only a circle around the source point throws rays.
     #[toggle(label = "Use mask", default = false)]
     pub use_mask: bool,
 
-    /// The circle's radius, px@comp.
     #[slider(
         label = "Mask radius",
         min = 0.0,
@@ -301,7 +249,6 @@ pub struct LightRays {
     )]
     pub mask_radius: f32,
 
-    /// How far past the radius the circle fades out, px@comp.
     #[slider(
         label = "Mask feather",
         min = 0.0,
@@ -312,8 +259,6 @@ pub struct LightRays {
     )]
     pub mask_feather: f32,
 
-    /// Where the rays start, px@comp. It may lie off the layer, up to one
-    /// layer's size beyond each edge.
     #[slider(
         label = "Source point X",
         min = 0.0,
@@ -323,7 +268,6 @@ pub struct LightRays {
     )]
     pub source_x: f32,
 
-    /// px@comp; see [`source_x`](Self::source_x).
     #[slider(
         label = "Source point Y",
         min = 0.0,
@@ -333,9 +277,6 @@ pub struct LightRays {
     )]
     pub source_y: f32,
 
-    /// How far the rays reach, in their own distance from the source: at 4 a
-    /// bright point throws a ray out to five times as far from the source as
-    /// it is. Takes no longer to draw at any length.
     #[slider(
         label = "Ray length",
         min = 0.0,
@@ -347,14 +288,9 @@ pub struct LightRays {
     )]
     pub ray_length: f32,
 
-    /// On, the layer is given room around it for the rays to reach into, so
-    /// a text or shape layer's rays are not cut off at its bounding box.
-    /// The room is as far as the longest ray reaches, up to the picture's
-    /// diagonal on each side.
     #[toggle(label = "Extend beyond layer", default = false)]
     pub extend_beyond_layer: bool,
 
-    /// How much the ray length changes around the source, per cent.
     #[slider(
         label = "Amount",
         min = 0.0,
@@ -366,7 +302,6 @@ pub struct LightRays {
     )]
     pub shimmer_amount: f32,
 
-    /// How fine the shimmer is: its coarsest wave count round the circle.
     #[slider(
         label = "Detail",
         min = 1.0,
@@ -378,17 +313,12 @@ pub struct LightRays {
     )]
     pub shimmer_detail: f32,
 
-    /// Animate it to move the shimmer: each full turn is a new shimmer.
     #[dial(label = "Phase", default = 0.0, step = 15.0)]
     pub shimmer_phase: f32,
 
-    /// On, moving the source point moves the shimmer, as it would through
-    /// real haze.
     #[toggle(label = "Source point affects shimmer", default = false)]
     pub source_affects_shimmer: bool,
 
-    /// How far the source point travels, px@comp, for the shimmer to change
-    /// right through: low is fast, high is slow.
     #[slider(
         label = "Radius",
         min = 1.0,
@@ -399,16 +329,12 @@ pub struct LightRays {
     )]
     pub shimmer_radius: f32,
 
-    /// Keeps only the coarse shimmer while the source point moves, and moves
-    /// it half as fast, for a logo that flickers.
     #[toggle(label = "Reduce flicker", default = false)]
     pub reduce_flicker: bool,
 
-    /// On, the shimmer repeats every Revolutions in loop turns of Phase.
     #[toggle(label = "Use loop", default = false)]
     pub use_loop: bool,
 
-    /// How many turns of Phase make one loop.
     #[counter(
         label = "Revolutions in loop",
         min = 1,
@@ -420,7 +346,6 @@ pub struct LightRays {
     )]
     pub revolutions: i32,
 
-    /// Brightens the rays; high enough, they burn out to white.
     #[slider(
         label = "Boost light",
         min = 0.0,
@@ -432,17 +357,12 @@ pub struct LightRays {
     )]
     pub boost_light: f32,
 
-    /// None keeps the picture's own colours; the others colour the rays by
-    /// how bright they are. A look fills the colours below, and editing one
-    /// of them puts this back to the plain gradient.
     #[choice(label = "Colourise", options = *COLOURISE_OPTIONS, default = 0)]
     pub colourise: u32,
 
-    /// The one colour, scene-linear.
     #[colour(label = "Colour", default = [1.0, 0.8, 0.45, 1.0], max = 4.0)]
     pub colour: [f32; 4],
 
-    /// The brightest light's colour, scene-linear.
     #[colour(label = "Highlights", default = [0.871, 0.672, 0.361, 1.0], max = 4.0)]
     pub highlights: [f32; 4],
 
@@ -455,15 +375,12 @@ pub struct LightRays {
     #[colour(label = "Mid-low", default = [0.038, 0.028, 0.130, 1.0], max = 4.0)]
     pub mid_low: [f32; 4],
 
-    /// The faintest light's colour, scene-linear.
     #[colour(label = "Shadows", default = [0.060, 0.001, 0.0, 1.0], max = 4.0)]
     pub shadows: [f32; 4],
 
-    /// What the colours are picked by.
     #[choice(label = "Based on", options = *BASED_ON_OPTIONS, default = 0)]
     pub based_on: u32,
 
-    /// How wide the alpha edges are, px@comp.
     #[slider(
         label = "Edge thickness",
         min = 0.0,
@@ -475,7 +392,6 @@ pub struct LightRays {
     )]
     pub edge_thickness: f32,
 
-    /// The picture under the rays, per cent.
     #[slider(
         label = "Source opacity",
         min = 0.0,
@@ -487,7 +403,6 @@ pub struct LightRays {
     )]
     pub source_opacity: f32,
 
-    /// The rays, per cent.
     #[slider(
         label = "Rays opacity",
         min = 0.0,
@@ -499,13 +414,9 @@ pub struct LightRays {
     )]
     pub rays_opacity: f32,
 
-    /// How the rays go onto the picture, None leaving the picture out. Its
-    /// own menu, applied inside the effect with Source opacity; the host's
-    /// Blend after Mix still blends the whole result.
     #[choice(label = "Blend mode", options = *BLEND_OPTIONS, default = 2)]
     pub rays_blend: u32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -517,62 +428,43 @@ pub struct LightRays {
     pub mix: f32,
 }
 
-/// One frame of Light rays, as both render paths draw it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LightRaysParams {
-    /// Raster pixels, kept within one layer size of the layer.
     pub source: [f32; 2],
-    /// Each angle's ray length as a logarithm of the scale: entry `i` is the
-    /// angle `i / TABLE` of a turn, from +x towards +y.
     pub lengths: Vec<f32>,
-    /// 0..1 of lightness.
     pub threshold: f32,
-    /// Radius and feather, raster pixels; a radius below zero is no mask.
     pub mask: [f32; 2],
-    /// 0 None, 1 One colour, 2 three colours, 3 five colours.
     pub colourise: u32,
-    /// Based on, 0..6.
     pub based_on: u32,
-    /// Raster pixels.
     pub edge: f32,
-    /// The gradient's stops, scene-linear, black to white.
     pub stops: [[f32; 3]; 7],
-    /// Where each stop sits, on the encoded lightness.
     pub at: [f32; 7],
-    /// How many of the stops are in use.
     pub count: u32,
-    /// `RAY_GAIN` times 1 + Boost light.
     pub gain: f32,
     pub source_opacity: f32,
     pub rays_opacity: f32,
-    /// 0 None, 1 Normal, otherwise a layer mode index plus 2.
     pub blend: u32,
     pub mix: f32,
 }
 
 impl LightRaysParams {
-    /// Nothing drawn: the picture goes through untouched, bit for bit.
     #[must_use]
     pub fn is_identity(&self) -> bool {
         self.mix == 0.0
     }
 
-    /// The weight of tap `j` in pass `k`, before normalising: the fade along
-    /// the ray, one factor a pass.
     #[must_use]
     pub fn weight(k: usize, j: usize) -> f32 {
         let step = FALL * (TAPS.pow(k as u32) as f32) / (TAPS.pow(PASSES as u32) as f32);
         (-(j as f32) * step).exp()
     }
 
-    /// Pass `k`'s step in the log of the scale, for a ray length `len`.
     #[must_use]
     pub fn step(k: usize, len: f32) -> f32 {
         len * (TAPS.pow(k as u32) as f32) / (TAPS.pow(PASSES as u32) as f32)
     }
 }
 
-/// sRGB byte to scene-linear.
 fn linear(v: u8) -> f32 {
     let c = f32::from(v) / 255.0;
     if c <= 0.040_45 {
@@ -582,8 +474,6 @@ fn linear(v: u8) -> f32 {
     }
 }
 
-/// A look's colours, scene-linear, Highlights first. `None` for a choice that
-/// is not a look.
 #[must_use]
 pub fn look(choice: u32) -> Option<Vec<[f32; 4]>> {
     let at = choice.checked_sub(FIRST_LOOK)? as usize;
@@ -596,12 +486,9 @@ pub fn look(choice: u32) -> Option<Vec<[f32; 4]>> {
     )
 }
 
-/// The colour rows, Highlights first, in the order a five-colour look fills
-/// them.
 const FIVE_ROWS: [&str; 5] = ["highlights", "mid_high", "midtones", "mid_low", "shadows"];
 const THREE_ROWS: [&str; 3] = ["highlights", "midtones", "shadows"];
 
-/// The plain mode a choice is: a three-colour look is the 3-colour gradient.
 #[must_use]
 pub fn mode_of(choice: u32) -> u32 {
     match choice {
@@ -611,15 +498,12 @@ pub fn mode_of(choice: u32) -> u32 {
     }
 }
 
-/// A 32-bit integer hash (PCG's output stage), for the shimmer's lattice.
 fn hash(mut v: u32) -> u32 {
     v = v.wrapping_mul(747_796_405).wrapping_add(2_891_336_453);
     let w = ((v >> ((v >> 28) + 4)) ^ v).wrapping_mul(277_803_737);
     (w >> 22) ^ w
 }
 
-/// The lattice value at a corner, 0..1. `period` wraps a coordinate; 0 is no
-/// wrap.
 fn corner(c: [i64; 4], period: [i64; 4], octave: u32) -> f32 {
     let mut h = hash(octave.wrapping_mul(0x9E37_79B9));
     for (v, p) in c.iter().zip(period) {
@@ -629,7 +513,6 @@ fn corner(c: [i64; 4], period: [i64; 4], octave: u32) -> f32 {
     h as f32 / u32::MAX as f32
 }
 
-/// Value noise in four dimensions, smoothly interpolated, 0..1.
 fn noise4(x: [f64; 4], period: [i64; 4], octave: u32) -> f32 {
     let base = x.map(|v| v.floor() as i64);
     let t = [0, 1, 2, 3].map(|i| {
@@ -654,12 +537,8 @@ fn noise4(x: [f64; 4], period: [i64; 4], octave: u32) -> f32 {
 }
 
 impl LightRays {
-    /// The raster's diagonal, pixels. Never a panel row.
     pub const DERIVED_DIAG: ParamId = ParamId::new("derived.diag");
 
-    /// How far past the picture the rays can reach, raster pixels, under
-    /// Extend beyond layer: the farthest a ray from anywhere on a picture
-    /// `diag` across can go, at most one diagonal. Zero when it is off.
     #[must_use]
     pub fn reach(self, diag: f32) -> f32 {
         if !self.extend_beyond_layer || self.mix <= 0.0 || diag <= 0.0 {
@@ -671,20 +550,6 @@ impl LightRays {
         (far * len.exp_m1()).min(diag)
     }
 
-    /// [`reach`](Self::reach) for the picture the rays are actually drawn
-    /// from, `[left, top, right, bottom]` in the raster pixels the source is
-    /// placed in: never more, and usually far less.
-    ///
-    /// A pixel gathers its light along the line to the source, from as far
-    /// back as `e^-len` of its distance. So a pixel `D` from the source lit by
-    /// the picture has `D ≤ far · e^len`, where `far` is the picture's corner
-    /// farthest from the source, and the stretch of line it gathers along is
-    /// `D (1 - e^-len)` long; to reach back into the picture from a distance
-    /// `δ` past its edge that stretch has to be at least `δ`. Every lit pixel
-    /// is therefore within `far (e^len - 1)` of the picture, and the room
-    /// past that only ever held nothing. `reach` measured `far` from the
-    /// raster's corner plus a whole diagonal, which on a big layer is several
-    /// times the room the rays can fill, and all of it held in memory.
     #[must_use]
     pub fn reach_within(self, diag: f32, picture: [f32; 4]) -> f32 {
         let loose = self.reach(diag);
@@ -698,14 +563,9 @@ impl LightRays {
             .iter()
             .map(|&(x, y)| (x - self.source_x).hypot(y - self.source_y))
             .fold(0.0f32, f32::max);
-        // A pixel more for each pass and one over: the gather reads its samples
-        // bilinearly, so every pass can carry a trace of light up to a texel
-        // past the last one that had any.
         ((far * len.exp_m1()).ceil() + PASSES as f32 + 1.0).min(loose)
     }
 
-    /// The numbers both render paths read, on a `w` by `h` raster. Positions
-    /// and sizes arrive already scaled to it.
     #[must_use]
     pub fn packed(self, w: u32, h: u32) -> LightRaysParams {
         let (wf, hf) = (w as f32, h as f32);
@@ -779,14 +639,12 @@ impl LightRays {
         }
     }
 
-    /// The ray length at each angle, `len` shaken by the shimmer.
     fn lengths(self, len: f32) -> Vec<f32> {
         let amount = self.shimmer_amount.max(0.0) / 100.0;
         if amount == 0.0 {
             return vec![len; TABLE];
         }
         let cells = self.shimmer_detail.max(1.0).round() as i64;
-        // Two lattice steps a turn of Phase.
         let phase = f64::from(self.shimmer_phase) / 360.0 * 2.0;
         let looped = self
             .use_loop
@@ -823,8 +681,6 @@ impl LightRays {
     }
 }
 
-/// The ray length at the angle of `d` (pixel minus source), read off the
-/// table between its two nearest entries. The WGSL twin is the same.
 #[must_use]
 pub fn length_at(lengths: &[f32], d: [f32; 2]) -> f32 {
     let turn = d[1].atan2(d[0]) / std::f32::consts::TAU;
@@ -836,13 +692,10 @@ pub fn length_at(lengths: &[f32], d: [f32; 2]) -> f32 {
     a + (b - a) * f
 }
 
-/// Lightness of a colour, the mean of its brightest and darkest channels.
 fn lightness(c: [f32; 3]) -> f32 {
     0.5 * (c[0].max(c[1]).max(c[2]) + c[0].min(c[1]).min(c[2]))
 }
 
-/// One pixel of the light the rays carry, from the picture `src` at `x`, `y`.
-/// Under Colourise, it is one measure (Based on) in all three channels.
 #[must_use]
 pub fn light_at(src: &[f32], w: u32, h: u32, x: u32, y: u32, p: &LightRaysParams) -> [f32; 4] {
     let i = ((y * w + x) * 4) as usize;
@@ -850,7 +703,6 @@ pub fn light_at(src: &[f32], w: u32, h: u32, x: u32, y: u32, p: &LightRaysParams
     let pos = [x as f32 + 0.5, y as f32 + 0.5];
     let mut k = 1.0f32;
     if p.threshold > 0.0 {
-        // On the encoded lightness, as the threshold reads on a picture.
         let l = lightness([c[0], c[1], c[2]]).max(0.0).powf(1.0 / 2.2);
         k = (l - p.threshold).max(0.0) / l.max(1e-5);
     }
@@ -905,7 +757,6 @@ pub fn light_at(src: &[f32], w: u32, h: u32, x: u32, y: u32, p: &LightRaysParams
     [v, v, v, alpha * k]
 }
 
-/// The gradient's colour at the encoded lightness `t`, 0..1.
 #[must_use]
 pub fn gradient(p: &LightRaysParams, t: f32) -> [f32; 3] {
     let n = p.count as usize;
@@ -928,8 +779,6 @@ pub fn gradient(p: &LightRaysParams, t: f32) -> [f32; 3] {
     p.stops[n - 1]
 }
 
-/// The rays from the gathered light `r`: brightened, and coloured by how
-/// bright they are under Colourise.
 #[must_use]
 pub fn rays_of(r: [f32; 4], p: &LightRaysParams) -> [f32; 4] {
     let g = p.gain;
@@ -944,7 +793,6 @@ pub fn rays_of(r: [f32; 4], p: &LightRaysParams) -> [f32; 4] {
     [c[0] * k, c[1] * k, c[2] * k, a]
 }
 
-/// The rays `s` onto the picture `d`, both premultiplied, by Blend mode.
 #[must_use]
 pub fn combine(d: [f32; 4], s: [f32; 4], blend: u32) -> [f32; 4] {
     match blend {
@@ -978,9 +826,6 @@ pub fn combine(d: [f32; 4], s: [f32; 4], blend: u32) -> [f32; 4] {
     }
 }
 
-/// One gathering pass on the CPU: each pixel the mean of [`TAPS`] taps back
-/// along its line to the source, pass `k`'s step apart. Rounded to half
-/// floats as the GPU's working textures hold them.
 fn gather(src: &[f32], w: u32, h: u32, k: usize, p: &LightRaysParams) -> Vec<f32> {
     let mut out = vec![0.0f32; src.len()];
     let weights: Vec<f32> = (0..TAPS).map(|j| LightRaysParams::weight(k, j)).collect();
@@ -1018,7 +863,6 @@ fn half(v: f32) -> f32 {
     half::f16::from_f32(v).to_f32()
 }
 
-/// The CPU oracle: the light, its passes, then the rays onto the picture.
 pub fn light_rays(rgba: &mut [f32], w: u32, h: u32, p: &LightRaysParams) {
     if p.is_identity() || w == 0 || h == 0 {
         return;
@@ -1070,8 +914,6 @@ fn choice_of(e: &EffectInstance) -> u32 {
     }
 }
 
-/// A keyed colour keeps its keys: a look is a starting point, not an edit of
-/// somebody's animation.
 fn keyed(e: &EffectInstance, id: &str) -> bool {
     match e.param(id) {
         Some(EffectValue::Colour(c)) => c.iter().any(|p| p.is_animated()),
@@ -1079,9 +921,6 @@ fn keyed(e: &EffectInstance, id: &str) -> bool {
     }
 }
 
-/// What picking a look, or editing one of its colours, writes back: a look
-/// fills the colour rows, and a colour edited under a look puts Colourise
-/// back to the plain gradient of as many colours.
 #[must_use]
 pub fn settle(before: Option<&EffectInstance>, after: &EffectInstance) -> Option<Pressed> {
     let chosen = choice_of(after);
@@ -1113,7 +952,6 @@ pub fn settle(before: Option<&EffectInstance>, after: &EffectInstance) -> Option
     })
 }
 
-/// Light rays' behaviour.
 pub struct LightRaysDef;
 
 impl EffectDef for LightRaysDef {
@@ -1175,8 +1013,6 @@ mod tests {
 
     #[test]
     fn the_fade_splits_into_one_set_of_weights_a_pass() {
-        // Tap j of pass k sits j·TAPS^k fine steps along; its weight is the
-        // fade there, whatever the ray length.
         let fine = FALL / (TAPS.pow(PASSES as u32) as f32);
         for k in 0..PASSES {
             for j in 0..TAPS {
@@ -1194,16 +1030,13 @@ mod tests {
         fx.use_loop = true;
         fx.revolutions = 2;
         let a = fx.packed(64, 48).lengths;
-        // Wraps: the first entry follows on from the last.
         let step = (a[0] - a[TABLE - 1]).abs();
         assert!(step < 0.05, "seam step {step}");
-        // Loops: Phase two turns on is the same shimmer.
         fx.shimmer_phase = 720.0;
         let b = fx.packed(64, 48).lengths;
         for (x, y) in a.iter().zip(&b) {
             assert!((x - y).abs() < 1e-5);
         }
-        // And it does change in between.
         fx.shimmer_phase = 300.0;
         let c = fx.packed(64, 48).lengths;
         assert!(a.iter().zip(&c).any(|(x, y)| (x - y).abs() > 0.01));
@@ -1218,7 +1051,6 @@ mod tests {
         fx.rays_blend = BLEND_NONE;
         let mut out = img.clone();
         light_rays(&mut out, w, h, &fx.packed(w, h));
-        // The rays alone: the picture itself, brightened by RAY_GAIN.
         for (i, (a, b)) in img.iter().zip(&out).enumerate() {
             let want = if i % 4 == 3 {
                 (a * RAY_GAIN).min(1.0)
@@ -1233,7 +1065,6 @@ mod tests {
     fn a_bright_dot_throws_a_ray_away_from_the_source() {
         let (w, h) = (64u32, 16u32);
         let mut img = vec![0.0f32; (w * h * 4) as usize];
-        // A white dot at x = 20, the source at the left edge.
         for y in 7..9 {
             for x in 20..22 {
                 let i = ((y * w + x) * 4) as usize;
@@ -1280,13 +1111,6 @@ mod tests {
         assert_eq!(fx.reach(2203.0), 0.0, "no rays: no room");
     }
 
-    /// **Light rays is given only the room its rays can fill.** The rays are
-    /// drawn by the CPU oracle on a picture with the old, loose room round
-    /// it; every pixel they light past the picture has to sit inside the
-    /// tight room `reach_within` gives, for a source inside and outside the
-    /// picture, short and long rays, with and without shimmer. The tight room
-    /// is never more than the loose one, and on a source in the middle of a
-    /// wide picture it is a fraction of it.
     #[test]
     fn the_rays_never_light_past_the_room_reach_within_gives() {
         let (w, h) = (40u32, 24u32);
@@ -1306,7 +1130,6 @@ mod tests {
                 let case = format!("source ({sx}, {sy}), length {length}, shimmer {shimmer}");
                 assert!(tight <= loose, "{case}: {tight} > {loose}");
                 assert!(tight > 0.0, "{case}: rays with no room");
-                // The picture, lit all over, with the loose room round it.
                 let pad = loose.ceil() as u32;
                 let (pw, ph) = (w + 2 * pad, h + 2 * pad);
                 let mut rgba = vec![0.0f32; (pw * ph * 4) as usize];
@@ -1328,7 +1151,6 @@ mod tests {
                         if rgba[i..i + 4].iter().all(|v| *v <= 1e-6) {
                             continue;
                         }
-                        // Distance past the picture, in texels, each way.
                         let (px, py) = (x as f32 - pad as f32, y as f32 - pad as f32);
                         let dx = (-px).max(px + 1.0 - w as f32).max(0.0);
                         let dy = (-py).max(py + 1.0 - h as f32).max(0.0);
@@ -1347,9 +1169,6 @@ mod tests {
                     past.len(),
                     past.first()
                 );
-                // The same picture drawn with the tight room is the loose
-                // one's middle: only the source's place on the raster moved,
-                // which shifts the bilinear reads by float rounding alone.
                 let small = room as u32;
                 let (sw, sh) = (w + 2 * small, h + 2 * small);
                 let mut tight_rgba = vec![0.0f32; (sw * sh * 4) as usize];
@@ -1379,7 +1198,6 @@ mod tests {
                 );
             }
         }
-        // The arcs' case: a source in the middle of a wide picture.
         let mut fx = LightRays::read(Params::EMPTY);
         fx.extend_beyond_layer = true;
         fx.ray_length = 0.3;
@@ -1400,13 +1218,11 @@ mod tests {
                 p.value = v;
             }
         };
-        // Picking Thermal, a five-colour look, writes all five colours.
         let mut after = before.clone();
         set(&mut after, "colourise", EffectValue::Choice(16));
         let pressed = settle(Some(&before), &after).unwrap();
         let ids: Vec<_> = pressed.rows.iter().map(|(id, _)| *id).collect();
         assert_eq!(ids, FIVE_ROWS);
-        // Picking the plain gradient writes nothing.
         let mut plain = before.clone();
         set(
             &mut plain,
@@ -1414,7 +1230,6 @@ mod tests {
             EffectValue::Choice(COLOURISE_THREE),
         );
         assert_eq!(settle(Some(&before), &plain), None);
-        // Under Ember, editing Midtones puts the menu back to 3-colour.
         let mut ember = before.clone();
         set(&mut ember, "colourise", EffectValue::Choice(4));
         let mut edited = ember.clone();
@@ -1425,7 +1240,6 @@ mod tests {
             pressed.rows,
             vec![("colourise", Value::Choice(COLOURISE_THREE))]
         );
-        // And an edit elsewhere leaves it alone.
         let mut moved = ember.clone();
         set(&mut moved, "use_mask", EffectValue::Bool(true));
         assert_eq!(settle(Some(&ember), &moved), None);
