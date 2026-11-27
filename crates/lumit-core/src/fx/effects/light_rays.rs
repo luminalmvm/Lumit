@@ -574,7 +574,7 @@ impl LightRays {
             self.source_y.clamp(-hf, 2.0 * hf),
         ];
         let len = (1.0 + self.ray_length.max(0.0)).ln();
-        let lengths = self.lengths(len);
+        let lengths = self.lengths(len, wf, hf);
         let colourise = mode_of(self.colourise.min(COLOURISE_OPTIONS.len() as u32 - 1));
         let rgb = |c: [f32; 4]| [c[0].max(0.0), c[1].max(0.0), c[2].max(0.0)];
         let (stops, at, count) = match colourise {
@@ -639,7 +639,7 @@ impl LightRays {
         }
     }
 
-    fn lengths(self, len: f32) -> Vec<f32> {
+    fn lengths(self, len: f32, w: f32, h: f32) -> Vec<f32> {
         let amount = self.shimmer_amount.max(0.0) / 100.0;
         if amount == 0.0 {
             return vec![len; TABLE];
@@ -652,7 +652,10 @@ impl LightRays {
         let flicker = self.source_affects_shimmer && self.reduce_flicker;
         let travel = if self.source_affects_shimmer {
             let r = f64::from(self.shimmer_radius.max(1.0)) * if flicker { 2.0 } else { 1.0 };
-            [f64::from(self.source_x) / r, f64::from(self.source_y) / r]
+            [
+                (f64::from(self.source_x) - f64::from(w) / 2.0) / r,
+                (f64::from(self.source_y) - f64::from(h) / 2.0) / r,
+            ]
         } else {
             [0.0; 2]
         };
