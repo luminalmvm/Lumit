@@ -678,7 +678,7 @@ impl LightRays {
                     amp *= 0.5;
                 }
                 let n = sum / total;
-                len * (1.0 + amount * (2.0 * n - 1.0)).max(0.0)
+                len * (1.0 + amount).powf(2.0 * n - 1.0)
             })
             .collect()
     }
