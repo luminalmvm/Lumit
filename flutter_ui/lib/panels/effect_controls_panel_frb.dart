@@ -3322,7 +3322,7 @@ class _EffectSection extends StatelessWidget {
     Widget curveEditor(List<BridgeParamInfo> run) => dimmedIf(
         run.every((p) => disabled.contains(p.id)),
         CurveChannelEditor(
-          key: ValueKey<String>('fx-curves-$id'),
+          key: ValueKey<String>('fx-curves-$id-${run.first.id}'),
           keyPrefix: 'fx-curves-$id',
           labels: [for (final p in run) engineLabel(p.label)],
           channelColours: themedGraphs
