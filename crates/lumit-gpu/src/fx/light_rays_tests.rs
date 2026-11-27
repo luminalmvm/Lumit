@@ -87,7 +87,6 @@ fn wgsl_light_rays_matches_the_cpu_oracle() {
         let out = fx.light_rays(&ctx, &tex, w, h, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
         let worst = worst_diff(&cpu, &gpu);
-        eprintln!("light rays case {n}: worst {worst}");
         assert!(worst < 4e-3, "case {n}: worst difference {worst}");
         let again = readback_linear_f32(&ctx, &fx.light_rays(&ctx, &tex, w, h, &op), w, h).unwrap();
         assert_eq!(gpu, again, "case {n}: GPU light rays must be bit-stable");
