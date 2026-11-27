@@ -329,16 +329,16 @@ pub struct Turbiniu {
     #[toggle(label = "Repeat profile", default = false)]
     pub distortion_ramp_loop: bool,
 
-    #[choice(label = "Draw as", options = ["Strokes", "Markers"], default = 0)]
+    #[choice(label = "Draw as", options = ["Strokes", "Marks"], default = 0)]
     pub primitives: u32,
 
-    #[counter(label = "Marker sides", min = 3, max = 32, default = 8, hard_min = 3, hard_max = 128, unit = Raw)]
+    #[counter(label = "Mark sides", min = 3, max = 32, default = 8, hard_min = 3, hard_max = 128, unit = Raw)]
     pub point_segments: i32,
 
-    #[counter(label = "Marker fill rate", min = 0, max = 100, default = 100, hard_min = 0, hard_max = 100, unit = Raw)]
+    #[counter(label = "Mark fill rate", min = 0, max = 100, default = 100, hard_min = 0, hard_max = 100, unit = Raw)]
     pub visible_points: i32,
 
-    #[dial(label = "Marker heading", default = 0.0)]
+    #[dial(label = "Mark heading", default = 0.0)]
     pub angle: f32,
 
     #[slider(label = "Follow tangent", min = -100.0, max = 100.0, default = 0.0, unit = Percent)]

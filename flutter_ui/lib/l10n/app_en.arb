@@ -34559,7 +34559,7 @@
   },
   "fxTurbiniu": "Turbiniu",
   "@fxTurbiniu": {
-    "description": "Effect name: strokes or markers drawn along a vector mask, or between two masks on the same layer."
+    "description": "Effect name: strokes or marks drawn along a vector mask, or between two masks on the same layer."
   },
   "fxOverlapMode": "Overlap mode",
   "@fxOverlapMode": {
@@ -34683,35 +34683,39 @@
   },
   "fxDrawAs": "Draw as",
   "@fxDrawAs": {
-    "description": "Effect controls: a choice on Turbiniu, whether each path is drawn as a stroke or as markers along it."
+    "description": "Effect controls: a choice on Turbiniu, whether each path is drawn as a stroke or as marks along it."
+  },
+  "fxMarks": "Marks",
+  "@fxMarks": {
+    "description": "Effect controls: a Draw as option on Turbiniu, small polygons placed along each path instead of a stroke."
   },
   "fxMarkShape": "Mark shape",
   "@fxMarkShape": {
-    "description": "Effect controls: a group heading on Turbiniu, the controls for how strokes or markers are drawn."
+    "description": "Effect controls: a group heading on Turbiniu, the controls for how strokes or marks are drawn."
   },
-  "fxMarkerSides": "Marker sides",
-  "@fxMarkerSides": {
-    "description": "Effect controls: a control on Turbiniu, how many sides each marker has."
+  "fxMarkSides": "Mark sides",
+  "@fxMarkSides": {
+    "description": "Effect controls: a control on Turbiniu, how many sides each mark has."
   },
-  "fxMarkerFillRate": "Marker fill rate",
-  "@fxMarkerFillRate": {
-    "description": "Effect controls: a control on Turbiniu, what share of the places along a path get a marker, per cent."
+  "fxMarkFillRate": "Mark fill rate",
+  "@fxMarkFillRate": {
+    "description": "Effect controls: a control on Turbiniu, what share of the places along a path get a mark, per cent."
   },
-  "fxMarkerHeading": "Marker heading",
-  "@fxMarkerHeading": {
-    "description": "Effect controls: a dial on Turbiniu, which way the markers point."
+  "fxMarkHeading": "Mark heading",
+  "@fxMarkHeading": {
+    "description": "Effect controls: a dial on Turbiniu, which way the marks point."
   },
   "fxFollowTangent": "Follow tangent",
   "@fxFollowTangent": {
-    "description": "Effect controls: a control on Turbiniu, how far the markers turn to follow the path's direction, per cent."
+    "description": "Effect controls: a control on Turbiniu, how far the marks turn to follow the path's direction, per cent."
   },
   "fxHeadingVariation": "Heading variation",
   "@fxHeadingVariation": {
-    "description": "Effect controls: a group heading on Turbiniu, a noise that turns the markers."
+    "description": "Effect controls: a group heading on Turbiniu, a noise that turns the marks."
   },
   "fxHeadingDeviation": "Heading deviation",
   "@fxHeadingDeviation": {
-    "description": "Effect controls: a control on Turbiniu, how far the noise turns the markers, in degrees."
+    "description": "Effect controls: a control on Turbiniu, how far the noise turns the marks, in degrees."
   },
   "fxCoverageWave": "Coverage wave",
   "@fxCoverageWave": {

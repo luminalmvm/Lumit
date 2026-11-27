@@ -14344,13 +14344,13 @@
           "default": 0,
           "options": [
             "Strokes",
-            "Markers"
+            "Marks"
           ],
           "dividers_after": []
         },
         {
           "id": "point_segments",
-          "label": "Marker sides",
+          "label": "Mark sides",
           "kind": "int",
           "unit": "raw",
           "default": 8,
@@ -14361,7 +14361,7 @@
         },
         {
           "id": "visible_points",
-          "label": "Marker fill rate",
+          "label": "Mark fill rate",
           "kind": "int",
           "unit": "raw",
           "default": 100,
@@ -14372,7 +14372,7 @@
         },
         {
           "id": "angle",
-          "label": "Marker heading",
+          "label": "Mark heading",
           "kind": "angle",
           "unit": "degrees",
           "default": 0.0,

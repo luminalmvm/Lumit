@@ -1138,11 +1138,12 @@ Map slope
 Map softness
 Map white to
 Maps
+Mark fill rate
+Mark heading
 Mark shape
-Marker fill rate
-Marker heading
-Marker sides
+Mark sides
 Markers
+Marks
 Mask
 Mask path
 Mask points

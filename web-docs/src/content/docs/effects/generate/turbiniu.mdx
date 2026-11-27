@@ -1,6 +1,6 @@
 ---
 title: Turbiniu
-description: Draws a family of strokes or markers along a mask, or between two masks.
+description: Draws a family of strokes or marks along a mask, or between two masks.
 ---
 
 Turbiniu is a **Generate** effect.
@@ -15,7 +15,7 @@ Turbiniu is a **Generate** effect.
 
 Turbiniu draws a family of strokes along a vector mask on the layer, or a family that runs
 from one mask to another, filling the space between them. Each stroke can be a line or a row
-of polygon markers, with its own width, coverage, colour and tips, so a few controls give
+of polygon marks, with its own width, coverage, colour and tips, so a few controls give
 ribbons, hatching, flowing lines, dotted trails or arrows.
 
 1. Draw one or two masks, open or closed. Set their **Mode** to **None** to use them only as
@@ -24,7 +24,7 @@ ribbons, hatching, flowing lines, dotted trails or arrows.
    **First mask** to stack the strokes along the first path, or pick another mask to draw
    them between the two.
 3. Set **Stroke count** and **Path resolution**, and under **Mark shape** pick **Strokes** or
-   **Markers** in **Draw as**.
+   **Marks** in **Draw as**.
 
 The guides follow the masks' keys, so the strokes move as the masks do.
 
@@ -54,10 +54,10 @@ The guides follow the masks' keys, so the strokes move as the masks do.
 | **Path warp › Profile shift** | Slider | -100 to 100; any value by typing | 0 | Per cent |
 | **Path warp › Profile span** | Slider | -100 to 100; any value by typing | 100 | Per cent |
 | **Path warp › Repeat profile** | Checkbox | On or off | Off | - |
-| **Draw as** | Dropdown | Strokes · Markers | Strokes | - |
-| **Marker sides** | Slider, whole numbers | 3 to 32; up to 128 | 8 | - |
-| **Marker fill rate** | Slider, whole numbers | 0 to 100 | 100 | - |
-| **Marker heading** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Draw as** | Dropdown | Strokes · Marks | Strokes | - |
+| **Mark sides** | Slider, whole numbers | 3 to 32; up to 128 | 8 | - |
+| **Mark fill rate** | Slider, whole numbers | 0 to 100 | 100 | - |
+| **Mark heading** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
 | **Follow tangent** | Slider | -100 to 100; any value by typing | 0 | Per cent |
 | **Heading variation › Sampling domain** | Dropdown | Image coordinates · Path coordinates · Sample order | Path coordinates | - |
 | **Heading deviation** | Slider | 0 to 10; higher | 0 | Degrees |
@@ -200,7 +200,7 @@ In the Effect Controls panel:
 
 - **Stroke spacing** groups **Spacing profile**.
 - **Path warp** groups **Sampling domain**, **Warp distance**, **Pattern frequency**, **Horizontal stretch**, **Vertical stretch**, **Horizontal shift**, **Vertical shift**, **Pattern phase**, **Phase period**, **Horizontal step per stroke**, **Pattern seed**, **Strength profile**, **Profile shift**, **Profile span**, **Repeat profile**, and starts closed.
-- **Mark shape** groups **Draw as**, **Marker sides**, **Marker fill rate**, **Marker heading**, **Follow tangent**.
+- **Mark shape** groups **Draw as**, **Mark sides**, **Mark fill rate**, **Mark heading**, **Follow tangent**.
 - **Heading variation** groups **Sampling domain**, **Heading deviation**, **Pattern frequency**, **Horizontal stretch**, **Vertical stretch**, **Horizontal shift**, **Vertical shift**, **Pattern phase**, **Phase period**, **Phase step per stroke**, **Pattern seed**, **Strength profile**, **Profile shift**, **Profile span**, **Repeat profile**, and starts closed.
 - **Coverage texture** groups **Sampling domain**, **Coverage variation**, **Pattern frequency**, **Horizontal stretch**, **Vertical stretch**, **Horizontal shift**, **Vertical shift**, **Pattern phase**, **Phase period**, **Phase step per stroke**, **Pattern seed**, **Base coverage**, **Strength profile**, **Profile shift**, **Profile span**, **Repeat profile**, and starts closed.
 - **Coverage wave** groups **Wave depth**, **Wave rate**, **Wave phase**, **Phase step per stroke**, **Coverage bias**, and starts closed.
@@ -252,15 +252,15 @@ In the Effect Controls panel:
   **Sample order**. The frequency, stretch and shift shape the noise, **Pattern phase**
   animates it and **Phase period** makes it loop. **Strength profile** sets how strong the
   warp is along the path.
-- **Heading variation** turns markers with the same kind of noise, by up to **Heading
+- **Heading variation** turns marks with the same kind of noise, by up to **Heading
   deviation**.
 
-### Markers
+### Marks
 
-- **Draw as** **Markers** draws polygons along the path instead of a line. **Marker sides**
-  is their shape and **Marker fill rate** how many show. Each place on the path keeps its own
-  chance, so a trim shows or hides markers without reshuffling the rest.
-- **Marker heading** turns them, and **Follow tangent** turns them along the path.
+- **Draw as** **Marks** draws polygons along the path instead of a line. **Mark sides**
+  is their shape and **Mark fill rate** how many show. Each place on the path keeps its own
+  chance, so a trim shows or hides marks without reshuffling the rest.
+- **Mark heading** turns them, and **Follow tangent** turns them along the path.
 
 ### Coverage
 
@@ -312,7 +312,7 @@ draws the stroke on, and **Variation seed** gives other ones.
   **Palette combine** **Sum** adds to the first and **Product** multiplies with it.
 
 When a frame would need more geometry than the renderer allows, it lowers the path
-resolution and the marker sides, and keeps fewer strokes at even intervals across the family.
+resolution and the mark sides, and keeps fewer strokes at even intervals across the family.
 
 ## Related
 
