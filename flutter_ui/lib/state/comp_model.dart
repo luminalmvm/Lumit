@@ -60,7 +60,6 @@ class CompModel extends ChangeNotifier {
     return _model?.groups ?? const [];
   }
 
-  /// The comp's length in frames, matching `durationFrames`.
   int get durationFrames {
     _freshen();
     return _model?.durationFrames.toInt() ?? 0;
@@ -164,7 +163,6 @@ class CompModel extends ChangeNotifier {
   /// already refuses to throw), and this is how they find out for free.
   bool get compGone => _comp != null && _model == null;
 
-  /// Point the model at [comp] (or null) and read it.
   void bind(CompositionReference? comp) {
     _comp = comp;
     refresh();
@@ -202,7 +200,6 @@ class CompModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Re-read only if the document has moved since the last read.
   void _freshen() {
     final comp = _comp;
     if (comp == null) {
@@ -258,7 +255,6 @@ class CompModel extends ChangeNotifier {
     super.dispose();
   }
 
-  /// The entry for [id], or null when the layer is gone.
   BridgeLayerEntry? byId(UuidValue id) {
     for (final entry in layers) {
       if (entry.layer.internallayerId == id) return entry;

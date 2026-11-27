@@ -61,10 +61,8 @@ pub mod export;
 pub mod export_defaults;
 pub mod export_presets;
 pub mod extrude;
-/// How a baked per-frame analysis reads a clip, shared by the tiers that do.
 pub mod frames;
 pub mod fxops;
-/// The GPU dispatch table for migrated effects (docs/impl/effect-registry.md §2.5).
 pub mod gpufx;
 mod gpufx_correction;
 mod gpufx_crop;
@@ -100,8 +98,6 @@ pub mod passes;
 mod placed;
 pub mod placement;
 pub mod plan;
-/// The planes tier: a model's depth or coverage, baked once and read per frame
-/// (docs/impl/addons.md §6.1).
 pub mod planes;
 pub mod prefetch;
 pub mod profile;
@@ -114,7 +110,6 @@ pub mod sent;
 mod sidecar;
 pub mod sim;
 pub mod source;
-/// Stabilise's analysis: its job, queue and sidecar.
 pub mod stabilise;
 pub mod standin;
 pub mod track;

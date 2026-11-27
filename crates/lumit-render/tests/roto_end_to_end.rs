@@ -39,9 +39,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 const COMP: u32 = 64;
-/// Well inside the matte's solid half.
 const KEPT: u32 = 12;
-/// Well inside its empty half.
 const CUT: u32 = 52;
 
 fn layer(name: &str, kind: LayerKind) -> Layer {
@@ -92,6 +90,7 @@ fn comp_of(name: &str, layers: Vec<Layer>) -> Composition {
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -110,8 +109,6 @@ fn comp_of(name: &str, layers: Vec<Layer>) -> Composition {
     }
 }
 
-/// A white layer wearing a stroked Roto brush, and the effect's own id so the
-/// matte can be filed under it.
 fn project() -> (Arc<Document>, Uuid, Uuid) {
     let white = Uuid::now_v7();
     let mut doc = Document::new();
@@ -151,7 +148,6 @@ fn project() -> (Arc<Document>, Uuid, Uuid) {
     (Arc::new(doc), comp_id, instance)
 }
 
-/// A matte that is solid on the left half of the frame and empty on the right.
 fn half_matte() -> Vec<u8> {
     (0..COMP)
         .flat_map(|_| (0..COMP).map(|x| if x < COMP / 2 { 255u8 } else { 0 }))
@@ -172,7 +168,6 @@ fn a_propagated_matte_cuts_the_layer_it_sits_on_and_passes_through_outside_its_s
     };
     let (doc, comp, instance) = project();
 
-    // No propagation yet: the effect is a passthrough and the layer is whole.
     lumit_render::roto::clear();
     let (before, w, _) = r.render_rgba(&doc, comp, 0, 1.0).expect("the plain render");
     assert_eq!(
@@ -181,7 +176,6 @@ fn a_propagated_matte_cuts_the_layer_it_sits_on_and_passes_through_outside_its_s
         "with nothing propagated the Roto brush changes no pixel"
     );
 
-    // The matte, filed for source frame 0 under this effect instance.
     let run =
         lumit_render::roto::run_from_planes(COMP, COMP, 60.0, 1, &[(0, [1u8; 32], half_matte())])
             .expect("a run");
@@ -383,13 +377,6 @@ fn a_matte_cuts_the_same_place_at_a_reduced_preview_size() {
     lumit_render::roto::clear();
 }
 
-/// **A Roto brush box in a node graph cuts by the matte of the file its picture
-/// comes from**, the planes tier's own test one tier along.
-///
-/// A box has no layer, so nothing used to carry a propagated matte to it and a
-/// brush in a graph passed its picture through. Here a white solid is read
-/// straight into a stroked brush box, and the matte filed under that box cuts
-/// it exactly as it cuts the layer above.
 #[test]
 fn a_brush_box_in_a_node_graph_cuts_by_the_matte_filed_under_it() {
     use lumit_core::comp_graph::{CompGraph, GraphEdge, GraphNode};
@@ -400,8 +387,6 @@ fn a_brush_box_in_a_node_graph_cuts_by_the_matte_filed_under_it() {
     };
     lumit_render::roto::clear();
 
-    // The layer project's own solid and brush, taken off the layer and put on
-    // a canvas instead.
     let (layered, _, instance) = project();
     let mut doc = (*layered).clone();
     let (white, brush) = doc

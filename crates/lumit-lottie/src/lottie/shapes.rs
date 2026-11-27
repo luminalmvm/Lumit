@@ -30,7 +30,6 @@ use crate::check::{arg, Feature, Place, Report};
 use crate::fit::tolerance;
 use crate::keys::{Track, TrackKey};
 
-/// `entries` as Lottie shape items, the top of the picture first.
 pub fn contents(c: &Clock, entries: &[ShapeEntry], report: &mut Report, at: &Place) -> Vec<Value> {
     let items = lowered(entries);
     let mut runs: Vec<std::ops::Range<usize>> = Vec::new();
@@ -52,7 +51,6 @@ pub fn contents(c: &Clock, entries: &[ShapeEntry], report: &mut Report, at: &Pla
     out
 }
 
-/// What a combine is called, for the check.
 fn combine_label(kind: u32) -> &'static str {
     match kind {
         1 => "Union",
@@ -62,7 +60,6 @@ fn combine_label(kind: u32) -> &'static str {
     }
 }
 
-/// One run of art, drawn as one, as a Lottie group.
 fn group(c: &Clock, members: &[Lowered], report: &mut Report, at: &Place) -> Option<Value> {
     let first = members.first()?;
     let item = first.item;
@@ -179,7 +176,6 @@ fn group(c: &Clock, members: &[Lowered], report: &mut Report, at: &Place) -> Opt
         rule = 1;
     }
 
-    // The modifiers a player has, in their order, then the paint.
     let mut repeaters = Vec::new();
     let closed = baked || multi || item.path_at(0.0).closed;
     for m in kept.drain(..) {
@@ -215,7 +211,6 @@ fn group(c: &Clock, members: &[Lowered], report: &mut Report, at: &Place) -> Opt
                     "eo": c.prop(&[&r.end_opacity], Class::Px, tolerance::PERCENT),
                 },
             })),
-            // Baked above, or left out with a word.
             _ => {}
         }
     }
@@ -334,8 +329,6 @@ fn stepped(c: &Clock, p: &Property, lo: f64, hi: f64) -> Value {
     c.write(&Track { keys }, Class::Px, false, &[])
 }
 
-/// True when anything the bake would read moves: a member's path or its
-/// numbers, or a modifier's.
 fn moves(members: &[Lowered], mods: &[&ShapeModifier]) -> bool {
     fn animated(v: &Value) -> bool {
         match v {
@@ -395,7 +388,6 @@ fn bake(members: &[Lowered], mods: &[&ShapeModifier]) -> Vec<Vec<(f64, f64)>> {
         .collect()
 }
 
-/// A polyline as a path with straight edges.
 fn polyline(points: &[(f64, f64)], closed: bool) -> BezierPath {
     BezierPath {
         vertices: points
@@ -421,7 +413,6 @@ fn winding(path: &BezierPath) -> f64 {
         .sum()
 }
 
-/// `path` run the other way round.
 fn reversed(path: &BezierPath) -> BezierPath {
     BezierPath {
         vertices: path
@@ -577,7 +568,6 @@ fn stroke_item(
     Value::Object(st)
 }
 
-/// A gradient fill: its two points, and its colour and opacity stops.
 fn gradient(c: &Clock, item: &ShapeItem, fill: &[Property; 4], rule: u32) -> Value {
     let props = gradient_props(item, fill);
     let still = props
@@ -619,14 +609,15 @@ fn gradient(c: &Clock, item: &ShapeItem, fill: &[Property; 4], rule: u32) -> Val
     })
 }
 
-/// Every number a gradient's stops are read from.
 fn gradient_props<'a>(item: &'a ShapeItem, fill: &'a [Property; 4]) -> Vec<&'a Property> {
     let mut out: Vec<&Property> = fill.iter().collect();
     out.push(&item.gradient_start_opacity);
     out.push(&item.gradient_end_opacity);
+    out.extend(item.gradient_colour.iter().flatten());
     for s in &item.gradient_stops {
         out.push(&s.position);
         out.push(&s.opacity);
+        out.extend(&s.colour);
     }
     out
 }
@@ -635,18 +626,17 @@ fn gradient_props<'a>(item: &'a ShapeItem, fill: &'a [Property; 4]) -> Vec<&'a P
 fn points(c: &Clock, item: &ShapeItem, fill: &[Property; 4], lt: f64) -> Vec<(f64, [f64; 3], f64)> {
     let v = |p: &Property| c.value(p, lt);
     let faded = |p: &Property| v(p).clamp(0.0, 100.0) / 100.0;
-    let to = item
-        .gradient_colour
-        .unwrap_or(LinearColour::BLACK)
-        .0
-        .map(f64::from);
+    let to = match &item.gradient_colour {
+        Some(c) => [v(&c[0]), v(&c[1]), v(&c[2]), v(&c[3])],
+        None => LinearColour::BLACK.0.map(f64::from),
+    };
     let from = [v(&fill[0]), v(&fill[1]), v(&fill[2]), v(&fill[3])];
     let mut between: Vec<(f64, [f64; 4], f64)> = item
         .gradient_stops
         .iter()
         .take(lumit_core::shape::MAX_GRADIENT_STOPS)
         .map(|s| {
-            let colour = s.colour.0.map(f64::from);
+            let colour = s.colour.each_ref().map(v);
             (
                 (v(&s.position).clamp(0.0, 100.0)) / 100.0,
                 colour,

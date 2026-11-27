@@ -90,7 +90,6 @@ use pyramid::Pyramid;
 /// is a track that ends (docs/impl/tracking.md §2).
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum TrackError {
-    /// The luma slice is too short for the dimensions given.
     #[error("frame plane is {got} samples, but {w}×{h} needs {want}")]
     PlaneSize {
         w: usize,
@@ -98,8 +97,6 @@ pub enum TrackError {
         want: usize,
         got: usize,
     },
-    /// A frame arrived at a different size from the one the set was started at.
-    /// The tracker holds one raster geometry for its whole life.
     #[error("frame {frame} is {w}×{h}, but this tracker was started at {sw}×{sh}")]
     SizeChanged {
         frame: i64,
@@ -108,7 +105,6 @@ pub enum TrackError {
         sw: usize,
         sh: usize,
     },
-    /// A flow seed's grid does not match the frame's.
     #[error("flow seed is {w}×{h}, but the frame is {fw}×{fh}")]
     SeedSize {
         w: usize,
@@ -116,7 +112,6 @@ pub enum TrackError {
         fw: usize,
         fh: usize,
     },
-    /// Frames must be pushed in increasing frame order.
     #[error("frame {got} was pushed after frame {last}; frames must increase")]
     FrameOrder { got: i64, last: i64 },
 }
@@ -182,12 +177,6 @@ pub struct FlowSeed<'a> {
 }
 
 impl<'a> FlowSeed<'a> {
-    /// Borrow `vectors` as a `w × h` flow field.
-    ///
-    /// # Errors
-    ///
-    /// [`TrackError::PlaneSize`] when the slice is too short for the
-    /// dimensions.
     pub fn new(vectors: &'a [[f32; 2]], w: usize, h: usize) -> Result<Self, TrackError> {
         let want = w.saturating_mul(h);
         if w == 0 || h == 0 || vectors.len() < want {
@@ -218,16 +207,13 @@ impl<'a> FlowSeed<'a> {
 /// deterministic either way.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TrackSettings {
-    /// Detection grid, buckets across × down (§2: 16 × 16).
     pub grid: (usize, usize),
-    /// Best-N features per bucket.
     pub per_bucket: usize,
     /// Response floor as a fraction of the frame's best response.
     pub quality: f32,
     /// Minimum spacing in pixels between two features, so "best N in a bucket"
     /// cannot land all N on one corner.
     pub min_separation: f64,
-    /// Half-width of the window the Shi–Tomasi normal matrix is summed over.
     pub detect_radius: usize,
     /// KLT window half-width: the window is `2·half_window + 1` on a side
     /// (§2: ~15 px at level 0).
@@ -235,7 +221,6 @@ pub struct TrackSettings {
     /// Pyramid levels, including level 0 (§2: 3–4). Clamped down where the
     /// frame is too small to support them.
     pub levels: usize,
-    /// Gauss–Newton iteration cap per level.
     pub max_iters: usize,
     /// Convergence: stop when the window's corners move less than this, in
     /// pixels at the level being solved.
@@ -288,21 +273,15 @@ impl Default for TrackSettings {
     }
 }
 
-/// What a track is doing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TrackState {
-    /// Still being followed at the last frame pushed.
     Live,
     /// Verification failed, the feature left the frame, or it entered an
     /// exclusion mask. The points already recorded stand; there will be no more.
     Ended,
-    /// Segmented out as belonging to something moving by itself. **Reserved for
-    /// phase 2** (docs/impl/tracking.md §3's epipolar segmentation); phase 1
-    /// never sets it.
     Moving,
 }
 
-/// One observation: where a track was on one frame.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TrackPoint {
     /// Source frame index, as the caller numbered it.
@@ -312,7 +291,6 @@ pub struct TrackPoint {
     pub y: f64,
 }
 
-/// What one frame-to-frame step measured.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TrackStep {
     /// The affine warp's 2×2 linear part for this step — how the patch had to
@@ -320,7 +298,6 @@ pub struct TrackStep {
     /// detector reads `log(scale)` out of it; see
     /// [`TrackSet::median_log_scale`].
     pub a: [[f64; 2]; 2],
-    /// Normalised cross-correlation against the reference patch after the step.
     pub ncc: f64,
     /// Forward–backward error in level-0 pixels.
     pub fb: f64,
@@ -362,19 +339,16 @@ pub struct Track {
 }
 
 impl Track {
-    /// The frame this track was born on.
     #[must_use]
     pub fn first_frame(&self) -> i64 {
         self.points.first().map_or(0, |p| p.frame)
     }
 
-    /// The last frame this track was seen on.
     #[must_use]
     pub fn last_frame(&self) -> i64 {
         self.points.last().map_or(-1, |p| p.frame)
     }
 
-    /// Whether the track has a point on `frame`.
     #[must_use]
     pub fn covers(&self, frame: i64) -> bool {
         !self.points.is_empty() && frame >= self.first_frame() && frame <= self.last_frame()
@@ -403,8 +377,6 @@ impl Track {
     }
 }
 
-/// One track's position on two frames — what the phase-2 two-view geometry
-/// consumes.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Correspondence {
     pub id: u32,
@@ -429,7 +401,6 @@ impl TrackSet {
         &self.tracks
     }
 
-    /// The track with `id`.
     #[must_use]
     pub fn get(&self, id: u32) -> Option<&Track> {
         // Ids are assigned in ascending order and never reused, so the vector is
@@ -505,7 +476,6 @@ impl TrackSet {
         geom::median(&mut v)
     }
 
-    /// How many tracks were still live at the last frame pushed.
     #[must_use]
     pub fn live_count(&self) -> usize {
         self.tracks
@@ -514,8 +484,6 @@ impl TrackSet {
             .count()
     }
 
-    /// This pair of frames' two-view geometry — the convenience over
-    /// [`estimate_pair`] that pulls the correspondences itself.
     #[must_use]
     pub fn pair_geometry(
         &self,
@@ -613,7 +581,6 @@ impl TrackSet {
     }
 }
 
-/// A live track's working state, alongside its entry in [`Tracker::tracks`].
 struct LiveTrack {
     index: usize,
     pos: [f64; 2],
@@ -647,7 +614,6 @@ pub struct Tracker {
 }
 
 impl Tracker {
-    /// A tracker with no exclusion masks.
     #[must_use]
     pub fn new(settings: TrackSettings) -> Self {
         Tracker {
@@ -686,7 +652,6 @@ impl Tracker {
         self.masks = masks;
     }
 
-    /// How many tracks are live right now — a caller's progress read.
     #[must_use]
     pub fn live_count(&self) -> usize {
         self.live.len()
@@ -781,7 +746,6 @@ impl Tracker {
         Ok(())
     }
 
-    /// Finish and hand over the tracks.
     #[must_use]
     pub fn finish(self) -> TrackSet {
         let (width, height) = self.size.unwrap_or((0, 0));

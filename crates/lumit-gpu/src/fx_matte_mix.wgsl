@@ -35,7 +35,6 @@ fn matte_mix(@builtin(global_invocation_id) gid: vec3<u32>) {
     let a = textureLoad(input, p, 0);
     let b = textureLoad(processed, p, 0);
     let m = textureLoad(matte, p, 0);
-    // Rec. 709 on the premultiplied colour, exactly as the CPU twin reads it.
     var k = clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
     if (params.invert != 0.0) {
         k = 1.0 - k;

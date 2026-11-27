@@ -30,17 +30,13 @@ pub enum SourceProbe {
     /// Not probed yet. The layer draws nothing this frame and the whole comp
     /// frame is not cacheable — it will be re-rendered once the probe lands.
     Unprobed,
-    /// A readable file carrying a video stream.
     Video {
-        /// The container's exact rate.
         fps: f64,
         /// Native pixel size — what transforms act in, regardless of the
         /// resolution the frame is actually decoded at.
         width: u32,
         height: u32,
-        /// Decodable frame count, from the frame index.
         frames: usize,
-        /// Whether the same file also carries an audio stream.
         audio: bool,
     },
     /// A readable file with no video stream (a music track, say). Not an
@@ -49,12 +45,10 @@ pub enum SourceProbe {
     /// Not on disk — moved, renamed, or on an unmounted drive. Draws the slate
     /// and leads to the relink flow.
     Missing,
-    /// Present but unreadable (corrupt or unsupported). Draws the slate.
     Failed,
 }
 
 impl SourceProbe {
-    /// The video details, or `None` for every state that has no picture.
     #[must_use]
     pub fn video(self) -> Option<(f64, u32, u32, usize)> {
         match self {
@@ -77,7 +71,6 @@ impl SourceProbe {
         matches!(self, SourceProbe::Missing | SourceProbe::Failed)
     }
 
-    /// Whether this source carries sound.
     #[must_use]
     pub fn has_audio(self) -> bool {
         matches!(
@@ -206,7 +199,6 @@ pub fn interpretation(
         pixel_aspect: it
             .pixel_aspect
             .filter(|(n, d)| n != d && within(*n, *d, 0.1, 10.0)),
-        // Once is the plain reading, so it is written the plain way.
         loops: match it.plays().min(MOST_LOOPS) {
             1 => 0,
             n => n,
@@ -246,7 +238,6 @@ pub fn analysed(
     if !pictures.is_plain() {
         fingerprint.head_tail_hash = format!("{}#{pictures:?}", fingerprint.head_tail_hash);
     }
-    // Another render pass is another picture.
     if let Some(pass) = &f.interpretation.render_pass {
         fingerprint.head_tail_hash = format!("{}#p{pass}", fingerprint.head_tail_hash);
     }
@@ -344,8 +335,6 @@ fn proxy_agrees(original: SourceProbe, proxy: SourceProbe) -> bool {
     oframes == pframes && (ofps - pfps).abs() < 1e-3
 }
 
-/// Nothing is probed — the do-nothing implementation a build with no media
-/// support (or a test with no files) hands in.
 pub struct NoProbes;
 
 impl SourceProbes for NoProbes {
@@ -360,8 +349,6 @@ impl SourceProbes for std::collections::HashMap<Uuid, SourceProbe> {
     }
 }
 
-/// Originals and proxies as two plain maps — the pair form, for a caller (or a
-/// test) that holds both without a probe cache of its own.
 impl SourceProbes
     for (
         std::collections::HashMap<Uuid, SourceProbe>,
@@ -382,8 +369,6 @@ impl SourceProbes
 mod tests {
     use super::*;
 
-    /// Audio-only media must never slate — the bug that painted colour bars
-    /// over a perfectly good music layer. Missing and unreadable both do.
     #[test]
     fn only_missing_and_failed_draw_the_slate() {
         assert!(!SourceProbe::AudioOnly.slates());

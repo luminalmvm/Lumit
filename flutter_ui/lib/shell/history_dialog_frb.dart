@@ -42,7 +42,6 @@ const double historyDialogWidth = 320;
 const double historyListHeight = 320;
 const double _rowExtent = 24;
 
-/// Open the History window.
 Future<void> showHistoryFrb(BuildContext context, LumitState app) =>
     showLumitModal<void>(
       context: context,
@@ -77,7 +76,6 @@ class _HistoryDialogState extends State<_HistoryDialog> {
     // Straight into the fields rather than through `setState`: the first build
     // has not happened yet, so there is nothing to schedule.
     _read();
-    // It opens where the document stands, not at the far end of a long list.
     _scroll = ScrollController(
         initialScrollOffset: (_applied - 6).clamp(0, 1 << 20) * _rowExtent);
   }
@@ -118,7 +116,6 @@ class _HistoryDialogState extends State<_HistoryDialog> {
           keyPrefix: 'history',
         ),
         Expanded(
-          // The ground under the rows takes the menu without a step to go to.
           child: GestureDetector(
             behavior: HitTestBehavior.translucent,
             onSecondaryTapUp: (up) => _menu(null, up.globalPosition),
@@ -162,8 +159,6 @@ class _HistoryDialogState extends State<_HistoryDialog> {
     );
   }
 
-  /// One row: its phrase, quiet if the step has been undone, and the place the
-  /// document stands marked as the selected one.
   Widget _row(
     LumitTheme t, {
     required String id,
@@ -186,8 +181,6 @@ class _HistoryDialogState extends State<_HistoryDialog> {
         ),
       );
 
-  /// A row's right-click: go to it, a step either way from where the
-  /// document stands, or clear the list.
   void _menu(int? applied, Offset at) {
     showMenuAt<void>(
       context: context,

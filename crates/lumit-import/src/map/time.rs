@@ -20,14 +20,10 @@
 
 use lumit_core::time::{Duration, FrameRate, Rational};
 
-/// The frame rate a composition imports at when the capture carries none.
 pub(crate) const DEFAULT_FPS: f64 = 25.0;
 
-/// The duration a composition imports with when the capture carries none.
 pub(crate) const DEFAULT_DURATION: f64 = 10.0;
 
-/// One composition's clock: its frame rate, plus the sub-frame grid an
-/// off-frame time is quantised onto.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct TimeBase {
     pub rate: FrameRate,
@@ -37,7 +33,6 @@ pub(crate) struct TimeBase {
 }
 
 impl TimeBase {
-    /// The clock for `rate`.
     pub(crate) fn new(rate: FrameRate) -> Self {
         let grid = (rate.fps() * 1000.0).round();
         let grid_den = if grid.is_finite() && (1.0..9e15).contains(&grid) {
@@ -48,19 +43,14 @@ impl TimeBase {
         Self { rate, grid_den }
     }
 
-    /// The clock for a capture's decimal frame rate, or `None` when the number
-    /// is absent or not a rate at all.
     pub(crate) fn of_fps(fps: Option<f64>) -> Option<Self> {
         FrameRate::from_decimal(fps?).map(Self::new)
     }
 
-    /// The clock a composition falls back to when its own rate did not arrive
-    /// ([`DEFAULT_FPS`]).
     pub(crate) fn fallback() -> Self {
         Self::new(FrameRate::FPS_25)
     }
 
-    /// The composition's frame rate as Lumit stores it.
     pub(crate) fn rate(&self) -> FrameRate {
         self.rate
     }
@@ -81,7 +71,6 @@ impl TimeBase {
         Rational::from_f64_on_grid(t, self.grid_den).unwrap_or(Rational::ZERO)
     }
 
-    /// A capture span, on the same grid.
     pub(crate) fn duration(&self, d: f64) -> Duration {
         Duration(self.seconds(d))
     }
@@ -110,21 +99,13 @@ mod tests {
         assert_eq!((tb.rate().num(), tb.rate().den()), (25, 1));
     }
 
-    /// **A time on a frame lands exactly on it; a time between two frames
-    /// stays between them.**
-    ///
-    /// The impl note's rule, and the one that decides whether an imported
-    /// animation still reads the way its author drew it. Snapping an off-frame
-    /// key would be a silent re-time.
     #[test]
     fn an_off_frame_key_is_not_snapped_onto_a_frame() {
         let tb = TimeBase::of_fps(Some(25.0)).expect("a rate");
 
-        // On a frame: exactly 51/25, whatever the decimal's last bit says.
         let on = tb.seconds(51.0 / 25.0);
         assert_eq!(on, Rational::new(51, 25).unwrap());
 
-        // Half a frame late: still half a frame late.
         let between = tb.seconds(51.5 / 25.0);
         assert!(between > Rational::new(51, 25).unwrap());
         assert!(between < Rational::new(52, 25).unwrap());

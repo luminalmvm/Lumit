@@ -43,30 +43,18 @@ pub const RATE: u32 = 48_000;
 /// measured only a fifth faster.
 pub const THREADS: usize = 1;
 
-/// An open voice model.
 #[derive(Debug)]
 pub struct Voice {
     enc: Session,
     erb_dec: Session,
     df_dec: Session,
-    /// What each decoder takes from the encoder, by the graphs' own names.
     erb_wants: Vec<String>,
     df_wants: Vec<String>,
     names: DeepFilter,
-    /// How many bins each band holds, lowest first.
     bands: Vec<usize>,
 }
 
 impl Voice {
-    /// Open the installed voice pack.
-    ///
-    /// # Errors
-    ///
-    /// [`MlError::RuntimeMissing`] when no model runtime is installed,
-    /// [`MlError::PackMissing`] when nothing installed does voice,
-    /// [`MlError::PackUnreadable`] for a pack whose numbers this code cannot
-    /// run, and whatever [`Session::open_on_cpu`] answers for a graph that
-    /// will not open.
     pub fn open() -> Result<Self, MlError> {
         if matches!(runtime::status(), runtime::RuntimeStatus::Missing) {
             return Err(MlError::RuntimeMissing);
@@ -134,7 +122,6 @@ impl Voice {
         self.isolate_in(channels, stop, CHUNKS)
     }
 
-    /// The whole of [`Voice::isolate`], with the runs cut as `chunks` says.
     fn isolate_in(
         &mut self,
         mut channels: Vec<Vec<f32>>,
@@ -154,8 +141,6 @@ impl Voice {
         Ok(channels)
     }
 
-    /// Run the three graphs over frames `first..end`, each fed the features
-    /// of the frame the encoder's lookahead says it reads.
     fn answer(&mut self, spectra: &Spectra, first: usize, end: usize) -> Result<Answer, MlError> {
         let shape = spectra.shape;
         let n = end - first;
@@ -210,8 +195,6 @@ impl Voice {
     }
 }
 
-/// Run one decoder on what the encoder made and keep the tensor named
-/// `output`, which must be `len` numbers long.
 fn decode(
     session: &mut Session,
     wants: &[String],
@@ -241,15 +224,11 @@ fn decode(
 mod tests {
     use super::*;
 
-    /// The voice pack as upstream publishes it, from `LUMIT_ML_PACKS_DIR`.
     fn real_tarball() -> Option<std::path::PathBuf> {
         let file = crate::test_support::packs_dir()?.join("DeepFilterNet3_onnx.tar.gz");
         file.is_file().then_some(file)
     }
 
-    /// Something a voice model takes for a voice: a buzz at a wavering pitch
-    /// with three formants, spoken in 300 ms syllables with gaps between, and
-    /// whether each sample is inside a syllable.
     fn syllables(seconds: f32) -> (Vec<f32>, Vec<bool>) {
         let rate = RATE as f32;
         let count = (seconds * rate) as usize;
@@ -279,7 +258,6 @@ mod tests {
         (voice, inside)
     }
 
-    /// The level in decibels of the samples where `pick` says so.
     fn level(signal: &[f32], marks: &[bool], pick: bool) -> f64 {
         let (sum, count) = signal
             .iter()
@@ -291,14 +269,6 @@ mod tests {
         10.0 * (sum / count.max(1) as f64 + 1e-20).log10()
     }
 
-    /// **On the reference machine, the real pack takes the hiss out from
-    /// between the syllables, keeps the syllables, lines up with its input
-    /// and gives the same samples twice, across run seams too.**
-    ///
-    /// The pack is installed from the upstream `.tar.gz` with the catalogue's
-    /// own entry, so this is also the install path that file takes. Skipped
-    /// politely wherever the runtime and the tarball are not, which is every
-    /// CI runner.
     #[test]
     fn the_real_model_keeps_the_voice_and_takes_out_the_hiss() {
         let (Some(runtime_dir), Some(tarball)) =
@@ -346,9 +316,6 @@ mod tests {
             "the syllables went from {voice_before:.1} dB to {voice_after:.1} dB"
         );
 
-        // Runs of two seconds, each settled from the very start, so every
-        // handover lands inside the signal and joins two runs that heard the
-        // same thing: anything but the same answer is the seams' bookkeeping.
         let short = Chunks {
             size: 200,
             warm: 400,

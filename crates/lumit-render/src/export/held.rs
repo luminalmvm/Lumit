@@ -3,10 +3,8 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-/// Whether the export running now is held.
 static HELD: AtomicBool = AtomicBool::new(false);
 
-/// Hold the export running now, or let it go on.
 pub(super) fn set(on: bool) {
     HELD.store(on, Ordering::Relaxed);
 }

@@ -102,8 +102,6 @@ class _FadeGlyphPainter extends CustomPainter {
       old.falling != falling || old.colour != colour || old.gain != gain;
 }
 
-/// A shape's row in a fade menu: the tick, the curve as it will fall or rise,
-/// and its name.
 Widget fadeShapeLabel(
   ({String id, BridgeClipFadeShape shape}) preset, {
   required bool falling,
@@ -168,7 +166,6 @@ class _ClipFadePopoverState extends State<_ClipFadePopover> {
   /// keep level against.
   bool _keep = true;
 
-  /// Which knob the pointer has hold of: the side, and 1 or 2.
   ({bool outgoing, int handle})? _dragging;
 
   bool get _pair => _out != null && _in != null;
@@ -192,7 +189,6 @@ class _ClipFadePopoverState extends State<_ClipFadePopover> {
         _box.bottom - y * _box.height,
       );
 
-  /// A position in the box back into curve space, undoing the mirror.
   ({double x, double y}) _curveSpace(bool outgoing, Offset local) {
     final b = _box;
     return (
@@ -315,7 +311,6 @@ class _ClipFadePopoverState extends State<_ClipFadePopover> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   if (_pair) ...[_keepRow(t), const SizedBox(height: 6)],
-                  // Each preset as the curve it is, its name a tooltip away.
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -376,7 +371,6 @@ class _ClipFadePopoverState extends State<_ClipFadePopover> {
       );
 }
 
-/// The box, the two curves and their handles.
 class _FadeBoxPainter extends CustomPainter {
   final Rect box;
 

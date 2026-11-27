@@ -24,12 +24,10 @@ use crate::fx::effects::stabilise::{
 };
 use crate::model::{Composition, Document, EffectInstance, Layer, LayerKind};
 
-/// One frame's warp, before it is handed to the GPU op.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Resolved {
     /// Output pixel to input pixel, in the layer's own pixels.
     pub map: Mat3,
-    /// Crop's scale.
     pub crop: f64,
     /// The layer's pixels, which the map is in: the analysis's, or for a
     /// Reverse its own layer's frame.
@@ -329,6 +327,7 @@ mod tests {
             master_automation: Default::default(),
             loudness_target: None,
             lighting: Default::default(),
+            blending: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -348,7 +347,6 @@ mod tests {
         let mut doc = Document::new();
         doc.items.push(ProjectItem::Composition(comp.clone()));
         let doc = Arc::new(doc);
-        // A shake of five pixels either way, frame by frame.
         let steps = (0..9)
             .map(|i| Step {
                 similarity: [1.0, 0.0, if i % 2 == 0 { 5.0 } else { -5.0 }, 0.0],
@@ -413,6 +411,7 @@ mod tests {
             master_automation: Default::default(),
             loudness_target: None,
             lighting: Default::default(),
+            blending: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -432,7 +431,6 @@ mod tests {
         let mut doc = Document::new();
         doc.items.push(ProjectItem::Composition(comp.clone()));
         let doc = Arc::new(doc);
-        // A shake of five pixels either way, whose edges Scale has to hide.
         let steps = (0..9)
             .map(|i| Step {
                 similarity: [1.0, 0.0, if i % 2 == 0 { 5.0 } else { -5.0 }, 0.0],

@@ -141,7 +141,6 @@ pub fn rounded(alpha: &[f32], w: u32, h: u32, radius: f32) -> Vec<f32> {
     // How far each pixel's centre is from the edge, plus half a pixel.
     let inside = distance_to(|i| !solid[i], w, h);
     let (label, count) = pieces(&solid, w, h);
-    // Each piece's disc: the radius, or the widest that fits in it.
     let mut widest = vec![0.0f32; count];
     for (i, &l) in label.iter().enumerate() {
         if let Some(m) = widest.get_mut(l as usize) {

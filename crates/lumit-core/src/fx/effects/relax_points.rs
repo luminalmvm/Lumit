@@ -20,13 +20,10 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// The most passes it will make, whatever is typed.
 const MAX_ITERATIONS: i64 = 100;
 
-/// The most neighbours one point is tested against in one pass.
 const MAX_NEIGHBOURS: usize = 256;
 
-/// No new pass starts once this many pairs have been tested.
 const MAX_TESTS: u64 = 50_000_000;
 
 /// The dice that say which way two points in the same place part.
@@ -42,10 +39,8 @@ const fn group(label: &'static str, params: &'static [&'static str]) -> ParamGro
     }
 }
 
-/// The budget and the disc, under the family's own heading.
 pub const RELAX_GROUPS: &[ParamGroup] = &[group("Point", &["max_points", "feather"])];
 
-/// Radius is read while Use point size is off, and Spacing while it is on.
 pub const RELAX_ENABLED_WHEN: &[EnabledWhen] = &[
     APPLY_GROUP_WHEN,
     APPLY_THRESHOLD_WHEN,
@@ -61,7 +56,6 @@ pub const RELAX_ENABLED_WHEN: &[EnabledWhen] = &[
     },
 ];
 
-/// Relax points' controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "relax_points",
@@ -69,7 +63,6 @@ pub const RELAX_ENABLED_WHEN: &[EnabledWhen] = &[
     version = 1,
     category = Points,
     cost = Moderate,
-    // A point may be pushed anywhere.
     roi = FullFrame,
     premultiplied = true,
     groups = RELAX_GROUPS,
@@ -111,7 +104,6 @@ pub struct RelaxPoints {
     #[slider(min = 0.0, max = 300.0, default = 100.0, hard_min = 0.0, unit = Percent)]
     pub spacing: f32,
 
-    /// How many times the points are pushed apart. More settles further.
     #[counter(
         min = 0,
         max = 50,
@@ -152,7 +144,6 @@ pub struct RelaxPoints {
     )]
     pub max_points: i32,
 
-    /// How soft the disc a point is drawn as is, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -224,7 +215,6 @@ impl RelaxPoints {
         let mut at: Vec<[f32; 2]> = (0..n)
             .map(|i| out.position.get(i).map_or([0.0; 2], |p| [p[0], p[1]]))
             .collect();
-        // The box the points start in, for Keep inside.
         let (mut low, mut high) = ([f32::INFINITY; 2], [f32::NEG_INFINITY; 2]);
         for p in &at {
             low = [low[0].min(p[0]), low[1].min(p[1])];
@@ -232,14 +222,6 @@ impl RelaxPoints {
         }
         let inside = self.bounds == 1 && low[0] <= high[0] && low[1] <= high[1];
 
-        // ponytail: uniform squares and a count on each point's neighbours,
-        // not a tree. A pass costs at most points times MAX_NEIGHBOURS tests,
-        // and no pass starts after MAX_TESTS, so the worst case is a million
-        // points in one pile: one pass of 256 million tests, and each point
-        // pushed only from the first 256 it shares a square with. A stream
-        // spread evenly costs about ten tests a point a pass. One huge point
-        // among small ones makes every square huge and is the same pile. A
-        // k-d tree, or squares sized to the usual point, is the upgrade.
         let mut next = at.clone();
         let mut tests = 0u64;
         for _ in 0..self.iterations.clamp(0, MAX_ITERATIONS as i32) {
@@ -347,7 +329,6 @@ fn buckets(at: &[[f32; 2]], reach: f32) -> HashMap<(i32, i32), Vec<u32>> {
     cells
 }
 
-/// Relax points' behaviour, the same shape as Vary points'.
 pub struct RelaxPointsDef;
 
 impl EffectDef for RelaxPointsDef {
@@ -355,7 +336,6 @@ impl EffectDef for RelaxPointsDef {
         &<RelaxPoints as EffectMetadata>::SCHEMA
     }
 
-    /// A stream in and a stream out, beside the picture.
     fn signature(&self) -> Signature {
         Signature::Image {
             inputs: POINTS_IN,

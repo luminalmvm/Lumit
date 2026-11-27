@@ -53,7 +53,6 @@ pub(crate) fn trust(document: Uuid) {
     }
 }
 
-/// A job that can be stopped is starting: forget any earlier cancel.
 pub(crate) fn begin() {
     CANCEL.store(false, Ordering::Release);
 }
@@ -92,7 +91,6 @@ pub(crate) fn auto_packs(document: Uuid, path: &Path) -> bool {
     lumit_project::auto_pack_note(document, path).is_some_and(|note| note.is_file())
 }
 
-/// Keep the note that says so, or take it away.
 pub(crate) fn note_auto_pack(document: Uuid, path: &Path, on: bool) {
     let Some(note) = lumit_project::auto_pack_note(document, path) else {
         return;
@@ -120,7 +118,6 @@ pub(crate) fn sources(doc: &Document, project_dir: &Path, all: bool) -> Vec<Pack
         let left = unplaced.get(&id).map(String::as_str);
         !all && left.is_some() && left == doc.packed_path(id)
     };
-    // The file a reference names, when it is wanted and on disk.
     let file = |id: Uuid, media: &MediaRef| {
         if !all && !doc.packed.contains_key(&id) || distrusted(id) {
             return None;

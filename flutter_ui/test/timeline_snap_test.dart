@@ -1,8 +1,3 @@
-// Timeline snapping arithmetic (docs/07-UI-SPEC.md §4.5).
-//
-// Pure, so checked here against hand-computed cases rather than by dragging in
-// a widget tree — the same reasoning timeline_drag_test.dart follows for the
-// row-height maths.
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -205,20 +200,17 @@ void main() {
     /// zoomed in.
     test('the reach is in pixels, so the magnification is the precision', () {
       const target = [SnapTarget(14, SnapKind.marker)];
-      // Zoomed out: two frames away is 12 px at 6 px/frame... just outside.
       expect(
         snapFrame(
                 frame: 12, targets: target, perFrame: 6.0, magnet: true)
             .caught,
         isNull,
       );
-      // Zoomed further out: the same two frames is 10 px, and it catches.
       expect(
         snapFrame(frame: 12, targets: target, perFrame: 5.0, magnet: true)
             .caught,
         const SnapTarget(14, SnapKind.marker),
       );
-      // Zoomed in: 100 px away, nowhere near.
       expect(
         snapFrame(frame: 12, targets: target, perFrame: 50.0, magnet: true)
             .caught,

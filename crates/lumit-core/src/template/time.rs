@@ -14,12 +14,9 @@ pub struct Timing {
     pub intro: f64,
     /// The moment the outro starts. The template's length is no outro.
     pub outro: f64,
-    /// How long the template runs.
     pub duration: f64,
 }
 
-/// Which ends of a template a copy plays. A copy cut in half-way through a
-/// scene can skip the intro, and one cut away from can skip the outro.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Ends {
     /// The copy starts on the intro. Off, it starts where the intro ends.
@@ -29,7 +26,6 @@ pub struct Ends {
 }
 
 impl Ends {
-    /// Both ends played, which is every copy nobody has changed.
     pub const BOTH: Ends = Ends {
         intro: true,
         outro: true,

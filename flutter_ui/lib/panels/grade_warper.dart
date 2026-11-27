@@ -27,7 +27,6 @@ import 'scopes_panel_frb.dart' show scopeColoursFor;
 /// Where red sits round the vectorscope, as the engine counts hue from it.
 const double _redAngle = 1.7960518;
 
-/// The mesh's rings, the centre not counted.
 const int _rings = 3;
 
 /// The engine's vectorscope trace: its size, its kind, and how far out a
@@ -45,11 +44,9 @@ const double _ringAt = 0.7;
 int warperIndex(int hues, int ring, int spoke) =>
     ring == 0 ? 0 : 1 + (ring - 1) * hues + spoke;
 
-/// How many points a mesh of [hues] has.
 int warperPoints(int hues) => 1 + _rings * hues;
 
 class GradeWarperMesh extends StatefulWidget {
-  /// Six or eight.
   final int hues;
 
   /// Each point's move, `(Cb, Cr) / 0.5` with Cr up, centre first; as many
@@ -80,14 +77,12 @@ class GradeWarperMesh extends StatefulWidget {
 }
 
 class _GradeWarperMeshState extends State<GradeWarperMesh> {
-  /// The moves in hand while a drag runs, and the point it holds.
   List<Offset>? _held;
   int? _point;
   int? _hover;
 
   ui.Image? _trace;
 
-  /// The scope's ground and trace colours the plot was asked in.
   List<Uint8List> _inks = const [];
   StreamSubscription<WorkerResponse>? _responses;
   LumitUiState? _ui;
@@ -129,7 +124,6 @@ class _GradeWarperMeshState extends State<GradeWarperMesh> {
         view: ui.measuredViewId,
       );
     } catch (_) {
-      // No worker, as in a test: the mesh draws over nothing.
     }
   }
 
@@ -287,7 +281,6 @@ class _GradeWarperMeshState extends State<GradeWarperMesh> {
           ? SystemMouseCursors.basic
           : SystemMouseCursors.precise,
       child: Listener(
-        // A right-click puts every point back.
         onPointerDown: (e) {
           if (e.buttons == kSecondaryButton) _reset(null);
         },
@@ -310,8 +303,6 @@ class _GradeWarperMeshState extends State<GradeWarperMesh> {
   }
 }
 
-/// The hue rim, the picture's colours, the mesh at rest in hairline, the
-/// mesh as it is moved, and its points.
 class _MeshPainter extends CustomPainter {
   final int hues;
   final List<Offset> moves;
@@ -320,7 +311,6 @@ class _MeshPainter extends CustomPainter {
   final int? held, hover;
   final ui.Image? trace;
 
-  /// The scope's ground and trace, which the plot is read against.
   final List<Uint8List> inks;
   final bool enabled;
   final LumitTheme t;
@@ -347,7 +337,6 @@ class _MeshPainter extends CustomPainter {
     final r = size.shortestSide / 2;
     Offset at(Offset mesh) => c + Offset(mesh.dx * unit, -mesh.dy * unit);
 
-    // A thin hue band at the rim, muted as the grade wheels are.
     const steps = 36;
     final rim = Rect.fromCircle(center: c, radius: r - 3);
     for (var i = 0; i < steps; i++) {
@@ -370,7 +359,6 @@ class _MeshPainter extends CustomPainter {
     if (trace case final image? when inks.length >= 2) {
       final side = unit / _traceReach;
       final ink = t.textSecondary;
-      // How far each pixel is from the scope's ground, toward its trace.
       final ground = _lum(inks[0]);
       final s = _lum(inks[1]) >= ground ? 1.5 : -1.5;
       canvas.drawImageRect(
@@ -380,7 +368,7 @@ class _MeshPainter extends CustomPainter {
         Paint()
           ..filterQuality = FilterQuality.medium
           ..colorFilter = ColorFilter.matrix([
-            0, 0, 0, 0, ink.r * 255, //
+            0, 0, 0, 0, ink.r * 255,
             0, 0, 0, 0, ink.g * 255,
             0, 0, 0, 0, ink.b * 255,
             0.25 * s, 0.6 * s, 0.15 * s, 0, -s * ground - 12,
@@ -400,7 +388,6 @@ class _MeshPainter extends CustomPainter {
       canvas.drawLine(c, at(rest(warperIndex(hues, _rings, k))), restLine);
     }
 
-    // The mesh as moved.
     Offset point(int i) =>
         at(rest(i) + (i < moves.length ? moves[i] : Offset.zero));
     final moved = moves.any((m) => m != Offset.zero);

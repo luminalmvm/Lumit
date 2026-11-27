@@ -58,8 +58,6 @@ pub const LOOK_ROWS: &[&str] = &[
     "turn",
 ];
 
-/// The layers a simulation hits at any time: Collide with, and every 3D layer
-/// that shows for All 3D layers.
 pub fn hit_layers<'a>(
     comp: &'a Composition,
     inst: &EffectInstance,
@@ -106,8 +104,6 @@ pub(crate) fn feed_place(comp: &Composition, l: &Layer, h: &mut blake3::Hasher) 
     }
 }
 
-/// A layer's shape as a thing to hit or give birth on: its outlines, its size,
-/// and a model's content wherever it has been moved to.
 pub(crate) fn feed_shape(doc: &Document, l: &Layer, h: &mut blake3::Hasher) {
     let _ = serde_json::to_writer(&mut *h, &l.masks);
     match &l.kind {
@@ -226,7 +222,6 @@ pub fn definition(
     feed_expressed(comp, layer, inst, &mut h);
     feed_shape(doc, layer, &mut h);
     let _ = serde_json::to_writer(&mut h, &layer.start_offset);
-    // The layer's place only matters against what the particles hit.
     let hits_any =
         on(inst, "ground") || on(inst, "collide_all") || inst.layer_ref("collide_with").is_some();
     if hits_any {
@@ -246,7 +241,6 @@ pub fn definition(
     *h.finalize().as_bytes()
 }
 
-/// What the host carries beside the particles from frame to frame.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Ledger {
     /// The frame, from the layer's in point.
@@ -265,7 +259,6 @@ pub struct Ledger {
 pub struct Steady {
     pub first: u64,
     pub n: u32,
-    /// The first one worth making.
     pub from: u32,
     pub dt: f64,
 }
@@ -289,7 +282,6 @@ impl Steady {
 }
 
 impl Ledger {
-    /// The steady births the frame after this one owes at Emit rate `rate`.
     #[must_use]
     pub fn steady(&self, rate: f32, dt: f64, cap: u32) -> Steady {
         let rate = f64::from(rate);
@@ -305,7 +297,6 @@ impl Ledger {
         }
     }
 
-    /// On to the next frame, having made `steady`.
     pub fn advance(&mut self, rate: f32, steady: &Steady) {
         let rate = f64::from(rate);
         let rate = if rate.is_finite() { rate.max(0.0) } else { 0.0 };
@@ -314,17 +305,14 @@ impl Ledger {
         self.frame += 1;
     }
 
-    /// The burst `rows` throw on this frame: its first index and how many.
     pub fn burst(&mut self, rows: &Particulate) -> (u64, u32) {
         let n = burst_at(rows, self.frame, &mut self.high);
         (burst_base(self.frame), n)
     }
 }
 
-/// The numbers a step reads from `rows`, each row reduced once for the kernel.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Physics {
-    /// How many times a frame the particles move.
     pub steps: u32,
     /// The field's middle, and how far it reaches.
     pub field: [f32; 4],
@@ -412,6 +400,7 @@ mod tests {
             master_automation: Default::default(),
             loudness_target: None,
             lighting: Default::default(),
+            blending: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -430,7 +419,6 @@ mod tests {
         }
     }
 
-    /// Births never repeat or get lost, however a frame is cut into steps.
     #[test]
     fn a_frame_of_births_is_cut_into_steps_without_a_gap() {
         for (rate, steps) in [(5.0, 2u32), (1000.0, 3), (60_000.0, 8), (1.0, 1)] {
@@ -456,7 +444,6 @@ mod tests {
         }
     }
 
-    /// Over the cap, only the newest births of a frame are made.
     #[test]
     fn only_the_newest_births_are_made_past_the_cap() {
         let l = Ledger::default();
@@ -466,7 +453,6 @@ mod tests {
         assert!(s.off(1) > s.off(0));
     }
 
-    /// Rows reach the kernel reduced, and a row that is not a number is nought.
     #[test]
     fn rows_are_reduced_for_a_step() {
         use crate::fx::params::Params;
@@ -498,7 +484,6 @@ mod tests {
         assert_eq!(physics(&rows).attractor, 0.0);
     }
 
-    /// The floor is where its own z is nought, and up is its z.
     #[test]
     fn the_floor_is_a_surface_seen_from_the_layer() {
         use super::super::collider::Collider;
@@ -532,7 +517,6 @@ mod tests {
         assert!(above.2 > 0.0 && below.2 < 0.0, "{above:?} {below:?}");
         let there = floor.to_layer().point(above);
         assert!((there.1 - 600.0).abs() < 1e-6);
-        // Every 3D layer feeds the name of a walk that hits them all.
         let mut e = crate::fx::builtins::instantiate("particulate").unwrap();
         for id in ["simulate", "collide_all"] {
             e.params.iter_mut().find(|p| p.id == id).unwrap().value = EffectValue::Bool(true);
@@ -552,7 +536,6 @@ mod tests {
         );
     }
 
-    /// Only Simulate turns the card on, so nothing saved before it looks new.
     #[test]
     fn only_simulate_turns_the_card_on() {
         let mut e = crate::fx::builtins::instantiate("particulate").unwrap();
@@ -569,8 +552,6 @@ mod tests {
         assert!(wanted(&e));
     }
 
-    /// What needs the card greys until Simulate is on, and an old walk's rows grey
-    /// in the scene and Particle blend beside them only without it.
     #[test]
     fn rows_wait_for_simulate() {
         use crate::fx::enabled::param_enabled;
@@ -606,8 +587,6 @@ mod tests {
         assert!(param_enabled(&e, "on_contact"));
     }
 
-    /// A row in the list is a row, and the walk's name follows what it reads and
-    /// not how it looks.
     #[test]
     fn looks_keep_the_walk_and_physics_rename_it() {
         let mut e = crate::fx::builtins::instantiate("particulate").unwrap();
@@ -638,11 +617,9 @@ mod tests {
         assert_eq!(walk, name(&comp, &set(&e, "size", 9.0), &layer));
         assert_eq!(walk, name(&comp, &set(&e, "mix", 50.0), &layer));
         assert_ne!(walk, name(&comp, &set(&e, "gravity", 9.0), &layer));
-        // A taller comp moves the floor, the model's fit and the Edge frame.
         let mut taller = comp.clone();
         taller.height += 1;
         assert_ne!(walk, name(&taller, &e, &layer));
-        // Moving a layer with nothing to hit keeps it, as particles are in its pixels.
         let mut moved = layer.clone();
         moved.transform.position_x = crate::anim::Property::fixed(400.0);
         assert_eq!(walk, name(&comp, &e, &moved));

@@ -68,8 +68,6 @@ fn run() -> Result<(), String> {
     });
     results.extend(measured?);
 
-    // The long-form comp's seven (docs/13 §2 B18-B24), on media of their own
-    // in the same directory.
     let long = lumit_bench::long::LongHarness::new(&media_dir())?;
     results.extend(long.all(&mut |m: Measurement| {
         println!(
@@ -78,8 +76,6 @@ fn run() -> Result<(), String> {
         );
     })?);
 
-    // And the same comp's sound (docs/13 §2 B25-B29). No sound card is
-    // opened: the plan is filled and mixed as the engine's threads do it.
     let sound = lumit_bench::long_sound::SoundHarness::new(&media_dir())?;
     results.extend(sound.all(&mut |m: Measurement| {
         println!(
@@ -88,8 +84,6 @@ fn run() -> Result<(), String> {
         );
     })?);
 
-    // The three per-effect numbers (docs/13 §2 B12-B14). They need no
-    // media and no comp, so they run after the six rather than beside them.
     results.extend(lumit_bench::scenarios::particulate::budgets(
         &mut |m: Measurement| {
             println!(
@@ -99,8 +93,6 @@ fn run() -> Result<(), String> {
         },
     )?);
 
-    // The puppet's three (docs/13 §2 B15-B17). CPU only: no media, no
-    // comp and no adapter, so they run wherever the harness runs.
     results.extend(lumit_bench::scenarios::puppet::budgets(
         &mut |m: Measurement| {
             println!(
@@ -110,8 +102,6 @@ fn run() -> Result<(), String> {
         },
     )?);
 
-    // A Model layer of a million triangles (docs/13 §2 B30), and with
-    // shadows (B33).
     results.extend(lumit_bench::models::budgets(&mut |m: Measurement| {
         println!(
             "{}",
@@ -119,7 +109,6 @@ fn run() -> Result<(), String> {
         );
     })?);
 
-    // One letter's mesh on an extruded layer (docs/13 §2 B39).
     results.extend(lumit_bench::extruded::budgets(&mut |m: Measurement| {
         println!(
             "{}",
@@ -127,7 +116,6 @@ fn run() -> Result<(), String> {
         );
     })?);
 
-    // A million particles in the 3D scene (docs/13 §2 B31).
     results.extend(lumit_bench::scene_points::budgets(
         &mut |m: Measurement| {
             println!(
@@ -137,7 +125,6 @@ fn run() -> Result<(), String> {
         },
     )?);
 
-    // One step of a million simulated particles (docs/13 §2 B37).
     results.extend(lumit_bench::sim_step::budgets(&mut |m: Measurement| {
         println!(
             "{}",
@@ -145,7 +132,6 @@ fn run() -> Result<(), String> {
         );
     })?);
 
-    // A step and a march of smoke at 128 cells a side (docs/13 §2 B40).
     results.extend(lumit_bench::smoke_step::budgets(&mut |m: Measurement| {
         println!(
             "{}",
@@ -153,7 +139,6 @@ fn run() -> Result<(), String> {
         );
     })?);
 
-    // Denoise played forward over 1080p footage (docs/13 §2 B41).
     results.extend(lumit_bench::denoise_play::budgets(
         &media_dir(),
         &mut |m: Measurement| {
@@ -213,7 +198,6 @@ fn run() -> Result<(), String> {
     }
 }
 
-/// Where the results go.
 fn out_path() -> PathBuf {
     std::env::var_os("BENCH_OUT").map_or_else(
         || PathBuf::from("target").join("bench-results.json"),

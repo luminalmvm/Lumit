@@ -27,11 +27,8 @@ import 'review_link_parts.dart' show reviewRowMenu;
 const double bringCompositionWidth = 460;
 const double _rowHeight = 28;
 
-/// The air over the first row and under the last.
 const double _listInset = 6;
 
-/// The list shows this many rows before it scrolls, and has a search box
-/// when there are more.
 const int _rowsShown = 8;
 
 /// Let the person choose a composition from the project file at [path], and
@@ -78,7 +75,6 @@ Future<bool> bringCompositionFrom(BuildContext context, String path,
         earlierSave: earlierSave,
         source: source);
   } catch (_) {
-    // The project closed while the window was up. Said the same way.
   }
   if (made == null || made.isEmpty) {
     app.postNotice(l10n.bringUnreadable, error: true);
@@ -91,7 +87,6 @@ Future<bool> bringCompositionFrom(BuildContext context, String path,
   try {
     name = made.first.getSettings().name;
   } catch (_) {
-    // The project closed as it came in.
   }
   app.postNotice(earlierSave
       ? l10n.backupBroughtBack(name)
@@ -120,10 +115,8 @@ class _PickerState extends State<_Picker> {
   final _scroll = ScrollController();
   late BridgeFileComp _chosen = widget.comps.first;
 
-  /// There is a search box when the list is long enough to scroll.
   bool get _searched => widget.comps.length > _rowsShown;
 
-  /// The compositions the search leaves.
   List<BridgeFileComp> get _shown {
     final wanted = _search.text.trim().toLowerCase();
     return [
@@ -180,7 +173,6 @@ class _PickerState extends State<_Picker> {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final shown = _shown;
-    // A search that hides the chosen one chooses the first it leaves.
     final chosen = shown.contains(_chosen) ? _chosen : shown.firstOrNull;
     final searched = _searched;
     final frame = DialogFrame(
@@ -216,8 +208,6 @@ class _PickerState extends State<_Picker> {
             ),
           ),
         SizedBox(
-          // Whole rows, and the thumb down the side says when there are
-          // more of them out of sight.
           height: _rowHeight * math.min(widget.comps.length, _rowsShown) +
               _listInset * 2,
           child: shown.isEmpty
@@ -277,13 +267,11 @@ class _PickerState extends State<_Picker> {
   }
 }
 
-/// One composition in the list: its name, its size and how long it is.
 class _CompRow extends StatefulWidget {
   final BridgeFileComp comp;
   final bool chosen;
   final VoidCallback onChoose, onConfirm;
 
-  /// What confirming is called in this window.
   final String confirm;
 
   const _CompRow(
@@ -337,7 +325,6 @@ class _CompRowState extends State<_CompRow> {
               : _hover
                   ? t.surface2
                   : null,
-          // The edge the chosen version wears in the history it came from.
           foregroundDecoration: chosen
               ? BoxDecoration(
                   border: Border(left: BorderSide(color: t.accent, width: 2)),

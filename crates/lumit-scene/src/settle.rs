@@ -1,7 +1,3 @@
-//! What a scene works out once it has been read, whichever file it came from:
-//! a name each part and take can be found by, the boxes a pose grows from, and
-//! a refusal for skins that don't add up.
-
 use std::collections::HashMap;
 
 use glam::{Mat4, Vec3};
@@ -136,8 +132,6 @@ fn empty() -> Bounds {
     }
 }
 
-/// Each mesh's box, how far each morph target reaches, and the box of the
-/// vertices each joint of a skin moves.
 pub fn measure(scene: &mut ModelScene) {
     for mesh in &mut scene.meshes {
         let mut whole = empty();
@@ -220,8 +214,6 @@ mod tests {
         }
     }
 
-    /// A skin that is whole keeps its joint boxes; a joint that isn't there,
-    /// or a vertex pointing past its joints, loses the skin and says so.
     #[test]
     fn a_broken_skin_is_taken_away_and_named() {
         let mut good = skinned(vec![1], 0);

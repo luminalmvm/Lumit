@@ -31,7 +31,6 @@ fn layer<'a>(doc: &'a Document, name: &str) -> &'a Layer {
 fn shape_contents_arrive_where_after_effects_draws_them() {
     let doc = imported();
 
-    // A 400 × 200 rectangle with rounded corners, filled and outlined.
     let LayerKind::Shape { contents } = &layer(&doc, "Rect").kind else {
         panic!("a shape layer");
     };
@@ -102,21 +101,19 @@ fn gradients_and_merged_paths_come_across() {
         panic!("a shape layer");
     };
 
-    // Red, a half clear green half way, blue.
     let art = items(contents);
     let ramp = art
         .iter()
         .find(|item| item.gradient == 1)
         .expect("the gradient");
     let red = lumit_core::shape::colour::at(ramp.fill.as_ref().expect("a start"), 0.0).0;
-    let blue = ramp.gradient_colour.expect("an end").0;
+    let blue = lumit_core::shape::colour::at(ramp.gradient_colour.as_ref().expect("an end"), 0.0).0;
     assert!(red[0] > 0.9 && red[2] < 0.1, "{red:?}");
     assert!(blue[2] > 0.9 && blue[0] < 0.1, "{blue:?}");
     assert_eq!(ramp.gradient_stops.len(), 1);
     assert_eq!(ramp.gradient_stops[0].position.value_at(0.0), 50.0);
     assert_eq!(ramp.gradient_stops[0].opacity.value_at(0.0), 50.0);
 
-    // Merge Paths' subtract: the second square cut out of the first.
     let LayerKind::Shape { contents } = &layer(&doc, "Ops").kind else {
         panic!("a shape layer");
     };

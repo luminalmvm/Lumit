@@ -18,17 +18,12 @@ import 'package:lumit_flutter/widgets/controls.dart';
 
 import 'frb_test_support.dart';
 
-/// A name no machine has: the state a user is in after unplugging the headset
-/// they pinned, which is the whole point of the fallback.
 const _gone = 'A device this machine does not have';
 
 void main() {
   setUpAll(initEngineForTests);
 
   group('Settings → Audio (frb)', () {
-    /// Open Settings on the Audio page with [chosen] already in the settings
-    /// file and in the engine, as a launch would leave it. Answers the UI
-    /// state, so a test can read what the page wrote back.
     Future<LumitUiState> open(WidgetTester tester, {String? chosen}) async {
       tester.view.physicalSize = const Size(1200, 900);
       tester.view.devicePixelRatio = 1.0;
@@ -56,7 +51,6 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('settings-page-audio')));
       await tester.pumpAndSettle();
-      // The list of outputs is asked for off the interface thread.
       await settleFrb(tester);
       return p.uiState;
     }
@@ -65,13 +59,10 @@ void main() {
         (tester) async {
       final ui = await open(tester, chosen: _gone);
 
-      // Pick System default off the list — the one entry every machine has.
       await tester.tap(find.byKey(const ValueKey('settings-audio-device')));
       await tester.pumpAndSettle();
       await tester.tap(find.text(l10n.settingsAudioSystemDefault).last);
       await tester.pumpAndSettle();
-      // The row reads the list back off the interface thread, so the line
-      // about the missing device goes when that answer lands.
       await settleFrb(tester,
           until: () =>
               find.text(l10n.settingsAudioDeviceMissing).evaluate().isEmpty);

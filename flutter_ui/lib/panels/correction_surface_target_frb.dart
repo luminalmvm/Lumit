@@ -35,11 +35,9 @@ class CorrectionSurfaceTarget implements GradeSurfaceTarget {
   final LumitState _app;
   final EffectStackEditor _editor = EffectStackEditor();
 
-  /// What the drag in hand has staged, by row, and the node it is on.
   final Map<String, BridgeEffectValue> _staged = {};
   (GradeShot, UuidValue)? _stagedOn;
 
-  /// The Correction effect's rows, from the engine's declaration.
   late final Map<String, BridgeParamInfo> _rows = {
     for (final p in listParameters(effect: correctionName)) p.id: p,
   };
@@ -50,7 +48,6 @@ class CorrectionSurfaceTarget implements GradeSurfaceTarget {
       if (t case BridgeSurfaceTarget_Param(:final param)) param,
   };
 
-  /// The current shot and the Corrections in view on it, in stack order.
   (GradeShot, List<BridgeEffectInstance>)? _nodes() {
     final shot = _ui.gradeShot.value;
     if (shot == null) return null;
@@ -68,7 +65,6 @@ class CorrectionSurfaceTarget implements GradeSurfaceTarget {
         ]
       );
     } catch (_) {
-      // The shot has gone.
       return null;
     }
   }
@@ -82,7 +78,6 @@ class CorrectionSurfaceTarget implements GradeSurfaceTarget {
     return (shot, nodes.where((n) => n.id() == want).firstOrNull ?? nodes.last);
   }
 
-  /// Point the editor at the stack [shot]'s node lives in.
   void _aim(GradeShot shot) {
     final scope = gradeScopeOf(_ui);
     final clip = shot.clip;
@@ -292,7 +287,6 @@ class CorrectionSurfaceTarget implements GradeSurfaceTarget {
     }
   }
 
-  /// The Correction [by] along from the current one becomes current.
   void _step(int by) {
     final here = _current();
     final nodes = _nodes()?.$2 ?? const <BridgeEffectInstance>[];
@@ -314,7 +308,6 @@ class CorrectionSurfaceTarget implements GradeSurfaceTarget {
     if (values.isNotEmpty) _write(shot, node.id(), values);
   }
 
-  /// The pages a surface steps through, in its order.
   static const List<GradePage> _pages = [
     GradePage.wheels,
     GradePage.adjust,

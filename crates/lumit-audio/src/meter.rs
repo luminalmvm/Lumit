@@ -37,10 +37,8 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 /// Node `i` meters into slot `i`.
 pub const MASTER: usize = MAX_NODES;
 
-/// The number of slots a [`Meters`] holds: every node, plus the master.
 pub const SLOTS: usize = MAX_NODES + 1;
 
-/// A buffer's running numbers for every slot, kept by the mix.
 pub type MeterAccs = [MeterAcc; SLOTS];
 
 /// One slot's meter, as the panel reads it. Linear sample amplitudes, not
@@ -51,13 +49,10 @@ pub type MeterAccs = [MeterAcc; SLOTS];
 pub struct MeterReading {
     /// Loudest absolute sample of the last buffer, left and right.
     pub peak: [f32; 2],
-    /// Root-mean-square of the last buffer, left and right.
     pub rms: [f32; 2],
     /// The most the last buffer was pulled down, in dB (positive): a node's
     /// duck, the master's limiter.
     pub gr: f32,
-    /// It has gone over since this was last reset. Sticky
-    /// ([`Meters::reset_clip`]).
     pub clipped: bool,
 }
 
@@ -69,7 +64,6 @@ pub struct MeterAcc {
     peak: [f32; 2],
     sum_sq: [f64; 2],
     frames: u64,
-    /// The smallest gain applied in the buffer.
     lowest: f32,
     clipped: bool,
 }
@@ -107,7 +101,6 @@ impl MeterAcc {
         self.lowest = self.lowest.min(gain);
     }
 
-    /// Light the clip flag.
     #[inline]
     pub fn clip(&mut self) {
         self.clipped = true;
@@ -189,7 +182,6 @@ pub struct LoudnessReading {
     pub true_peak: f32,
 }
 
-/// The meter bank shared between the audio callback and whoever draws it.
 pub struct Meters {
     slots: Box<[Slot]>,
     momentary: AtomicU32,
@@ -247,14 +239,12 @@ impl Meters {
         self.slots.get(slot).map(Slot::load).unwrap_or_default()
     }
 
-    /// Put every clip light out: the desk's "I have seen it" button.
     pub fn reset_clip(&self) {
         for slot in self.slots.iter() {
             slot.clipped.store(false, Ordering::Relaxed);
         }
     }
 
-    /// The master's loudness as the callback last published it.
     #[must_use]
     pub fn loudness(&self) -> LoudnessReading {
         let f = |a: &AtomicU32| f32::from_bits(a.load(Ordering::Relaxed));
@@ -292,9 +282,6 @@ impl Meters {
 mod tests {
     use super::*;
 
-    /// A sample under full scale is not a clip, and the flag is sticky
-    /// across buffers until it is reset by hand: the light stays on so it
-    /// can be seen by someone who was not watching when it happened.
     #[test]
     fn the_clip_light_stays_on_until_it_is_put_out() {
         let meters = Meters::default();
@@ -308,7 +295,6 @@ mod tests {
         meters.publish(&hot, 1);
         assert!(meters.read(0).clipped);
 
-        // Quiet buffers afterwards do not clear it; silence does not either.
         meters.publish(&quiet, 1);
         meters.silence();
         assert!(meters.read(0).clipped, "only a reset puts the light out");

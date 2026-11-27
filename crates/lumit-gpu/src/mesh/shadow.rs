@@ -20,7 +20,6 @@ use lumit_scene::ModelScene;
 use std::sync::Arc;
 use wgpu::util::DeviceExt;
 
-/// Six views round each of the eight lights.
 const MAX_VIEWS: usize = 48;
 
 /// Past this many views a map is drawn at half the side, so two lights all
@@ -50,7 +49,6 @@ struct GpuMaps {
     views: [[[f32; 4]; 4]; MAX_VIEWS],
 }
 
-/// One frame's shadow maps, one or six views a light in one array.
 #[derive(Clone)]
 pub struct ShadowMaps {
     pub(crate) texture: wgpu::Texture,
@@ -68,7 +66,6 @@ impl ShadowMaps {
     }
 }
 
-/// One model that casts: its scene, and where it is in comp pixels.
 #[derive(Clone)]
 pub struct MapCaster<'a> {
     pub scene: &'a Arc<ModelScene>,
@@ -77,7 +74,6 @@ pub struct MapCaster<'a> {
     pub pose: Option<&'a lumit_scene::pose::Pose>,
 }
 
-/// The corners of `c`'s box in comp pixels.
 pub(super) fn box_corners(c: &MapCaster<'_>) -> [Vec3; 8] {
     let bounds = c.pose.map_or(c.scene.bounds, |p| p.bounds);
     let (lo, hi) = (Vec3::from(bounds.min), Vec3::from(bounds.max));
@@ -145,7 +141,6 @@ pub(super) fn layout() -> Vec<wgpu::BindGroupLayoutEntry> {
     entries
 }
 
-/// A matrix from its four rows.
 fn rows(r: [Vec4; 4]) -> Mat4 {
     Mat4::from_cols(r[0], r[1], r[2], r[3]).transpose()
 }
@@ -170,15 +165,6 @@ fn perspective(eye: Vec3, d: Vec3, t: f32) -> Mat4 {
     ])
 }
 
-/// Each light's views round `points`, the casters' box corners: the views'
-/// matrices, the map for the shader with its texel's width for a side of one,
-/// and the most texels a side can have before the light's widest soft edge
-/// is past the [`MAX_SOFT`] texels the shader reads. A parallel light looks
-/// along itself over the casters. Any other looks at them from where it is,
-/// all round when it is among them or they fill too wide a cone.
-///
-/// ponytail: one map a light round every model, so a small model beside a
-/// big one gets a coarse shadow. A map a model, or cascades, if it shows.
 fn fit(l: &LightingLight, points: &[Vec3], first: usize) -> Option<(Vec<Mat4>, GpuMap, f32)> {
     let centre = l.corners.iter().map(|&c| Vec3::from(c)).sum::<Vec3>() / 4.0;
     let soft = l.shadow_diffusion * DIFFUSION_SPREAD;
@@ -392,8 +378,6 @@ impl FxEngine {
         let mut maps = [GpuMap::default(); MAX_LIT_LIGHTS];
         let mut views: Vec<Mat4> = Vec::new();
         let (mut sharpest, mut all_round) = (0.0f32, false);
-        // ponytail: past eight lights or 48 views the rest cast no model's
-        // shadow, as past eight lights a layer takes no more.
         for l in lights {
             let casts = l.kind != LightingKind::Ambient && l.shadow_darkness > 0.0;
             if !casts || kept.contains(l) || kept.len() == MAX_LIT_LIGHTS {
@@ -466,7 +450,6 @@ impl MeshFx {
             .texture
     }
 
-    /// Each view's depth from every part of `models`, into one array.
     fn draw_maps(
         &self,
         ctx: &GpuContext,
@@ -496,7 +479,6 @@ impl MeshFx {
         });
         let align = u64::from(ctx.device.limits().min_uniform_buffer_offset_alignment);
         let stride = |size: usize| wgpu::util::align_to(size as u64, align);
-        // Each view's frame: the view in `clip`, its depth range in `eye`.
         let frame_size = std::mem::size_of::<FrameUniform>();
         let mut frames = vec![0u8; (stride(frame_size) * u64::from(layers)) as usize];
         for (k, m) in views.iter().enumerate() {
@@ -520,7 +502,6 @@ impl MeshFx {
                 contents: &frames,
                 usage: wgpu::BufferUsages::UNIFORM,
             });
-        // Each part where its node and its model put it, as its pose has it.
         let draw_size = std::mem::size_of::<DrawUniform>();
         let posed: Vec<_> = models
             .iter()

@@ -29,7 +29,6 @@ use lumit_core::model::{Document, ProjectItem};
 use lumit_core::puppet::PuppetMesh;
 use uuid::Uuid;
 
-/// The wireframe one layer is showing at the frame just built.
 #[derive(Debug, Clone)]
 pub struct Ghost {
     /// The rest mesh — vertices in layer px at natural size, and the triangles
@@ -44,8 +43,6 @@ pub struct Ghost {
     pub inert: Vec<Uuid>,
 }
 
-/// The preview a puppet tool arms: which layer wants a mesh before it has a
-/// block, and the density and expansion to build it at.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Preview {
     layer: Uuid,
@@ -105,7 +102,6 @@ pub fn arm(layer: Option<(Uuid, f64, f64)>) {
             expansion,
         });
         if held.preview != next {
-            // The mesh the old preview left is not this layer's any more.
             if let Some(old) = held.preview {
                 held.ghosts.remove(&old.layer);
             }
@@ -114,7 +110,6 @@ pub fn arm(layer: Option<(Uuid, f64, f64)>) {
     }
 }
 
-/// The density and expansion this layer's preview wants, when it has one.
 #[must_use]
 pub fn previewing(layer: Uuid) -> Option<(f64, f64)> {
     let held = state().lock().ok()?;

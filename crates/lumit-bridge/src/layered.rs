@@ -72,7 +72,6 @@ fn blend_of(key: [u8; 4]) -> BlendMode {
     }
 }
 
-/// The same for the codes a layer style names its blend mode by.
 fn blend_of_code(code: &str) -> BlendMode {
     match code {
         "Drkn" => BlendMode::Darken,
@@ -104,8 +103,6 @@ fn blend_of_code(code: &str) -> BlendMode {
     }
 }
 
-/// Photoshop's key for each layer style that comes across, and the style it
-/// becomes.
 const STYLES: [(&str, &str); 6] = [
     ("DrSh", "style_drop_shadow"),
     ("IrSh", "style_inner_shadow"),
@@ -156,11 +153,6 @@ fn lab_to_linear(l: f64, a: f64, b: f64) -> [f32; 3] {
     .map(|c| c.clamp(0.0, 1.0) as f32)
 }
 
-/// The layer styles `record` wears, as Lumit's own.
-// ponytail: one of each style, one colour each. A second shadow, a gradient,
-// a contour, noise and an outer style's blend mode are not carried, and
-// gradient overlay, pattern overlay, satin and bevel are left out. The
-// upgrade is a row for each on the Lumit style.
 fn styles(psd: &PsdDocument, record: &PsdLayer) -> Vec<EffectInstance> {
     let mut out = Vec::new();
     if record.number("lfx2/masterFXSwitch") == Some(0.0) {
@@ -235,12 +227,6 @@ fn styles(psd: &PsdDocument, record: &PsdLayer) -> Vec<EffectInstance> {
     out
 }
 
-/// The masks `record`'s vector mask becomes: one for each subpath, in the
-/// file's order. A layer is read at the document's size, so a point's place in
-/// the document is its place on the layer.
-// ponytail: the mask's feather and density are not carried, and a subpath
-// that crosses itself fills the way Lumit fills any path. The upgrade is
-// reading the first two from the layer's mask data.
 fn masks(psd: &PsdDocument, record: &PsdLayer) -> Vec<Mask> {
     let Some(vector) = record.vector_mask() else {
         return Vec::new();
@@ -294,33 +280,14 @@ fn masks(psd: &PsdDocument, record: &PsdLayer) -> Vec<Mask> {
         .collect()
 }
 
-/// The Lumit effects a Photoshop adjustment layer becomes, and whether they
-/// give Photoshop's picture, or `None` for a kind that is not mapped.
-///
-/// Each number is carried the way the After Effects import carries the same
-/// effect's, where it has one. Photoshop adjusts the encoded picture and Lumit
-/// works in linear light, so most kinds run between two sRGB curves to give
-/// the same picture. Exposure is worked out in linear light in Photoshop too.
-/// Posterize, Threshold, Brightness/Contrast, Vibrance, Colour Balance, Photo
-/// Filter, a tinted Black and White, Levels with an output white under 255
-/// and Hue/Saturation with a saturation or a range set do their sums another
-/// way, and come out near Photoshop's picture and not the same.
-// ponytail: Invert, Posterize, Threshold, Brightness/Contrast, Exposure,
-// Hue/Saturation, Levels, Curves, Black and White, Vibrance and Colour
-// Balance. Exposure's offset and gamma, a colourised Hue/Saturation, a range's
-// own edges, a curve of more than sixteen points, a negative Vibrance and
-// Colour Balance's preserve luminosity are not carried. Every other kind is
-// left out, and the upgrade is an arm here for each.
 fn adjustment(record: &PsdLayer) -> Option<(Vec<EffectInstance>, bool)> {
     let word = |path: &str| record.number(path);
     let colour = |[r, g, b]: [f32; 3]| {
         EffectValue::Colour([r, g, b, 1.0].map(|c| Property::fixed(f64::from(c))))
     };
     let mut rows: Vec<(String, f64)> = Vec::new();
-    // The rows that are not plain numbers, and a second effect to carry.
     let mut others: Vec<(&str, EffectValue)> = Vec::new();
     let mut second = None;
-    // Whether the effect gives Photoshop's picture with these numbers.
     let mut same = false;
     let (vibrance, saturation) = (word("vibA/vibrance"), word("vibA/Strt"));
     let name = if word("nvrt").is_some() {
@@ -544,7 +511,6 @@ fn adjustment(record: &PsdLayer) -> Option<(Vec<EffectInstance>, bool)> {
     Some((effects, same))
 }
 
-/// A layered file that imports as a composition.
 pub(crate) enum Layered {
     Psd(PsdDocument),
     Ai(AiDocument),
@@ -596,7 +562,6 @@ impl Layered {
     }
 }
 
-/// The item that reads one layer of the file at `path` as a picture.
 fn layer_item(path: &Path, id: Uuid, index: usize, name: &str) -> ProjectItem {
     let file_name = path
         .file_name()
@@ -622,8 +587,6 @@ fn layer_item(path: &Path, id: Uuid, index: usize, name: &str) -> ProjectItem {
     })
 }
 
-/// The ops that add `items`, file them in a folder named for the file at
-/// `path`, and fill `comp` with `layers` and `groups`.
 fn filed(
     path: &Path,
     items: Vec<ProjectItem>,
@@ -672,10 +635,6 @@ fn filed(
     ops
 }
 
-/// The ops that fill `comp` with `ai`'s layers: a Footage layer for each
-/// top-level layer, hidden where Illustrator had it switched off.
-// ponytail: a layer is read as pixels at the artboard's size, so one scaled
-// past 100% goes soft. The upgrade is drawing it at the size the comp shows it.
 fn ai_ops(
     ai: &AiDocument,
     path: &Path,
@@ -703,8 +662,6 @@ fn ai_ops(
     filed(path, items, layers, Vec::new(), comp, first_index)
 }
 
-/// Somewhere layers are being gathered: the document, or a group that becomes
-/// a composition of its own.
 struct Scope<'a> {
     /// The group's header. `None` for the document.
     header: Option<&'a PsdLayer>,
@@ -730,15 +687,6 @@ impl Scope<'_> {
 /// walks down by calling itself, and a file can hold thousands of groups.
 const MAX_GROUP_DEPTH: usize = 16;
 
-/// The ops that fill `comp` with `psd`'s layers, and how many records were
-/// left out because they hold no picture: an adjustment layer of a kind that
-/// is not mapped, a gradient or pattern fill, an empty layer.
-///
-/// `comp` is new and empty. `comp_size`, `rate` and `out` are its size, frame
-/// rate and length, and `first_index` is where the next project item goes.
-// ponytail: a group's own mask and layer styles are dropped, and a layer
-// clipped to a group is not clipped. A matte on the Lumit layer is the upgrade
-// for the mask and the clip.
 fn psd_ops(
     psd: &PsdDocument,
     path: &Path,
@@ -748,7 +696,6 @@ fn psd_ops(
     out: Rational,
     first_index: usize,
 ) -> (Vec<Op>, u32) {
-    // The item that reads one record of the file as a picture.
     let footage =
         |id: Uuid, index: usize, record: &PsdLayer| layer_item(path, id, index, &record.name);
     let centred = |width: u32, height: u32| {
@@ -764,7 +711,6 @@ fn psd_ops(
         fold: None,
     }];
     let mut left_out = 0u32;
-    // Groups opened past [`MAX_GROUP_DEPTH`], which are read as plain layers.
     let mut flat = 0u32;
 
     // The file lists its layers bottom first, and a comp lists them top first.
@@ -884,7 +830,6 @@ fn psd_ops(
             }
         }
     }
-    // A file that ends inside a group still closes it.
     while close(&mut scopes, &mut items, comp_size, rate, out) {}
     let (layers, groups) = scopes
         .pop()
@@ -894,13 +839,7 @@ fn psd_ops(
     (ops, left_out)
 }
 
-/// A record's opacity, blend mode and visibility, onto the layer made for it.
 fn dress(layer: &mut Layer, record: &PsdLayer) {
-    // Photoshop's Fill fades a layer's picture and leaves its styles alone.
-    // Lumit has one opacity for both, so Fill is carried where no style came
-    // across, and there it is one more opacity.
-    // ponytail: a layer that wears a style keeps its picture at full Fill.
-    // The upgrade is a Fill row on the layer.
     let fill = if layer.styles.is_empty() {
         f64::from(record.fill_opacity) / 255.0
     } else {
@@ -925,7 +864,6 @@ fn close(
         return false;
     };
     if let Some((group, _)) = top.fold.take() {
-        // A group whose every member was left out has nothing to hold.
         if !group.members.is_empty() {
             top.groups.push(group);
         }
@@ -947,6 +885,7 @@ fn close(
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups: scope.groups,
         beat_grid: None,

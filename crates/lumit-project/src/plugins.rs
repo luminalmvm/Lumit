@@ -32,7 +32,6 @@ pub fn plugin_prefs_path() -> Option<PathBuf> {
     Some(dirs.data_dir().join("plugins.json"))
 }
 
-/// The plugins this user does not want offered.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PluginPrefs {
@@ -62,7 +61,6 @@ impl PluginPrefs {
             .unwrap_or_default()
     }
 
-    /// Read from [`plugin_prefs_path`], or an empty list when there is none.
     #[must_use]
     pub fn load_default() -> Self {
         plugin_prefs_path()
@@ -70,7 +68,6 @@ impl PluginPrefs {
             .unwrap_or_default()
     }
 
-    /// Whether `identifier` is switched off.
     #[must_use]
     pub fn is_disabled(&self, identifier: &str) -> bool {
         self.disabled.contains(identifier)
@@ -86,12 +83,6 @@ impl PluginPrefs {
         }
     }
 
-    /// Write the list to `path`, creating the directory.
-    ///
-    /// # Errors
-    ///
-    /// A sentence naming what went wrong: the directory could not be made, the
-    /// list would not serialise, or the file would not be written.
     pub fn save(&self, path: &Path) -> Result<(), String> {
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir).map_err(|e| format!("plugin preferences: {e}"))?;

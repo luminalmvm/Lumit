@@ -26,13 +26,15 @@ pub(super) fn markers_json(markers: &[Marker], rate: FrameRate, offset: Rational
                 "colour": m.colour,
                 "duration": m.duration.map(|d| rate.frame_at(CompTime(d))),
                 "chapter": matches!(m.kind, MarkerKind::Chapter),
+                "beat": match m.kind {
+                    MarkerKind::Beat { confidence } => Some(confidence),
+                    _ => None,
+                },
             })
         })
         .collect()
 }
 
-/// The transform and camera properties `layer.keys` and `layer.get` know, and
-/// the channels each is stored as.
 pub(super) const PROPERTIES: &[(&str, &[TransformProp])] = &[
     ("anchor", &[TransformProp::AnchorX, TransformProp::AnchorY]),
     (
@@ -105,7 +107,6 @@ fn side_json(side: SideInterp) -> Value {
     }
 }
 
-/// A property's value on the wire: one number, or one per axis.
 #[derive(Deserialize, Clone)]
 #[serde(untagged)]
 pub(super) enum Values {
@@ -207,7 +208,6 @@ pub(super) fn keyed(
     offset: Rational,
     axes: impl Fn(&Values) -> Result<usize, ScriptError>,
 ) -> Result<Vec<Animation>, ScriptError> {
-    // One list of keys per axis, all at the same times.
     let mut keyed: Vec<Vec<Keyframe>> = Vec::new();
     for key in keys {
         let time = key.time.at(rate)?;
@@ -347,6 +347,7 @@ struct MarkerArgs {
     colour: Option<u8>,
     duration: Option<i64>,
     chapter: Option<bool>,
+    beat: Option<f32>,
 }
 
 #[derive(Deserialize)]
@@ -366,7 +367,8 @@ pub(super) fn markers_set(host: &dyn Host, a: MarkersArgs) -> Result<Value, Scri
     // Times come in on the comp's clock, and a layer keeps its markers on
     // its own.
     let offset = layer.map_or(Rational::ZERO, |l| l.start_offset.0);
-    let chapters: Vec<Option<bool>> = a.markers.iter().map(|m| m.chapter).collect();
+    let chapters: Vec<(Option<bool>, Option<f32>)> =
+        a.markers.iter().map(|m| (m.chapter, m.beat)).collect();
     let edits = a
         .markers
         .into_iter()
@@ -386,13 +388,19 @@ pub(super) fn markers_set(host: &dyn Host, a: MarkersArgs) -> Result<Value, Scri
     // cannot say, such as being a beat.
     let held = layer.map_or(&comp.markers, |l| &l.markers);
     let mut markers = lumit_core::markers::merge_edits(edits, held, rate);
-    for (marker, chapter) in markers.iter_mut().zip(chapters) {
+    for (marker, (chapter, beat)) in markers.iter_mut().zip(chapters) {
         match chapter {
             Some(true) => marker.kind = MarkerKind::Chapter,
             Some(false) if matches!(marker.kind, MarkerKind::Chapter) => {
                 marker.kind = MarkerKind::User;
             }
             _ => {}
+        }
+        // A beat, as Detect beats makes them, which Beat trigger fires on.
+        if let Some(confidence) = beat {
+            marker.kind = MarkerKind::Beat {
+                confidence: confidence.clamp(0.0, 1.0),
+            };
         }
     }
     let op = match layer {

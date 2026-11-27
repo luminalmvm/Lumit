@@ -45,14 +45,11 @@ abstract class GradeSurfaceTarget {
   /// Write what [nudge] staged as one undo step.
   void commit();
 
-  /// The current shot's name, for the panels' status line.
   String shot();
 }
 
-/// How long the hardware has to be still before a drag is written.
 const Duration surfaceQuiet = Duration(milliseconds: 250);
 
-/// How often at most the panels' displays are brought up to date.
 const Duration _showEvery = Duration(milliseconds: 50);
 
 /// The Grade panel's pages, in the order its page menu steps through them.
@@ -76,21 +73,17 @@ class ControlSurfaces {
   final LumitUiState _ui;
   final LumitState _app;
 
-  /// The grade the surfaces drive.
   late final GradeSurfaceTarget _target = CorrectionSurfaceTarget(_ui, _app);
 
-  /// Where Tangent panels stand.
   final ValueNotifier<BridgeTangentStatus> tangent =
       ValueNotifier(const BridgeTangentStatus.off());
 
-  /// The MIDI input ports on the system now.
   final ValueNotifier<List<String>> ports = ValueNotifier(const []);
 
   /// What MIDI learn will tie the next control moved to, or null when not
   /// learning.
   final ValueNotifier<BridgeSurfaceTarget?> learning = ValueNotifier(null);
 
-  /// The learned controls, as the workspace keeps them.
   List<BridgeMidiMapping> get mappings => [
         for (final json in _ui.workspace.midiMappings)
           if (_mappingFrom(json) case final mapping?) mapping,
@@ -100,7 +93,6 @@ class ControlSurfaces {
   Timer? _show;
   bool _staged = false;
 
-  /// Listen for the whole run, and turn on what the workspace says is on.
   void start() {
     final sink = RustStreamSink<BridgeSurfaceEvent>();
     // The sink has no stream until the call has set it up.
@@ -120,15 +112,12 @@ class ControlSurfaces {
     }
   }
 
-  // --- Settings --------------------------------------------------------------
-
   void setTangent(bool on) {
     _ui.workspace.setTangentPanels(on);
     setTangentPanels(enabled: on);
     if (!on) tangent.value = const BridgeTangentStatus.off();
   }
 
-  /// The ports on the system, from now on kept up to date in [ports].
   void watchPorts() => ports.value = midiInputs();
 
   void setInput(String port, bool on) {
@@ -142,7 +131,6 @@ class ControlSurfaces {
     setMidiMappings(mappings: mappings);
   }
 
-  /// Tie the next control moved on an open port to [to].
   void learn(BridgeSurfaceTarget to) {
     learning.value = to;
     midiLearn(listening: true);
@@ -169,8 +157,6 @@ class ControlSurfaces {
     _ui.workspace.setMidiMappings([for (final m in kept) _mappingJson(m)]);
     setMidiMappings(mappings: kept);
   }
-
-  // --- Events ----------------------------------------------------------------
 
   void _on(BridgeSurfaceEvent event) {
     switch (event) {
@@ -247,7 +233,6 @@ class ControlSurfaces {
     _target.action('$action${items[next]}');
   }
 
-  /// Write the drag in hand, if there is one.
   void _commit() {
     _quiet?.cancel();
     _quiet = null;
@@ -255,8 +240,6 @@ class ControlSurfaces {
     _staged = false;
     _target.commit();
   }
-
-  // --- The displays ----------------------------------------------------------
 
   void _showSoon() {
     if (tangent.value is! BridgeTangentStatus_Connected) return;
@@ -273,7 +256,6 @@ class ControlSurfaces {
   }
 }
 
-/// A learned control as the settings file keeps it.
 Map<String, dynamic> _mappingJson(BridgeMidiMapping m) => {
       'port': m.control.port,
       'channel': m.control.channel,
@@ -318,7 +300,6 @@ BridgeMidiMapping? _mappingFrom(Map<String, dynamic> j) {
   );
 }
 
-/// What [target] is called in the MIDI learn list.
 String surfaceTargetLabel(BridgeSurfaceTarget target) => switch (target) {
       BridgeSurfaceTarget_Param(:final param, :final axis) => switch (axis) {
           BridgeSurfaceAxis.x => l10n.surfaceWheelX(_rowLabel(param)),

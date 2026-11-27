@@ -1,5 +1,3 @@
-//! Tests for a baked Scatter read by a driver.
-
 use super::*;
 
 /// A Scatter's points are made while a frame is drawn and exist nowhere
@@ -36,20 +34,14 @@ fn a_baked_scatter_is_read_by_a_driver_and_draws_as_it_did_live() {
         port: "points".into(),
     };
 
-    // A board with a Scatter on it, baked, and a web drawn from the bake.
-    // Neither of the first two draws, so the web is the whole picture.
     let mut scatter = lumit_core::fx::builtins::instantiate("scatter").unwrap();
     set(&mut scatter, "density", number(3000.0));
     set(&mut scatter, "mix", number(0.0));
-    // A Pick points between them marks half the points under a name, so
-    // the stream that is baked carries a named column.
     let mut pick = lumit_core::fx::builtins::instantiate("pick_points").unwrap();
     set(&mut pick, "result", EffectValue::Choice(1));
     set(&mut pick, "group_name", EffectValue::Text("kept".into()));
     set(&mut pick, "to", number(50.0));
     set(&mut pick, "mix", number(0.0));
-    // And a Vary points stores each point's colour under another, so it
-    // carries a column four numbers wide as well.
     let mut vary = lumit_core::fx::builtins::instantiate("vary_points").unwrap();
     set(&mut vary, "opacity", number(40.0));
     set(&mut vary, "set_number", EffectValue::Bool(true));
@@ -91,6 +83,7 @@ fn a_baked_scatter_is_read_by_a_driver_and_draws_as_it_did_live() {
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -108,7 +101,6 @@ fn a_baked_scatter_is_read_by_a_driver_and_draws_as_it_did_live() {
         extra: serde_json::Map::new(),
     }));
 
-    // The same document with the Bake points on another Mode.
     let with_mode = |mode: u32| {
         let mut doc = doc.clone();
         let board = &mut doc.comp_mut(comp_id).unwrap().layers[0];
@@ -120,8 +112,6 @@ fn a_baked_scatter_is_read_by_a_driver_and_draws_as_it_did_live() {
     let live = frame_of(&bypass);
     assert_eq!(frame_of(&auto), live, "nothing is baked, so Auto is live");
 
-    // And with two Points sample drivers: one counts the bake's stream
-    // and one Scatter's own, each onto a Slider control for the reading.
     let counts = |doc: &Arc<Document>| {
         let mut doc = Document::clone(doc);
         let board = &mut doc.comp_mut(comp_id).unwrap().layers[0];
@@ -199,8 +189,6 @@ fn a_baked_scatter_is_read_by_a_driver_and_draws_as_it_did_live() {
     );
     assert_eq!(counts(&bypass)[0], 0.0, "Bypass reads no bake");
 
-    // And the baked stream is the live one, named column and all: the
-    // stream a live walk hands the effect, against the bake read back.
     crate::fxops::watch_points(Some(bake_id));
     frame_of(&bypass);
     let handed = crate::fxops::take_watched_points().expect("the walk reached the effect");
@@ -233,8 +221,6 @@ fn a_baked_scatter_is_read_by_a_driver_and_draws_as_it_did_live() {
     .expect("Auto reads the bake");
     assert!(read == handed, "the bake is the stream that was live");
 
-    // The file holds the same: forgotten and read back the way opening
-    // the project reads it, the stream is still that one.
     let read_back = || {
         bake_points::retain(|_| false);
         for job in warm_jobs(&auto) {
@@ -247,7 +233,6 @@ fn a_baked_scatter_is_read_by_a_driver_and_draws_as_it_did_live() {
     };
     assert!(read_back() == Some(handed.clone()), "the file round-trips");
 
-    // And a file that is not a bake reads as no bake at all.
     let junk = Answer::Bake(vec![7; 64]);
     write_sidecar(dir.path(), AnalysisKey::bake(bake_id), 24.0, 4, &junk);
     assert_eq!(read_back(), None, "Auto is live again");

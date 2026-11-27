@@ -1,15 +1,9 @@
-// The Lottie and SVG window's check: what won't come across, grouped by
-// what happens to it, lines that say the same thing gathered with a count,
-// each place clickable to select its layer. The import report's grammar
-// (ae_report_frb.dart), with the places live.
 
 part of 'vector_export_frb.dart';
 
-/// Lines that say the same thing, and every issue they say it about.
 class _Line {
   final String said;
 
-  /// The players that miss it, for a Some players line. Empty otherwise.
   final String players;
   final List<BridgeVectorIssue> issues = [];
 
@@ -25,11 +19,8 @@ String issueLine(BridgeVectorIssue issue) =>
         somePlayers: issue.outcome == 'some_players') ??
     issue.english;
 
-/// Where an issue is, for the reader: comp, layer, then the part.
 String issuePlace(BridgeVectorIssue issue) => issue.place.join(' › ');
 
-/// The issues in the three sections, in the window's order, each section's
-/// lines gathered by what they say, the most said first.
 List<(String, String, List<_Line>)> checkSections(
     Iterable<BridgeVectorIssue> issues) {
   const order = [
@@ -62,11 +53,9 @@ String _outcomeLabel(String outcome) => switch (outcome) {
       _ => l10n.vectorOutcomeChanged,
     };
 
-/// How far a line's words stand in, which is the room its twirl takes.
 const double _placeInset = 18;
 
 extension _Check on _VectorWindowState {
-  /// Every issue the window shows: the front comp's, then the ticked ones'.
   Iterable<BridgeVectorIssue> get _allIssues => [
         ...?_preview?.issues,
         for (final row in _comps)
@@ -107,7 +96,6 @@ extension _Check on _VectorWindowState {
     ];
   }
 
-  /// What the check says about every line, as text for pasting.
   String get _checkText => [
         for (final (outcome, _, lines) in checkSections(_allIssues)) ...[
           _outcomeLabel(outcome),
@@ -166,9 +154,6 @@ extension _Check on _VectorWindowState {
     }
   }
 
-  /// One thing the check says. Said about one place, the place sits under it
-  /// as a link; said about several, it is a line with a count that opens to
-  /// list them.
   Widget _checkLine(BuildContext context, LumitTheme t, _Line line) {
     final several = line.issues.length > 1;
     final open = _openLines.contains(line.key);
@@ -254,7 +239,6 @@ extension _Check on _VectorWindowState {
     );
   }
 
-  /// A place, which selects what it names when clicked.
   Widget _place(LumitTheme t, BridgeVectorIssue issue) => HoverMark(
         builder: (context, lit) => GestureDetector(
           behavior: HitTestBehavior.opaque,

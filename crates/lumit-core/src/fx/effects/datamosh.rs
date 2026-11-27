@@ -28,7 +28,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Datamosh's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "datamosh",
@@ -87,7 +86,6 @@ pub struct Datamosh {
     #[slider(min = 0.0, max = 5.0, default = 0.0, hard_min = 0.0, unit = Seconds)]
     pub reset_interval: f32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -110,8 +108,6 @@ impl Datamosh {
     /// does not exist. Never a panel row.
     pub const DERIVED_DISPLACEMENT: ParamId = ParamId::new("derived.displacement");
 
-    /// The ramp and the reach out of a resolved bag: [`Datamosh::packed`]'s two
-    /// missing arguments, so no caller has to know the ids.
     pub fn derived_of(p: Params<'_>) -> (f32, f32) {
         (
             p.float(Self::DERIVED_RAMP, 1.0),

@@ -81,6 +81,7 @@ fn comp_of(name: &str, width: u32, layers: Vec<Layer>) -> Composition {
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -99,19 +100,12 @@ fn comp_of(name: &str, width: u32, layers: Vec<Layer>) -> Composition {
     }
 }
 
-/// What a copy does with the template's one control.
 #[derive(Clone, Copy, PartialEq)]
 enum Copy {
-    /// Sets nothing, so it shows the template as it is.
     Follows,
-    /// Sets the card's opacity to nothing.
     Hidden,
 }
 
-/// The project: the template, and a composition placing it twice as Precomp
-/// layers, or once as a clip.
-///
-/// Answers the document and the placing composition's id.
 fn project(left: Copy, right: Option<Copy>, as_clip: bool) -> (Arc<Document>, Uuid) {
     let card = Uuid::now_v7();
     let mut doc = Document::new();
@@ -178,7 +172,6 @@ fn project(left: Copy, right: Option<Copy>, as_clip: bool) -> (Arc<Document>, Uu
     (Arc::new(doc), parent_id)
 }
 
-/// Whether the left card's place and the right card's place are lit.
 fn halves(rgba: &[u8]) -> (bool, bool) {
     let width = (CARD * 2) as usize;
     let at = |x: usize| rgba[((HEIGHT as usize / 2) * width + x) * 4] > 128;
@@ -196,7 +189,6 @@ fn each_copy_of_a_template_draws_the_values_it_set() {
         halves(&r.render_rgba(&doc, comp, 3, 1.0).expect("the render").0)
     };
 
-    // Two copies in one frame, one set and one not: two pictures.
     assert_eq!(
         render(Copy::Hidden, Some(Copy::Follows), false),
         (false, true),
@@ -213,7 +205,6 @@ fn each_copy_of_a_template_draws_the_values_it_set() {
         "a copy that sets nothing shows the template"
     );
 
-    // A clip is a copy too, and its values are its own.
     assert_eq!(
         render(Copy::Follows, None, true),
         (true, false),

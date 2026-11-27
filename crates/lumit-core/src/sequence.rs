@@ -31,18 +31,14 @@ pub mod spoken;
 pub mod takes;
 pub mod transition;
 
-/// What a clip plays: one footage item, one nested composition or one solid
-/// (docs/03-DATA-MODEL.md §5.3 ClipSource).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ClipSource {
     Footage(Uuid),
     Comp(Uuid),
-    /// A flat colour at the solid's own size, the same at every time.
     Solid(Uuid),
 }
 
 impl ClipSource {
-    /// The project item it plays.
     #[must_use]
     pub fn id(self) -> Uuid {
         match self {
@@ -86,7 +82,6 @@ pub enum FadeShape {
 }
 
 impl FadeShape {
-    /// A Custom shape with its handles already inside the legal box.
     #[must_use]
     pub fn custom(x1: f64, y1: f64, x2: f64, y2: f64) -> Self {
         let (x1, y1, x2, y2) = clamp_handles(x1, y1, x2, y2);
@@ -119,7 +114,6 @@ impl FadeShape {
     }
 }
 
-/// Both handles of a Custom shape inside a legal, reachable box.
 fn clamp_handles(x1: f64, y1: f64, x2: f64, y2: f64) -> (f64, f64, f64, f64) {
     let y = |v: f64| v.clamp(-HANDLE_REACH, 1.0 + HANDLE_REACH);
     (
@@ -195,7 +189,6 @@ pub struct Clip {
     /// open.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retime: Option<Property>,
-    /// How fractional source moments become pixels (render policy).
     #[serde(default)]
     pub interpolation: Interpolation,
     /// The fade at each end (docs/impl/audio-timeline.md §3). Both are left
@@ -216,10 +209,8 @@ pub struct Clip {
     /// sets nothing, which is every clip of anything but a template.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub inputs: Option<EffectInstance>,
-    /// The other versions of the clip's grade ([`crate::grade::versions`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub grade_versions: Option<crate::grade::versions::GradeVersions>,
-    /// The whole stack's bypass, the clip's twin of the layer's fx switch.
     #[serde(default = "default_true", skip_serializing_if = "is_true")]
     pub fx: bool,
     /// The clip's own gain in dB, the line drawn across its box
@@ -267,8 +258,6 @@ pub struct Clip {
         skip_serializing_if = "clip_opacity::is_one"
     )]
     pub opacity: f64,
-    /// The other takes the clip holds ([`takes`]). What it shows is the one
-    /// in `source` and `source_in`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub takes: Vec<takes::Take>,
     /// What the overlap at this clip's start draws as, when another clip runs
@@ -276,14 +265,11 @@ pub struct Clip {
     /// left out of the file.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transition: Option<EffectInstance>,
-    /// Unknown fields from newer Lumit versions (docs/10-FILE-FORMAT.md §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 impl Clip {
-    /// A plain (un-retimed) clip of `source` placed at `place_start` for
-    /// `place_duration`, playing its source from `source_in` at natural rate.
     pub fn new(
         source: ClipSource,
         source_in: Rational,
@@ -467,7 +453,6 @@ impl Clip {
             Animation::Keyframed(keys) => {
                 Animation::Keyframed(crate::retime::stretch_keys(keys, Rational::ZERO, k)?)
             }
-            // A held frame holds however long it lasts.
             held => held.clone(),
         };
         Some(Clip {
@@ -488,7 +473,6 @@ impl Clip {
     /// adds a key at the same speed, and three keys in a straight line are
     /// still one constant speed however many of them there are.
     pub fn constant_speed(&self) -> Option<f64> {
-        // Not retimed is the plainest constant speed there is: source rate.
         let Some(speeds) = self.span_speeds() else {
             return self.retime.is_none().then_some(1.0);
         };
@@ -551,7 +535,6 @@ impl Clip {
         if keys.len() != 2 {
             return None;
         }
-        // A two-key map has one span, so its end speeds are the ramp.
         self.end_speeds()
     }
 
@@ -591,7 +574,6 @@ impl Clip {
         Some((start, end))
     }
 
-    /// True when layer-local time `lt` (seconds) falls within this clip.
     pub fn contains(&self, lt: f64) -> bool {
         lt >= self.place_start.to_f64() && lt < self.place_end().to_f64()
     }
@@ -603,8 +585,6 @@ impl Clip {
         let clip_time = lt - self.place_start.to_f64();
         match &self.retime {
             Some(map) => map.value_at(clip_time),
-            // Not retimed: the source runs alongside the clip's own clock,
-            // from wherever it was trimmed in.
             None => self.source_in.to_f64() + clip_time,
         }
     }
@@ -720,7 +700,6 @@ impl Clip {
                 .transition
                 .as_ref()
                 .and_then(|t| respawn(std::slice::from_ref(t)).pop()),
-            // A copy is out of the original's group.
             group: None,
             ..self.clone()
         }
@@ -753,8 +732,6 @@ impl Clip {
         freeze_auto::freeze_auto_around(&mut whole, tau);
         whole.insert_key_preserving_shape(tau);
         let Animation::Keyframed(keys) = &whole.animation else {
-            // A static map holds one source moment throughout, so both halves
-            // are the same map and the cut lands on that moment.
             let s = on_grid(map.value_at(tau.to_f64()))?;
             return Some((Some(map.clone()), Some(map.clone()), s));
         };
@@ -831,7 +808,6 @@ impl Clip {
             opacity: self.opacity,
             takes: self.takes.clone(),
             inputs: self.inputs.clone(),
-            // What the clip's start draws as, which is the left piece's start.
             transition: self.transition.clone(),
             extra: self.extra.clone(),
         };
@@ -856,7 +832,6 @@ impl Clip {
                 }
                 effects
             },
-            // And so are the values it hands a template.
             inputs: self.inputs.as_ref().and_then(|inputs| {
                 let mut inputs = respawn(std::slice::from_ref(inputs));
                 if let Ok(back) = Rational::ZERO.checked_sub(tau_clip) {
@@ -1011,14 +986,11 @@ impl Clip {
         self.extended(self.place_start.checked_sub(new_start).ok()?, true)
     }
 
-    /// The shared body of the two extends: grow the clip by `added` at one end,
-    /// carrying the map on (or back) at the speed that end was already going.
     fn extended(&self, added: Rational, at_start: bool) -> Option<Clip> {
         let duration = self.place_duration.checked_add(added).ok()?;
         let speed = self
             .end_speeds()
             .map_or(1.0, |(v0, v1)| if at_start { v0 } else { v1 });
-        // How much source the growth consumes, on the grid.
         let consumed =
             Rational::from_f64_on_grid(speed * added.to_f64(), Rational::FLICK_DEN).ok()?;
 
@@ -1035,8 +1007,6 @@ impl Clip {
                     return None;
                 };
                 let grown = if at_start {
-                    // Every key moves later in clip time by what was added at
-                    // the front, and a new one opens the map earlier in source.
                     let first = keys.first()?;
                     let mut grown =
                         vec![flat(Rational::ZERO, first.value - speed * added.to_f64())];
@@ -1096,8 +1066,6 @@ pub struct SequenceShape {
     pub pieces: Vec<ShapePiece>,
 }
 
-/// One piece of a [`SequenceShape`]: where it sits on the row, how far into
-/// its own source it starts, and its retime.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ShapePiece {
     pub place_start: Rational,
@@ -1107,8 +1075,6 @@ pub struct ShapePiece {
 }
 
 impl SequenceShape {
-    /// Read the shape of `clips` — all of them, or one, for the two things
-    /// the row's menu offers.
     pub fn of(clips: &[Clip]) -> Self {
         Self {
             pieces: clips
@@ -1139,7 +1105,7 @@ impl SequenceShape {
         let mut out = Vec::with_capacity(self.pieces.len());
         for piece in &self.pieces {
             if piece.place_start >= limit {
-                continue; // wholly past what this row reaches
+                continue;
             }
             let end = piece
                 .place_start
@@ -1164,8 +1130,6 @@ impl SequenceShape {
                 duration,
             );
             clip.retime = piece.retime.clone();
-            // A trimmed piece keeps only the part of its map it still has
-            // room for, exactly as trimming that clip by hand would.
             if end > limit {
                 if let Some(shorter) =
                     clip.trim_end(piece.place_start.checked_add(duration).unwrap_or(limit))
@@ -1197,7 +1161,6 @@ pub(crate) fn respawn(effects: &[EffectInstance]) -> Vec<EffectInstance> {
         .collect()
 }
 
-/// The last source position a map reaches.
 fn map_last_value(map: &Property) -> Option<Rational> {
     let Animation::Keyframed(keys) = &map.animation else {
         return None;
@@ -1234,17 +1197,13 @@ pub fn overwrite_with(clips: &[Clip], dropped: Uuid) -> Vec<Clip> {
             out.push(c.clone());
             continue;
         }
-        // Clear of it on either side: nothing to do.
         if c.place_end() <= start || c.place_start >= end {
             out.push(c.clone());
             continue;
         }
-        // Buried: it goes.
         if c.place_start >= start && c.place_end() <= end {
             continue;
         }
-        // Straddling: one clip either side, and the later piece needs an
-        // identity of its own — it is a new clip, not the one that was there.
         if c.place_start < start && c.place_end() > end {
             if let Some(mut left) = c.trim_end(start) {
                 // The split divides the fades the way a razor does: the
@@ -1262,7 +1221,6 @@ pub fn overwrite_with(clips: &[Clip], dropped: Uuid) -> Vec<Clip> {
             }
             continue;
         }
-        // Covered at one end.
         let trimmed = if c.place_start < start {
             c.trim_end(start)
         } else {
@@ -1393,12 +1351,10 @@ pub fn slide_between(clips: &[Clip], clip: Uuid, delta: Rational) -> Option<Vec<
     Some(out)
 }
 
-/// Whether `clip` shares any of the row with the span `start..end`.
 fn overlaps(clip: &Clip, start: Rational, end: Rational) -> bool {
     clip.place_start < end && start < clip.place_end()
 }
 
-/// `clips` with each of `changed` standing in for the clip of the same id.
 fn with(clips: &[Clip], changed: &[Clip]) -> Vec<Clip> {
     clips
         .iter()
@@ -1437,7 +1393,6 @@ pub fn resolve(clips: &[Clip], lt: f64) -> Option<(Uuid, ClipSource, f64)> {
     active_clip(clips, lt).map(|c| (c.id, c.source, c.held_source_time(lt)))
 }
 
-/// What a Sequence layer that draws a picture shows at one layer time.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Shown<'a> {
     /// A gap, or a time off either end of the row: transparent.
@@ -1456,26 +1411,6 @@ pub enum Shown<'a> {
     },
 }
 
-/// What a picture layer shows at layer-local time `lt`: nothing, one clip, or
-/// two under a dissolve.
-///
-/// An overlap is a dissolve, and is as long as the overlap. The clip that
-/// starts later comes in as the other goes out, at `fade_in.shape.gain(u)`
-/// against one less that, where `u`
-/// runs from 0 at the start of the overlap to 1 at its end, and neither
-/// clip's stored seconds are read inside it: the reading the sound mix makes
-/// of a crossfade. Outside an overlap a clip comes up over its own
-/// `fade_in.seconds` from its start and goes down over its `fade_out.seconds`
-/// before its end, each through its own shape. An end another clip overlaps
-/// has no fade of its own, because the dissolve is the fade there.
-///
-/// At most two clips cover a moment on a row the edit commands made. Where
-/// more do, the first two as the clips are stored are the ones read.
-///
-/// ponytail: inside an overlap only the dissolve is read, so a fade at a
-/// clip's other end that reaches into the overlap is not multiplied in. It
-/// takes a clip shorter than its fade and its dissolve together to see it.
-/// The upgrade is a gain for each of the two clips here.
 pub fn shown_at(clips: &[Clip], lt: f64) -> Shown<'_> {
     let mut live = clips.iter().filter(|c| c.contains(lt));
     let Some(first) = live.next() else {
@@ -1510,27 +1445,6 @@ pub fn shown_at(clips: &[Clip], lt: f64) -> Shown<'_> {
     }
 }
 
-/// A Sequence layer as it draws at `lt`: wearing the effects and the blend mode
-/// of the clip it is showing. `None` where the layer draws as it is stored,
-/// which is every layer that is not a Sequence layer and every moment whose
-/// clip sets neither.
-///
-/// The clip's stack runs ahead of the layer's own, as it does in the sound
-/// mix. Its keys are stored from the clip's start and are moved onto the
-/// layer's clock here, so everything downstream reads one stack at one time.
-///
-/// Inside a dissolve the layer wears both clips' stacks, the outgoing clip's
-/// first, each with its effects' Mix scaled by that clip's share of the
-/// picture. So an effect arrives and leaves with its clip and nothing changes
-/// at once. A blend mode cannot be part way between two, so the layer takes
-/// the mode of whichever clip is more than half of the picture.
-///
-/// ponytail: the two stacks run on the picture already mixed, not each on its
-/// own clip's, and an effect whose Mix is an expression or which has none is
-/// worn whole from the first frame of the dissolve. The upgrade is to run
-/// each clip's stack on its own picture ahead of the mix. And the copy takes
-/// the row's other clips with it, which a row of thousands would feel. The
-/// upgrade there is a copy that carries only the clips near this moment.
 #[must_use]
 pub fn worn_at(layer: &Layer, lt: f64) -> Option<Layer> {
     let LayerKind::Sequence { clips } = &layer.kind else {
@@ -1539,8 +1453,6 @@ pub fn worn_at(layer: &Layer, lt: f64) -> Option<Layer> {
     if layer.audio_only {
         return None;
     }
-    // Each clip showing with its share of the picture, the earlier first, and
-    // the one that is most of it.
     let (shares, lead): (Vec<(&Clip, f64)>, &Clip) = match shown_at(clips, lt) {
         Shown::Nothing => return None,
         Shown::One { clip, .. } => (vec![(clip, 1.0)], clip),
@@ -1584,7 +1496,6 @@ pub fn worn_at(layer: &Layer, lt: f64) -> Option<Layer> {
     Some(worn)
 }
 
-/// Every effect's Mix made `share` of what it was, keys and all.
 fn scale_mix(effects: &mut [EffectInstance], share: f64) {
     for effect in effects {
         for param in &mut effect.params {
@@ -1592,7 +1503,7 @@ fn scale_mix(effects: &mut [EffectInstance], share: f64) {
                 continue;
             }
             if let crate::model::EffectValue::Float(mix) = &mut param.value {
-                if let Some(scaled) = crate::ops::remapped(&mix.animation, share, 0.0) {
+                if let Some(scaled) = crate::anim::remapped(&mix.animation, share, 0.0) {
                     mix.animation = scaled;
                 }
             }

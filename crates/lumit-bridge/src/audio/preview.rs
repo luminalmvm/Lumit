@@ -1,5 +1,3 @@
-//! A footage file heard by itself, with no composition behind it.
-
 use super::{engine, ensure_device, forget, lock, send, Cmd, Device, Loaded};
 use lumit_audio::plan::MixPlan;
 use lumit_render::mix::graph::{GraphInfo, GraphNode};
@@ -60,11 +58,10 @@ pub(crate) fn preview(item: Uuid, sound: lumit_media::audio::SoundSource, start_
         // reads the end of the file and not the whole of it.
         let frames = source.frames_exactly();
         if frames == 0 {
-            return; // a file with no sound in it, or one that will not open
+            return;
         }
         let duration_s = frames as f64 / f64::from(rate);
 
-        // One clip at unity on one strip, the item's own.
         let plan = Arc::new(MixPlan::single(
             vec![lumit_audio::plan::PlacedClip {
                 source: Arc::clone(&source),

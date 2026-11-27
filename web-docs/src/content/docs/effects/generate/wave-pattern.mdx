@@ -1,0 +1,75 @@
+---
+title: Wave pattern
+description: "Bands or rings of a repeating wave, coloured from a ramp."
+---
+
+Wave pattern is a **Textures** effect.
+
+## What it does
+
+Draws one wave over and over, as straight bands or as rings round **Centre**, and colours it
+from the ramp. **Distortion** bends the waves with noise. **Phase offset** slides the waves
+along, and comes back to the start every 360°.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Type** | Dropdown | Bands · Rings | Bands | - |
+| **Profile** | Dropdown | Sine · Saw · Triangle · Square | Sine | - |
+| **Wavelength** | Slider | 2 to 2000; any value by typing | 120 | Pixels at composition size |
+| **Angle** | Dial | Any angle | 0° | Degrees |
+| **Centre** | Point | Any position | 960, 540 | Pixels at composition size |
+| **Phase offset** | Dial | Any angle | 0° | Degrees |
+| **Distortion** | Slider | 0 to 20; any value by typing | 0 | - |
+| **Detail** | Slider, whole numbers | 0 to 8 | 2 | - |
+| **Detail scale** | Slider | 4 to 2000; any value by typing | 240 | Pixels at composition size |
+| **Roughness** | Slider | 0 to 100 | 50 | - |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Paint** | Dropdown | Inside layer · Whole frame | Inside layer | - |
+| **Interpolation** | Dropdown | Linear · Smooth · Constant | Linear | - |
+| **Progression** | Dropdown | Linear · Quadratic · Easing | Linear | - |
+| **Stops** | Slider, whole numbers | 2 to 5 | 3 | - |
+| **Colour 1** to **Colour 5** | Colour | Each channel 0 to 1 | White, amber, blue, magenta, black | - |
+| **Position 1** to **Position 5** | Slider | 0 to 100 | 0, 50, 100, 100, 100 | - |
+
+In the Effect Controls panel:
+
+- **Angle** is editable while **Type** is set to Bands.
+
+## What each control does
+
+- **Type**: **Bands** runs the waves in straight lines, and **Rings** runs them round
+  Centre.
+- **Profile**: the shape of one wave. **Sine** rises and falls in a curve, **Saw** rises and
+  drops back, **Triangle** rises and falls in straight lines, and **Square** switches
+  between the two ends of the ramp.
+- **Wavelength**: the width of one wave.
+- **Angle**: turns the bands.
+- **Centre**: the middle of the rings, and the point the bands turn about.
+- **Phase offset**: slides the waves along.
+- **Distortion**: how far noise bends the waves, in wavelengths.
+- **Detail**: how many finer layers are added to the noise.
+- **Detail scale**: how big the noise is.
+- **Roughness**: how strong each finer layer is beside the one before it.
+- **Seed**: which noise bends the waves.
+- **Paint**: **Inside layer** paints only where the layer draws, and **Whole frame** fills
+  the whole of the layer's picture.
+- **Interpolation**: how one stop meets the next. **Smooth** eases between them, and
+  **Constant** holds each colour until the next stop.
+- **Progression**: how the ramp is read from end to end. **Quadratic** stretches the start
+  of the ramp, and **Easing** stretches both ends.
+- **Stops**: how many colours are used, from Colour 1.
+- **Colour 1** to **Colour 5** and **Position 1** to **Position 5**: each stop's colour, and
+  where it sits on the ramp. Stops are sorted by Position.
+- **Mix**: how much of the result replaces the original.
+- **Blend**: the blend mode the result is laid over the original with.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
+
+## Related
+
+- [Sine wave fan](/effects/generate/sine-wave-fan/)
+- [Fractal noise](/effects/generate/fractal-noise/)
+- [Textures](/effects/#textures)
+- [Effects](/use/effects/)

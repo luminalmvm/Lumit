@@ -72,7 +72,6 @@ pub(crate) struct CostWindow {
 }
 
 impl CostWindow {
-    /// Record one render's measured cost in seconds.
     pub(crate) fn push(&mut self, cost_secs: f64) {
         if !cost_secs.is_finite() || cost_secs < 0.0 {
             return;
@@ -225,10 +224,6 @@ pub(crate) fn fill_order(anchor: u64, first: u64, last: u64) -> impl Iterator<It
 mod tests {
     use super::*;
 
-    /// The fill order walks outward from the playhead, two ahead for every
-    /// one behind, covers every frame exactly once, and wraps at either end
-    /// of the work area — playback loops it, so the frame after the last is
-    /// the first — keeping the 2:1 interleave all the way round.
     #[test]
     fn the_fill_order_is_forward_biased_and_complete() {
         let order: Vec<u64> = fill_order(10, 0, 20).collect();
@@ -238,15 +233,11 @@ mod tests {
         let expected: Vec<u64> = (0..=20).filter(|&f| f != 10).collect();
         assert_eq!(all, expected, "every frame once, never the anchor");
 
-        // Anchor near the end: the forward walk wraps to the start instead of
-        // stopping, the backward walk wraps to the end, 2:1 throughout.
         let wrapped: Vec<u64> = fill_order(4, 0, 5).collect();
         assert_eq!(wrapped, vec![5, 0, 3, 1, 2], "ahead wraps 5 -> 0");
         let from_start: Vec<u64> = fill_order(0, 0, 5).collect();
         assert_eq!(from_start, vec![1, 2, 5, 3, 4], "behind wraps 0 -> 5");
-        // A work area that does not start at zero wraps to ITS start.
         assert_eq!(fill_order(9, 7, 9).collect::<Vec<_>>(), vec![7, 8]);
-        // Anchor clamped into range, single-frame comp yields nothing.
         assert_eq!(fill_order(99, 0, 0).count(), 0);
         // An impossible range yields nothing rather than panicking. This is the
         // shape a work area outside the comp used to take — a negative first
@@ -267,8 +258,6 @@ mod tests {
         let period = std::time::Duration::from_micros(16_667);
         let start = std::time::Instant::now();
 
-        // Ten frames, each presented 2 ms after its due time — the overhead the
-        // old rule accumulated. The grid must stay exactly period-spaced.
         let mut due = next_present_due(None, start, period);
         assert_eq!(due, start + period, "the first present anchors the grid");
         for n in 2..=10u32 {
@@ -281,9 +270,6 @@ mod tests {
             );
         }
 
-        // A genuine stall — later than one whole period — re-anchors: every-frame
-        // never bursts to catch up, so lost time stays lost and playback
-        // continues at rate from where it is.
         let stalled = due + period * 3;
         let after = next_present_due(Some(due), stalled, period);
         assert_eq!(after, stalled + period, "a stall re-anchors at now");

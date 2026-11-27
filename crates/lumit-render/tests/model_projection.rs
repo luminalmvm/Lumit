@@ -1,8 +1,3 @@
-//! A picture projected on a model from a camera. From that camera it has to be
-//! the picture itself, whatever the model's shape, and a camera moved off it
-//! has to find it still on the surfaces it landed on, with Base colour on the
-//! ones the first camera couldn't see.
-
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use lumit_core::anim::{Animation, Keyframe, Property, SideInterp};
@@ -15,8 +10,6 @@ use uuid::Uuid;
 
 const SIZE: u32 = 128;
 
-/// A large card behind a small one, as a glTF beside its buffer. Each is two
-/// triangles facing the comp's default camera.
 fn cards(dir: &std::path::Path) -> std::path::PathBuf {
     let quad = |half: f32, z: f32| {
         [
@@ -52,7 +45,6 @@ fn cards(dir: &std::path::Path) -> std::path::PathBuf {
     path
 }
 
-/// A picture that differs at every pixel, so a slip of one shows.
 fn picture(dir: &std::path::Path) -> std::path::PathBuf {
     let path = dir.join("plate.png");
     let file = std::fs::File::create(&path).unwrap();
@@ -95,13 +87,11 @@ fn add(doc: &mut Document, comp: Uuid, layer: Layer) {
     apply(doc, &Op::AddLayer { comp, index, layer }).unwrap();
 }
 
-/// A comp holding the plate, on its own and hidden when `shows` is off.
 fn with_plate(doc: &mut Document, plate: &FootageItem, shows: bool) -> (Uuid, Uuid) {
     let kind = LayerKind::Footage { item: plate.id };
     with_layer(doc, kind, Vec::new(), shows)
 }
 
-/// A comp holding one layer of `kind` with `effects` on it.
 fn with_layer(
     doc: &mut Document,
     kind: LayerKind,
@@ -128,14 +118,11 @@ fn with_layer(
     (comp, id)
 }
 
-/// `plate` on two cards, from a camera that starts straight on and has slid
-/// sideways by frame 10, its time held at frame 0 or following the playhead.
 fn projected(doc: &mut Document, model: &FootageItem, plate: &FootageItem, held: bool) -> Uuid {
     let (comp, shown) = with_plate(doc, plate, false);
     on_cards(doc, model, comp, shown, held)
 }
 
-/// [`projected`] for layer `shown` of `comp`.
 fn on_cards(doc: &mut Document, model: &FootageItem, comp: Uuid, shown: Uuid, held: bool) -> Uuid {
     let c = doc.comp(comp).unwrap().clone();
     let mut camera = lumit_core::edits::fresh_camera(&c, "Camera".into(), None);
@@ -238,8 +225,6 @@ fn a_projection_is_the_picture_from_its_camera_and_stays_on_the_model_from_other
     assert!(off_by(&from_its_camera, &picture) <= 2);
     assert_eq!(reds(&from_its_camera), 0, "the camera saw all of this");
 
-    // The camera has moved on, and the picture stayed where it landed: the
-    // large card behind the small one was never seen, so it shows Base colour.
     let moved = frame(held, 10);
     assert!(off_by(&moved, &picture) > 8, "the cards have slid apart");
     assert!(
@@ -247,7 +232,6 @@ fn a_projection_is_the_picture_from_its_camera_and_stays_on_the_model_from_other
         "what the camera couldn't see shows Base colour"
     );
 
-    // Following the playhead, the picture is seen from where it is projected.
     let followed = frame(follows, 10);
     assert!(off_by(&followed, &picture) <= 2);
     assert_eq!(reds(&followed), 0);
@@ -257,9 +241,6 @@ fn a_projection_is_the_picture_from_its_camera_and_stays_on_the_model_from_other
     assert_eq!(reds(&frame(blurred, 5)), 0);
 }
 
-/// A strip with a skin that leans its top edge away from the camera over a
-/// second, past the box it has at rest, and a small card in front of it with
-/// its back to the camera.
 fn leaning(dir: &std::path::Path) -> std::path::PathBuf {
     let corners = [
         [-9.0f32, -0.9, 0.0],
@@ -329,10 +310,6 @@ fn leaning(dir: &std::path::Path) -> std::path::PathBuf {
     path
 }
 
-/// A projected model playing a take is the picture from its camera, following
-/// or held at the playhead, with motion blur on or off. A depth drawn at rest,
-/// a shutter sample tested against the frame's depth, or a depth holding a face
-/// the model isn't drawn with, brings Base colour back.
 #[test]
 fn a_projection_stays_on_a_model_in_its_pose() {
     let Ok(mut r) = HeadlessRenderer::shared() else {
@@ -381,8 +358,6 @@ fn a_projection_stays_on_a_model_in_its_pose() {
     }
 }
 
-/// A Precomp layer read as a picture brings its own effects, as it shows
-/// them itself.
 #[test]
 fn a_precomp_picture_keeps_its_own_effects() {
     let Ok(mut r) = HeadlessRenderer::shared() else {
@@ -405,8 +380,6 @@ fn a_precomp_picture_keeps_its_own_effects() {
     assert!(off_by(&as_a_picture, &as_a_layer) <= 2);
 }
 
-/// A card has no file behind it, so it has to come back from a saved project
-/// and draw with nothing to find.
 #[test]
 fn a_card_survives_a_save_with_no_file_behind_it() {
     let Ok(mut r) = HeadlessRenderer::shared() else {

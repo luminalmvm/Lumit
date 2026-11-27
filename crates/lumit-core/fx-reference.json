@@ -18,6 +18,10 @@
       "label": "Generate"
     },
     {
+      "slug": "textures",
+      "label": "Textures"
+    },
+    {
       "slug": "points",
       "label": "Points"
     },
@@ -7745,7 +7749,8 @@
           "options": [
             "Turbulent",
             "Horizontal",
-            "Vertical"
+            "Vertical",
+            "Bulge"
           ],
           "dividers_after": []
         },
@@ -10756,7 +10761,7 @@
       "slug": "gradient",
       "match_name": "gradient",
       "label": "Gradient",
-      "version": 1,
+      "version": 2,
       "category": "Generate",
       "category_slug": "generate",
       "params": [
@@ -10768,7 +10773,8 @@
           "default": 0,
           "options": [
             "Linear",
-            "Radial"
+            "Radial",
+            "Angle"
           ],
           "dividers_after": []
         },
@@ -10835,6 +10841,25 @@
           ],
           "slider_min": 0.0,
           "slider_max": 4.0
+        },
+        {
+          "id": "highlight",
+          "label": "Highlight length",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0,
+          "hard_min": -100.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "highlight_angle",
+          "label": "Highlight angle",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
         },
         {
           "id": "colours",
@@ -11035,6 +11060,20 @@
         {
           "label": "",
           "params": [
+            "highlight",
+            "highlight_angle"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "shape",
+            "values": [
+              1
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
             "colour_2",
             "position_2"
           ],
@@ -11215,21 +11254,9 @@
       "match_name": "fractal_noise",
       "label": "Fractal noise",
       "version": 1,
-      "category": "Generate",
-      "category_slug": "generate",
+      "category": "Textures",
+      "category_slug": "textures",
       "params": [
-        {
-          "id": "noise_type",
-          "label": "Noise type",
-          "kind": "choice",
-          "unit": "raw",
-          "default": 1,
-          "options": [
-            "Value",
-            "Perlin"
-          ],
-          "dividers_after": []
-        },
         {
           "id": "fractal_type",
           "label": "Fractal type",
@@ -11238,9 +11265,76 @@
           "default": 1,
           "options": [
             "Basic",
-            "Turbulent"
+            "Turbulent",
+            "Turbulent smooth",
+            "Turbulent sharp",
+            "Dynamic",
+            "Dynamic progressive",
+            "Dynamic twist",
+            "Max",
+            "Smeary",
+            "Swirly",
+            "Rocky",
+            "Cloudy",
+            "Terrain",
+            "Subscale",
+            "Strings"
           ],
           "dividers_after": []
+        },
+        {
+          "id": "noise_type",
+          "label": "Noise type",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 1,
+          "options": [
+            "Value",
+            "Perlin",
+            "Block",
+            "Linear",
+            "Spline",
+            "Chips",
+            "Circular",
+            "Box",
+            "Buya",
+            "Cranal",
+            "Dents",
+            "Electric",
+            "Fire",
+            "Hama",
+            "Luka",
+            "Naki",
+            "Nutous",
+            "Ober",
+            "Pezo",
+            "Poxo",
+            "Sema",
+            "Stupl",
+            "Zada",
+            "Blistered turbulence",
+            "Displaced turbulence",
+            "Wavy turbulence",
+            "Displaced Voronoi",
+            "VL noise",
+            "Stucci",
+            "Stucci wall in",
+            "Stucci wall out",
+            "Windy",
+            "Billow",
+            "Waves"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "distortion",
+          "label": "Distortion",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 4.0,
+          "hard_min": 0.0
         },
         {
           "id": "invert",
@@ -15747,7 +15841,8 @@
             "Rings",
             "Spiral",
             "Hexagons",
-            "Point"
+            "Point",
+            "Sphere"
           ],
           "dividers_after": []
         },
@@ -15926,6 +16021,55 @@
           "slider_min": 0.0,
           "slider_max": 1000.0,
           "hard_min": 0.0
+        },
+        {
+          "id": "tilt",
+          "label": "Tilt",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
+        },
+        {
+          "id": "open_top",
+          "label": "Open top",
+          "kind": "float",
+          "unit": "degrees",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 180.0,
+          "hard_min": 0.0,
+          "hard_max": 180.0
+        },
+        {
+          "id": "rim_wave",
+          "label": "Rim wave",
+          "kind": "float",
+          "unit": "degrees",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 90.0,
+          "hard_min": 0.0,
+          "hard_max": 180.0
+        },
+        {
+          "id": "rim_waves",
+          "label": "Rim waves",
+          "kind": "float",
+          "unit": "raw",
+          "default": 3.0,
+          "slider_min": 0.0,
+          "slider_max": 12.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "rim_phase",
+          "label": "Rim phase",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
         },
         {
           "id": "size_from",
@@ -16255,7 +16399,20 @@
           "label": "",
           "params": [
             "start_angle",
-            "arc",
+            "arc"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "layout",
+            "values": [
+              2,
+              6
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
             "inner_radius"
           ],
           "collapsed": false,
@@ -16263,6 +16420,23 @@
             "param": "layout",
             "values": [
               2
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "tilt",
+            "open_top",
+            "rim_wave",
+            "rim_waves",
+            "rim_phase"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "layout",
+            "values": [
+              6
             ]
           }
         },
@@ -16368,6 +16542,12 @@
           "value": 5
         },
         {
+          "param": "spacing_x",
+          "on": "layout",
+          "cond": "choice_is_not",
+          "value": 6
+        },
+        {
           "param": "spacing_y",
           "on": "fit",
           "cond": "bool_is",
@@ -16386,6 +16566,12 @@
           "value": 5
         },
         {
+          "param": "spacing_y",
+          "on": "layout",
+          "cond": "choice_is_not",
+          "value": 6
+        },
+        {
           "param": "spacing_z",
           "on": "layout",
           "cond": "choice_is_not",
@@ -16398,10 +16584,20 @@
           "value": 5
         },
         {
+          "param": "fit",
+          "on": "layout",
+          "cond": "choice_is_not",
+          "value": 6
+        },
+        {
           "param": "width",
-          "on": "fit",
-          "cond": "bool_is",
-          "value": true
+          "on": "layout",
+          "cond": "or",
+          "value": {
+            "cond": "choice_is",
+            "or": "fit",
+            "value": 6
+          }
         },
         {
           "param": "width",
@@ -16411,9 +16607,13 @@
         },
         {
           "param": "height",
-          "on": "fit",
-          "cond": "bool_is",
-          "value": true
+          "on": "layout",
+          "cond": "or",
+          "value": {
+            "cond": "choice_is",
+            "or": "fit",
+            "value": 6
+          }
         },
         {
           "param": "height",
@@ -20923,7 +21123,8 @@
             "Number",
             "Stripes",
             "Checker",
-            "Waves"
+            "Waves",
+            "Depth"
           ],
           "dividers_after": []
         },
@@ -20980,6 +21181,29 @@
           "default": 540.0,
           "slider_min": 0.0,
           "slider_max": 2160.0
+        },
+        {
+          "id": "centre_z",
+          "label": "Centre Z",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": -4000.0,
+          "slider_max": 4000.0
+        },
+        {
+          "id": "plane",
+          "label": "Plane",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "XY",
+            "XZ",
+            "YZ",
+            "XYZ"
+          ],
+          "dividers_after": []
         },
         {
           "id": "radius",
@@ -21487,6 +21711,39 @@
         {
           "label": "",
           "params": [
+            "centre_z"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "pattern",
+            "values": [
+              3,
+              11,
+              12,
+              13,
+              14
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "plane"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "pattern",
+            "values": [
+              3,
+              11,
+              12,
+              13
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
             "radius"
           ],
           "collapsed": false,
@@ -21495,7 +21752,8 @@
             "values": [
               3,
               6,
-              7
+              7,
+              14
             ]
           }
         },
@@ -21767,7 +22025,8 @@
             "Number",
             "Stripes",
             "Checker",
-            "Waves"
+            "Waves",
+            "Depth"
           ],
           "dividers_after": []
         },
@@ -21837,6 +22096,29 @@
           "default": 540.0,
           "slider_min": 0.0,
           "slider_max": 2160.0
+        },
+        {
+          "id": "centre_z",
+          "label": "Centre Z",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": -4000.0,
+          "slider_max": 4000.0
+        },
+        {
+          "id": "plane",
+          "label": "Plane",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "XY",
+            "XZ",
+            "YZ",
+            "XYZ"
+          ],
+          "dividers_after": []
         },
         {
           "id": "radius",
@@ -22111,6 +22393,39 @@
         {
           "label": "",
           "params": [
+            "centre_z"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "pattern",
+            "values": [
+              3,
+              11,
+              12,
+              13,
+              14
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "plane"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "pattern",
+            "values": [
+              3,
+              11,
+              12,
+              13
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
             "radius"
           ],
           "collapsed": false,
@@ -22119,7 +22434,8 @@
             "values": [
               3,
               6,
-              7
+              7,
+              14
             ]
           }
         },

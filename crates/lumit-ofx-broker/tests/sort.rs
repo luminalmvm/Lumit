@@ -1,6 +1,3 @@
-//! The Sort sample extension's plugin, built from its C source, found in its
-//! bundle as an installed extension's is, and drawn through a broker.
-
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::path::{Path, PathBuf};
@@ -18,8 +15,6 @@ const SAMPLE: &str = concat!(
     "/../../examples/extensions/sort"
 );
 
-/// Compile sort.c into `<extension>/Sort.ofx.bundle`, as its own comments say
-/// to, and answer with the extension's folder.
 fn build_sort(root: &Path) -> PathBuf {
     let extension = root.join("sort");
     let binaries = extension
@@ -68,7 +63,6 @@ fn build_sort(root: &Path) -> PathBuf {
     extension
 }
 
-/// Each row's runs of pixels brighter than the threshold, darkest first.
 fn sorted_rows(pixels: &[[f32; 4]], width: usize, threshold: f32) -> Vec<[f32; 4]> {
     let mut out = pixels.to_vec();
     for row in out.chunks_mut(width) {
@@ -85,7 +79,6 @@ fn the_sort_sample_sorts_bright_runs_along_rows() {
     let root = tempfile::tempdir().unwrap();
     let extension = build_sort(root.path());
 
-    // The bundle folder the manifest names is what the plugin scan is given.
     let found = scan_dir(&extension.join("Sort.ofx.bundle"));
     assert_eq!(found.len(), 1, "{found:?}");
     let mut config = BrokerConfig::new(&found[0], (8, 4));
@@ -101,7 +94,6 @@ fn the_sort_sample_sorts_bright_runs_along_rows() {
         .create_instance(plugin as u32, Context::Filter, params)
         .unwrap();
 
-    // Greys, each row a shuffle of eight levels, none near the threshold.
     let (width, height) = (8, 4);
     let source: Vec<f32> = (0..width * height)
         .flat_map(|i| {

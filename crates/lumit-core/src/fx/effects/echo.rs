@@ -21,7 +21,6 @@
 use crate::fx::{registry::EffectDef, registry::EffectMetadata, schema::EffectSchema};
 use lumit_fx_macros::Effect;
 
-/// Echo's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "echo",
@@ -31,7 +30,6 @@ use lumit_fx_macros::Effect;
     // It reads whole neighbour frames.
     cost = Cheap,
     roi = FullFrame,
-    // The 16-frame window (FX-17, raised from 8) the render decodes for.
     temporal = &[0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10, -11, -12, -13, -14, -15, -16],
     // The matte scales the amount, inside the kernel (the owner's rule
     // for mattes); the generic strength dissolve does not also run.
@@ -116,12 +114,11 @@ pub struct Echo {
             "Divide",
             "Blend"
         ],
-        default = 3, // Screen
-        dividers_after = &[1] // divider after In front
+        default = 3,
+        dividers_after = &[1]
     )]
     pub mode: u32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -154,7 +151,6 @@ impl Echo {
         let decay = self.decay.clamp(0.0, 1.0);
         let start = self.starting_intensity.clamp(0.0, 1.0);
         let blend = self.mode == BLEND;
-        // Blend: every image's share of the average.
         let share = if blend {
             1.0 / (count as f32 + 1.0)
         } else {
@@ -175,7 +171,6 @@ impl Echo {
     }
 }
 
-/// The Add operator's index.
 const ADD: u32 = 2;
 /// The Blend operator's index, after the kernel's own fourteen.
 const BLEND: u32 = 14;

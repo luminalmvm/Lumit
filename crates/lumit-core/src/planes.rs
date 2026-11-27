@@ -34,10 +34,8 @@ pub const TIER_VERSION: u16 = 1;
 /// find it without importing the catalogue's type.
 pub const DEPTH: &str = "depth";
 
-/// Depth points' `match_name`: the same analysis, drawn another way.
 pub const DEPTH_POINTS: &str = "depth_points";
 
-/// The Remove background effect's, for the same reason.
 pub const REMOVE_BACKGROUND: &str = "remove_background";
 
 /// The **Frames** row's options, in index order, on every effect whose
@@ -95,9 +93,7 @@ pub fn source_span(
 /// (docs/05 §1.1) - the same split the Camera track's density table takes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlaneTask {
-    /// How far away every pixel is.
     Depth,
-    /// How much of each pixel is the subject.
     Matte,
 }
 
@@ -126,8 +122,6 @@ pub fn task_of_name(match_name: &str) -> Option<PlaneTask> {
     }
 }
 
-/// What one instance asks for, or `None` for anything that is not a
-/// planes-tier effect.
 #[must_use]
 pub fn task_of(fx: &EffectInstance) -> Option<PlaneTask> {
     (fx.effect.namespace == crate::model::EffectNamespace::Builtin)
@@ -135,7 +129,6 @@ pub fn task_of(fx: &EffectInstance) -> Option<PlaneTask> {
         .flatten()
 }
 
-/// The planes-tier effects on a layer that are switched on, in stack order.
 pub fn analyses(effects: &[EffectInstance]) -> impl Iterator<Item = &EffectInstance> {
     effects.iter().filter(|e| e.enabled && task_of(e).is_some())
 }
@@ -147,7 +140,6 @@ pub fn analyses(effects: &[EffectInstance]) -> impl Iterator<Item = &EffectInsta
 /// analysis away every time somebody glanced at the depth.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct PlaneSettings {
-    /// Which model the effect names, as its Choice index.
     pub model: u32,
     /// Robust Video Matting's detail row, as its Choice index. Zero for every
     /// effect that has no such row, which is every one but Remove background.
@@ -209,8 +201,6 @@ mod tests {
     use crate::fx::builtins::instantiate;
     use crate::model::EffectParam;
 
-    /// Write one row on an instance, adding it when the declaration's default
-    /// left it out.
     fn set(fx: &mut EffectInstance, id: &str, value: EffectValue) {
         match fx.params.iter_mut().find(|p| p.id == id) {
             Some(param) => param.value = value,
@@ -222,10 +212,6 @@ mod tests {
         }
     }
 
-    /// **The model row renames every frame and the view row renames none.**
-    /// The first decides what the model produced; the second decides how it is
-    /// drawn, and a cache thrown away for a glance is the mirror mistake the
-    /// per-frame stamp exists to avoid (§13).
     #[test]
     fn a_settings_change_renames_everything_and_a_view_change_nothing() {
         let mut fx = instantiate(DEPTH).expect("declared");
@@ -244,8 +230,6 @@ mod tests {
         for (was, is) in before.iter().zip(&modelled) {
             assert_ne!(was, is, "a different model is a different plane");
         }
-        // And each frame is named apart from its neighbours, so the shape is
-        // ready for the day one frame carries something of its own.
         assert_eq!(
             before
                 .iter()
@@ -255,8 +239,6 @@ mod tests {
         );
     }
 
-    /// **The Frames row picks the source seconds an analysis reads**, through
-    /// the layer's own clock on a layer and the comp's on a node graph box.
     #[test]
     fn the_frames_row_picks_the_source_span() {
         use crate::model::{LinearColour, MotionBlur};
@@ -280,6 +262,7 @@ mod tests {
             master_automation: Default::default(),
             loudness_target: None,
             lighting: Default::default(),
+            blending: Default::default(),
             sound_mix: false,
             beat_grid: None,
             graph: None,

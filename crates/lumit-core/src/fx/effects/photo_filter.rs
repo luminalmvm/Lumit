@@ -1,30 +1,15 @@
-//! Photo filter (docs/08 §3.61): a coloured glass held in front of the lens —
-//! AE's Photo Filter.
-//!
-//! **In plain terms.** Before white balance was a menu, a photographer screwed a
-//! coloured glass onto the lens to warm a shot up or cool it down. This is that
-//! glass: the picture is multiplied by the filter's colour, Density says how
-//! strong the glass is, and Preserve luminosity puts the exposure back
-//! afterwards so the shot changes colour rather than getting darker.
-//!
-//! Twenty named filters ship — the six warming and cooling filters photographers
-//! know by their Wratten numbers, eight plain colours, sepia, four deep ones and
-//! an underwater — plus Custom, which takes any colour.
-
 use crate::fx::{
     cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
     schema::EnabledCond, schema::EnabledWhen,
 };
 use lumit_fx_macros::Effect;
 
-/// A colour picker means nothing until the filter is the custom one.
 pub const PHOTO_FILTER_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
     param: "colour",
     on: "filter",
     cond: EnabledCond::ChoiceIs(PhotoFilter::CUSTOM),
 }];
 
-/// Photo filter's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "photo_filter",
@@ -99,7 +84,6 @@ pub struct PhotoFilter {
     #[toggle(label = "Preserve luminosity", default = true)]
     pub preserve_luminosity: bool,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -120,26 +104,26 @@ impl PhotoFilter {
     /// quoted in — a filter is named by its display colour — and decoded to
     /// scene-linear once, host-side, in [`packed`](Self::packed).
     pub const FILTERS: [[u8; 3]; 20] = [
-        [0xEC, 0x8A, 0x00], // Warming filter (85)
-        [0xFA, 0x96, 0x00], // Warming filter (LBA)
-        [0xEB, 0xB1, 0x13], // Warming filter (81)
-        [0x00, 0x6D, 0xFF], // Cooling filter (80)
-        [0x00, 0x5D, 0xFF], // Cooling filter (LBB)
-        [0x00, 0xB5, 0xFF], // Cooling filter (82)
-        [0xEA, 0x1B, 0x00], // Red
-        [0xF0, 0x7B, 0x00], // Orange
-        [0xF0, 0xE1, 0x00], // Yellow
-        [0x19, 0xF0, 0x00], // Green
-        [0x00, 0xE5, 0xF0], // Cyan
-        [0x00, 0x22, 0xF0], // Blue
-        [0x97, 0x00, 0xF0], // Violet
-        [0xFF, 0x00, 0xE1], // Magenta
-        [0xAC, 0x7A, 0x33], // Sepia
-        [0xFF, 0x00, 0x00], // Deep red
-        [0x00, 0x00, 0xFF], // Deep blue
-        [0x00, 0xFF, 0x00], // Deep emerald
-        [0xFF, 0xD5, 0x00], // Deep yellow
-        [0x00, 0xC1, 0xB1], // Underwater
+        [0xEC, 0x8A, 0x00],
+        [0xFA, 0x96, 0x00],
+        [0xEB, 0xB1, 0x13],
+        [0x00, 0x6D, 0xFF],
+        [0x00, 0x5D, 0xFF],
+        [0x00, 0xB5, 0xFF],
+        [0xEA, 0x1B, 0x00],
+        [0xF0, 0x7B, 0x00],
+        [0xF0, 0xE1, 0x00],
+        [0x19, 0xF0, 0x00],
+        [0x00, 0xE5, 0xF0],
+        [0x00, 0x22, 0xF0],
+        [0x97, 0x00, 0xF0],
+        [0xFF, 0x00, 0xE1],
+        [0xAC, 0x7A, 0x33],
+        [0xFF, 0x00, 0x00],
+        [0x00, 0x00, 0xFF],
+        [0x00, 0xFF, 0x00],
+        [0xFF, 0xD5, 0x00],
+        [0x00, 0xC1, 0xB1],
     ];
 
     /// The scene-linear filter colour, the density, the luminosity flag and the
@@ -168,7 +152,6 @@ impl PhotoFilter {
     }
 }
 
-/// Photo filter's behaviour.
 pub struct PhotoFilterDef;
 
 impl EffectDef for PhotoFilterDef {

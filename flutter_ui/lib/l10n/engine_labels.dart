@@ -34,15 +34,10 @@ library;
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/src/rust/api/colour.dart';
 
-/// The translation of an engine-supplied label, or [english] unchanged if there
-/// is no entry for it.
 String engineLabel(String english) => _table[english] ?? english;
 
-/// Whether [english] is a label this table knows — what the sync test asserts.
 bool hasEngineLabel(String english) => _table.containsKey(english);
 
-/// What deleting the things called [names] reads as in Edit > History: the
-/// thing's own name for one, else the command's.
 String deleteStepName(List<String> names) =>
     names.length == 1 ? l10n.histDeleteNamed(names.single) : 'Delete';
 
@@ -368,7 +363,6 @@ Map<String, String> get _built => {
       "Edge": l10n.fxEdge,
       "Edge margin": l10n.fxEdgeMargin,
       "Edit lens…": l10n.fxEditLens,
-      // Denoise: its controls, views and groups.
       "Denoise": l10n.fxDenoise,
       "Removed noise": l10n.fxRemovedNoise,
       "Frames blended": l10n.fxFramesBlended,
@@ -398,7 +392,6 @@ Map<String, String> get _built => {
       "Spatial": l10n.fxSpatial,
       "Spatial by size": l10n.fxSpatialBySize,
       "Finish": l10n.fxFinish,
-      // Energy line: its controls, its noise types and its looks.
       "Paths": l10n.fxPaths,
       "One after another": l10n.fxOneAfterAnother,
       "All at once": l10n.fxAllAtOnce,
@@ -434,8 +427,6 @@ Map<String, String> get _built => {
       "Toxic": l10n.fxToxic,
       "Wind direction": l10n.fxWindDirection,
       "Wind speed": l10n.fxWindSpeed,
-      // The Flare window: kinds, places, controls and colour modes the
-      // engine's flare tables send.
       "Edit flare…": l10n.fxEditFlare,
       "Fringe": l10n.fxFringe,
       "Thickness": l10n.fxThickness,
@@ -984,6 +975,12 @@ Map<String, String> get _built => {
       "Limit to radius": l10n.fxLimitToRadius,
       "Constant": l10n.fxConstant,
       "Across": l10n.fxAcross,
+      "Centre Z": l10n.fxCentreZ,
+      "Plane": l10n.fxPlane,
+      "XY": l10n.fxPlaneXy,
+      "XZ": l10n.fxPlaneXz,
+      "YZ": l10n.fxPlaneYz,
+      "XYZ": l10n.fxPlaneXyz,
       "Picked": l10n.fxPicked,
       "Image layer": l10n.fxImageLayer,
       "Colour from image": l10n.fxColourFromImage,
@@ -1100,7 +1097,6 @@ Map<String, String> get _built => {
       "Pulse": l10n.fxPulse,
       "Envelope": l10n.fxEnvelope,
       "Time since last": l10n.fxTimeSinceLast,
-      // A Model layer's Animation and parts' rows.
       "Animation": l10n.fxAnimation,
       "Freeze": l10n.fxFreeze,
       "Part": l10n.fxPart,
@@ -1313,7 +1309,9 @@ Map<String, String> get _built => {
       "Hard light": l10n.fxHardLight,
       "High": l10n.fxHigh,
       "Highlight amount": l10n.fxHighlightAmount,
+      "Highlight angle": l10n.fxHighlightAngle,
       "Highlight exposure": l10n.fxHighlightExposure,
+      "Highlight length": l10n.fxHighlightLength,
       "Highlight threshold": l10n.fxHighlightThreshold,
       "Highlight tonal width": l10n.fxHighlightTonalWidth,
       "Highlights": l10n.fxHighlights,
@@ -1736,6 +1734,149 @@ Map<String, String> get _built => {
       "Voronoi": l10n.fxVoronoi,
       "Cells": l10n.fxCells,
       "Checkerboard": l10n.fxCheckerboard,
+      "Progression": l10n.fxProgression,
+      "Quadratic": l10n.fxQuadratic,
+      "Easing": l10n.fxEasing,
+      "F2": l10n.fxF2,
+      "Smooth F1": l10n.fxSmoothF1,
+      "Distance to edge": l10n.fxDistanceToEdge,
+      "N-sphere radius": l10n.fxNSphereRadius,
+      "Flagstone": l10n.fxFlagstone,
+      "Chess cells": l10n.fxChessCells,
+      "Line colour": l10n.fxLineColour,
+      "Distance metric": l10n.fxDistanceMetric,
+      "Euclidean": l10n.fxEuclidean,
+      "Manhattan": l10n.fxManhattan,
+      "Chebychev": l10n.fxChebychev,
+      "Minkowski": l10n.fxMinkowski,
+      "Exponent": l10n.fxExponent,
+      "Lacunarity": l10n.fxLacunarity,
+      "Wave pattern": l10n.fxWavePattern,
+      "Profile": l10n.fxProfile,
+      "Saw": l10n.fxSaw,
+      "Detail scale": l10n.fxDetailScale,
+      "Tile patterns": l10n.fxTilePatterns,
+      "Bricks": l10n.fxBricks,
+      "Fancy tiles": l10n.fxFancyTiles,
+      "Scales": l10n.fxScales,
+      "Flemish bond": l10n.fxFlemishBond,
+      "English bond": l10n.fxEnglishBond,
+      "Chain link": l10n.fxChainLink,
+      "Herringbone": l10n.fxHerringbone,
+      "Basket weave": l10n.fxBasketWeave,
+      "Row height": l10n.fxRowHeight,
+      "Row offset": l10n.fxRowOffset,
+      "Offset frequency": l10n.fxOffsetFrequency,
+      "Squash": l10n.fxSquash,
+      "Squash frequency": l10n.fxSquashFrequency,
+      "Line softness": l10n.fxLineSoftness,
+      "Holes": l10n.fxHoles,
+      "Edge roughness": l10n.fxEdgeRoughness,
+      "Tile colour 1": l10n.fxTileColour1,
+      "Tile colour 2": l10n.fxTileColour2,
+      "Chainmail": l10n.fxChainmail,
+      "Ring radius": l10n.fxRingRadius,
+      "Ring width": l10n.fxRingWidth,
+      "Metal colour": l10n.fxMetalColour,
+      "Background colour": l10n.fxBackgroundColour,
+      "Shading": l10n.fxShading,
+      "Woodgrain": l10n.fxWoodgrain,
+      "Light wood": l10n.fxLightWood,
+      "Dark wood": l10n.fxDarkWood,
+      "Ring spacing": l10n.fxRingSpacing,
+      "Ring sharpness": l10n.fxRingSharpness,
+      "Ring intensity": l10n.fxRingIntensity,
+      "Ring unevenness": l10n.fxRingUnevenness,
+      "Ring noise": l10n.fxRingNoise,
+      "Ring noise size": l10n.fxRingNoiseSize,
+      "Graininess": l10n.fxGraininess,
+      "Grain size": l10n.fxGrainSize,
+      "Plank depth": l10n.fxPlankDepth,
+      "Trunk wobble": l10n.fxTrunkWobble,
+      "Trunk wobble length": l10n.fxTrunkWobbleLength,
+      "Angular wobble": l10n.fxAngularWobble,
+      "Trunk centre": l10n.fxTrunkCentre,
+      "Layers": l10n.fxLayers,
+      "Steps": l10n.fxSteps,
+      "Curl": l10n.fxCurl,
+      "Scratch colour": l10n.fxScratchColour,
+      "Flakes": l10n.fxFlakes,
+      "Flake colour": l10n.fxFlakeColour,
+      "Flake size": l10n.fxFlakeSize,
+      "Flake size variance": l10n.fxFlakeSizeVariance,
+      "Sparkle": l10n.fxSparkle,
+      "Blend factor": l10n.fxBlendFactor,
+      "Gabor": l10n.fxGabor,
+      "Packet size": l10n.fxPacketSize,
+      "Anisotropy": l10n.fxAnisotropy,
+      "Magic": l10n.fxMagic,
+      "Matrix effect": l10n.fxMatrixEffect,
+      "Glyph size": l10n.fxGlyphSize,
+      "Trail length": l10n.fxTrailLength,
+      "Glyph changes": l10n.fxGlyphChanges,
+      "Text colour": l10n.fxTextColour,
+      "Head colour": l10n.fxHeadColour,
+      "Pixel flow": l10n.fxPixelFlow,
+      "Speed variation": l10n.fxSpeedVariation,
+      "Gap": l10n.fxGap,
+      "Sine wave fan": l10n.fxSineWaveFan,
+      "Wave amount": l10n.fxWaveAmount,
+      "Wave length": l10n.fxWaveLength,
+      "Movement": l10n.fxMovement,
+      "Bombing": l10n.fxBombing,
+      "Bullet size": l10n.fxBulletSize,
+      "Jitter": l10n.fxJitter,
+      "Scale variation": l10n.fxScaleVariation,
+      "Random rotation": l10n.fxRandomRotation,
+      "Source centre": l10n.fxSourceCentre,
+      "Source size": l10n.fxSourceSize,
+      "Dot colour": l10n.fxDotColour,
+      "Over layer": l10n.fxOverLayer,
+      "Bullets only": l10n.fxBulletsOnly,
+      "Weave": l10n.fxWeave,
+      "Thread spacing": l10n.fxThreadSpacing,
+      "Warp width": l10n.fxWarpWidth,
+      "Weft width": l10n.fxWeftWidth,
+      "Warp colour": l10n.fxWarpColour,
+      "Weft colour": l10n.fxWeftColour,
+      "Gap colour": l10n.fxGapColour,
+      "Thread shading": l10n.fxThreadShading,
+      "Width variation": l10n.fxWidthVariation,
+      "Water drop": l10n.fxWaterDrop,
+      "Start time": l10n.fxStartTime,
+      "Calm colour": l10n.fxCalmColour,
+      "Crest colour": l10n.fxCrestColour,
+      "Trough colour": l10n.fxTroughColour,
+      "Softbox": l10n.fxSoftbox,
+      "Frame width": l10n.fxFrameWidth,
+      "Frame softness": l10n.fxFrameSoftness,
+      "Frame colour": l10n.fxFrameColour,
+      "Spot": l10n.fxSpot,
+      "Hot spot": l10n.fxHotSpot,
+      "Dark spot": l10n.fxDarkSpot,
+      "Spot centre": l10n.fxSpotCentre,
+      "Spot inner radius": l10n.fxSpotInnerRadius,
+      "Spot outer radius": l10n.fxSpotOuterRadius,
+      "Spot strength": l10n.fxSpotStrength,
+      "Spot falloff": l10n.fxSpotFalloff,
+      "Cylinder": l10n.shape3dCylinder,
+      "Rotation X": l10n.fxCylinderRotationX,
+      "Rotation Y": l10n.fxCylinderRotationY,
+      "Rotation Z": l10n.fxCylinderRotationZ,
+      "Rotation order": l10n.fxRotationOrder,
+      "XZY": l10n.fxXzy,
+      "YXZ": l10n.fxYxz,
+      "YZX": l10n.fxYzx,
+      "ZXY": l10n.fxZxy,
+      "ZYX": l10n.fxZyx,
+      "Offset X (%)": l10n.fxOffsetXPercent,
+      "Offset Y (%)": l10n.fxOffsetYPercent,
+      "Full": l10n.fxFull,
+      "Light height": l10n.fxLightHeight,
+      "Diffuse": l10n.materialDiffuse,
+      "Specular": l10n.fxSpecular,
+      "Metal": l10n.materialMetal,
+      "Transparency falloff": l10n.fxTransparencyFalloff,
       "Halftone": l10n.fxHalftone,
       "Squares": l10n.fxSquares,
       "Keep colours": l10n.fxKeepColours,
@@ -1862,6 +2003,10 @@ Map<String, String> get _built => {
       "Standard": l10n.fxStandard,
       "Starburst intensity": l10n.fxStarburstIntensity,
       "Start angle": l10n.fxStartAngle,
+      "Open top": l10n.fxOpenTop,
+      "Rim wave": l10n.fxRimWave,
+      "Rim waves": l10n.fxRimWaves,
+      "Rim phase": l10n.fxRimPhase,
       "Start colour": l10n.fxStartColour,
       "Start x": l10n.fxStartX,
       "Start y": l10n.fxStartY,
@@ -1916,6 +2061,44 @@ Map<String, String> get _built => {
       "Trigger": l10n.fxTrigger,
       "Tritone": l10n.fxTritone,
       "Turbulent": l10n.fxTurbulent,
+      "Block": l10n.fxBlock,
+      "Spline": l10n.fxSpline,
+      "Turbulent smooth": l10n.fxTurbulentSmooth,
+      "Turbulent sharp": l10n.fxTurbulentSharp,
+      "Dynamic": l10n.fxDynamic,
+      "Dynamic progressive": l10n.fxDynamicProgressive,
+      "Dynamic twist": l10n.fxDynamicTwist,
+      "Smeary": l10n.fxSmeary,
+      "Swirly": l10n.fxSwirly,
+      "Rocky": l10n.fxRocky,
+      "Terrain": l10n.fxTerrain,
+      "Subscale": l10n.fxSubscale,
+      "Strings": l10n.fxStrings,
+      "Chips": l10n.fxChips,
+      "Circular": l10n.fxCircular,
+      "Buya": l10n.fxBuya,
+      "Cranal": l10n.fxCranal,
+      "Dents": l10n.fxDents,
+      "Hama": l10n.fxHama,
+      "Luka": l10n.fxLuka,
+      "Naki": l10n.fxNaki,
+      "Nutous": l10n.fxNutous,
+      "Ober": l10n.fxOber,
+      "Pezo": l10n.fxPezo,
+      "Poxo": l10n.fxPoxo,
+      "Sema": l10n.fxSema,
+      "Stupl": l10n.fxStupl,
+      "Zada": l10n.fxZada,
+      "Blistered turbulence": l10n.fxBlisteredTurbulence,
+      "Displaced turbulence": l10n.fxDisplacedTurbulence,
+      "Wavy turbulence": l10n.fxWavyTurbulence,
+      "Displaced Voronoi": l10n.fxDisplacedVoronoi,
+      "VL noise": l10n.fxVlNoise,
+      "Stucci": l10n.fxStucci,
+      "Stucci wall in": l10n.fxStucciWallIn,
+      "Stucci wall out": l10n.fxStucciWallOut,
+      "Windy": l10n.fxWindy,
+      "Billow": l10n.fxBillow,
       "Turbulent displace": l10n.fxTurbulentDisplace,
       "Twitch frequency": l10n.fxTwitchFrequency,
       "Twitchy": l10n.fxTwitchy,
@@ -2028,7 +2211,6 @@ Map<String, String> get _built => {
       "Z wave phase": l10n.fxZWavePhase,
       "Zebra": l10n.fxZebra,
       "Zoom": l10n.fxZoom,
-      // A Model layer's material rows, and their presets.
       "Material": l10n.fxMaterial,
       "Geometry options": l10n.fxGeometryOptions,
       "Extrusion depth": l10n.fxExtrusionDepth,
@@ -2069,7 +2251,6 @@ Map<String, String> get _built => {
       "Plastic": l10n.fxPlastic,
       "Rubber": l10n.fxRubber,
       "Emissive": l10n.fxEmissive,
-      // The looks a cut's Transition menu offers.
       "Flip": l10n.fxFlip,
       "Shutters": l10n.fxShutters,
       "Dip to black": l10n.fxDipToBlack,
@@ -2080,7 +2261,6 @@ Map<String, String> get _built => {
       "Glitch": l10n.fxGlitch,
       "Glitch slices": l10n.fxGlitchSlices,
       "Pixelate": l10n.fxPixelate,
-      // Move, and its looks. Zoom in and Zoom out share the keymap's words.
       "Move": l10n.fxMove,
       "Moves": l10n.fxMoves,
       "Outgoing": l10n.fxOutgoing,
@@ -2149,10 +2329,7 @@ Map<String, String> get _built => {
       "Sheet": l10n.fxSheet,
       "Sheet width (mm)": l10n.fxSheetWidthMm,
       "Short waves": l10n.fxShortWaves,
-      "Softbox": l10n.fxSoftbox,
-      "Sparkle": l10n.fxSparkle,
       "Spectrum": l10n.fxSpectrum,
-      "Spot": l10n.fxSpot,
       "Spot A": l10n.fxSpotA,
       "Spot B": l10n.fxSpotB,
       "Spot C": l10n.fxSpotC,
@@ -2220,7 +2397,6 @@ Map<String, String> get _built => {
       "Flake size (µm)": l10n.fxFlakeSizeUm,
       "Flake tilt": l10n.fxFlakeTilt,
       "Hex": l10n.fxHex,
-      "Layers": l10n.fxLayers,
       "Nebula glitter": l10n.fxNebulaGlitter,
       "Round": l10n.fxRound,
       "Sand size": l10n.fxSandSize,
@@ -2281,9 +2457,7 @@ Map<String, String> get _built => {
       "Gold rainbow foil": l10n.fxGoldRainbowFoil,
       "Ice blue": l10n.fxIceBlue,
       "Pressed logo": l10n.fxPressedLogo,
-      "Profile": l10n.fxProfile,
       "Soft pastel satin": l10n.fxSoftPastelSatin,
-      // Light leak, and its looks.
       "Light leak": l10n.fxLightLeak,
       "Film burn": l10n.fxFilmBurn,
       // Light rays, and its colourings.
@@ -2329,18 +2503,14 @@ Map<String, String> get _built => {
       "Failing light": l10n.fxFailingLight,
       "Film projector": l10n.fxFilmProjector,
       "CRT": l10n.fxCrt,
-      // Slices, and its looks.
       "Slices": l10n.fxSlices,
       "Slice glitch": l10n.fxSliceGlitch,
       "Alternate": l10n.fxAlternate,
       "Random order": l10n.fxRandomOrder,
-      // Luma fade's patterns, and its looks.
       "Diamonds": l10n.fxDiamonds,
       "Blocks": l10n.fxBlocks,
       "Noise dissolve": l10n.fxNoiseDissolve,
       "Soft iris": l10n.fxSoftIris,
-      // Settings -> Keymap: what each shortcut does, and the headings saying
-      // where it is live (crates/lumit-keymap/src/lib.rs).
       "Play or pause": l10n.keyPlayOrPause,
       "Shuttle backwards": l10n.keyShuttleBackwards,
       "Shuttle pause": l10n.keyShuttlePause,
@@ -2720,9 +2890,6 @@ Map<String, String> get _built => {
       "Show or hide the Audio panel": l10n.keyShowOrHideTheAudioPanel,
       "Show or hide the Text panel": l10n.keyShowOrHideTheTextPanel,
       "Show or hide the Paragraph panel": l10n.keyShowOrHideTheParagraphPanel,
-      // Edit > History: what each edit calls itself
-      // (crates/lumit-core/src/ops.rs `Op::name`). One phrase per operation
-      // the engine has, in the voice of the menu row that makes it.
       "Add item": l10n.histAddItem,
       "Delete item": l10n.histDeleteItem,
       "Relink footage": l10n.histRelinkFootage,
@@ -2851,6 +3018,7 @@ Map<String, String> get _built => {
       "Edit transform": l10n.histEditTransform,
       "Edit expression": l10n.histEditExpression,
       "Set axis mode": l10n.histSetAxisMode,
+      "Set motion path": l10n.histSetMotionPath,
       "Set rotation order": l10n.histSetRotationOrder,
       "Set camera zoom": l10n.histSetCameraZoom,
       "Set camera settings": l10n.histSetCameraSettings,
@@ -2858,6 +3026,7 @@ Map<String, String> get _built => {
       "Set material settings": l10n.histSetMaterialSettings,
       "Edit geometry options": l10n.histEditGeometryOptions,
       "Set lighting": l10n.histSetLighting,
+      "Set blending": l10n.histSetBlending,
       "Link camera to solve": l10n.histLinkCameraToSolve,
       "Edit volume": l10n.histEditVolume,
       "Edit Retime": l10n.histEditRetime,
@@ -2889,8 +3058,6 @@ Map<String, String> get _built => {
       "Set loudness target": l10n.histSetLoudnessTarget,
       "Record automation": l10n.histRecordAutomation,
       "Normalise mix": l10n.histNormaliseMix,
-      // The mark the Audio timeline writes, which reads in the history under
-      // the same words the row carries.
       "Sound mix": l10n.timelineSoundMix,
       "Set beat grid": l10n.histSetBeatGrid,
       "Several changes": l10n.histSeveralChanges,
@@ -2921,7 +3088,6 @@ Map<String, String> get _built => {
 String? importReason(String key, Map<String, String> args) {
   String a(String name) => engineLabel(args[name] ?? '');
   switch (key) {
-    // Items and compositions.
     case 'item_unreadable':
       return l10n.aeItemUnreadable;
     case 'comp_missing':
@@ -2954,7 +3120,6 @@ String? importReason(String key, Map<String, String> args) {
     case 'ocio_config_not_found':
       return l10n.aeOcioConfigNotFound(a('config'));
 
-    // Layers.
     case 'layer_unreadable':
       return l10n.aeLayerUnreadable;
     case 'layer_kind_unsupported':
@@ -3006,7 +3171,6 @@ String? importReason(String key, Map<String, String> args) {
     case 'control_value_not_carried':
       return l10n.aeControlValueNotCarried(a('control'));
 
-    // Properties and keyframes.
     case 'spatial_tangents_flattened':
       return l10n.aeSpatialTangentsFlattened;
     case 'expression_carried':
@@ -3024,13 +3188,11 @@ String? importReason(String key, Map<String, String> args) {
     case 'structure_unreadable':
       return l10n.aeStructureUnreadable(a('count'));
 
-    // Masks.
     case 'mask_feather_axes_differ':
       return l10n.aeMaskFeatherAxesDiffer(a('x'), a('y'));
     case 'mask_roto_bezier_flattened':
       return l10n.aeMaskRotoBezierFlattened;
 
-    // Effects.
     case 'effect_placeholder':
       return l10n.aeEffectPlaceholder(a('match_name'));
     case 'effect_params_unreadable':
@@ -3049,7 +3211,6 @@ String? importReason(String key, Map<String, String> args) {
     case 'effect_param_rebased':
       return l10n.aeEffectParamRebased(a('effect'), a('param'));
 
-    // Third-party effects.
     case 'effect_as_plugin':
       return l10n.aeEffectAsPlugin(
           a('match_name'), a('plugin'), a('carried'), a('controls'));
@@ -3059,7 +3220,6 @@ String? importReason(String key, Map<String, String> args) {
   }
 }
 
-/// Whether this build has a sentence for [key] — what the sync test asserts.
 bool hasImportReason(String key) => importReason(key, const {}) != null;
 
 /// The one-line reason for a line of the Lottie and SVG window's check
@@ -3221,8 +3381,6 @@ String? _colourRefusal(String key, String Function(String) a) {
     case 'config_unreadable':
       return l10n.ocioConfigUnreadable(a('path'));
 
-    // Things a config may legitimately contain that Lumit's v1 transform set
-    // does not implement. Each names what it refused.
     case 'unsupported_transform':
       return l10n.ocioUnsupportedTransform(a('name'));
     case 'unsupported_builtin':
@@ -3244,7 +3402,6 @@ String? _colourRefusal(String key, String Function(String) a) {
     case 'unsupported_config_version':
       return l10n.ocioUnsupportedConfigVersion(a('version'));
 
-    // The config is supported in principle but does not hold up.
     case 'unknown_colour_space':
       return l10n.ocioUnknownColourSpace(a('name'));
     case 'unknown_role':
@@ -3271,7 +3428,6 @@ String? _colourRefusal(String key, String Function(String) a) {
   }
 }
 
-/// Whether this build has a sentence for [key] — what the sync test asserts.
 bool hasColourProblem(String key) => colourProblem(key, const {}) != null;
 
 // ---------------------------------------------------------------------------
@@ -3328,7 +3484,6 @@ String? effectBadge(String key, [String? detail]) {
   }
 }
 
-/// Whether this build has a sentence for [key] — what the sync test asserts.
 bool hasEffectBadge(String key) => effectBadge(key) != null;
 
 /// What a model pack does, for the line under its name on the Addons page.

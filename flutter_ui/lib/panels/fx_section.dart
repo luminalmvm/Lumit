@@ -39,7 +39,6 @@ import 'keyframe_controls_frb.dart' show KeyframeControlsFrb, editPickedKeys;
 /// by the 1px edge it always reserves, so one icon button measures 18.
 const double fxStopwatchColumn = 18;
 
-/// What every row reserves before its label.
 const double fxKeyColumnWidth = fxStopwatchColumn;
 
 /// How wide a row's link mark is: a 14px glyph with 4 either side.
@@ -50,8 +49,6 @@ const double fxLinkMarkWidth = 22;
 /// the control column, which is the point of it being fixed.
 const double fxLabelColumnWidth = 142;
 
-/// How wide the whole name side is, so the controls stack into one column down
-/// the panel.
 const double fxNameColumnWidth = fxKeyColumnWidth + 4 + fxLabelColumnWidth;
 
 /// The room the control column keeps before the label starts taking the
@@ -96,7 +93,6 @@ class FxRowHover extends InheritedWidget {
   bool updateShouldNotify(FxRowHover old) => old.over != over;
 }
 
-/// The pointer's place on one row, handed down through [FxRowHover].
 class FxRowHoverRegion extends StatefulWidget {
   final Widget child;
   const FxRowHoverRegion({super.key, required this.child});
@@ -334,10 +330,8 @@ class FxSelection {
   /// row is keyed by on both sides of the Timeline's table.
   final String? layer;
 
-  /// The picked instances, in stack order.
   final List<UuidValue> effects;
 
-  /// Whether [effect] on [layer] is one of the picked ones.
   bool holds(String layer, UuidValue effect) =>
       this.layer == layer && effects.contains(effect);
 }
@@ -361,17 +355,13 @@ class FxPick {
 
   final ValueListenable<FxSelection> selection;
 
-  /// The layer this section's effect is on, as its id in string form.
   final String layer;
   final UuidValue effect;
 
-  /// Whether this section is picked as the selection now stands.
   bool get picked => selection.value.holds(layer, effect);
 }
 
-/// One twirl-open section: Source, Transform, or one effect.
 class FxSection extends StatelessWidget {
-  /// The section's own control, left of the name — an effect's enable switch.
   final Widget? leading;
   final String title;
   final bool open;
@@ -445,7 +435,6 @@ class FxSection extends StatelessWidget {
   /// this heading, so the answer is read from the list as it is now.
   final bool Function(String from)? landsBelow;
 
-  /// The rows under the heading, drawn only while [open].
   final List<Widget> rows;
 
   /// While true the heading's name is an inline editor instead of a label —
@@ -458,7 +447,6 @@ class FxSection extends StatelessWidget {
   /// contract every inline rename in the application has.
   final ValueChanged<String>? onRenamed;
 
-  /// `Escape` while renaming: close the editor and keep the old name.
   final VoidCallback? onRenameCancelled;
 
   /// False while the effect is **bypassed**. The heading takes a dashed
@@ -501,7 +489,6 @@ class FxSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    // Bypassed: the heading wears a dashed outline and its rows dim.
     final heading = enabled
         ? _draggableHeading(t)
         : DashedOutline(child: _draggableHeading(t));
@@ -675,7 +662,6 @@ class FxSection extends StatelessWidget {
                   onCancel: onRenameCancelled ?? () {},
                 )
               : Text(t.kickerCase(title),
-                  // Bypassed, the name drops to muted with the fill.
                   style: enabled ? t.kickerOn : t.kicker,
                   overflow: TextOverflow.ellipsis),
         ),
@@ -693,6 +679,8 @@ class FxSection extends StatelessWidget {
                 SizedBox(
                     width: fxKeyColumnWidth + 4 + fxLabelWidthFor(box.maxWidth),
                     child: names),
+                // The 6 a row leaves between its name and its control.
+                const SizedBox(width: 6),
                 Expanded(child: Row(children: actions)),
               ]),
             ),
@@ -755,8 +743,6 @@ class FxSection extends StatelessWidget {
     );
   }
 
-  /// The heading's box, around contents built above it: the fill, the fixed
-  /// height and the padding. [hover] is how far the pointer has lit it.
   Widget _headingBox(LumitTheme t, bool lit, Widget content, double hover) =>
       Container(
         height: fxHeadingHeight,
@@ -775,7 +761,6 @@ class FxSection extends StatelessWidget {
       );
 }
 
-/// A reading that gives its place to the actions under the pointer.
 class _FxRestOnly extends StatelessWidget {
   final Widget child;
   const _FxRestOnly({required this.child});
@@ -807,7 +792,6 @@ class _FxPickedFill extends StatefulWidget {
 
   final FxPick pick;
 
-  /// The heading, drawn lit or unlit.
   final Widget Function(bool lit) box;
 
   @override
@@ -860,11 +844,15 @@ class FxRenameField extends StatefulWidget {
   final String initial;
   final ValueChanged<String> onDone;
   final VoidCallback onCancel;
+
+  /// How wide the field is; the name column's width when not given.
+  final double? width;
   const FxRenameField(
       {super.key,
       required this.initial,
       required this.onDone,
-      required this.onCancel});
+      required this.onCancel,
+      this.width});
 
   @override
   State<FxRenameField> createState() => _FxRenameFieldState();
@@ -878,9 +866,23 @@ class _FxRenameFieldState extends State<FxRenameField> {
       extentOffset: widget.initial.length,
     );
 
+  /// Its own focus, asked for once it is on screen. `autofocus` alone is not
+  /// enough: it does nothing while another panel (the Node graph, say) holds
+  /// the focus, and the typing then went there.
+  final FocusNode _focus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !_focus.hasFocus) _focus.requestFocus();
+    });
+  }
+
   @override
   void dispose() {
     _controller.dispose();
+    _focus.dispose();
     super.dispose();
   }
 
@@ -888,7 +890,8 @@ class _FxRenameFieldState extends State<FxRenameField> {
   Widget build(BuildContext context) => HouseTextField(
         key: const ValueKey('fx-rename-field'),
         controller: _controller,
-        width: fxNameColumnWidth - 40,
+        focusNode: _focus,
+        width: widget.width ?? fxNameColumnWidth - 40,
         autofocus: true,
         submitOnLostFocus: true,
         onSubmitted: widget.onDone,
@@ -940,7 +943,6 @@ Widget fxTwoColumnRow({
 }) {
   final height = fxRowHeight(ThemeScope.of(context).theme);
   final strip = FxKeyStripScope.widthOf(context);
-  // In a narrow panel the lane has a line of its own under an animated row.
   final under = FxKeyStripScope.stackedLane(context, lane);
   // A value edit on a row with keys picked in the strip moves them all.
   final picks = FxKeyStripScope.maybeOf(context);
@@ -1055,7 +1057,6 @@ Widget fxGroupHeaderRow(
     onSecondaryTapUp:
         onContextMenu == null ? null : (d) => onContextMenu(d.globalPosition),
     child: HoverMark(builder: (context, lit) {
-      // Shut, the name and the twirl light towards how they read open.
       final ink = open
           ? t.textPrimary
           : Color.lerp(t.textMuted, t.textPrimary, lit)!;
@@ -1102,7 +1103,6 @@ Widget fxGroupHeaderRow(
                 SizedBox(
                     width: fxLabelWidthFor(constraints.maxWidth),
                     child: name),
-                // On the same edge as the controls in the rows around it.
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(

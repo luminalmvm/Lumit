@@ -1,9 +1,3 @@
-// The panel an extension's page is shown in.
-//
-// One pane per installed extension, told apart by the pane's number. The
-// page is a web page from the extension's own folder, drawn by the system's
-// web view (extension_page.dart has one for each platform), and everything
-// it asks of Lumit goes through an [ExtensionHost].
 
 import 'dart:async';
 
@@ -24,7 +18,6 @@ import 'extension_page.dart';
 import 'placeholder.dart';
 
 class ExtensionPanel extends StatelessWidget {
-  /// The pane's number, which is how the extension it shows is known.
   final int slot;
 
   const ExtensionPanel({super.key, required this.slot});
@@ -62,7 +55,6 @@ class ExtensionPanel extends StatelessWidget {
   }
 }
 
-/// The way to the page extensions are installed from.
 Widget _settingsButton(BuildContext context) {
   final t = ThemeScope.of(context).theme;
   return HouseButton(
@@ -74,11 +66,9 @@ Widget _settingsButton(BuildContext context) {
   );
 }
 
-/// One extension's page, and the [ExtensionHost] that answers it.
 class ExtensionView extends StatefulWidget {
   final BridgeExtension extension;
 
-  /// The effect the page drives, for an LFX effect's interface page.
   final EffectChannel? effect;
 
   const ExtensionView({super.key, required this.extension, this.effect});
@@ -94,7 +84,6 @@ class _ExtensionViewState extends State<ExtensionView>
 
   late final String _origin = extensionOrigin(widget.extension.id);
 
-  /// Why it is not, when it could not be put up.
   String? _failure;
 
   /// The view has gone to a page that is not the extension's own. Nothing

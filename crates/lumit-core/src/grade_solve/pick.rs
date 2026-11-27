@@ -9,18 +9,13 @@
 use super::{colours, percentile, RowValue, Rows, SolveError};
 use crate::fx::effects::correction::{maths, Correction};
 
-/// What a qualifier pick does to the ranges already there.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PickMode {
-    /// Ranges that cover the samples and nothing else.
     Set,
-    /// The ranges widened to cover the samples too.
     Add,
-    /// The nearest edge of one range pulled in past the samples.
     Subtract,
 }
 
-/// Which way a hue curve's x axis runs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CurveAxis {
     Hue,
@@ -28,21 +23,16 @@ pub enum CurveAxis {
     Lum,
 }
 
-/// Where a hue curve pick lands on the curve's x axis, 0..1, and how far
-/// the samples spread either side of it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CurvePick {
     pub centre: f32,
     pub spread: f32,
 }
 
-/// Samples with less chroma than this have no hue worth reading.
 const GREY: f32 = 0.02;
 
-/// The share of samples a range covers, from each end.
 const TAIL: f32 = 0.02;
 
-/// The axis of a hue curve's row id, or `None` for a row that isn't one.
 pub fn curve_axis(id: &str) -> Option<CurveAxis> {
     match id {
         "hue_hue" | "hue_sat" | "hue_lum" => Some(CurveAxis::Hue),
@@ -98,7 +88,6 @@ pub fn circle_samples(
     out
 }
 
-/// A range on a 0..1 axis: low, high and softness.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Range {
     lo: f32,
@@ -107,8 +96,6 @@ struct Range {
 }
 
 impl Range {
-    /// The samples' own range, `TAIL` trimmed from each end, softness a
-    /// quarter of its width within reason.
     fn of(mut values: Vec<f32>) -> Range {
         let lo = percentile(&mut values, TAIL);
         let hi = percentile(&mut values, 1.0 - TAIL);
@@ -172,7 +159,6 @@ pub fn qualifier_pick(
     if picked.is_empty() {
         return Err(SolveError::Empty);
     }
-    // A 3D key takes the circle's average as one more sample.
     if node.qual_mode == 4 {
         let one = super::mean(picked.iter().copied()).ok_or(SolveError::Empty)?;
         return super::pick3d::qualifier_pick_3d(&[one], mode, node);
@@ -183,7 +169,6 @@ pub fn qualifier_pick(
         .map(|u| u.map(|c| maths::encode(c, space)))
         .collect();
     let was_off = node.qual_mode == 0 || node.qual_mode > 3;
-    // An Off qualifier has nothing to widen or cut into.
     let mode = match (was_off, mode) {
         (true, PickMode::Subtract) => return Ok(Vec::new()),
         (true, _) => PickMode::Set,
@@ -285,7 +270,6 @@ pub fn qualifier_pick(
             put_range(&mut rows, SAT, next[0]);
             put_range(&mut rows, LUM, next[1]);
             if let Some(h) = next.get(2) {
-                // Back to a centre and a width, symmetric.
                 let width = (h.hi - h.lo).clamp(0.0, 1.0);
                 let middle = (centre + 0.5 * (h.lo + h.hi)).rem_euclid(1.0);
                 rows.push(("qual_hue", RowValue::Float(360.0 * middle)));
@@ -305,8 +289,6 @@ pub fn qualifier_pick(
     Ok(rows)
 }
 
-/// The ranges after the pick: the samples' own for Set, both covered for
-/// Add, and for Subtract one range cut, the one that loses least.
 fn edit_ranges(now: &[Range], got: &[Range], mode: PickMode) -> Vec<Range> {
     match mode {
         PickMode::Set => got.to_vec(),
@@ -335,7 +317,6 @@ fn hue(v: [f32; 3]) -> f32 {
     maths::hue_of(c[1], c[2])
 }
 
-/// The mean of hues as angles, 0..1.
 fn circular_mean(hues: &[f32]) -> f32 {
     let (mut s, mut c) = (0.0f64, 0.0f64);
     for h in hues {
@@ -346,8 +327,6 @@ fn circular_mean(hues: &[f32]) -> f32 {
     ((s.atan2(c) / std::f64::consts::TAU) as f32).rem_euclid(1.0)
 }
 
-/// The hues as a range of turns about `centre`: their own ends, trimmed,
-/// made symmetric so the centre stays put.
 fn hue_range(hues: &[f32], centre: f32) -> Range {
     let d: Vec<f32> = hues
         .iter()
@@ -369,7 +348,6 @@ pub fn curve_pick(
     axis: CurveAxis,
     node: &Correction,
 ) -> Result<CurvePick, SolveError> {
-    // The node's grade up to the hue curves, all of it keyed in.
     let mut pk = node.packed(1.0);
     pk.hue_curves_on = false;
     pk.mix = 1.0;
@@ -423,8 +401,6 @@ mod tests {
     use super::*;
     use crate::grade_solve::test_support::{declared, with_rows};
 
-    /// A pick on an orange band keys the band and leaves a blue one alone,
-    /// and Subtract over part of it cuts that part out.
     #[test]
     fn a_pick_over_a_hue_band_keys_that_band() {
         let (w, h) = (64u32, 32u32);
@@ -432,8 +408,6 @@ mod tests {
         for y in 0..h {
             for x in 0..w {
                 let t = (y as f32 + 0.5) / h as f32;
-                // Left half orange, right half blue, brighter down the
-                // picture.
                 let base = if x < w / 2 {
                     [0.9, 0.45, 0.12]
                 } else {
@@ -459,8 +433,6 @@ mod tests {
         assert!(key(10, 12) > 0.99);
         assert!(key(48, 16) < 0.01);
 
-        // Subtract the bright end of the band: the bottom rows go, the top
-        // ones stay.
         let bright = circle_samples(&rgba, w, h, [16.0, 30.0], 2.0);
         let cut = qualifier_pick(&bright, PickMode::Subtract, &keyed).unwrap();
         let mut both = rows.clone();

@@ -26,31 +26,23 @@ pub mod library;
 pub mod package;
 pub mod style;
 
-/// The file that makes a folder an extension.
 pub const MANIFEST_FILE: &str = "extension.json";
 
 /// The manifest shape this build reads. Raised when a field changes meaning.
 pub const FORMAT: u32 = 1;
 
-/// Where an install is put together before it is moved into place.
 const STAGING: &str = ".staging";
 
-/// The most an extension's folder holds. A page, its scripts and pictures.
 const MAX_FILES: usize = 4096;
 const MAX_BYTES: u64 = 512 << 20;
 const MAX_DEPTH: usize = 16;
 
-/// The longest a manifest is read.
 const MAX_MANIFEST: u64 = 1 << 20;
 
-/// The longest an effect's shader is read.
 const MAX_SHADER: u64 = 1 << 20;
 
-/// The most effects one extension carries.
 const MAX_EFFECTS: usize = 64;
 
-/// One thing an extension may ask to be allowed. Each is a family of
-/// questions it can ask the interface and of things it is told.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Permission {
@@ -70,7 +62,6 @@ pub enum Permission {
 }
 
 impl Permission {
-    /// The word a manifest spells it with.
     #[must_use]
     pub fn word(self) -> &'static str {
         match self {
@@ -84,7 +75,6 @@ impl Permission {
     }
 }
 
-/// What an `extension.json` says.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Manifest {
     pub format: u32,
@@ -93,7 +83,6 @@ pub struct Manifest {
     pub id: String,
     pub name: String,
     pub version: String,
-    /// One line saying what it does.
     #[serde(default)]
     pub summary: String,
     /// Who made it, as they call themselves. Nothing checks it.
@@ -114,7 +103,6 @@ pub struct Manifest {
     /// as `example.org`. A name stands for the sites under it too.
     #[serde(default)]
     pub hosts: Vec<String>,
-    /// The LFX effects it carries.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub effects: Vec<ManifestEffect>,
 }
@@ -155,7 +143,6 @@ pub struct ManifestEffect {
     pub interface: Option<ManifestInterface>,
 }
 
-/// One pass: a function in the shader, drawn at `scale` of the picture.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ManifestPass {
     pub name: String,
@@ -168,7 +155,6 @@ fn full_size() -> f32 {
     1.0
 }
 
-/// The extra picture an effect takes.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ManifestInput {
     pub label: String,
@@ -179,7 +165,6 @@ pub struct ManifestInput {
 #[serde(rename_all = "lowercase")]
 pub enum InputKind {
     Image,
-    /// A Depth socket in the node graph.
     Depth,
 }
 
@@ -192,7 +177,6 @@ pub struct ManifestInterface {
     pub height: u32,
 }
 
-/// What the engine keeps of `effect`, with its shader's text.
 pub(crate) fn lfx_effect(extension: &str, effect: &ManifestEffect, shader: String) -> LfxEffect {
     LfxEffect {
         extension: extension.to_owned(),
@@ -247,7 +231,6 @@ fn invalid(why: &str) -> ExtensionError {
     ExtensionError::Invalid(why.to_owned())
 }
 
-/// Whether `id` can name an extension, and so a folder.
 #[must_use]
 pub fn is_id(id: &str) -> bool {
     let plain = |b: u8| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-';
@@ -491,7 +474,6 @@ pub fn machine_dirs() -> Vec<PathBuf> {
     Vec::new()
 }
 
-/// The folders the person added, in the order they added them.
 #[must_use]
 pub fn extra_dirs() -> Vec<PathBuf> {
     lumit_project::plugins::PluginPrefs::load_default().extension_folders
@@ -543,7 +525,6 @@ pub fn remove_dir(folder: &Path) -> bool {
     prefs.extension_folders.len() != before && prefs.save_default().is_ok()
 }
 
-/// One extension as its folder has it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Installed {
     pub manifest: Manifest,
@@ -687,7 +668,6 @@ pub fn bundles(installed: &Installed) -> Vec<PathBuf> {
     bundles.into_iter().collect()
 }
 
-/// What a copy has left to spend.
 struct Room {
     files: usize,
     bytes: u64,
@@ -920,9 +900,6 @@ mod tests {
         assert!(parse(&both).is_err());
     }
 
-    /// Installing copies the folder whole, an install over another replaces
-    /// it whole, a package installs the same as its folder, and a removed
-    /// extension leaves nothing.
     #[test]
     fn an_extension_is_installed_listed_replaced_and_removed() {
         let root = std::env::temp_dir().join(format!("lumit-ext-test-{}", std::process::id()));

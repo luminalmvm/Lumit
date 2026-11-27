@@ -1,7 +1,3 @@
-//! A Model layer's rows through the walk: only what changed is kept and it
-//! finds its part again, a pose comes from the moment alone, a file that holds
-//! no take keeps one name for every frame, and a keyed camera comes out of a file.
-
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use lumit_core::anim::Property;
@@ -13,8 +9,6 @@ use lumit_render::{model, model_extract, model_motion};
 use std::sync::Arc;
 use uuid::Uuid;
 
-/// A triangle under a parent that a take slides a metre along x in a second,
-/// and a camera a metre back of it that slides with it.
 fn write_rig(dir: &std::path::Path) -> std::path::PathBuf {
     let mut bytes: Vec<u8> = Vec::new();
     let floats: [f32; 9] = [-1.0, -1.0, 0.0, 1.0, -1.0, 0.0, 0.0, 1.0, 0.0];
@@ -94,7 +88,6 @@ fn project(path: &std::path::Path) -> (Arc<Document>, Uuid, Uuid, Uuid) {
     (Arc::new(doc), comp, id, item.id)
 }
 
-/// The scene, read beside the frame as a panel would start it.
 fn read_scene(doc: &Document, item: Uuid) -> Arc<lumit_scene::ModelScene> {
     for _ in 0..500 {
         if let Some(Some(scene)) = model::scene_if_read(doc, item) {
@@ -122,7 +115,6 @@ fn rows_keep_only_what_changed_and_the_take_plays() {
         "a new layer plays its first take"
     );
 
-    // Saved as nothing changed: no rows at all.
     let mut list = model_motion::all_rows(layer, settings, &scene);
     assert_eq!(
         list.len(),
@@ -133,8 +125,6 @@ fn rows_keep_only_what_changed_and_the_take_plays() {
     assert_eq!((kept.playback.as_ref(), kept.parts.len()), (None, 0));
     assert_eq!(kept.take, Take::First);
 
-    // One part moved is one part saved, named by its path, and survives a file
-    // that has lost the part and one that has it back.
     let tri = scene.nodes.iter().position(|n| n.name == "Tri").unwrap();
     let rows = &mut list[1 + tri];
     let id = rows.id;
@@ -155,7 +145,6 @@ fn rows_keep_only_what_changed_and_the_take_plays() {
     assert_eq!(again.parts.len(), 1, "a part the file lost keeps its rows");
     assert_eq!(model_motion::all_rows(layer, &kept, &scene)[1 + tri].id, id);
 
-    // Picking a take by the Animation row keeps it by name.
     let mut list = model_motion::all_rows(layer, settings, &scene);
     for p in &mut list[0].params {
         if p.id == "take" {
@@ -167,7 +156,6 @@ fn rows_keep_only_what_changed_and_the_take_plays() {
         Take::Rest
     );
 
-    // A take the file has lost stays named, and reads past the file's own.
     let lost = lumit_core::model_layer::ModelSettings {
         take: Take::Named("Gone".into()),
         ..(**settings).clone()
@@ -182,8 +170,6 @@ fn rows_keep_only_what_changed_and_the_take_plays() {
         lost.take
     );
 
-    // The same moment comes out the same whatever came before, and a moment
-    // past the take goes round.
     let context = lumit_core::model::comp_context(&doc, c, 0.25);
     let at = |t: f64| model_motion::pose_at(c, layer, settings, &scene, t, &context).unwrap();
     let first = at(0.25);
@@ -192,8 +178,6 @@ fn rows_keep_only_what_changed_and_the_take_plays() {
     assert_eq!(first.worlds[tri], at(1.25).worlds[tri]);
     assert!((first.worlds[tri].w_axis.x - 0.25).abs() < 1e-4);
 
-    // The rows time it: Offset moves it along, Mirror comes back past the end,
-    // and Retime reads the take as it reads footage.
     let timed = |offset: f64, looping: u32, retime: Option<Property>, t: f64| {
         let mut rows =
             lumit_core::fx::builtins::instantiate(lumit_core::model_part::PLAYBACK_NAME).unwrap();
@@ -216,7 +200,6 @@ fn rows_keep_only_what_changed_and_the_take_plays() {
     assert!((timed(0.5, 1, None, 0.25) - 0.75).abs() < 1e-4, "Offset");
     assert!((timed(0.0, 2, None, 1.25) - 0.75).abs() < 1e-4, "Mirror");
     assert!((timed(0.0, 3, None, 5.0) - 1.0).abs() < 1e-4, "Freeze");
-    // Half speed: the second second of the layer shows the first of the take.
     let mut half = Property::zero();
     let key = |secs: i64, value: f64| lumit_core::anim::Keyframe {
         time: lumit_core::time::Rational::new(secs, 1).unwrap(),
@@ -233,7 +216,6 @@ fn rows_keep_only_what_changed_and_the_take_plays() {
         "Retime"
     );
 
-    // A part turned on three axes turns in the order the layer's rows do.
     let mut rows = model_motion::all_rows(layer, settings, &scene);
     for p in &mut rows[1 + tri].params {
         let v = match p.id.as_str() {
@@ -267,7 +249,6 @@ fn rows_keep_only_what_changed_and_the_take_plays() {
         }
     }
 
-    // The camera comes out keyed and following the layer, with nothing else.
     let made = model_extract::layers_from_model(&doc, c, layer, ("Camera", "Light"));
     assert_eq!(made.len(), 1);
     assert_eq!(made[0].name, "Lens");

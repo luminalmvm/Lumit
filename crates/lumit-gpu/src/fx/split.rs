@@ -1,6 +1,3 @@
-//! Channel-offset kernels (docs/08 §3.6, §3.15): the classic RGB split, its
-//! wavelength-dispersion sibling, and the always-radial chromatic aberration.
-
 use crate::GpuContext;
 
 use super::{work_texture, FxEngine};
@@ -108,9 +105,6 @@ struct ChromaticAberrationParams {
 }
 
 impl FxEngine {
-    /// Apply one RGB split (docs/08 §3.6) to a linear working texture,
-    /// returning a new texture of the same size. Single pointwise pass with
-    /// offset bilinear taps.
     pub fn rgb_split(
         &self,
         ctx: &GpuContext,
@@ -149,10 +143,6 @@ impl FxEngine {
         out
     }
 
-    /// Apply one spectral split — the RGB split's Wavelength mode (docs/08
-    /// §3.6) — to a linear working texture, returning a new texture
-    /// of the same size. Single pointwise pass, nine offset bilinear taps
-    /// weighted by the host-supplied wavelength basis.
     pub fn spectral_split(
         &self,
         ctx: &GpuContext,
@@ -187,10 +177,6 @@ impl FxEngine {
         out
     }
 
-    /// Apply one chromatic aberration (docs/08 §3.15) to a linear working
-    /// texture, returning a new texture of the same size. Single pointwise
-    /// pass with offset bilinear taps — a dedicated, always-radial sibling
-    /// of [`FxEngine::rgb_split`]'s own radial mode.
     pub fn chromatic_aberration(
         &self,
         ctx: &GpuContext,

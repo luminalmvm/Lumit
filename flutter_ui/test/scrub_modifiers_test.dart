@@ -78,8 +78,6 @@ void main() {
   testWidgets('a drag faster than the rebuilds loses no travel',
       (tester) async {
     final emitted = <num>[];
-    // The value prop is frozen at 0 — the harshest case: no rebuild ever
-    // catches up with the drag.
     await tester.pumpWidget(_host(DragValueField(
       value: 0,
       min: -1000000,
@@ -94,7 +92,6 @@ void main() {
     await gesture.moveBy(const Offset(30, 0));
     await tester.pump();
     final base = emitted.isEmpty ? 0 : emitted.last;
-    // Ten moves, no pump between them: every tick lands on the same build.
     for (var i = 0; i < 10; i++) {
       await gesture.moveBy(const Offset(10, 0));
     }
@@ -104,9 +101,6 @@ void main() {
         reason: 'all ten 10 px moves count, not only the last one');
   });
 
-  /// Drags the clock readout with [modifier] held and returns how many frames
-  /// it moved during the measured stretch. As above, an unmeasured first move
-  /// crosses the slop; the measured move is exactly [px] pixels.
   Future<int> dragClock(WidgetTester tester,
       {required double px, LogicalKeyboardKey? modifier}) async {
     final live = <int>[];
@@ -147,13 +141,7 @@ void main() {
     expect(await dragClock(tester, px: 4), 1);
   });
 
-  // -------------------------------------------------------------------------
-  // The floating ladder (polish 27, study §3): the four rungs shown at once,
-  // the active one boxed, only while a scrub runs.
-  // -------------------------------------------------------------------------
-
   group('The floating ladder', () {
-    /// Which rungs are drawn in a box — the boxed one is the level in force.
     List<String> boxed(WidgetTester tester) => [
           for (final label in ScrubLadder.labels)
             if ((((tester
@@ -171,8 +159,6 @@ void main() {
               label,
         ];
 
-    /// P1: the chip is put up by the gesture and taken down with it, and the
-    /// resting field is exactly what it was.
     testWidgets('rides a scrub and leaves with it', (tester) async {
       await tester.pumpWidget(_host(DragValueField(
         value: 0,

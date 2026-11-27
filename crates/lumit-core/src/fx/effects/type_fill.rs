@@ -25,14 +25,10 @@ use crate::fx::{
 use crate::model::{EffectInstance, EffectValue};
 use lumit_fx_macros::Effect;
 
-/// What Order offers.
 pub const TYPE_FILL_ORDER: &[&str] = &["In turn", "Shift per row", "Random"];
 
-/// What Direction offers.
 pub const TYPE_FILL_DIRECTION: &[&str] = &["Rows", "Columns"];
 
-/// What the rows are called when Direction is Columns, where each works down
-/// a column instead of along a row.
 pub const COLUMN_LABELS: &[(&str, &str)] = &[
     ("rows", "Columns"),
     ("grid_height", "Grid width"),
@@ -43,13 +39,10 @@ pub const COLUMN_LABELS: &[(&str, &str)] = &[
     ("alternate_rows", "Alternate columns"),
 ];
 
-/// Where the region is read from.
 pub const REGION_FROM: &[&str] = &["Alpha", "Luminance"];
 
-/// The dice Random order rolls.
 const ORDER_ATTR: u32 = 130;
 
-/// Type fill's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "type_fill",
@@ -61,7 +54,6 @@ const ORDER_ATTR: u32 = 130;
     premultiplied = true,
 )]
 pub struct TypeFill {
-    /// The Text layer whose look the words take: font, style and colour.
     #[layer(label = "Text layer")]
     pub text_layer: bool,
 
@@ -69,8 +61,6 @@ pub struct TypeFill {
     #[text(label = "Words", default = "Flood|the|Grid")]
     pub words: ShortText,
 
-    /// How many times Words is set one after another in every row: a short
-    /// list fills a wide row without being typed again.
     #[counter(
         label = "Repeat words",
         min = 1,
@@ -115,17 +105,12 @@ pub struct TypeFill {
     #[layer(label = "Region layer")]
     pub region_layer: bool,
 
-    /// Where the Region layer's picture sits on this one: as it sits in the
-    /// comp, stretched over the frame, or centred at its own size.
     #[choice(label = "Region placement", options = *MAP_PLACEMENT_OPTIONS, default = 0)]
     pub region_layer_placement: u32,
 
-    /// Whether the region is where the Region layer is opaque or where it is
-    /// bright.
     #[choice(label = "Region from", options = REGION_FROM, default = 0)]
     pub region_from: u32,
 
-    /// Fill where the region is not, instead of where it is.
     #[toggle(label = "Invert region", default = false)]
     pub invert: bool,
 
@@ -144,7 +129,6 @@ pub struct TypeFill {
     #[toggle(label = "Fit piece", default = false)]
     pub fit_piece: bool,
 
-    /// How much of its piece's box a word fills with Fit piece, per cent.
     #[slider(
         label = "Piece scale",
         min = 0.0,
@@ -173,7 +157,6 @@ pub struct TypeFill {
     )]
     pub threshold: f32,
 
-    /// How many rows fill the frame from top to bottom.
     #[counter(
         label = "Rows",
         min = 1,
@@ -197,7 +180,6 @@ pub struct TypeFill {
     )]
     pub grid_height: f32,
 
-    /// The room between one row and the next, px@comp.
     #[slider(
         label = "Row gap",
         min = 0.0,
@@ -240,7 +222,6 @@ pub struct TypeFill {
     #[slider(label = "Row shift", min = -2000.0, max = 2000.0, default = 0.0, unit = Px)]
     pub row_shift: f32,
 
-    /// Every other row slides the other way.
     #[toggle(label = "Alternate rows", default = false)]
     pub alternate_rows: bool,
 
@@ -272,11 +253,9 @@ pub struct TypeFill {
     #[choice(label = "Order", options = TYPE_FILL_ORDER, default = 0)]
     pub order: u32,
 
-    /// Which shuffle Random order makes.
     #[seed]
     pub seed: u32,
 
-    /// The Mix every effect ends with, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -299,10 +278,8 @@ pub struct Piece {
 }
 
 impl TypeFill {
-    /// The raster factor.
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
 
-    /// This instance's raster factor, read back out of a resolved bag.
     #[must_use]
     pub fn px_scale_of(p: crate::fx::params::Params<'_>) -> f32 {
         p.float(Self::DERIVED_PX_SCALE, 1.0)
@@ -329,7 +306,6 @@ impl TypeFill {
             .collect()
     }
 
-    /// The top and bottom of each row in a raster `height` px high.
     #[must_use]
     #[allow(clippy::cast_precision_loss, clippy::cast_sign_loss)]
     pub fn row_bands(&self, height: f32, px_scale: f32) -> Vec<[f32; 2]> {
@@ -380,7 +356,6 @@ impl TypeFill {
         }
     }
 
-    /// Which word each column of row `row` takes, left to right, out of `n`.
     #[must_use]
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     pub fn row_order(&self, row: usize, n: usize) -> Vec<usize> {
@@ -473,8 +448,6 @@ impl TypeFill {
             }
             for (k, column) in self.columns(r, natural, width, gap, self.row_offset(r, px_scale)) {
                 if self.cut_words {
-                    // Every word whole; the region cuts it pixel by pixel
-                    // (`TypeFill::coverage`).
                     if column[1] - column[0] >= least {
                         out.push(Piece {
                             word: k,
@@ -550,7 +523,6 @@ impl TypeFill {
             if mix >= 1.0 {
                 return given;
             }
-            // Both as shares of one, mixed.
             let g: f32 = given.iter().sum();
             let n: f32 = natural.iter().map(|v| v.max(1e-3)).sum();
             given
@@ -638,8 +610,6 @@ impl TypeFill {
             let spans = runs(row);
             for (k, column) in self.columns(r, natural, width, gap, self.row_offset(r, px_scale)) {
                 for span in &spans {
-                    // The region's own edges are the pieces' edges: Word
-                    // gap is only the room between columns.
                     #[allow(clippy::cast_precision_loss)]
                     let (s0, s1) = (span[0] as f32, span[1] as f32);
                     let (x0, x1) = (column[0].max(s0), column[1].min(s1));
@@ -670,7 +640,6 @@ impl TypeFill {
     }
 }
 
-/// The runs of pixel columns a row's region reaches, start and end.
 fn runs(row: &[Option<[f32; 2]>]) -> Vec<[usize; 2]> {
     let mut out = Vec::new();
     let mut start = None;

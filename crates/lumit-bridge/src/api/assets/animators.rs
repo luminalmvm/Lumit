@@ -3,10 +3,96 @@
 use flutter_rust_bridge::frb;
 
 use super::{
-    BridgeAnimatorAxis, BridgeRangeSelector, BridgeSelectorBasis, BridgeSelectorKind,
-    BridgeSelectorMode, BridgeSelectorShape, BridgeTextAnimator,
+    BridgeAnimatorAxis, BridgeRangeSelector, BridgeSelectorBasis, BridgeSelectorCombine,
+    BridgeSelectorKind, BridgeSelectorMode, BridgeSelectorShape, BridgeSelectorUnits,
+    BridgeStaggerOrder, BridgeStaggerRepeat, BridgeTextAnimator,
 };
 use crate::api::{effect::BridgeScalar, BridgeError};
+use lumit_core::text::selector::{
+    RangeSelector, SelectorBasis, SelectorCombine, SelectorKind, SelectorMode, SelectorShape,
+    SelectorUnits, StaggerOrder, StaggerRepeat,
+};
+
+/// One selector on its way out to the panel.
+fn read_selector(s: &RangeSelector, offset: lumit_core::time::Rational) -> BridgeRangeSelector {
+    let read = |p| BridgeScalar::read_at(p, offset);
+    BridgeRangeSelector {
+        start: read(&s.start),
+        end: read(&s.end),
+        offset: read(&s.offset),
+        basis: match s.basis {
+            SelectorBasis::Characters => BridgeSelectorBasis::Characters,
+            SelectorBasis::Words => BridgeSelectorBasis::Words,
+            SelectorBasis::CharactersExcludingSpaces => {
+                BridgeSelectorBasis::CharactersExcludingSpaces
+            }
+            SelectorBasis::Lines => BridgeSelectorBasis::Lines,
+        },
+        shape: match s.shape {
+            SelectorShape::Square => BridgeSelectorShape::Square,
+            SelectorShape::Ramp => BridgeSelectorShape::Ramp,
+            SelectorShape::Smooth => BridgeSelectorShape::Smooth,
+            SelectorShape::Bounce => BridgeSelectorShape::Bounce,
+        },
+        mode: match s.mode {
+            SelectorMode::Range => BridgeSelectorMode::Range,
+            SelectorMode::Current => BridgeSelectorMode::Current,
+            SelectorMode::Said => BridgeSelectorMode::Said,
+            SelectorMode::Unsaid => BridgeSelectorMode::Unsaid,
+            SelectorMode::Emphasis => BridgeSelectorMode::Emphasis,
+        },
+        ease: s.ease,
+        kind: match s.kind {
+            SelectorKind::Range => BridgeSelectorKind::Range,
+            SelectorKind::Proximity => BridgeSelectorKind::Proximity,
+            SelectorKind::Wiggly => BridgeSelectorKind::Wiggly,
+            SelectorKind::Stagger => BridgeSelectorKind::Stagger,
+        },
+        target: s.target,
+        radius: read(&s.radius),
+        invert: s.invert,
+        ease_high: read(&s.ease_high),
+        ease_low: read(&s.ease_low),
+        amount: read(&s.amount),
+        delay: read(&s.delay),
+        delay_ease: read(&s.delay_ease),
+        bounce_amplitude: read(&s.bounce_amplitude),
+        bounce_frequency: read(&s.bounce_frequency),
+        bounce_decay: read(&s.bounce_decay),
+        order: match s.order {
+            StaggerOrder::Forward => BridgeStaggerOrder::Forward,
+            StaggerOrder::Backward => BridgeStaggerOrder::Backward,
+            StaggerOrder::FromCentre => BridgeStaggerOrder::FromCentre,
+            StaggerOrder::FromEdges => BridgeStaggerOrder::FromEdges,
+            StaggerOrder::Random => BridgeStaggerOrder::Random,
+        },
+        min_amount: read(&s.min_amount),
+        max_amount: read(&s.max_amount),
+        wiggles: read(&s.wiggles),
+        correlation: read(&s.correlation),
+        seed: s.seed,
+        combine: match s.combine {
+            SelectorCombine::Add => BridgeSelectorCombine::Add,
+            SelectorCombine::Intersect => BridgeSelectorCombine::Intersect,
+            SelectorCombine::Min => BridgeSelectorCombine::Min,
+            SelectorCombine::Max => BridgeSelectorCombine::Max,
+            SelectorCombine::Difference => BridgeSelectorCombine::Difference,
+        },
+        units: match s.units {
+            SelectorUnits::Percentage => BridgeSelectorUnits::Percentage,
+            SelectorUnits::Index => BridgeSelectorUnits::Indexed,
+        },
+        randomize: s.randomize,
+        delay_frames: s.delay_frames,
+        total: s.total,
+        repeat: match s.repeat {
+            StaggerRepeat::Once => BridgeStaggerRepeat::Once,
+            StaggerRepeat::Loop => BridgeStaggerRepeat::Loop,
+            StaggerRepeat::PingPong => BridgeStaggerRepeat::PingPong,
+        },
+        bounce_last: s.bounce_last,
+    }
+}
 
 /// One animator on its way out to the panel, its keys on the comp's clock.
 #[frb(ignore)]
@@ -14,47 +100,25 @@ pub(crate) fn read_animator(
     animator: &lumit_core::text::TextAnimator,
     offset: lumit_core::time::Rational,
 ) -> BridgeTextAnimator {
-    use lumit_core::text::selector::{SelectorBasis, SelectorKind, SelectorMode, SelectorShape};
     let read = |p| BridgeScalar::read_at(p, offset);
-    let s = &animator.selector;
     BridgeTextAnimator {
         name: animator.name.clone(),
-        selector: BridgeRangeSelector {
-            start: read(&s.start),
-            end: read(&s.end),
-            offset: read(&s.offset),
-            basis: match s.basis {
-                SelectorBasis::Characters => BridgeSelectorBasis::Characters,
-                SelectorBasis::Words => BridgeSelectorBasis::Words,
-            },
-            shape: match s.shape {
-                SelectorShape::Square => BridgeSelectorShape::Square,
-                SelectorShape::Ramp => BridgeSelectorShape::Ramp,
-                SelectorShape::Smooth => BridgeSelectorShape::Smooth,
-                SelectorShape::Bounce => BridgeSelectorShape::Bounce,
-            },
-            mode: match s.mode {
-                SelectorMode::Range => BridgeSelectorMode::Range,
-                SelectorMode::Current => BridgeSelectorMode::Current,
-                SelectorMode::Said => BridgeSelectorMode::Said,
-                SelectorMode::Unsaid => BridgeSelectorMode::Unsaid,
-                SelectorMode::Emphasis => BridgeSelectorMode::Emphasis,
-            },
-            ease: s.ease,
-            kind: match s.kind {
-                SelectorKind::Range => BridgeSelectorKind::Range,
-                SelectorKind::Proximity => BridgeSelectorKind::Proximity,
-                SelectorKind::Wiggly => BridgeSelectorKind::Wiggly,
-            },
-            target: s.target,
-            radius: read(&s.radius),
-            invert: s.invert,
-            min_amount: read(&s.min_amount),
-            max_amount: read(&s.max_amount),
-            wiggles: read(&s.wiggles),
-            correlation: read(&s.correlation),
-            seed: s.seed,
-        },
+        selector: read_selector(&animator.selector, offset),
+        selectors: animator
+            .selectors
+            .iter()
+            .map(|s| read_selector(s, offset))
+            .collect(),
+        enabled: animator.enabled,
+        solo: animator.solo,
+        amount: read(&animator.amount),
+        follow: animator.follow.clone(),
+        follow_offset: animator.follow_offset,
+        skew: read(&animator.skew),
+        skew_axis: read(&animator.skew_axis),
+        tracking: read(&animator.tracking),
+        blur: read(&animator.blur),
+        character_offset: read(&animator.character_offset),
         position_x: read(&animator.position_x),
         position_y: read(&animator.position_y),
         rotation: read(&animator.rotation),
@@ -83,20 +147,109 @@ pub(crate) fn read_animator(
     }
 }
 
+fn write_property(
+    s: &BridgeScalar,
+    offset: lumit_core::time::Rational,
+) -> Result<lumit_core::anim::Property, BridgeError> {
+    Ok(lumit_core::anim::Property {
+        animation: s.animation_at(offset)?,
+        extra: serde_json::Map::new(),
+    })
+}
+
+/// One selector back from the panel, on the layer's own clock.
+fn selector_from(
+    s: &BridgeRangeSelector,
+    offset: lumit_core::time::Rational,
+) -> Result<RangeSelector, BridgeError> {
+    let write = |p: &BridgeScalar| write_property(p, offset);
+    Ok(RangeSelector {
+        start: write(&s.start)?,
+        end: write(&s.end)?,
+        offset: write(&s.offset)?,
+        basis: match s.basis {
+            BridgeSelectorBasis::Characters => SelectorBasis::Characters,
+            BridgeSelectorBasis::Words => SelectorBasis::Words,
+            BridgeSelectorBasis::CharactersExcludingSpaces => {
+                SelectorBasis::CharactersExcludingSpaces
+            }
+            BridgeSelectorBasis::Lines => SelectorBasis::Lines,
+        },
+        shape: match s.shape {
+            BridgeSelectorShape::Square => SelectorShape::Square,
+            BridgeSelectorShape::Ramp => SelectorShape::Ramp,
+            BridgeSelectorShape::Smooth => SelectorShape::Smooth,
+            BridgeSelectorShape::Bounce => SelectorShape::Bounce,
+        },
+        mode: match s.mode {
+            BridgeSelectorMode::Range => SelectorMode::Range,
+            BridgeSelectorMode::Current => SelectorMode::Current,
+            BridgeSelectorMode::Said => SelectorMode::Said,
+            BridgeSelectorMode::Unsaid => SelectorMode::Unsaid,
+            BridgeSelectorMode::Emphasis => SelectorMode::Emphasis,
+        },
+        ease: Some(s.ease)
+            .filter(|e| e.is_finite())
+            .map_or(0.0, |e| e.max(0.0)),
+        kind: match s.kind {
+            BridgeSelectorKind::Range => SelectorKind::Range,
+            BridgeSelectorKind::Proximity => SelectorKind::Proximity,
+            BridgeSelectorKind::Wiggly => SelectorKind::Wiggly,
+            BridgeSelectorKind::Stagger => SelectorKind::Stagger,
+        },
+        target: s.target,
+        radius: write(&s.radius)?,
+        invert: s.invert,
+        ease_high: write(&s.ease_high)?,
+        ease_low: write(&s.ease_low)?,
+        amount: write(&s.amount)?,
+        delay: write(&s.delay)?,
+        delay_ease: write(&s.delay_ease)?,
+        bounce_amplitude: write(&s.bounce_amplitude)?,
+        bounce_frequency: write(&s.bounce_frequency)?,
+        bounce_decay: write(&s.bounce_decay)?,
+        order: match s.order {
+            BridgeStaggerOrder::Forward => StaggerOrder::Forward,
+            BridgeStaggerOrder::Backward => StaggerOrder::Backward,
+            BridgeStaggerOrder::FromCentre => StaggerOrder::FromCentre,
+            BridgeStaggerOrder::FromEdges => StaggerOrder::FromEdges,
+            BridgeStaggerOrder::Random => StaggerOrder::Random,
+        },
+        min_amount: write(&s.min_amount)?,
+        max_amount: write(&s.max_amount)?,
+        wiggles: write(&s.wiggles)?,
+        correlation: write(&s.correlation)?,
+        seed: s.seed,
+        combine: match s.combine {
+            BridgeSelectorCombine::Add => SelectorCombine::Add,
+            BridgeSelectorCombine::Intersect => SelectorCombine::Intersect,
+            BridgeSelectorCombine::Min => SelectorCombine::Min,
+            BridgeSelectorCombine::Max => SelectorCombine::Max,
+            BridgeSelectorCombine::Difference => SelectorCombine::Difference,
+        },
+        units: match s.units {
+            BridgeSelectorUnits::Percentage => SelectorUnits::Percentage,
+            BridgeSelectorUnits::Indexed => SelectorUnits::Index,
+        },
+        randomize: s.randomize,
+        delay_frames: s.delay_frames,
+        total: s.total,
+        repeat: match s.repeat {
+            BridgeStaggerRepeat::Once => StaggerRepeat::Once,
+            BridgeStaggerRepeat::Loop => StaggerRepeat::Loop,
+            BridgeStaggerRepeat::PingPong => StaggerRepeat::PingPong,
+        },
+        bounce_last: s.bounce_last,
+    })
+}
+
 /// And back: the panel's animator returned to the layer's own clock.
 #[frb(ignore)]
-pub(super) fn animator_from(
+pub(crate) fn animator_from(
     animator: BridgeTextAnimator,
     offset: lumit_core::time::Rational,
 ) -> Result<lumit_core::text::TextAnimator, BridgeError> {
-    use lumit_core::text::selector::{SelectorBasis, SelectorKind, SelectorMode, SelectorShape};
-    let write = |s: &BridgeScalar| -> Result<lumit_core::anim::Property, BridgeError> {
-        Ok(lumit_core::anim::Property {
-            animation: s.animation_at(offset)?,
-            extra: serde_json::Map::new(),
-        })
-    };
-    let s = &animator.selector;
+    let write = |p: &BridgeScalar| write_property(p, offset);
     // An axis named twice is one axis, the later setting winning, and a tag
     // that isn't one is dropped.
     let mut axes: Vec<lumit_core::text::AnimatorAxis> = Vec::new();
@@ -115,44 +268,25 @@ pub(super) fn animator_from(
     }
     Ok(lumit_core::text::TextAnimator {
         name: animator.name.clone(),
-        selector: lumit_core::text::selector::RangeSelector {
-            start: write(&s.start)?,
-            end: write(&s.end)?,
-            offset: write(&s.offset)?,
-            basis: match s.basis {
-                BridgeSelectorBasis::Characters => SelectorBasis::Characters,
-                BridgeSelectorBasis::Words => SelectorBasis::Words,
-            },
-            shape: match s.shape {
-                BridgeSelectorShape::Square => SelectorShape::Square,
-                BridgeSelectorShape::Ramp => SelectorShape::Ramp,
-                BridgeSelectorShape::Smooth => SelectorShape::Smooth,
-                BridgeSelectorShape::Bounce => SelectorShape::Bounce,
-            },
-            mode: match s.mode {
-                BridgeSelectorMode::Range => SelectorMode::Range,
-                BridgeSelectorMode::Current => SelectorMode::Current,
-                BridgeSelectorMode::Said => SelectorMode::Said,
-                BridgeSelectorMode::Unsaid => SelectorMode::Unsaid,
-                BridgeSelectorMode::Emphasis => SelectorMode::Emphasis,
-            },
-            ease: Some(s.ease)
-                .filter(|e| e.is_finite())
-                .map_or(0.0, |e| e.max(0.0)),
-            kind: match s.kind {
-                BridgeSelectorKind::Range => SelectorKind::Range,
-                BridgeSelectorKind::Proximity => SelectorKind::Proximity,
-                BridgeSelectorKind::Wiggly => SelectorKind::Wiggly,
-            },
-            target: s.target,
-            radius: write(&s.radius)?,
-            invert: s.invert,
-            min_amount: write(&s.min_amount)?,
-            max_amount: write(&s.max_amount)?,
-            wiggles: write(&s.wiggles)?,
-            correlation: write(&s.correlation)?,
-            seed: s.seed,
-        },
+        selector: selector_from(&animator.selector, offset)?,
+        selectors: animator
+            .selectors
+            .iter()
+            .map(|s| selector_from(s, offset))
+            .collect::<Result<Vec<_>, _>>()?,
+        enabled: animator.enabled,
+        solo: animator.solo,
+        amount: write(&animator.amount)?,
+        // A blank name follows nothing.
+        follow: animator.follow.clone().filter(|f| !f.trim().is_empty()),
+        follow_offset: Some(animator.follow_offset)
+            .filter(|o| o.is_finite())
+            .unwrap_or(0.0),
+        skew: write(&animator.skew)?,
+        skew_axis: write(&animator.skew_axis)?,
+        tracking: write(&animator.tracking)?,
+        blur: write(&animator.blur)?,
+        character_offset: write(&animator.character_offset)?,
         position_x: write(&animator.position_x)?,
         position_y: write(&animator.position_y)?,
         rotation: write(&animator.rotation)?,

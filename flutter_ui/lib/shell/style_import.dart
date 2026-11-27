@@ -18,7 +18,6 @@ import '../state/workspace.dart';
 import '../theme/style_sheet.dart';
 import 'settings_account.dart' show askBefore;
 
-/// Whether the file at [path] is a zip: a style's folder packed into one.
 bool _zipped(String path) {
   try {
     final head = File(path).openSync()..setPositionSync(0);
@@ -36,7 +35,6 @@ bool _zipped(String path) {
 
 String _fileName(String path) => path.split(RegExp(r'[/\\]')).last;
 
-/// Why a style package couldn't be taken in, as a sentence.
 String _why(BridgeStyleOutcome outcome, String path) => switch (outcome) {
       BridgeStyleOutcome_Ready() => '',
       BridgeStyleOutcome_NotAStyle() => l10n.styleNotOne(_fileName(path)),
@@ -45,7 +43,6 @@ String _why(BridgeStyleOutcome outcome, String path) => switch (outcome) {
       BridgeStyleOutcome_Failed() => l10n.styleFailed(_fileName(path)),
     };
 
-/// Pick a style and take it in.
 Future<void> importStyleFromDisk(
     BuildContext context, LumitState app, LumitUiState ui) async {
   final path = await pickStyleToOpen();
@@ -62,7 +59,6 @@ Future<void> importStyle(BuildContext context, LumitState app,
   final sep = Platform.pathSeparator;
   final String name;
 
-  /// Unpack a package into the styles folder. Whether it went in.
   Future<bool> install(String package, String shown) async {
     final done = await styleInstallPackage(path: package, styles: folder);
     if (done is! BridgeStyleOutcome_Ready) {
@@ -96,7 +92,6 @@ Future<void> importStyle(BuildContext context, LumitState app,
         '${Directory(folder).absolute.path.toLowerCase()}$sep');
     final home = File(path).parent.path;
     if (inFolder) {
-      // Already here: it is only used.
     } else if (_fileName(home).toLowerCase() == name.toLowerCase()) {
       // In a folder of its own, which comes with its pictures, icons and
       // fonts, packed and unpacked as a package would be.
@@ -129,7 +124,6 @@ Future<void> importStyle(BuildContext context, LumitState app,
           !await _mayReplace(context, workspace, name)) {
         return;
       }
-      // Over the one of that name where it is, a folder of its own or not.
       final to = same == null
           ? '$folder$sep$file'
           : '${same.folder}$sep${same.name}.$styleFileExtension';
@@ -144,7 +138,6 @@ Future<void> importStyle(BuildContext context, LumitState app,
   if (!context.mounted) return;
   final before = (workspace.customStyle, workspace.themeShape);
   workspace.setCustomStyle(_named(workspace, name)?.name ?? name);
-  // A picture of the same name as the one replaced is read again.
   if (workspace.activeStyle?.roomPicture case final picture?) {
     FileImage(File(picture)).evict();
   }
@@ -163,7 +156,6 @@ StyleSheet? _named(Workspace workspace, String name) => workspace.styles
     .where((s) => s.name.toLowerCase() == name.toLowerCase())
     .firstOrNull;
 
-/// True when no style is called [name], or the person says to replace it.
 Future<bool> _mayReplace(
     BuildContext context, Workspace workspace, String name) async {
   if (_named(workspace, name) == null) return true;
@@ -171,8 +163,6 @@ Future<bool> _mayReplace(
   return askBefore(context, l10n.styleReplace(name), l10n.styleReplaceYes);
 }
 
-/// Pack the style in use into one file to share, as its folder when it has
-/// one of its own.
 Future<void> makeStylePackage(LumitState app, LumitUiState ui) async {
   final style = ui.workspace.activeStyle;
   if (style == null) return;

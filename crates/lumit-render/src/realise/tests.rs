@@ -15,8 +15,6 @@ fn plate() -> std::sync::Arc<Vec<u8>> {
     std::sync::Arc::new(px)
 }
 
-/// One footage-shaped draw at the comp's own size, centred: eight-bit
-/// pixels, no colour space, nothing on it.
 fn draw(rgba: &std::sync::Arc<Vec<u8>>) -> CompLayerDraw {
     CompLayerDraw {
         layer: uuid::Uuid::now_v7(),
@@ -39,6 +37,7 @@ fn draw(rgba: &std::sync::Arc<Vec<u8>>) -> CompLayerDraw {
         three_d: false,
         ends_run: false,
         matte: None,
+        display_blend: false,
         blend: lumit_gpu::composite::Blend::Normal,
         mask_cov: None,
         pre: None,
@@ -67,8 +66,6 @@ fn draw(rgba: &std::sync::Arc<Vec<u8>>) -> CompLayerDraw {
     }
 }
 
-/// The placement `realise_segment` gives that draw, so the hand-built
-/// reference below composites the same rectangle in the same place.
 fn placed<'a>(
     l: &CompLayerDraw,
     texture: &'a wgpu::Texture,
@@ -150,8 +147,6 @@ fn made_once(ctx: &lumit_gpu::GpuContext, f: &impl Fn() -> wgpu::Texture) -> (Ve
     (px, after.saturating_sub(before))
 }
 
-/// A realiser on the shared device, with everything a plain footage layer
-/// never asks for left out.
 fn realiser<'a>(
     shared: &'a lumit_gpu::test_support::Lease,
     lut_cache: &'a std::cell::RefCell<crate::fxops::LutCache>,
@@ -194,8 +189,6 @@ fn a_plain_footage_layer_goes_straight_to_the_composite() {
     let (got, short) = made(&ctx, || {
         realiser.realise(None, W, H, [0.0; 4], std::slice::from_ref(&l))
     });
-    // The route this replaced, by hand: the sRGB upload, a working-format
-    // copy of it, and the same composite draw over the same background.
     let (want, long) = made(&ctx, || {
         let src = ctx.colour().upload_srgb8(&ctx, &rgba, W, H);
         let linear = ctx.colour().linearise(&ctx, &src);
@@ -236,7 +229,6 @@ fn a_float_plates_neighbours_are_read_as_floats() {
     let lut_cache = std::cell::RefCell::new(crate::fxops::LutCache::default());
     let fx_cache = std::cell::RefCell::new(crate::fxops::FxCache::default());
     let realiser = realiser(&ctx, &lut_cache, &fx_cache);
-    // Above white, which eight bits could never have carried.
     let colour = [2.0f32, 0.5, 0.25, 1.0];
     let float_plate: Vec<u8> = (0..W * H)
         .flat_map(|_| colour)
@@ -246,13 +238,11 @@ fn a_float_plates_neighbours_are_read_as_floats() {
     if let DrawSource::Pixels { format, .. } = &mut l.source {
         *format = lumit_media::decode::PixelFormat::LinearF32;
     }
-    // A frame back, twice as bright.
     let brighter: Vec<u8> = (0..W * H)
         .flat_map(|_| [colour[0] * 2.0, colour[1] * 2.0, colour[2] * 2.0, 1.0])
         .flat_map(f32::to_le_bytes)
         .collect();
     l.neighbours = vec![(-1, std::sync::Arc::new(brighter), W, H)];
-    // One echo in front at 0.6 over the frame at 0.4: 1.2 + 0.4 of it.
     let mut echo = lumit_core::fx::builtins::instantiate("echo").expect("echo is a built-in");
     for p in &mut echo.params {
         match p.id.as_str() {

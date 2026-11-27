@@ -12,23 +12,23 @@ use std::sync::Arc;
 
 use lumit_cache::ByteSized;
 use lumit_core::expression::ExpressionContext;
-use lumit_core::mask::MaskPolyline;
+use lumit_core::mask::{BezierPath, Mask, MaskPolyline};
 use lumit_core::model::{Composition, Document, Layer, LinearColour, TextDocument};
+use lumit_core::paint::PaintStroke;
 use lumit_core::shape::modifier::ShapeEntry;
 use lumit_core::text::{GlyphAxes, GlyphXform};
+use lumit_gpu::composite::MbSample;
 
 use crate::extrude::{name_of, Kept, Shelf};
 use crate::placement::world_placement;
 
-use super::{raster_scale, SHAPE_RASTER_PIXELS};
+use super::raster_scale::Seen;
+use super::SHAPE_RASTER_PIXELS;
 
-/// A layer's raster: the bytes, the raster size and the natural size.
 pub(super) type LayerRaster = (Arc<Vec<u8>>, u32, u32, (f32, f32));
 
-/// The most bytes kept rasters hold, in memory.
 pub(crate) const RASTER_BYTES: usize = 256 << 20;
 
-/// The kept rasters, by name.
 pub(crate) static RASTERS: Shelf<KeptRaster> = std::sync::Mutex::new(None);
 
 /// One kept raster. A mask or a stroke copies it before writing, so the kept
@@ -37,8 +37,10 @@ pub(crate) struct KeptRaster {
     rgba: Arc<Vec<u8>>,
     w: u32,
     h: u32,
-    /// The layer's own size, which the placement draws the raster at.
     natural: (f32, f32),
+    /// How far up and left of the layer's corner the raster starts, for
+    /// animated letters thrown further than their room.
+    origin: (f32, f32),
 }
 
 impl ByteSized for Kept<KeptRaster> {
@@ -47,12 +49,10 @@ impl ByteSized for Kept<KeptRaster> {
     }
 }
 
-/// The raster named `name`, made by `make` if it is not kept.
 fn kept(name: u128, make: impl FnOnce() -> KeptRaster) -> Arc<KeptRaster> {
     crate::extrude::kept(&RASTERS, RASTER_BYTES, name, make)
 }
 
-/// A solid's colour as a `tw` by `th` raster.
 pub(super) fn solid(colour: LinearColour, tw: u32, th: u32) -> Arc<Vec<u8>> {
     let mut h = blake3::Hasher::new();
     h.update(b"solid/1/");
@@ -70,19 +70,21 @@ pub(super) fn solid(colour: LinearColour, tw: u32, th: u32) -> Arc<Vec<u8>> {
         w: tw,
         h: th,
         natural: (tw as f32, th as f32),
+        origin: (0.0, 0.0),
     });
     Arc::clone(&raster.rgba)
 }
 
 /// The name of a Text layer's raster: what the block holds, what each letter
 /// is asked to do, the path it runs along and how far along it, the zoom it
-/// is drawn at and the box it is drawn into, and the fonts in force.
+/// is drawn at, the box it is drawn into and how far it grows, and the fonts
+/// in force.
 fn text_name(
     block: &lumit_text::TextBlock<'_>,
     xforms: &[GlyphXform],
     spine: Option<&MaskPolyline>,
     offset: f32,
-    (zoom, own): (f32, (u32, u32)),
+    (zoom, own, grow): (f32, (u32, u32), [u32; 4]),
 ) -> u128 {
     let mut h = blake3::Hasher::new();
     h.update(b"text/1/");
@@ -90,6 +92,13 @@ fn text_name(
     h.update(&zoom.to_le_bytes());
     h.update(&own.0.to_le_bytes());
     h.update(&own.1.to_le_bytes());
+    // Only a grown box names it, so every other raster keeps its name.
+    if grow != [0; 4] {
+        h.update(b"grow/");
+        for g in grow {
+            h.update(&g.to_le_bytes());
+        }
+    }
     h.update(&block.key_bytes());
     h.update(&(xforms.len() as u64).to_le_bytes());
     for x in xforms {
@@ -104,9 +113,23 @@ fn text_name(
             turn,
             plate,
             axes,
+            skew,
+            skew_axis,
+            tracking,
+            blur,
+            char_offset,
         } = *x;
         let pairs = position.into_iter().chain(scale).chain(turn);
-        let lone = [rotation, opacity, depth];
+        let lone = [
+            rotation,
+            opacity,
+            depth,
+            skew,
+            skew_axis,
+            tracking,
+            blur,
+            char_offset,
+        ];
         for v in pairs.chain(lone).chain(fill).chain(plate) {
             h.update(&v.to_le_bytes());
         }
@@ -139,19 +162,24 @@ fn text_name(
 }
 
 /// The name of a Shape layer's raster: the art as it stands at this time, the
-/// raster size and the box it fills, and the time `at` for art that still
-/// moves. `None` when the art will not serialise, and then nothing is kept.
+/// raster size and the box it fills, the time `at` for art that still moves,
+/// and whether its gradients mix in display. `None` when the art will not
+/// serialise, and then nothing is kept.
 fn shape_name(
     contents: &[ShapeEntry],
     (w, h): (u32, u32),
     bounds: [f64; 4],
     at: Option<f64>,
+    display: bool,
 ) -> Option<u128> {
     let mut hasher = blake3::Hasher::new();
     hasher.update(b"shape/1/");
     hasher.update(&serde_json::to_vec(contents).ok()?);
     if let Some(lt) = at {
         hasher.update(&lt.to_le_bytes());
+    }
+    if display {
+        hasher.update(b"display/");
     }
     hasher.update(&w.to_le_bytes());
     hasher.update(&h.to_le_bytes());
@@ -181,8 +209,6 @@ fn still_moves(contents: &[ShapeEntry]) -> bool {
         || serde_json::to_value(contents).map_or(true, |v| moves(&v))
 }
 
-/// A Text layer's words at layer time `lt`, comp time `t_comp`, rasterised,
-/// and the raster's name.
 pub(super) fn text(
     doc: &Arc<Document>,
     comp: &Composition,
@@ -190,7 +216,8 @@ pub(super) fn text(
     document: &TextDocument,
     (lt, t_comp): (f64, f64),
     context: &Arc<ExpressionContext>,
-) -> (LayerRaster, Option<u128>) {
+    seen: &Seen,
+) -> ((LayerRaster, Option<u128>), (f32, f32)) {
     // The words at *this* layer time — a plain document hands back
     // what was typed; an expression-driven one is evaluated here,
     // which is what makes a caption able to print a live value.
@@ -210,52 +237,67 @@ pub(super) fn text(
     let offset = document.path_offset.value_at(lt) as f32;
     // **Continuously rasterised**, as a shape layer is: the words
     // are drawn as large as the layer and its parents show them,
-    // so a small text scaled up never blurs. The placement keeps
-    // the layer's own size, and a raster too big to hold is drawn
-    // at the most it can be.
-    let shown =
-        raster_scale::shape_raster_scale(world_placement(comp, layer, t_comp, context.clone()));
+    // a collapsed precomp and the camera included, so a small text
+    // scaled up never blurs. The placement keeps the layer's own
+    // size, and a raster too big to hold is drawn at the most it
+    // can be.
+    let world = world_placement(comp, layer, t_comp, context.clone());
     let spine = spine.as_ref();
-    let at = (doc, comp, layer, document, t_comp, spine, shown);
-    let words = laid(at, &line, &spoken);
+    let at = (doc, comp, layer, document, t_comp, spine, (seen, world));
+    let mut offset_words = None;
+    let words = laid(at, &line, &spoken, &mut offset_words);
     let Some((other, w)) = document.resolved_blend(context) else {
         let name = text_name(
             &words.block,
             &words.xforms,
             spine,
             offset,
-            (words.zoom, words.own),
+            (words.zoom, words.own, words.grow),
         );
         let r = kept(name, || {
-            kept_of(draw(&words, spine, offset, words.zoom, shown))
+            let drawn = draw(&words, spine, offset, words.zoom, words.grow);
+            kept_of(drawn, words.grow)
         });
-        return ((Arc::clone(&r.rgba), r.w, r.h, r.natural), Some(name));
+        let raster = (Arc::clone(&r.rgba), r.w, r.h, r.natural);
+        return ((raster, Some(name)), r.origin);
     };
     // **A fade between keyed words**: each word laid out and drawn on its
-    // own, at the same zoom, then mixed. Named by both and the weight, so a
-    // kept raster of one frame of the fade is never served for another.
-    let fade = laid(at, &other, &[]);
+    // own, at the same zoom and grown the same, then mixed. Named by both and
+    // the weight, so a kept raster of one frame of the fade is never served
+    // for another.
+    let mut offset_fade = None;
+    let fade = laid(at, &other, &[], &mut offset_fade);
     let zoom = words.zoom.min(fade.zoom);
+    let wider = (words.own.0.max(fade.own.0), words.own.1.max(fade.own.1));
+    let most = std::array::from_fn(|i| words.grow[i].max(fade.grow[i]));
+    let grow = lumit_text::animated::trimmed(most, wider, zoom);
     let mut h = blake3::Hasher::new();
     h.update(b"text/fade/1/");
     for one in [&words, &fade] {
-        let name = text_name(&one.block, &one.xforms, spine, offset, (zoom, one.own));
+        let name = text_name(
+            &one.block,
+            &one.xforms,
+            spine,
+            offset,
+            (zoom, one.own, grow),
+        );
         h.update(&name.to_le_bytes());
     }
     h.update(&w.to_le_bytes());
     let name = name_of(&h);
     let r = kept(name, || {
-        let (a, a_natural) = draw(&words, spine, offset, zoom, shown);
-        let (b, b_natural) = draw(&fade, spine, offset, zoom, shown);
+        let (a, a_natural) = draw(&words, spine, offset, zoom, grow);
+        let (b, b_natural) = draw(&fade, spine, offset, zoom, grow);
         let mixed = lumit_text::blend::crossfade(&a, &b, w);
         let natural = (a_natural.0.max(b_natural.0), a_natural.1.max(b_natural.1));
-        kept_of((mixed, natural))
+        kept_of((mixed, natural), grow)
     });
-    ((Arc::clone(&r.rgba), r.w, r.h, r.natural), Some(name))
+    let raster = (Arc::clone(&r.rgba), r.w, r.h, r.natural);
+    ((raster, Some(name)), r.origin)
 }
 
 /// What one set of words is laid out from: the document and layer, the comp
-/// time, the path and how large the layer is shown.
+/// time, the path, and where the layer is seen and placed.
 type LaidAt<'a> = (
     &'a Arc<Document>,
     &'a Composition,
@@ -263,23 +305,25 @@ type LaidAt<'a> = (
     &'a TextDocument,
     f64,
     Option<&'a MaskPolyline>,
-    f32,
+    (&'a Seen, [[f32; 4]; 4]),
 );
 
-/// One set of words laid out: the block, what each letter is asked to do, and
-/// the zoom it can be drawn at and the box it is drawn into.
+/// One set of words laid out: the block, what each letter is asked to do, the
+/// zoom it can be drawn at, the box it is drawn into and how far it grows.
 struct Laid<'a> {
     block: lumit_text::TextBlock<'a>,
     xforms: Vec<GlyphXform>,
     zoom: f32,
     own: (u32, u32),
+    grow: [u32; 4],
 }
 
 /// `line` laid out as the layer's words.
 fn laid<'a>(
-    (doc, comp, layer, document, t_comp, spine, shown): LaidAt<'a>,
+    (doc, comp, layer, document, t_comp, spine, (seen, world)): LaidAt<'a>,
     line: &'a str,
     spoken: &[lumit_core::text::SpokenWord],
+    offset_line: &'a mut Option<String>,
 ) -> Laid<'a> {
     // **The letters move separately**. What each one is
     // asked to do is worked out here, from the animators' own
@@ -289,27 +333,47 @@ fn laid<'a>(
     let xforms = lumit_core::text::ports::layer_glyph_xforms(
         doc, comp, layer, document, line, t_comp, spoken,
     );
-    // An unstyled single line draws the way it always has. A
-    // styled one, or one with a line break, is set by the shaper.
+    // Character offset sets a reached letter as another character.
+    let line: &'a str = match lumit_core::text::offset_text(line, &xforms) {
+        Some(other) => offset_line.insert(other).as_str(),
+        None => line,
+    };
     let block = lumit_text::TextBlock::of(document, line);
+    let three_d = layer.switches.three_d;
+    let flat = seen.flat(world);
     let room = |w: u32, h: u32| {
         (SHAPE_RASTER_PIXELS / (f64::from(w.max(1)) * f64::from(h.max(1))))
             .sqrt()
             .max(1.0)
     };
-    // The zoom it is drawn at and the box it is drawn into. Shown at its own
-    // size or smaller, the layer is drawn as it always was, without laying it
-    // out twice, and the box is the raster's own.
-    let (zoom, own) = match spine {
+    // Animated letters thrown further than the room round the words grow the
+    // box that far, so they are not clipped.
+    let reach = match spine {
+        Some(_) => [0; 4],
+        None => lumit_text::animated::overhang(&block, &xforms),
+    };
+    // The zoom it is drawn at, the box it is drawn into and how far it grows.
+    // Shown at its own size or smaller and not grown, the layer is drawn as it
+    // always was, without laying it out twice, and the box is the raster's own.
+    // What the camera magnifies depends on the box, so a layer it sees is
+    // always laid out.
+    let boxed = |(w, h): (u32, u32)| seen.scale(world, three_d, (f64::from(w), f64::from(h)));
+    let (zoom, own, grow) = match spine {
         Some(path) => {
             let (w, h) = lumit_text::path_box(path, document.size as f32);
-            (f64::from(shown).clamp(1.0, room(w, h)) as f32, (w, h))
+            let zoom = f64::from(boxed((w, h))).clamp(1.0, room(w, h)) as f32;
+            (zoom, (w, h), reach)
         }
-        None if shown <= 1.0 => (1.0, (0, 0)),
+        None if flat <= 1.0 && reach == [0; 4] && !seen.camera_sees(three_d) => {
+            (1.0, (0, 0), reach)
+        }
         None => {
-            let own = lumit_text::layout(&block, !xforms.is_empty());
-            let zoom = f64::from(shown).clamp(1.0, room(own.width, own.height)) as f32;
-            (zoom, (own.width, own.height))
+            let laid = lumit_text::layout(&block, !xforms.is_empty());
+            let own = (laid.width, laid.height);
+            let [l, t, r, b] = reach;
+            let (w, h) = (own.0.saturating_add(l + r), own.1.saturating_add(t + b));
+            let zoom = f64::from(boxed(own)).clamp(1.0, room(w, h)) as f32;
+            (zoom, own, lumit_text::animated::trimmed(reach, own, zoom))
         }
     };
     Laid {
@@ -317,16 +381,17 @@ fn laid<'a>(
         xforms,
         zoom,
         own,
+        grow,
     }
 }
 
-/// Laid-out words drawn at `zoom`, and the layer's own size.
+/// Laid-out words drawn at `zoom`, grown by `grow`, and the layer's own size.
 fn draw(
     words: &Laid<'_>,
     spine: Option<&MaskPolyline>,
     offset: f32,
     zoom: f32,
-    shown: f32,
+    grow: [u32; 4],
 ) -> (lumit_text::RasterText, (u32, u32)) {
     let (block, xforms) = (&words.block, &words.xforms);
     match spine {
@@ -335,32 +400,27 @@ fn draw(
             let r = lumit_text::rasterise_along_at(block, path, offset, w, h, xforms, zoom);
             (r, (w.max(1), h.max(1)))
         }
-        None if shown <= 1.0 => {
-            let r = lumit_text::rasterise(block, xforms);
-            let size = (r.width, r.height);
-            (r, size)
-        }
-        None => lumit_text::rasterise_at(block, xforms, zoom),
+        None => lumit_text::rasterise_at(block, xforms, zoom, grow),
     }
 }
 
-fn kept_of((r, natural): (lumit_text::RasterText, (u32, u32))) -> KeptRaster {
+fn kept_of((r, natural): (lumit_text::RasterText, (u32, u32)), grow: [u32; 4]) -> KeptRaster {
     KeptRaster {
         rgba: Arc::new(r.rgba),
         w: r.width,
         h: r.height,
         natural: (natural.0 as f32, natural.1 as f32),
+        origin: (grow[0] as f32, grow[1] as f32),
     }
 }
 
-/// A Shape layer's art at layer time `lt`, rasterised, and the raster's name
-/// when it has one. `None` when it has nothing to draw.
 pub(super) fn shape(
     comp: &Composition,
     layer: &Layer,
     contents: &[ShapeEntry],
     (lt, t_comp): (f64, f64),
     context: &Arc<ExpressionContext>,
+    seen: &Seen,
 ) -> Option<(LayerRaster, Option<u128>)> {
     let contents = lumit_core::shape::contents_at(contents, lt, context);
     let (x0, y0, x1, y1) = lumit_core::shape::contents_bounds(&contents, lt)?;
@@ -372,22 +432,27 @@ pub(super) fn shape(
     //
     // **Continuously rasterised**, as After Effects draws a
     // shape layer: the art is drawn as large as the layer and
-    // its parents show it, so scaling it up never blurs it.
-    // The effects read the raster factor off the texture, so
-    // they keep their size.
-    let shown =
-        raster_scale::shape_raster_scale(world_placement(comp, layer, t_comp, context.clone()));
+    // its parents show it, a collapsed precomp and the camera
+    // included, so scaling it up never blurs it. The effects read
+    // the raster factor off the texture, so they keep their size.
+    let shown = seen.scale(
+        world_placement(comp, layer, t_comp, context.clone()),
+        layer.switches.three_d,
+        (natural_w, natural_h),
+    );
     let most = (SHAPE_RASTER_PIXELS / (natural_w * natural_h))
         .sqrt()
         .max(1.0);
     let k = f64::from(shown).clamp(1.0, most);
     let w = (natural_w * k).round().max(1.0) as u32;
     let h = (natural_h * k).round().max(1.0) as u32;
-    let make = || lumit_core::shape::rasterise_contents(&contents, w, h, x0, y0, x1, y1, lt);
+    let display = comp.blending == lumit_core::model::blending::CompBlending::Display;
+    let make =
+        || lumit_core::shape::rasterise_contents_in(&contents, w, h, x0, y0, x1, y1, lt, display);
     // Art that came back unfrozen draws differently at each time, so its
     // name carries the time.
     let at = (matches!(contents, Cow::Borrowed(_)) && still_moves(&contents)).then_some(lt);
-    let name = shape_name(&contents, (w, h), [x0, y0, x1, y1], at);
+    let name = shape_name(&contents, (w, h), [x0, y0, x1, y1], at, display);
     let rgba = match name {
         Some(name) => {
             let r = kept(name, || KeptRaster {
@@ -395,12 +460,54 @@ pub(super) fn shape(
                 w,
                 h,
                 natural: (natural_w as f32, natural_h as f32),
+                origin: (0.0, 0.0),
             });
             Arc::clone(&r.rgba)
         }
         None => Arc::new(make()),
     };
     Some(((rgba, w, h, (natural_w as f32, natural_h as f32)), name))
+}
+
+/// A layer's masks and paint, moved into a raster that starts `at` up and left
+/// of the layer's corner. As they are for every other raster.
+pub(super) fn moved_art(
+    layer: &Layer,
+    at: Option<(f32, f32)>,
+) -> (Cow<'_, [Mask]>, Cow<'_, [PaintStroke]>) {
+    let Some((dx, dy)) = at.filter(|&a| a != (0.0, 0.0)) else {
+        return (Cow::Borrowed(&layer.masks), Cow::Borrowed(&layer.paint));
+    };
+    let (dx, dy) = (f64::from(dx), f64::from(dy));
+    let moved = |path: &mut BezierPath| {
+        for v in &mut path.vertices {
+            v.pos = (v.pos.0 + dx, v.pos.1 + dy);
+        }
+    };
+    let mut masks = layer.masks.clone();
+    for mask in &mut masks {
+        moved(&mut mask.path);
+        for key in &mut mask.path_keys {
+            moved(&mut key.path);
+        }
+    }
+    let mut paint = layer.paint.clone();
+    for stroke in &mut paint {
+        for p in &mut stroke.points {
+            *p = (p.0 + dx, p.1 + dy);
+        }
+    }
+    (Cow::Owned(masks), Cow::Owned(paint))
+}
+
+/// A placement for a raster that starts `at` up and left of the layer's
+/// corner: the anchor is read that much further in, so the layer's own
+/// pixels land where they always did.
+pub(super) fn lifted(mut placed: MbSample, at: Option<(f32, f32)>) -> MbSample {
+    if let Some((dx, dy)) = at {
+        placed.anchor = (placed.anchor.0 + dx, placed.anchor.1 + dy);
+    }
+    placed
 }
 
 #[cfg(test)]
@@ -427,6 +534,7 @@ mod tests {
             master_automation: Default::default(),
             loudness_target: None,
             lighting: Default::default(),
+            blending: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -454,7 +562,9 @@ mod tests {
             current_depth: 0,
             inputs: None,
         });
-        let ((rgba, w, h, _), name) = text(&doc, &comp, &layer, document, (1.0, 1.0), &context);
+        let seen = Seen::own(crate::track::camera_pose(&doc, &comp, 1.0), &comp);
+        let (((rgba, w, h, _), name), _) =
+            text(&doc, &comp, &layer, document, (1.0, 1.0), &context, &seen);
         (rgba.to_vec(), w, h, name.unwrap())
     }
 

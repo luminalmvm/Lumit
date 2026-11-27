@@ -8,7 +8,6 @@
 use crate::{lfx_effect, parse};
 use lumit_core::fx::lfx::LfxEffect;
 
-/// A shader's file name and its text, from `builtin/<extension>/`.
 macro_rules! shader {
     ($extension:literal, $name:literal) => {
         (
@@ -18,7 +17,6 @@ macro_rules! shader {
     };
 }
 
-/// Each manifest, and its shaders by file name.
 const BUILTIN: &[(&str, &[(&str, &str)])] = &[
     (
         include_str!("../builtin/siceliot/extension.json"),
@@ -30,6 +28,21 @@ const BUILTIN: &[(&str, &[(&str, &str)])] = &[
             shader!("siceliot", "gradient-map"),
             shader!("siceliot", "voronoi"),
             shader!("siceliot", "checkerboard"),
+            shader!("siceliot", "wave-pattern"),
+            shader!("siceliot", "tile-patterns"),
+            shader!("siceliot", "chainmail"),
+            shader!("siceliot", "woodgrain"),
+            shader!("siceliot", "scratches"),
+            shader!("siceliot", "flakes"),
+            shader!("siceliot", "gabor"),
+            shader!("siceliot", "magic"),
+            shader!("siceliot", "matrix-effect"),
+            shader!("siceliot", "pixel-flow"),
+            shader!("siceliot", "sine-wave-fan"),
+            shader!("siceliot", "bombing"),
+            shader!("siceliot", "weave"),
+            shader!("siceliot", "water-drop"),
+            shader!("siceliot", "softbox"),
             shader!("siceliot", "halftone"),
             shader!("siceliot", "dithering"),
             shader!("siceliot", "inner-shadow"),
@@ -46,6 +59,7 @@ const BUILTIN: &[(&str, &[(&str, &str)])] = &[
             shader!("siceliot", "linear-colour-key"),
             shader!("siceliot", "colour-neutraliser"),
             shader!("siceliot", "sphere"),
+            shader!("siceliot", "cylinder"),
         ],
     ),
     (
@@ -79,13 +93,10 @@ pub fn effects() -> Vec<LfxEffect> {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::panic)]
 mod tests {
-    /// Every effect that comes with Lumit reads, finds its shader, files
-    /// under one of Lumit's headings and compiles. Guards projects that use
-    /// them opening with the effects missing.
     #[test]
     fn every_built_in_effect_loads_and_compiles() {
         let effects = super::effects();
-        assert_eq!(effects.len(), 24);
+        assert_eq!(effects.len(), 40);
         for effect in effects {
             lumit_core::fx::lfx::check(&effect)
                 .unwrap_or_else(|why| panic!("{}: {why}", effect.id));

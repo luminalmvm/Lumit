@@ -18,7 +18,6 @@ fn kept(path: &str) -> bool {
         || path.starts_with("/home/.cache/lumit/") && path.contains("/journal/ops-")
 }
 
-/// The kept files written or deleted since this was last asked.
 #[wasm_bindgen]
 pub fn lumit_web_changed() -> Vec<String> {
     let mut changed = files::take_changed();
@@ -26,7 +25,6 @@ pub fn lumit_web_changed() -> Vec<String> {
     changed
 }
 
-/// A file's bytes, or nothing when it has gone.
 #[wasm_bindgen]
 pub fn lumit_web_file(path: String) -> Option<Vec<u8>> {
     files::read(Path::new(&path)).ok()
@@ -69,13 +67,11 @@ pub fn lumit_web_used(projects: Vec<String>) -> Vec<String> {
     used
 }
 
-/// The `/web/<id>/` folder `path` is in, if it is in one.
 fn folder(path: &str) -> Option<String> {
     let id = path.strip_prefix("/web/")?.split('/').next()?;
     Some(format!("/web/{id}/"))
 }
 
-/// Put back a file kept from an earlier page.
 #[wasm_bindgen]
 pub fn lumit_web_restore(path: String, bytes: Vec<u8>) {
     let path = Path::new(&path);

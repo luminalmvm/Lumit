@@ -1,14 +1,9 @@
-//! The analysis, end to end, on a clip with a shake written down.
-
 use super::*;
 use lumit_core::stabilise::frame::{Edges, Framing};
 use lumit_core::stabilise::motion::apply;
 use lumit_core::stabilise::path::Model;
 use lumit_core::stabilise::plan::{build, PlanRows, Smoothness};
 
-/// A picture with corners everywhere: overlapping blobs of different sizes and
-/// brightnesses on a soft ramp, the same at every frame, seen through a camera
-/// that slides and turns by the frame's shake.
 struct Shaken {
     frames: usize,
     w: u32,
@@ -36,7 +31,6 @@ impl Shaken {
         v.clamp(0.0, 1.0) as f32
     }
 
-    /// Where frame `n` shows the scene point that frame `n`'s pixel `p` is.
     fn source_of(&self, n: usize, p: [f64; 2]) -> [f64; 2] {
         let [dx, dy, a] = self.shake[n];
         let (cx, cy) = (f64::from(self.w) / 2.0, f64::from(self.h) / 2.0);
@@ -47,7 +41,6 @@ impl Shaken {
         [cx + c * qx + s * qy, cy - s * qx + c * qy]
     }
 
-    /// Where frame `n` shows the scene point frame 0 shows at pixel `p`.
     fn truth(&self, n: usize, p: [f64; 2]) -> [f64; 2] {
         let scene = self.source_of(0, p);
         let [dx, dy, a] = self.shake[n];
@@ -118,8 +111,6 @@ fn job(frames: usize) -> (Job, Shaken) {
     (job, clip)
 }
 
-/// Locked to the first frame, every frame's map puts each pixel where the
-/// written-down shake moved it, to a third of a pixel, for the turn-aware fits.
 #[test]
 fn no_motion_undoes_a_written_down_shake() {
     let (job, clip) = job(40);
@@ -163,7 +154,6 @@ fn no_motion_undoes_a_written_down_shake() {
     }
 }
 
-/// Cancel stops a run between frames and files nothing.
 #[test]
 fn cancel_stops_an_analysis_between_frames() {
     let (job, _) = job(60);
@@ -179,9 +169,6 @@ fn cancel_stops_an_analysis_between_frames() {
     assert_eq!(result.err(), Some(AnalysisError::Cancelled));
 }
 
-/// A sidecar that parses but does not hold together is read as no file: one
-/// cut short, and one with no frames, which a plan made anyway draws nothing
-/// from rather than panicking.
 #[test]
 fn a_truncated_or_empty_sidecar_is_read_as_none() {
     let (job, _) = job(12);

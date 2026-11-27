@@ -11,10 +11,10 @@
 // kernels, same order, same inputs.
 
 struct SP {
-    w: u32,        // frame width
-    h: u32,        // frame height
-    fw: u32,       // flow-field width
-    fh: u32,       // flow-field height
+    w: u32,
+    h: u32,
+    fw: u32,
+    fh: u32,
     phi: f32,      // phase in (0, 1)
     occ_mode: u32, // 0 visible-only, 1 blend
     fallback: u32, // 0 blend, 1 nearest
@@ -134,7 +134,6 @@ fn syn_prep(@builtin(global_invocation_id) gid: vec3u) {
         let thr = max(OCC_REL * (length(g.xy) + length(fv)), OCC_ABS);
         occ_b = select(0.0, 1.0, cn > thr);
     }
-    // A's luma at this flow pixel, for the HUD guard's texture test.
     let s = field_scale();
     let c = sample_frame(0u, f32(x) * s, f32(y) * s);
     let luma = (0.2126 * c.x + 0.7152 * c.y + 0.0722 * c.z) / 255.0;
@@ -147,7 +146,6 @@ fn luma_at(x: i32, y: i32) -> f32 {
     return aux[qy * P.fw + qx].w;
 }
 
-// Sobel magnitude of A's luma at (x, y).
 fn grad_mag(x: i32, y: i32) -> f32 {
     let tl = luma_at(x - 1, y - 1);
     let t = luma_at(x, y - 1);
@@ -220,7 +218,6 @@ fn syn_post(@builtin(global_invocation_id) gid: vec3u) {
     aux2[y * P.fw + x] = vec4f(ma, mb, hsum / 9.0, 0.0);
 }
 
-// Bilinear read of the finished masks at working-res coordinates.
 fn sample_masks(xf: f32, yf: f32) -> vec3f {
     let x = clamp(xf, 0.0, f32(P.fw - 1u));
     let y = clamp(yf, 0.0, f32(P.fh - 1u));
@@ -248,7 +245,6 @@ fn syn_blend(@builtin(global_invocation_id) gid: vec3u) {
     let i = y * P.w + x;
     let phi = P.phi;
     let s = field_scale();
-    // Working-res coordinates of this frame pixel.
     let fx = f32(x) / s;
     let fy = f32(y) / s;
 
@@ -273,7 +269,6 @@ fn syn_blend(@builtin(global_invocation_id) gid: vec3u) {
 
     var synth: vec4f;
     if (oa > 0.5 && ob > 0.5) {
-        // Neither frame can explain this pixel.
         if (P.fallback == 1u) {
             synth = select(lb, la, phi < 0.5);
         } else {

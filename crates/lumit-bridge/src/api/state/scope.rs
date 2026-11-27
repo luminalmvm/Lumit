@@ -91,6 +91,7 @@ pub(crate) fn op_scope(op: &lumit_core::ops::Op) -> (Option<Uuid>, Option<Uuid>,
         | Op::ReorderLayer { comp, .. }
         | Op::SetCompMotionBlur { comp, .. }
         | Op::SetCompLighting { comp, .. }
+        | Op::SetCompBlending { comp, .. }
         | Op::SetCompBackground { comp, .. }
         | Op::SetMasterVolume { comp, .. }
         | Op::SetMasterAutomation { comp, .. }
@@ -124,6 +125,7 @@ pub(crate) fn op_scope(op: &lumit_core::ops::Op) -> (Option<Uuid>, Option<Uuid>,
         // the comp is the honest scope, not the one row that changed.
         | Op::SetLayerKind { comp, .. }
         | Op::SetLayerOrient { comp, .. }
+        | Op::SetLayerMotionPath { comp, .. }
         | Op::SetLayerAdjustment { comp, .. } => (Some(*comp), None, false),
 
         // One layer's own contents.

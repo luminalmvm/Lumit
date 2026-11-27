@@ -44,7 +44,6 @@ const HOLD_MS: f64 = 10.0;
 const RELEASE_MS: f64 = 100.0;
 const RANGE_DB: f64 = -60.0;
 
-/// The Gate's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "audio_gate",
@@ -92,7 +91,6 @@ impl EffectDef for AudioGateDef {
         &<AudioGate as EffectMetadata>::SCHEMA
     }
 
-    /// It processes sound and touches no pixel, so the render path skips it.
     fn is_image_op(&self) -> bool {
         false
     }
@@ -108,18 +106,15 @@ impl EffectDef for AudioGateDef {
     }
 }
 
-/// One open gate.
 struct Gate {
     /// Behind a mutex because [`AudioProcessor::process`] takes `&self`.
     /// Uncontended by construction: one instance is driven by one bake.
     state: Mutex<State>,
 }
 
-/// Everything the block loop carries from one block to the next.
 struct State {
     rate: f64,
     reduction: GainReduction,
-    /// Whether the gate is letting the sound through now.
     open: bool,
     /// Frames left of the hold. Counted down only while the level is under the
     /// shutting threshold, which is what the hysteresis buys.
@@ -223,7 +218,6 @@ mod tests {
 
     const RATE: u32 = 48_000;
 
-    /// A steady stereo tone at `amp`.
     fn tone(frames: usize, amp: f32) -> Vec<f32> {
         dipped(frames, amp, 0..0, amp)
     }
@@ -244,7 +238,6 @@ mod tests {
         AudioGateDef.open_audio(None, values, RATE, false).unwrap()
     }
 
-    /// Every whole block of `input`, from block `first`, through `p`.
     fn run(
         p: &dyn AudioProcessor,
         input: &[f32],
@@ -279,8 +272,6 @@ mod tests {
         ]
     }
 
-    /// The loudest sample of the last block, which is the one the ballistics
-    /// have settled in.
     fn settled_peak(samples: &[f32]) -> f32 {
         samples
             .chunks_exact(AUDIO_BLOCK_SAMPLES)
@@ -301,14 +292,10 @@ mod tests {
         assert_eq!(bits(&whole), bits(&halves));
     }
 
-    /// **Plan 3**: what is under the threshold is silenced and what is over it
-    /// comes back as it went in.
     #[test]
     fn it_silences_what_is_under_the_threshold_and_passes_what_is_over() {
         let values = knobs(10.0);
 
-        // Six dB down, well over a threshold of -40: the gate opens and the
-        // tone comes back at its own height.
         let loud = tone(AUDIO_BLOCK_FRAMES * 8, 0.5);
         let peak = settled_peak(&run(&*open(&values), &loud, &values, 0));
         assert!(
@@ -316,8 +303,6 @@ mod tests {
             "an open gate came back at {peak}"
         );
 
-        // Sixty dB down, twenty under the threshold: the range floor is what
-        // comes out, which is a thousandth of it.
         let quiet = tone(AUDIO_BLOCK_FRAMES * 8, 0.001);
         let peak = settled_peak(&run(&*open(&values), &quiet, &values, 0));
         assert!(peak < 1e-5, "a shut gate let {peak} through");

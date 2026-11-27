@@ -15,11 +15,8 @@ use lumit_core::model::{Composition, Document, Layer, LayerKind};
 
 use crate::cache::NestedKeyer;
 
-/// What a rebuilt layer's neighbours are measured by (`rebuild_offsets`).
 type Offsets = [(i32, Option<(i32, FlowWant)>)];
 
-/// Takes the field off each neighbour of a Precomp layer whose nested comp,
-/// named at `at(offset)`, is the frame's own picture again.
 pub(super) fn in_nested(
     doc: &Arc<Document>,
     offsets: &mut Offsets,
@@ -41,8 +38,6 @@ pub(super) fn in_nested(
     });
 }
 
-/// The same for the adjustment layer at `idx` in `comp`, whose picture is the
-/// layers below it at comp time `at(offset)`.
 pub(super) fn below(
     doc: &Arc<Document>,
     offsets: &mut Offsets,
@@ -67,7 +62,6 @@ pub(super) fn below(
     leave_out_repeats(offsets, |o| keys.nested_key(doc, &alone, at(o)));
 }
 
-/// Whether any neighbour is measured for Denoise, the one reader that cares.
 fn wants_some(offsets: &Offsets) -> bool {
     offsets
         .iter()

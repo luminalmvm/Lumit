@@ -14,11 +14,9 @@ use lumit_core::time::{Duration, FrameRate};
 use std::sync::Arc;
 use uuid::Uuid;
 
-/// Frames to fill the cloud: its life, at the rate below.
 const WARM: i64 = 60;
 const RUNS: i64 = 30;
 
-/// Measure B37. `Err` when there is no graphics adapter.
 pub fn budgets(progress: &mut dyn FnMut(Measurement)) -> Result<Vec<Measurement>, String> {
     let mut doc = Document::new();
     let span = rat(10, 1);
@@ -80,6 +78,7 @@ pub fn budgets(progress: &mut dyn FnMut(Measurement)) -> Result<Vec<Measurement>
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,

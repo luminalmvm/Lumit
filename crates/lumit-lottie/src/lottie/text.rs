@@ -49,7 +49,6 @@ fn texts(c: &Clock, document: &TextDocument) -> Vec<(String, f64)> {
     out
 }
 
-/// The layer's letters as Lottie shape groups, the top of the picture first.
 pub fn shapes(
     c: &Clock,
     document: &TextDocument,
@@ -77,7 +76,6 @@ pub fn shapes(
     for (n, (words, start)) in runs.iter().enumerate() {
         let until = starts.get(n + 1).copied().unwrap_or(end);
         let mut it = letters(c, document, words, *start, report, place);
-        // Shown only from its own start until the next text's.
         let mut keys = Vec::new();
         let hold = |seconds: f64, v: f64| TrackKey {
             seconds,
@@ -100,7 +98,6 @@ pub fn shapes(
     out
 }
 
-/// A group transform that only fades.
 fn identity(opacity: Value) -> Value {
     json!({
         "ty": "tr",
@@ -161,11 +158,10 @@ fn letters(
     let animated = animated && !on_path;
     let layout = lumit_text::layout(&block, animated);
     let margin = if animated {
-        f64::from(lumit_text::animator_margin(block.size))
+        f64::from(lumit_text::animated::animator_margin(block.size))
     } else {
         0.0
     };
-    // Each letter's pen and advance on its line, by character index.
     let mut pens: Vec<Option<(f64, f64, f64)>> = vec![None; words.chars().count()];
     for line in &layout.lines {
         for (j, pair) in line.carets.windows(2).enumerate() {
@@ -174,7 +170,6 @@ fn letters(
             }
         }
     }
-    // Every letter's animation, sampled once for all of them.
     let samples: Vec<(f64, Vec<GlyphXform>)> = if animated {
         c.times()
             .into_iter()
@@ -197,7 +192,6 @@ fn letters(
         let ShapeEntry::Group(group) = glyph else {
             continue;
         };
-        // The character this letter is, found in order by its name.
         while chars
             .get(cursor)
             .is_some_and(|ch| ch.to_string() != group.name)
@@ -276,7 +270,6 @@ fn letters(
     out
 }
 
-/// Every fill in `items` given `colour`.
 fn recolour(items: &mut [Value], colour: &Value) {
     for item in items {
         match item.get("ty").and_then(Value::as_str) {
@@ -314,13 +307,11 @@ fn laid(c: &Clock, document: &TextDocument) -> ((f64, f64), lumit_text::BlockLay
     ((f64::from(x), f64::from(baseline)), layout)
 }
 
-/// Where a Lottie text layer's origin sits in the layer's own pixels.
 #[must_use]
 pub fn origin(c: &Clock, document: &TextDocument) -> (f64, f64) {
     laid(c, document).0
 }
 
-/// A Lottie text layer's `t`. The font joins `fonts`.
 pub fn document(
     c: &Clock,
     document: &TextDocument,

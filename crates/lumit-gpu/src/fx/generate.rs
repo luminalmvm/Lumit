@@ -10,8 +10,6 @@ use crate::GpuContext;
 
 use super::{work_texture, FxEngine};
 
-/// One resolved Fill (docs/08 §3.34). Mirrors the arguments of
-/// `lumit_core::fx::cpu::fill`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FillOp {
     /// Scene-linear RGB; the layer's own alpha supplies the coverage.
@@ -31,21 +29,26 @@ struct FillParams {
 }
 
 /// One resolved Gradient (docs/08 §3.35). Mirrors
-/// `lumit_core::fx::cpu::GradientParams` field-for-field; both reciprocals
+/// `lumit_core::fx::cpu::gradient::GradientParams` field-for-field; both reciprocals
 /// arrive floored, so a zero-length axis collapses the ramp to one flat colour
 /// rather than faulting.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GradientOp {
-    pub radial: bool,
+    /// 0 linear, 1 radial, 2 angle.
+    pub shape: u32,
     /// Start point in raster pixels.
     pub start: [f32; 2],
     /// `end − start`, raster pixels.
     pub axis: [f32; 2],
     pub inv_len2: f32,
     pub inv_len: f32,
-    /// Scene-linear start and end colours.
-    pub c0: [f32; 3],
-    pub c1: [f32; 3],
+    /// The axis's direction, radians, where an angle ramp begins.
+    pub turn: f32,
+    /// A radial ramp's centre off the start point and its reach.
+    pub focal: [f32; 3],
+    /// Scene-linear start and end colours, straight alpha last.
+    pub c0: [f32; 4],
+    pub c1: [f32; 4],
     /// 0..1 dither of the ramp position.
     pub scatter: f32,
     pub seed: u32,
@@ -58,6 +61,10 @@ pub struct GradientOp {
     /// The colours in between in use (0..=3), rgb and place along the ramp.
     pub mids: u32,
     pub mid: [[f32; 4]; 3],
+    /// The alpha of each colour in between.
+    pub mid_alpha: [f32; 3],
+    /// Mix the colours as display values (cpu::gradient::GradientParams::display).
+    pub display: bool,
 }
 
 #[repr(C)]
@@ -71,12 +78,43 @@ struct GradientParams {
     scatter: f32,
     mix_amt: f32,
     seed: u32,
-    radial: u32,
+    /// 0 linear, 1 radial, 2 angle.
+    shape: u32,
     /// 1 = clip the ramp to the layer's coverage and leave its alpha.
     clip_to_alpha: u32,
-    /// How many of `mid` are in use.
     mids: u32,
     mid: [[f32; 4]; 3],
+    /// x = where an angle ramp begins, radians; yzw = the focal point.
+    shape_k: [f32; 4],
+    /// xyz = each colour in between's alpha; w = 1 to mix as display values.
+    mid_alpha: [f32; 4],
+}
+
+/// The parity test's copy of the renderer's `gradient_op`: this crate sees
+/// the CPU kernel's numbers only in its tests.
+#[cfg(test)]
+impl From<&lumit_core::fx::cpu::gradient::GradientParams> for GradientOp {
+    fn from(p: &lumit_core::fx::cpu::gradient::GradientParams) -> Self {
+        Self {
+            shape: p.shape,
+            start: p.start,
+            axis: p.axis,
+            inv_len2: p.inv_len2,
+            inv_len: p.inv_len,
+            turn: p.turn,
+            focal: p.focal,
+            c0: p.c0,
+            c1: p.c1,
+            scatter: p.scatter,
+            seed: p.seed,
+            mix: p.mix,
+            clip_to_alpha: p.clip_to_alpha,
+            mids: p.mids,
+            mid: p.mid,
+            mid_alpha: p.mid_alpha,
+            display: p.display,
+        }
+    }
 }
 
 /// One resolved Noise (docs/08 §3.36). `tick` arrives already discretised from
@@ -121,6 +159,14 @@ pub struct FractalNoiseOp {
     pub lacunarity: f32,
     pub perlin: bool,
     pub turbulent: bool,
+    /// Noise type, `lumit_core::fx::noise::NOISE_*`; the kernel reads this, not
+    /// `perlin`.
+    pub base: u32,
+    /// Fractal type, `lumit_core::fx::noise::FRACTAL_*`; the kernel reads this,
+    /// not `turbulent`.
+    pub kind: u32,
+    /// Distortion, in cells of the base octave; 0 reads the field in place.
+    pub distortion: f32,
     /// Depth loop length in cells; 0 for a field that never repeats.
     pub cycle: i32,
     /// `(cos, sin)` of the Rotation control, host-computed.
@@ -153,6 +199,10 @@ struct FractalNoiseParams {
     octaves: u32,
     cycle: i32,
     flags: u32,
+    base: u32,
+    kind: u32,
+    distortion: f32,
+    _pad1: u32,
 }
 
 impl FxEngine {
@@ -210,17 +260,24 @@ impl FxEngine {
             h,
             bytemuck::bytes_of(&GradientParams {
                 start_axis: [op.start[0], op.start[1], op.axis[0], op.axis[1]],
-                c0: [op.c0[0], op.c0[1], op.c0[2], 0.0],
-                c1: [op.c1[0], op.c1[1], op.c1[2], 0.0],
+                c0: op.c0,
+                c1: op.c1,
                 inv_len2: op.inv_len2,
                 inv_len: op.inv_len,
                 scatter: op.scatter,
                 mix_amt: op.mix,
                 seed: op.seed,
-                radial: u32::from(op.radial),
+                shape: op.shape,
                 clip_to_alpha: u32::from(op.clip_to_alpha),
                 mids: op.mids.min(3),
                 mid: op.mid,
+                shape_k: [op.turn, op.focal[0], op.focal[1], op.focal[2]],
+                mid_alpha: [
+                    op.mid_alpha[0],
+                    op.mid_alpha[1],
+                    op.mid_alpha[2],
+                    f32::from(u8::from(op.display)),
+                ],
             }),
         );
         out
@@ -296,6 +353,10 @@ impl FxEngine {
                 octaves: op.octaves,
                 cycle: op.cycle,
                 flags,
+                base: op.base,
+                kind: op.kind,
+                distortion: op.distortion,
+                _pad1: 0,
             }),
         );
         out
@@ -308,8 +369,6 @@ impl FxEngine {
 /// `the_lightning_segment_cap_matches_the_core` in the fx tests.
 pub const LIGHTNING_SEGMENTS: usize = 192;
 
-/// One resolved Beam (docs/08 §3.73). Mirrors `lumit_core::fx::cpu::BeamParams`
-/// field-for-field.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BeamOp {
     /// Where the beam starts, raster pixels.
@@ -320,13 +379,11 @@ pub struct BeamOp {
     pub inv_len2: f32,
     /// The tail and the head, as fractions of the axis.
     pub u0: f32,
-    /// See [`u0`](Self::u0).
     pub u1: f32,
     /// `1 ÷ (u1 − u0)`, floored.
     pub inv_span: f32,
     /// The half-thickness at the tail, raster pixels.
     pub half0: f32,
-    /// And at the head.
     pub half1: f32,
     /// Softness ÷ 100, floored above zero.
     pub soft: f32,
@@ -473,8 +530,6 @@ struct RadioWavesParams {
     _pad2: u32,
 }
 
-/// One resolved Vegas (docs/08 §3.76). Mirrors
-/// `lumit_core::fx::cpu::VegasParams` field-for-field.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct VegasOp {
     /// True to read the alpha rather than the perceptual luma.
@@ -554,7 +609,6 @@ pub struct PathDrawOp {
     pub wiggle_freq: f32,
     /// Where in the wobble's evolution this frame sits, taken host-side.
     pub wiggle_tick: f32,
-    /// The wobble's seed.
     pub seed: u32,
     /// The drawing's colour, scene-linear RGB.
     pub colour: [f32; 3],

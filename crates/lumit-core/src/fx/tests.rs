@@ -11,6 +11,7 @@ use crate::model::{Composition, EffectInstance, EffectNamespace, EffectValue, La
 use crate::time::Rational;
 
 mod point_generators;
+mod round_corners;
 
 // These tests are about *parameter resolution*, not about expressions, so they
 // call the resolvers without an expression context and get the detached one.
@@ -20,13 +21,8 @@ mod point_generators;
 // with what numbers, which is what the ordering assertions below compare. A test
 // about one effect's own numbers reads them back through `resolve_migrated`.
 
-/// One resolved op as the ordering assertions read it: its match name and the
-/// bag it resolved to.
 type ShapedOp = (&'static str, Vec<(ParamId, Value)>);
 
-/// A whole resolved stack in that form. Comparing this compares the *whole*
-/// stack — which the old `Vec<Resolved>` stopped doing the moment the last
-/// effect's numbers moved into the arena and left one variant behind it.
 type Shape = Vec<ShapedOp>;
 
 fn shape(stack: &ResolvedStack) -> Shape {
@@ -104,9 +100,6 @@ fn resolve_migrated<T: EffectMetadata>(
     T::read(ops.get(0).expect("the migrated op").params)
 }
 
-/// The resolved bag of a one-effect migrated stack, in push order — for the
-/// assertions that are about the *bag* rather than about the declared struct: a
-/// derived value, or how many entries an effect resolves to at all.
 pub(crate) fn resolve_bag(
     effects: &[EffectInstance],
     lt: f64,
@@ -126,15 +119,10 @@ pub(crate) fn resolve_bag(
     ops.get(0).expect("the migrated op").params.iter().collect()
 }
 
-/// What a Shake instance hands its dispatch at `lt`: the wobble (or the whole
-/// motion-blur set) the old `Resolved::Shake` variant carried, now the declared
-/// rows and the resolve-time derivation read back through the
-/// effect's own `packed`.
 fn shake_packed(e: &EffectInstance, lt: f64, diag_px: f32) -> effects::shake::Shaken {
     shake_packed_scaled(e, lt, diag_px, 1.0)
 }
 
-/// [`shake_packed`] with the §2.3 preview factor in play.
 fn shake_packed_scaled(
     e: &EffectInstance,
     lt: f64,
@@ -194,29 +182,18 @@ fn shake_stack(
     ops
 }
 
-/// What a Flash instance hands its kernel at `lt`: the `(strength, colour, mix)`
-/// the old `Resolved::Flash` variant carried, now the resolve-time derivation
-/// read back through the effect's own `packed`.
 fn flash_packed(e: &EffectInstance, lt: f64, markers: &MarkerContext) -> (f32, [f32; 4], f32) {
     let bag = resolve_bag(std::slice::from_ref(e), lt, 1000.0, 1.0, markers);
     let p = Params::new(&bag);
     effects::flash::Flash::read(p).packed(effects::flash::Flash::strength_of(p))
 }
 
-/// What a Lens flare op hands the bake and the kernels: the
-/// [`LensFlareParams`](crate::fx::lens_flare::LensFlareParams) bundle the old
-/// `Resolved::LensFlare` variant carried, read back out of the resolved arena
-/// through the effect's own `packed` — Lights mode's sources included, since they
-/// are a resolve-time derivation rather than a row.
 fn flare_packed(ops: &super::params::ResolvedStack) -> crate::fx::lens_flare::LensFlareParams {
     let fx = ops.get(0).expect("the flare op");
     let (lights, count) = effects::lens_flare::LensFlare::lights_of(fx.params);
     effects::lens_flare::LensFlare::read(fx.params).packed(lights, count)
 }
 
-/// What a Scanlines instance hands its kernel: the fields the old
-/// `Resolved::Scanlines` variant carried, with the folded intensity and the roll
-/// offset coming out of the resolve-time derivation.
 fn scanlines_packed(
     e: &EffectInstance,
     lt: f64,
@@ -252,9 +229,6 @@ fn dof_packed(e: &EffectInstance, px_scale: f32, depth_bound: bool) -> cpu::DofP
     effects::dof::Dof::read(p).packed(depth_bound, effects::dof::Dof::blades_of(p))
 }
 
-/// What a Datamosh instance hands its kernel at `lt`: the fields the old
-/// `Resolved::Datamosh` variant carried, with the reset ramp and the migrated
-/// reach coming out of the resolve-time derivation.
 fn datamosh_packed(e: &EffectInstance, lt: f64) -> (f32, f32, f32, i32, f32) {
     let bag = resolve_bag(
         std::slice::from_ref(e),
@@ -268,37 +242,21 @@ fn datamosh_packed(e: &EffectInstance, lt: f64) -> (f32, f32, f32, i32, f32) {
     effects::datamosh::Datamosh::read(p).packed(ramp, reach)
 }
 
-// Posterize time (docs/08 §3.25): the held comp time snaps down to the coarser
-// grid. The two comp times that share a held frame MUST return the exact same
-// tau (that equality is what lets the frame cache dedup them) and never divide
-// by zero on a degenerate rate.
 #[test]
 fn posterize_held_time_snaps_to_the_grid() {
-    // 10 fps grid, no phase: every time in [0.3, 0.4) holds at 0.3.
     assert_eq!(posterize_held_time(0.30, 10.0, 0.0), 0.3);
     assert_eq!(posterize_held_time(0.35, 10.0, 0.0), 0.3);
     assert!((posterize_held_time(0.399, 10.0, 0.0) - 0.3).abs() < 1e-9);
-    // The next step lands exactly on 0.4.
     assert!((posterize_held_time(0.40, 10.0, 0.0) - 0.4).abs() < 1e-9);
-    // Two times sharing a held frame agree bit-for-bit (the dedup property):
-    // at 12 fps the cell [4/12, 5/12) holds both 0.34 and 0.40 at 4/12.
     assert_eq!(
         posterize_held_time(0.34, 12.0, 0.0),
         posterize_held_time(0.40, 12.0, 0.0)
     );
-    // A phase offset shifts where the steps land.
     assert!((posterize_held_time(0.35, 10.0, 0.05) - 0.35).abs() < 1e-9);
-    // A degenerate rate holds nothing and never divides by zero.
     assert_eq!(posterize_held_time(0.42, 0.0, 0.0), 0.42);
     assert_eq!(posterize_held_time(0.42, -5.0, 0.0), 0.42);
 }
 
-// posterize_sample_times (docs/08 §3.25): the decode planner's per-layer held
-// comp time — the piece that makes Posterize Time step *footage playback*, not
-// only comp-driven animation. An Everything-below adjustment holds every layer
-// beneath it; a This-layer Posterize holds only its own layer; a plain stack is
-// left at the live playhead. This is the FX-1 regression: the sampled time must
-// snap to the rate.
 #[test]
 fn posterize_sample_times_snap_covered_layers_to_the_grid() {
     use crate::model::{LayerKind, Switches, TransformGroup};
@@ -350,9 +308,6 @@ fn posterize_sample_times_snap_covered_layers_to_the_grid() {
         )
     };
 
-    // Everything-below Posterize at 10 fps on an adjustment (index 0, the top),
-    // two plain layers beneath. At t = 0.37 the layers below snap to the 0.3
-    // grid; the adjustment carrying the effect is not held by its own effect.
     let mut post = instantiate("posterize_time").unwrap();
     for p in &mut post.params {
         if p.id == "rate" {
@@ -374,9 +329,6 @@ fn posterize_sample_times_snap_covered_layers_to_the_grid() {
     );
     assert!((st[2] - 0.3).abs() < 1e-9);
 
-    // A Posterize on a plain (footage) layer holds ONLY that layer's own
-    // sampling — the reach is implied by the carrier, so a non-adjustment
-    // carrier never holds the layers beneath it.
     let on_footage = vec![footage(vec![post.clone()]), footage(vec![])];
     let stf = posterize_sample_times(&on_footage, 0.37);
     assert!((stf[0] - 0.3).abs() < 1e-9, "the posterised footage snaps");
@@ -385,17 +337,10 @@ fn posterize_sample_times_snap_covered_layers_to_the_grid() {
         "a layer below a plain-layer Posterize stays live"
     );
 
-    // No live Posterize → every layer stays at the live playhead.
     let st = posterize_sample_times(&[footage(vec![]), footage(vec![])], 0.37);
     assert!(st.iter().all(|&s| (s - 0.37).abs() < 1e-9));
 }
 
-// accumulation_shutter_offsets (docs/08 §3.26): the decode planner's per-layer
-// list of shutter moments — the piece that makes accumulation motion blur
-// sample *footage* between frames, not only transforms. An adjustment's
-// offsets reach every layer beneath it and none above; two stacked ones give
-// the layers under both the union; a bypassed, hidden or out-of-span
-// adjustment gives nothing.
 #[test]
 fn accumulation_shutter_offsets_cover_the_layers_beneath() {
     use crate::model::{LayerKind, Switches, TransformGroup};
@@ -461,8 +406,6 @@ fn accumulation_shutter_offsets_cover_the_layers_beneath() {
             .sample_offsets()
     };
 
-    // One adjustment over two layers: both beneath get its moments, the
-    // adjustment itself and a layer above get none.
     let layers = vec![
         footage(),
         layer(LayerKind::Adjustment, vec![mb(4.0)]),
@@ -475,8 +418,6 @@ fn accumulation_shutter_offsets_cover_the_layers_beneath() {
     assert_eq!(got[2], offsets_of(4.0));
     assert_eq!(got[3], offsets_of(4.0));
 
-    // Two stacked: the layer between gets the outer's moments, the layer
-    // under both gets the union, sorted, with nothing twice.
     let layers = vec![
         layer(LayerKind::Adjustment, vec![mb(4.0)]),
         footage(),
@@ -495,7 +436,6 @@ fn accumulation_shutter_offsets_cover_the_layers_beneath() {
         "the inner adjustment adds its own moments"
     );
 
-    // Hidden, out of span, or with effects bypassed: nothing reaches below.
     let mut hidden = layer(LayerKind::Adjustment, vec![mb(4.0)]);
     hidden.switches.visible = false;
     let mut early = layer(LayerKind::Adjustment, vec![mb(4.0)]);
@@ -506,8 +446,6 @@ fn accumulation_shutter_offsets_cover_the_layers_beneath() {
         let got = accumulation_shutter_offsets(&[off, footage()], 0.5);
         assert!(got[1].is_empty());
     }
-    // A plain layer carrying the effect wants its own moments, for itself
-    // alone: it averages its own clip, and nothing beneath it is covered.
     let got = accumulation_shutter_offsets(
         &[
             layer(
@@ -527,7 +465,6 @@ fn accumulation_shutter_offsets_cover_the_layers_beneath() {
 #[test]
 fn resolve_stack_evaluates_converts_and_skips_dead_effects() {
     let mut e = instantiate("blur").unwrap();
-    // 30 px@comp at a px_scale of 1 is 30 raster px.
     let b = resolve_migrated::<effects::blur::Blur>(
         &[e.clone()],
         0.0,
@@ -546,18 +483,10 @@ fn resolve_stack_evaluates_converts_and_skips_dead_effects() {
     );
 }
 
-// docs/impl/temporal-rerender.md §5: in a held/sub-frame re-render an effect
-// flagged sample_temporally == false resolves at the true frame time, while the
-// rest of the stack samples the held time. resolve_stack_temporal is the
-// per-effect time split both the preview and export re-render drive; with the
-// two times equal it is byte-identical to resolve_stack (the ordinary render is
-// unchanged).
 #[test]
 fn resolve_stack_temporal_pins_non_sampling_effects_to_the_frame_time() {
     use crate::anim::{Keyframe, SideInterp};
     use crate::time::Rational;
-    // A blur whose radius ramps 0→1000 px@comp over one second, so a held time
-    // and a frame time resolve to visibly different radii.
     let key = |time: Rational, value: f64| Keyframe {
         time,
         value,
@@ -577,8 +506,6 @@ fn resolve_stack_temporal_pins_non_sampling_effects_to_the_frame_time() {
             p.value = EffectValue::Float(ramp.clone());
         }
     }
-    // Blur has moved to the registry, so its radius comes back out of the
-    // arena through its own typed reader rather than out of a variant.
     fn radius_of(e: &EffectInstance) -> f32 {
         let ops = super::resolved::resolve_stack_temporal(
             std::slice::from_ref(e),
@@ -592,14 +519,9 @@ fn resolve_stack_temporal_pins_non_sampling_effects_to_the_frame_time() {
         let fx = ops.get(0).expect("the blur op");
         effects::blur::Blur::read(fx.params).radius
     }
-    // Sample time 0.2 (radius 200 px@comp at a px_scale of 1), frame time 0.8
-    // (800 px). With the flag ON (the default) the effect samples the held
-    // time; with it OFF it holds at the frame time.
     assert!((radius_of(&e) - 200.0).abs() < 0.01);
     e.sample_temporally = false;
     assert!((radius_of(&e) - 800.0).abs() < 0.01);
-    // Equal times ⇒ byte-identical to resolve_stack (ordinary render unchanged),
-    // whatever the flag.
     assert_eq!(
         resolve_stack_temporal(
             std::slice::from_ref(&e),
@@ -653,8 +575,6 @@ fn neutral_dof(near_aperture: f32, far_aperture: f32, focus_point: [f32; 2]) -> 
 
 #[test]
 fn dof_near_far_override_and_fall_back_to_the_aperture_master() {
-    // Near/Far override the per-side radii; the Aperture master scales both
-    // about its default 8. Set Aperture 16 (master 2×), Near 10, Far 4.
     let mut e = instantiate("dof").unwrap();
     for p in e.params.iter_mut() {
         match p.id.as_str() {
@@ -669,9 +589,6 @@ fn dof_near_far_override_and_fall_back_to_the_aperture_master() {
         neutral_dof(20.0, 8.0, [960.0, 540.0])
     );
 
-    // A legacy instance saved before the Near/Far pair existed has only
-    // `aperture`; both sides then fall back to it, reproducing the old
-    // symmetric single-aperture behaviour exactly.
     let mut legacy = instantiate("dof").unwrap();
     for p in legacy.params.iter_mut() {
         if p.id == "aperture" {
@@ -695,18 +612,14 @@ fn input_times_are_the_boxs_own_time_and_the_frames_it_reads() {
     let dt = 0.5;
     let times = |match_name: &str| input_times(&instantiate(match_name).unwrap(), 4.0, dt);
 
-    // A plain effect reads the frame in hand and nothing else.
     assert_eq!(times("blur"), vec![4.0]);
 
-    // Echo reaches back over its declared window, its own time first.
     let echo = times("echo");
     assert_eq!(echo[0], 4.0);
     assert_eq!(echo.len(), 17, "the frame itself and sixteen behind it");
     assert_eq!(echo[1], 3.5);
     assert_eq!(echo[16], 4.0 - 16.0 * dt);
 
-    // Motion blur measures against the frame after, Datamosh against the one
-    // before.
     assert_eq!(times("motion_blur"), vec![4.0, 4.5]);
     assert_eq!(times("datamosh"), vec![4.0, 3.5]);
 
@@ -716,7 +629,6 @@ fn input_times_are_the_boxs_own_time_and_the_frames_it_reads() {
     set_float(&mut post, "rate", 2.0);
     assert_eq!(input_times(&post, 4.3, dt), vec![4.0]);
 
-    // Accumulation motion blur takes its own time and every shutter moment.
     let acc = instantiate("accumulation_mb").unwrap();
     let want = crate::fx::temporal::stack_accumulation_mb(std::slice::from_ref(&acc), true, 4.0)
         .expect("the effect resolves")
@@ -726,19 +638,15 @@ fn input_times_are_the_boxs_own_time_and_the_frames_it_reads() {
     assert_eq!(got[0], 4.0);
     assert_eq!(got[1], 4.0 + want[0] * dt);
 
-    // A Time offset shows another second, and that second alone.
     let mut shift = instantiate("time_offset").unwrap();
     set_float(&mut shift, "offset", -1.25);
     assert_eq!(input_times(&shift, 4.0, dt), vec![2.75]);
 
-    // A bypassed box asks for the frame in hand, whatever it is.
     let mut off = instantiate("echo").unwrap();
     off.enabled = false;
     assert_eq!(input_times(&off, 4.0, dt), vec![4.0]);
 }
 
-/// A Node graph effect's demands on the picture it is handed join the stack's
-/// own window, so the layer is rendered at the frames the graph reads (§5.2).
 #[test]
 fn a_node_graph_effects_demands_join_the_layers_window() {
     use crate::comp_graph::{CompGraph, GraphEdge, GraphInput, GraphNode, InputKind};
@@ -759,8 +667,6 @@ fn a_node_graph_effects_demands_join_the_layers_window() {
             preview: None,
         },
     };
-    // An Echo box on the graph's own picture Input: the host layer has to be
-    // rendered at every frame it reads.
     let echo = GraphNode::Fx(instantiate("echo").unwrap());
     let out = GraphNode::Output {
         id: uuid::Uuid::now_v7(),
@@ -805,18 +711,12 @@ fn a_node_graph_effects_demands_join_the_layers_window() {
         "the graph's Echo reads the layer's own sixteen frames back"
     );
 
-    // A layer whose graph reads nothing else keeps the window it had.
     layer.effects = vec![instantiate("blur").unwrap()];
     assert_eq!(layer_temporal_window(&doc, &layer, 1.0, dt), vec![0]);
 }
 
 #[test]
 fn motion_blur_and_datamosh_together_ask_for_both_measurements() {
-    // A layer used to carry one flow field and the first consumer in
-    // stack order took it, leaving the other silently doing nothing. The two
-    // want opposite measurements — forward to the next frame, back to the
-    // previous — so the stack asks for both, and stack order does not decide
-    // who gets served.
     let mb = instantiate("motion_blur").unwrap();
     let dm = instantiate("datamosh").unwrap();
     assert_eq!(
@@ -828,17 +728,12 @@ fn motion_blur_and_datamosh_together_ask_for_both_measurements() {
         vec![-1, 1],
         "the list must not depend on stack order"
     );
-    // Two of the same effect still measure once: sorted and deduplicated.
     assert_eq!(stack_flow_neighbours(&[mb.clone(), mb], true), vec![1]);
-    // The fx switch still turns the whole thing off.
     assert!(stack_flow_neighbours(&[dm], false).is_empty());
 }
 
 #[test]
 fn datamosh_intensity_ceiling_is_open_and_displacement_migrates() {
-    // FX-14: the Intensity hard cap is lifted, so a typed
-    // value above 1 resolves through for a punchier tear; Displacement is
-    // clamped at 1 below and open above.
     let mut e = instantiate("datamosh").unwrap();
     for p in &mut e.params {
         if p.id == "intensity" {
@@ -850,8 +745,6 @@ fn datamosh_intensity_ceiling_is_open_and_displacement_migrates() {
     }
     assert_eq!(datamosh_packed(&e, 0.0), (2.5, 9.0, 0.6, 9, 1.0));
 
-    // An old project carries `streak_length`, not `displacement`: the
-    // resolve reads it as the reach fallback, so the loaded look is unchanged.
     let mut legacy = instantiate("datamosh").unwrap();
     for p in &mut legacy.params {
         if p.id == "displacement" {
@@ -883,11 +776,8 @@ fn cpu_motion_blur_unconfident_pixels_borrow_the_neighbourhood_rather_than_freez
         let v = ((i * 2654435761) % 251) as f32 / 250.0;
         img[i * 4..i * 4 + 4].copy_from_slice(&[v, v, v, 1.0]);
     }
-    // 24 px/frame to the right everywhere — one motion, so the neighbourhood
-    // genuinely has something to lend.
     let u = vec![24.0f32; n];
     let v = vec![0.0f32; n];
-    // Left half fully trusted, right half not trusted at all.
     let conf: Vec<f32> = (0..n)
         .map(|i| if (i as u32 % w) < w / 2 { 1.0 } else { 0.0 })
         .collect();
@@ -907,8 +797,6 @@ fn cpu_motion_blur_unconfident_pixels_borrow_the_neighbourhood_rather_than_freez
         MbQuality::Normal,
     );
 
-    // Mean absolute difference from the input, over a column well inside each
-    // half (away from the seam, where the two behaviours meet and mix).
     let moved = |x0: u32, x1: u32| {
         let mut sum = 0.0f64;
         let mut count = 0u32;
@@ -946,10 +834,6 @@ fn cpu_motion_blur_unconfident_pixels_borrow_the_neighbourhood_rather_than_freez
 
 #[test]
 fn cpu_motion_blur_smears_along_the_flow() {
-    // A vertical edge (left half bright, right half dark) smeared by a
-    // constant horizontal flow should soften the edge along x while
-    // leaving a pixel deep inside a flat region unchanged (a box streak
-    // over constant colour is that colour) — the defining behaviour.
     let (w, h) = (16u32, 4u32);
     let mut img = vec![0.0f32; (w * h * 4) as usize];
     for y in 0..h {
@@ -960,7 +844,7 @@ fn cpu_motion_blur_smears_along_the_flow() {
         }
     }
     let n = (w * h) as usize;
-    let (u, vv) = (vec![8.0f32; n], vec![0.0f32; n]); // 8px horizontal
+    let (u, vv) = (vec![8.0f32; n], vec![0.0f32; n]);
     let full = vec![1.0f32; n];
     let mut out = img.clone();
     cpu::motion_blur(
@@ -975,19 +859,15 @@ fn cpu_motion_blur_smears_along_the_flow() {
         1.0,
         MbView::Rendered,
         MbQuality::Normal,
-    ); // streak 4px
+    );
 
     // Indices on row 0 (a closure keeps clippy's erasing-op lint happy and
     // reads clearly as column, row).
     let idx = |x: u32, y: u32| ((y * w + x) * 4) as usize;
-    // A pixel far inside the bright flat region is untouched (1.0).
     let flat = idx(2, 0);
     assert!((out[flat] - 1.0).abs() < 1e-4, "flat interior is preserved");
-    // A pixel far inside the dark flat region stays dark.
     let dark = idx(13, 0);
     assert!(out[dark].abs() < 1e-4, "dark interior stays dark");
-    // The pixel just right of the edge picks up light from the bright
-    // side it was smeared across — a genuine, directional softening.
     let edge = idx(8, 0);
     assert!(
         out[edge] > 0.05 && out[edge] < 0.95,
@@ -998,25 +878,18 @@ fn cpu_motion_blur_smears_along_the_flow() {
 
 #[test]
 fn cpu_datamosh_full_intensity_reads_the_shifted_previous_frame() {
-    // A single bright premultiplied pixel in `prev`; a one-step walk whose
-    // flow points straight at it should recover that pixel's colour at the
-    // sampling position, not `current`'s.
     let (w, h) = (9u32, 9u32);
     let n = (w * h) as usize;
-    let current = vec![0.0f32; n * 4]; // all black
+    let current = vec![0.0f32; n * 4];
     let mut prev = vec![0.0f32; n * 4];
-    let bright = ((4 * w + 6) * 4) as usize; // (x=6, y=4)
+    let bright = ((4 * w + 6) * 4) as usize;
     prev[bright..bright + 4].copy_from_slice(&[4.0, 2.0, 1.0, 1.0]);
-    // Output pixel (4, 4) walks one step of flow u = 2 (× displacement 1) to
-    // (6, 4).
     let mut u = vec![0.0f32; n];
     let v = vec![0.0f32; n];
     u[(4 * w + 4) as usize] = 2.0;
     let out = cpu::datamosh(&current, &prev, w, h, &u, &v, 1.0, 1.0, 0.6, 1);
     let i = ((4 * w + 4) * 4) as usize;
     assert_eq!(&out[i..i + 4], &[4.0, 2.0, 1.0, 1.0]);
-    // A pixel whose flow is zero and whose `prev` neighbourhood is dark
-    // stays dark (current is also dark there) — no bleed from elsewhere.
     assert_eq!(&out[0..4], &[0.0, 0.0, 0.0, 0.0]);
 }
 
@@ -1032,61 +905,42 @@ fn cpu_echo_blend_modes_combine_a_single_tap() {
     weights[0] = 1.0;
     let run = |mode: u32| cpu::echo(&current, &[(-1, &neighbour)], weights, mode, 1.0);
 
-    // Behind (0): accumulator over the echo — opaque accumulator wins.
     assert_eq!(run(0), vec![0.5, 0.5, 0.5, 1.0]);
-    // In front (1): echo over the accumulator — opaque echo wins.
     assert_eq!(run(1), vec![0.25, 0.25, 0.25, 1.0]);
-    // Add (2): 0.5 + 0.25 = 0.75; alpha 1 + 1 = 2.
     assert_eq!(run(2), vec![0.75, 0.75, 0.75, 2.0]);
-    // Screen (3): 0.5 + 0.25 − 0.5×0.25 = 0.625; alpha 1 + 1 − 1 = 1.
     assert_eq!(run(3), vec![0.625, 0.625, 0.625, 1.0]);
-    // Multiply (4): 0.5 × 0.25 = 0.125.
     assert_eq!(run(4), vec![0.125, 0.125, 0.125, 1.0]);
-    // Overlay (5): accumulator 0.5 ≤ 0.5 → 2·0.5·0.25 = 0.25; alpha 1.
     assert_eq!(run(5), vec![0.25, 0.25, 0.25, 1.0]);
-    // Hard light (7): echo 0.25 ≤ 0.5 → 2·0.5·0.25 = 0.25; alpha 1.
     assert_eq!(run(7), vec![0.25, 0.25, 0.25, 1.0]);
-    // Lighten (8): max(0.5, 0.25) = 0.5 — the leading frame wins.
     assert_eq!(run(8), vec![0.5, 0.5, 0.5, 1.0]);
-    // Darken (9): min(0.5, 0.25) = 0.25.
     assert_eq!(run(9), vec![0.25, 0.25, 0.25, 1.0]);
-    // Difference (10): |0.5 − 0.25| = 0.25; alpha |1 − 1| = 0.
     assert_eq!(run(10), vec![0.25, 0.25, 0.25, 0.0]);
-    // Exclusion (11): 0.5 + 0.25 − 2·0.5·0.25 = 0.5; alpha 1 + 1 − 2 = 0.
     assert_eq!(run(11), vec![0.5, 0.5, 0.5, 0.0]);
-    // Subtract (12): max(0.5 − 0.25, 0) = 0.25; alpha max(1 − 1, 0) = 0.
     assert_eq!(run(12), vec![0.25, 0.25, 0.25, 0.0]);
-    // Divide (13): 0.5 ÷ 0.25 = 2.0; alpha 1 ÷ 1 = 1.
     assert_eq!(run(13), vec![2.0, 2.0, 2.0, 1.0]);
 }
 
 #[test]
 fn cpu_blur_identity_energy_and_mix() {
-    // A 9x9 with one bright premultiplied pixel in the middle.
     let (w, h) = (9u32, 9u32);
     let mut img = vec![0.0f32; (w * h * 4) as usize];
     let mid = ((4 * w + 4) * 4) as usize;
-    img[mid..mid + 4].copy_from_slice(&[4.0, 2.0, 1.0, 1.0]); // HDR > 1
+    img[mid..mid + 4].copy_from_slice(&[4.0, 2.0, 1.0, 1.0]);
 
-    // Radius 0 is the identity.
     let mut id = img.clone();
     cpu::blur_gaussian(&mut id, w, h, 0.0, 1, 1.0);
     assert_eq!(id, img);
 
-    // A blur spreads but conserves energy away from edges (repeat policy,
-    // small radius, bright pixel far from borders).
     let mut blurred = img.clone();
     cpu::blur_gaussian(&mut blurred, w, h, 2.0, 1, 1.0);
     assert!(blurred[mid] < img[mid], "peak flattens");
-    let sum = |v: &[f32]| v.iter().step_by(4).sum::<f32>(); // red plane
+    let sum = |v: &[f32]| v.iter().step_by(4).sum::<f32>();
     assert!((sum(&blurred) - sum(&img)).abs() < 1e-3, "energy conserved");
 
-    // Mix 0 returns the input exactly, whatever the radius.
     let mut mixed = img.clone();
     cpu::blur_gaussian(&mut mixed, w, h, 5.0, 1, 0.0);
     assert_eq!(mixed, img);
 
-    // Transparent edges lose energy when the kernel hangs off the border.
     let mut corner = vec![0.0f32; (w * h * 4) as usize];
     corner[0..4].copy_from_slice(&[1.0, 1.0, 1.0, 1.0]);
     let mut t = corner.clone();
@@ -1096,8 +950,6 @@ fn cpu_blur_identity_energy_and_mix() {
     assert!(sum(&t) < sum(&rep), "transparent edge sheds energy");
 }
 
-/// A step edge for sharpen tests: left half dark, right half bright,
-/// fully opaque, with an HDR right side.
 fn step_image(w: u32, h: u32) -> Vec<f32> {
     let mut img = vec![0.0f32; (w * h * 4) as usize];
     for y in 0..h {
@@ -1115,19 +967,16 @@ fn cpu_sharpen_identity_edge_overshoot_and_threshold() {
     let (w, h) = (16u32, 8u32);
     let img = step_image(w, h);
 
-    // Mix 0 is the exact identity.
     let mut m0 = img.clone();
     cpu::sharpen(&mut m0, w, h, 1.0, 3.0, 0.0, true, 0.0);
     assert_eq!(m0, img);
 
-    // Amount 0 changes nothing (opaque pixels, so unpremultiply is exact).
     let mut a0 = img.clone();
     cpu::sharpen(&mut a0, w, h, 0.0, 3.0, 0.0, true, 1.0);
     for (a, b) in a0.iter().zip(&img) {
         assert!((a - b).abs() < 1e-6, "{a} vs {b}");
     }
 
-    // A flat region is untouched; the step edge overshoots both ways.
     let mut s = img.clone();
     cpu::sharpen(&mut s, w, h, 1.0, 2.0, 0.0, true, 1.0);
     let px = |x: u32, y: u32| ((y * w + x) * 4) as usize;
@@ -1138,25 +987,20 @@ fn cpu_sharpen_identity_edge_overshoot_and_threshold() {
     assert!(s[dark_side] < img[dark_side], "dark side of edge dips");
     assert!(s[bright_side] > img[bright_side], "bright side lifts");
 
-    // A threshold above the edge contrast suppresses the sharpening.
     let mut t = img.clone();
     cpu::sharpen(&mut t, w, h, 1.0, 2.0, 1.0, true, 1.0);
     for (a, b) in t.iter().zip(&img) {
         assert!((a - b).abs() < 1e-5, "threshold 1.0 gates the edge detail");
     }
 
-    // Fully transparent input stays fully transparent (no invented light).
     let mut clear = vec![0.0f32; (w * h * 4) as usize];
     cpu::sharpen(&mut clear, w, h, 3.0, 2.0, 0.0, false, 1.0);
     assert!(clear.iter().all(|v| *v == 0.0));
 
-    // Per-channel mode fringes where luma-only does not: on a pure
-    // chroma edge (constant luma), luma-only is inert.
     let mut chroma = vec![0.0f32; (w * h * 4) as usize];
     for y in 0..h {
         for x in 0..w {
             let i = ((y * w + x) * 4) as usize;
-            // Two colours with identical Rec. 709 luma.
             let (r, g, b) = if x < w / 2 {
                 (0.5, 0.25, 0.0)
             } else {
@@ -1187,7 +1031,6 @@ fn cpu_sharpen_identity_edge_overshoot_and_threshold() {
 
 #[test]
 fn cpu_rgb_split_shifts_channels_and_keeps_alpha() {
-    // A white impulse in the middle of a black opaque frame.
     let (w, h) = (17u32, 9u32);
     let mut img = vec![0.0f32; (w * h * 4) as usize];
     for px in img.chunks_exact_mut(4) {
@@ -1197,13 +1040,9 @@ fn cpu_rgb_split_shifts_channels_and_keeps_alpha() {
     let mid = at(8, 4);
     img[mid..mid + 3].copy_from_slice(&[1.0, 1.0, 1.0]);
 
-    // The classic split's per-tap scales (FX-9): taps 0/2 full, tap 1 anchored.
     let classic = [1.0f32, 0.0, 1.0];
-    // The classic red / green / blue tints (T17): each primary keeps only its
-    // own channel of its tap, reproducing the channel-separated split.
     let classic_tints = [[1.0f32, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
 
-    // Amount 0 and mix 0 are both the exact identity.
     let mut a0 = img.clone();
     cpu::rgb_split(&mut a0, w, h, 0.0, 0.0, classic, classic_tints, 1.0);
     assert_eq!(a0, img);
@@ -1211,8 +1050,6 @@ fn cpu_rgb_split_shifts_channels_and_keeps_alpha() {
     cpu::rgb_split(&mut m0, w, h, 3.0, 45.0, classic, classic_tints, 0.0);
     assert_eq!(m0, img);
 
-    // Angle 0°, 2px: red lands 2px right of the impulse, blue 2px left,
-    // green and alpha exactly where they were.
     let mut s = img.clone();
     cpu::rgb_split(&mut s, w, h, 2.0, 0.0, classic, classic_tints, 1.0);
     assert_eq!(s[at(10, 4)], 1.0, "red shifted +x");
@@ -1224,9 +1061,6 @@ fn cpu_rgb_split_shifts_channels_and_keeps_alpha() {
         "alpha follows green: untouched"
     );
 
-    // Per-tap scales (FX-9): halving tap 0's scale halves its displacement,
-    // so red now lands 1px (not 2px) right of the impulse; zeroing tap 2's
-    // scale keeps blue on the impulse.
     let mut pc = img.clone();
     cpu::rgb_split(&mut pc, w, h, 2.0, 0.0, [0.5, 0.0, 0.0], classic_tints, 1.0);
     assert_eq!(pc[at(9, 4)], 1.0, "red at half scale shifts +1x");
@@ -1237,8 +1071,6 @@ fn cpu_rgb_split_shifts_channels_and_keeps_alpha() {
         "blue at scale 0 stays on the impulse"
     );
 
-    // Tints (T17): a white tint on tap 0 keeps the full colour of its sample,
-    // so the shifted tap 0 now carries green and blue too — not just red.
     let white_tap0 = [[1.0f32, 1.0, 1.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]];
     let mut ti = img.clone();
     cpu::rgb_split(&mut ti, w, h, 2.0, 0.0, classic, white_tap0, 1.0);
@@ -1248,14 +1080,10 @@ fn cpu_rgb_split_shifts_channels_and_keeps_alpha() {
     assert_eq!(ti[at(8, 4)], 0.0, "nothing left on the impulse");
 }
 
-/// The default channel tints — red / green / blue — that reproduce the
-/// classic R-outward / B-inward / G-anchor split (P2).
 const RGB_TINTS: [[f32; 3]; 3] = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
 
 #[test]
 fn cpu_chromatic_aberration_shifts_channels_radially_and_keeps_alpha() {
-    // A white impulse in the middle of a black opaque frame — the same
-    // corpus rgb_split's own radial-mode test uses.
     let (w, h) = (17u32, 9u32);
     let mut img = vec![0.0f32; (w * h * 4) as usize];
     for px in img.chunks_exact_mut(4) {
@@ -1265,8 +1093,6 @@ fn cpu_chromatic_aberration_shifts_channels_radially_and_keeps_alpha() {
     let mid = at(8, 4);
     img[mid..mid + 3].copy_from_slice(&[1.0, 1.0, 1.0]);
 
-    // Amount 0 and mix 0 are both the exact identity (the general
-    // formula's own passthrough, mirroring rgb_split's un-guarded style).
     let mut a0 = img.clone();
     cpu::chromatic_aberration(&mut a0, w, h, 0.0, RGB_TINTS, 1.0);
     assert_eq!(a0, img);
@@ -1274,8 +1100,6 @@ fn cpu_chromatic_aberration_shifts_channels_radially_and_keeps_alpha() {
     cpu::chromatic_aberration(&mut m0, w, h, 5.0, RGB_TINTS, 0.0);
     assert_eq!(m0, img);
 
-    // The exact centre pixel is unmoved even at a huge amount: its own
-    // (position − centre) vector is zero, so every tap collapses onto it.
     let mut c = img.clone();
     cpu::chromatic_aberration(&mut c, w, h, 20.0, RGB_TINTS, 1.0);
     assert_eq!(c[mid], 1.0, "frame-centre red is unmoved");
@@ -1307,13 +1131,8 @@ fn cpu_spectral_split_disperses_and_preserves_uniform() {
     let (w, h) = (17u32, 9u32);
     let at = |x: u32, y: u32| ((y * w + x) * 4) as usize;
 
-    // The default red/green/blue picker gradient (A1): red at the −1 end,
-    // green astride, blue at the +1 end — the same directional arrangement the
-    // old physical basis had, so these assertions are unchanged.
     let rgb = [[1.0f32, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
 
-    // A uniform image is unchanged (the gradient columns are normalised, and
-    // clamp addressing keeps edges uniform too).
     let mut uniform = vec![0.0f32; (w * h * 4) as usize];
     for px in uniform.chunks_exact_mut(4) {
         px.copy_from_slice(&[0.5, 0.25, 0.125, 1.0]);
@@ -1324,9 +1143,6 @@ fn cpu_spectral_split_disperses_and_preserves_uniform() {
         assert!((a - b).abs() < 1e-6, "texel {i}: {a} vs {b}");
     }
 
-    // A white impulse on an opaque black frame disperses: red mass
-    // lands ahead of the impulse (the classic mode's R direction), blue
-    // behind, green astride it — and alpha never moves.
     let mut img = vec![0.0f32; (w * h * 4) as usize];
     for px in img.chunks_exact_mut(4) {
         px[3] = 1.0;
@@ -1334,7 +1150,6 @@ fn cpu_spectral_split_disperses_and_preserves_uniform() {
     let mid = at(8, 4);
     img[mid..mid + 3].copy_from_slice(&[1.0, 1.0, 1.0]);
 
-    // Mix 0 is the exact identity.
     let mut m0 = img.clone();
     cpu::spectral_split(&mut m0, w, h, 3.0, 45.0, false, 9, rgb, 0.0);
     assert_eq!(m0, img);
@@ -1355,11 +1170,9 @@ fn cpu_spectral_split_disperses_and_preserves_uniform() {
 fn flash_envelope_decays_hits_and_holds_statics() {
     use crate::anim::{Keyframe, SideInterp};
     use crate::time::Rational;
-    // A static trigger is a constant flash.
     assert_eq!(flash_envelope(&Property::fixed(0.5), 7.0, 0.12), 0.5);
     assert_eq!(flash_envelope(&Property::fixed(2.0), 0.0, 0.12), 1.0);
 
-    // Keyframed: hits at t=1 (full) and t=2 (0.6), decay 0.5s.
     let key = |t: i64, v: f64| Keyframe {
         time: Rational::new(t, 1).unwrap(),
         value: v,
@@ -1386,12 +1199,9 @@ fn flash_envelope_decays_hits_and_holds_statics() {
         0.6,
         "second hit wins over the tail"
     );
-    // Overlap takes the loudest: right after t=2 the first hit's tail
-    // (1.0·e^-2) is quieter than the fresh 0.6 hit.
     let after = flash_envelope(&trig, 2.1, 0.5);
     assert!((after - 0.6 * (-0.2f64).exp()).abs() < 1e-12);
 
-    // Decay 0 flashes only on the exact hit time.
     assert_eq!(flash_envelope(&trig, 1.0, 0.0), 1.0);
     assert_eq!(flash_envelope(&trig, 1.01, 0.0), 0.0);
 }
@@ -1403,19 +1213,12 @@ fn flash_instantiates_resolves_and_lights_within_the_footprint() {
     assert_eq!(e.float_at("intensity", 0.0), Some(100.0));
     assert_eq!(e.float_at("decay", 0.0), Some(120.0));
     assert_eq!(e.colour_at("colour", 0.0), Some([1.0, 1.0, 1.0, 1.0]));
-    // Trigger 0: resolves to a zero-strength (identity) flash — the
-    // §1.2 trigger-driven exemption.
     assert_eq!(
         flash_packed(&e, 0.0, &MarkerContext::NONE),
         (0.0, [1.0; 4], 1.0)
     );
 
-    // CPU semantics: strength 1 paints the footprint the flash colour.
-    let mut img = vec![
-        0.5, 0.25, 0.1, 1.0, // opaque pixel
-        0.2, 0.1, 0.05, 0.5, // half-transparent pixel
-        0.0, 0.0, 0.0, 0.0, // empty pixel
-    ];
+    let mut img = vec![0.5, 0.25, 0.1, 1.0, 0.2, 0.1, 0.05, 0.5, 0.0, 0.0, 0.0, 0.0];
     let before = img.clone();
     cpu::flash(&mut img, 1.0, [2.0, 1.0, 0.5, 1.0], 1.0);
     assert_eq!(&img[0..4], &[2.0, 1.0, 0.5, 1.0], "opaque: flash colour");
@@ -1426,7 +1229,6 @@ fn flash_instantiates_resolves_and_lights_within_the_footprint() {
     );
     assert_eq!(&img[8..12], &[0.0; 4], "empty pixels never light up");
 
-    // Strength 0 and mix 0 are both the exact identity.
     let mut s0 = before.clone();
     cpu::flash(&mut s0, 0.0, [1.0; 4], 1.0);
     assert_eq!(s0, before);
@@ -1439,12 +1241,9 @@ fn flash_instantiates_resolves_and_lights_within_the_footprint() {
 fn exposure_instantiates_resolves_and_gains_light() {
     let e = instantiate("exposure").unwrap();
     assert_eq!(e.float_at("stops", 0.0), Some(0.0));
-    // 0 stops packs to a neutral factor of 1.0.
     let v: effects::exposure::Exposure =
         resolve_migrated(&[e], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
     assert_eq!(v.packed(), (1.0, 1.0));
-    // The CPU reference: 0 stops is identity; +1 stop (factor 2) doubles
-    // RGB and leaves alpha alone; Mix 0 is the identity at any factor.
     let mut neutral = vec![0.4_f32, 0.5, 0.6, 1.0];
     cpu::exposure(&mut neutral, 1.0, 1.0);
     assert_eq!(neutral, vec![0.4, 0.5, 0.6, 1.0]);
@@ -1460,7 +1259,6 @@ fn exposure_instantiates_resolves_and_gains_light() {
 fn temperature_instantiates_resolves_and_warms_and_cools() {
     let e = instantiate("temperature").unwrap();
     assert_eq!(e.float_at("temperature", 0.0), Some(0.0));
-    // Temperature 0 packs to neutral gains of exactly 1.0 each.
     let v: effects::temperature::Temperature = resolve_migrated(
         std::slice::from_ref(&e),
         0.0,
@@ -1492,8 +1290,6 @@ fn temperature_instantiates_resolves_and_warms_and_cools() {
     let warm: effects::temperature::Temperature =
         resolve_migrated(&[warm], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
     assert_eq!(warm.packed(), ([1.75, 1.0, 0.25], 1.0));
-    // At the +200 hard extreme the blue gain would be 1 − 1.5 = −0.5; the
-    // pack floors it at 0 (never a negative channel), red at 2.5.
     let mut hot = e.clone();
     for p in &mut hot.params {
         if p.id == "temperature" {
@@ -1512,9 +1308,6 @@ fn temperature_instantiates_resolves_and_warms_and_cools() {
     let cool: effects::temperature::Temperature =
         resolve_migrated(&[cool], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
     assert_eq!(cool.packed(), ([0.25, 1.0, 1.75], 1.0));
-    // The CPU reference: neutral gains are the bit-exact identity; a warm
-    // shift (gains 1.5 / 0.5) boosts red and cuts blue, green and alpha
-    // untouched; Mix 0 is the identity at any gains.
     let mut neutral = vec![0.4_f32, 0.5, 0.6, 1.0];
     cpu::temperature(&mut neutral, 1.0, 1.0, 1.0);
     assert_eq!(neutral, vec![0.4, 0.5, 0.6, 1.0]);
@@ -1529,34 +1322,25 @@ fn temperature_instantiates_resolves_and_warms_and_cools() {
 #[test]
 fn invert_instantiates_resolves_and_inverts() {
     let e = instantiate("invert").unwrap();
-    // The only parameter is Mix, defaulting to 100 %.
     assert_eq!(e.float_at("mix", 0.0), Some(100.0));
     let v: effects::invert::Invert = resolve_migrated(&[e], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
     assert_eq!(v.packed(), 1.0);
 
-    // The CPU reference: an opaque pixel inverts as 1 − c, alpha untouched.
     let mut opaque = vec![0.2_f32, 0.5, 0.9, 1.0];
     cpu::invert(&mut opaque, 1.0);
     for (v, want) in opaque.iter().zip([0.8_f32, 0.5, 0.1, 1.0]) {
         assert!((v - want).abs() < 1e-6, "opaque invert: {v} vs {want}");
     }
-    // Mix 0 is the identity at any input.
     let mut m0 = vec![0.2_f32, 0.5, 0.9, 1.0];
     cpu::invert(&mut m0, 0.0);
     assert_eq!(m0, vec![0.2, 0.5, 0.9, 1.0]);
 
-    // Half-alpha pixel: invert runs on the unpremultiplied colour and is
-    // re-premultiplied — the round trip a naive invert of premultiplied
-    // colour gets wrong. Straight (0.4,0.6,0.8) at alpha 0.5 is stored
-    // premultiplied as (0.2,0.3,0.4); inverting the straight colour gives
-    // (0.6,0.4,0.2), re-premultiplied to (0.3,0.2,0.1); alpha untouched.
     let mut half = vec![0.2_f32, 0.3, 0.4, 0.5];
     cpu::invert(&mut half, 1.0);
     for (v, want) in half.iter().zip([0.3_f32, 0.2, 0.1, 0.5]) {
         assert!((v - want).abs() < 1e-6, "half-alpha invert: {v} vs {want}");
     }
 
-    // Scene-linear HDR values above 1 invert to honest negatives (§2.1).
     let mut hdr = vec![2.0_f32, 3.0, 0.5, 1.0];
     cpu::invert(&mut hdr, 1.0);
     for (v, want) in hdr.iter().zip([-1.0_f32, -2.0, 0.5, 1.0]) {
@@ -1569,12 +1353,9 @@ fn tint_instantiates_resolves_and_maps_luma() {
     let e = instantiate("tint").unwrap();
     assert_eq!(e.colour_at("black", 0.0), Some([0.0, 0.0, 0.0, 1.0]));
     assert_eq!(e.colour_at("white", 0.0), Some([1.0, 1.0, 1.0, 1.0]));
-    // Defaults pack to black→black, white→white (a greyscale mapping).
     let v: effects::tint::Tint = resolve_migrated(&[e], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
     assert_eq!(v.packed(), ([0.0, 0.0, 0.0], [1.0, 1.0, 1.0], 1.0));
 
-    // The CPU reference: default black→black / white→white maps every pixel
-    // to its own Rec.709 luma in all three channels (a greyscale).
     let rgb = [0.8_f32, 0.2, 0.5];
     let luma = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
     let mut grey = vec![rgb[0], rgb[1], rgb[2], 1.0];
@@ -1584,8 +1365,6 @@ fn tint_instantiates_resolves_and_maps_luma() {
     }
     assert_eq!(grey[3], 1.0, "alpha untouched");
 
-    // A duotone: black→(0.1,0,0.2), white→(0.9,0.8,1.0). Each channel lerps
-    // by the pixel's luma. Mix 0 is the identity at any colours.
     let black = [0.1_f32, 0.0, 0.2];
     let white = [0.9_f32, 0.8, 1.0];
     let mut duo = vec![rgb[0], rgb[1], rgb[2], 1.0];
@@ -1602,10 +1381,6 @@ fn tint_instantiates_resolves_and_maps_luma() {
     cpu::tint(&mut m0, black, white, 0.0);
     assert_eq!(m0, vec![rgb[0], rgb[1], rgb[2], 1.0]);
 
-    // Half-alpha pixel: the map runs on the unpremultiplied colour and is
-    // re-premultiplied. Straight (0.8,0.2,0.5) at alpha 0.5 is stored
-    // premultiplied as (0.4,0.1,0.25); with defaults it maps to the straight
-    // luma in each channel, re-premultiplied to luma·0.5; alpha untouched.
     let mut half = vec![0.4_f32, 0.1, 0.25, 0.5];
     cpu::tint(&mut half, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0], 1.0);
     for v in half.iter().take(3) {
@@ -1618,12 +1393,10 @@ fn tint_instantiates_resolves_and_maps_luma() {
 fn hue_shift_is_neutral_at_zero_and_preserves_grey_and_luma() {
     let e = instantiate("hue_shift").unwrap();
     assert_eq!(e.float_at("angle", 0.0), Some(0.0));
-    // Preserve luminance is on by default.
     assert_eq!(
         e.param("preserve_luminance"),
         Some(&EffectValue::Bool(true))
     );
-    // 0° packs to the identity matrix.
     let v: effects::hue_shift::HueShift = resolve_migrated(
         std::slice::from_ref(&e),
         0.0,
@@ -1635,12 +1408,9 @@ fn hue_shift_is_neutral_at_zero_and_preserves_grey_and_luma() {
         v.packed(),
         ([1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0], 1.0)
     );
-    // Identity is bit-exact identity.
     let mut a = vec![0.4_f32, 0.5, 0.6, 1.0];
     cpu::hue_shift(&mut a, hue_matrix(0.0), 1.0);
     assert_eq!(a, vec![0.4, 0.5, 0.6, 1.0]);
-    // Rotating a neutral grey leaves it grey (rows each ~sum to 1), and any
-    // rotation preserves Rec.709 luma to within rounding.
     let m = hue_matrix(90.0);
     let grey = [0.5_f32, 0.5, 0.5];
     let out = [
@@ -1666,12 +1436,10 @@ fn hue_shift_is_neutral_at_zero_and_preserves_grey_and_luma() {
 fn contrast_is_neutral_at_100_and_pivots_about_mid_grey() {
     let e = instantiate("contrast").unwrap();
     assert_eq!(e.float_at("contrast", 0.0), Some(100.0));
-    // 100 % packs to a neutral factor of 1.0.
     let v: effects::contrast::Contrast =
         resolve_migrated(&[e], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
     assert_eq!(v.packed(), (1.0, 1.0));
 
-    // Neutral (k 1.0) is the bit-exact identity; Mix 0 is too at any k.
     let mut n = vec![0.4_f32, 0.5, 0.6, 1.0];
     cpu::contrast(&mut n, 1.0, 1.0);
     assert_eq!(n, vec![0.4, 0.5, 0.6, 1.0]);
@@ -1679,33 +1447,24 @@ fn contrast_is_neutral_at_100_and_pivots_about_mid_grey() {
     cpu::contrast(&mut m0, 2.5, 0.0);
     assert_eq!(m0, vec![0.4, 0.5, 0.6, 1.0]);
 
-    // Mid-grey (0.5) is the fixed point of the pivot at any k.
     let mut grey = vec![0.5_f32, 0.5, 0.5, 1.0];
     cpu::contrast(&mut grey, 2.0, 1.0);
     for v in grey.iter().take(3) {
         assert!((v - 0.5).abs() < 1e-6, "mid-grey stays put");
     }
 
-    // Opaque pixel, k 2.0: each channel moves twice as far from 0.5.
     let mut op = vec![0.4_f32, 0.5, 0.6, 1.0];
     cpu::contrast(&mut op, 2.0, 1.0);
     for (v, want) in op.iter().zip([0.3_f32, 0.5, 0.7, 1.0]) {
         assert!((v - want).abs() < 1e-6, "opaque grade: {v} vs {want}");
     }
 
-    // Half-alpha pixel: the grade runs on the unpremultiplied colour and
-    // is re-premultiplied — the premult round trip that a naive grade on
-    // premultiplied colour would get wrong. Straight (0.4,0.6,0.5) at
-    // alpha 0.5 is stored premultiplied as (0.2,0.3,0.25); k 2.0 grades
-    // the straight colour to (0.3,0.7,0.5), re-premultiplied to
-    // (0.15,0.35,0.25); alpha is untouched.
     let mut half = vec![0.2_f32, 0.3, 0.25, 0.5];
     cpu::contrast(&mut half, 2.0, 1.0);
     for (v, want) in half.iter().zip([0.15_f32, 0.35, 0.25, 0.5]) {
         assert!((v - want).abs() < 1e-6, "half-alpha grade: {v} vs {want}");
     }
 
-    // Empty pixels stay empty (unpremult reads black, re-premult is zero).
     let mut empty = vec![0.0_f32, 0.0, 0.0, 0.0];
     cpu::contrast(&mut empty, 2.0, 1.0);
     assert_eq!(empty, vec![0.0, 0.0, 0.0, 0.0]);
@@ -1715,12 +1474,9 @@ fn contrast_is_neutral_at_100_and_pivots_about_mid_grey() {
 fn gamma_is_neutral_at_one_and_curves_per_channel() {
     let e = instantiate("gamma").unwrap();
     assert_eq!(e.float_at("gamma", 0.0), Some(1.0));
-    // Default 1.0 packs to a neutral gamma.
     let v: effects::gamma::Gamma = resolve_migrated(&[e], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
     assert_eq!(v.packed(), (1.0, 1.0));
 
-    // Neutral (gamma 1.0) is the bit-exact identity; Mix 0 is too at any
-    // gamma (a short-circuit, not a reliance on pow(x, 1) == x).
     let mut n = vec![0.4_f32, 0.5, 0.6, 1.0];
     cpu::gamma(&mut n, 1.0, 1.0);
     assert_eq!(n, vec![0.4, 0.5, 0.6, 1.0]);
@@ -1728,32 +1484,22 @@ fn gamma_is_neutral_at_one_and_curves_per_channel() {
     cpu::gamma(&mut m0, 2.2, 0.0);
     assert_eq!(m0, vec![0.4, 0.5, 0.6, 1.0]);
 
-    // Opaque pixel, gamma 2.0: each channel becomes pow(u, 1/2).
     let mut op = vec![0.25_f32, 0.5, 0.81, 1.0];
     cpu::gamma(&mut op, 2.0, 1.0);
     for (v, want) in op.iter().zip([0.5_f32, 0.5_f32.powf(0.5), 0.9, 1.0]) {
         assert!((v - want).abs() < 1e-6, "opaque curve: {v} vs {want}");
     }
 
-    // 0 and 1 are fixed points of any gamma (pow(0) = 0, pow(1) = 1).
     let mut ends = vec![0.0_f32, 1.0, 0.0, 1.0];
     cpu::gamma(&mut ends, 0.45, 1.0);
     assert!((ends[0] - 0.0).abs() < 1e-6 && (ends[1] - 1.0).abs() < 1e-6);
 
-    // Half-alpha pixel: the curve runs on the unpremultiplied colour and is
-    // re-premultiplied — the premult round trip a naive curve on
-    // premultiplied colour would get wrong. Straight (0.25,0.81,0.49) at
-    // alpha 0.5 is stored premultiplied as (0.125,0.405,0.245); gamma 2.0
-    // curves the straight colour to (0.5,0.9,0.7), re-premultiplied to
-    // (0.25,0.45,0.35); alpha is untouched.
     let mut half = vec![0.125_f32, 0.405, 0.245, 0.5];
     cpu::gamma(&mut half, 2.0, 1.0);
     for (v, want) in half.iter().zip([0.25_f32, 0.45, 0.35, 0.5]) {
         assert!((v - want).abs() < 1e-6, "half-alpha curve: {v} vs {want}");
     }
 
-    // Negative scene-linear input is clamped to 0 before the pow (pow of a
-    // negative base is undefined), so it curves to 0 rather than NaN.
     let mut neg = vec![-0.2_f32, 0.0, 0.0, 1.0];
     cpu::gamma(&mut neg, 2.0, 1.0);
     assert!(
@@ -1762,7 +1508,6 @@ fn gamma_is_neutral_at_one_and_curves_per_channel() {
         neg[0]
     );
 
-    // Empty pixels stay empty (unpremult reads black, re-premult is zero).
     let mut empty = vec![0.0_f32, 0.0, 0.0, 0.0];
     cpu::gamma(&mut empty, 2.0, 1.0);
     assert_eq!(empty, vec![0.0, 0.0, 0.0, 0.0]);
@@ -1773,12 +1518,10 @@ fn cpu_vignette_darkens_the_corners_and_is_neutral_at_zero_amount() {
     let (w, h) = (20u32, 20u32);
     let mut img = vec![0.0f32; (w * h * 4) as usize];
     for px in img.chunks_exact_mut(4) {
-        px.copy_from_slice(&[1.0, 1.0, 1.0, 1.0]); // opaque white
+        px.copy_from_slice(&[1.0, 1.0, 1.0, 1.0]);
     }
     let at = |x: u32, y: u32| ((y * w + x) * 4) as usize;
 
-    // Amount 0 and mix 0 are both the exact identity (the early return
-    // and the general blend formula's own 1·x + 0·y identity).
     let mut a0 = img.clone();
     cpu::vignette(&mut a0, w, h, 0.0, 0.75, 0.5, 1.0, 1.0, 1.0);
     assert_eq!(a0, img);
@@ -1786,8 +1529,6 @@ fn cpu_vignette_darkens_the_corners_and_is_neutral_at_zero_amount() {
     cpu::vignette(&mut m0, w, h, 0.8, 0.2, 0.1, 1.0, 1.0, 0.0);
     assert_eq!(m0, img);
 
-    // A tight, hard-edged, fully-strength vignette: the centre stays
-    // lit, the corner goes dark, alpha is never touched.
     let mut v = img.clone();
     cpu::vignette(&mut v, w, h, 1.0, 0.2, 0.05, 1.0, 1.0, 1.0);
     let centre = at(10, 10);
@@ -1796,10 +1537,6 @@ fn cpu_vignette_darkens_the_corners_and_is_neutral_at_zero_amount() {
     assert!(v[corner] < 0.05, "corner goes dark: {}", v[corner]);
     assert_eq!(v[corner + 3], 1.0, "alpha is never touched");
 
-    // Softness > 1 is a legal, wider feather (not clamped to 1). At
-    // the same tight Radius, softness 1.5 spreads the falloff so the corner
-    // is only partly darkened where the hard-edged case above was near
-    // black, and every value stays finite and in gamut — no artefacts.
     let mut wide = img.clone();
     cpu::vignette(&mut wide, w, h, 1.0, 0.2, 1.5, 1.0, 1.0, 1.0);
     assert!(
@@ -1813,14 +1550,9 @@ fn cpu_vignette_darkens_the_corners_and_is_neutral_at_zero_amount() {
     }
 }
 
-/// One opaque mid-grey-ish pixel, one half-alpha, one HDR, one empty —
-/// the colour-effect test quartet.
 fn colour_quartet() -> Vec<f32> {
     vec![
-        0.25, 0.5, 0.1, 1.0, //
-        0.1, 0.2, 0.05, 0.5, //
-        4.0, 2.0, 1.0, 1.0, //
-        0.0, 0.0, 0.0, 0.0,
+        0.25, 0.5, 0.1, 1.0, 0.1, 0.2, 0.05, 0.5, 4.0, 2.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0,
     ]
 }
 
@@ -1828,35 +1560,28 @@ fn colour_quartet() -> Vec<f32> {
 fn cpu_colour_balance_stages_behave() {
     let img = colour_quartet();
 
-    // A neutral balance is the bit-exact identity (the
-    // whole effect short-circuits, no unpremultiply round trip).
     let mut n = img.clone();
     cpu::colour_balance(&mut n, [0.0; 3], [1.0; 3], [1.0; 3], 1.0);
     assert_eq!(n, img);
 
-    // Mix 0 is the exact identity whatever the balance.
     let mut m0 = img.clone();
     cpu::colour_balance(&mut m0, [0.5; 3], [2.0; 3], [3.0; 3], 0.0);
     assert_eq!(m0, img);
 
-    // Gain doubles linear values; HDR stays unclipped (§2.1).
     let mut g = img.clone();
     cpu::colour_balance(&mut g, [0.0; 3], [1.0; 3], [2.0; 3], 1.0);
     assert_eq!(g[0], 0.5);
     assert_eq!(g[8], 8.0, "highlights never clip");
 
-    // Lift raises blacks (empty alpha stays empty: premultiplied zero).
     let mut l = img.clone();
     cpu::colour_balance(&mut l, [0.1; 3], [1.0; 3], [1.0; 3], 1.0);
     assert!((l[2] - 0.2).abs() < 1e-6, "0.1 blue lifted by 0.1");
     assert_eq!(&l[12..16], &[0.0; 4], "empty pixels stay empty");
 
-    // Gamma 2 is a square root in linear: 0.25 → 0.5.
     let mut ga = img.clone();
     cpu::colour_balance(&mut ga, [0.0; 3], [2.0; 3], [1.0; 3], 1.0);
     assert!((ga[0] - 0.5).abs() < 1e-6);
 
-    // Alpha is untouched by any of it.
     for v in [&n, &m0, &g, &l, &ga] {
         assert_eq!(v[3], 1.0);
         assert_eq!(v[7], 0.5);
@@ -1867,40 +1592,32 @@ fn cpu_colour_balance_stages_behave() {
 fn cpu_saturation_behaves() {
     let img = colour_quartet();
 
-    // Saturation 1 is the bit-exact identity (whole-effect short-circuit).
     let mut n = img.clone();
     cpu::saturate(&mut n, 1.0, 1.0);
     assert_eq!(n, img);
 
-    // Mix 0 is the exact identity whatever the saturation.
     let mut m0 = img.clone();
     cpu::saturate(&mut m0, 0.0, 0.0);
     assert_eq!(m0, img);
 
-    // Saturation 0 collapses to Rec. 709 luma (true greyscale).
     let mut s = img.clone();
     cpu::saturate(&mut s, 0.0, 1.0);
     let luma = 0.25 * cpu::LUMA[0] + 0.5 * cpu::LUMA[1] + 0.1 * cpu::LUMA[2];
     for (c, v) in s.iter().take(3).enumerate() {
         assert!((v - luma).abs() < 1e-6, "channel {c} at luma");
     }
-    // The half-alpha pixel desaturates in unpremultiplied space: its
-    // premultiplied channels all land on (unpremult luma) × alpha.
     let luma_half = (0.2 * cpu::LUMA[0] + 0.4 * cpu::LUMA[1] + 0.1 * cpu::LUMA[2]) * 0.5;
     for c in 0..3 {
         assert!((s[4 + c] - luma_half).abs() < 1e-6, "channel {c}");
     }
     assert_eq!(&s[12..16], &[0.0; 4], "empty pixels stay empty");
 
-    // Oversaturation spreads channels apart and clamps at zero, never
-    // clipping highlights (§2.1).
     let mut o = img.clone();
     cpu::saturate(&mut o, 2.0, 1.0);
     assert!(o[1] > 0.5, "dominant green pushes up");
     assert!(o[2] >= 0.0, "recessive blue clamps at zero, not negative");
     assert!(o[8] > 4.0, "HDR red keeps its headroom");
 
-    // Alpha is untouched by any of it.
     for v in [&n, &m0, &s, &o] {
         assert_eq!(v[3], 1.0);
         assert_eq!(v[7], 0.5);
@@ -1911,29 +1628,20 @@ fn cpu_saturation_behaves() {
 fn cpu_vibrance_behaves() {
     let img = colour_quartet();
 
-    // Amount 0 is the bit-exact identity (whole-effect short-circuit).
     let mut n = img.clone();
     cpu::vibrance(&mut n, 0.0, 1.0);
     assert_eq!(n, img);
 
-    // Mix 0 is the exact identity whatever the amount.
     let mut m0 = img.clone();
     cpu::vibrance(&mut m0, 1.0, 0.0);
     assert_eq!(m0, img);
 
-    // The defining property: a boost lifts LESS-saturated pixels MORE. Two
-    // opaque pixels — one near-neutral (low chroma), one vivid — boosted at
-    // the same amount: the near-neutral's colourfulness grows by the larger
-    // factor.
     let spread = |px: &[f32]| {
         let mx = px[0].max(px[1]).max(px[2]);
         let mn = px[0].min(px[1]).min(px[2]);
         mx - mn
     };
-    let mut pair = vec![
-        0.50, 0.55, 0.45, 1.0, // low saturation
-        0.90, 0.10, 0.10, 1.0, // high saturation
-    ];
+    let mut pair = vec![0.50, 0.55, 0.45, 1.0, 0.90, 0.10, 0.10, 1.0];
     let before_low = spread(&pair[0..4]);
     let before_high = spread(&pair[4..8]);
     cpu::vibrance(&mut pair, 1.0, 1.0);
@@ -1950,7 +1658,6 @@ fn cpu_vibrance_behaves() {
         after_high / before_high
     );
 
-    // Alpha is untouched; a transparent pixel stays empty.
     let mut q = img.clone();
     cpu::vibrance(&mut q, 1.5, 1.0);
     assert_eq!(q[3], 1.0);
@@ -1960,8 +1667,6 @@ fn cpu_vibrance_behaves() {
 
 #[test]
 fn cpu_matte_key_behaves() {
-    // A base op: default green screen, unit gain, mid balance, neutral biases,
-    // no clips. `view` / `spill` / `replace_method` / `mix` are varied per case.
     let base = |view: u32, gain: f32, spill: f32, replace: u32, mix: f32| MatteKeyParams {
         view,
         key: [0.0, 0.6, 0.0, 1.0],
@@ -1983,8 +1688,6 @@ fn cpu_matte_key_behaves() {
         mix,
     };
 
-    // A pixel exactly the screen colour keys out fully (alpha → 0), and its
-    // premultiplied colour collapses with it.
     let mut on_key = vec![0.0_f32, 0.6, 0.0, 1.0];
     cpu::matte_key(&mut on_key, &base(0, 1.0, 1.0, 3, 1.0));
     assert_eq!(
@@ -1993,8 +1696,6 @@ fn cpu_matte_key_behaves() {
         "the screen colour is removed"
     );
 
-    // A half-alpha screen pixel (premultiplied [0,0.3,0,0.5] = straight
-    // [0,0.6,0]) keys to nothing too — the keyer works on straight colour.
     let mut half = vec![0.0_f32, 0.3, 0.0, 0.5];
     cpu::matte_key(&mut half, &base(0, 1.0, 1.0, 3, 1.0));
     assert_eq!(
@@ -2003,22 +1704,15 @@ fn cpu_matte_key_behaves() {
         "partial-alpha screen removed"
     );
 
-    // A far-from-screen colour (red) is kept exactly — no primary excess, so
-    // nothing to despill and nothing to replace.
     let red = vec![0.8_f32, 0.0, 0.0, 1.0];
     let mut r = red.clone();
     cpu::matte_key(&mut r, &base(0, 1.0, 1.0, 2, 1.0));
     assert_eq!(r, red, "far-from-screen pixels are kept exactly");
 
-    // Mix 0 is the exact identity whatever the settings.
     let mut m0 = red.clone();
     cpu::matte_key(&mut m0, &base(0, 1.0, 1.0, 2, 0.0));
     assert_eq!(m0, red, "Mix 0 is the identity");
 
-    // Despill: a kept pixel with a green excess over its red/blue reference has
-    // its green pulled down to that reference at full despill. Gain 0 keeps the
-    // pixel fully opaque so the despilled colour is what lands. [0.4,0.6,0.4]
-    // has a red/blue reference of 0.4, so full despill flattens it to grey 0.4.
     let mut spill = vec![0.4_f32, 0.6, 0.4, 1.0];
     cpu::matte_key(&mut spill, &base(0, 0.0, 1.0, 3, 1.0));
     for (c, v) in spill.iter().take(3).enumerate() {
@@ -2029,10 +1723,6 @@ fn cpu_matte_key_behaves() {
     }
     assert_eq!(spill[3], 1.0, "a kept pixel keeps its alpha");
 
-    // The key is continuous: a pixel with a middling green excess keeps a
-    // partial alpha, never a hard 0 or 1 — what keeps the effect oracle-safe
-    // (§1.6). [0.3,0.5,0.3] has excess 0.2 against a screen excess of 0.6, so
-    // raw = 1/3 and the matte lands at 2/3. Spill off, so colour is untouched.
     let mut edge = vec![0.3_f32, 0.5, 0.3, 1.0];
     cpu::matte_key(&mut edge, &base(0, 1.0, 0.0, 3, 1.0));
     assert!(
@@ -2041,8 +1731,6 @@ fn cpu_matte_key_behaves() {
         edge[3]
     );
 
-    // Screen matte view: the matte itself as opaque greyscale. The edge pixel's
-    // matte is 2/3, so every RGB channel reads 2/3 and alpha is 1.
     let mut mv = vec![0.3_f32, 0.5, 0.3, 1.0];
     cpu::matte_key(&mut mv, &base(1, 1.0, 0.0, 3, 1.0));
     for (c, v) in mv.iter().take(3).enumerate() {
@@ -2050,8 +1738,6 @@ fn cpu_matte_key_behaves() {
     }
     assert_eq!(mv[3], 1.0, "the screen-matte view is opaque");
 
-    // Blue screens key too: the primary axis follows the screen colour's max
-    // channel, so a blue key removes a blue pixel and keeps a red one.
     let blue_key = MatteKeyParams {
         key: [0.0, 0.0, 0.6, 1.0],
         ..base(0, 1.0, 1.0, 3, 1.0)
@@ -2066,8 +1752,6 @@ fn cpu_matte_key_behaves() {
 
 #[test]
 fn blur_family_split_resolves_each_effect_and_loads_legacy_as_gaussian() {
-    // The old mode-driven blur is now three single-purpose effects.
-    // Gaussian (match_name "blur") resolves at its Radius, fixed Repeat edge.
     let gaussian = instantiate("blur").unwrap();
     assert!(gaussian.param("mode").is_none(), "the mode control is gone");
     let b = resolve_migrated::<effects::blur::Blur>(
@@ -2077,10 +1761,8 @@ fn blur_family_split_resolves_each_effect_and_loads_legacy_as_gaussian() {
         1.0,
         &MarkerContext::NONE,
     );
-    // 30 px@comp at a px_scale of 1 = 30px.
     assert_eq!(b.packed(), (30.0, 1, 1.0));
 
-    // Directional blur reads Length/Angle (200 px@comp), fixed Repeat.
     let dir = instantiate("directional_blur").unwrap();
     assert_eq!(dir.float_at("length", 0.0), Some(200.0));
     let d = resolve_migrated::<effects::directional_blur::DirectionalBlur>(
@@ -2092,9 +1774,6 @@ fn blur_family_split_resolves_each_effect_and_loads_legacy_as_gaussian() {
     );
     assert_eq!(d.packed(), (200.0, 0.0, 1, 1.0));
 
-    // Radial blur reads Centre/Amount/Type/Edges: Centre is px@comp and
-    // resolves like every other pixel row (px_scale 1 here), Amount
-    // 150 px@comp = 150px, Type defaults to Spin, Edges to Repeat.
     let mut radial = instantiate("radial_blur").unwrap();
     for p in &mut radial.params {
         match p.id.as_str() {
@@ -2112,7 +1791,6 @@ fn blur_family_split_resolves_each_effect_and_loads_legacy_as_gaussian() {
     );
     assert_eq!(rb.packed(), ([300.0, 700.0], 150.0, 1, 1, 1.0));
 
-    // The Type choice flips Spin/Zoom; Edges is honoured (Mirror = 2).
     for p in &mut radial.params {
         match p.id.as_str() {
             "radial_type" => p.value = EffectValue::Choice(1),
@@ -2130,8 +1808,6 @@ fn blur_family_split_resolves_each_effect_and_loads_legacy_as_gaussian() {
     let (_, _, spin, edge, _) = rb.packed();
     assert_eq!(spin, 0, "Type 1 is Zoom");
     assert_eq!(edge, 2, "Edges Mirror is honoured");
-    // An out-of-range Choice clamps to Mirror rather than falling back, exactly
-    // as the old arm's `(*c).min(2)` did.
     for p in &mut radial.params {
         if p.id == "edge" {
             p.value = EffectValue::Choice(9);
@@ -2146,13 +1822,10 @@ fn blur_family_split_resolves_each_effect_and_loads_legacy_as_gaussian() {
     );
     assert_eq!(rb.packed().3, 2);
 
-    // A project saved with the old combined blur (a "blur" instance carrying
-    // mode/length/angle/edge) loads as Gaussian at its Radius — the leftover
-    // params are simply ignored — existing projects load as Gaussian.
     let mut legacy = instantiate("blur").unwrap();
     legacy.params.push(crate::model::EffectParam {
         id: "mode".into(),
-        value: EffectValue::Choice(2), // was Radial
+        value: EffectValue::Choice(2),
         extra: serde_json::Map::new(),
     });
     legacy.params.push(crate::model::EffectParam {
@@ -2167,7 +1840,6 @@ fn blur_family_split_resolves_each_effect_and_loads_legacy_as_gaussian() {
         1.0,
         &MarkerContext::NONE,
     );
-    // Fixed Repeat, not the stored edge.
     assert_eq!(b.packed(), (30.0, 1, 1.0));
 }
 
@@ -2176,18 +1848,14 @@ fn cpu_sharpen_simple_identity_edge_overshoot_and_alpha() {
     let (w, h) = (16u32, 8u32);
     let img = step_image(w, h);
 
-    // Amount 0 is the bit-exact identity, whatever the Mix.
     let mut a0 = img.clone();
     cpu::sharpen_simple(&mut a0, w, h, 0.0, 1.0, 1.0);
     assert_eq!(a0, img);
 
-    // Mix 0 is the exact identity, whatever the Amount.
     let mut m0 = img.clone();
     cpu::sharpen_simple(&mut m0, w, h, 2.0, 1.0, 0.0);
     assert_eq!(m0, img);
 
-    // A flat region is untouched (the high-pass of constant colour is zero);
-    // the step edge overshoots both ways.
     let mut s = img.clone();
     cpu::sharpen_simple(&mut s, w, h, 1.0, 1.0, 1.0);
     let px = |x: u32, y: u32| ((y * w + x) * 4) as usize;
@@ -2198,7 +1866,6 @@ fn cpu_sharpen_simple_identity_edge_overshoot_and_alpha() {
     assert!(s[dark_side] < img[dark_side], "dark side of edge dips");
     assert!(s[bright_side] > img[bright_side], "bright side lifts");
 
-    // Fully transparent input stays fully transparent (no invented light).
     let mut clear = vec![0.0f32; (w * h * 4) as usize];
     cpu::sharpen_simple(&mut clear, w, h, 3.0, 1.0, 1.0);
     assert!(clear.iter().all(|v| *v == 0.0));
@@ -2206,14 +1873,12 @@ fn cpu_sharpen_simple_identity_edge_overshoot_and_alpha() {
 
 #[test]
 fn cpu_directional_blur_streaks_along_the_angle() {
-    // A white impulse in the middle of a transparent frame.
     let (w, h) = (17u32, 9u32);
     let mut img = vec![0.0f32; (w * h * 4) as usize];
     let at = |x: u32, y: u32| ((y * w + x) * 4) as usize;
     let mid = at(8, 4);
     img[mid..mid + 4].copy_from_slice(&[1.0, 1.0, 1.0, 1.0]);
 
-    // Length 0 and mix 0 are both the exact identity.
     let mut l0 = img.clone();
     cpu::blur_directional(&mut l0, w, h, 0.0, 0.0, 1, 1.0);
     assert_eq!(l0, img);
@@ -2221,8 +1886,6 @@ fn cpu_directional_blur_streaks_along_the_angle() {
     cpu::blur_directional(&mut m0, w, h, 6.0, 45.0, 1, 0.0);
     assert_eq!(m0, img);
 
-    // Angle 0, length 5: the impulse smears along x only — energy
-    // appears beside it on its own row, none above or below.
     let mut s = img.clone();
     cpu::blur_directional(&mut s, w, h, 5.0, 0.0, 1, 1.0);
     assert!(s[mid] < 1.0, "peak flattens");
@@ -2232,11 +1895,9 @@ fn cpu_directional_blur_streaks_along_the_angle() {
     );
     assert_eq!(s[at(8, 3)], 0.0, "no bleed upward");
     assert_eq!(s[at(8, 5)], 0.0, "no bleed downward");
-    // Box weights conserve energy away from edges (5 interior taps).
     let sum = |v: &[f32]| v.iter().step_by(4).sum::<f32>();
     assert!((sum(&s) - sum(&img)).abs() < 1e-4, "energy conserved");
 
-    // Angle 90 streaks along y instead.
     let mut v = img.clone();
     cpu::blur_directional(&mut v, w, h, 5.0, 90.0, 1, 1.0);
     assert!(
@@ -2256,11 +1917,8 @@ fn cpu_radial_blur_spins_and_zooms_from_centre() {
     let at = |x: u32, y: u32| ((y * w + x) * 4) as usize;
     let imp = at(12, 8);
     img[imp..imp + 4].copy_from_slice(&[1.0, 1.0, 1.0, 1.0]);
-    // px@comp, resolved onto this 17x17 raster: pixel 8's centre.
     let centre = [8.5f32, 8.5f32];
 
-    // Amount 0 and mix 0 are both the exact identity, either type (the
-    // same zero-tap-offset reasoning as blur_directional's length 0).
     let mut a0 = img.clone();
     cpu::blur_radial(&mut a0, w, h, centre, 0.0, true, 1, 1.0);
     assert_eq!(a0, img);
@@ -2271,8 +1929,6 @@ fn cpu_radial_blur_spins_and_zooms_from_centre() {
     cpu::blur_radial(&mut m0, w, h, centre, 30.0, true, 1, 0.0);
     assert_eq!(m0, img);
 
-    // The exact centre pixel is unmoved even at a huge amount, either
-    // type — d = 0 there, so every tap collapses to that pixel itself.
     let mut cs = img.clone();
     cpu::blur_radial(&mut cs, w, h, centre, 60.0, true, 1, 1.0);
     assert_eq!(cs[at(8, 8)], 0.0, "centre picks up no energy (spin)");
@@ -2317,7 +1973,6 @@ fn cpu_radial_blur_spins_and_zooms_from_centre() {
 
 #[test]
 fn cpu_glow_blooms_spreads_alpha_and_keeps_neutral_exact() {
-    // An HDR spike on an opaque dark frame, plus a transparent border.
     let (w, h) = (17u32, 9u32);
     let at = |x: u32, y: u32| ((y * w + x) * 4) as usize;
     let mut img = vec![0.0f32; (w * h * 4) as usize];
@@ -2330,18 +1985,14 @@ fn cpu_glow_blooms_spreads_alpha_and_keeps_neutral_exact() {
     let mid = at(8, 4);
     img[mid..mid + 4].copy_from_slice(&[6.0, 3.0, 1.5, 1.0]);
 
-    // Intensity 0 is the bit-exact identity (the neutral pin).
     let mut n = img.clone();
     cpu::glow(&mut n, w, h, 4.0, 1.0, 0.5, 0.0, [1.0; 4], 1.0, &[]);
     assert_eq!(n, img);
 
-    // Mix 0 is the exact identity whatever the parameters.
     let mut m0 = img.clone();
     cpu::glow(&mut m0, w, h, 4.0, 0.2, 0.1, 2.0, [1.0; 4], 0.0, &[]);
     assert_eq!(m0, img);
 
-    // A frame entirely below the threshold gains nothing: the halo is
-    // zero everywhere and the add is exact.
     let dim = {
         let mut d = img.clone();
         d[mid..mid + 4].copy_from_slice(&[0.1, 0.1, 0.1, 1.0]);
@@ -2351,23 +2002,16 @@ fn cpu_glow_blooms_spreads_alpha_and_keeps_neutral_exact() {
     cpu::glow(&mut quiet, w, h, 4.0, 1.0, 0.5, 1.0, [1.0; 4], 1.0, &[]);
     assert_eq!(quiet, dim);
 
-    // The spike blooms: neighbours gain light, the spike itself gains
-    // its own halo back (additive, §2.1: nothing clips).
     let mut g = img.clone();
     cpu::glow(&mut g, w, h, 3.0, 1.0, 0.5, 1.0, [1.0; 4], 1.0, &[]);
     assert!(g[at(10, 4)] > img[at(10, 4)], "neighbour catches the halo");
     assert!(g[mid] > img[mid], "the spike gains its own bloom");
 
-    // The halo carries alpha over transparency: with a threshold low
-    // enough that opaque coverage passes it, the transparent border
-    // next to the footprint gains coverage — glow reads as light there.
     let mut a = img.clone();
     cpu::glow(&mut a, w, h, 3.0, 0.05, 0.0, 1.0, [1.0; 4], 1.0, &[]);
     assert!(a[at(1, 4) + 3] > 0.0, "coverage bloomed past the edge");
     assert!(a[at(8, 4) + 3] <= 1.0, "alpha saturates at full coverage");
 
-    // Tint colours the halo, not the underlying image: with a red tint,
-    // the transparent border gains red light only.
     let mut t = img.clone();
     cpu::glow(
         &mut t,
@@ -2385,10 +2029,6 @@ fn cpu_glow_blooms_spreads_alpha_and_keeps_neutral_exact() {
     assert_eq!(t[at(1, 4) + 1], 0.0, "no green in a red-tinted halo");
 }
 
-/// **Falloff** (docs/08 §3.3): one bright pixel on black, so the halo is the
-/// profile. At every Falloff it has to be round and carry on past the Radius,
-/// a gaussian at 0 and an exponential above it. The glow used to stop dead at
-/// the Radius in a square, which is what a bright glow showed.
 #[test]
 fn cpu_glow_halo_is_round_and_has_no_edge() {
     let (w, h) = (129u32, 129u32);
@@ -2435,7 +2075,6 @@ fn cpu_glow_halo_is_round_and_has_no_edge() {
         }
     };
 
-    // Zero is the gaussian, σ half the Radius, still going past twice it.
     let gaussian = bloom(0.0);
     let mut plain = img.clone();
     cpu::glow(&mut plain, w, h, 16.0, 0.0, 0.0, 1.0, [1.0; 4], 1.0, &[]);
@@ -2451,7 +2090,6 @@ fn cpu_glow_halo_is_round_and_has_no_edge() {
 
     let exp = bloom(1e-3);
     round(&exp, "exponential");
-    // It falls by the same factor every pixel, at the core's decay length.
     let (near, far) = (exp[at(84, 64)], exp[at(99, 64)]);
     assert!(far > 0.0, "the light carries on past twice the Radius");
     let lambda = 16.0 * cpu::GLOW_CORE;
@@ -2461,7 +2099,6 @@ fn cpu_glow_halo_is_round_and_has_no_edge() {
         "decay length {measured}, expected {lambda}"
     );
 
-    // A higher Falloff sends more of the light further out.
     let wide = bloom(2.0);
     assert!(
         wide[at(124, 64)] > 4.0 * exp[at(124, 64)],
@@ -2471,15 +2108,12 @@ fn cpu_glow_halo_is_round_and_has_no_edge() {
 
 #[test]
 fn shake_noise_is_deterministic_seeded_and_hop_free() {
-    // Same inputs → same outputs, exactly (§2.4 determinism).
     for i in 0..50 {
         let x = i as f64 * 0.173;
         assert_eq!(shake_noise(7, 0, x), shake_noise(7, 0, x));
     }
-    // Different seeds → different sequences; different channels too.
     assert_ne!(shake_noise(1, 0, 0.37), shake_noise(2, 0, 0.37));
     assert_ne!(shake_noise(1, 0, 0.37), shake_noise(1, 1, 0.37));
-    // Bounded to [−1, 1] and actually moving.
     let mut spread = (f64::MAX, f64::MIN);
     for i in 0..500 {
         let v = shake_noise(11, 2, i as f64 * 0.31);
@@ -2487,8 +2121,6 @@ fn shake_noise_is_deterministic_seeded_and_hop_free() {
         spread = (spread.0.min(v), spread.1.max(v));
     }
     assert!(spread.1 - spread.0 > 0.5, "the wobble wanders: {spread:?}");
-    // Hop-free: tiny steps in time give tiny steps in value, across
-    // lattice boundaries included (the smoothstep is C¹ there).
     for i in 0..400 {
         let x = i as f64 * 0.01;
         let dv = (shake_noise(3, 1, x + 1e-4) - shake_noise(3, 1, x)).abs();
@@ -2501,15 +2133,11 @@ fn cpu_shake_is_identity_at_zero_and_wobbles_through_the_affine() {
     let (w, h) = (17u32, 9u32);
     let img = transform_card(w, h);
 
-    // A neutral shake (zero wobble) is the bit-exact identity: the affine
-    // is the identity, whatever the Edges control.
     let neutral = shake_stack(ShakeSample::IDENTITY, 1, 100.0, None);
     let mut n = img.clone();
     cpu::apply_stack(&mut n, w, h, &neutral);
     assert_eq!(n, img);
 
-    // A pure offset matches the Transform reference fed the same shared
-    // affine and the same edge policy — the oracle path is one path.
     let shaken = shake_stack(
         ShakeSample {
             offset_px: [2.0, -1.0],
@@ -2529,9 +2157,6 @@ fn cpu_shake_is_identity_at_zero_and_wobbles_through_the_affine() {
     assert_eq!(s, t);
     assert_ne!(s, img, "the wobble actually moves pixels");
 
-    // The Edges control governs the revealed border (P3). A big
-    // offset drags an edge into view: Transparent leaves a fully clear
-    // corner; Repeat and Mirror hold coverage there instead.
     let corner_alpha = |v: &[f32]| {
         let at = |x: u32, y: u32| ((y * w + x) * 4 + 3) as usize;
         [
@@ -2575,7 +2200,6 @@ fn cpu_shake_is_identity_at_zero_and_wobbles_through_the_affine() {
     }
 }
 
-/// A shake instance with its motion blur enabled at `amount`.
 fn shake_with_mb(amount: f64) -> crate::model::EffectInstance {
     let mut e = instantiate("shake").unwrap();
     for p in &mut e.params {
@@ -2593,7 +2217,6 @@ fn cpu_shake_motion_blur_off_is_the_plain_shake_and_on_smears() {
     let (w, h) = (24u32, 16u32);
     let img = transform_card(w, h);
 
-    // A shake carrying a wobble, resolved without motion blur.
     let resolved = |e: &EffectInstance| {
         super::resolved::resolve_stack(
             std::slice::from_ref(e),
@@ -2604,7 +2227,7 @@ fn cpu_shake_motion_blur_off_is_the_plain_shake_and_on_smears() {
             Arc::new(ExpressionContext::detached()),
         )
     };
-    let base = shake_with_mb(0.0); // amount 0 ⇒ no sub-frames ⇒ the plain shake
+    let base = shake_with_mb(0.0);
     let plain = resolved(&base);
     assert!(
         matches!(
@@ -2616,8 +2239,6 @@ fn cpu_shake_motion_blur_off_is_the_plain_shake_and_on_smears() {
     let mut a = img.clone();
     cpu::apply_stack(&mut a, w, h, &plain);
 
-    // The same shake with motion blur on smears: the averaged result differs
-    // from the plain single resample.
     let smeared = shake_with_mb(0.8);
     assert!(
         matches!(
@@ -2630,9 +2251,6 @@ fn cpu_shake_motion_blur_off_is_the_plain_shake_and_on_smears() {
     cpu::apply_stack(&mut b, w, h, &resolved(&smeared));
     assert_ne!(a, b, "motion blur smears the shake");
 
-    // A degenerate sub-frame set — every sample equal to one wobble — averages
-    // back to that single resample (to within f32 rounding of the sum ÷ count),
-    // pinning the averaging maths against the plain transform reference.
     let one = ShakeSample {
         offset_px: [3.0, -2.0],
         rotation_deg: 5.0,
@@ -2660,11 +2278,7 @@ fn cpu_shake_motion_blur_off_is_the_plain_shake_and_on_smears() {
 
 #[test]
 fn shake_migrates_old_zoom_pump_and_auto_scale_params() {
-    // A project saved before FX-11 carries `zoom_pump` and `auto_scale`
-    // instead of `z_amp` and `edge`. Resolve reads the old ids as
-    // fallbacks so the look migrates sensibly.
     let mut old = instantiate("shake").unwrap();
-    // Rebuild the pre-FX-11 param set by id.
     old.params.retain(|p| {
         matches!(
             p.id.as_str(),
@@ -2687,15 +2301,12 @@ fn shake_migrates_old_zoom_pump_and_auto_scale_params() {
     let effects::shake::Shaken::Plain { wobble, edge, .. } = shake_packed(&old, 0.4, 1000.0) else {
         panic!("a pre-FX-11 shake has no motion blur");
     };
-    // The old 10% Zoom pump becomes the z (depth) shake, so zoom moves off
-    // 1; Auto-scale off migrates to the Transparent edge (code 0).
     assert_ne!(
         wobble.zoom, 1.0,
         "the old Zoom pump migrated to the z shake"
     );
     assert_eq!(edge, 0, "Auto-scale off migrated to Transparent");
 
-    // Auto-scale on (the old default) migrates to Repeat (code 1).
     for p in &mut old.params {
         if p.id == "auto_scale" {
             p.value = EffectValue::Bool(true);
@@ -2707,8 +2318,6 @@ fn shake_migrates_old_zoom_pump_and_auto_scale_params() {
     assert_eq!(edge, 1, "Auto-scale on migrated to Repeat");
 }
 
-/// A varied premultiplied test card for the transform: gradient, an HDR
-/// spike, a half-alpha region and an opaque border pixel.
 fn transform_card(w: u32, h: u32) -> Vec<f32> {
     let mut img = vec![0.0f32; (w * h * 4) as usize];
     for y in 0..h {
@@ -2729,15 +2338,12 @@ fn transform_card(w: u32, h: u32) -> Vec<f32> {
 
 #[test]
 fn cpu_transform_moves_scales_rotates_and_fades() {
-    // A white impulse on a transparent frame.
     let (w, h) = (17u32, 9u32);
     let mut img = vec![0.0f32; (w * h * 4) as usize];
     let at = |x: u32, y: u32| ((y * w + x) * 4) as usize;
     let mid = at(8, 4);
     img[mid..mid + 4].copy_from_slice(&[1.0, 1.0, 1.0, 1.0]);
 
-    // Position +2 in x (anchor 0): the impulse lands two pixels right,
-    // exactly (integer offsets keep bilinear taps on pixel centres).
     let mut t = img.clone();
     cpu::transform(
         &mut t,
@@ -2755,16 +2361,12 @@ fn cpu_transform_moves_scales_rotates_and_fades() {
     assert_eq!(t[at(10, 4)], 1.0, "impulse moved +2x");
     assert_eq!(t[mid], 0.0, "and left its old home");
 
-    // The area revealed beyond the source edge is transparent, not a
-    // smeared border: shifting +2 leaves columns 0-1 fully empty.
     for y in 0..h {
         for x in 0..2 {
             assert_eq!(t[at(x, y) + 3], 0.0, "({x},{y}) revealed as clear");
         }
     }
 
-    // Rotation 90° about the frame centre: y-down raster, so the pixel
-    // two to the right of centre lands two below it (clockwise).
     let centre = [8.5, 4.5];
     let mut r = img.clone();
     img[at(10, 4)..at(10, 4) + 4].copy_from_slice(&[0.0, 1.0, 0.0, 1.0]);
@@ -2775,8 +2377,6 @@ fn cpu_transform_moves_scales_rotates_and_fades() {
     assert_eq!(r[mid], 1.0, "the centre pixel stays put");
     assert!(r[at(8, 6) + 1] > 0.999, "+2x lands at +2y");
 
-    // Scale 0 is degenerate: the image collapses to nothing and renders
-    // fully transparent — never a division fault (docs/14).
     let mut z = img.clone();
     cpu::transform(
         &mut z,
@@ -2793,7 +2393,6 @@ fn cpu_transform_moves_scales_rotates_and_fades() {
     );
     assert!(z.iter().all(|v| *v == 0.0), "zero scale collapses to clear");
 
-    // Opacity halves all four channels (premultiplied).
     let mut o = img.clone();
     cpu::transform(
         &mut o, w, h, [0.0; 2], [0.0; 2], [1.0; 2], 0.0, NO_SKEW, 0, 0.5, 1.0,
@@ -2803,9 +2402,6 @@ fn cpu_transform_moves_scales_rotates_and_fades() {
     }
 }
 
-/// A minimal comp + layer pair for marker-context tests: a comp at the
-/// given frame rate carrying `markers`, and an adjustment layer whose
-/// start offset is `offset_s` seconds.
 fn marker_rig(
     fps: (u32, u32),
     markers: Vec<crate::markers::Marker>,
@@ -2821,6 +2417,7 @@ fn marker_rig(
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -2882,7 +2479,6 @@ fn marker_context_builds_layer_local_ordered_beats() {
     use crate::markers::{Marker, MarkerKind};
     use crate::time::{CompTime, Rational};
     let rat = |n, d| Rational::new(n, d).unwrap();
-    // Beats out of order, plus a user and a chapter marker to ignore.
     let user = Marker::user(uuid::Uuid::now_v7(), rat(1, 2));
     let chapter = Marker {
         kind: MarkerKind::Chapter,
@@ -2893,15 +2489,10 @@ fn marker_context_builds_layer_local_ordered_beats() {
     let early = Marker::beat(uuid::Uuid::now_v7(), rat(1, 1), 0.5);
     let (comp, layer) = marker_rig((30, 1), vec![user, late, chapter, early], (1, 4));
     let ctx = MarkerContext::for_layer(&comp, &layer);
-    // Beat kind only, layer-local (comp time − start offset), sorted.
     assert_eq!(ctx.beats, vec![0.75, 1.75]);
     assert_eq!(ctx.fps, 30.0);
-    // The local translation matches the resolver's own lt subtraction
-    // exactly: a beat at comp second 1 and a frame evaluated there land
-    // on the identical f64.
     let lt = crate::time::layer_time(1.0, layer.start_offset.0);
     assert_eq!(ctx.beats[0], lt);
-    // The obvious no-marker default (§1.4 graceful fallback).
     assert_eq!(MarkerContext::NONE.beats, Vec::<f64>::new());
     assert_eq!(MarkerContext::NONE.fps, 0.0);
     assert_eq!(MarkerContext::default(), MarkerContext::NONE);
@@ -2920,17 +2511,12 @@ fn beat_ctx(beats: &[f64], fps: f64) -> MarkerContext {
 #[test]
 fn flash_mode_resolves_manual_trigger_strobe_and_legacy() {
     let ctx = beat_ctx(&[1.0, 2.0, 3.0], 4.0);
-    // A fresh instance defaults to Manual and resolves exactly as the
-    // pre-mode flash did, markers or none.
     let mut e = instantiate("flash").unwrap();
     assert!(matches!(e.param("mode"), Some(EffectValue::Choice(0))));
     assert_eq!(e.float_at("duration", 0.0), Some(2.0));
     assert!(matches!(e.param("shape"), Some(EffectValue::Choice(0))));
     assert_eq!(e.float_at("every_nth", 0.0), Some(1.0));
     assert_eq!(e.float_at("phase", 0.0), Some(0.0));
-    // The old arm's two outcomes, transcribed: strength is the envelope
-    // times Intensity (100 % → 1), clamped, and colour and mix come
-    // straight from the declared rows.
     let dark = (0.0, [1.0; 4], 1.0);
     let lit = (1.0, [1.0; 4], 1.0);
     assert_eq!(
@@ -2939,7 +2525,6 @@ fn flash_mode_resolves_manual_trigger_strobe_and_legacy() {
         "Manual ignores markers entirely"
     );
 
-    // Trigger mode lights on the beat and is spent past Duration.
     for p in &mut e.params {
         if p.id == "mode" {
             p.value = EffectValue::Choice(1);
@@ -2956,12 +2541,8 @@ fn flash_mode_resolves_manual_trigger_strobe_and_legacy() {
         dark,
         "3 frames past a 2-frame flash"
     );
-    // And with no markers at all it resolves dark — never an error
-    // (§1.4 graceful fallback).
     assert_eq!(flash_packed(&e, 1.0, &MarkerContext::NONE), dark);
 
-    // Strobe every 2nd beat: beat index 1 (2 s) does not fire, index 2
-    // (3 s) does.
     for p in &mut e.params {
         match p.id.as_str() {
             "mode" => p.value = EffectValue::Choice(2),
@@ -2977,9 +2558,6 @@ fn flash_mode_resolves_manual_trigger_strobe_and_legacy() {
         "Strobe thins the beat list to every Nth before the envelope"
     );
 
-    // A legacy instance (saved before the marker modes existed) has no
-    // mode parameter and still resolves Manual: a static Trigger of
-    // 0.4 holds a 0.4 flash whatever the markers say.
     let mut legacy = instantiate("flash").unwrap();
     legacy.params.retain(|p| {
         !matches!(
@@ -3021,8 +2599,6 @@ fn an_orchestration_only_effect_resolves_to_no_op_at_all() {
         assert!(ops.is_empty(), "{name} resolved to an op");
     }
 
-    // And it is still the effect the frame walk finds: declaring it changed
-    // where its schema lives, not what reads it.
     let mut post = instantiate("posterize_time").unwrap();
     for p in &mut post.params {
         if p.id == "rate" {
@@ -3043,8 +2619,6 @@ fn an_orchestration_only_effect_resolves_to_no_op_at_all() {
 fn no_resolved_bag_carries_one_id_twice() {
     for def in BUILTIN_DEFS.iter() {
         let name = def.schema().match_name;
-        // An orchestration-only effect resolves to no op and so to no bag —
-        // there is nothing here for it to carry twice.
         if !def.is_image_op() {
             continue;
         }
@@ -3067,14 +2641,11 @@ fn no_resolved_bag_carries_one_id_twice() {
 #[test]
 fn marker_window_reports_what_the_envelope_reads() {
     let ctx = beat_ctx(&[1.0, 2.0, 3.0], 4.0);
-    // Manual mode — and any effect without marker input — has no
-    // window, which is what keeps its frame keys time-free.
     let mut e = instantiate("flash").unwrap();
     assert_eq!(marker_window(&e, 1.5, &ctx), None);
     let blur = instantiate("blur").unwrap();
     assert_eq!(marker_window(&blur, 1.5, &ctx), None);
 
-    // Trigger mode: the nearest trigger either side of the frame.
     for p in &mut e.params {
         if p.id == "mode" {
             p.value = EffectValue::Choice(1);
@@ -3097,9 +2668,6 @@ fn marker_window_reports_what_the_envelope_reads() {
         })
     );
 
-    // Strobe filters first: with every 2nd beat, the frame after beat
-    // index 1 still sees indices 0 and 2 as its neighbours — the
-    // window is the triggers the envelope actually consumes.
     for p in &mut e.params {
         match p.id.as_str() {
             "mode" => p.value = EffectValue::Choice(2),
@@ -3119,11 +2687,7 @@ fn marker_window_reports_what_the_envelope_reads() {
 
 #[test]
 fn scanlines_migrates_old_darkness_into_intensity() {
-    // An old project (FX-13) carried a separate Darkness param
-    // (0..100). On load it folds into the single Intensity so the darken is
-    // the old Intensity × Darkness product exactly.
     let mut e = instantiate("scanlines").unwrap();
-    // Restore the old shape: Intensity 0.5 plus a Darkness of 80%.
     for p in &mut e.params {
         if p.id == "intensity" {
             p.value = EffectValue::Float(Property::fixed(0.5));
@@ -3146,9 +2710,6 @@ fn scanlines_migrates_old_darkness_into_intensity() {
 
 #[test]
 fn cpu_block_glitch_params_each_move_the_result() {
-    // Every hashed quantity at zero is still an exact identity even
-    // though block displacement runs (not the early return) — the
-    // "scale by zero" branches must themselves be exact.
     let (w, h) = (40u32, 40u32);
     let img = transform_card(w, h);
     let (seed, tick) = (42u32, 5i32);
@@ -3187,9 +2748,6 @@ fn cpu_scanlines_darken_a_periodic_band() {
     }
     let red_at = |img: &[f32], y: u32| img[(y * w * 4) as usize];
 
-    // Period 4px, no roll, no interlace: rows 0-1 of every period are
-    // bright, rows 2-3 dark — the same shape every period. Intensity 0.5
-    // takes the dark rows to half brightness (1 − intensity).
     let mut out = img.clone();
     cpu::scanlines(&mut out, w, h, 0.5, 4.0, 0.0, false, 1.0);
     for y in 0..h {
@@ -3197,9 +2755,6 @@ fn cpu_scanlines_darken_a_periodic_band() {
         assert_eq!(red_at(&out, y), expect, "row {y}");
     }
 
-    // Interlace flips which half darkens on odd periods only: period 1
-    // (rows 4-7) is dark-then-bright instead of bright-then-dark;
-    // period 0 and period 2 (even) are unaffected.
     let mut inter = img.clone();
     cpu::scanlines(&mut inter, w, h, 0.5, 4.0, 0.0, true, 1.0);
     assert_eq!(red_at(&inter, 0), 1.0, "period 0 unaffected");
@@ -3210,9 +2765,6 @@ fn cpu_scanlines_darken_a_periodic_band() {
     assert_eq!(red_at(&inter, 10), 0.5, "period 2 (even) unflipped again");
 }
 
-/// Vector blur follows its map. A map pushing straight right smears a lit
-/// pixel along its row and never off it, Forwards trails it to the right only,
-/// and the slope of a vertical edge smears along the edge, up and down.
 #[test]
 fn cpu_vector_blur_streaks_along_the_map() {
     use super::effects::vector_blur::VectorBlur;
@@ -3227,7 +2779,6 @@ fn cpu_vector_blur_streaks_along_the_map() {
             .collect()
     };
 
-    // Red full and green mid-grey: every vector points right.
     let right: Vec<f32> = (0..w * h).flat_map(|_| [1.0, 0.5, 0.5, 1.0]).collect();
     let mut v = VectorBlur::read(Params::EMPTY);
     v.vectors_from = 1;
@@ -3248,7 +2799,6 @@ fn cpu_vector_blur_streaks_along_the_map() {
         }
     }
 
-    // Dark left of x = 8 and light right of it: the contour runs up and down.
     let edge: Vec<f32> = (0..h)
         .flat_map(|_| {
             (0..w).flat_map(|x| {
@@ -3268,13 +2818,6 @@ fn cpu_vector_blur_streaks_along_the_map() {
     assert!(px.iter().all(|&(x, _)| x == 8), "stays on the edge: {px:?}");
 }
 
-// ---------------------------------------------------------------------------
-// Lens flare (docs/08 §3.27, docs/impl/lens-flare.md §8)
-// ---------------------------------------------------------------------------
-
-// §8.1 — the in-house FFT: a forward-then-inverse round trip returns the
-// input, an 8-point transform matches the direct DFT sum, and Parseval's
-// identity holds under the ortho normalisation.
 #[test]
 fn lens_flare_fft_round_trips_matches_dft_and_conserves_energy() {
     use crate::fx::fft::{fft_inplace, Cx};
@@ -3282,7 +2825,6 @@ fn lens_flare_fft_round_trips_matches_dft_and_conserves_energy() {
         .map(|i| Cx::new((i as f64 * 0.7).sin(), (i as f64 * 1.3).cos()))
         .collect();
 
-    // Round trip.
     let mut data = src.clone();
     fft_inplace(&mut data, false);
     let spectrum = data.clone();
@@ -3291,7 +2833,6 @@ fn lens_flare_fft_round_trips_matches_dft_and_conserves_energy() {
         assert!((a.re - b.re).abs() < 1e-12 && (a.im - b.im).abs() < 1e-12);
     }
 
-    // Direct ortho DFT.
     let n = src.len();
     for (k, s) in spectrum.iter().enumerate() {
         let mut sum = Cx::ZERO;
@@ -3303,16 +2844,11 @@ fn lens_flare_fft_round_trips_matches_dft_and_conserves_energy() {
         assert!((s.re - sum.re).abs() < 1e-12 && (s.im - sum.im).abs() < 1e-12);
     }
 
-    // Parseval (ortho: energies equal exactly).
     let e_time: f64 = src.iter().map(|z| z.norm_sq()).sum();
     let e_freq: f64 = spectrum.iter().map(|z| z.norm_sq()).sum();
     assert!((e_time - e_freq).abs() < 1e-9);
 }
 
-// §8.3 — optics units: the Cauchy fit reproduces n_d exactly and the Abbe
-// number within tolerance; refraction matches Snell; Fresnel at normal
-// incidence is the textbook ((n1-n2)/(n1+n2))²; the quarter-wave MgF₂
-// coating cuts the reflectance, and extra layers cut it further.
 #[test]
 fn lens_flare_optics_match_the_textbook() {
     use crate::fx::lens_flare::*;
@@ -3324,16 +2860,13 @@ fn lens_flare_optics_match_the_textbook() {
     let v = (n_d - 1.0) / (n_f - n_c);
     assert!((v - 60.3).abs() < 0.05, "V {v}");
 
-    // Snell at 45° into n = 1.5 glass: sin(t) = sin(45°)/1.5.
     let i = [(0.5f32).sqrt(), 0.0, (0.5f32).sqrt()];
     let t = refract3(i, [0.0, 0.0, -1.0], 1.0 / 1.5).expect("no TIR at 45°");
     let sin_t = t[0].hypot(t[1]);
     assert!((sin_t - (0.5f32).sqrt() / 1.5).abs() < 1e-6);
-    // Total internal reflection from the dense side at a grazing angle.
     let g = [(0.99f32).sqrt(), 0.0, (0.01f32).sqrt()];
     assert!(refract3(g, [0.0, 0.0, -1.0], 1.5).is_none());
 
-    // Normal-incidence Fresnel.
     let r = fresnel_cos(1.0, 1.0, 1.5);
     let expect = ((1.0f32 - 1.5) / (1.0 + 1.5)).powi(2);
     assert!((r - expect).abs() < 1e-4, "{r} vs {expect}");
@@ -3378,13 +2911,9 @@ fn lens_flare_optics_match_the_textbook() {
          at normal"
     );
 
-    // The Coating dial at 0 is bare glass regardless of the file layers.
     let off = surface_reflectance(1.0, 1.0, 1.5, 0.0, 3.0, 550.0, 0.0);
     assert!((off - plain).abs() < 1e-6);
 
-    // A bare stack (0 layers) is exactly the uncoated interface, and the
-    // transfer matrix agrees with plain Fresnel there — the degenerate case
-    // that proves the chain closes correctly.
     let empty = stack_reflectance(1.0, 1.0, 1.5, &coating_design(0, 0.0), 550.0);
     assert!(
         (empty - plain).abs() < 1e-5,
@@ -3392,10 +2921,6 @@ fn lens_flare_optics_match_the_textbook() {
     );
 }
 
-// §8.4 — the prescription library and pair ranking (curated to
-// twenty): every bundled .lens file parses with a sane surface count,
-// focal length and a stop surface; the bake's pair list is deterministic,
-// non-empty, and every pair joins two genuine glass interfaces.
 #[test]
 fn lens_flare_library_parses_and_pairs_rank_deterministically() {
     use crate::fx::lens_flare::*;
@@ -3437,7 +2962,6 @@ fn lens_flare_library_parses_and_pairs_rank_deterministically() {
         );
     }
 
-    // Deterministic bake: two runs agree entirely (pairs, sprite, gain).
     let p = default_flare_params();
     let a = bake(&p);
     let b = bake(&p);
@@ -3459,8 +2983,6 @@ fn lens_flare_library_parses_and_pairs_rank_deterministically() {
     for path in &a.pairs {
         assert!(path[0] < path[1]);
         assert!((path[1] as usize) < a.surfaces.len());
-        // Four-bounce paths carry the same walk one leg further in:
-        // the third bounce is past the second, the fourth before the third.
         if path[2] != NO_BOUNCE {
             assert!(path[0] < path[2] && path[3] < path[2]);
             assert!((path[2] as usize) < a.surfaces.len());
@@ -3484,9 +3006,7 @@ fn lens_flare_library_parses_and_pairs_rank_deterministically() {
 fn lens_flare_bakes_are_shared_across_one_step_of_aperture() {
     use crate::fx::lens_flare::*;
     let seed = default_flare_params();
-    // The middle of a step, so a nudge either way stays inside it.
     let base = bake_params(&LensFlareParams { fstop: 2.8, ..seed }).fstop;
-    // A quarter of a step away — the same bake by construction.
     let nudged = base * (FSTOP_BAKE_STEP_STOPS * 0.25 * 0.5).exp2();
     let a = LensFlareParams {
         fstop: base,
@@ -3504,8 +3024,6 @@ fn lens_flare_bakes_are_shared_across_one_step_of_aperture() {
     assert_eq!(ba.energy_gain, bb.energy_gain, "and the same exposure");
     assert_eq!(ba.pairs, bb.pairs);
 
-    // A whole step is a different bake, so the aperture is still followed —
-    // in steps of about 1.7%, not in leaps.
     let stepped = LensFlareParams {
         fstop: base * (FSTOP_BAKE_STEP_STOPS * 0.5).exp2(),
         ..a
@@ -3516,16 +3034,12 @@ fn lens_flare_bakes_are_shared_across_one_step_of_aperture() {
         "a step apart is a different iris"
     );
 
-    // What the frame itself computes is untouched: the ghost trace's stop
-    // scale reads the raw dial, so a slow ramp moves the ghosts every frame
-    // rather than every step.
     assert_ne!(
         fstop_scale(ba.native_fstop, a.fstop),
         fstop_scale(bb.native_fstop, b.fstop),
         "the per-frame stop scale is not quantised"
     );
 
-    // The other three continuous iris dials snap the same way.
     let rotated = LensFlareParams {
         aperture_rotation_deg: a.aperture_rotation_deg + APERTURE_ROTATION_BAKE_STEP_DEG * 0.25,
         ..a
@@ -3585,8 +3099,6 @@ fn lens_flare_auto_exposure_reads_the_native_stop() {
         "the exposure gain must not move with the working aperture"
     );
 
-    // And the honest half: the light the iris passes falls with the square of
-    // the stop scale, and nothing puts it back any more.
     let (w, h) = (96u32, 54u32);
     let energy = |p: &LensFlareParams, b: &FlareBaked| -> f32 {
         cpu_flare(p, b, w, h, &manual_light(p, w, h)).iter().sum()
@@ -3647,8 +3159,6 @@ fn lens_flare_splats_reconstruct_a_flat_sheet_and_keep_their_flux() {
     let flux = 3.0_f32;
 
     let mut out = vec![0.0_f32; (W * H * 3) as usize];
-    // A lattice well inside the buffer, so no tent is clipped by an edge and
-    // the flux check is exact.
     let (n, origin) = (9_usize, 32.0_f32);
     for j in 0..n {
         for i in 0..n {
@@ -3665,8 +3175,6 @@ fn lens_flare_splats_reconstruct_a_flat_sheet_and_keep_their_flux() {
         }
     }
 
-    // **Flux.** Every ray's deposit lands inside the buffer, so the total is
-    // exactly what went in.
     let total: f64 = out.iter().step_by(3).map(|v| f64::from(*v)).sum();
     let want = f64::from(flux) * (n * n) as f64;
     assert!(
@@ -3674,9 +3182,6 @@ fn lens_flare_splats_reconstruct_a_flat_sheet_and_keep_their_flux() {
         "flux must be conserved: {total} vs {want}"
     );
 
-    // **Flatness.** Inside the lattice — a step in from its outermost rays, so
-    // every sample sees a full set of neighbours — the field must be constant.
-    // The value is the flux of one ray spread over one cell.
     let expect = flux / (STEP * STEP);
     let (lo, hi) = (origin + STEP, origin + (n - 2) as f32 * STEP);
     let mut worst = 0.0_f32;
@@ -3696,9 +3201,6 @@ fn lens_flare_splats_reconstruct_a_flat_sheet_and_keep_their_flux() {
          max {ripple_max}, expected {expect})",
         100.0 * worst
     );
-    // Said the other way round, because this is the number that was wrong: the
-    // peak-to-trough ripple across the sheet. The old tent reached zero at
-    // every cell boundary, which is 100%.
     let ripple = (ripple_max - ripple_min) / ripple_max.max(1e-9);
     assert!(
         ripple < 0.05,
@@ -3706,8 +3208,6 @@ fn lens_flare_splats_reconstruct_a_flat_sheet_and_keep_their_flux() {
         100.0 * ripple
     );
 
-    // And the same for a sheared footprint, since a ghost's cells are rarely
-    // axis-aligned: the tent's frame is the parallelogram's, not the pixel's.
     let sh1 = [STEP * 0.5, STEP * 0.25];
     let sh2 = [-STEP * 0.2, STEP * 0.5];
     let mut sheared = vec![0.0_f32; (W * H * 3) as usize];
@@ -3766,9 +3266,6 @@ fn lens_flare_ghost_edges_ring_without_shading_their_interiors() {
     let rot = p.aperture_rotation_deg.to_radians();
     let roundness = effective_roundness(p.roundness, p.fstop, baked.native_fstop);
 
-    // The derivation, at the sizes real ghosts come in: a 5%-of-frame ghost
-    // and a frame-filling wash are both hundreds to thousands, never the
-    // handful the propagated ladder could reach.
     let tight = ghost_fresnel_number(0.05, 2.8);
     let wash = ghost_fresnel_number(1.0, 2.8);
     assert!(
@@ -3780,8 +3277,6 @@ fn lens_flare_ghost_edges_ring_without_shading_their_interiors() {
         "a frame-filling ghost at f/2.8 is thousands, got {wash}"
     );
     assert!(wash > tight, "a bigger ghost has the higher Fresnel number");
-    // Stopping down shrinks the ghost and the pupil together, so the fringes
-    // coarsen as F ∝ scale²; and a degenerate stop rings not at all.
     assert!(ghost_fresnel_number(0.05 * 0.35, 8.0) < tight);
     assert_eq!(ghost_fresnel_number(0.0, 2.8), 0.0);
     assert_eq!(ghost_fresnel_number(0.05, 0.0), 0.0);
@@ -3805,8 +3300,6 @@ fn lens_flare_ghost_edges_ring_without_shading_their_interiors() {
         (1.3..1.45).contains(&first),
         "the first fringe peaks near 1.37, got {first}"
     );
-    // Monotone it is not — which is the whole point, and what the analytic
-    // mask can never be.
     let profile: Vec<f32> = (0..400)
         .map(|i| knife_edge_intensity(i as f32 * 0.05 - 2.0))
         .collect();
@@ -3816,9 +3309,6 @@ fn lens_flare_ghost_edges_ring_without_shading_their_interiors() {
         .count();
     assert!(peaks >= 3, "the fringe train must have several peaks");
 
-    // **The interior is flat.** Along a radial line through the inner 60% of
-    // the pupil, a ringed mask must not deviate from the plain one by more
-    // than a whisper — the check the earlier masks could not have passed.
     let f = ghost_fresnel_number(1.0, p.fstop);
     let grid = 2.0 / 63.0;
     let mut worst = 0.0_f32;
@@ -3842,8 +3332,6 @@ fn lens_flare_ghost_edges_ring_without_shading_their_interiors() {
         "the ghost interior must not be shaded by its rim: worst |Δ| {worst}"
     );
 
-    // At zero the mask IS the plain one, byte for byte — the path every
-    // unmeasurable ghost takes.
     for i in 0..64 {
         let u = i as f32 / 63.0 * 1.2 - 0.6;
         assert_eq!(
@@ -3861,9 +3349,6 @@ fn lens_flare_ghost_edges_ring_without_shading_their_interiors() {
         );
     }
 
-    // **The rim does ring** where the grid is fine enough to carry it: with
-    // softness off and a dense grid, the profile overshoots the plateau just
-    // inside the edge.
     let fine = 0.002;
     let sharp: Vec<f32> = (0..600)
         .map(|i| {
@@ -3899,10 +3384,6 @@ fn lens_flare_ghost_edges_ring_without_shading_their_interiors() {
         "the inner half must stay within a tenth of its plateau, got {inner}"
     );
 
-    // **Fringes nobody can sample are averaged, not aliased.** A grid far
-    // coarser than the fringe spacing gets the plain mask back; that is the
-    // band limit, and it is what stops an aliased fringe train from beating
-    // across the whole ghost.
     let coarse = 2.0 / 15.0;
     for i in 0..64 {
         let u = i as f32 / 63.0 * 1.1;
@@ -3914,9 +3395,6 @@ fn lens_flare_ghost_edges_ring_without_shading_their_interiors() {
         );
     }
 
-    // The Fresnel integrals themselves, against their limits and their known
-    // value at the first fringe.
-    // Both tend to ½, oscillating in with amplitude ~1/(πv).
     let (c, s) = fresnel_cs(100.0);
     assert!((c - 0.5).abs() < 0.005 && (s - 0.5).abs() < 0.005);
     let (cn, sn) = fresnel_cs(-1.5);
@@ -3926,8 +3404,6 @@ fn lens_flare_ghost_edges_ring_without_shading_their_interiors() {
     assert!((c1 - 0.7799).abs() < 3e-3, "C(1) = 0.7799, got {c1}");
     assert!((s1 - 0.4383).abs() < 3e-3, "S(1) = 0.4383, got {s1}");
 
-    // Every ranked path can ring now — the closed form costs the same as the
-    // polygon, so there is no budget to fall off the end of.
     assert!(!baked.spreads.is_empty());
     assert!(baked
         .spreads
@@ -3949,8 +3425,6 @@ fn lens_flare_coatings_are_per_element_and_colour_the_ghosts() {
     use crate::fx::lens_flare::*;
     let p = default_flare_params();
 
-    // The element mapping, on a lens whose own header states the answer: the
-    // Tessar is four elements over eight surfaces.
     let tessar = parse_lens(include_str!(
         "../../lens_files/Zeiss_100mm_F4.5_Tessar.lens"
     ))
@@ -3958,24 +3432,17 @@ fn lens_flare_coatings_are_per_element_and_colour_the_ghosts() {
     assert_eq!(element_count(&tessar.surfaces), 4);
     let elements = surface_elements(&tessar.surfaces);
     assert_eq!(elements.len(), tessar.surfaces.len());
-    // Element 0 is the front piece of glass: its own row opens it, the row
-    // after closes it. The aperture stop belongs to no element.
     assert_eq!(elements[0], 0);
     assert_eq!(elements[1], 0);
     assert_eq!(elements[2], 1);
     assert_eq!(elements[3], 1);
     assert_eq!(elements[4], -1, "the stop bounds no glass");
-    // The cemented pair: the join goes to the earlier element, which is the
-    // documented rule.
     assert_eq!(elements[5], 2);
     assert_eq!(elements[6], 3);
     assert_eq!(elements[7], 3);
-    // Elements are numbered front to back, contiguously, with no gaps.
     let seen: Vec<i32> = elements.iter().copied().filter(|&e| e >= 0).collect();
     assert!(seen.windows(2).all(|w| w[1] == w[0] || w[1] == w[0] + 1));
 
-    // Every bundled lens reports a sane element count, and the library
-    // spans the range the schema's twenty rows have to cover.
     let counts = library_element_counts();
     assert_eq!(counts.len(), 20);
     assert!(counts
@@ -3986,14 +3453,10 @@ fn lens_flare_coatings_are_per_element_and_colour_the_ghosts() {
         *counts.iter().max().expect("a library"),
     );
     assert!(lo <= 5 && hi >= 16, "counts run {lo}..{hi}");
-    // The row thresholds: every lens has a first element, and the deepest
-    // rows belong to the few big zooms alone.
     assert_eq!(lenses_with_at_least(1).len(), 20);
     assert!(!lenses_with_at_least(hi).is_empty());
     assert!(lenses_with_at_least(MAX_COATING_ELEMENTS as u32 + 1).is_empty());
 
-    // **Stamping.** An element's choice reaches both of its surfaces, and a
-    // surface belonging to no element is left as the file describes it.
     let mut surfaces = tessar.surfaces.clone();
     let mut choices = [COATING_AS_FILE; MAX_COATING_ELEMENTS];
     choices[1] = 4;
@@ -4002,19 +3465,12 @@ fn lens_flare_coatings_are_per_element_and_colour_the_ghosts() {
     assert_eq!(surfaces[3].coating_design, 4.0);
     assert_eq!(surfaces[0].coating_design, COATING_AS_FILE as f32);
     assert_eq!(surfaces[4].coating_design, COATING_AS_FILE as f32);
-    // An out-of-range palette index is clamped rather than indexing nothing.
     let mut wild = tessar.surfaces.clone();
     let mut mad = [COATING_AS_FILE; MAX_COATING_ELEMENTS];
     mad[0] = 9999;
     apply_element_coatings(&mut wild, &mad);
     assert_eq!(wild[0].coating_design, (COATING_DESIGNS - 1) as f32);
 
-    // **The palette really does separate colours.** Each design's residual
-    // reflection is measured at normal incidence across the visible band and
-    // reduced to the wavelength it reflects most. Real coatings differ in
-    // where their minimum sits, so the peaks must land in different parts of
-    // the spectrum — that is the whole mechanism behind a blue ghost sitting
-    // beside an amber one.
     let peak_nm = |choice: u32| -> f32 {
         let mut best = (0.0_f32, 550.0_f32);
         let mut nm = 420.0_f32;
@@ -4044,9 +3500,6 @@ fn lens_flare_coatings_are_per_element_and_colour_the_ghosts() {
     );
     let _ = green;
 
-    // Uncoated is brighter than any coating, at every wavelength tried, and
-    // from either side: light leaving the glass meets the same coating from
-    // the inside, and once met it inside out, at three times bare glass.
     for nm in [450.0_f32, 550.0, 650.0] {
         for (n1, n2) in [(1.0, 1.5), (1.5, 1.0)] {
             let bare = surface_reflectance(1.0, n1, n2, 1.0, 1.0, nm, 1.0);
@@ -4060,16 +3513,12 @@ fn lens_flare_coatings_are_per_element_and_colour_the_ghosts() {
         }
     }
 
-    // The Coating dial still governs everything: at 0 every design is bare
-    // glass, whatever the element rows say.
     let plain = fresnel_cos(1.0, 1.0, 1.5);
     for design in 0..COATING_DESIGNS {
         let off = surface_reflectance(1.0, 1.0, 1.5, design as f32, 3.0, 550.0, 0.0);
         assert!((off - plain).abs() < 1e-6, "design {design} at Coating 0");
     }
 
-    // **An untouched panel changes nothing.** Every row at "As the lens file"
-    // must bake byte-for-byte the surfaces the prescription describes.
     let mut untouched = tessar.surfaces.clone();
     apply_element_coatings(&mut untouched, &[COATING_AS_FILE; MAX_COATING_ELEMENTS]);
     for (a, b) in untouched.iter().zip(&tessar.surfaces) {
@@ -4077,8 +3526,6 @@ fn lens_flare_coatings_are_per_element_and_colour_the_ghosts() {
         assert_eq!(a.coating_design, COATING_AS_FILE as f32);
     }
 
-    // …and it is a BAKE input, so changing one rebakes rather than quietly
-    // serving the previous lens's optics.
     let base = bake_key(&p);
     let mut changed = p;
     changed.coating_elements[0] = 5;
@@ -4087,8 +3534,6 @@ fn lens_flare_coatings_are_per_element_and_colour_the_ghosts() {
     deeper.coating_elements[MAX_COATING_ELEMENTS - 1] = 2;
     assert_ne!(base, bake_key(&deeper), "the last row counts too");
 
-    // And the bake really does answer differently: uncoating the front
-    // element brightens the ghosts it takes part in.
     let mut uncoated_front = p;
     uncoated_front.coating_elements[0] = 1;
     let a = bake(&p);
@@ -4100,14 +3545,9 @@ fn lens_flare_coatings_are_per_element_and_colour_the_ghosts() {
     );
 }
 
-/// **Four-bounce ghosts** (entry C1): the path model walks, the
-/// enumeration stays bounded, and old uncoated glass shows the doubled
-/// ghosts modern coatings suppress.
 #[test]
 fn lens_flare_four_bounce_ghosts_rank_and_render() {
     use crate::fx::lens_flare::*;
-    // The walk: a known-bright two-bounce path lands, and its sentinel form
-    // is what it always was.
     let p = default_flare_params();
     let baked = bake(&p);
     let dir = light_direction([0.33, 0.30], 9.0 / 16.0, baked.focal_mm);
@@ -4127,7 +3567,6 @@ fn lens_flare_four_bounce_ghosts_rank_and_render() {
         panic!("the brightest ranked path traced nothing at the default light")
     };
     assert!(pos[0].is_finite() && pos[1].is_finite() && w.is_finite());
-    // Bit-equal twice: the walk carries no state between calls.
     assert_eq!(
         hit,
         trace_splat(
@@ -4157,7 +3596,7 @@ fn lens_flare_four_bounce_ghosts_rank_and_render() {
     // look in — which is the physically right answer for modern multicoated
     // glass, and the assertion below pins it.
     let vintage = LensFlareParams {
-        lens: 17, // Zeiss Biotar 50mm F1.4
+        lens: 17,
         ..default_flare_params()
     };
     let vb = bake(&vintage);
@@ -4172,8 +3611,6 @@ fn lens_flare_four_bounce_ghosts_rank_and_render() {
         "the Biotar renders no four-bounce ghost at all: {} paths ranked",
         vb.pairs.len()
     );
-    // …and they are honest ghosts, not table entries: one must actually
-    // land light on the sensor.
     let vdir = light_direction([0.33, 0.30], 0.5625, vb.focal_mm);
     let landed = vb.pairs.iter().filter(|p| p[2] != NO_BOUNCE).any(|&path| {
         (0..8).any(|k| {
@@ -4187,9 +3624,7 @@ fn lens_flare_four_bounce_ghosts_rank_and_render() {
     });
     assert!(landed, "no four-bounce path put light on the sensor");
 
-    // Modern coatings keep them rare: on the Master Prime the brightest
-    // ghosts are all still the two-bounce ones.
-    let modern = bake(&default_flare_params()); // lens 16, Master Prime
+    let modern = bake(&default_flare_params());
     for path in modern.pairs.iter().take(8) {
         assert_eq!(
             path[2], NO_BOUNCE,
@@ -4198,8 +3633,6 @@ fn lens_flare_four_bounce_ghosts_rank_and_render() {
         );
     }
 
-    // The enumeration bound holds: no more four-bounce paths survive than
-    // were ever probed.
     for b in [&baked, &vb] {
         let four = b.pairs.iter().filter(|p| p[2] != NO_BOUNCE).count();
         assert!(
@@ -4294,8 +3727,6 @@ fn starburst_slice_zero_counts_the_iris_blades() {
 fn lens_flare_combine_does_not_repeat_the_flare_past_its_buffer() {
     use crate::fx::lens_flare::*;
     let (w, h) = (64u32, 36u32);
-    // Squeeze 0.5 sits inside the padding: the frame edge samples the
-    // padded buffer's real content, not black.
     let p_half = LensFlareParams {
         anamorphic: 0.5,
         starburst_intensity: 0.0,
@@ -4314,8 +3745,6 @@ fn lens_flare_combine_does_not_repeat_the_flare_past_its_buffer() {
         left_edge > 0.0,
         "the padded buffer must reach the squeezed frame edge"
     );
-    // Squeeze 0.25 outruns even the 2× padding cap — and past the padded
-    // buffer there must be nothing, never a repeated edge row.
     let p_quarter = LensFlareParams {
         anamorphic: 0.25,
         ..p_half
@@ -4326,25 +3755,18 @@ fn lens_flare_combine_does_not_repeat_the_flare_past_its_buffer() {
     let mut out = vec![0.0_f32; (w * h * 4) as usize];
     let lights = manual_light(&p_quarter, w, h);
     cpu_combine(&mut out, w, h, &p_quarter, &baked, &flare, w, h, &lights);
-    // squeeze 0.25 maps x=0 to sx = 32 + (0.5-32)/0.25 = -94, u = -94.5/64
-    // of the base width plus the 32 px pad offset: still far outside.
     let left_edge: f32 = (0..h).map(|y| out[((y * w) * 4) as usize]).sum();
     assert_eq!(
         left_edge, 0.0,
         "outside the padded buffer there is no flare"
     );
-    // The centre still receives it.
     let centre = out[(((h / 2) * w + w / 2) * 4) as usize];
     assert!(centre > 0.0, "the squeezed flare itself still lands");
 }
 
-// Forward migration: a built-in instance saved before its schema
-// grew a parameter gains it at the default on load — the panel had been
-// drawing a dash and set_value refusing the id.
 #[test]
 fn lens_flare_backfill_restores_missing_params() {
     let mut inst = instantiate("lens_flare").unwrap();
-    // Simulate an older save: strip the params that were added later.
     inst.params
         .retain(|p| !matches!(p.id.as_str(), "source_type" | "blend"));
     assert!(inst.params.iter().all(|p| p.id != "source_type"));
@@ -4357,15 +3779,11 @@ fn lens_flare_backfill_restores_missing_params() {
             "{id} must be backfilled"
         );
     }
-    // Present values are never touched, and a second pass is a no-op.
     let count = inst.params.len();
     backfill_builtin_params(&mut effects);
     assert_eq!(effects[0].params.len(), count);
 }
 
-// A Depth of field pro saved with a Matte (a depth pass) and a Depth row
-// (metres) opens with one Depth row: the pass where only it was set, the
-// metres where both were, as the metres won. The old row goes.
 #[test]
 fn dof_pro_depth_rows_merge_on_open() {
     let (pass, metres) = (uuid::Uuid::now_v7(), uuid::Uuid::now_v7());
@@ -4393,11 +3811,6 @@ fn dof_pro_depth_rows_merge_on_open() {
     }
 }
 
-// The Background → Blend migration. A project
-// saved with Transparent lands on Add — the same pixels it always rendered —
-// and one saved with Black lands on Normal, the flare on opaque black that
-// option existed to produce. The dead parameter goes, because the schema no
-// longer declares it and the panel cannot draw a row `set_value` refuses.
 #[test]
 fn lens_flare_background_migrates_to_the_blend_menu() {
     use crate::fx::lens_flare::{BLEND_ADD, BLEND_NORMAL};
@@ -4419,7 +3832,6 @@ fn lens_flare_background_migrates_to_the_blend_menu() {
             matches!(effects[0].param("blend"), Some(EffectValue::Choice(c)) if *c == want),
             "background {saved} must migrate to blend {want}"
         );
-        // Idempotent: loading twice cannot re-migrate or duplicate.
         let count = effects[0].params.len();
         backfill_builtin_params(&mut effects);
         assert_eq!(effects[0].params.len(), count);
@@ -4427,8 +3839,6 @@ fn lens_flare_background_migrates_to_the_blend_menu() {
     }
 }
 
-// A Wave warp or Ripple saved before Wave speed holds still, and a fresh one
-// moves.
 #[test]
 fn a_saved_wave_holds_still() {
     for name in ["wave_warp", "ripple"] {
@@ -4444,15 +3854,6 @@ fn a_saved_wave_holds_still() {
     }
 }
 
-// The share-of-the-frame → px@comp conversions read old projects
-// forward, which is the forward-migration rule applied to a *unit* change
-// rather than to a missing row: what a saved file rendered, it still renders.
-//
-// Radial blur's centre was a per cent of the frame, so 30 / 70 on a 1920x1080
-// comp is the pixel 576, 756 — and the same point either way, which is the
-// only thing the conversion has to be true about. The declared version is the
-// gate: a file read twice converts once, and a file saved since the conversion
-// is left exactly alone.
 #[test]
 fn radial_blurs_percent_centre_converts_to_pixels_on_load() {
     let (w, h) = (1920.0, 1080.0);
@@ -4475,13 +3876,10 @@ fn radial_blurs_percent_centre_converts_to_pixels_on_load() {
     assert!((read(&effects, "centre_y") - 756.0).abs() < 1e-9);
     assert_eq!(effects[0].effect.version, 2, "the instance is v2 now");
 
-    // Idempotent: a second read converts nothing, because the version says so.
     migrate_percent_to_px(&mut effects, w, h);
     assert!((read(&effects, "centre_x") - 576.0).abs() < 1e-9);
     assert!((read(&effects, "centre_y") - 756.0).abs() < 1e-9);
 
-    // A keyframed centre keeps its curve: every value scales, and so do the
-    // bezier speeds, which live on the value axis (see `scale_property`).
     let mut animated = instantiate("radial_blur").unwrap();
     animated.effect.version = 1;
     for p in &mut animated.params {
@@ -4524,7 +3922,6 @@ fn radial_blurs_percent_centre_converts_to_pixels_on_load() {
         "the speed scales with the values it describes"
     );
 
-    // Nothing else moves: a Percent row on another effect is not a distance.
     let mut untouched = instantiate("levels").unwrap();
     untouched.effect.version = 1;
     let mut effects = vec![untouched];
@@ -4533,12 +3930,6 @@ fn radial_blurs_percent_centre_converts_to_pixels_on_load() {
     assert_eq!(effects[0].params, before.params);
 }
 
-// Beam's Length was a per cent of the *run* between Start and End, so its
-// conversion reads the instance's own points rather than the frame:
-// 25 % of a 1560-pixel run is 390 pixels, and the beam that saved is the beam
-// that loads. The points are read at time zero — a keyframed pair means the
-// old percentage described a distance that moved, and no single pixel number
-// can be all of them.
 #[test]
 fn beams_percent_length_converts_against_its_own_run() {
     let mut inst = instantiate("beam").unwrap();
@@ -4548,7 +3939,6 @@ fn beams_percent_length_converts_against_its_own_run() {
             p.value = EffectValue::Float(Property::fixed(25.0));
         }
     }
-    // The declared points: 240,840 to 1680,240 — a run of exactly 1560.
     let mut effects = vec![inst];
     migrate_percent_to_px(&mut effects, 1920.0, 1080.0);
     let read = |effects: &[crate::model::EffectInstance], id: &str| match effects[0].param(id) {
@@ -4564,9 +3954,6 @@ fn beams_percent_length_converts_against_its_own_run() {
     );
 }
 
-// An old shake renders as it did: its Phase is turned round (version 2) and
-// its twist and zoom rows divided by Amplitude / 30 (version 3). A fresh one
-// at Amplitude 0 holds still.
 #[test]
 fn an_old_shake_is_carried_over_and_shakes_the_same() {
     let noise_of = |inst: &crate::model::EffectInstance| {
@@ -4613,7 +4000,6 @@ fn an_old_shake_is_carried_over_and_shakes_the_same() {
     assert_eq!(carried.effect.version, 3);
     assert_eq!(noise_of(&carried), noise_of(&new));
 
-    // A Phase an expression drives stays on version 1 and reads as before.
     let mut scripted = old.clone();
     for p in &mut scripted.params {
         if p.id == "phase" {
@@ -4627,8 +4013,6 @@ fn an_old_shake_is_carried_over_and_shakes_the_same() {
     assert_eq!(carried.effect.version, 1);
     assert_eq!(noise_of(&carried), noise_of(&new));
 
-    // A still Amplitude of 0 cannot be divided by, so that shake comes in as
-    // 30 with no X or Y and twists as it did. A fresh one at 0 does nothing.
     old.effect.version = 2;
     set(&mut old, &[("amplitude", 0.0)]);
     let carried = migrated(&old);
@@ -4649,10 +4033,6 @@ fn an_old_shake_is_carried_over_and_shakes_the_same() {
     );
 }
 
-// Card wipe's Transition width was a per cent of the frame measured along
-// whichever axis Flip order runs, so its conversion reads the
-// instance's own order: 25 % is 480 pixels across a 1920 frame going left to
-// right, and 270 down a 1080 one going top to bottom.
 #[test]
 fn card_wipes_percent_width_converts_along_its_own_order() {
     for (order, want) in [(0u32, 480.0), (1, 480.0), (2, 270.0), (3, 270.0)] {
@@ -4682,10 +4062,6 @@ fn card_wipes_percent_width_converts_along_its_own_order() {
     }
 }
 
-// Tile's two sizes were per cents of the frame and are px@comp now, so
-// a saved v1 instance converts each axis against its own extent: a 2x2 repeat
-// stamped over the whole frame is 960 x 540 out of 1920 x 1080. The centre was
-// pixels already and must not be touched twice.
 #[test]
 fn tiles_percent_sizes_convert_axis_by_axis() {
     let mut inst = instantiate("tile").unwrap();
@@ -4717,17 +4093,12 @@ fn tiles_percent_sizes_convert_axis_by_axis() {
         assert!((read(&effects, id) - v).abs() < 1e-9, "{id}");
     }
     assert_eq!(effects[0].effect.version, 2);
-    // Read twice, converted once: the version is the gate.
     migrate_percent_to_px(&mut effects, 1920.0, 1080.0);
     for (id, v) in want {
         assert!((read(&effects, id) - v).abs() < 1e-9, "{id} idempotent");
     }
 }
 
-// Lens flare's Ghost softness was a per cent of the frame *diagonal* — the one
-// exception to the px@comp rule, now closed — so its conversion is the only one
-// in the sweep that reads a diagonal: 1 % of a 1080p frame's 2202.9 px is
-// 22.03 pixels of blur, and the flare that saved is the flare that loads.
 #[test]
 fn lens_flares_percent_softness_converts_against_the_diagonal() {
     let mut inst = instantiate("lens_flare").unwrap();
@@ -4746,16 +4117,10 @@ fn lens_flares_percent_softness_converts_against_the_diagonal() {
     let want = 1920.0f64.hypot(1080.0) / 100.0;
     assert!((read(&effects) - want).abs() < 1e-9);
     assert_eq!(effects[0].effect.version, 12);
-    // Read twice, converted once.
     migrate_percent_to_px(&mut effects, 1920.0, 1080.0);
     assert!((read(&effects) - want).abs() < 1e-9, "idempotent");
 }
 
-/// The Lens flare's float parameters read through the expression context like
-/// every other effect's. A merge had left the flare's arm on the context-free
-/// `float_at`, where `time` evaluates to nothing — so an expression-driven
-/// flare silently ignored its expressions while every neighbour honoured
-/// theirs.
 #[test]
 fn lens_flare_params_evaluate_expressions_in_context() {
     let mut inst = instantiate("lens_flare").unwrap();
@@ -4832,7 +4197,6 @@ fn flare_blend_matches_its_formulas() {
         [0.0, 0.40, 0.0, 0.55],
         "Subtract clamps at black",
     );
-    // Divide by a zero element cannot produce a NaN or an infinity.
     let z = flare_blend(12, d, [0.0; 4]);
     assert!(z.iter().all(|v| v.is_finite()), "Divide must stay finite");
 }
@@ -4858,23 +4222,17 @@ fn lens_flare_frame_probe_sees_corner_stretch() {
     let sp = frame_grid_needs(&baked, pair_count, corner, p.coating, stop_scale, shift);
     assert_eq!(sp.len(), pair_count);
     assert!(sp.iter().all(|s| s.is_finite() && *s >= 1.0));
-    // At least one renderable pair must outgrow its bake-floor grid at the
-    // Normal tier — the condition the budget raise exists for.
     let grew = sp
         .iter()
         .zip(&baked.spreads)
         .any(|(need, b)| boost_grid(pair_grid(64, *b), *need) > pair_grid(64, *b));
     assert!(grew, "corner light must raise at least one pair's grid");
-    // The boost never lowers the floor, honours its 3x cap, and stays in
-    // the dispatchable range.
     assert_eq!(boost_grid(64, 1.0), 64);
     assert_eq!(boost_grid(64, 63.0), 64, "never below the bake floor");
     assert_eq!(boost_grid(64, 100.4), 100);
     assert_eq!(boost_grid(64, 4096.0), 192, "capped at 3x the rung grid");
     assert_eq!(boost_grid(360, 4096.0), 512, "hard 512 dispatch clamp");
     assert_eq!(boost_grid(4, 1.0), 8, "degenerate floor stays sane");
-    // The budget plan never lowers a rung, spends at most the headroom,
-    // and raises the pair that asked.
     let plan = plan_frame_grids(64, &baked.spreads, &sp);
     assert_eq!(plan.len(), pair_count);
     let mut baseline = 0u64;
@@ -4896,7 +4254,6 @@ fn lens_flare_frame_probe_sees_corner_stretch() {
             .any(|(pi, &g)| g > pair_grid(64, baked.spreads.get(pi).copied().unwrap_or(1.0))),
         "the corner frame must actually spend its headroom"
     );
-    // The raw-rows entry is the same probe.
     let rows: Vec<[f32; 8]> = baked
         .surfaces
         .iter()
@@ -4929,18 +4286,13 @@ fn lens_flare_frame_probe_sees_corner_stretch() {
     assert_eq!(sp, sp2, "seam entry must be bit-identical");
 }
 
-/// The documented drop-on defaults, shared by the lens flare tests.
 fn default_flare_params() -> crate::fx::lens_flare::LensFlareParams {
     crate::fx::lens_flare::LensFlareParams {
-        // Every element left as the lens file describes it — the
-        // drop-on default, and byte-for-byte the picture it always drew.
         coating_elements: [crate::fx::lens_flare::COATING_AS_FILE;
             crate::fx::lens_flare::MAX_COATING_ELEMENTS],
         // Raster pixels: tests divide by their own raster via
         // manual_light, so any sane point works; this is 0.33/0.30 of 96×54.
         light: [31.7, 16.2],
-        // A point source, as the effect has always defaulted to, and no
-        // comp lights — Manual mode never reads them.
         source_size: [0.0, 0.0],
         lights: [crate::fx::lens_flare::DEAD_LIGHT; crate::fx::lens_flare::MAX_SOURCES],
         light_count: 0,
@@ -4953,9 +4305,6 @@ fn default_flare_params() -> crate::fx::lens_flare::LensFlareParams {
         roundness: 0.15,
         aperture_softness: 0.05,
         ghost_intensity: 1.0,
-        // px@comp now. The old 0.05 % of a 96x54 diagonal was a
-        // twentieth of a pixel and rounded to no blur; half a pixel is the
-        // same picture, said in the unit the dial now speaks.
         ghost_softness: 0.5,
         max_ghosts: 60,
         dispersion: 1.0,
@@ -4976,10 +4325,6 @@ fn default_flare_params() -> crate::fx::lens_flare::LensFlareParams {
     }
 }
 
-// Matte-mode source detection (impl note §6): the CPU reference finds
-// the brightest sources deterministically — brightest first, gated by the
-// soft threshold, adjacent maxima suppressed — and the light carries the
-// source pixel's colour times its gate weight.
 #[test]
 fn lens_flare_detects_matte_sources_deterministically() {
     use crate::fx::lens_flare::*;
@@ -4992,8 +4337,6 @@ fn lens_flare_detects_matte_sources_deterministically() {
         matte[i + 2] = rgb[2];
         matte[i + 3] = 1.0;
     };
-    // A bright white source, a dimmer warm one far away, and a neighbour 8 px
-    // from the bright one, in the same tile, which joins it.
     put(20, 24, [4.0, 4.0, 4.0]);
     put(28, 24, [3.0, 3.0, 3.0]);
     put(100, 70, [1.5, 1.0, 0.5]);
@@ -5004,10 +4347,6 @@ fn lens_flare_detects_matte_sources_deterministically() {
         2,
         "the neighbour must join the bright source: {lights:?}"
     );
-    // Brightest first — and the light sits at the flux centre of
-    // everything folded into it, not on its brightest pixel. Both pixels are
-    // one lit region here, so the centre is between them weighted by
-    // brightness: (20·4 + 28·3) / 7 = 164/7.
     let cx = 164.0 / 7.0;
     assert!(
         (lights[0].pos[0] - (cx + 0.5) / 128.0).abs() < 1e-6,
@@ -5015,16 +4354,10 @@ fn lens_flare_detects_matte_sources_deterministically() {
         lights[0].pos[0] * 128.0 - 0.5
     );
     assert!((lights[0].pos[1] - 24.5 / 96.0).abs() < 1e-6);
-    // …and its colour is the MEAN of the lit pixels, not the brightest one's:
-    // (4 + 3) / 2. One sparkle can no longer define a source's colour.
     assert_eq!(lights[0].rgb, [3.5, 3.5, 3.5]);
-    // The warm source keeps its colour.
     assert!((lights[1].pos[0] - 100.5 / 128.0).abs() < 1e-6);
     assert_eq!(lights[1].rgb, [1.5, 1.0, 0.5]);
 
-    // The soft gate scales (luma 4 against a gate opening 3 → 5
-    // lands half-way, 0.5), and a threshold above every source finds none —
-    // including one AT a source's luma, which "brighter than" excludes.
     let gated = detect_lights(&matte, w, h, 3.0, 2.0, true, [1.0; 3], false);
     assert!(!gated.is_empty());
     assert!(gated[0].rgb[0] < 4.0, "the gate must attenuate: {gated:?}");
@@ -5034,7 +4367,6 @@ fn lens_flare_detects_matte_sources_deterministically() {
         "a threshold at the brightest source's own luma finds nothing:          the gate is 'brighter than', not 'at least'"
     );
 
-    // Determinism: two runs agree bit-for-bit.
     assert_eq!(
         lights,
         detect_lights(&matte, w, h, 1.0, 0.0, true, [1.0; 3], false)
@@ -5071,8 +4403,6 @@ fn lens_flare_detects_matte_sources_deterministically() {
             "a one-tile lamp is a point"
         );
     }
-    // Two lamps ten pixels apart in neighbouring tiles stay two lights, and
-    // a strip of light across the edge between the same tiles is one.
     let lamp_pair = |xs: &[u32]| {
         let mut m = vec![0.0f32; (sw * sh * 4) as usize];
         for &x in xs {
@@ -5094,10 +4424,6 @@ fn lens_flare_detects_matte_sources_deterministically() {
     );
     assert!((strip[0].pos[0] * sw as f32 - 16.0).abs() < 1e-3);
 
-    // The gate itself (one-sided): closed at and below the threshold,
-    // open a softness above it. The two cases the owner asked for by name:
-    // at threshold 1 only light brighter than 1 flares, and at threshold 0
-    // anything brighter than black does — black itself never.
     assert_eq!(threshold_gate(0.99, 1.0, 0.0), 0.0);
     assert_eq!(
         threshold_gate(1.0, 1.0, 0.0),
@@ -5196,13 +4522,6 @@ fn lens_flare_an_area_source_renders_without_stripes() {
     );
 }
 
-/// **Light layers resolve, and an area light keeps its size**.
-///
-/// The whole reason the layer exists is the area kind: a light with a real
-/// width and height flares as its own shape through the source machinery,
-/// where a point can only ever be a dot. This pins the resolve — including that
-/// only an area light reports extent, whatever the stored numbers say, and that
-/// a light switched off is not a light (the rule for every layer).
 #[test]
 fn lens_flare_light_layers_resolve_with_their_extent() {
     use crate::anim::Property;
@@ -5216,6 +4535,7 @@ fn lens_flare_light_layers_resolve_with_their_extent() {
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -5301,8 +4621,6 @@ fn lens_flare_light_layers_resolve_with_their_extent() {
     let lights = comp.lights_at(1.0, &read(1.0), None);
     assert_eq!(lights.len(), 2, "a light switched off is not a light");
 
-    // Top of the stack first — the order the effects that read lights take
-    // them in, so a crowded frame spends its slots on the ones on top.
     assert_eq!(lights[0].position.0, 300.0);
     assert_eq!(lights[0].kind, LightKind::Area);
     assert_eq!(
@@ -5318,11 +4636,8 @@ fn lens_flare_light_layers_resolve_with_their_extent() {
         "a point light has no extent, whatever the stored numbers say"
     );
 
-    // Outside every span there are no lights at all.
     assert!(comp.lights_at(99.0, &read(99.0), None).is_empty());
 
-    // A default light is white at full intensity — a fresh one should light
-    // something rather than land as a black source nobody can see.
     assert_eq!(lights[1].colour, [1.0, 1.0, 1.0]);
 
     // ---- and the whole way through to the trace ----
@@ -5380,14 +4695,10 @@ fn lens_flare_light_layers_resolve_with_their_extent() {
         [0.0, 0.0],
         "a point light has no extent"
     );
-    // And `manual_light` divides them by the raster exactly as it divides the
-    // Manual point — one place decides the fraction.
     let placed = crate::fx::lens_flare::manual_light(&p, 1920, 1080);
     assert_eq!(placed.len(), 2);
     assert_eq!(placed[0].pos, [300.0 / 1920.0, 200.0 / 1080.0]);
 
-    // Manual mode carries none of it: the derivation pushes nothing at all, so
-    // the flare is the single light at the parameter position it always was.
     let manual = instantiate("lens_flare").unwrap();
     let ops = super::resolved::resolve_stack(
         std::slice::from_ref(&manual),
@@ -5513,16 +4824,10 @@ fn every_enablement_rule_names_a_parameter_of_its_kind() {
     }
 }
 
-// The greyed rows. `param_enabled` is the authority on the question and the
-// panel draws from it, so the semantics are pinned here rather than left to the
-// Dart side to rediscover.
 #[test]
 fn dof_greys_the_rows_its_switches_take_over() {
     let mut e = instantiate("dof").unwrap();
 
-    // A fresh instance: no depth layer, so everything that reads one is greyed,
-    // and Use focus point is off, so the point is greyed and the distance is
-    // live.
     use crate::fx::enabled::param_enabled;
     assert!(param_enabled(&e, "focus"));
     for id in [
@@ -5538,19 +4843,15 @@ fn dof_greys_the_rows_its_switches_take_over() {
     }
     assert!(!param_enabled(&e, "focus_point_x"));
     assert!(!param_enabled(&e, "focus_point_y"));
-    // Everything without a rule against it stays live, which is most rows.
     for id in ["aperture", "blades", "exposure", "roundness", "mix"] {
         assert!(param_enabled(&e, id), "{id} has no rule and must stay live");
     }
 
-    // Picking a depth layer gives the depth rows their subject.
     set_layer(&mut e, "depth", Some(uuid::Uuid::now_v7()));
     assert!(param_enabled(&e, "depth_channel"));
     assert!(param_enabled(&e, "use_focus_point"));
     assert!(param_enabled(&e, "remove_edge_leak"));
 
-    // Tick Use focus point and the two swap: the point decides, the number does
-    // not.
     set_bool(&mut e, "use_focus_point", true);
     assert!(!param_enabled(&e, "focus"));
     assert!(param_enabled(&e, "focus_point_x"));
@@ -5559,49 +4860,32 @@ fn dof_greys_the_rows_its_switches_take_over() {
     assert!(param_enabled(&e, "focus"));
     assert!(!param_enabled(&e, "focus_point_x"));
 
-    // Clearing the layer greys the depth rows again — a dangling reference reads
-    // as unset.
     set_layer(&mut e, "depth", None);
     assert!(!param_enabled(&e, "depth_channel"));
 
-    // An instance that predates the deciding parameter must not lock a row it
-    // can never unlock: the rule cannot be judged, so it greys nothing. This is
-    // the `backfill_builtin_params` trap from the other side.
     let mut old = instantiate("dof").unwrap();
     old.params.retain(|p| p.id != "use_focus_point");
     assert!(param_enabled(&old, "focus"));
 
-    // An effect with no built-in schema at all (an OFX or placeholder instance)
-    // has no rules, so nothing is greyed.
     let mut foreign = instantiate("dof").unwrap();
     foreign.effect.match_name = "not_a_builtin".to_owned();
     assert!(param_enabled(&foreign, "focus"));
 }
 
-// A fresh Depth of field focuses on the middle of the frame, the way a fresh
-// Transform rotates about the middle (T23). The schema cannot know the raster,
-// so the apply site fills it in; landing focus in the top-left corner would be
-// exactly the §1.2 failure the raster-aware constructor exists to prevent.
 #[test]
 fn a_fresh_dof_focuses_on_the_middle_of_the_frame() {
     let e = instantiate_for_raster("dof", 1920.0, 1440.0).unwrap();
     assert_eq!(e.float_at("focus_point_x", 0.0), Some(960.0));
     assert_eq!(e.float_at("focus_point_y", 0.0), Some(720.0));
 
-    // Plain `instantiate` keeps the pure schema default (nominal 1080p), which
-    // is what presets and tests want.
     let pure = instantiate("dof").unwrap();
     assert_eq!(pure.float_at("focus_point_x", 0.0), Some(960.0));
     assert_eq!(pure.float_at("focus_point_y", 0.0), Some(540.0));
 }
 
-// The fold's contract in the resolve step: a saved instance that predates every
-// added control resolves to exactly the op the effect always produced, with each
-// new field at the value the kernel branches around.
 #[test]
 fn a_legacy_dof_resolves_to_the_neutral_aperture() {
     let mut legacy = instantiate("dof").unwrap();
-    // Strip everything the fold added, as a project saved before it would be.
     legacy.params.retain(|p| {
         !matches!(
             p.id.as_str(),
@@ -5650,8 +4934,6 @@ fn the_default_aperture_is_the_historical_disc_bit_for_bit() {
     let (wi, hi) = (w as i32, h as i32);
     let n = (w * h) as usize;
 
-    // A picture with real structure, and highlights above the 1.0 threshold so
-    // the tonal branch would show if it were taken.
     let mut img = vec![0.0f32; n * 4];
     let mut depth = vec![0.0f32; n * 4];
     for y in 0..hi {
@@ -5662,8 +4944,6 @@ fn the_default_aperture_is_the_historical_disc_bit_for_bit() {
             img[i * 4 + 1] = 1.0 - t;
             img[i * 4 + 2] = t * t;
             img[i * 4 + 3] = 1.0;
-            // A left-to-right ramp, so the circle of confusion sweeps its whole
-            // range across the frame.
             depth[i * 4] = x as f32 / (wi - 1) as f32;
             depth[i * 4 + 3] = 1.0;
         }
@@ -5701,8 +4981,6 @@ fn the_default_aperture_is_the_historical_disc_bit_for_bit() {
     let mut got = img.clone();
     cpu::dof(&mut got, Some(&depth), w, h, &p);
 
-    // The historical kernel, longhand: smoothstep ramp, per-side aperture,
-    // box-weighted integer disc, edges clamped, `o*(1-mix) + v*mix`.
     let mut want = img.clone();
     for y in 0..hi {
         for x in 0..wi {
@@ -5856,18 +5134,12 @@ fn the_dof_aperture_stays_inside_its_circle() {
                         }
                     }
                 }
-                // The centre tap is always in, which is what keeps the running
-                // weight non-zero at any radius.
                 assert!(accepted > 0);
                 assert!(cpu::dof_tap_inside(0.0, 0.0, coc2, &p));
             }
         }
     }
 
-    // The star property, on a hexagon with a vertex placed on the +x axis so the
-    // two directions are exactly where they are expected. `aperture_blades`
-    // puts an edge normal at `rotation`, so rotating by half a step (30° for
-    // six sides) moves a vertex there instead.
     let (blade_normals, apothem2) = aperture_blades(6, 30.0);
     let star = |roundness: f32| cpu::DofParams {
         focus: 0.5,
@@ -5893,7 +5165,6 @@ fn the_dof_aperture_stays_inside_its_circle() {
         display: 0,
         mix: 1.0,
     };
-    // How far the aperture reaches along a ray, by bisection on the inside test.
     let reach = |p: &cpu::DofParams, ux: f32, uy: f32| {
         let (mut lo, mut hi) = (0.0f32, coc * 1.5);
         for _ in 0..40 {
@@ -5906,9 +5177,6 @@ fn the_dof_aperture_stays_inside_its_circle() {
         }
         lo
     };
-    // Which direction happens to be a vertex depends on the rotation phase, so
-    // the extremes are found rather than assumed: the farthest direction is a
-    // vertex and the nearest is an edge midpoint, whatever the phase.
     let extremes = |p: &cpu::DofParams| {
         let (mut lo, mut hi) = (f32::MAX, 0.0f32);
         for i in 0..360 {
@@ -5924,38 +5192,26 @@ fn the_dof_aperture_stays_inside_its_circle() {
     let (star_min, star_max) = extremes(&star(-1.0));
     let (round_min, round_max) = extremes(&star(1.0));
 
-    // The vertices sit on the circle at any roundness: along a vertex both terms
-    // carry the same k²r², so the test collapses to r ≤ coc whatever the
-    // coefficient. This is what keeps the aperture inscribed rather than merely
-    // small.
     assert!(
         (poly_max - coc).abs() < 0.05 && (star_max - coc).abs() < 0.05,
         "a vertex must reach the circle at any roundness: {poly_max} vs {star_max}"
     );
-    // A plain polygon's nearest point is its apothem, k·coc.
     let apothem = coc * apothem2.sqrt();
     assert!(
         (poly_min - apothem).abs() < 0.05,
         "roundness 0 must be the inscribed polygon: {poly_min} vs {apothem}"
     );
-    // Negative roundness pulls the edge midpoints in past the apothem, which is
-    // the difference between a star and a smaller hexagon.
     assert!(
         star_min < poly_min * 0.95,
         "negative roundness must pinch the edge midpoints in ({star_min} vs {poly_min})"
     );
 
-    // Roundness 1 is the circle, which is why the reference panel needs no
-    // Circle entry: every direction reaches the same distance.
     assert!(
         (round_max - round_min).abs() < 0.05 && (round_max - coc).abs() < 0.05,
         "roundness 1 must be the circle: {round_min} to {round_max}"
     );
 }
 
-/// An instance may carry the user's own name. `None` — every older
-/// project — serialises to nothing at all, so documents without the feature
-/// are byte-for-byte unchanged, and a named instance round-trips exactly.
 #[test]
 fn custom_name_roundtrips_and_defaults_to_none() {
     let e = instantiate("blur").unwrap();
@@ -5978,8 +5234,6 @@ fn custom_name_roundtrips_and_defaults_to_none() {
     assert_eq!(back.custom_name.as_deref(), Some("Blur the sign"));
 }
 
-/// A text row saves and loads, reaches the effect through the bag, names the
-/// frame, and reads its default in a project from before the row existed.
 #[test]
 fn a_text_row_round_trips_resolves_and_feeds_the_key() {
     use crate::fx::effects::label_points::LabelPoints;
@@ -6017,7 +5271,6 @@ fn a_text_row_round_trips_resolves_and_feeds_the_key() {
     assert_eq!(read(&back).0, "{index}: {x}");
     assert_ne!(read(&back).1, read(&fresh).1, "the text names the frame");
 
-    // A project from before the row existed has no entry for it.
     let mut older = vec![fresh.clone()];
     older[0].params.retain(|p| p.id != "text");
     assert_eq!(read(&older[0]).0, "");
@@ -6027,7 +5280,6 @@ fn a_text_row_round_trips_resolves_and_feeds_the_key() {
         Some(&EffectValue::Text(String::new()))
     );
 
-    // A text longer than the cap is cut at a whole character, not refused.
     let mut long = fresh;
     set(&mut long, &"é".repeat(TEXT_MAX_BYTES));
     assert_eq!(read(&long).0, "é".repeat(TEXT_MAX_BYTES / 2));
@@ -6070,9 +5322,8 @@ fn spectral_bands_preserve_exposure_and_resolve_the_coating() {
         }
     }
 
-    // A coated lens, one ghost, one off-axis ray: spectral vs band-centre.
     let p = LensFlareParams {
-        lens: 16, // Zeiss Master Prime: modern multi-layer coatings
+        lens: 16,
         ..default_flare_params()
     };
     let baked = bake(&p);
@@ -6081,8 +5332,6 @@ fn spectral_bands_preserve_exposure_and_resolve_the_coating() {
     let dir = light_direction([0.3, 0.3], 0.5625, baked.focal_mm);
     let mut spectral_differs = false;
     let mut compared = 0u32;
-    // Several ghosts and pupil points: any one surviving ray on a coated
-    // path is enough to show the band centre under-resolves the stack.
     for pair in baked.pairs.iter().take(8) {
         for frac in [0.1_f32, 0.3, 0.5] {
             let origin = [
@@ -6121,7 +5370,6 @@ fn spectral_bands_preserve_exposure_and_resolve_the_coating() {
          the band-centre sample — otherwise A2 resolved nothing"
     );
 
-    // Determinism: the same band twice is the same bits.
     let probe_origin = [baked.pupil_mm * 0.3, 0.0, baked.start_z_mm];
     let a = trace_splat_spectral(
         &baked,
@@ -6146,10 +5394,6 @@ fn spectral_bands_preserve_exposure_and_resolve_the_coating() {
     assert_eq!(a, b);
 }
 
-// ---------------------------------------------------------------------------
-// The effect registry (docs/impl/effect-registry.md §7)
-// ---------------------------------------------------------------------------
-
 use uuid::Uuid;
 
 /// A name is how a saved project finds its effect again, so two effects sharing
@@ -6167,8 +5411,6 @@ fn every_builtin_declares_a_unique_match_name() {
     }
 }
 
-/// A project saved before a parameter existed carries no entry for it, and must
-/// render — reading the declared default, never panicking.
 #[test]
 fn a_missing_parameter_reads_its_default() {
     let empty = Params::EMPTY;
@@ -6176,7 +5418,6 @@ fn a_missing_parameter_reads_its_default() {
     assert_eq!(v.saturation, 100.0);
     assert_eq!(v.mix, 100.0);
 
-    // And a parameter that *is* present wins over the default.
     let entries = [(
         effects::saturation::Saturation::SATURATION,
         Value::Float(50.0),
@@ -6186,10 +5427,6 @@ fn a_missing_parameter_reads_its_default() {
     assert_eq!(v.mix, 100.0);
 }
 
-/// A document holding one comp lit by `n` visible area lights, spaced along
-/// x from 300 by 100, each `(80, 40)` half-size at y 200 — what a Lights-mode
-/// flare resolves its derived sources from. Returns the document and the
-/// comp's id, ready for an [`ExpressionContext`].
 pub(crate) fn lit_document(n: usize) -> (crate::model::Document, Uuid) {
     use crate::model::*;
     use crate::time::{CompTime, Duration, FrameRate};
@@ -6201,6 +5438,7 @@ pub(crate) fn lit_document(n: usize) -> (crate::model::Document, Uuid) {
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -6272,8 +5510,6 @@ pub(crate) fn lit_document(n: usize) -> (crate::model::Document, Uuid) {
     (document, comp_id)
 }
 
-/// Every byte [`ResolvedStack::feed_hash`] writes for the stack — the frame
-/// key's view of it, so two arenas that hash alike are the same arena.
 fn stack_bytes(stack: &ResolvedStack) -> Vec<u8> {
     let mut bytes: Vec<u8> = Vec::new();
     stack.feed_hash(&mut |b| bytes.extend_from_slice(b));
@@ -6314,7 +5550,6 @@ fn a_derived_roll_moves_with_the_raster() {
         effects::scanlines::Scanlines::read(p).packed(i, r)
     };
 
-    // At the comp raster: a 3 px period, and 4 lines/s at 0.5 s over it = 6 px.
     let mut ops = resolve(1.0);
     let (_, period, roll, _, _) = packed(&ops);
     assert_eq!(period, 3.0);
@@ -6323,7 +5558,6 @@ fn a_derived_roll_moves_with_the_raster() {
         "the roll is non-zero, so a lost multiply cannot hide"
     );
 
-    // Reused at half size: both lengths halve, and nothing else moves.
     ops.rescale_spatial(0.5);
     let (intensity, period, roll, interlace, mix) = packed(&ops);
     assert_eq!(period, 1.5, "the declared Px period follows the raster");
@@ -6332,11 +5566,8 @@ fn a_derived_roll_moves_with_the_raster() {
     assert!(!interlace);
     assert_eq!(mix, 1.0);
 
-    // Which is exactly where resolving against the half raster lands — the
-    // phase a precomp at that size would have had on its own.
     assert_eq!(packed(&resolve(0.5)), packed(&ops));
 
-    // Factor 1 is exactly a no-op, over the whole arena.
     let mut same = resolve(1.0);
     let before = stack_bytes(&same);
     same.rescale_spatial(1.0);
@@ -6413,8 +5644,6 @@ fn every_derived_spatial_id_is_one_the_effect_actually_derives() {
         }
         declaring += 1;
         let mut inst = instantiate(name).unwrap_or_else(|| panic!("{name} is a built-in"));
-        // The one mode fork among the declaring effects: the flare pushes its
-        // lights only in Lights mode.
         for p in &mut inst.params {
             if p.id == "source_type" {
                 p.value = EffectValue::Choice(2);
@@ -6449,21 +5678,8 @@ fn every_derived_spatial_id_is_one_the_effect_actually_derives() {
     );
 }
 
-/// docs/impl/effect-registry.md §7 test 4, deferred from the plumbing stage: a
-/// spatial parameter in the arena rescales under [`ResolvedStack::rescale_spatial`]
-/// **exactly** as the old `Resolved` op did.
-///
-/// This is the one property the migration could silently lose. The repair —
-/// a stack resolved against the comp raster and then run on a smaller preview
-/// target — reaches the arena through `ResolvedStack::rescale_spatial`, which calls
-/// both halves; if a blur declared `Unit::Raw` it would render at full-size
-/// radii on a half-size preview, which is precisely the bug that was fixed for
-/// the flare. So the golden values are written out: the old table said "radius
-/// scales, mix does not", and both are checked through the public entry point
-/// rather than through `rescale_spatial` directly.
 #[test]
 fn a_migrated_spatial_parameter_rescales_as_the_old_op_did() {
-    // 30 px@comp at a px_scale of 1 = 30 px, the comp-raster resolve.
     let e = instantiate("blur").expect("blur is a built-in");
     let mut ops = super::resolved::resolve_stack(
         std::slice::from_ref(&e),
@@ -6480,8 +5696,6 @@ fn a_migrated_spatial_parameter_rescales_as_the_old_op_did() {
     };
     assert_eq!(radius(&ops), 30.0);
 
-    // Half-resolution preview: the old `rescale_px` multiplied `radius_px` by
-    // the factor, and so must the arena.
     ops.rescale_spatial(0.5);
     assert_eq!(radius(&ops), 15.0, "the radius follows the preview raster");
     assert_eq!(
@@ -6492,8 +5706,6 @@ fn a_migrated_spatial_parameter_rescales_as_the_old_op_did() {
         "the Mix does not"
     );
 
-    // Resolving directly against the smaller raster must land in the same
-    // place — which is the whole point of the correction.
     let direct = super::resolved::resolve_stack(
         std::slice::from_ref(&e),
         0.0,
@@ -6504,7 +5716,6 @@ fn a_migrated_spatial_parameter_rescales_as_the_old_op_did() {
     );
     assert_eq!(radius(&direct), radius(&ops));
 
-    // Factor 1 is exactly a no-op, as it was for the variants.
     let mut same = super::resolved::resolve_stack(
         std::slice::from_ref(&e),
         0.0,
@@ -6684,13 +5895,9 @@ fn every_parameter_declares_a_unit() {
             ("blur", "radius"),
             ("directional_blur", "length"),
             ("radial_blur", "amount"),
-            // Radial blur's centre is the last point to stop being a
-            // per cent of the frame, so it joins the pass that follows the
-            // raster.
             ("radial_blur", "centre_x"),
             ("radial_blur", "centre_y"),
             ("sharpen", "radius"),
-            // Denoise's sample is a place on the picture and a side.
             ("denoise", "sample_x"),
             ("denoise", "sample_y"),
             ("denoise", "sample_size"),
@@ -6737,8 +5944,6 @@ fn every_parameter_declares_a_unit() {
             ("turbulent_displace", "offset_y"),
             ("tile", "tile_centre_x"),
             ("tile", "tile_centre_y"),
-            // The tile's own size and the output window's size are
-            // sizes, so they are distances and follow the raster too.
             ("tile", "tile_width"),
             ("tile", "tile_height"),
             ("tile", "output_width"),
@@ -6796,7 +6001,6 @@ fn every_parameter_declares_a_unit() {
             ("bezier_warp", "left_top_tangent_y"),
             ("bezier_warp", "left_bottom_tangent_x"),
             ("bezier_warp", "left_bottom_tangent_y"),
-            // Stabilise's Fill feather and trims, pixels of the frame.
             ("stabilise", "fill_feather"),
             ("stabilise", "trim_left"),
             ("stabilise", "trim_top"),
@@ -6865,9 +6069,6 @@ fn every_parameter_declares_a_unit() {
             // any of them, and none is here.
             ("particulate", "position_x"),
             ("particulate", "position_y"),
-            // The third axis: a depth and an extent through the plane
-            // are lengths like the two beside them, and rescale with the
-            // raster for the same reason.
             ("particulate", "position_z"),
             ("particulate", "width"),
             ("particulate", "height"),
@@ -6893,11 +6094,6 @@ fn every_parameter_declares_a_unit() {
             ("particulate", "ground_height"),
             ("particulate", "flock_radius"),
             ("particulate", "spark_speed"),
-            // Grid: every length in a lattice — the gaps between
-            // cells, where its centre sits, how far a cell may wander, and the
-            // disc a point is drawn as, and Lines' grid size, corner and line
-            // width. The counts and the per cents are not lengths and are not
-            // here.
             ("grid", "spacing_x"),
             ("grid", "spacing_y"),
             ("grid", "spacing_z"),
@@ -6920,15 +6116,9 @@ fn every_parameter_declares_a_unit() {
             // per composition area and rescales nowhere — it is measured
             // against the comp, not against the raster.
             ("scatter", "size"),
-            // Emit from image: the disc a point is drawn as, Scatter's
-            // row exactly. Threshold is a share of full white and Density a
-            // count per composition area, so neither rescales.
             ("emit_from_image", "size"),
-            // Points along path: the disc a point is drawn as, Grid's row.
             ("points_along_path", "deform_amplitude"),
             ("points_along_path", "size"),
-            // Math points lays its figure out in px@comp, and the two
-            // path producers beside it draw their discs the same size.
             ("math_points", "position_x"),
             ("math_points", "position_y"),
             ("math_points", "x_amplitude"),
@@ -6937,7 +6127,6 @@ fn every_parameter_declares_a_unit() {
             ("math_points", "size"),
             ("contour_points", "size"),
             ("intersection_points", "size"),
-            // Text to points: the disc a point is drawn as, Grid's row.
             ("text_to_points", "size"),
             // Track points: the analysis's three distances, which are in the
             // footage's own pixels, and the disc a point is drawn as.
@@ -6945,8 +6134,6 @@ fn every_parameter_declares_a_unit() {
             ("track_points", "window"),
             ("track_points", "max_distance"),
             ("track_points", "size"),
-            // Clone to points: the cell a layer is fitted into, and how far
-            // a stamp's corners are rounded.
             ("clone_to_points", "dist_spacing_x"),
             ("clone_to_points", "dist_spacing_y"),
             ("clone_to_points", "dist_offset"),
@@ -6968,9 +6155,7 @@ fn every_parameter_declares_a_unit() {
             // would weave a different web from the export's.
             ("connect_points", "max_distance"),
             ("connect_points", "width"),
-            // Points field: how far from a point its field reaches.
             ("points_field", "radius"),
-            // Label points: how far from its point a label sits.
             ("label_points", "offset_x"),
             ("label_points", "offset_y"),
             ("type_fill", "grid_height"),
@@ -6978,11 +6163,10 @@ fn every_parameter_declares_a_unit() {
             ("type_fill", "row_shift"),
             ("type_fill", "word_gap"),
             ("type_fill", "min_width"),
-            // Vary points and Pick points: the pattern's own distances, and
-            // how far Vary points moves a point. All travel with the stream.
             ("vary_points", "noise_scale"),
             ("vary_points", "centre_x"),
             ("vary_points", "centre_y"),
+            ("vary_points", "centre_z"),
             ("vary_points", "radius"),
             ("vary_points", "spacing"),
             ("vary_points", "offset_x"),
@@ -6993,11 +6177,9 @@ fn every_parameter_declares_a_unit() {
             ("pick_points", "noise_scale"),
             ("pick_points", "centre_x"),
             ("pick_points", "centre_y"),
+            ("pick_points", "centre_z"),
             ("pick_points", "radius"),
             ("pick_points", "spacing"),
-            // Transform points, Relax points and Flow points: where the
-            // stream is moved from and to, the space a point wants, and the
-            // field's own places and speed. All travel with the stream.
             ("transform_points", "anchor_x"),
             ("transform_points", "anchor_y"),
             ("transform_points", "position_x"),
@@ -7009,7 +6191,6 @@ fn every_parameter_declares_a_unit() {
             ("flow_points", "centre_x"),
             ("flow_points", "centre_y"),
             ("flow_points", "radius"),
-            // Sort distribution's Centre, as Pick points'.
             ("sort_points", "centre_x"),
             ("sort_points", "centre_y"),
             // What a full channel of a Motion vectors layer means, in pixels
@@ -7030,16 +6211,12 @@ fn every_parameter_declares_a_unit() {
             ("planar_track", "lower_left_y"),
             ("planar_track", "lower_right_x"),
             ("planar_track", "lower_right_y"),
-            // Its two search points and their box are the same numbers
-            // asked the same question, one patch at a time.
             ("planar_track", "point1_x"),
             ("planar_track", "point1_y"),
             ("planar_track", "point2_x"),
             ("planar_track", "point2_y"),
             ("planar_track", "region"),
             ("depth_points", "point_size"),
-            // The Correction: the qualifier's Blur and Grow, and each
-            // window's place, size and softness.
             ("correction", "qual_blur"),
             ("correction", "qual_grow"),
             ("correction", "win1_x"),
@@ -7071,8 +6248,6 @@ fn every_parameter_declares_a_unit() {
             ("lens_flare", "light_y"),
             ("lens_flare", "source_width"),
             ("lens_flare", "source_height"),
-            // The ghost blur's radius is a distance, and the one remaining
-            // per cent of the diagonal was this one.
             ("lens_flare", "ghost_softness"),
             ("drop_shadow", "distance"),
             ("drop_shadow", "softness"),
@@ -7104,8 +6279,6 @@ fn every_parameter_declares_a_unit() {
             ("iris_wipe", "outer_radius"),
             ("iris_wipe", "inner_radius"),
             ("iris_wipe", "feather"),
-            // The flipping wave's width is a distance across the frame,
-            // so it follows the raster like every other distance.
             ("card_wipe", "transition_width"),
             ("point_control", "point_x"),
             ("point_control", "point_y"),
@@ -7244,14 +6417,11 @@ fn a_vec4_is_its_own_kind_and_reads_back_whole() {
         tags.push(tag);
     }
 
-    // Read-back: the exact four floats, in order.
     let v = [1.5f32, -2.5, 0.0, 7.25];
     let id = ParamId::new("derived.something");
     let entries = [(id, Value::Vec4(v))];
     let p = Params::new(&entries);
     assert_eq!(p.vec4(id, [0.0; 4]), v);
-    // Absent, and present-but-another-kind, both fall back to the default —
-    // the same rule every typed reader follows.
     assert_eq!(p.vec4(ParamId::new("nothing"), [9.0; 4]), [9.0; 4]);
     let wrong = [(id, Value::Colour(v))];
     assert_eq!(
@@ -7259,12 +6429,9 @@ fn a_vec4_is_its_own_kind_and_reads_back_whole() {
         [9.0; 4],
         "a Colour is not a Vec4"
     );
-    // `as_f32` gives the first component, as it does for a Colour.
     assert_eq!(Value::Vec4(v).as_f32(), 1.5);
 }
 
-/// How many payload bytes [`ResolvedStack::feed_hash`] writes for a value —
-/// the test above walks back over them to reach the tag byte.
 fn payload_len(v: Value) -> usize {
     match v {
         Value::Bool(_) | Value::Layer(_) | Value::MaskPath(_) => 1,
@@ -7273,7 +6440,6 @@ fn payload_len(v: Value) -> usize {
         // A length, then two floats a live point — the unused tail of
         // the fixed array is padding by another name and never feeds a key.
         Value::Curve(c) => 4 + 8 * c.points().len(),
-        // A length byte, then the bytes typed.
         Value::Text(t) => 1 + t.as_str().len(),
         Value::Shape(s) => 4 + 8 * s.len(),
         // A length, then three floats and two 16-bit fractions a stop.
@@ -7335,7 +6501,6 @@ fn every_migrated_effect_renders_what_the_old_dispatch_rendered() {
     both(
         &effects::exposure::ExposureDef,
         &[(effects::exposure::Exposure::STOPS, Value::Float(1.5))],
-        // The old arm's `2f64.powf(stops) as f32`, at the same stops.
         &|p| cpu::exposure(p, 2f64.powf(1.5) as f32, 1.0),
     );
     both(
@@ -7357,7 +6522,6 @@ fn every_migrated_effect_renders_what_the_old_dispatch_rendered() {
             effects::temperature::Temperature::TEMPERATURE,
             Value::Float(60.0),
         )],
-        // The old arm's gains: k = 60/100, 1 ± 0.75·k, floored at 0.
         &|p| cpu::temperature(p, 1.0 + 0.75 * 0.6, 1.0 - 0.75 * 0.6, 1.0),
     );
     both(
@@ -7398,7 +6562,6 @@ fn every_migrated_effect_renders_what_the_old_dispatch_rendered() {
         &[
             (effects::glow::Glow::THRESHOLD, Value::Float(0.2)),
             (effects::glow::Glow::KNEE, Value::Float(0.5)),
-            // Already through the preview factor, as the bag carries it.
             (effects::glow::Glow::RADIUS, Value::Float(2.0)),
             (effects::glow::Glow::INTENSITY, Value::Float(1.5)),
             (
@@ -7422,8 +6585,6 @@ fn every_migrated_effect_renders_what_the_old_dispatch_rendered() {
             (effects::transform::Transform::OPACITY, Value::Float(80.0)),
             (effects::transform::Transform::MIX, Value::Float(75.0)),
         ],
-        // The old arm's `px`/`pct` helpers, and the Transform effect's fixed
-        // transparent edge.
         &|p| {
             cpu::transform(
                 p,
@@ -7479,7 +6640,6 @@ fn every_migrated_effect_renders_what_the_old_dispatch_rendered() {
         &|p| cpu::block_glitch(p, 4, 4, 0.5, 7, 3, 3.0, 0.4, 2.0, 1.0, 0.3, 0.8),
     );
     both(
-        // Scanlines' folded intensity and roll offset are derived too.
         &effects::scanlines::ScanlinesDef,
         &[
             (effects::scanlines::Scanlines::INTENSITY, Value::Float(0.9)),
@@ -7505,8 +6665,6 @@ fn every_migrated_effect_renders_what_the_old_dispatch_rendered() {
                 Value::Float(1.5),
             ),
         ],
-        // The derived pair wins over the declared Intensity and Roll speed —
-        // which is the whole point of them.
         &|p| cpu::scanlines(p, 4, 4, 0.6, 2.0, 1.5, true, 0.5),
     );
     both(
@@ -7565,9 +6723,6 @@ fn every_migrated_effect_renders_what_the_old_dispatch_rendered() {
             ),
             (effects::matte_key::MatteKey::MIX, Value::Float(75.0)),
         ],
-        // The old arm's arithmetic, transcribed: per cent ÷ 100, gain floored
-        // rather than clamped, and both Choice rows normalised through their
-        // wire codes.
         &|p| {
             cpu::matte_key(
                 p,
@@ -7837,16 +6992,10 @@ fn every_effect_carries_a_matte_row() {
             "{} — the effects that claim the matte inside their own maths are              listed here; anything else that wants a deeper meaning              must say so here too",
             s.match_name
         );
-        // Every image effect takes one, whatever it means by it.
-        // `MatteRole::None` is for an effect that genuinely cannot be driven by
-        // a picture, and the Controls family above is the whole of that list —
-        // anything else that wants to opt out is argued for here.
         let param = s
             .matte
             .param()
             .unwrap_or_else(|| panic!("{} declares no matte at all", s.match_name));
-        // An override says what it means, in the schema, which is what the
-        // manual's tables print (`fx-reference.json`).
         if let MatteRole::Own { meaning, .. } = s.matte {
             assert!(
                 meaning.len() > 40 && !meaning.ends_with('.'),
@@ -7929,7 +7078,6 @@ fn every_effect_carries_a_matte_row() {
                 "{} — Luminance by default, the reading every kernel had",
                 s.match_name
             );
-            // Beside the pair, in schema order: picker, Invert, Channel.
             let at = |id: &str| s.params.iter().position(|p| p.id == id).unwrap();
             assert_eq!(
                 at(MATTE_CHANNEL_PARAM),
@@ -8002,10 +7150,6 @@ fn every_mix_row_carries_a_blend() {
     assert_eq!(BlendMode::NAMES[0], "Normal");
 }
 
-/// **The blend maths, pinned at its end stops**: Add sums, Multiply
-/// multiplies, Normal is the effect's output, and the Mix lerp runs after the
-/// blend — so Mix 0 is the input on every mode and Mix 1 the blend alone.
-/// Alpha is always the effect's own.
 #[test]
 fn the_blend_combines_the_effect_with_its_input_and_then_mixes() {
     let d = [0.25, 0.5, 0.75, 1.0];
@@ -8028,8 +7172,6 @@ fn the_blend_combines_the_effect_with_its_input_and_then_mixes() {
         [0.0, 0.0, 0.25, 0.5],
         "Subtract"
     );
-    // The encoded set: Screen of x with itself is 1 - (1-x)^2 in the encoded
-    // domain, which for encoded 0.5 is 0.75 — round-tripped through the curve.
     let e = crate::pixels::srgb_decode(128);
     let screen = cpu::blend_pixel(8, [e, e, e, 1.0], [e, e, e, 1.0]);
     let want = {
@@ -8042,7 +7184,6 @@ fn the_blend_combines_the_effect_with_its_input_and_then_mixes() {
         "Screen runs encoded: {} vs {want}",
         screen[0]
     );
-    // Difference of a pixel with itself is black, whatever the domain.
     assert_eq!(cpu::blend_pixel(18, d, d)[..3], [0.0, 0.0, 0.0]);
 
     let input = vec![0.25, 0.5, 0.75, 1.0];
@@ -8057,10 +7198,6 @@ fn the_blend_combines_the_effect_with_its_input_and_then_mixes() {
     assert_eq!(out, [0.5, 0.75, 1.0, 0.75], "Mix 0.5 is halfway");
 }
 
-/// **The stack applies the blend through the seam**: an Exposure at
-/// Blend = Multiply and Mix 50 through `apply_stack` equals the kernel run at
-/// Mix 100, multiplied with its input, then lerped to half — and at Normal the
-/// kernel's own Mix does the whole job, untouched.
 #[test]
 fn apply_stack_runs_the_kernel_at_full_mix_and_blends_once() {
     use crate::fx::effects::exposure::Exposure;
@@ -8200,12 +7337,8 @@ fn a_chain_past_the_budget_coarsens_rather_than_stopping() {
     );
 }
 
-/// **A scribble lifts the pen across a hole** (docs/08 §3.78): a line that
-/// crosses a notched shape twice must not be joined through the gap.
 #[test]
 fn a_scribble_lifts_the_pen_across_a_notch() {
-    // A U: two uprights and a floor, so a horizontal line high up crosses it
-    // twice with nothing in between.
     let u: Vec<[f32; 2]> = vec![
         [0.0, 0.0],
         [30.0, 0.0],
@@ -8222,8 +7355,6 @@ fn a_scribble_lifts_the_pen_across_a_notch() {
         "a notched shape must lift the pen at least once"
     );
 
-    // And with the lifts honoured, nothing is drawn down the middle of the
-    // notch — the hole the U has.
     let mut p = cpu::PathDrawParams::blank();
     cpu::path_chain(&chain, 0.0, 100.0, &mut p);
     p.half_width = 2.0;
@@ -8245,8 +7376,6 @@ fn a_scribble_lifts_the_pen_across_a_notch() {
         "the scribble missed the U's right upright"
     );
 
-    // A convex shape needs no lift at all: the pen crosses, hops down the edge,
-    // and comes back, which is what makes it one continuous scribble.
     let square: Vec<[f32; 2]> = vec![[0.0, 0.0], [100.0, 0.0], [100.0, 100.0], [0.0, 100.0]];
     assert!(
         cpu::scribble_chain(&square, 0.0, 10.0, 0.0)
@@ -8268,7 +7397,6 @@ fn a_brush_stroke_changes_shape_when_its_stamps_come_apart() {
 
     let mut close = cpu::PathDrawParams::blank();
     cpu::stroke_geometry(&poly, 1.0, 20.0, 3.0, 0.0, 100.0, &mut close);
-    // Overlapping: the pieces have length, because they are the path itself.
     let swept = (0..close.count as usize)
         .filter(|&i| {
             (close.segments[i][2] - close.segments[i][0]).abs()
@@ -8283,19 +7411,16 @@ fn a_brush_stroke_changes_shape_when_its_stamps_come_apart() {
 
     let mut apart = cpu::PathDrawParams::blank();
     cpu::stroke_geometry(&poly, 1.0, 20.0, 60.0, 0.0, 100.0, &mut apart);
-    // Well apart: every piece is a stamp, with no length at all.
     for i in 0..apart.count as usize {
         let s = apart.segments[i];
         assert_eq!((s[0], s[1]), (s[2], s[3]), "a dot must have no length");
     }
-    // And they are spaced by what was asked for, round the path.
     assert!(apart.count >= 2);
     assert!(
         (apart.arcs[1] - apart.arcs[0] - 60.0).abs() < 1e-3,
         "the dots must be laid at the spacing asked for"
     );
 
-    // Start and End trim the dots too, and by distance round the path.
     let mut window = cpu::PathDrawParams::blank();
     cpu::stroke_geometry(&poly, 1.0, 20.0, 60.0, 25.0, 75.0, &mut window);
     assert!(window.count < apart.count, "a window must draw fewer dots");
@@ -8304,7 +7429,6 @@ fn a_brush_stroke_changes_shape_when_its_stamps_come_apart() {
         "the first dot must start at the Start mark"
     );
 
-    // An absent mask builds nothing, which is the documented no-op.
     let mut none = cpu::PathDrawParams::blank();
     cpu::stroke_geometry(
         &crate::mask::MaskPolyline::default(),
@@ -8368,8 +7492,6 @@ fn a_path_effect_is_told_the_raster_and_the_clock_at_resolve() {
         "a fresh Scribble is Static and must not move"
     );
 
-    // Jagged floors, Wiggly drifts — the one line of arithmetic that separates
-    // the three (docs/08 §3.78's third decision), read back through the bag.
     let with_type = |kind: u32, lt: f64| {
         let mut e = instantiate("scribble").expect("scribble");
         for prop in &mut e.params {
@@ -8386,7 +7508,6 @@ fn a_path_effect_is_told_the_raster_and_the_clock_at_resolve() {
         );
         float(&bag, Scribble::DERIVED_TICK)
     };
-    // Wiggles per second defaults to 8, so a quarter of a second is two wiggles.
     assert_eq!(
         with_type(1, 0.25),
         2.0,
@@ -8408,7 +7529,6 @@ fn a_monotone_curve_stays_in_the_unit_square() {
     use crate::fx::cpu::curve_table;
 
     for points in [
-        // The overshooting shape: a long flat run, then a sudden rise.
         &[
             [0.0, 0.0],
             [0.1, 0.02],
@@ -8416,7 +7536,6 @@ fn a_monotone_curve_stays_in_the_unit_square() {
             [0.6, 0.95],
             [1.0, 1.0],
         ][..],
-        // A hard S, and a lifted black under a crushed white.
         &[[0.0, 0.0], [0.25, 0.05], [0.75, 0.95], [1.0, 1.0]][..],
         &[[0.0, 0.2], [0.5, 0.4], [1.0, 0.9]][..],
     ] {
@@ -8446,7 +7565,6 @@ fn a_monotone_curve_stays_in_the_unit_square() {
 /// wrote and 14-ENGINEERING-RULES §4 forbids a panic on it.
 #[test]
 fn a_curve_is_sanitised_on_read() {
-    // Sorted by x, and the square is the square.
     let messy = CurvePoints::sanitised(&[[0.8, 2.0], [0.2, -1.0], [0.5, 0.5]]);
     assert_eq!(
         messy.points(),
@@ -8454,18 +7572,15 @@ fn a_curve_is_sanitised_on_read() {
         "sorted by x and clamped into the unit square"
     );
 
-    // Two points at one x have no curve between them; the first wins.
     let repeated = CurvePoints::sanitised(&[[0.0, 0.0], [0.5, 0.9], [0.5, 0.1], [1.0, 1.0]]);
     assert_eq!(repeated.points(), [[0.0, 0.0], [0.5, 0.9], [1.0, 1.0]]);
 
-    // Past the cap, the tail is dropped rather than the list refused.
     let many: Vec<[f32; 2]> = (0..40).map(|i| [i as f32 / 39.0, 0.5]).collect();
     assert_eq!(
         CurvePoints::sanitised(&many).points().len(),
         CURVE_MAX_POINTS
     );
 
-    // Fewer than two survivors is not a curve at all: the diagonal stands in.
     assert_eq!(CurvePoints::sanitised(&[]), CurvePoints::IDENTITY);
     assert_eq!(CurvePoints::sanitised(&[[0.4, 0.6]]), CurvePoints::IDENTITY);
     assert_eq!(
@@ -8480,10 +7595,6 @@ fn a_curve_is_sanitised_on_read() {
     );
 }
 
-/// **A curve parameter resolves through the arena, straightened, and keys a
-/// frame**. Curve values are static, so this is the whole of their
-/// resolve: the document's list arrives as a [`Value::Curve`], sanitised, and
-/// two different curves feed two different hashes.
 #[test]
 fn a_curve_parameter_resolves_and_feeds_the_key() {
     use crate::fx::effects::curves::Curves;
@@ -8497,7 +7608,6 @@ fn a_curve_parameter_resolves_and_feeds_the_key() {
 
     for p in &mut e.params {
         if p.id == "master" {
-            // Deliberately out of order and outside the square.
             p.value = EffectValue::Curve(vec![[1.0, 1.0], [0.5, 1.4], [0.0, 0.0]]);
         }
     }
@@ -8560,8 +7670,6 @@ fn the_two_keyers_still_load_a_save_that_holds_their_old_matte_rows() {
     use crate::model::{EffectParam, EffectValue};
     for name in ["matte_key", "set_matte"] {
         let mut e = instantiate(name).expect("instantiates");
-        // Strip whatever the fresh instance wrote under those ids, then put
-        // back what a project saved before the drop would hold.
         e.params
             .retain(|p| !p.id.starts_with(crate::fx::schema::MATTE_PARAM));
         for (id, value) in [
@@ -8585,7 +7693,6 @@ fn the_two_keyers_still_load_a_save_that_holds_their_old_matte_rows() {
         crate::fx::builtins::backfill_builtin_params(&mut list);
         let e = &list[0];
 
-        // Every row the schema declares is present, at a readable value.
         let s = BUILTIN_DEFS.get(name).expect("declared").schema();
         for p in s.params {
             assert!(
@@ -8608,8 +7715,6 @@ fn the_two_keyers_still_load_a_save_that_holds_their_old_matte_rows() {
             "{name}: the dropped Channel was rewritten"
         );
 
-        // And it resolves: the stack builds, the effect keeps its op, and
-        // nothing about the undeclared rows reaches it.
         let (ids, ops) = super::resolved::resolve_stack_temporal_named(
             &list,
             super::drivers::ResolvedDrivers::NONE,
@@ -8624,10 +7729,6 @@ fn the_two_keyers_still_load_a_save_that_holds_their_old_matte_rows() {
         assert_eq!(ops.len(), 1, "{name}: the effect resolved to no op");
     }
 }
-
-// ---------------------------------------------------------------------------
-// Units, vector pairs and the pair link flag
-// ---------------------------------------------------------------------------
 
 /// **Every parameter says what its number means.** The panel draws the unit
 /// beside the value, so a parameter that never declared one would show a
@@ -8713,19 +7814,16 @@ fn a_vector_pair_link_is_off_by_default_and_survives_the_file() {
     assert!(!e.pair_linked("light"), "a fresh pair is unlinked");
     assert!(e.linked_pairs.is_empty());
 
-    // A scale is the one pair that starts chained: a size, not a place.
     let transform = instantiate("transform").expect("Transform is a built-in");
     assert_eq!(transform.linked_pairs, vec!["scale".to_owned()]);
     assert!(!transform.pair_linked("position"));
 
-    // Nothing linked: nothing written.
     let bare = serde_json::to_value(&e).expect("an instance serialises");
     assert!(
         bare.get("linked_pairs").is_none(),
         "an unlinked instance must not grow a field: {bare}"
     );
 
-    // Linked: written, and read back linked.
     assert!(e.set_pair_linked("light", true), "the toggle changed it");
     assert!(!e.set_pair_linked("light", true), "and is idempotent");
     let saved = serde_json::to_value(&e).expect("an instance serialises");
@@ -8733,7 +7831,6 @@ fn a_vector_pair_link_is_off_by_default_and_survives_the_file() {
     assert!(back.pair_linked("light"));
     assert_eq!(back.linked_pairs, vec!["light".to_owned()]);
 
-    // A file from before the field: every pair unlinked, no error.
     let mut older = serde_json::to_value(&e).expect("an instance serialises");
     older
         .as_object_mut()
@@ -8743,8 +7840,6 @@ fn a_vector_pair_link_is_off_by_default_and_survives_the_file() {
         serde_json::from_value(older).expect("an older instance still loads");
     assert!(!old.pair_linked("light"));
 
-    // Unlinking takes the field away again, so the document goes back to the
-    // bytes it had before anyone touched the chain.
     let mut relinked = back;
     assert!(relinked.set_pair_linked("light", false));
     assert!(serde_json::to_value(&relinked)
@@ -8763,17 +7858,10 @@ fn a_vector_pair_link_is_off_by_default_and_survives_the_file() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// Particulate and the points stream
-// (docs/impl/particulate.md §9 items 1-7 and 9-11, on the CPU path).
-// ---------------------------------------------------------------------------
-
 use crate::fx::effects::particulate::Particulate;
 use crate::fx::points::{self, emitter::EmitterShape, PointsStream, Schedule};
 use crate::mask::MaskPolyline;
 
-/// A Particulate instance with its declared defaults, and `edits` applied —
-/// the shape every test below starts from.
 pub(crate) fn particulate(edits: &[(&str, EffectValue)]) -> EffectInstance {
     let mut e = instantiate("particulate").expect("Particulate is declared");
     for (id, value) in edits {
@@ -8791,7 +7879,6 @@ pub(crate) fn fixed(v: f64) -> EffectValue {
     EffectValue::Float(Property::fixed(v))
 }
 
-/// Everything the closed forms read, from an instance's declared controls.
 fn particulate_params(e: &EffectInstance) -> points::PointsParams {
     let bag = resolve_bag(
         std::slice::from_ref(e),
@@ -8803,7 +7890,6 @@ fn particulate_params(e: &EffectInstance) -> points::PointsParams {
     Particulate::read(Params::new(&bag)).points()
 }
 
-/// The stream one instance draws at layer time `t`, at 60 fps.
 fn particulate_stream(e: &EffectInstance, t: f64) -> PointsStream {
     let dt = 1.0 / 60.0;
     let bag = resolve_bag(
@@ -8835,7 +7921,6 @@ fn particulate_scrubs_in_any_order() {
         .iter()
         .map(|f| particulate_stream(&e, f64::from(*f) * dt))
         .collect();
-    // {500, 3, 250, 3} — the note's own order, the last one a repeat.
     let jumped: Vec<PointsStream> = [500, 3, 250, 3]
         .iter()
         .map(|f| particulate_stream(&e, f64::from(*f) * dt))
@@ -8862,14 +7947,12 @@ fn particulate_scrubs_in_any_order() {
 #[test]
 fn a_layer_carried_absurdly_far_forward_does_not_hang_the_scan() {
     let dt = 1.0 / 60.0;
-    // Every frame the walk visits calls this, so it counts the walk.
     let calls = std::cell::Cell::new(0u64);
     let rate = |_: f64| {
         calls.set(calls.get() + 1);
         150.0
     };
 
-    // Ten million seconds in, which is a retime keyframe away.
     let absurd = 600_000_000i64;
     let s = Schedule::scan(dt, absurd, 60, &rate);
 
@@ -8883,12 +7966,8 @@ fn a_layer_carried_absurdly_far_forward_does_not_hang_the_scan() {
         !s.is_exact(),
         "a clamped walk must say so rather than pass for a complete one"
     );
-    // And it is still a usable schedule: the window it records is the window
-    // the frame can see, so the particles that are drawn are drawn properly.
     assert_eq!(s.counts().len(), 60);
 
-    // An ordinary layer is untouched — no clamp, no flag, the same answer as
-    // ever.
     let ordinary = Schedule::scan(dt, 599, 60, &|_| 150.0);
     assert!(ordinary.is_exact());
     assert_eq!(
@@ -8897,17 +7976,9 @@ fn a_layer_carried_absurdly_far_forward_does_not_hang_the_scan() {
     );
 }
 
-/// Trimming used to sum the whole `counts` vector to ask whether it was under
-/// the ceiling yet, and then `Vec::remove(0)` — both linear, inside a loop that
-/// runs once per dropped frame. At the hundred thousand frames the window
-/// permits that is 10^10 operations for one trim, from a Life somebody typed.
-///
-/// This asserts the answer is unchanged; that it now arrives in one pass is what
-/// makes it finish.
 #[test]
 fn trimming_to_the_newest_drops_the_right_frames_in_one_pass() {
     let dt = 1.0 / 60.0;
-    // Ten births a frame, a thousand frames: ten thousand candidates.
     let mut s = Schedule::scan(dt, 999, 1000, &|_| 600.0);
     let before = s.candidates();
     assert!(before > 5_000, "the fixture needs enough to trim: {before}");
@@ -8921,32 +7992,25 @@ fn trimming_to_the_newest_drops_the_right_frames_in_one_pass() {
         "trimmed to {} candidates over a ceiling of 500",
         s.candidates()
     );
-    // The newest are what survive, so the window moved forward and the first
-    // birth index moved with it by exactly what was dropped.
     assert!(s.first_frame() > first_frame);
     assert_eq!(
         s.first_birth() - first_birth,
         before - s.candidates(),
         "the births dropped and the index moved by different amounts"
     );
-    // Trimming again to the same ceiling is a no-op rather than a walk.
     let settled = (s.first_frame(), s.first_birth(), s.candidates());
     s.trim_to_newest(500);
     assert_eq!((s.first_frame(), s.first_birth(), s.candidates()), settled);
 
-    // A ceiling nothing reaches leaves it alone.
     let mut untouched = Schedule::scan(dt, 59, 60, &|_| 60.0);
     let was = (untouched.first_frame(), untouched.candidates());
     untouched.trim_to_newest(u64::MAX);
     assert_eq!((untouched.first_frame(), untouched.candidates()), was);
 }
 
-/// cache hit against the cold scan.
 #[test]
 fn the_birth_schedule_is_the_rate_curves_integral() {
     let dt = 1.0 / 60.0;
-    // A constant 150 per second: after `n` frames, `floor(150 · n · Δt)` have
-    // been born, give or take the carry the frame is holding.
     for frames in [1i64, 7, 60, 601] {
         let s = Schedule::scan(dt, frames - 1, frames, &|_| 150.0);
         let want = (150.0 * frames as f64 * dt).floor() as u64;
@@ -8957,9 +8021,6 @@ fn the_birth_schedule_is_the_rate_curves_integral() {
         );
     }
 
-    // A keyframed ramp, hand-computed: 0 → 120 per second over the first
-    // second, sampled at each frame start. The carry after `n` frames is
-    // `Σ rate(f)·Δt` over f < n, and the count is its floor.
     let ramp = |lt: f64| (lt.clamp(0.0, 1.0) * 120.0).floor();
     let mut carry = 0.0f64;
     let mut want = 0u64;
@@ -8972,7 +8033,6 @@ fn the_birth_schedule_is_the_rate_curves_integral() {
     let s = Schedule::scan(dt, 59, 60, &ramp);
     assert_eq!(s.total(), want, "the ramp's schedule is its own integral");
 
-    // The cache: a hit is the cold scan, and a changed key scans again.
     let mut cache = points::ScheduleCache::default();
     let cold = Schedule::scan(dt, 59, 60, &|_| 150.0);
     let mut scans = 0;
@@ -9019,8 +8079,6 @@ fn the_closed_forms_match_the_analytic_solutions() {
     let p0 = [100.0f32, 50.0, -25.0];
     let v0 = [30.0f32, -80.0, 45.0];
 
-    // k = 0: p = p0 + v0·t + ½g·t², v = v0 + g·t. Written out here so the
-    // test is the textbook and not the implementation.
     let f = points::Forces {
         gravity: 400.0,
         ..base
@@ -9030,7 +8088,6 @@ fn the_closed_forms_match_the_analytic_solutions() {
         let want = [
             p0[0] + v0[0] * age,
             p0[1] + v0[1] * age + 0.5 * 400.0 * age * age,
-            // Gravity stays down: the depth axis is unaccelerated.
             p0[2] + v0[2] * age,
         ];
         assert!((pos[0] - want[0]).abs() < 1e-3, "x at {age}");
@@ -9040,8 +8097,6 @@ fn the_closed_forms_match_the_analytic_solutions() {
         assert!((vel[2] - v0[2]).abs() < 1e-3, "vz at {age}");
     }
 
-    // k = 0.5, with wind and gravity: the published form, `g/k` and all,
-    // against the rearrangement the implementation uses.
     let f = points::Forces {
         gravity: 400.0,
         wind: [120.0, 0.0, -60.0],
@@ -9114,7 +8169,6 @@ fn the_cap_keeps_the_newest_particles() {
     let s = particulate_stream(&over, 3.0);
     assert_eq!(s.len(), 100, "the cap is the live count");
 
-    // The same frame with room to spare: the capped set is the *tail* of it.
     let roomy = particulate(&[
         ("emit_rate", fixed(600.0)),
         ("life", fixed(4.0)),
@@ -9129,7 +8183,6 @@ fn the_cap_keeps_the_newest_particles() {
         "the cap kept something other than the newest hundred"
     );
 
-    // The degradation rung: the newest half, by the same rule.
     let half = all.len() / 2;
     let mut halved = all.clone();
     halved.keep_newest(half);
@@ -9138,9 +8191,6 @@ fn the_cap_keeps_the_newest_particles() {
     assert_eq!(halved.position, all.position[all.len() - half..]);
 }
 
-/// **The mask-path emitter's no-op** (§9 item 9): nothing to walk means no
-/// particles at all, and the effect passes its input through — degrade, never
-/// fault (14-ENGINEERING-RULES §4).
 #[test]
 fn a_mask_path_emitter_with_no_path_emits_nothing() {
     let e = particulate(&[("shape", EffectValue::Choice(4))]);
@@ -9154,7 +8204,6 @@ fn a_mask_path_emitter_with_no_path_emits_nothing() {
     points::draw_discs(&mut rgba, 16, 16, &s, 1.0);
     assert_eq!(rgba, before, "the input did not pass through untouched");
 
-    // A path to walk, and the same emitter emits again.
     let path = MaskPolyline {
         expansion: 0.0,
         feather: 0.0,
@@ -9165,8 +8214,6 @@ fn a_mask_path_emitter_with_no_path_emits_nothing() {
     };
     let dt = 1.0 / 60.0;
     let sched = Schedule::scan(dt, 120, 600, &|_| 150.0);
-    // Nothing to carry them off the line, so where they are is where they were
-    // born — which is what the assertion below is really about.
     let mut still = p.clone();
     still.emitter.speed = 0.0;
     still.forces.turbulence = 0.0;
@@ -9180,8 +8227,6 @@ fn a_mask_path_emitter_with_no_path_emits_nothing() {
     }
 }
 
-/// Particulate's defaults with nothing moving a particle but its own launch,
-/// and no jitter, so where one is can be worked out by hand.
 fn plain_particles() -> points::PointsParams {
     let mut p = particulate_params(&particulate(&[]));
     p.emitter.shape = EmitterShape::Point;
@@ -9201,7 +8246,6 @@ fn plain_particles() -> points::PointsParams {
     p
 }
 
-/// One particle, thrown at layer time 0 by a burst, seen at `t`.
 fn lone_particle(p: &points::PointsParams, t: f64, tail: f32) -> (PointsStream, Vec<[f32; 3]>) {
     let dt = 1.0 / 60.0;
     let mut s = Schedule::scan(dt, (t / dt).floor() as i64, 600, &|_| 0.0);
@@ -9209,9 +8253,6 @@ fn lone_particle(p: &points::PointsParams, t: f64, tail: f32) -> (PointsStream, 
     points::evaluate_with_tail(p, &s, t, &MaskPolyline::default(), tail)
 }
 
-/// Bursts go off once at the start, every N frames, and on each rise of
-/// Trigger, a frame-0 high included and a level held into the window not.
-/// A burst's particles are extra: the steady flow is drawn exactly as it was.
 #[test]
 fn bursts_go_off_when_asked_and_leave_the_steady_flow_alone() {
     let dt = 1.0 / 60.0;
@@ -9228,7 +8269,6 @@ fn bursts_go_off_when_asked_and_leave_the_steady_flow_alone() {
         bursts(points::Burst::Every, &none),
         vec![(0, 10), (20, 10), (40, 10)]
     );
-    // High on frame 0, low, then high again from frame 30.
     let beat = |lt: f64| {
         let f = (lt / dt).round() as i64;
         f64::from(u8::from(f == 0 || (30..35).contains(&f)))
@@ -9237,12 +8277,10 @@ fn bursts_go_off_when_asked_and_leave_the_steady_flow_alone() {
         bursts(points::Burst::Trigger, &beat),
         vec![(0, 10), (30, 10)]
     );
-    // A window opening on frame 60 with Trigger already high is no rise.
     let mut late = Schedule::scan(dt, 119, 60, &|_| 60.0);
     late.add_bursts(points::Burst::Trigger, &|_| 10.0, &|_| 1.0, &|_| 1.0);
     assert!(late.bursts().is_empty());
 
-    // The effect's own Burst row reaches the schedule.
     let e = particulate(&[("burst", EffectValue::Choice(2))]);
     let mut s = steady.clone();
     Particulate::add_bursts(&e, &mut s, &|id, lt| {
@@ -9263,18 +8301,12 @@ fn bursts_go_off_when_asked_and_leave_the_steady_flow_alone() {
         assert_eq!(both.colour[j], plain.colour[i]);
     }
 
-    // Over the cap, the oldest bursts go first.
     s.trim_to_newest(150);
     assert_eq!(s.bursts(), &[(48, 100)]);
 }
 
-/// Kill takes a particle the first time it leaves the frame and its margin,
-/// and never brings it back, even when gravity drops it in again. Wrap puts
-/// it on the opposite side, margin included, and its tail goes with it.
 #[test]
 fn edge_kill_stays_dead_and_wrap_comes_back_opposite() {
-    // Thrown up from the middle of a 100 px frame and falling back: it peaks
-    // at y = -25 half a second in, and is back inside at 0.9 s.
     let mut up = plain_particles().framed(100.0, 100.0);
     up.emitter.direction_deg = -90.0;
     up.emitter.speed = 300.0;
@@ -9290,7 +8322,6 @@ fn edge_kill_stays_dead_and_wrap_comes_back_opposite() {
     up.margin = 30.0;
     assert_eq!(lone_particle(&up, 0.9, 0.0).0.len(), 1, "never passed it");
 
-    // Off the right at 200 px a second: at 0.5 s it is at x = 150.
     let mut right = plain_particles().framed(100.0, 100.0);
     right.emitter.direction_deg = 0.0;
     right.emitter.speed = 200.0;
@@ -9305,8 +8336,6 @@ fn edge_kill_stays_dead_and_wrap_comes_back_opposite() {
     }
 }
 
-/// Size, Opacity and Colour by Speed run from Speed min to Speed max, and
-/// by Random hold a number of the particle's own for its whole life.
 #[test]
 fn speed_and_random_drives_map_as_they_say() {
     let dt = 1.0 / 60.0;
@@ -9319,7 +8348,6 @@ fn speed_and_random_drives_map_as_they_say() {
         let s = Schedule::scan(dt, (t / dt).floor() as i64, 600, &|_| 60.0);
         points::evaluate(p, &s, t, &MaskPolyline::default())
     };
-    // How far along to End colour each visible particle is.
     let toward = |s: &PointsStream| -> Vec<(u64, f32, f32)> {
         (0..s.len())
             .filter(|&i| s.colour[i][3] > 1e-4)
@@ -9339,7 +8367,6 @@ fn speed_and_random_drives_map_as_they_say() {
         let want = ((fast - 100.0) / 200.0).clamp(0.0, 1.0);
         assert!((k - want).abs() < 1e-3, "speed {fast}: {k} not {want}");
     }
-    // A range with no width is a step at its speed.
     p.particle.speed_range = [200.0; 2];
     for (_, k, fast) in toward(&stream(&p, 1.0)) {
         assert!((k - f32::from(u8::from(fast >= 200.0))).abs() < 1e-3);
@@ -9361,8 +8388,6 @@ fn speed_and_random_drives_map_as_they_say() {
     assert!(hi - lo > 0.5, "the numbers do not spread: {lo}..{hi}");
 }
 
-/// A Density layer keeps births to where its picture is bright, and a black
-/// picture gives none at all.
 #[test]
 fn density_births_land_only_on_light() {
     let dt = 1.0 / 60.0;
@@ -9373,7 +8398,6 @@ fn density_births_land_only_on_light() {
     p.emitter.speed = 0.0;
     let sched = Schedule::scan(dt, 59, 600, &|_| 600.0);
     let (w, h) = (100u32, 100u32);
-    // White on the left half, black on the right.
     let mut rgba = vec![0.0f32; (w * h * 4) as usize];
     for (i, px) in rgba.chunks_exact_mut(4).enumerate() {
         if (i as u32 % w) < 50 {
@@ -9392,9 +8416,6 @@ fn density_births_land_only_on_light() {
     assert!(dense(&vec![0.0; rgba.len()]).is_empty());
 }
 
-/// Particle blend combines the particles with each other by the layer
-/// modes. Normal is the plain draw, and a particle on its own looks the same
-/// whatever the mode; only where two meet does the mode show.
 #[test]
 fn particle_blend_mixes_only_where_particles_meet() {
     let (w, h) = (48u32, 48u32);
@@ -9424,15 +8445,11 @@ fn particle_blend_mixes_only_where_particles_meet() {
         .position(|m| *m == crate::model::BlendMode::Add)
         .expect("Add is a layer mode") as u32;
     let added = draw(Some(add));
-    // Only the red one reaches x = 16; both cover x = 21.
     assert_eq!(px(&added, 16), px(&plain, 16));
     assert_eq!(px(&plain, 21), [0.0, 1.0, 0.0, 1.0]);
     assert_eq!(px(&added, 21), [1.0, 1.0, 0.0, 1.0]);
 }
 
-// --------------------------------------------------- Scatter
-
-/// A Scatter instance with its declared defaults, and `edits` applied.
 fn scatter(edits: &[(&str, EffectValue)]) -> EffectInstance {
     let mut e = instantiate("scatter").expect("Scatter is declared");
     for (id, value) in edits {
@@ -9446,7 +8463,6 @@ fn scatter(edits: &[(&str, EffectValue)]) -> EffectInstance {
     e
 }
 
-/// The instance's reduced controls, resolved at full raster.
 fn scatter_of(e: &EffectInstance) -> crate::fx::effects::scatter::Scatter {
     let bag = resolve_bag(
         std::slice::from_ref(e),
@@ -9471,9 +8487,6 @@ fn half_alpha(w: u32, h: u32) -> Vec<f32> {
     rgba
 }
 
-/// **Points land inside the alpha and nowhere else** — the whole of what this
-/// effect claims. A hard-edged field admits every candidate on the opaque side
-/// and refuses every one on the other.
 #[test]
 fn scatter_keeps_the_points_that_land_on_alpha() {
     let (w, h) = (200u32, 100u32);
@@ -9492,8 +8505,6 @@ fn scatter_keeps_the_points_that_land_on_alpha() {
             "a point stood on the transparent half at {at:?}"
         );
     }
-    // Half the frame is opaque and the field there is 1, so every candidate on
-    // that side stands: the count is the candidates that fell on the left.
     let left = all
         .position
         .iter()
@@ -9532,14 +8543,10 @@ fn scatter_throws_no_more_candidates_than_its_cap() {
     let all = s.candidates(1920, 1080, 1.0, points::Projection::FLAT);
     assert_eq!(all.len(), 500);
     assert_eq!(all.id, (0..500).collect::<Vec<u64>>());
-    // And under the cap the count is the density's own arithmetic.
     let plenty = scatter_of(&scatter(&[("density", fixed(10.0))]));
     assert_eq!(plenty.candidate_count(1000, 1000, 1.0), 1000);
 }
 
-// -------------------------------------------- Emit from image
-
-/// An Emit from image instance with its declared defaults, and `edits` applied.
 fn emit_from_image(edits: &[(&str, EffectValue)]) -> EffectInstance {
     let mut e = instantiate("emit_from_image").expect("Emit from image is declared");
     for (id, value) in edits {
@@ -9553,7 +8560,6 @@ fn emit_from_image(edits: &[(&str, EffectValue)]) -> EffectInstance {
     e
 }
 
-/// The instance's reduced controls, resolved at full raster.
 fn emit_of(e: &EffectInstance) -> crate::fx::effects::emit_from_image::EmitFromImage {
     let bag = resolve_bag(
         std::slice::from_ref(e),
@@ -9583,9 +8589,6 @@ fn half_bright(w: u32, h: u32) -> Vec<f32> {
     rgba
 }
 
-/// **Points land where the picture is bright and nowhere else** — the whole of
-/// what this effect claims. A hard-edged field admits every candidate on the
-/// white side and refuses every one on the black.
 #[test]
 fn emit_from_image_keeps_the_points_that_land_on_light() {
     let (w, h) = (200u32, 100u32);
@@ -9604,8 +8607,6 @@ fn emit_from_image_keeps_the_points_that_land_on_light() {
             "a point stood on the dark half at {at:?}"
         );
     }
-    // The white half's field is 1 at any threshold below full, so every
-    // candidate there stands: the count is the candidates that fell left.
     let left = all
         .position
         .iter()
@@ -9627,9 +8628,6 @@ fn emit_from_image_throws_no_more_candidates_than_its_cap() {
     assert_eq!(all.id, (0..500).collect::<Vec<u64>>());
 }
 
-// ------------------------------------------------------ Grid
-
-/// A Grid instance with its declared defaults, and `edits` applied.
 fn grid(edits: &[(&str, EffectValue)]) -> EffectInstance {
     let mut e = instantiate("grid").expect("Grid is declared");
     for (id, value) in edits {
@@ -9643,7 +8641,6 @@ fn grid(edits: &[(&str, EffectValue)]) -> EffectInstance {
     e
 }
 
-/// The lattice one instance emits at layer time `t`, in px@comp.
 fn grid_stream(e: &EffectInstance, t: f64) -> PointsStream {
     let bag = resolve_bag(
         std::slice::from_ref(e),
@@ -9655,8 +8652,6 @@ fn grid_stream(e: &EffectInstance, t: f64) -> PointsStream {
     crate::fx::effects::grid::Grid::read(Params::new(&bag)).stream(points::Projection::FLAT)
 }
 
-/// **The lattice is a lattice**: as many points as cells, spaced by Spacing,
-/// centred on Position, and `id` the walk's own index.
 #[test]
 fn a_grid_emits_one_point_per_cell_on_its_spacing() {
     let e = grid(&[
@@ -9673,7 +8668,6 @@ fn a_grid_emits_one_point_per_cell_on_its_spacing() {
         (0..15).collect::<Vec<u64>>(),
         "id is the walk's index"
     );
-    // Row-major from the top left corner, centred on the comp's middle.
     for (i, at) in s.position.iter().enumerate() {
         let (c, r) = (i % 5, i / 5);
         let want = [
@@ -9708,9 +8702,6 @@ fn a_grid_over_its_cap_keeps_the_first_cells_by_index() {
     assert_eq!(capped.position, whole.position[..100], "a different prefix");
 }
 
-// --------------------------------------- Clone to points
-
-/// A Clone to points instance with its declared defaults, and `edits` applied.
 fn clone_to_points(edits: &[(&str, EffectValue)]) -> EffectInstance {
     let mut e = instantiate("clone_to_points").expect("Clone to points is declared");
     for (id, value) in edits {
@@ -9724,8 +8715,6 @@ fn clone_to_points(edits: &[(&str, EffectValue)]) -> EffectInstance {
     e
 }
 
-/// The stamps one instance lays over `stream`, through the one expression both
-/// render paths read.
 fn clone_stamps(e: &EffectInstance, stream: &PointsStream) -> PointsStream {
     let bag = resolve_bag(
         std::slice::from_ref(e),
@@ -9738,8 +8727,6 @@ fn clone_stamps(e: &EffectInstance, stream: &PointsStream) -> PointsStream {
     CloneToPoints::read(Params::new(&bag)).stamps(stream, Pictures::plain(1))
 }
 
-/// A small hand-made stream: two points, a known distance apart, with distinct
-/// colours so a painter's-order test can tell which one landed last.
 fn two_points() -> PointsStream {
     PointsStream {
         position: vec![[20.0, 20.0, 0.0], [22.0, 20.0, 0.0]],
@@ -9755,13 +8742,8 @@ fn two_points() -> PointsStream {
     }
 }
 
-/// A named column stays on the point it was written for through every helper
-/// that reorders, drops or joins points, whether it holds a number, an
-/// offset or a colour. The reader answers an empty name, a built-in one and
-/// an unknown one as it says it does, and makes one number of the wider two.
 #[test]
 fn a_named_column_stays_with_its_points() {
-    // Four points out of id order, each 10 px further across than the last.
     let mut s = PointsStream {
         position: (0..4).map(|i| [i as f32 * 10.0, 0.0, 0.0]).collect(),
         speed: vec![[0.0; 3]; 4],
@@ -9773,12 +8755,10 @@ fn a_named_column_stays_with_its_points() {
         id: vec![3, 1, 2, 0],
         ..PointsStream::default()
     };
-    // Ten times its id, so a weight on the wrong point shows.
     let weights = s.named_mut("weight", 1).expect("room for a name");
     for (weight, v) in weights.iter_mut().zip([30.0, 10.0, 20.0, 0.0]) {
         weight[0] = v;
     }
-    // An offset and a colour ride with it, each made from the point's id.
     let offset = |id: u64| [3.0 * id as f32, 4.0 * id as f32, 0.0, 0.0];
     let colour = |id: u64| [id as f32, 0.5, 0.25, 1.0];
     let ids = s.id.clone();
@@ -9788,8 +8768,6 @@ fn a_named_column_stays_with_its_points() {
             *value = if width == 2 { offset(*id) } else { colour(*id) };
         }
     }
-    // Whether every point still carries its own two, and reads each as one
-    // number by the rule: an offset its length, a colour how bright it is.
     let wide = |s: &PointsStream| {
         let (push, tint) = (s.column("push"), s.column("tint"));
         (0..s.len()).all(|i| {
@@ -9820,7 +8798,6 @@ fn a_named_column_stays_with_its_points() {
         s.named_mut("@x", 1).is_none(),
         "a built-in is never written"
     );
-    // At half size a place still reads in px@comp.
     let half = s.rescaled(0.5);
     assert_eq!(half.value_of("@x", 2), 20.0);
     assert_eq!(weight_of(&half), weight_of(&s));
@@ -9840,8 +8817,6 @@ fn a_named_column_stays_with_its_points() {
     assert_eq!(weight_of(&s), [(2, 20.0), (3, 30.0)], "newest kept");
     assert!(wide(&s), "newest kept");
 
-    // Each side carries a name the other lacks, and the lack reads nought.
-    // A name the two hold at different widths reads nothing afterwards.
     let mut other = two_points();
     let tag = other.named_mut("tag", 1).expect("room for a name");
     tag.fill([1.0, 0.0, 0.0, 0.0]);
@@ -9863,7 +8838,6 @@ fn a_named_column_stays_with_its_points() {
     );
     assert_eq!(s.value("push", 0), None, "two widths under one name");
 
-    // A name past the cap is not written.
     for k in 0..=points::NAMED_MAX {
         s.named_mut(&format!("n{k}"), 1);
     }
@@ -9876,8 +8850,6 @@ fn flat_sprite(n: u32) -> Vec<f32> {
     vec![1.0; (n * n * 4) as usize]
 }
 
-/// **One stamp per point**, with the point's own size and rotation and the
-/// effect's two dials on top.
 #[test]
 fn clone_to_points_stamps_one_copy_per_point() {
     let stream = grid_stream(&grid(&[("columns", fixed(4.0)), ("rows", fixed(3.0))]), 0.0);
@@ -9927,7 +8899,6 @@ fn clone_to_points_lays_its_stamps_in_id_order() {
                 h: 4,
             }),
         );
-        // The pixel the two stamps share.
         let d = ((20 * w + 21) * 4) as usize;
         [rgba[d], rgba[d + 1], rgba[d + 2]]
     };
@@ -9976,9 +8947,6 @@ fn a_stream_rescales_into_the_raster_it_is_drawn_at() {
     );
 }
 
-// -------------------------------------------------- Trail
-
-/// A Trail instance with its declared defaults, and `edits` applied.
 fn trail(edits: &[(&str, EffectValue)]) -> EffectInstance {
     let mut e = instantiate("trail").expect("Trail is declared");
     for (id, value) in edits {
@@ -9992,8 +8960,6 @@ fn trail(edits: &[(&str, EffectValue)]) -> EffectInstance {
     e
 }
 
-/// The tail one instance draws over `samples`, through the one expression both
-/// render paths read.
 fn trail_tail(e: &EffectInstance, samples: &[PointsStream]) -> (PointsStream, Vec<[f32; 3]>) {
     let bag = resolve_bag(
         std::slice::from_ref(e),
@@ -10005,8 +8971,6 @@ fn trail_tail(e: &EffectInstance, samples: &[PointsStream]) -> (PointsStream, Ve
     crate::fx::effects::trail::Trail::read(Params::new(&bag)).tail(samples)
 }
 
-/// A moving emitter's stream at `t`, and the same producer at `t − k·step` —
-/// the carriage a wired Trail is handed, newest first.
 fn moving_samples(n: usize, step: f64) -> Vec<PointsStream> {
     let e = particulate(&[
         ("emit_rate", fixed(30.0)),
@@ -10065,17 +9029,12 @@ fn a_trail_lays_its_dabs_oldest_sample_first() {
             "dab {i} is somewhere the producer never put the point"
         );
     }
-    // And the order is not the trivial one: the sample the dab came from only
-    // ever runs from the far end towards the near one.
     assert!(
         want.windows(2).all(|w| w[0].0 >= w[1].0),
         "the samples are not laid down oldest first"
     );
 }
 
-// ----------------------------------------- Connect points
-
-/// A Connect points instance with its declared defaults, and `edits` applied.
 fn connect_points(edits: &[(&str, EffectValue)]) -> EffectInstance {
     let mut e = instantiate("connect_points").expect("Connect points is declared");
     for (id, value) in edits {
@@ -10089,8 +9048,6 @@ fn connect_points(edits: &[(&str, EffectValue)]) -> EffectInstance {
     e
 }
 
-/// The web one instance draws over `stream`, through the one expression both
-/// render paths read.
 fn connect_links(e: &EffectInstance, stream: &PointsStream) -> (PointsStream, Vec<[f32; 3]>) {
     let bag = resolve_bag(
         std::slice::from_ref(e),
@@ -10102,8 +9059,6 @@ fn connect_links(e: &EffectInstance, stream: &PointsStream) -> (PointsStream, Ve
     crate::fx::effects::connect_points::ConnectPoints::read(Params::new(&bag)).links(stream)
 }
 
-/// Every pair of `stream` within `reach` of each other, **by a full
-/// comparison** — the `n²` answer the bucketed walk has to reproduce exactly.
 fn pairs_within(stream: &PointsStream, reach: f32) -> usize {
     let mut n = 0;
     for i in 0..stream.len() {
@@ -10154,10 +9109,6 @@ fn connect_points_pairs_exactly_as_a_full_comparison_would() {
     }
 }
 
-// ------------------------------------------- border emission
-
-/// A still emitter of the given shape: nothing carries a particle off the
-/// outline, so where it is drawn is where it was born.
 fn outline_stream(shape: u32) -> PointsStream {
     let e = particulate(&[
         ("shape", EffectValue::Choice(shape)),
@@ -10213,8 +9164,6 @@ fn adding_the_outline_shapes_moved_no_existing_code() {
         assert_eq!(EmitterShape::from_code(code), shape, "code {code}");
     }
     assert_eq!(EmitterShape::OPTIONS.len(), 10);
-    // A filled ellipse still fills: the interior draw is the one that was
-    // there, and the outline is a different code entirely.
     let inside = outline_stream(2);
     let on_ring = inside
         .position
@@ -10229,11 +9178,8 @@ fn adding_the_outline_shapes_moved_no_existing_code() {
         "a filled ellipse put {on_ring} of {} particles exactly on its rim",
         inside.len()
     );
-    // With no frame to fill, a Layer emitter gives birth to nothing.
     assert!(outline_stream(9).position.is_empty());
 }
-
-// ------------------------------------------------ the third axis
 
 /// A camera one `zoom` back from a layer whose plane is at `z = 0`, as the
 /// projection restricted to that plane comes out: a particle at depth `z`
@@ -10257,9 +9203,6 @@ fn head_on_camera(centre: [f32; 2], zoom: f32) -> points::Projection {
     }
 }
 
-/// **A camera foreshortens, and the plane does not move**: a particle
-/// at `z = 0` lands exactly where its x and y say, one further off is drawn
-/// smaller and pulled towards the centre, and one nearer is drawn larger.
 #[test]
 fn the_camera_puts_depth_where_perspective_puts_it() {
     let proj = head_on_camera([100.0, 100.0], 400.0);
@@ -10271,12 +9214,10 @@ fn the_camera_puts_depth_where_perspective_puts_it() {
         "the plane foreshortened: {scale}"
     );
 
-    // 400 further off: half the size, and half as far from the centre.
     let (far, far_scale) = proj.apply([160.0, 100.0, 400.0]);
     assert!((far_scale - 0.5).abs() < 1e-5, "{far_scale}");
     assert!((far[0] - 130.0).abs() < 1e-3, "{far:?}");
 
-    // 200 nearer: twice the size, twice as far out.
     let (near, near_scale) = proj.apply([160.0, 100.0, -200.0]);
     assert!((near_scale - 2.0).abs() < 1e-5, "{near_scale}");
     assert!((near[0] - 220.0).abs() < 1e-3, "{near:?}");
@@ -10336,7 +9277,6 @@ fn two_dimensional_defaults_draw_the_picture_they_always_drew() {
         assert_eq!(fresh.projected(i), [p[0], p[1]], "particle {i} was moved");
         assert_eq!(fresh.depth_scale(i), 1.0, "particle {i} foreshortened");
     }
-    // With no turbulence there is nothing at all to leave the plane with.
     let still = particulate_stream(&particulate(&[("turbulence_amount", fixed(0.0))]), 2.0);
     assert!(!still.is_empty());
     for (i, p) in still.position.iter().enumerate() {
@@ -10352,9 +9292,6 @@ fn two_dimensional_defaults_draw_the_picture_they_always_drew() {
     assert_eq!(a, b, "an old file's picture moved");
 }
 
-/// **Frame-key sensitivity** (§9 item 11): the seed changes the key, an edit to
-/// a control changes it, and nothing else does. No new terms — the standard
-/// formula, which is the whole claim (particulate.md §5).
 #[test]
 fn particulates_frame_key_follows_its_seed_and_its_controls() {
     let key = |e: &EffectInstance, lt: f64| {
@@ -10446,8 +9383,6 @@ fn tile_grows_the_raster_only_above_a_hundred_per_cent() {
         "the growth stops at the largest picture"
     );
 
-    // The margin holds picture, and the frame's own window is untouched: the
-    // growth adds, it never moves what was already there.
     let img: Vec<f32> = (0..(w * h * 4))
         .map(|i| {
             if i % 4 == 3 {
@@ -10505,7 +9440,6 @@ fn tile_spreads_its_output_window_evenly_about_the_tile_centre() {
     t.output_height = h as f32 * 0.5;
     let p = t.packed(w as f32, h as f32);
 
-    // An opaque frame, so "there is picture here" reads straight off alpha.
     let img: Vec<f32> = (0..(w * h * 4))
         .map(|i| if i % 4 == 3 { 1.0 } else { 0.5 })
         .collect();
@@ -10519,8 +9453,6 @@ fn tile_spreads_its_output_window_evenly_about_the_tile_centre() {
     cpu::tile_into(&img, w, h, &mut out, ow, oh, &p);
     let alpha = |x: u32, y: u32| out[((y * ow + x) * 4 + 3) as usize];
 
-    // The window is 16 x 12 about (8, 6): x from 0 to 16, y from 0 to 12. Both
-    // sides of the tile centre hold picture, and past the window there is none.
     for (x, y) in [(2u32, 6u32), (14, 6), (8, 1), (8, 10)] {
         assert!(
             alpha(x, y) > 0.5,
@@ -10534,8 +9466,6 @@ fn tile_spreads_its_output_window_evenly_about_the_tile_centre() {
         );
     }
 
-    // And the same rule sizes the raster: a window that reaches past the frame
-    // from an off-centre tile grows it far enough to hold both ends.
     let mut wide = t;
     wide.output_width = w as f32;
     let (gw, _) = cpu::tile_raster(w, h, &wide.packed(w as f32, h as f32));
@@ -10546,8 +9476,6 @@ fn tile_spreads_its_output_window_evenly_about_the_tile_centre() {
     );
 }
 
-/// The corpus the spatial tests key against: a `w × h` frame that is the
-/// screen colour everywhere except a foreground block, in premultiplied RGBA.
 #[cfg(test)]
 fn keyer_plate(w: u32, h: u32, block: (u32, u32, u32, u32)) -> Vec<f32> {
     let mut img = vec![0.0f32; (w * h * 4) as usize];
@@ -10556,8 +9484,6 @@ fn keyer_plate(w: u32, h: u32, block: (u32, u32, u32, u32)) -> Vec<f32> {
         for x in 0..w {
             let i = ((y * w + x) * 4) as usize;
             let fg = x >= bx && x < bx + bw && y >= by && y < by + bh;
-            // The foreground is a plain magenta, well away from the screen; the
-            // screen is the effect's own default green.
             let c = if fg { [0.6, 0.1, 0.5] } else { [0.0, 0.6, 0.0] };
             img[i..i + 3].copy_from_slice(&c);
             img[i + 3] = 1.0;
@@ -10566,8 +9492,6 @@ fn keyer_plate(w: u32, h: u32, block: (u32, u32, u32, u32)) -> Vec<f32> {
     img
 }
 
-/// A base keyer at its defaults, on the Screen matte view so the tests read the
-/// matte itself out of the red channel rather than inferring it from a colour.
 #[cfg(test)]
 fn matte_view_params() -> MatteKeyParams {
     MatteKeyParams {
@@ -10614,11 +9538,6 @@ fn the_keyers_defaults_are_the_pointwise_keyer_byte_for_byte() {
     assert_eq!(pointwise, staged, "the defaults took a different path");
 }
 
-/// **Shrink and grow march the matte's edge, in opposite directions**.
-///
-/// Counted rather than sampled: how much of the frame the matte keeps is the
-/// one number a morphological pass is supposed to move, and it must move up for
-/// a grow and down for a shrink.
 #[test]
 fn the_screen_shrink_and_grow_march_the_mattes_edge() {
     let (w, h) = (24u32, 24u32);
@@ -10646,7 +9565,6 @@ fn the_screen_shrink_and_grow_march_the_mattes_edge() {
         shrunk < plain && plain < grown,
         "shrink {shrunk}, plain {plain}, grow {grown}"
     );
-    // A morphological pass is not a blur: the edge that moved is still hard.
     let mut out = img.clone();
     cpu::matte_key_spatial(
         &mut out,
@@ -10665,12 +9583,9 @@ fn the_screen_shrink_and_grow_march_the_mattes_edge() {
     );
 }
 
-/// **The garbage masks force opaque and force transparent**, and an
-/// unset one is the no-op.
 #[test]
 fn the_garbage_masks_hold_the_matte_open_and_shut() {
     let (w, h) = (24u32, 24u32);
-    // A frame that is nothing but screen: the key alone keeps none of it.
     let img = keyer_plate(w, h, (0, 0, 0, 0));
     let base = matte_view_params();
     let blank = cpu::MaskFillParams::blank();
@@ -10690,21 +9605,18 @@ fn the_garbage_masks_hold_the_matte_open_and_shut() {
         "an all-screen frame keys to nothing"
     );
 
-    // Inside: the rectangle is opaque, and only the rectangle.
     let mut held = img.clone();
     cpu::matte_key_spatial(&mut held, w, h, &base, &fill, &blank);
     let at = |x: u32, y: u32, buf: &[f32]| buf[((y * w + x) * 4) as usize];
     assert!(at(10, 10, &held) > 0.99, "the hold-out is not opaque");
     assert!(at(2, 2, &held) < 0.01, "the hold-out leaked outside itself");
 
-    // Outside: on a frame the key keeps whole, the rectangle is cut away.
     let fg = keyer_plate(w, h, (0, 0, w, h));
     let mut cut = fg.clone();
     cpu::matte_key_spatial(&mut cut, w, h, &base, &blank, &fill);
     assert!(at(10, 10, &cut) < 0.01, "the cut-out is not transparent");
     assert!(at(2, 2, &cut) > 0.99, "the cut-out ate the whole frame");
 
-    // An open path holds nothing out: the row's documented no-op.
     let mut open = poly.clone();
     open.closed = false;
     assert_eq!(cpu::mask_fill_params(&open, 1.0).count, 0);
@@ -10724,8 +9636,6 @@ fn pixel_sort_moves_pixels_only_inside_their_own_span() {
     use super::effects::pixel_sort::PixelSort;
     use super::{params::Params, registry::EffectMetadata};
 
-    // A line of distinct greys, so a pixel can be recognised wherever it lands.
-    // Luminance is the weighted sum of the three, which for a grey is the grey.
     let grey = |g: f32| [g, g, g, 1.0];
     let line = |w: usize, f: &dyn Fn(usize) -> f32| -> Vec<f32> {
         (0..w).flat_map(|i| grey(f(i))).collect()
@@ -10743,9 +9653,6 @@ fn pixel_sort_moves_pixels_only_inside_their_own_span() {
         mix: 1.0,
     };
 
-    // 1. **The cap really caps.** Sixteen greys running downhill, with a span
-    //    length of four: no pixel may travel further than a span is long, and
-    //    the line as a whole must come back unsorted.
     let w = 16usize;
     let img = line(w, &|i| (16 - i) as f32 / 20.0);
     let mut out = img.clone();
@@ -10770,9 +9677,6 @@ fn pixel_sort_moves_pixels_only_inside_their_own_span() {
         "a span of four must not sort a line of sixteen"
     );
 
-    // 2. **It is a rearrangement, never a grade.** Whatever the span mode, the
-    //    line comes back holding texels it already had — and under Sort and
-    //    Mirror it holds every one of them exactly once.
     for mode in [0u32, 1, 2] {
         let mut out = img.clone();
         cpu::pixel_sort(
@@ -10799,9 +9703,6 @@ fn pixel_sort_moves_pixels_only_inside_their_own_span() {
         }
     }
 
-    // 3. **A pixel outside the band never moves.** The greys either side of
-    //    0.15 and 0.85 are in no span at all, so they must come back where they
-    //    were whatever the pixels around them did.
     let outside = [0.05f32, 0.95];
     let img = line(w, &|i| {
         if i % 5 == 0 {
@@ -10827,10 +9728,6 @@ fn pixel_sort_moves_pixels_only_inside_their_own_span() {
         );
     }
 
-    // 4. **Direction is a transpose and nothing else.** Sorting a turned
-    //    picture down its columns has to give the turned answer, offsets and
-    //    all — which is the whole of what the Direction row is allowed to
-    //    change.
     let (w, h) = (7usize, 5usize);
     let flat: Vec<f32> = (0..w * h)
         .flat_map(|i| grey(0.1 + (i * 37 % 61) as f32 / 80.0))
@@ -10880,9 +9777,6 @@ fn pixel_sort_moves_pixels_only_inside_their_own_span() {
     assert_eq!(of(300.0), 300);
 }
 
-/// The per-copy columns `drive_rows` writes replace Scale,
-/// Rotation and Opacity stamp by stamp, and a stream without them keeps the
-/// rows' one value. Guards each copy taking the value its driver gave it.
 #[test]
 fn clone_to_points_reads_per_copy_scale_rotation_and_opacity() {
     use crate::fx::drivers::per_copy::{COPY_OPACITY, COPY_ROTATION, COPY_SCALE};
@@ -10912,9 +9806,6 @@ fn clone_to_points_reads_per_copy_scale_rotation_and_opacity() {
     assert!((s.colour[0][3] - 1.0).abs() < 1e-5 && (s.colour[1][3] - 0.25).abs() < 1e-5);
 }
 
-/// Scale x / y and Offset x / y per copy (engine change 16): the columns
-/// `drive_rows` writes stretch and move each stamp on its own, and without
-/// them the rows' one value applies to all.
 #[test]
 fn clone_to_points_reads_per_copy_scale_xy_and_offset() {
     use crate::fx::drivers::per_copy::{COPY_OFFSET_X, COPY_SCALE_X};
@@ -10940,7 +9831,6 @@ fn clone_to_points_reads_per_copy_scale_xy_and_offset() {
     assert!((s.position[0][0] - before.position[0][0]).abs() < 1e-4);
 }
 
-/// Sets one row of an instance, adding it when the instance has none yet.
 fn set_row(inst: &mut EffectInstance, id: &str, value: EffectValue) {
     match inst.params.iter_mut().find(|p| p.id == id) {
         Some(param) => param.value = value,
@@ -10952,8 +9842,6 @@ fn set_row(inst: &mut EffectInstance, id: &str, value: EffectValue) {
     }
 }
 
-/// Two solid layers in one comp, the second `dx` px to the right, with a
-/// rectangle mask on the second: what Path reads another layer's path from.
 fn two_solids(
     dx: f64,
 ) -> (
@@ -10980,6 +9868,7 @@ fn two_solids(
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -11015,8 +9904,6 @@ fn two_solids(
     (comp, owner, target, context)
 }
 
-/// **Clone to points makes its own points** for Grid, Path and Layout, and
-/// reads the wire for Points input.
 #[test]
 fn clone_to_points_distributions_make_their_own_points() {
     use effects::clone_to_points::{CloneToPoints, DIST_GRID, DIST_LAYOUT, DIST_PATH};
@@ -11054,7 +9941,6 @@ fn clone_to_points_distributions_make_their_own_points() {
     let line = CloneToPoints::distributed(&e, &comp, &owner, 0.0, &context, flat).unwrap();
     assert_eq!(line.len(), 4);
 
-    // Path on the other layer: its mask, seen from this one, 100 px across.
     set_row(&mut e, "distribution", EffectValue::Choice(DIST_PATH));
     set_row(
         &mut e,
@@ -11067,14 +9953,11 @@ fn clone_to_points_distributions_make_their_own_points() {
     assert_eq!(along.len(), 2);
     assert!((along.position[0][0] - (own.points[0][0] + 100.0)).abs() < 1e-3);
     assert!((along.position[0][1] - own.points[0][1]).abs() < 1e-3);
-    // The path layer is read, never stamped.
     assert!(CloneToPoints::rows(&e)
         .iter()
         .all(|(row, _)| *row != "path_layer"));
 }
 
-/// **Layout lines the copies up by their own size**: each starts Spacing past
-/// where the one before ends, and the line is centred on Position.
 #[test]
 fn layout_lines_the_copies_up_by_their_size() {
     use effects::clone_to_points::CloneToPoints;
@@ -11091,14 +9974,11 @@ fn layout_lines_the_copies_up_by_their_size() {
     }
     let units = [[0.5, 1.0], [1.0, 1.0], [2.0, 1.0]];
     c.laid_out(&mut s, |i| units[i]);
-    // 50 + 100 + 200 long, two gaps of 20: 390 in all, from 765.
     let xs: Vec<f32> = s.position.iter().map(|p| p[0]).collect();
     assert_eq!(xs, [790.0, 885.0, 1055.0]);
     assert!(s.position.iter().all(|p| p[1] == 540.0));
 }
 
-/// **Deform moves a point along the normal where it stands**, by the wave
-/// measured along the path, and turns it the way the bent path runs.
 #[test]
 fn deform_moves_points_along_the_path_normal() {
     use effects::points_along_path::PointsAlongPath;
@@ -11116,14 +9996,12 @@ fn deform_moves_points_along_the_path_normal() {
         ..PointsAlongPath::read(Params::EMPTY)
     };
     let s = along.stream(&path, points::Projection::FLAT);
-    // A quarter of the way into the wave: its crest, up off the path.
     assert!(
         (s.position[0][1] + 10.0).abs() < 1e-3,
         "{:?}",
         s.position[0]
     );
     assert!(s.position[0][0].abs() < 1e-3);
-    // At the crest the bent path runs level again.
     assert!(s.rotation[0].abs() < 1e-2, "{}", s.rotation[0]);
     let off = PointsAlongPath { deform: 0, ..along };
     assert_eq!(
@@ -11132,8 +10010,6 @@ fn deform_moves_points_along_the_path_normal() {
     );
 }
 
-/// **Align lines the group's bounds up on Position**: Raster by the picture's
-/// alpha, here a 2 × 2 block moved so its top left sits on the point.
 #[test]
 fn clone_deformer_aligns_the_group_by_its_bounds() {
     use effects::clone_deformer::{CloneDeformer, Reads};
@@ -11156,8 +10032,6 @@ fn clone_deformer_aligns_the_group_by_its_bounds() {
     assert_eq!(alpha(2, 2), 0.0);
 }
 
-/// **A copy's outline lands where its stamp does**: a picture of 10 × 10
-/// px stamped at Point size 100 on (50, 50) covers 0 to 100.
 #[test]
 fn clone_deformer_places_each_copy_as_its_stamp() {
     use effects::clone_deformer::shape_copies;
@@ -11178,13 +10052,10 @@ fn clone_deformer_places_each_copy_as_its_stamp() {
     );
 }
 
-/// **Vector cuts by the outlines**: the copy's edge and the Boolean layer's
-/// edge are the paths', whatever the pictures' alpha says.
 #[test]
 fn clone_deformer_vector_boolean_cuts_by_the_outlines() {
     use effects::clone_deformer::{BooleanShape, CloneDeformer, Reads, ShapeCopy};
     let (w, h) = (8u32, 4u32);
-    // A soft picture: half alpha everywhere, white.
     let mut rgba = vec![0.5f32; (w * h * 4) as usize];
     let other = vec![0.25f32; (w * h * 4) as usize];
     let copies = [ShapeCopy {
@@ -11211,23 +10082,18 @@ fn clone_deformer_vector_boolean_cuts_by_the_outlines() {
     };
     d.apply(&mut rgba, w, h, 1.0, [0.0; 2], &reads);
     let px = |x: u32| &rgba[((w + x) * 4) as usize..((w + x) * 4 + 4) as usize];
-    // Left of the cut: the copy, opaque, its colour white.
     assert!(
         (px(1)[3] - 1.0).abs() < 1e-5 && (px(1)[0] - 1.0).abs() < 1e-5,
         "{:?}",
         px(1)
     );
-    // Right of it: cut away.
     assert_eq!(px(6)[3], 0.0);
 }
 
-/// **Subtract from layer cuts the copies out of the layer**: where the copy
-/// is, nothing; where only the layer is, the layer's colour.
 #[test]
 fn clone_deformer_subtract_from_layer_keeps_the_layer() {
     use effects::clone_deformer::{CloneDeformer, Reads};
     let (w, h) = (4u32, 1u32);
-    // The copy covers the left half, white; the layer is red everywhere.
     let mut rgba = vec![0.0f32; 16];
     for x in 0..2 {
         rgba[x * 4..x * 4 + 4].copy_from_slice(&[1.0; 4]);
@@ -11270,8 +10136,6 @@ fn clone_to_points_places_the_clone_rows() {
     );
 }
 
-/// **Round corners rounds a square's corners and leaves its sides**: the
-/// corner pixel goes, the middle of an edge stays.
 #[test]
 fn clone_deformer_rounds_outward_corners() {
     use effects::clone_deformer::round::rounded;
@@ -11291,9 +10155,7 @@ fn clone_deformer_rounds_outward_corners() {
     assert_eq!(at(5, 5), 0.0);
     assert_eq!(at(20, 5), 1.0);
     assert_eq!(at(20, 20), 1.0);
-    // Half way round the arc: inside it.
     assert!(at(9, 9) > 0.5);
-    // A strip 6 px tall keeps its body under a radius of 8.
     let strip: Vec<f32> = (0..w * h)
         .map(|i| {
             if (5..35).contains(&(i % w)) && (17..23).contains(&(i / w)) {
@@ -11308,8 +10170,6 @@ fn clone_deformer_rounds_outward_corners() {
     assert_eq!(r[(17 * w + 20) as usize], 1.0);
 }
 
-/// **Length and Travel pick the stretch of the path the copies spread on**:
-/// three copies over the first half of a 100 px line, slid on by a tenth.
 #[test]
 fn path_points_spread_over_length_and_slide_by_travel() {
     use effects::points_along_path::PointsAlongPath;
@@ -11373,7 +10233,6 @@ fn closed_path_copies_are_length_over_count_apart_and_offset_pushes_them_off() {
     assert!((first[0] - 0.0).abs() < 1e-3 && (first[1] + 10.0).abs() < 1e-3);
     let second = s.position[1];
     assert!((second[0] - 50.0).abs() < 1e-3 && (second[1] + 10.0).abs() < 1e-3);
-    // A square's corner keeps its edge's way.
     assert!(s.rotation[0].abs() < 1e-6);
 }
 
@@ -11403,13 +10262,11 @@ fn copies_on_a_flattened_curve_face_the_curve() {
         closed: true,
         corners: Vec::new(),
     };
-    // At the top, running clockwise: +x.
     for s in [0.0, chord * 6.0] {
         let [x, y] = smooth_tangent(&path, s);
         let want = (s / chord) as f32 * std::f32::consts::TAU / n as f32;
         assert!((y.atan2(x) - want).abs() < 1e-4, "{s}: {}", y.atan2(x));
     }
-    // Halfway along a chord it runs with the chord.
     let [x, y] = smooth_tangent(&path, chord / 2.0);
     assert!((y.atan2(x) - std::f32::consts::TAU / 48.0).abs() < 1e-4);
 }
@@ -11435,7 +10292,6 @@ fn clone_deformer_cuts_and_fillets_on_the_paths() {
         .find(|c| c.iter().all(|p| p[1] <= 45.0 + 1e-3))
         .expect("a top slice");
     let round = filleted(top, 20.0);
-    // The corner is gone, the middle of the side stays.
     assert!(round.iter().all(|p| (p[0] - 0.0).hypot(p[1] - 0.0) > 5.0));
     assert!(round
         .iter()
@@ -11449,134 +10305,6 @@ fn clone_deformer_cuts_and_fillets_on_the_paths() {
         .any(|p| (p[0] - 50.0).abs() < 49.0 && p[1] > 3.9));
 }
 
-/// **A corner a cut has nicked rounds by the whole radius**: a side of 3 px
-/// across a corner is closed back into the corner first, so the fillet is not
-/// held to half of it. The end of a thin strip, whose sides run parallel, and
-/// the tip of a narrow wedge stay.
-#[test]
-fn round_corners_closes_a_nicked_corner() {
-    use effects::clone_deformer::fillet::{filleted, without_nicks};
-    let nicked = vec![
-        [0.0, 0.0],
-        [100.0, 0.0],
-        [100.0, 97.0],
-        [97.0, 100.0],
-        [0.0, 100.0],
-    ];
-    let closed = without_nicks(&nicked, 20.0);
-    assert_eq!(closed.len(), 4);
-    assert!(closed
-        .iter()
-        .any(|p| (p[0] - 100.0).abs() < 1e-3 && (p[1] - 100.0).abs() < 1e-3));
-    let round = filleted(&nicked, 20.0);
-    // The arc starts 20 px from the corner on both sides, as on a clean one.
-    assert!(round
-        .iter()
-        .any(|p| (p[1] - 100.0).abs() < 1e-3 && (p[0] - 80.0).abs() < 0.5));
-    assert!(round
-        .iter()
-        .any(|p| (p[0] - 100.0).abs() < 1e-3 && (p[1] - 80.0).abs() < 0.5));
-    // A strip's end and a wedge's tip are sides of their own.
-    let strip = vec![[0.0, 0.0], [100.0, 0.0], [100.0, 4.0], [0.0, 4.0]];
-    assert_eq!(without_nicks(&strip, 5.0).len(), 4);
-    let wedge = [[0.0, 0.0], [200.0, -1.5], [200.0, 1.5]];
-    let wedge = vec![wedge[0], wedge[1], wedge[2], [0.0, 3.0]];
-    assert_eq!(without_nicks(&wedge, 5.0).len(), 4);
-    // A point a cut left on a straight side goes, so the corner beside it
-    // rounds by the whole radius.
-    let grazed = vec![
-        [0.0, 0.0],
-        [100.0, 0.0],
-        [100.0, 84.0],
-        [100.1, 100.0],
-        [0.0, 100.0],
-    ];
-    assert_eq!(without_nicks(&grazed, 20.0).len(), 4);
-    let round = filleted(&grazed, 20.0);
-    assert!(round
-        .iter()
-        .any(|p| (p[0] - 100.0).abs() < 0.2 && (p[1] - 80.0).abs() < 0.6));
-    // A thin ray's end keeps its corners, though they sit within a pixel of
-    // the line through their neighbours.
-    let ray = [[0.0, 0.0], [200.0, -0.8], [200.0, 0.8]];
-    assert_eq!(
-        without_nicks(&[ray[0], ray[1], ray[2], [0.0, 1.2]], 20.0).len(),
-        4
-    );
-    // A ray whose long sides are drawn in many nearly straight pieces keeps
-    // its length.
-    let ray = vec![
-        [148.0, 206.0],
-        [148.0, 148.0],
-        [168.0, 148.0],
-        [203.0, 185.0],
-        [281.0, 267.0],
-        [367.0, 359.0],
-        [460.0, 457.0],
-        [475.0, 473.0],
-        [458.0, 459.0],
-        [353.0, 374.0],
-        [255.0, 294.0],
-        [168.0, 223.0],
-    ];
-    // Its tip, a stub of three points, stays blunt, and the rounded ray still
-    // reaches it.
-    let kept = without_nicks(&ray, 37.0);
-    for p in [[460.0, 457.0], [475.0, 473.0], [458.0, 459.0]] {
-        assert!(kept.contains(&p), "{kept:?}");
-    }
-    let round = filleted(&ray, 37.0);
-    assert!(
-        round
-            .iter()
-            .any(|p| (p[0] - 475.0).hypot(p[1] - 473.0) < 12.0),
-        "{round:?}"
-    );
-    // A tip whose sides would meet close by, but at 55°, stays a blunt tip.
-    let tip = vec![[-17.74, -11.24], [0.0, -2.0], [0.0, 2.0], [-17.74, 11.24]];
-    assert_eq!(without_nicks(&tip, 10.0).len(), 4);
-    // A point a cut left alone on a long straight side, between two real
-    // corners, goes too; the points of a curve, each barely turning, stay.
-    let lone = vec![
-        [398.13803, 457.28122],
-        [478.7039, 457.28125],
-        [458.489, 492.5676],
-        [438.42093, 527.5977],
-    ];
-    assert_eq!(without_nicks(&lone, 37.0).len(), 3);
-    let curve: Vec<[f32; 2]> = (0..90)
-        .map(|k| {
-            let t = k as f32 * std::f32::consts::TAU / 90.0;
-            [200.0 * t.cos(), 200.0 * t.sin()]
-        })
-        .collect();
-    assert_eq!(without_nicks(&curve, 37.0).len(), 90);
-}
-
-/// Round corners' Radius is how far along each side the rounding starts, as
-/// Cavalry's Bevel: a 120° corner's arc starts 20 px from it on both sides.
-#[test]
-fn round_corners_radius_is_along_the_sides() {
-    use effects::clone_deformer::fillet::filleted;
-    let h = 100.0 * 3f32.sqrt() / 2.0;
-    let hexagon: Vec<[f32; 2]> = (0..6)
-        .map(|k| {
-            let t = k as f32 * std::f32::consts::FRAC_PI_3;
-            [100.0 * t.cos(), 100.0 * t.sin()]
-        })
-        .collect();
-    let round = filleted(&hexagon, 20.0);
-    // Along the side from (100, 0) to (50, h), 20 px from the first corner.
-    let start = [100.0 - 0.2 * 50.0, 0.2 * h];
-    assert!(
-        round
-            .iter()
-            .any(|p| (p[0] - start[0]).hypot(p[1] - start[1]) < 0.05),
-        "{round:?}"
-    );
-}
-
-/// The square `x`, `y`, `side` as a closed flattened path.
 fn square_path(x: f64, y: f64, side: f64) -> crate::mask::MaskPolyline {
     crate::mask::flatten_path(&crate::mask::Mask::rectangle(x, y, side, side).path, 0.25)
 }
@@ -11622,4 +10350,198 @@ fn time_loop_moments_follow_the_type() {
         Some(5.0),
         "round again, the next lap shows in full"
     );
+}
+
+/// **Bulge** pulls each pixel up the slope of the field rather than by its
+/// value: the picture moves, and not as Turbulent moves it.
+#[test]
+fn turbulent_displace_bulge_warps_unlike_turbulent() {
+    use super::effects::turbulent_displace::TurbulentDisplace;
+    let (w, h) = (48u32, 48u32);
+    let picture: Vec<f32> = (0..w * h)
+        .flat_map(|i| {
+            let (x, y) = (i % w, i / w);
+            let v = if (x / 4 + y / 4) % 2 == 0 { 1.0 } else { 0.0 };
+            [v, v, v, 1.0]
+        })
+        .collect();
+    let mut t = TurbulentDisplace::read(super::params::Params::EMPTY);
+    t.amount = 12.0;
+    t.size = 20.0;
+    let mut turbulent = picture.clone();
+    cpu::turbulent_displace(&mut turbulent, w, h, &t.packed(), &[]);
+    t.displacement = 3;
+    let p = t.packed();
+    assert!(p.bulge > 0.5);
+    let mut bulge = picture.clone();
+    cpu::turbulent_displace(&mut bulge, w, h, &p, &[]);
+    let moved = bulge
+        .iter()
+        .zip(&picture)
+        .filter(|(a, b)| (*a - *b).abs() > 1e-3)
+        .count();
+    let unlike = bulge
+        .iter()
+        .zip(&turbulent)
+        .filter(|(a, b)| (*a - *b).abs() > 1e-3)
+        .count();
+    assert!(moved > 100, "{moved}");
+    assert!(unlike > 100, "{unlike}");
+}
+
+/// The two types and two bases Fractal noise shipped with keep their first
+/// octave bit for bit as it came out of `noise::fractal`; only the finer
+/// octaves move (see the next test).
+#[test]
+fn typed_fractal_keeps_basic_and_turbulent_first_octave() {
+    use super::noise::{fractal, fractal_typed, FractalField};
+    for (perlin, turbulent) in [(false, false), (false, true), (true, false), (true, true)] {
+        for (octaves, cycle) in [(1u32, 0i32), (1, 3)] {
+            let f = FractalField {
+                seed: 4242,
+                octaves,
+                gain: 0.6,
+                lacunarity: 1.8,
+                perlin,
+                turbulent,
+                cycle,
+            };
+            for i in 0..400 {
+                let x = (i as f32) * 0.173 - 31.0;
+                let y = (i as f32) * -0.291 + 7.5;
+                let z = (i % 37) as f32 * 0.083;
+                let old = fractal(&f, x, y, z);
+                let new = fractal_typed(&f, u32::from(perlin), u32::from(turbulent), x, y, z);
+                assert_eq!(
+                    old.to_bits(),
+                    new.to_bits(),
+                    "{perlin} {turbulent} {octaves} at {x},{y},{z}"
+                );
+            }
+        }
+    }
+}
+
+/// Every octave scales about the origin, so unshifted their lattice lines all
+/// meet on x = 0 and draw a thin line there (half of a cross through the
+/// layer's centre). Measured as the mean crease across the column: on x = 0 it
+/// must look like any other column.
+#[test]
+fn typed_fractal_draws_no_cross_at_the_origin() {
+    use super::noise::{fractal, fractal_typed, FractalField};
+    fn crease(g: &dyn Fn(f32, f32) -> f32, x: f32) -> f32 {
+        let h = 0.003;
+        (0..4000)
+            .map(|i| {
+                let y = i as f32 * 0.0137 - 27.0;
+                (g(x, y) - 0.5 * (g(x - h, y) + g(x + h, y))).abs()
+            })
+            .sum::<f32>()
+            / 4000.0
+    }
+    fn ratio(g: &dyn Fn(f32, f32) -> f32) -> f32 {
+        let others = (1..30)
+            .map(|k| crease(g, k as f32 * 0.377 + 0.05))
+            .sum::<f32>()
+            / 29.0;
+        crease(g, 0.0) / others
+    }
+    for perlin in [false, true] {
+        let f = FractalField {
+            seed: 7,
+            octaves: 8,
+            gain: 0.6,
+            lacunarity: 1.87,
+            perlin,
+            turbulent: true,
+            cycle: 0,
+        };
+        let old = ratio(&|x, y| fractal(&f, x, y, 0.3));
+        let new = ratio(&|x, y| fractal_typed(&f, u32::from(perlin), 1, x, y, 0.3));
+        assert!((old - 1.0).abs() > 0.25, "perlin {perlin}: old {old}");
+        assert!((new - 1.0).abs() < 0.15, "perlin {perlin}: new {new}");
+    }
+}
+
+/// Each octave's slope is the derivative of its value: the warping types move
+/// the next octave along it, so a wrong slope would be a wrong picture.
+#[test]
+fn octave_slope_matches_the_values_own_derivative() {
+    use super::noise::{octave, NOISE_PERLIN, NOISE_SPLINE, NOISE_VALUE};
+    let e = 1.0 / 512.0;
+    for base in [NOISE_VALUE, NOISE_PERLIN, NOISE_SPLINE] {
+        for i in 0..200 {
+            // Keep clear of cell edges, where a central difference straddles two cells.
+            let x = (i / 20) as f32 * 1.37 + 0.31 + (i % 7) as f32 * 0.05;
+            let y = (i % 20) as f32 * 0.91 + 0.27;
+            let z = 0.4;
+            let (_, dx, dy) = octave(base, 9, 2, x, y, z, 0, true);
+            let fdx = (octave(base, 9, 2, x + e, y, z, 0, false).0
+                - octave(base, 9, 2, x - e, y, z, 0, false).0)
+                / (2.0 * e);
+            let fdy = (octave(base, 9, 2, x, y + e, z, 0, false).0
+                - octave(base, 9, 2, x, y - e, z, 0, false).0)
+                / (2.0 * e);
+            assert!(
+                (dx - fdx).abs() < 2e-2,
+                "base {base} dx {dx} vs {fdx} at {x},{y}"
+            );
+            assert!(
+                (dy - fdy).abs() < 2e-2,
+                "base {base} dy {dy} vs {fdy} at {x},{y}"
+            );
+        }
+    }
+}
+
+#[test]
+fn every_fractal_type_is_distinct_bounded_and_loops() {
+    use super::noise::{fractal_typed, FractalField, FRACTAL_LAST, NOISE_LAST};
+    let field = |cycle| FractalField {
+        seed: 77,
+        octaves: 6,
+        gain: 0.7,
+        lacunarity: 1.0 / 0.56,
+        perlin: false,
+        turbulent: false,
+        cycle,
+    };
+    let sample = |base, kind, cycle, z: f32| -> Vec<f32> {
+        let f = field(cycle);
+        (0..256)
+            .map(|i| {
+                let (x, y) = ((i % 16) as f32 * 0.37, (i / 16) as f32 * 0.41);
+                fractal_typed(&f, base, kind, x, y, z)
+            })
+            .collect()
+    };
+    let mut bases: Vec<Vec<f32>> = Vec::new();
+    for base in 0..=NOISE_LAST {
+        let plain = sample(base, 0, 0, 0.3);
+        assert!(
+            bases.iter().all(|s| s != &plain),
+            "base {base} draws the same picture as another base"
+        );
+        bases.push(plain);
+        let mut seen: Vec<Vec<f32>> = Vec::new();
+        for kind in 0..=FRACTAL_LAST {
+            let a = sample(base, kind, 0, 0.3);
+            for v in &a {
+                assert!(
+                    v.is_finite() && (-1.6..=1.6).contains(v),
+                    "base {base} kind {kind}: {v}"
+                );
+            }
+            assert!(
+                seen.iter().all(|s| s != &a),
+                "base {base} kind {kind} draws the same picture as another type"
+            );
+            seen.push(a);
+            assert_eq!(
+                sample(base, kind, 2, 0.25),
+                sample(base, kind, 2, 2.25),
+                "base {base} kind {kind}: the cycle must close"
+            );
+        }
+    }
 }

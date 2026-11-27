@@ -42,8 +42,6 @@ import '../state/file_dialogs.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 
-/// The editor's width and the height of the code well inside it — the dialog
-/// pattern's frame at the one size a page of code wants.
 const double shaderEditorWidth = 640;
 const double shaderEditorWellHeight = 320;
 
@@ -263,7 +261,6 @@ bool editExpressionOn({
   return true;
 }
 
-/// Open the expression dialogue on the box's text and stage what comes back.
 Future<void> _editExpressionText(BuildContext context, InstanceHome home,
     UuidValue effect, VoidCallback onApplied) async {
   final box = home.read().where((i) => i.id() == effect).firstOrNull;
@@ -413,8 +410,6 @@ Future<bool> showShaderEditor({
   return applyShaderSource(home: home, effect: effect, source: applied);
 }
 
-/// The §4.1 refusal, worn calmly: this shader is its graph's, and the one way
-/// into the text is to detach.
 class _DetachOffer extends StatelessWidget {
   final VoidCallback onDetach;
   final VoidCallback onCancel;
@@ -484,7 +479,6 @@ class _ShaderEditorState extends State<_ShaderEditor> {
       ExpressionTextEditingController(text: widget.source, language: "wgsl");
   final ScrollController _scroll = ScrollController();
 
-  /// The engine's last answer about what is in the box.
   BridgeShaderStatus? _status;
 
   /// The pause in the typing that asks for the next one. A keystroke is not a
@@ -511,11 +505,6 @@ class _ShaderEditorState extends State<_ShaderEditor> {
     super.dispose();
   }
 
-  /// ponytail: the preview compile runs on the UI thread, on the debounce —
-  /// naga's answer is cached by source hash, so it is one parse per distinct
-  /// text and milliseconds at that. The trigger for moving it to the worker job
-  /// §3.2 specifies is a felt stutter *while typing* in this window; nothing
-  /// else in the app waits on it.
   void _typed() {
     // A controller notifies on **selection** as well as on text, and a mouse
     // drag across a page of code is a great many of those. Only a change to
@@ -678,8 +667,6 @@ class _CodeWell extends StatelessWidget {
     final code = t.mono.copyWith(color: t.textPrimary, height: 1.4);
     final numbers = code.copyWith(color: t.textMuted);
     final lines = '\n'.allMatches(text.text).length + 1;
-    // One character's advance in this face, which in a monospaced one is every
-    // character's advance. Measured on the style the field actually uses.
     final probe = TextPainter(
       text: TextSpan(text: 'M', style: code),
       textDirection: TextDirection.ltr,

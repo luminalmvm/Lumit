@@ -80,12 +80,9 @@ use uuid::Uuid;
 
 use crate::sidecar;
 
+mod analysis_settings;
 mod rescale;
 use rescale::{rescale, rescale_planar};
-
-// ---------------------------------------------------------------------------
-// What an analysis is asked for
-// ---------------------------------------------------------------------------
 
 /// The settings that change what an analysis finds, read off the Camera track
 /// effect. Part of the cache key: change one and it is a different solve, not a
@@ -94,7 +91,6 @@ use rescale::{rescale, rescale_planar};
 pub struct AnalysisSettings {
     /// Feature density, as the effect's Choice index (docs/08 §3.85).
     pub density: u32,
-    /// Whether the layer's masks exclude regions from tracking.
     pub use_masks: bool,
     /// A Planar track's **Follow** index; zero — the surface — for a
     /// Camera track, which has no such row. It is a setting rather than a field
@@ -113,68 +109,6 @@ impl Default for AnalysisSettings {
             use_masks: true,
             follow: lumit_core::fx::effects::planar_track::FOLLOW_DEFAULT,
             focal_bits: 0,
-        }
-    }
-}
-
-impl AnalysisSettings {
-    /// The lens the Focal length row gives, in millimetres. `None` to solve it.
-    #[must_use]
-    pub fn focal(&self) -> Option<f64> {
-        Some(f64::from_bits(self.focal_bits)).filter(|f| f.is_finite() && *f > 0.0)
-    }
-
-    /// Read the settings off one Camera track instance. A parameter the
-    /// instance does not carry — an older project, a hand-edited file — reads
-    /// as the effect's own default rather than failing (docs/14 §4).
-    #[must_use]
-    pub fn of(fx: &EffectInstance) -> Self {
-        let d = Self::default();
-        AnalysisSettings {
-            density: match fx.param("density") {
-                Some(EffectValue::Choice(v)) => *v,
-                _ => d.density,
-            },
-            use_masks: match fx.param("use_masks") {
-                Some(EffectValue::Bool(v)) => *v,
-                _ => d.use_masks,
-            },
-            follow: match fx.param(lumit_core::track::FOLLOW_PARAM) {
-                Some(EffectValue::Choice(v)) => *v,
-                _ => d.follow,
-            },
-            focal_bits: match fx.param("focal_length") {
-                Some(EffectValue::Float(p)) => p.value_at(0.0).to_bits(),
-                _ => d.focal_bits,
-            },
-        }
-    }
-
-    /// Whether this is one of the point options rather than the surface.
-    fn points(self) -> bool {
-        self.follow != lumit_core::fx::effects::planar_track::FOLLOW_DEFAULT
-    }
-
-    fn tracker(self) -> TrackSettings {
-        let (across, down, per_bucket) =
-            lumit_core::fx::effects::camera_track::density(self.density);
-        TrackSettings {
-            grid: (across, down),
-            // A point track is confined to one or two small boxes, and the
-            // detection grid is over the whole frame: a box the size of a badge
-            // lands inside a bucket or two, so the ordinary two-per-bucket would
-            // leave a point standing on two features. Everything outside the
-            // boxes is excluded, so raising the count costs nothing anywhere
-            // else — the buckets the boxes do not touch have nothing to detect.
-            //
-            // ponytail: one number rather than a grid sized to the region; a
-            // per-region detector is the upgrade if a very small box starves.
-            per_bucket: if self.points() {
-                per_bucket.max(32)
-            } else {
-                per_bucket
-            },
-            ..TrackSettings::default()
         }
     }
 }
@@ -264,10 +198,8 @@ impl MaskTrack {
         self
     }
 
-    /// The regions as they stand at layer time `t`.
     #[must_use]
     pub fn at(&self, t: f64) -> Vec<ExclusionMask> {
-        // The boundary first, so a run with no masks at all still has it.
         let bounds = (!self.bounds.is_empty()).then(|| {
             ExclusionMask::from_contours(
                 self.bounds
@@ -333,7 +265,6 @@ impl MaskTrack {
     }
 }
 
-/// One flattened region's contribution to the key.
 fn feed_region(h: &mut blake3::Hasher, region: &ExclusionMask) {
     let (contours, inverted) = region.outlines();
     h.update(b"mask/");
@@ -450,7 +381,6 @@ impl AnalysisKey {
         AnalysisKey(*h.finalize().as_bytes())
     }
 
-    /// This key for a run limited to the source seconds `a` to `b`.
     fn within(self, a: f64, b: f64) -> Self {
         let mut h = blake3::Hasher::new();
         h.update(b"lumit-track/frames/");
@@ -503,17 +433,20 @@ pub trait LumaFrames {
 /// differs.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum JobKind {
-    /// Where the camera was: a whole-scene solve.
     Camera,
     /// Where one flat surface is, as four corners per frame. The quad is
     /// the reference shape, in the analysis's own pixels; the tracker is already
     /// confined to it by the job's [`MaskTrack`].
-    Planar { quad: Quad },
+    Planar {
+        quad: Quad,
+    },
     /// Where one or two small patches are, each followed on its own and
     /// assumed to be on nothing in particular. The answer is the same
     /// [`PlanarTrack`] shape: the region box under whatever warp the points can
     /// honestly support — a slide from one, a similarity from two.
-    Points { regions: PointRegions },
+    Points {
+        regions: PointRegions,
+    },
     /// Many points followed for their own sake, for a Track points effect:
     /// corners or blobs, as its rows say. It shares the frame source, the
     /// progress readings and the sidecar with the others, and has a frame
@@ -530,14 +463,11 @@ pub enum JobKind {
 pub struct PointRegions {
     /// The two points, of which only the first is read when `two` is false.
     pub points: [[f64; 2]; 2],
-    /// Whether the second point is in use.
     pub two: bool,
-    /// Half a search box's side.
     pub radius: f64,
 }
 
 impl PointRegions {
-    /// The points actually in use — one or two.
     #[must_use]
     pub fn used(&self) -> &[[f64; 2]] {
         &self.points[..if self.two { 2 } else { 1 }]
@@ -556,7 +486,6 @@ impl PointRegions {
     }
 }
 
-/// One analysis, as handed to the worker.
 pub struct Job {
     /// What the answer is filed under, and what [`progress`] is read by.
     ///
@@ -573,7 +502,6 @@ pub struct Job {
     /// lives in the store for the session.
     pub key: Option<AnalysisKey>,
     pub settings: AnalysisSettings,
-    /// Which question the followed tracks are asked.
     pub kind: JobKind,
     /// Regions no track may be born in or wander into, in source raster pixels
     /// and re-flattened at each frame's own moment.
@@ -607,16 +535,12 @@ impl Job {
 /// samples it as it repaints, exactly as it samples the cache bar.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Progress {
-    /// Accepted, not started.
     Queued,
-    /// Decoding and following features: `done` of `total` frames.
     Tracking {
         done: usize,
         total: usize,
     },
-    /// Frames are in; the geometry and the solve are running.
     Solving,
-    /// There is a solve in the store for this media.
     Done,
     /// Stopped between frames, or in the solve. Nothing was written.
     Cancelled,
@@ -626,31 +550,21 @@ pub enum Progress {
 /// Why an analysis stopped. Every variant is a refusal rather than a fault.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum AnalysisError {
-    /// The media could not be opened, or carries no video.
     #[error("the media could not be read")]
     Unreadable,
-    /// Opened, but with no frames or no raster.
     #[error("the media has no frames to track")]
     NoFrames,
-    /// The tracker refused the frames it was given (a size change mid-clip).
     #[error("the frames could not be tracked: {0}")]
     Tracking(TrackError),
-    /// The shot does not carry a camera solve.
     #[error("the shot could not be solved: {0}")]
     Solve(SolveError),
-    /// The quad does not carry a planar track.
     #[error("the surface could not be followed: {0}")]
     Planar(PlanarError),
-    /// The caller stopped it.
     #[error("the analysis was cancelled")]
     Cancelled,
     #[error("there is not enough video memory")]
     TooBig,
 }
-
-// ---------------------------------------------------------------------------
-// What comes back
-// ---------------------------------------------------------------------------
 
 /// One media's solve, as the render path wants it: the poses already converted,
 /// indexed by frame, plus the solve itself for the point cloud.
@@ -697,7 +611,6 @@ impl Solved {
         self.last_frame - self.first_frame + 1 < i64::try_from(self.clip_frames).unwrap_or(i64::MAX)
     }
 
-    /// The converted pose at solved frame `frame`.
     #[must_use]
     pub fn pose(&self, frame: i64) -> Option<CameraPose> {
         let i = usize::try_from(frame.checked_sub(self.first_frame)?).ok()?;
@@ -751,10 +664,6 @@ fn euler_of_transpose(r: &Mat3) -> (f64, f64, f64) {
     (rx, r[2][0].atan2(r[2][2]), r[0][1].atan2(r[1][1]))
 }
 
-// ---------------------------------------------------------------------------
-// The sidecar
-// ---------------------------------------------------------------------------
-
 /// Bump when the record's meaning changes. Old files then hash to a different
 /// name and are simply never asked for, which is the same disposal the frame
 /// cache's algorithm version performs.
@@ -792,7 +701,6 @@ pub enum Answer {
     Bake(Vec<u8>),
 }
 
-/// What one sidecar file holds.
 #[derive(serde::Serialize, serde::Deserialize)]
 struct Record {
     /// Repeated inside the file as well as in its name, so a collision or a
@@ -804,7 +712,6 @@ struct Record {
     answer: Answer,
 }
 
-/// Serialise a record, in the crate's shared framing ([`crate::sidecar`]).
 fn encode(key: AnalysisKey, fps: f64, clip_frames: usize, answer: &Answer) -> Option<Vec<u8>> {
     let body = bincode::serialize(&Record {
         key: key.0,
@@ -862,10 +769,6 @@ fn test_cache_dir() -> Option<PathBuf> {
     TEST_CACHE_DIR.lock().ok().and_then(|dir| dir.clone())
 }
 
-// ---------------------------------------------------------------------------
-// The store
-// ---------------------------------------------------------------------------
-
 /// Every solve this session knows about, by footage item.
 ///
 /// An `RwLock` rather than a channel because the readers are the render path —
@@ -920,9 +823,7 @@ fn planars() -> &'static RwLock<HashMap<Uuid, Arc<PlanarSolved>>> {
     PLANARS.get_or_init(|| RwLock::new(HashMap::new()))
 }
 
-/// The one analysis in flight, and what every media's last analysis did.
 struct Jobs {
-    /// `(media, the flag its frame loop and its solve consult)`.
     running: Option<(Uuid, Arc<AtomicBool>)>,
     /// Bounded by the media a session analyses; cleared by [`clear`].
     progress: HashMap<Uuid, Progress>,
@@ -980,8 +881,6 @@ impl PlanarTrackStore for Store {
     }
 }
 
-/// What has been tracked under the Planar track instance `track` — the status
-/// row's reading and the corner-pin gesture's input.
 #[must_use]
 pub fn planar(track: Uuid) -> Option<Arc<PlanarSolved>> {
     planars().read().ok()?.get(&track).cloned()
@@ -1016,12 +915,8 @@ pub fn progress(media: Uuid) -> Option<Progress> {
     jobs().lock().ok()?.progress.get(&media).cloned()
 }
 
-/// One solved point as the overlay draws it: which track it is, where it lands
-/// on the picture, and how near the camera it was.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ProjectedPoint {
-    /// The track's own id — what a selection names, and what
-    /// [`point_centroid`] takes back.
     pub track: u32,
     /// Pixels **from the frame's centre**, which is the only origin the tracker
     /// has. The caller adds its own centre; the store cannot, because it is
@@ -1147,8 +1042,6 @@ pub fn camera_pose(doc: &Arc<Document>, comp: &Composition, t: f64) -> CameraPos
     })
 }
 
-/// As [`camera_pose`], keeping the [`lumit_core::track::LinkState`] the
-/// interface draws as a badge.
 #[must_use]
 pub fn linked_pose(doc: &Arc<Document>, comp: &Composition, t: f64) -> Option<LinkedPose> {
     lumit_core::track::camera_pose_at(doc, comp, t, &Store)
@@ -1215,20 +1108,13 @@ pub fn owned_ids(doc: &Document) -> Vec<Uuid> {
     ids
 }
 
-// ---------------------------------------------------------------------------
-// Asking for one
-// ---------------------------------------------------------------------------
-
-/// What happened when an analysis was asked for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Requested {
-    /// Accepted; watch [`progress`].
     Started,
     /// Another analysis is running. One at a time, deliberately: this is a
     /// minutes-long decode-bound job, and two of them share one disk and halve
     /// each other. Ask again when it is done.
     Busy,
-    /// The thread could not be started at all.
     Refused,
 }
 
@@ -1403,7 +1289,6 @@ pub fn cancel(media: Uuid) {
     held.progress.insert(media, Progress::Cancelled);
 }
 
-/// Publish one step of a running analysis.
 pub(crate) fn report(media: Uuid, step: Progress) {
     if let Ok(mut held) = jobs().lock() {
         held.progress.insert(media, step);
@@ -1496,7 +1381,6 @@ fn file(id: Uuid, kind: JobKind, fps: f64, clip_frames: usize, answer: Answer) -
                 );
             }
         }
-        // A file that will not unpack is no bake.
         Answer::Bake(bytes) => match unpack_bake(&bytes) {
             Some(baked) => bake_points::publish(id, baked),
             None => return false,
@@ -1733,9 +1617,6 @@ fn bake(
         first,
         u32::try_from(span).unwrap_or(u32::MAX),
     );
-    // ponytail: a drawn frame is the whole composition at full size, since
-    // the stream may read any of it. Drawing this layer's stack alone is the
-    // upgrade if baking a heavy composition is too slow.
     let mut renderer: Option<crate::headless::HeadlessRenderer> = None;
     let mut held = 0usize;
     for k in 0..total {
@@ -1784,11 +1665,6 @@ fn bake(
     Ok(baked)
 }
 
-/// The most blobs followed on one frame.
-///
-/// ponytail: one number rather than a row. It bounds what a noisy clip can
-/// cost: this many points a frame in the sidecar at twelve bytes each. A Max
-/// points row is the upgrade if somebody needs more.
 const MAX_BLOBS: usize = 1000;
 
 /// A Track points analysis: every frame of the clip through the feature
@@ -2025,11 +1901,6 @@ fn track_frames(
     Ok((fps, total, set, frames.analysis_scale()))
 }
 
-// ---------------------------------------------------------------------------
-// Building a job from the document
-// ---------------------------------------------------------------------------
-
-/// The Camera track instance on `layer`, if it carries an enabled one.
 #[must_use]
 pub fn camera_track_effect(layer: &Layer) -> Option<&EffectInstance> {
     layer
@@ -2167,7 +2038,6 @@ pub fn planar_job_for_precomp(doc: &Arc<Document>, layer: &Layer, analyse: bool)
     planar_job(layer, comp_frames(doc, nested), analyse)
 }
 
-/// What opens a nested comp's frames at its own size, on the worker thread.
 fn comp_frames(doc: &Arc<Document>, nested: Uuid) -> OpenFrames {
     let doc = Arc::clone(doc);
     Box::new(move || {
@@ -2175,11 +2045,8 @@ fn comp_frames(doc: &Arc<Document>, nested: Uuid) -> OpenFrames {
     })
 }
 
-/// What a [`Job`] opens its frames with.
 type OpenFrames = Box<dyn FnOnce() -> Option<Box<dyn LumaFrames>> + Send>;
 
-/// The Planar track job on `layer` over whatever `open` reads, with no sidecar
-/// name yet: the half the footage and the precomp builders share.
 fn planar_job(layer: &Layer, open: OpenFrames, analyse: bool) -> Option<Job> {
     let fx = planar_track_effect(layer)?;
     let settings = AnalysisSettings::of(fx);
@@ -2208,7 +2075,6 @@ fn planar_job(layer: &Layer, open: OpenFrames, analyse: bool) -> Option<Job> {
     })
 }
 
-/// The enabled Track points instances on `layer`, in stack order.
 pub fn track_points_effects(layer: &Layer) -> impl Iterator<Item = &EffectInstance> {
     layer
         .effects
@@ -2304,10 +2170,6 @@ pub fn job_for_precomp(doc: &Arc<Document>, layer: &Layer, analyse: bool) -> Opt
     })
 }
 
-// ---------------------------------------------------------------------------
-// The real frames
-// ---------------------------------------------------------------------------
-
 /// [`LumaFrames`] over a media file, through the same frame index and decoder
 /// every other consumer opens (docs/impl/media-io.md §2).
 pub struct MediaLuma {
@@ -2350,10 +2212,6 @@ impl LumaFrames for MediaLuma {
         (frame.width == self.width && frame.height == self.height).then_some(frame.luma)
     }
 }
-
-// ---------------------------------------------------------------------------
-// The rendered frames
-// ---------------------------------------------------------------------------
 
 /// The longest edge an analysis render is allowed.
 ///
@@ -2517,12 +2375,8 @@ mod tests {
     const FOCAL: f64 = 320.0;
     const NEAR_Z: f64 = 700.0;
     const FAR_Z: f64 = 1300.0;
-    /// One checker patch of the near plane, in world units.
     const PATCH: f64 = 260.0;
 
-    /// A deterministic integer hash in 0..1 — the phase-1 tests' splitmix
-    /// finaliser, so both halves of the tracking work see the same kind of
-    /// picture (docs/impl/tracking.md §5).
     fn hash2(ix: i64, iy: i64) -> f64 {
         let mut h = (ix as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)
             ^ (iy as u64).wrapping_mul(0xC2B2_AE3D_27D4_EB4F);
@@ -2585,7 +2439,6 @@ mod tests {
         mul3(mul3(z, y), x)
     }
 
-    /// The truth: where the camera was on frame `n`, and which way it pointed.
     fn truth(n: usize) -> (Mat3, [f64; 3]) {
         let a = n as f64;
         (
@@ -2598,11 +2451,8 @@ mod tests {
         )
     }
 
-    /// The scene, rendered on demand.
     struct Shot {
         frames: usize,
-        /// Frames from here on carry no picture to follow — a whiteout, a lens
-        /// cap, a clip running into blank. See [`Shot::degrading`].
         good: usize,
     }
 
@@ -2686,7 +2536,6 @@ mod tests {
         SERIAL.lock().unwrap_or_else(|held| held.into_inner())
     }
 
-    /// Point the sidecar at `dir` and start from an empty store.
     fn with_cache(dir: &Path) {
         *TEST_CACHE_DIR.lock().unwrap() = Some(dir.to_path_buf());
         clear();
@@ -2721,8 +2570,6 @@ mod tests {
     /// solve. Named only so the pair it is half of is readable.
     type Analysed = Result<(f64, usize, Answer), AnalysisError>;
 
-    /// The camera half of [`Answer`], for the tests that asked for one — which
-    /// is every one written before the planar track existed.
     type AnalysedCamera = Result<(f64, usize, CameraSolve), AnalysisError>;
 
     fn run_here_answer(job: Job, cancel: &AtomicBool) -> (Analysed, Vec<Progress>) {
@@ -2744,7 +2591,6 @@ mod tests {
         (camera, log)
     }
 
-    /// A camera solve as the sidecar holds it.
     fn filed(solve: &CameraSolve) -> Answer {
         Answer::Camera(Box::new(solve.clone()))
     }
@@ -2780,7 +2626,6 @@ mod tests {
         [v(0) / w, v(1) / w]
     }
 
-    /// Where the *tracker* puts the same point, through the same solved pose.
     fn project_through_solve(pose: &SolvedPose, p: [f64; 3]) -> Option<[f64; 2]> {
         let d = [
             p[0] - pose.position[0],
@@ -2799,8 +2644,6 @@ mod tests {
             ]
         })
     }
-
-    // --- A comp with a camera linked to the tracked layer -------------------
 
     fn secs(n: i64, d: i64) -> CompTime {
         CompTime(Rational::new(n, d).unwrap())
@@ -2846,9 +2689,6 @@ mod tests {
         }
     }
 
-    /// A footage layer wearing the Camera track effect, and a Camera layer
-    /// linked to it — the shape the camera track describes, built for real
-    /// rather than mocked.
     fn linked_document(media: Uuid) -> (Document, Composition) {
         let mut footage = layer(
             "shot",
@@ -2886,6 +2726,7 @@ mod tests {
             master_automation: Default::default(),
             loudness_target: None,
             lighting: Default::default(),
+            blending: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -2989,8 +2830,6 @@ mod tests {
         map
     }
 
-    // --- The tests ----------------------------------------------------------
-
     /// The whole of stage 2 in one run: a synthetic shot is tracked and solved,
     /// progress is published as it goes, the solve lands in the store, and a
     /// Camera layer linked to the tracked layer reads it frame for frame.
@@ -3013,8 +2852,6 @@ mod tests {
         let (fps, clip_frames, solve) = out.expect("the synthetic shot solves");
         assert_eq!(clip_frames, FRAMES, "the whole clip was followed");
 
-        // Progress is observable, and it is honest: it starts at nothing done,
-        // reaches every frame, and only then says it is solving.
         assert_eq!(
             steps.first(),
             Some(&Progress::Tracking {
@@ -3028,9 +2865,6 @@ mod tests {
         }));
         assert_eq!(steps.last(), Some(&Progress::Solving));
 
-        // The solve stands up on its own terms before anything is asked of the
-        // conversion: every frame posed, the lens recovered, and the rotations
-        // far enough from the identity that an Euler mistake cannot hide.
         assert_eq!(solve.poses.len(), FRAMES, "a pose per frame");
         let focal = solve.segments.first().unwrap().focal_px;
         assert!(
@@ -3052,7 +2886,6 @@ mod tests {
             "the camera barely turned ({turn}), so the Euler extraction is not being tested"
         );
 
-        // The conversion, against the matrix that actually draws the frame.
         let solved = Solved::new(fps, FRAMES, solve).expect("the solve has frames");
         assert!(
             !solved.is_partial(),
@@ -3077,7 +2910,6 @@ mod tests {
             "the compositor and the tracker disagree by {worst} px about where a solved point is"
         );
 
-        // Into the store, and out through the link.
         publish(media, solved.fps, solved.clip_frames, solved.solve.clone());
         let (doc, comp) = linked_document(media);
         let mut seen: Vec<CameraPose> = Vec::new();
@@ -3100,7 +2932,6 @@ mod tests {
             seen.windows(2).filter(|w| w[0] != w[1]).count() > FRAMES / 2,
             "the linked camera did not actually move"
         );
-        // Past the solved range the last derived motion holds, and says so.
         let past = linked_pose(&Arc::new(doc.clone()), &comp, 10.0).unwrap();
         assert_eq!(past.state, lumit_core::track::LinkState::Held);
         assert_eq!(Some(past.pose), solved.pose(solved.last_frame));
@@ -3123,8 +2954,6 @@ mod tests {
         let media = Uuid::now_v7();
         let (doc, comp) = linked_document(media);
 
-        // Nudged: fifty pixels along x and three degrees about y, written the
-        // way a drag writes them — straight onto the camera's own properties.
         let mut nudged = comp.clone();
         {
             let cam = nudged
@@ -3161,8 +2990,6 @@ mod tests {
             "a correction changes the picture, so it must change the frame's name"
         );
 
-        // Analyse again, to a different answer. The correction is not part of
-        // the solve, so it is still exactly on top of it.
         let mut again = written_solve();
         for solved in &mut again.poses {
             solved.position[1] += 40.0;
@@ -3176,8 +3003,6 @@ mod tests {
         clear();
     }
 
-    /// Cancelling stops between frames, writes nothing at all, and leaves the
-    /// next run to do the whole job cleanly.
     #[test]
     fn cancelling_leaves_no_cache_entry_and_a_clean_rerun() {
         let _serial = serially();
@@ -3190,7 +3015,6 @@ mod tests {
             &MaskTrack::default(),
         );
 
-        // Raised after a handful of frames, which is where a real Cancel lands.
         let cancel = AtomicBool::new(false);
         let mut first = job(media, "cancel", MaskTrack::default());
         first.key = Some(key);
@@ -3212,12 +3036,9 @@ mod tests {
             "a cancelled run got as far as solving"
         );
 
-        // Nothing written, because `run` is what writes and it never had an
-        // answer to write.
         assert!(read_sidecar(dir.path(), key).is_none());
         assert!(solved(media).is_none(), "a cancelled run published a solve");
 
-        // And the same job, uncancelled, is a whole clean analysis.
         let clean = AtomicBool::new(false);
         let mut again = job(media, "cancel", MaskTrack::default());
         again.key = Some(key);
@@ -3226,9 +3047,6 @@ mod tests {
         clear();
     }
 
-    /// The sidecar's whole contract: a rebuild and a cache hit agree bit for
-    /// bit, a file written by a newer Lumit is refused rather than believed, and
-    /// deleting the folder costs an analysis and nothing else.
     #[test]
     fn a_cache_hit_and_a_rebuild_are_the_same_bytes() {
         let _serial = serially();
@@ -3248,7 +3066,6 @@ mod tests {
         write_sidecar(dir.path(), key, fps, clip_frames, &filed(&solve));
         let written = std::fs::read(dir.path().join(key.file_name())).unwrap();
 
-        // Read back: the same solve, and the same file when written again.
         let (read_fps, read_clip, read_solve) =
             read_sidecar(dir.path(), key).expect("the sidecar is there");
         assert_eq!(read_fps, fps);
@@ -3267,8 +3084,6 @@ mod tests {
             "re-encoding what was read gives different bytes"
         );
 
-        // A second analysis of the same input is the same solve — which is what
-        // makes the cache safe to trust at all.
         let mut again = job(media, "cache", MaskTrack::default());
         again.key = Some(key);
         let (fps_again, clip_again, solve_again) = run_here(again, &cancel).0.unwrap();
@@ -3279,7 +3094,6 @@ mod tests {
             "a rebuild and a cache hit are not the same bits"
         );
 
-        // A different key does not read this file, however tempting.
         let other = AnalysisKey::new(
             &fingerprint("cache"),
             AnalysisSettings {
@@ -3289,15 +3103,12 @@ mod tests {
             &MaskTrack::default(),
         );
         assert!(read_sidecar(dir.path(), other).is_none());
-        // Neither does a file from a version this build does not know.
         let mut future = written.clone();
         future[7] = 0xff;
         future[8] = 0xff;
         assert!(decode(&future, key).is_none(), "a newer file was believed");
         assert!(decode(b"not ours at all", key).is_none());
 
-        // Deleting the sidecar is always safe: the next read finds nothing and
-        // the next analysis rebuilds the identical answer.
         std::fs::remove_file(dir.path().join(key.file_name())).unwrap();
         assert!(read_sidecar(dir.path(), key).is_none());
         let mut rebuilt = job(media, "cache", MaskTrack::default());
@@ -3380,8 +3191,6 @@ mod tests {
             0,
             "a track lived inside a masked region"
         );
-        // And the mask took only what it covers: the rest of the frame is still
-        // tracked, so this is an exclusion and not a failure to track at all.
         assert!(
             masked.tracks().len() > unmasked.tracks().len() / 2,
             "masking a quarter of the frame cost most of the tracks"
@@ -3448,8 +3257,6 @@ mod tests {
             assert_eq!(Some(got.pose), solved(media).and_then(|s| s.pose(n)));
         }
 
-        // And closing the project lets them go, without touching the file that
-        // would warm them again.
         clear();
         assert!(
             solved(media).is_none(),
@@ -3461,11 +3268,6 @@ mod tests {
         );
     }
 
-    // --- The precomp path ---------------------------------------------------
-
-    /// A nested comp that pans a field of solids past the camera, at a raster
-    /// big enough for the analysis cap to bite, plus a Precomp layer wearing a
-    /// Camera track. `(doc, the nested comp's id, the precomp layer)`.
     fn nested_pan(frames: usize) -> (Arc<Document>, Uuid, Layer) {
         use lumit_core::anim::{Animation, Keyframe, SideInterp};
         use lumit_core::model::SolidDef;
@@ -3530,6 +3332,7 @@ mod tests {
             master_automation: Default::default(),
             loudness_target: None,
             lighting: Default::default(),
+            blending: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -3582,7 +3385,6 @@ mod tests {
                 return;
             }
         };
-        // 1280 × 720 capped to a 960 long edge: three quarters.
         assert_eq!(source.info(), (N, 960, 540, FPS));
         assert!((source.analysis_scale() - 0.75).abs() < 1e-6);
         let first = source.luma(0).expect("the compositor rendered a frame");
@@ -3594,7 +3396,6 @@ mod tests {
         );
         drop(source);
 
-        // And through the whole job, which is the seam that matters.
         let cancel = AtomicBool::new(false);
         let (fps, total, set, scale) = track_frames(
             job_for_precomp(&doc, &precomp, true).unwrap(),
@@ -3615,8 +3416,6 @@ mod tests {
             set.tracks().len()
         );
 
-        // The cancellation seam is the frame loop, the same one a decoded clip
-        // uses: a raised flag refuses before a frame is rendered.
         let stopped = AtomicBool::new(true);
         assert_eq!(
             track_frames(
@@ -3629,10 +3428,6 @@ mod tests {
         );
         clear();
     }
-
-    // -----------------------------------------------------------------------
-    // The planar track
-    // -----------------------------------------------------------------------
 
     /// A flat, textured surface sliding across the frame — everything a planar
     /// track needs, and nothing it does not.
@@ -3718,7 +3513,6 @@ mod tests {
         (det.abs() > 1e-12).then(|| adj.map(|row| row.map(|v| v / det)))
     }
 
-    /// The quad the planar tests follow, well inside the textured region.
     const PIN_QUAD: Quad = [[90.0, 60.0], [300.0, 60.0], [90.0, 230.0], [300.0, 230.0]];
 
     fn planar_job(track: Uuid, tag: &str) -> Job {
@@ -3736,9 +3530,6 @@ mod tests {
         }
     }
 
-    /// The whole planar path, end to end: a real analysis of a rendered shot,
-    /// the corners against the warp each frame was drawn under, the answer in
-    /// the store, and a Corner pin written from it that lands on the surface.
     #[test]
     fn a_planar_analysis_follows_a_surface_and_writes_a_corner_pin() {
         let _serial = serially();
@@ -3764,7 +3555,6 @@ mod tests {
             "every frame of a clean slide should be followed"
         );
 
-        // The corners, against the ground truth each frame was rendered under.
         let mut worst = 0.0f64;
         for f in &track.frames {
             let n = usize::try_from(f.frame).unwrap();
@@ -3783,7 +3573,6 @@ mod tests {
             "the surface should carry a crowd of correspondences, not a handful"
         );
 
-        // Into the store, and out again through the trait `lumit-core` reads.
         publish_planar(effect, fps, clip_frames, *track);
         let store = Store;
         let range = store
@@ -3800,9 +3589,6 @@ mod tests {
             "a different instance is a different answer, not this one"
         );
 
-        // And the gesture the whole thing exists for: a Corner pin on another
-        // layer, keyed to the surface. The pin's numbers are the store's,
-        // through the comp's own clock.
         let media = Uuid::now_v7();
         let span = secs(PlaneShot::FRAMES as i64, FPS as i64);
         let mut shot = layer("shot", LayerKind::Footage { item: media }, span);
@@ -3818,6 +3604,7 @@ mod tests {
             master_automation: Default::default(),
             loudness_target: None,
             lighting: Default::default(),
+            blending: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,

@@ -1,7 +1,3 @@
-//! An overlap on a picture row drawn as a Transition effect: the effect runs
-//! over the outgoing clip, the incoming clip beneath it, from nothing taken away
-//! to nothing left. One with no effect named is the dissolve it always was.
-
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use lumit_core::model::{
@@ -67,7 +63,6 @@ fn sequence(clips: Vec<Clip>) -> Layer {
     }
 }
 
-/// A one-colour picture on disk, which comes in through the decode worker.
 fn png(dir: &std::path::Path, name: &str, colour: [u8; 3]) -> std::path::PathBuf {
     let path = dir.join(name);
     let file = std::fs::File::create(&path).unwrap();
@@ -113,7 +108,6 @@ fn solid(doc: &mut Document, colour: [f32; 4]) -> ClipSource {
     ClipSource::Solid(id)
 }
 
-/// A composition holding nothing but one colour.
 fn nested(doc: &mut Document, colour: [f32; 4]) -> ClipSource {
     let ClipSource::Solid(def) = solid(doc, colour) else {
         panic!("a solid");
@@ -134,6 +128,7 @@ fn composition(layers: Vec<Layer>) -> Composition {
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -152,9 +147,6 @@ fn composition(layers: Vec<Layer>) -> Composition {
     }
 }
 
-/// Red for two seconds, then blue for two, the blue laid over the red's last
-/// second, with `kind` on the overlap. Sixty frames a second, so frame 60 is
-/// where the overlap starts and frame 120 where it has ended.
 fn overlap(
     mut doc: Document,
     going: ClipSource,
@@ -180,10 +172,6 @@ fn at(px: &[u8], x: u32, y: u32) -> [u8; 3] {
     [px[d], px[d + 1], px[d + 2]]
 }
 
-/// Every kind takes nothing away at its first frame and has taken everything at
-/// the first frame past the overlap, and a Linear wipe half way is one edge, the
-/// incoming clip on the side it went first. On solids, mixed where they are drawn,
-/// and on footage, whose two pictures come through the decode worker together.
 #[test]
 fn every_kind_sweeps_from_the_outgoing_clip_to_the_incoming_one() {
     let Ok(mut r) = lumit_render::headless::HeadlessRenderer::shared() else {
@@ -227,7 +215,6 @@ fn every_kind_sweeps_from_the_outgoing_clip_to_the_incoming_one() {
                 "{route} {kind} ends on the incoming clip"
             );
         }
-        // Half way through a Linear wipe at its usual angle, the left has gone.
         let (doc, comp) = build(Some("linear_wipe"));
         let (px, _, _) = r.render_rgba(&doc, comp, 90, 1.0).unwrap();
         assert!(
@@ -241,7 +228,6 @@ fn every_kind_sweeps_from_the_outgoing_clip_to_the_incoming_one() {
             at(&px, 56, 32)
         );
 
-        // At half preview an Iris wipe half way is still a hole in the middle.
         let (doc, comp) = build(Some("iris_wipe"));
         let half_res = lumit_render::plan::Quality {
             auto_res: true,
@@ -263,7 +249,6 @@ fn every_kind_sweeps_from_the_outgoing_clip_to_the_incoming_one() {
             );
         }
 
-        // Near the end of each kind, what's left is less than half of it.
         for kind in transition::TABLE.iter().map(|k| k.name) {
             let (doc, comp) = build(Some(kind));
             let (px, _, _) = r.render_rgba(&doc, comp, 119, 1.0).unwrap();
@@ -276,7 +261,6 @@ fn every_kind_sweeps_from_the_outgoing_clip_to_the_incoming_one() {
             );
         }
 
-        // A flash is white at the middle of its overlap.
         let (doc, comp) = build(Some("flash"));
         let (px, _, _) = r.render_rgba(&doc, comp, 90, 1.0).unwrap();
         assert!(
@@ -285,8 +269,6 @@ fn every_kind_sweeps_from_the_outgoing_clip_to_the_incoming_one() {
             at(&px, 32, 32)
         );
 
-        // Half way through a Push left, the outgoing clip has gone left and
-        // the incoming one has come in from the right.
         let (doc, comp) = build(Some("move"));
         let (px, _, _) = r.render_rgba(&doc, comp, 90, 1.0).unwrap();
         let (left, right) = (at(&px, 8, 32), at(&px, 56, 32));
@@ -313,7 +295,6 @@ fn every_kind_sweeps_from_the_outgoing_clip_to_the_incoming_one() {
             "{route} drift: {mid:?}"
         );
 
-        // No kind named is a dissolve: both, at once, everywhere.
         let (doc, comp) = build(None);
         let (px, _, _) = r.render_rgba(&doc, comp, 90, 1.0).unwrap();
         let (left, right) = (at(&px, 8, 32), at(&px, 56, 32));
@@ -323,8 +304,6 @@ fn every_kind_sweeps_from_the_outgoing_clip_to_the_incoming_one() {
             "{route} a dissolve shows both: {left:?}"
         );
 
-        // A clip's own effects stay on it through the wipe: the outgoing clip
-        // inverted on its side, and the incoming clip as it was on the other.
         let (doc, comp) = build(Some("linear_wipe"));
         let mut dressed = (*doc).clone();
         if let Some(ProjectItem::Composition(c)) = dressed.item_mut(comp) {
@@ -345,7 +324,6 @@ fn every_kind_sweeps_from_the_outgoing_clip_to_the_incoming_one() {
             at(&px, 56, 32)
         );
 
-        // Bypassed, the effect is a dissolve again.
         let (doc, comp) = build(Some("linear_wipe"));
         let mut bypassed = (*doc).clone();
         if let Some(ProjectItem::Composition(c)) = bypassed.item_mut(comp) {
@@ -362,8 +340,6 @@ fn every_kind_sweeps_from_the_outgoing_clip_to_the_incoming_one() {
     }
 }
 
-/// A row with nothing set writes no new field, and an old file's clip reads as
-/// the dissolve, so nothing about it can change.
 #[test]
 fn an_overlap_with_no_kind_is_left_out_of_the_file() {
     let clip = Clip::new(

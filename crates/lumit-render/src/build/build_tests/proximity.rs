@@ -1,10 +1,5 @@
-//! A Proximity selector following its null.
-
 use super::*;
 
-/// **A Proximity selector follows its null**: the letters nearest the null
-/// are moved most, and dragging the null to the other end of the word moves
-/// the other letters instead.
 #[test]
 fn a_proximity_selector_follows_its_null() {
     use lumit_core::anim::Property;
@@ -86,6 +81,7 @@ fn a_proximity_selector_follows_its_null() {
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,

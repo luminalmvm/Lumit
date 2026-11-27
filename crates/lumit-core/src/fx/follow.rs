@@ -13,15 +13,10 @@
 
 use crate::model::{Composition, EffectInstance, EffectNamespace, Layer, LayerKind};
 
-/// How a time effect reads its layer at other moments.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Follow {
-    /// Echo and Motion blur: whole frames a set number of frames away, beside
-    /// the frame itself.
     Neighbours,
-    /// Timewarp: the moments it shows in place of the frame.
     Moments,
-    /// Posterize time: the whole layer, transform and all, held on its grid.
     Hold,
 }
 
@@ -158,7 +153,6 @@ pub fn neighbour_times(
         .collect()
 }
 
-/// The comp time a hold shows `layer` at, around comp time `t`.
 #[must_use]
 pub fn held_time(layer: &Layer, t: f64) -> f64 {
     let lt = crate::time::layer_time(t, layer.start_offset.0);

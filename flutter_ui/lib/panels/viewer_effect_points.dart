@@ -61,7 +61,6 @@ void pickForPoint(LumitUiState ui, LayerReference layer,
   }
 }
 
-/// One point on the picture, and what a drag on it writes.
 class _Mark {
   final LayerReference layer;
   final UuidValue effect;
@@ -80,7 +79,6 @@ class _Mark {
   final ViewerLayerMap map;
   final Offset at;
 
-  /// An expression works out either half, so the mark is not dragged.
   final bool driven;
 
   const _Mark(this.layer, this.effect, this.x, this.y, this.xWas, this.yWas,
@@ -98,10 +96,8 @@ class ViewerEffectPoints extends StatefulWidget {
   final List<LayerBox> Function() boxes;
   final Color colour;
 
-  /// The armed tool. Only Selection drags a mark.
   final ToolMode tool;
 
-  /// Told once a drag has been written.
   final VoidCallback onChanged;
 
   const ViewerEffectPoints({
@@ -123,11 +119,8 @@ class _ViewerEffectPointsState extends State<ViewerEffectPoints> {
 
   String? _hover;
 
-  /// The mark under the pointer is driven, by an expression or a wire.
   bool _hoverDriven = false;
 
-  /// The drag in flight: the mark, the corner of its patch on screen and the
-  /// press within it, the point it started from, and where it is now.
   _Mark? _held;
   Offset _patch = Offset.zero;
   Offset _down = Offset.zero;
@@ -185,7 +178,6 @@ class _ViewerEffectPointsState extends State<ViewerEffectPoints> {
         ),
       );
 
-  /// The patch round a mark that takes the pointer, as big as the pivot's.
   Widget _grip(_Mark m) => Positioned(
         key: ValueKey<String>('viewer-fx-point-${m.key}'),
         left: m.at.dx - gizmoAnchorSlop / 2,
@@ -214,8 +206,6 @@ class _ViewerEffectPointsState extends State<ViewerEffectPoints> {
         ),
       );
 
-  /// A point's own menu: where it can go, its key at the playhead, and its
-  /// rows. A point worked out by an expression or a wire goes nowhere.
   void _menu(_Mark m, Offset at) {
     final fixed = m.driven || _wired(m);
     final frame = _ui.playheadFrame.value;
@@ -304,7 +294,6 @@ class _ViewerEffectPointsState extends State<ViewerEffectPoints> {
     final m = _held;
     if (m == null) return;
     var d = at - _down;
-    // Shift keeps it to one axis, as it does for a layer's move.
     if (HardwareKeyboard.instance.isShiftPressed) d = constrainToAxis(d);
     final from = m.map.layerOf(_patch + _down);
     final now = m.map.layerOf(_patch + _down + d);
@@ -378,7 +367,6 @@ class _ViewerEffectPointsState extends State<ViewerEffectPoints> {
               !rows.contains('$path/${pair.y}')) {
             continue;
           }
-          // A layer that is not on the picture has nowhere to put a mark.
           final box = boxes[layerId];
           if (box == null || box.bounds.isEmpty) continue;
           // px is the layer's own pixels, per cent is of its own frame, and
@@ -410,7 +398,6 @@ class _ViewerEffectPointsState extends State<ViewerEffectPoints> {
           if (x == null || y == null) continue;
           final lx = x / span.width * box.bounds.width;
           final ly = y / span.height * box.bounds.height;
-          // Behind the camera, a point has no place on the picture.
           if (!box.map.inFront(lx, ly)) continue;
           out.add(_Mark(
             entry.layer,
@@ -436,10 +423,8 @@ class _ViewerEffectPointsState extends State<ViewerEffectPoints> {
 class _PointsPainter extends CustomPainter {
   final List<Offset> points;
 
-  /// The marks under the pointer or in hand, drawn a touch heavier.
   final List<Offset> lit;
 
-  /// Which of [points] an expression works out, drawn in [drivenColour].
   final List<bool> driven;
   final Color colour, drivenColour;
 

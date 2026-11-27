@@ -2179,7 +2179,7 @@ pub enum BridgeEffectValue {
     /// as written; the engine straightens what it reads.
     Shape(Vec<Vec<f32>>),
     /// A ramp's stops between its two colour rows, as a shape gradient's.
-    Gradient(Vec<crate::api::layer::BridgeGradientStop>),
+    Gradient(Vec<crate::api::shape::BridgeGradientStop>),
     /// A name from the OCIO config, as the config spells it; empty is unset.
     /// Also what a [`BridgeParamKind::Text`] row holds: the text as typed.
     Text(String),
@@ -2224,9 +2224,9 @@ impl BridgeEffectValue {
             EffectValue::Gradient(stops) => BridgeEffectValue::Gradient(
                 stops
                     .iter()
-                    .map(|s| crate::api::layer::BridgeGradientStop {
+                    .map(|s| crate::api::shape::BridgeGradientStop {
                         position: BridgeScalar::read_at(&s.position, offset),
-                        colour: crate::api::assets::colour_of(s.colour),
+                        colour: crate::shape_paint::read(&s.colour, offset),
                         opacity: BridgeScalar::read_at(&s.opacity, offset),
                     })
                     .collect(),
@@ -2349,7 +2349,7 @@ impl BridgeEffectValue {
                     .map(|s| {
                         Ok(lumit_core::shape::GradientStop {
                             position: clamped_property(&s.position, offset, 0.0, 100.0)?,
-                            colour: crate::api::assets::linear_of(s.colour),
+                            colour: crate::shape_paint::write(&s.colour, offset)?,
                             opacity: clamped_property(&s.opacity, offset, 0.0, 100.0)?,
                         })
                     })

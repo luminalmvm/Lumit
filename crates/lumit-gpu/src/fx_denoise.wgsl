@@ -5,7 +5,6 @@
 
 @group(0) @binding(6) var out_mid: texture_storage_2d<rgba16float, write>;
 
-// The current frame in Y'CbCr, alpha in .w (space::picture_to_ycc).
 @compute @workgroup_size(8, 8)
 fn prep(@builtin(global_invocation_id) g: vec3<u32>) {
     if (g.x >= p.dims.x || g.y >= p.dims.y) {
@@ -35,7 +34,6 @@ fn field_at(fx: f32, fy: f32) -> vec3<f32> {
     return top + (bottom - top) * ty;
 }
 
-// == temporal::catmull_rom.
 fn cr(t: f32) -> vec4<f32> {
     let t2 = t * t;
     let t3 = t * t * t;
@@ -47,7 +45,6 @@ fn cr(t: f32) -> vec4<f32> {
     );
 }
 
-// == temporal::bicubic over in0.
 fn bicubic(px: f32, py: f32) -> vec4<f32> {
     let fx = floor(px);
     let fy = floor(py);
@@ -107,7 +104,6 @@ fn resolve(@builtin(global_invocation_id) g: vec3<u32>) {
     textureStore(out_mid, q, vec4<f32>(s.xyz / s.w, s.w * s.w / w2));
 }
 
-// The current frame (in0) alone (temporal::plain).
 @compute @workgroup_size(8, 8)
 fn plain(@builtin(global_invocation_id) g: vec3<u32>) {
     if (g.x >= p.dims.x || g.y >= p.dims.y) {
@@ -130,7 +126,6 @@ fn tap(k: i32) -> f32 {
     return 1.0 / 16.0;
 }
 
-// One a-trous pass across (atrous::smooth, across).
 @compute @workgroup_size(8, 8)
 fn atrous_h(@builtin(global_invocation_id) g: vec3<u32>) {
     if (g.x >= p.dims.x || g.y >= p.dims.y) {
@@ -147,7 +142,6 @@ fn atrous_h(@builtin(global_invocation_id) g: vec3<u32>) {
     textureStore(out_mid, vec2<i32>(g.xy), acc);
 }
 
-// And down (atrous::smooth, down).
 @compute @workgroup_size(8, 8)
 fn atrous_v(@builtin(global_invocation_id) g: vec3<u32>) {
     if (g.x >= p.dims.x || g.y >= p.dims.y) {
@@ -178,7 +172,6 @@ fn shrink(@builtin(global_invocation_id) g: vec3<u32>) {
     let band = p.pass_.y;
     let blended = max(textureLoad(in2, q, 0).w, 1.0);
     let luma = textureLoad(in3, q, 0).x;
-    // == spatial::local_energy: the 5x5 window less the pixel itself.
     var e = vec3<f32>(0.0);
     for (var dy = -2; dy <= 2; dy = dy + 1) {
         for (var dx = -2; dx <= 2; dx = dx + 1) {

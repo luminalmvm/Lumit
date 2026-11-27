@@ -33,14 +33,10 @@ pub(crate) const SCRATCH_NAMESPACE: Uuid = Uuid::from_bytes([
     0x6c, 0x75, 0x6d, 0x69, 0x74, 0x00, 0x50, 0x00, 0x80, 0x00, 0x73, 0x63, 0x72, 0x61, 0x74, 0x63,
 ]);
 
-/// What a scratch composition was built for.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ScratchOf {
-    /// A project footage item, with its interpretation applied.
     Footage(Uuid),
-    /// One layer's source before its transform, with its masks.
     Layer { comp: Uuid, layer: Uuid },
-    /// A page of a multicam comp's angles side by side, for the angle viewer.
     Angles { comp: Uuid, page: u32 },
 }
 
@@ -101,8 +97,6 @@ pub fn document_with(
                 f.name.clone(),
                 LayerKind::Footage { item },
                 duration.0,
-                // Identity: a footage view shows the source, not the source
-                // placed somewhere.
                 crate::edits::centred_transform(
                     f64::from(size.0),
                     f64::from(size.1),
@@ -155,6 +149,7 @@ pub fn document_with(
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         // A scratch composition is never a mix: it is one item on its own, and
         // the Audio timeline has nothing to show of it.
         sound_mix: false,

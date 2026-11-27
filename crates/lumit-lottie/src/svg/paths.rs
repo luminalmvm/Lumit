@@ -21,7 +21,6 @@ use super::anim::{self, Clock, Ease, Seg, Value, LINEAR};
 use super::{Scope, Svg};
 use crate::fit::tolerance;
 
-/// A path as the file writes it.
 #[derive(Debug, Clone, PartialEq)]
 pub(super) enum PathValue {
     /// The path's numbers ([`numbers`]), still or animated, the commands the
@@ -89,7 +88,6 @@ impl Svg<'_> {
         d
     }
 
-    /// A path from polylines, each a run of points: what a bake hands back.
     pub(super) fn polyline_d(&self, lines: &[Vec<(f64, f64)>], closed: bool) -> String {
         let mut d = String::new();
         for line in lines {
@@ -108,7 +106,6 @@ impl Svg<'_> {
         d
     }
 
-    /// The path a shape item or a mask draws, on `layer`'s clock.
     pub(super) fn path_value(
         &self,
         scope: &Scope<'_>,
@@ -153,8 +150,6 @@ impl Svg<'_> {
         }
     }
 
-    /// A path worked out at every frame: values in step when its commands
-    /// never change, steps of `d` when they do.
     pub(super) fn sampled_path(
         &self,
         scope: &Scope<'_>,
@@ -193,7 +188,6 @@ impl Svg<'_> {
         PathValue::Steps(steps)
     }
 
-    /// The base `d` of `path`, for the tag.
     pub(super) fn path_base(&self, path: &PathValue) -> String {
         match path {
             PathValue::Curves { value, closed } => {
@@ -203,7 +197,6 @@ impl Svg<'_> {
         }
     }
 
-    /// The `<animate attributeName="d">` of `path`, when it moves.
     pub(super) fn path_animation(&self, out: &mut String, path: &PathValue) {
         match path {
             PathValue::Curves { value, closed } => {
@@ -396,7 +389,6 @@ fn thinned(line: &[(f64, f64)], tol: f64) -> Vec<(f64, f64)> {
         .collect()
 }
 
-/// A still path.
 fn curves_of(path: &BezierPath) -> PathValue {
     PathValue::Curves {
         value: Value::Still(numbers(path)),

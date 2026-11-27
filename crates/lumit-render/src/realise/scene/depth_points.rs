@@ -14,19 +14,15 @@ use lumit_core::model::{Composition, Document, Layer};
 use lumit_core::planes::{PlaneTask, DEPTH_POINTS};
 use std::sync::Arc;
 
-/// Where a layer's Depth points' rays start, and the plane they pass through.
 #[derive(Clone)]
 pub struct Rays {
     eye: DVec3,
     /// The layer's own pixels to comp pixels.
     place: DMat4,
-    /// Whether its Camera row names a camera.
     named: bool,
-    /// What steadies its analysis at this frame.
     steady: [f32; 2],
 }
 
-/// `layer`'s rays at comp time `t`, `None` with no Depth points on it.
 pub(super) fn rays(
     doc: &Arc<Document>,
     comp: &Composition,
@@ -80,7 +76,6 @@ impl Rays {
     }
 }
 
-/// The picture its Depth layer row gives Depth points, if any.
 fn picked<'a>(input: Option<&'a LayerInput>, own: &'a wgpu::Texture) -> Option<&'a wgpu::Texture> {
     match input {
         Some(LayerInput::Several(list)) => list.first().and_then(|(l, _)| l.texture(own)),
@@ -147,7 +142,6 @@ pub(crate) fn draw<'a>(
         .map(|d| lumit_gpu::fx::fit_centred(ctx, d.clone(), w, h));
     let r = frame.render_scale.max(1e-6);
     let zoom = frame.camera.zoom.max(1.0);
-    // The camera's blur, as the layers take it.
     let lens = frame.camera.dof.map_or([0.0; 3], |dof| {
         let k =
             lumit_core::camera::coc_per_zoom(&dof, zoom) / 2.0 * crate::realise::dof::DOF_SOFTNESS;

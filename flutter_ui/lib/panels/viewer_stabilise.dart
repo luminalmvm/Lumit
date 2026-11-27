@@ -42,20 +42,15 @@ const double _grabRadius = 10;
 /// mid-depth dot.
 const double _dot = 2.75;
 
-/// How soon the points are read again while the engine works out the plan
-/// they are placed with.
 const Duration _planWait = Duration(milliseconds: 100);
 
-/// One Stabilise's points over the picture.
 class ViewerStabiliseLayer extends StatefulWidget {
-  /// The stabilised layer, and which Stabilise on it.
   final LayerReference layer;
   final UuidValue effect;
 
   /// The Point size row, in percent.
   final double pointSize;
 
-  /// Where the picture is on screen, and how big the composition is.
   final Rect fitted;
   final Size compSize;
 
@@ -74,10 +69,8 @@ class ViewerStabiliseLayer extends StatefulWidget {
   /// so the picture stays clickable otherwise.
   final bool selecting;
 
-  /// Points were dropped or restored: the panels re-read.
   final VoidCallback onChanged;
 
-  /// Where a right click with nothing to offer goes.
   final void Function(TapUpDetails)? onPictureMenu;
 
   const ViewerStabiliseLayer({
@@ -107,7 +100,6 @@ class _ViewerStabiliseLayerState extends State<ViewerStabiliseLayer> {
   /// Which points are picked, by track id. Panel state, as the cloud's is.
   final Set<int> _picked = <int>{};
 
-  /// What the last read was for.
   int? _askedFrame;
   int? _askedRevision;
   int? _askedLanded;
@@ -115,7 +107,6 @@ class _ViewerStabiliseLayerState extends State<ViewerStabiliseLayer> {
   /// The analysis the points on screen belong to, which a pick names.
   int? _generation;
 
-  /// Reads again while the plan the points are placed with is being made.
   Timer? _again;
 
   VoidCallback? _release;
@@ -145,7 +136,6 @@ class _ViewerStabiliseLayerState extends State<ViewerStabiliseLayer> {
     super.dispose();
   }
 
-  /// Escape clears the pick, on the ladder's selection rung.
   bool _escape() {
     if (!mounted || _picked.isEmpty) return false;
     setState(_picked.clear);
@@ -215,7 +205,6 @@ class _ViewerStabiliseLayerState extends State<ViewerStabiliseLayer> {
     });
   }
 
-  /// A composition point on the panel.
   Offset _at(BridgeStabilisePoint p) {
     final f = widget.fitted;
     final w = widget.compSize.width == 0 ? 1.0 : widget.compSize.width;
@@ -223,8 +212,6 @@ class _ViewerStabiliseLayerState extends State<ViewerStabiliseLayer> {
     return Offset(f.left + p.x * f.width / w, f.top + p.y * f.height / h);
   }
 
-  /// The points drawn: those on the picture and inside the panel, which the
-  /// painter clips to.
   Iterable<BridgeStabilisePoint> get _drawn {
     final panel = Offset.zero & (context.size ?? Size.zero);
     final area = widget.fitted.intersect(panel);
@@ -273,7 +260,6 @@ class _ViewerStabiliseLayerState extends State<ViewerStabiliseLayer> {
           effect: widget.effect,
           tracks: _picked.toList()..sort());
     } catch (_) {
-      // The layer went away; nothing was dropped.
       return;
     }
     setState(_picked.clear);
@@ -353,7 +339,6 @@ class _ViewerStabiliseLayerState extends State<ViewerStabiliseLayer> {
                 radius: radius,
                 accent: widget.accent,
                 muted: widget.muted,
-                // The roto overlay's halo, and the cloud's mark for a pick.
                 edge: t.surface0,
                 mark: t.textPrimary,
               ),
@@ -365,19 +350,14 @@ class _ViewerStabiliseLayerState extends State<ViewerStabiliseLayer> {
   }
 }
 
-/// The points: kept ones filled in the accent, set-aside ones as muted rings,
-/// both over a thin dark edge. A picked one is drawn bigger and carries a second
-/// ring in the text colour, so a pick reads at a glance on a busy shot.
 class StabilisePointPainter extends CustomPainter {
   final List<({Offset at, bool kept, bool picked})> points;
 
-  /// The picture's rectangle: nothing is drawn outside it.
   final Rect picture;
   final double radius;
   final Color accent;
   final Color muted;
 
-  /// The edge under every mark, and the ring round a picked point.
   final Color edge;
   final Color mark;
 

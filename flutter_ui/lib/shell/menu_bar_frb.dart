@@ -89,6 +89,7 @@ import '../state/dock.dart';
 import '../state/external_links.dart';
 import '../state/file_dialogs.dart';
 import '../state/keymap.dart';
+import '../state/usage_data.dart' show UsageData;
 import '../state/settings.dart' show ScriptEvent, ToolBarPosition;
 import '../state/viewer_view.dart';
 import '../state/workspace.dart' show UserWorkspace, Workspace;
@@ -263,7 +264,6 @@ List<MenuEntry> workspaceEntryRows(
   required int slot,
 }) {
   final workspace = ui.workspace;
-  // Save as new, rename, delete, export, import, in that order.
   final rows = userWorkspaceRows(context, app, ui, of: user);
   final name = preset?.title ?? user ?? '';
   return [
@@ -308,8 +308,6 @@ class PickListEntry extends MenuEntry {
 String? _slotAction(int slot) =>
     slot <= workspaceSlots ? 'workspace.switch.$slot' : null;
 
-/// A menu of [rows] at [position], drawn as the bar's own are: the same
-/// rows, dividers, ticks and chords, for a right-click somewhere in the shell.
 Future<void> showMenuEntries(
         BuildContext context, Offset position, List<MenuEntry> rows) =>
     showLumitPopup<void>(
@@ -348,14 +346,12 @@ class MenuEntry {
   /// menu is open. Null for every ordinary row — see [MenuEntry.live].
   final Listenable? live;
 
-  /// How to rebuild this row when [live] fires. Null unless [live] is set.
   final MenuEntry Function()? rebuild;
 
   /// What hovering the row says, where its label is a shortened name: the
   /// full path of a recent project.
   final String? tip;
 
-  /// A mark before the name, for a menu of things that have one: the tools.
   final LumitIcon? icon;
 
   MenuEntry(
@@ -451,7 +447,6 @@ class MenuEntry {
         tip = null,
         icon = null;
 
-  /// A command the specification has and the build has not.
   MenuEntry.todo(this.label, {this.action})
       : onPressed = null,
         children = null,
@@ -500,11 +495,8 @@ class MenuEntry {
   /// lets it be redrawn after the press.
   bool get keepsMenuOpen => _checkedNow != null;
 
-  /// This row as it currently reads. The same row for everything except a
-  /// [MenuEntry.live] one, which asks its builder.
   MenuEntry get current => rebuild == null ? this : rebuild!();
 
-  /// What the row reads as, suffix and all.
   String get text => todo ? l10n.notImplemented(label ?? '') : (label ?? '');
 
   /// The rows of [items] a menu draws: all but the commands not built yet.
@@ -525,7 +517,6 @@ class MenuEntry {
     return true;
   }
 
-  /// Press the row among [rows], or under one of them, that carries [action].
   static bool pressAction(List<MenuEntry> rows, String action) {
     for (final row in rows) {
       if (row.action == action) return row.press();
@@ -625,11 +616,7 @@ class LumitMenuBarFrb extends StatelessWidget {
   final Future<String?> Function()? savePicker;
   final Future<List<String>> Function()? footagePicker;
 
-  /// The After Effects project chooser — a file picker for the `.aep` itself
-  /// or a zipped bundle.
   final Future<String?> Function()? aeProjectPicker;
-
-  /// The Bridge bundle chooser — a folder picker (docs/11 §2.1).
 
   const LumitMenuBarFrb({
     super.key,
@@ -662,7 +649,6 @@ class LumitMenuBarFrb extends StatelessWidget {
     );
   }
 
-  /// Every menu, with this bar's pickers and its palette.
   List<MenuSection> _menus(BuildContext context) => lumitMenus(
         context,
         app,
@@ -825,10 +811,14 @@ class LumitMenuBarFrb extends StatelessWidget {
           category: l10n.paletteCommand,
           shortcut: chord,
           ticked: row.checked ?? false,
-          // Greyed, with its chord where it has one.
           disabled: row.enabled ? null : (chord ?? ''),
           needsPro: row.needsPro,
-          run: row.onPressed ?? () {},
+          run: () {
+            if (row.action case final action? when row.onPressed != null) {
+              ui.usage.count('command', action);
+            }
+            row.onPressed?.call();
+          },
         ));
       }
     }
@@ -863,7 +853,6 @@ class LumitMenuBarFrb extends StatelessWidget {
         lumitIcon(icon, size: iconSize, color: t.textMuted);
     Widget glyphMark(String icon) =>
         glyph.LumitIcon(icon, size: iconSize, colour: t.textMuted);
-    // Every comp, by name: Enter fronts it in the Viewer and Timeline.
     for (final (comp, name) in app.comps()) {
       commands.add(PaletteCommand(
         label: name,
@@ -872,7 +861,6 @@ class LumitMenuBarFrb extends StatelessWidget {
         run: () => ui.setSelectedComp(comp),
       ));
     }
-    // Every layer of the front comp, with its kind's mark: Enter selects it.
     for (final entry in ui.model.layers) {
       commands.add(PaletteCommand(
         label: entry.info.name,
@@ -923,7 +911,6 @@ class LumitMenuBarFrb extends StatelessWidget {
         },
       ));
     }
-    // Every Settings page and every row on one: Enter opens Settings there.
     for (final page in SettingsPage.shown) {
       final path = '${l10n.settingsTitle}$palettePathSeparator${page.label}';
       commands.add(PaletteCommand(
@@ -971,7 +958,6 @@ class LumitMenuBarFrb extends StatelessWidget {
       app.notifyDocumentChanged();
     }
 
-    // A saved preset's whole stack, to the primary layer only.
     Future<void> applyPreset(BridgePresetInfo preset) async {
       final layer = ui.selectedLayer.value;
       if (layer == null) return;
@@ -1023,7 +1009,6 @@ class LumitMenuBarFrb extends StatelessWidget {
       // last was, because the key event itself has no position.
       anchor: lastKnownPointerPosition,
       model: FxConsoleModel(
-        // The chord the keymap has for it now, as the menus read theirs.
         keyHint: ui.keymap.chordFor('console.open'),
         onSnapshot: comp == null ? null : () => saveSnapshotFrb(app, ui),
         entries: [
@@ -1055,14 +1040,12 @@ class LumitMenuBarFrb extends StatelessWidget {
                           try {
                             movePreset(path: preset.path, group: group);
                           } catch (_) {
-                            // A name already taken there: nothing moves.
                           }
                           ui.presetsChanged.value++;
                         },
                       )
                   : null,
             ),
-          // Then the effects, the overwhelmingly common reason to open this.
           for (final effect in listEffects())
             FxConsoleEntry(
               label: engineLabel(effect.label),
@@ -1079,7 +1062,6 @@ class LumitMenuBarFrb extends StatelessWidget {
                 namespace: effect.namespace,
               ),
             ),
-          // The node graphs, which apply as effects rather than front.
           for (final (each, name) in graphs)
             FxConsoleEntry(
               label: name,
@@ -1102,8 +1084,6 @@ class LumitMenuBarFrb extends StatelessWidget {
     );
   }
 }
-
-// --- The tree -------------------------------------------------------------
 
 /// Every menu, in bar order. Pure construction: it reads the document and the
 /// shell state and hands back rows, so the two renderers below (and a test)
@@ -1149,7 +1129,6 @@ List<MenuSection> lumitMenus(
   /// follows the selection rather than whatever it was when the menu opened.
   int? row(CompositionReference c) => newLayerRow(ui, c);
 
-  /// A Layer ▸ New row, by its keymap action.
   MenuEntry newRow(String label, String action) => MenuEntry(
       label, onComp((c) => newLayerFrb(context, ui, c, action)),
       action: action);
@@ -1181,7 +1160,6 @@ List<MenuSection> lumitMenus(
                   MenuEntry(projectDisplayName(path),
                       () => app.openProject(path),
                       tip: kIsWeb ? null : path),
-                // Welcome's Clear, where the palette finds it too.
                 MenuEntry.divider(),
                 MenuEntry(l10n.menuClearRecentProjects,
                     ui.workspace.clearRecentProjects),
@@ -1214,7 +1192,6 @@ List<MenuSection> lumitMenus(
                     : () => saveProjectFrb(app, ui,
                         forcePicker: true, picker: savePicker),
                 action: 'file.save.as'),
-            // The file as it was last saved, once it has changes since.
             MenuEntry(
                 l10n.menuRevertToSaved,
                 projectPath == null || !_dirty(project)
@@ -1268,7 +1245,6 @@ List<MenuSection> lumitMenus(
                     : () =>
                         importFootageFrb(context, app, picker: footagePicker),
                 action: 'file.import'),
-            // A folder and every folder inside it, kept as project folders.
             MenuEntry(
                 l10n.menuImportFolder,
                 project == null
@@ -1279,7 +1255,6 @@ List<MenuSection> lumitMenus(
                           await importDroppedPaths(app, [folder]);
                         }
                       }),
-            // A caption layer from a subtitle file, in the open composition.
             MenuEntry(
                 l10n.captionsImportEllipsis,
                 comp == null ? null : () => unawaited(importCaptionsFrb(context))),
@@ -1340,7 +1315,6 @@ List<MenuSection> lumitMenus(
         // opens, like the pack state above, so the bar's own rebuilds cost
         // nothing for it.
         final steps = _historySteps(project);
-        // What each tier holds, so a Clear with nothing to clear greys.
         final memory =
             cacheStats().usedBytes > 0 || vramCacheStats().usedBytes > 0;
         final disk = diskCacheStats().usedBytes > 0;
@@ -1357,8 +1331,6 @@ List<MenuSection> lumitMenus(
                     : l10n.menuRedoStep(steps.redo!),
                 (history?.canRedo ?? false) ? () => redoFrb(app) : null,
                 action: 'edit.redo'),
-            // The journal as a list you can read and click. Undo and redo above it
-            // walk the same list one step at a time.
             MenuEntry(l10n.menuHistory,
                 project == null ? null : () => showHistoryFrb(context, app)),
             // What the cache meter's and the History window's right-clicks
@@ -1498,7 +1470,6 @@ List<MenuSection> lumitMenus(
                         app.notifyDocumentChanged();
                       }),
             MenuEntry.divider(),
-            // The selected rows become controls of the graphics template.
             addToControlsRow(ui),
             MenuEntry.divider(),
             // "Export", never "render", for anything the user sees (glossary §9).
@@ -1513,7 +1484,6 @@ List<MenuSection> lumitMenus(
                   comp == null
                       ? null
                       : () => showReviewLinks(context, send: comp)),
-              // The Viewer's own Save frame as, for the comp in front.
               MenuEntry(
                   l10n.viewerMenuSaveFrame,
                   comp == null
@@ -1522,8 +1492,6 @@ List<MenuSection> lumitMenus(
                   action: 'comp.frame.save'),
             ],
             MenuEntry.divider(),
-            // Comp-level markers, including the beat pass, which makes them
-            // (docs/09 §10) — the layer's own markers are Layer ▸ Markers.
             MenuEntry(l10n.menuAddMarkerAtPlayhead,
                 onComp((c) => _markerAtPlayhead(ui, c)),
                 action: 'marker.add'),
@@ -1617,8 +1585,6 @@ List<MenuSection> lumitMenus(
                             onDone: app.notifyDocumentChanged)),
               ],
             ]),
-            // What the layer *is*, as opposed to what it is doing: its name, and a
-            // Solid's own size and colour (the shared dialogue pattern).
             MenuEntry(l10n.menuLayerSettings,
                 onLayer((l) => layerSettingsOf(context, app, ui, l)),
                 action: 'layer.settings'),
@@ -1946,8 +1912,6 @@ List<MenuSection> lumitMenus(
                 action: zoom.action,
               ),
             MenuEntry.divider(),
-            // Preview resolution (§2.2 item 2): how many pixels the engine is
-            // asked for, ticked so the menu says which one is in force.
             MenuEntry.submenu(l10n.menuResolution, [
               for (final resolution in PreviewResolution.values)
                 MenuEntry.option(
@@ -1980,11 +1944,6 @@ List<MenuSection> lumitMenus(
               action: 'viewer.rulers.toggle',
               checked: () => ui.viewerOverlays.rulers,
             ),
-            // The layer-controls switch: the wireframes, the handles and the hover
-            // highlight, on and off together. The bar's own view menu carries the
-            // same switch under its own name — they are one switch until the full
-            // wireframe display mode of §2.2 item 5 gives this row something of
-            // its own to turn on.
             MenuEntry.toggle(
               l10n.menuShowWireframe,
               () => ui.setViewerLayerControls(!ui.viewerLayerControls),
@@ -2030,8 +1989,6 @@ List<MenuSection> lumitMenus(
                       ui.viewOf(ui.views.active!.engineId) == look,
                 ),
               MenuEntry.divider(),
-              // Putting the view in front on one of the three keys, under the
-              // views it picks from.
               MenuEntry.submenu(
                   l10n.menuAssignViewShortcut(ui.views.active == null
                       ? ViewerView.activeCamera.title
@@ -2123,7 +2080,6 @@ List<MenuSection> lumitMenus(
                 () => ui.setCompareMode(CompareMode.split),
                 checked: () => ui.currentCompare == CompareMode.split,
               ),
-              // What the second side is: the snapshot, or another comp.
               MenuEntry.divider(),
               MenuEntry.option(
                 l10n.viewerMenuSnapshot,
@@ -2143,14 +2099,12 @@ List<MenuSection> lumitMenus(
                 MenuEntry(l10n.viewerMenuSwapSides, ui.swapCompare),
               ],
             ]),
-            // The way of looking, shared or each view's own.
             MenuEntry.toggle(
               l10n.menuShareViewOptions,
               () => ui.setShareViewOptions(!ui.views.shareViewOptions),
               checked: () => ui.views.shareViewOptions,
             ),
             MenuEntry.divider(),
-            // The active view's own two switches, and the way out of the panels.
             MenuEntry.toggle(
               l10n.menuLockView,
               () {
@@ -2179,15 +2133,12 @@ List<MenuSection> lumitMenus(
     (
       title: l10n.menuWindow,
       items: () => [
-            // Each wears the chord of its slot on the strip, as the strip's
-            // own menu does.
             MenuEntry.submenu(l10n.menuWorkspace, [
               for (final (i, preset) in WorkspacePreset.values.indexed)
                 MenuEntry(preset.title,
                     () => ui.workspace.applyWorkspacePreset(preset),
                     action: _slotAction(i + 1),
                     checked: ui.workspace.activePreset == preset),
-              // The user's own, under the presets, in the strip's own order.
               if (ui.workspace.userWorkspaces.isNotEmpty) MenuEntry.divider(),
               for (final (i, saved) in ui.workspace.userWorkspaces.indexed)
                 MenuEntry(saved.name,
@@ -2240,7 +2191,6 @@ List<MenuSection> lumitMenus(
                     () => showSettingsWindowFrb(context,
                         initialPage: SettingsPage.addons)),
               ]),
-            // Every floating window's panels back in this one.
             MenuEntry(
                 l10n.windowPanelsToMain,
                 ui.split.windows.isEmpty
@@ -2250,7 +2200,6 @@ List<MenuSection> lumitMenus(
                         ui.workspace.touch();
                         ui.saveLayout();
                       }),
-            // The Viewer's picture alone, full screen on a display of its own.
             if (popOutAvailable && !kIsWeb)
               MenuEntry.submenu(l10n.menuVideoMonitor, videoMonitorMenu(ui)),
             MenuEntry.divider(),
@@ -2317,8 +2266,6 @@ List<MenuSection> lumitMenus(
 List<MenuEntry> _effectMenu(
         LumitState app, LumitUiState ui, List<LayerReference> layers) =>
     [
-      // The last effect put on anything, by name, then every effect off the
-      // selection. Both are the chords' own commands.
       MenuEntry(
           switch (_lastEffectLabel()) {
             final label? => l10n.menuApplyEffect(label),
@@ -2336,7 +2283,6 @@ List<MenuEntry> _effectMenu(
               ? () => removeAllEffects(app, layers)
               : null,
           action: 'effect.remove.all'),
-      // The clean-up effects' two, on the one picked or the selection's first.
       MenuEntry(l10n.fxMenuLearnNoise,
           canLearnNoise(ui) ? () => learnSelectedNoise(ui) : null,
           action: 'effect.learn'),
@@ -2406,8 +2352,6 @@ void foldCutClips(LumitState app, LumitUiState ui) {
   app.notifyDocumentChanged();
 }
 
-/// Save the comp's frame at the playhead as a picture, as the Viewer's own
-/// menu does.
 Future<void> saveCompFrameFrb(
     BuildContext context, LumitUiState ui, CompositionReference comp) {
   final settings = comp.getSettings();
@@ -2435,7 +2379,6 @@ bool _dirty(ProjectReference? project) {
   }
 }
 
-/// [name] onto each of [layers], as one undo step.
 void addEffectToLayers(LumitState app, LumitUiState ui,
     Iterable<LayerReference> layers, String name) {
   asOneUndoStep(app.project, () {
@@ -2446,7 +2389,6 @@ void addEffectToLayers(LumitState app, LumitUiState ui,
   app.notifyDocumentChanged();
 }
 
-/// The name the last effect applied reads by, or null with none yet.
 String? _lastEffectLabel() {
   final name = EffectDragData.last;
   if (name == null) return null;
@@ -2458,7 +2400,6 @@ String? _lastEffectLabel() {
   return null;
 }
 
-/// Every effect off each of [layers], as one undo step.
 void removeAllEffects(LumitState app, Iterable<LayerReference> layers) {
   asOneUndoStep(app.project, () {
     for (final layer in layers) {
@@ -2470,7 +2411,6 @@ void removeAllEffects(LumitState app, Iterable<LayerReference> layers) {
   app.notifyDocumentChanged();
 }
 
-/// The Effect menu as a flyout, for a layer's own right-click menu.
 Widget effectFlyout(LumitState app, LumitUiState ui, LayerReference layer,
         VoidCallback close) =>
     _MenuList(
@@ -2478,18 +2418,13 @@ Widget effectFlyout(LumitState app, LumitUiState ui, LayerReference layer,
         close: close,
         path: l10n.menuEffect);
 
-/// Rows of the menu bar as a flyout, for a right-click menu elsewhere.
 Widget menuEntriesFlyout(List<MenuEntry> items, VoidCallback close) =>
     _MenuList(items: items, close: close);
 
-/// The Effect menu's rows, for a menu that nests them under its own heading.
 List<MenuEntry> effectMenuEntries(
         LumitState app, LumitUiState ui, List<LayerReference> layers) =>
     _effectMenu(app, ui, layers);
 
-/// A list of entries drawn as a menu surface, with the bar's own dividers,
-/// ticks, chords and flyouts, for a right-click menu built from the same rows
-/// the menu bar uses.
 Widget menuEntryList(List<MenuEntry> items, VoidCallback close,
         {double width = 300}) =>
     _MenuList(items: items, close: close, width: width);
@@ -2561,9 +2496,6 @@ bool _sequenced(LayerReference? layer) {
   }
 }
 
-/// Whether this layer can cross between footage and sequence at all. Only
-/// footage has clips to cut, and only a sequence has any to put back.
-/// Whether this is a Type layer.
 bool _typed(LayerReference? layer) {
   if (layer == null) return false;
   try {
@@ -2573,7 +2505,6 @@ bool _typed(LayerReference? layer) {
   }
 }
 
-/// Whether this is a shape layer.
 bool _shaped(LayerReference? layer) {
   if (layer == null) return false;
   try {
@@ -2583,7 +2514,6 @@ bool _shaped(LayerReference? layer) {
   }
 }
 
-/// Whether this layer reads an Illustrator file.
 bool _vector(LayerReference? layer) {
   if (layer == null) return false;
   try {
@@ -2712,7 +2642,6 @@ Future<LayerReference?> _newBus(
     try {
       if (await entry.layer.hasAudio()) inputs.add(entry.layer);
     } catch (_) {
-      // The layer has gone.
     }
   }
   LayerReference? bus;
@@ -2796,11 +2725,9 @@ bool _retimeable(LayerReference? layer) {
   }
 }
 
-/// What the Retime item says.
 String _retimeLabel(LayerReference? layer) {
   if (layer == null) return l10n.menuEnableRetime;
   try {
-    // Greyed on a Sequence layer, under the row's usual name.
     if (layer.getKind() == BridgeLayerKind.sequence) {
       return l10n.menuEnableRetime;
     }
@@ -2829,7 +2756,6 @@ Future<void> _openLink(LumitState app, String url) async {
   app.postNotice(l10n.couldNotOpenLink(url), error: true);
 }
 
-/// Help ▸ Lumit help, which the keyboard opens too.
 Future<void> openLumitHelp(LumitState app) => _openLink(app, lumitDocsUrl);
 
 /// The keymap action that puts [panel] up and takes it down, for the panels
@@ -2844,7 +2770,6 @@ String? panelToggleAction(Panel panel) => switch (panel) {
       _ => null,
     };
 
-/// Add [panel]'s pane to the arrangement, or drop it, and keep the layout.
 void togglePanel(LumitUiState ui, Panel panel) {
   setPanelVisible(ui.split, panel, !panelVisible(ui.split, panel));
   ui.workspace.touch();
@@ -2916,8 +2841,6 @@ Future<void> importAeBundleFrb(BuildContext context, LumitState app,
   await showAeImportReport(context: context, report: report);
 }
 
-/// Make a composition and front it — a comp you just made is the one you want
-/// to work on.
 Future<void> newCompositionFrb(BuildContext context, LumitState app) async {
   final comp = await app.newComposition(context);
   if (comp != null && context.mounted) {
@@ -2968,7 +2891,6 @@ void redoFrb(LumitState app) {
       redo: applied < steps.length ? engineLabel(steps[applied].name) : null,
     );
   } catch (_) {
-    // A project that has just gone: the plain words, greyed.
     return (undo: null, redo: null);
   }
 }
@@ -3018,7 +2940,6 @@ bool duplicateSelectionFrb(LumitState app, LumitUiState ui) {
       ui.setEffectSelection(
           layer, layer.duplicateEffects(effects: ui.selectedEffects.value));
     } catch (_) {
-      // The effects went away under the selection.
       return false;
     }
   } else if (ui.selectedLayers.value.isNotEmpty) {
@@ -3063,7 +2984,6 @@ bool copySelectionFrb(LumitUiState ui) {
       return false;
     }
   }
-  // Every picked layer, not only the first.
   final layers = [for (final e in selectedEntries(ui)) e.layer];
   if (layers.isEmpty) return false;
   ui.copyLayerToClipboard(
@@ -3192,7 +3112,6 @@ VoidCallback? _pasteAction(
         layer.pasteEffects(text: text, atFrame: ui.playheadFrame.value);
         app.notifyDocumentChanged();
       };
-    // Onto every selected layer.
     case ClipboardKind.masks:
       if (layer == null) return null;
       return () => pasteMasksOnto(app, ui, ui.selectedLayers.value);
@@ -3244,7 +3163,6 @@ bool stepToMarkerFrb(LumitUiState ui, CompositionReference comp,
   return true;
 }
 
-/// The open composition's settings, from the menu row or its key.
 Future<void> compSettingsFrb(BuildContext context, LumitState app) async {
   final comp = context.read<LumitUiState>().selectedComp;
   if (comp == null) return;
@@ -3312,8 +3230,6 @@ BridgePackState? _packState(ProjectReference? project) {
   }
 }
 
-/// Write the packed footage back out beside the project and save the project
-/// without it.
 Future<void> unpackProjectFrb(LumitState app, LumitUiState ui) async {
   final project = app.project;
   if (project == null) return;
@@ -3461,8 +3377,6 @@ MenuEntry updateMenuEntry(
   );
 }
 
-// --- The macOS renderer ---------------------------------------------------
-
 /// The same tree as native macOS menus.
 ///
 /// Two Mac conventions are applied here and nowhere else, because they are only
@@ -3486,10 +3400,11 @@ List<PlatformMenuItem> platformMenusFor(
   // The system's bar stays clickable under the busy card, so a row does
   // nothing while the card is up, as a key does.
   final app = context.read<LumitState>();
-  VoidCallback? guarded(VoidCallback? run) => run == null
+  VoidCallback? guarded(VoidCallback? run, [String? action]) => run == null
       ? null
       : () {
           if (app.opening.value || app.busy.value != null) return;
+          if (action != null) UsageData.note('command', action);
           run();
         };
 
@@ -3528,7 +3443,7 @@ List<PlatformMenuItem> platformMenusFor(
       group.add(PlatformMenuItem(
         label: label,
         // A null callback is how the platform menu draws a row disabled.
-        onSelected: guarded(item.onPressed),
+        onSelected: guarded(item.onPressed, item.action),
         shortcut: chord == null ? null : activatorForChord(chord),
       ));
     }
@@ -3536,8 +3451,6 @@ List<PlatformMenuItem> platformMenusFor(
     return out;
   }
 
-  // Settings and About move into the application menu; the menus they came
-  // from lose exactly those rows.
   MenuEntry? take(String title, String label) {
     for (final menu in menus) {
       if (menu.title != title) continue;
@@ -3708,8 +3621,6 @@ class _SystemMenuBarState extends State<_SystemMenuBar> {
       );
 }
 
-// --- The in-app renderer --------------------------------------------------
-
 /// Holds the subscription to a shortcut-request bump — the palette's
 /// Ctrl+Shift+P, the console's Ctrl+Space — and opens its surface when the
 /// notifier fires. Draws nothing; it exists only so the menu bar itself stays
@@ -3812,7 +3723,6 @@ class _MenuButtonState extends State<_MenuButton> {
         },
       ),
     );
-    // HouseButton's own hover face, drawn under it while the pointer is away.
     return DecoratedBox(
       decoration: _up
           ? BoxDecoration(
@@ -3961,7 +3871,6 @@ class _MenuListState extends State<_MenuList> {
                 onPressed: item.onPressed == null
                     ? close
                     : item.keepsMenuOpen
-                        // A toggle stays put and redraws its own tick.
                         ? () {
                             _noteRun(item);
                             item.onPressed!();
@@ -3989,6 +3898,9 @@ class _MenuListState extends State<_MenuList> {
   /// [item] is run: the palette leads with it next time it opens empty, by
   /// the label the palette gives it.
   void _noteRun(MenuEntry item) {
+    if (item.action case final action?) {
+      context.read<LumitUiState>().usage.count('command', action);
+    }
     final path = widget.path;
     if (path == null) return;
     context.read<LumitUiState>().workspace.noteCommandRun(

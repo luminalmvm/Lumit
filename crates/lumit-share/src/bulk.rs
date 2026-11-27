@@ -28,20 +28,30 @@ use std::thread;
 use uuid::Uuid;
 use web_time::{Duration, Instant};
 
-/// What one machine asks another for.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Wanted {
     /// The whole of a footage item, made small, to cut with.
-    StandIn { item: Uuid },
+    StandIn {
+        item: Uuid,
+    },
     /// `count` frames of a footage item from `first`, as good as the
     /// original, for an export that uses only those.
-    Part { item: Uuid, first: u64, count: u64 },
-    /// The footage item's file itself.
-    Original { item: Uuid },
+    Part {
+        item: Uuid,
+        first: u64,
+        count: u64,
+    },
+    Original {
+        item: Uuid,
+    },
     /// The file an export this machine asked another to do came to.
-    Export { job: Uuid },
+    Export {
+        job: Uuid,
+    },
     /// What an analysis made of a shot, such as depth or a track.
-    Analysis { id: Uuid },
+    Analysis {
+        id: Uuid,
+    },
 }
 
 impl Wanted {
@@ -66,7 +76,6 @@ pub struct Held {
     pub bytes: u64,
 }
 
-/// How a transfer is getting on, for whoever is watching.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum News {
     /// `done` of `total` bytes have crossed. `sending` is this machine
@@ -77,11 +86,14 @@ pub enum News {
         total: u64,
         sending: bool,
     },
-    /// The file is here, whole, at `path`.
-    Arrived { wanted: Wanted, path: PathBuf },
+    Arrived {
+        wanted: Wanted,
+        path: PathBuf,
+    },
     /// Nobody in the project could give it.
-    Refused { wanted: Wanted },
-    /// Who has the original of which footage changed.
+    Refused {
+        wanted: Wanted,
+    },
     Holders,
 }
 
@@ -103,7 +115,6 @@ pub trait Footage: Send + Sync {
         u64::MAX
     }
 
-    /// Something happened to a transfer.
     fn told(&self, news: News);
 }
 
@@ -179,13 +190,10 @@ const PIECE: usize = 48 << 10;
 /// The longest frame read: a piece and its few bytes of heading.
 const FRAME_LIMIT: u32 = 1 << 20;
 
-/// How many things one link may be asked for and not yet have started on.
 const ASKED_ROOM: usize = 64;
 
-/// How many frames wait to be sent on one link.
 const OUT_ROOM: usize = 256;
 
-/// How often progress is told, at most.
 const TELLING: Duration = Duration::from_millis(250);
 
 /// How often a quiet link says it is still there, and how long one that
@@ -199,10 +207,8 @@ const DATA: u8 = 3;
 const END: u8 = 4;
 const NO: u8 = 5;
 const STILL_HERE: u8 = 6;
-/// The asker no longer wants what it asked for.
 const UNWANT: u8 = 7;
 
-/// A frame's heading: what it is and which request it belongs to.
 fn frame(kind: u8, request: u64, rest: &[u8]) -> Vec<u8> {
     let mut bytes = Vec::with_capacity(9 + rest.len());
     bytes.push(kind);
@@ -239,10 +245,8 @@ fn start_of(path: &Path, length: u64) -> Option<[u8; 32]> {
     Some(*hasher.finalize().as_bytes())
 }
 
-/// What waits to go out on a link.
 enum Out {
     Frame(Vec<u8>),
-    /// The file at `path`, as the answer to `request`.
     File {
         request: u64,
         wanted: Wanted,
@@ -251,7 +255,6 @@ enum Out {
     },
 }
 
-/// The way to one other machine.
 struct Link {
     /// Which link this is, to tell it from the one that replaces it.
     id: u64,
@@ -262,7 +265,6 @@ struct Link {
     socket: TcpStream,
 }
 
-/// Something this machine asked for and is taking.
 struct Taking {
     wanted: Wanted,
     peer: u32,
@@ -270,12 +272,10 @@ struct Taking {
     file: Option<File>,
     done: u64,
     total: u64,
-    /// The most this machine takes for it ([`Footage::most`]).
     most: u64,
     told: Instant,
 }
 
-/// Something a guest asked the host for that the host is still getting.
 struct Owed {
     wanted: Wanted,
     peer: u32,
@@ -283,13 +283,10 @@ struct Owed {
     resume: Resume,
 }
 
-/// One end's footage: the links it has, what it is taking, and on the host
-/// what it owes.
 pub(crate) struct Hub {
     footage: Arc<dyn Footage>,
     limits: Arc<Limits>,
     host: bool,
-    /// A host whose one guest goes and comes back ([`Hub::patient`]).
     patient: bool,
     stop: AtomicBool,
     next: AtomicU64,
@@ -302,8 +299,6 @@ pub(crate) struct Hub {
     /// Who has the original of which footage item, by person. An entry goes
     /// when the person does.
     holds: Mutex<HashMap<u32, Vec<Held>>>,
-    /// What a guest, or a patient host, wants and has no link to ask down
-    /// yet.
     waiting: Mutex<Vec<Wanted>>,
     /// What a peer asked this end for and has since said it does not want:
     /// the peer, and its request. Checked before a file is made and between
@@ -311,7 +306,6 @@ pub(crate) struct Hub {
     withdrawn: Mutex<Vec<(u32, u64)>>,
 }
 
-/// The file a transfer is written to until it is whole.
 fn part(path: &Path) -> PathBuf {
     let mut name = path.as_os_str().to_owned();
     name.push(".part");
@@ -348,7 +342,6 @@ impl Hub {
         }
     }
 
-    /// Stop every transfer and let go of every link.
     pub(crate) fn stop(&self) {
         self.stop.store(true, Ordering::Relaxed);
         for link in self.links.lock().drain(..) {
@@ -360,13 +353,11 @@ impl Hub {
         self.stop.load(Ordering::Relaxed)
     }
 
-    /// Note which originals `peer` has, as it said or as the host passed on.
     pub(crate) fn holds(&self, peer: u32, items: Vec<Held>) {
         self.holds.lock().insert(peer, items);
         self.footage.told(News::Holders);
     }
 
-    /// Everyone's originals as this end knows them, to pass on.
     pub(crate) fn all_holds(&self) -> Vec<(u32, Vec<Held>)> {
         let holds = self.holds.lock();
         holds
@@ -375,7 +366,6 @@ impl Hub {
             .collect()
     }
 
-    /// Who has the original of `item`, and how big it is on their disk.
     pub(crate) fn holders(&self, item: Uuid) -> Vec<(u32, u64)> {
         let holds = self.holds.lock();
         let mut who: Vec<(u32, u64)> = holds
@@ -463,7 +453,6 @@ impl Hub {
         }
     }
 
-    /// Keep `wanted` to ask for on the next link.
     fn wait(&self, wanted: Wanted) {
         let mut waiting = self.waiting.lock();
         if !waiting.contains(&wanted) {
@@ -636,7 +625,6 @@ impl Hub {
         }
     }
 
-    /// Nobody can give `wanted`: say so here, and to whoever was owed it.
     fn refuse(&self, wanted: &Wanted) {
         let owed: Vec<Owed> = {
             let mut all = self.owed.lock();
@@ -654,7 +642,6 @@ impl Hub {
         });
     }
 
-    /// Make what a link asks for, one thing at a time, and queue it to go.
     fn make_loop(
         self: &Arc<Self>,
         peer: u32,
@@ -701,7 +688,6 @@ impl Hub {
         }
     }
 
-    /// Read a link until it drops or says something that is not a frame.
     fn read_loop(self: &Arc<Self>, peer: u32, receiver: &mut Receiver) {
         while !self.stopped() {
             let Ok(bytes) = receiver.recv(FRAME_LIMIT) else {
@@ -754,7 +740,6 @@ impl Hub {
         }
     }
 
-    /// The other end wants something: hand it to this link's maker.
     fn asked(&self, peer: u32, request: u64, rest: &[u8]) -> bool {
         let Some((have, rest)) = rest.split_first_chunk::<8>() else {
             return false;
@@ -847,8 +832,6 @@ impl Hub {
         true
     }
 
-    /// A file has all arrived: put it in its place, say so, and on the host
-    /// pass it on to whoever asked the host for it.
     fn whole(self: &Arc<Self>, peer: u32, request: u64, total: u64) -> bool {
         let taken = {
             let mut taking = self.taking.lock();

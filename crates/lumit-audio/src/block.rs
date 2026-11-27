@@ -17,15 +17,12 @@ use crate::meter::{self, MeterAccs};
 use crate::plan::{Fader, MixPlan, PlacedClip, MAX_NODES, MAX_SENDS, NONE};
 use crate::rack::AUDIO_BLOCK_FRAMES;
 
-/// How many frames a block is mixed in at most. A longer stretch is mixed as
-/// several.
 pub const SCRATCH_FRAMES: usize = 1024;
 
 /// A master limiter reduction past this (0.1 dB) lights the master's clip
 /// lamp.
 const LAMP_GAIN: f32 = 0.988_553_1;
 
-/// Where a racked node's output comes from.
 pub trait RackSource {
     /// Rack `rack`'s output for the frames from `start` into `out`, given the
     /// node's `input` for the same frames (interleaved stereo, both). False
@@ -98,7 +95,6 @@ impl RackSource for DrySource {
     }
 }
 
-/// A fader's override as one mix has followed it.
 #[derive(Clone, Copy, Debug, Default)]
 struct Glide {
     /// Held last block, at `last`, as a trim or not: a new held value of the
@@ -112,7 +108,6 @@ struct Glide {
     done: u32,
 }
 
-/// What one node keeps from block to block.
 #[derive(Clone, Copy, Debug, Default)]
 struct NodeState {
     duck: Follower,
@@ -125,11 +120,8 @@ struct NodeState {
 pub struct MixWork {
     /// A [`SCRATCH_FRAMES`] stereo buffer per node.
     scratch: Box<[f32]>,
-    /// A racked node's input while its rack is asked for the output.
     input: Box<[f32]>,
-    /// A fader's gain per frame.
     gains: Box<[f32]>,
-    /// Which nodes this block mixes.
     play: Box<[bool]>,
     /// Per node; `spare` is what a new plan's are made in.
     nodes: Box<[NodeState]>,
@@ -144,11 +136,8 @@ pub struct MixWork {
     /// thread and the peaks run ahead of it and would cut it short.
     owns_live: bool,
     limiter: Limiter,
-    /// Whether the master goes through the limiter, or a plain clamp.
     limit: bool,
-    /// The plan these states belong to.
     seen: u64,
-    /// The rate the mix runs at.
     rate: u32,
     /// What the jog reads the mix into before it is played at its speed
     /// ([`crate::jog`]): a chunk's worth at four times speed.
@@ -186,7 +175,6 @@ impl MixWork {
         self
     }
 
-    /// The rate the mix runs at.
     #[must_use]
     pub fn rate(&self) -> u32 {
         self.rate
@@ -198,7 +186,6 @@ impl MixWork {
         std::mem::take(&mut self.jog)
     }
 
-    /// Take the jog's buffer back.
     pub(crate) fn return_jog(&mut self, jog: Box<[f32]>) {
         self.jog = jog;
     }
@@ -385,7 +372,6 @@ impl MixPlan {
         missed
     }
 
-    /// [`Self::mix_block`] for at most [`SCRATCH_FRAMES`] frames.
     fn mix_chunk(
         &self,
         start: usize,
@@ -416,8 +402,6 @@ impl MixPlan {
         let owns = *owns_live;
         let gains = &mut gains[..len];
 
-        // Which nodes are in play: all of them, or the one asked for and
-        // what feeds it.
         play[..count].fill(stop_at.is_none());
         if let Some(stop) = stop_at.map(usize::from).filter(|&s| s < count) {
             play[stop] = true;

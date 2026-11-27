@@ -22,8 +22,6 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/viewer_panel_frb.dart';
 
-/// One-pixel vertical stripes: detail exactly as fine as a logical pixel, so a
-/// capture at anything under 1:1 has to average it away.
 class _Stripes extends CustomPainter {
   const _Stripes();
 
@@ -40,9 +38,6 @@ class _Stripes extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-/// A [picture] of the given size, offset by [at] inside a 100 × 100 panel —
-/// which is the stage: the magnification is in the picture's size, and the pan
-/// is in its offset.
 Future<({RenderRepaintBoundary picture, RenderBox panel})> _mount(
   WidgetTester tester, {
   required Size picture,
@@ -80,7 +75,6 @@ Future<({RenderRepaintBoundary picture, RenderBox panel})> _mount(
   );
 }
 
-/// Read [image] back as a colour per pixel.
 Future<int Function(int, int)> _pixels(ui.Image image) async {
   final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
   final bytes = data!.buffer.asUint8List();
@@ -92,9 +86,6 @@ Future<int Function(int, int)> _pixels(ui.Image image) async {
   };
 }
 
-/// Whether every neighbouring pixel along row [y], from [from] to [to], differs
-/// from the last — which is what a row of one-pixel stripes looks like when
-/// nothing has been averaged away.
 bool _alternates(int Function(int, int) at, int from, int to, int y) {
   for (var x = from + 1; x < to; x++) {
     if (at(x, y) == at(x - 1, y)) return false;
@@ -105,9 +96,6 @@ bool _alternates(int Function(int, int) at, int from, int to, int y) {
 void main() {
   testWidgets('a zoomed snapshot keeps the detail a panel-sized one lost',
       (tester) async {
-    // The picture is four times the panel and panned so its middle is on
-    // screen: 400 % with the corners off, which is the case that used to cost
-    // the detail.
     final stage = await _mount(
       tester,
       picture: const Size(400, 400),
@@ -121,8 +109,6 @@ void main() {
     final shots = await tester.runAsync(() async {
       final layer = stage.picture.debugLayer! as OffsetLayer;
       final visible = await layer.toImage(crop, pixelRatio: 1);
-      // What the panel-sized capture did: the whole picture, scaled down until
-      // it fits the panel's own resolution.
       final whole = await stage.picture.toImage(pixelRatio: 100 / 400);
       return (
         visible: (visible.width, await _pixels(visible)),
@@ -135,19 +121,12 @@ void main() {
     expect(visibleWidth, 100, reason: 'still only the panel worth of pixels');
     expect(wholeWidth, 100, reason: 'and the same count as the old capture');
 
-    // Column 20 of the crop is logical x = 170, an even column and so white,
-    // with black either side of it. At full detail those are the three colours
-    // read back, and every stripe across the row is there.
     expect(visible(19, 50), 0xFF000000);
     expect(visible(20, 50), 0xFFFFFFFF);
     expect(visible(21, 50), 0xFF000000);
     expect(_alternates(visible, 0, 100, 50), isTrue,
         reason: 'every one of the hundred stripes survives the capture');
 
-    // The same region of the picture in the old capture: columns 37 to 62,
-    // twenty-five pixels standing for a hundred logical ones. Whatever the
-    // rasteriser makes of that, the stripes are not in it — this is the
-    // softening the crop does away with.
     expect(_alternates(whole, 37, 62, 50), isFalse);
   });
 }

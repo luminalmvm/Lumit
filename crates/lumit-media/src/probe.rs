@@ -64,7 +64,6 @@ pub struct MediaProbe {
 }
 
 impl MediaProbe {
-    /// Every audio stream the file carries, the first one first.
     pub fn audio_streams(&self) -> impl Iterator<Item = &AudioInfo> {
         self.audio.iter().chain(&self.more_audio)
     }
@@ -114,7 +113,6 @@ impl MediaProbe {
 /// say otherwise. Every answer is the file's own, before any interpretation.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct FileFacts {
-    /// Whether the picture carries an alpha channel at all.
     pub has_alpha: bool,
     /// Whether its samples are float, which reads as linear light.
     pub float: bool,
@@ -126,7 +124,6 @@ pub struct FileFacts {
     pub pixel_aspect: (u32, u32),
 }
 
-/// The `timecode` tag of a container or one of its streams.
 #[cfg(not(target_arch = "wasm32"))]
 fn timecode_tag(tags: Option<rsmpeg::avutil::AVDictionaryRef>) -> Option<String> {
     let tags = tags?;
@@ -193,7 +190,6 @@ pub(crate) fn quarter_turns(par: &ffi::AVCodecParameters) -> u8 {
     ((-degrees / 90.0).round() as i64).rem_euclid(4) as u8
 }
 
-/// Read [`FileFacts`] off the container. Opens the file and decodes nothing.
 pub fn facts(src: &MediaSource) -> Result<FileFacts, MediaError> {
     // Lumit's own readers hand back a picture with alpha and no more to say.
     if crate::reads_own(src) {
@@ -250,7 +246,6 @@ fn file_facts(src: &MediaSource) -> Result<FileFacts, MediaError> {
     Ok(out)
 }
 
-/// Whether libav's description of a pixel format carries `flag`.
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn pix_fmt_flag(format: i32, flag: u32) -> bool {
     // SAFETY: `av_pix_fmt_desc_get` takes a format value and returns either a
@@ -347,7 +342,6 @@ pub fn probe(src: impl Into<MediaSource>) -> Result<MediaProbe, MediaError> {
     let runs = probe.runs_as_video();
     if let Some(video) = probe.video.as_mut() {
         let native = (video.fps_num, video.fps_den);
-        // One picture has no rate, fields or loop to read, only a shape.
         if runs {
             probe.duration_seconds = src.interpret.duration(probe.duration_seconds, native);
             (video.fps_num, video.fps_den) = src.interpret.fps(native);
@@ -357,7 +351,6 @@ pub fn probe(src: impl Into<MediaSource>) -> Result<MediaProbe, MediaError> {
     Ok(probe)
 }
 
-/// The file's own numbers, before any interpretation.
 fn probe_file(src: &MediaSource) -> Result<MediaProbe, MediaError> {
     // ffmpeg opens neither half of an Illustrator document.
     if crate::ai::is_ai(src.on_disk()) {
@@ -366,11 +359,6 @@ fn probe_file(src: &MediaSource) -> Result<MediaProbe, MediaError> {
     probe_container(src)
 }
 
-/// The page reads a still itself, as a picture of its own size. Nothing else
-/// opens without FFmpeg.
-///
-/// ponytail: the whole picture is read for its size. Read the header alone if
-/// big stills are slow to import.
 #[cfg(target_arch = "wasm32")]
 fn probe_container(src: &MediaSource) -> Result<MediaProbe, MediaError> {
     if let Some(probe) = crate::web::probe(src.on_disk()) {
@@ -584,11 +572,6 @@ mod tests {
         );
     }
 
-    /// Regression (tester report): an audio file with embedded cover art
-    /// exposes the artwork as a video stream (attached-picture disposition).
-    /// It must probe as **audio-only** — treating the still as footage made
-    /// the preview chase motion frames that do not exist, and the failed
-    /// decode wedged every comp holding the audio layer.
     #[test]
     fn probe_audio_with_cover_art_is_audio_only() {
         let dir = tempfile::tempdir().unwrap();
@@ -601,8 +584,6 @@ mod tests {
         assert!(p.video.is_none(), "cover art must not probe as video");
     }
 
-    /// Regression: probing arbitrary non-media bytes must return a typed
-    /// error and never panic.
     #[test]
     fn probe_garbage_file_errors_not_panics() {
         let dir = tempfile::tempdir().unwrap();

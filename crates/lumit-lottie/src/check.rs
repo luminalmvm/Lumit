@@ -30,19 +30,15 @@ impl Players {
     pub const WEB_CANVAS: Players = Players(1 << 1);
     /// The dotLottie players (ThorVG): web, iOS and Android.
     pub const DOT_LOTTIE: Players = Players(1 << 2);
-    /// lottie-ios.
     pub const IOS: Players = Players(1 << 3);
-    /// lottie-android.
     pub const ANDROID: Players = Players(1 << 4);
     /// The Flutter `lottie` package, which the preview plays through.
     pub const FLUTTER: Players = Players(1 << 5);
-    /// Every Lottie player above.
     pub const ALL: Players = Players(0b11_1111);
     /// Browsers playing an animated SVG.
     pub const CHROME: Players = Players(1 << 8);
     pub const FIREFOX: Players = Players(1 << 9);
     pub const SAFARI: Players = Players(1 << 10);
-    /// Every browser above.
     pub const BROWSERS: Players = Players(0b111 << 8);
     pub const NONE: Players = Players(0);
 
@@ -91,7 +87,6 @@ impl Players {
         })
     }
 
-    /// The keys of the players in this set, in [`Self::KEYS`] order.
     #[must_use]
     pub fn keys(self) -> Vec<&'static str> {
         Players::KEYS
@@ -102,14 +97,12 @@ impl Players {
     }
 }
 
-/// What happens to the thing an issue is about.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Outcome {
     /// Not in the file at all, or in it and drawn by none of the ticked players.
     LeftOut,
     /// In the file, and some of the ticked players don't draw it.
     SomePlayers,
-    /// In the file, written differently: baked into keys, drawn flat.
     Changed,
 }
 
@@ -125,7 +118,6 @@ impl Outcome {
     }
 }
 
-/// One thing that won't come across as it is in Lumit.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Issue {
     pub outcome: Outcome,
@@ -138,7 +130,6 @@ pub struct Issue {
     /// The comp the layer is in, which is a precomp's own comp for a layer
     /// inside one.
     pub comp: Uuid,
-    /// The layer, when the issue is about one.
     pub layer: Option<Uuid>,
     /// Where it is, for the reader: comp, layer, then the part of the layer.
     pub place: Vec<String>,
@@ -157,7 +148,6 @@ pub enum Feature {
     BlendMode(u8),
     MaskSubtract,
     MaskIntersect,
-    /// Lighten and Darken masks.
     MaskLightenDarken,
     MaskDifference,
     /// A mask's opacity below 100.
@@ -165,11 +155,8 @@ pub enum Feature {
     MaskExpansion,
     LumaMatte,
     OffsetPaths,
-    /// Per-dimension easing on a value with several numbers.
     SplitEasing,
-    /// Rounded corners on a polygon or star.
     RoundedPolystar,
-    /// Text drawn from a font (Text mode).
     FontText,
     TextAnimators,
     TextOnPath,
@@ -183,7 +170,6 @@ pub enum Feature {
     EffectTransform,
     /// Set matte (Lottie effect 28).
     EffectSetMatte,
-    /// `mix-blend-mode` in an SVG.
     SvgBlend,
 }
 
@@ -238,12 +224,9 @@ pub fn missing_in(feature: Feature, ticked: Players) -> Players {
     missing.and(ticked)
 }
 
-/// Builds the issue list as the export walks the comp, and settles each
-/// issue's outcome against the ticked players.
 #[derive(Debug, Default)]
 pub struct Report {
     issues: Vec<Issue>,
-    /// The issues already said, for finding a repeat without a scan.
     said: std::collections::BTreeSet<Issue>,
     ticked: Players,
 }
@@ -258,12 +241,10 @@ impl Report {
         }
     }
 
-    /// Something the file can't carry at all.
     pub fn left_out(&mut self, at: &Place, reason: &'static str, english: String, args: Args) {
         self.push(at, Outcome::LeftOut, reason, english, args, Players::NONE);
     }
 
-    /// Something written differently from how Lumit has it.
     pub fn changed(&mut self, at: &Place, reason: &'static str, english: String, args: Args) {
         self.push(at, Outcome::Changed, reason, english, args, Players::NONE);
     }
@@ -324,10 +305,8 @@ impl Report {
     }
 }
 
-/// The facts of an issue, by name.
 pub type Args = Vec<(String, String)>;
 
-/// Where the walk is: which comp and layer, and the names to show.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Place {
     pub comp: Uuid,
@@ -336,7 +315,6 @@ pub struct Place {
 }
 
 impl Place {
-    /// The comp itself.
     #[must_use]
     pub fn comp(comp: Uuid, name: &str) -> Self {
         Self {
@@ -346,7 +324,6 @@ impl Place {
         }
     }
 
-    /// A layer in this place's comp.
     #[must_use]
     pub fn layer(&self, layer: Uuid, name: &str) -> Self {
         let mut names = self.names.clone();
@@ -358,7 +335,6 @@ impl Place {
         }
     }
 
-    /// A part of this place's layer: an effect, a mask, a shape item.
     #[must_use]
     pub fn part(&self, name: &str) -> Self {
         let mut names = self.names.clone();
@@ -382,7 +358,6 @@ impl Place {
     }
 }
 
-/// One fact for an issue.
 #[must_use]
 pub fn arg(name: &str, value: impl Into<String>) -> (String, String) {
     (name.to_owned(), value.into())

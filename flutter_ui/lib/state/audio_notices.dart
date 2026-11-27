@@ -1,6 +1,3 @@
-// The status line for the sound's own troubles: the output it played
-// through went away and it moved to another, or some of it was played as
-// silence because it was not ready in time.
 
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/src/rust/api/audio.dart';
@@ -31,5 +28,4 @@ class AudioNotices {
   }
 }
 
-/// The one reader, shared by whatever polls the clock.
 final audioNotices = AudioNotices();

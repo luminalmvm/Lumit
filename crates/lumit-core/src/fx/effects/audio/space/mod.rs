@@ -87,7 +87,6 @@ fn play(
     }
 }
 
-/// The whole of `input`, played through a processor that has seen nothing yet.
 #[cfg(test)]
 fn play_all(
     processor: &dyn crate::fx::audio_chain::AudioProcessor,
@@ -114,8 +113,6 @@ fn noise(frames: usize) -> Vec<f32> {
     (0..frames * 2).map(|_| next() * 0.5).collect()
 }
 
-/// A sine at `hz`, in both channels, `frames` long. It and [`bin`] are how the
-/// distortion's harmonics are measured.
 #[cfg(test)]
 fn tone(frames: usize, hz: f64, rate: f64, amplitude: f32) -> Vec<f32> {
     let mut out = Vec::with_capacity(frames * 2);
@@ -146,7 +143,6 @@ fn bin(signal: &[f32], hz: f64, rate: f64) -> f64 {
     2.0 * (real * real + imaginary * imaginary).sqrt() / frames
 }
 
-/// The loudest sample in a run, either channel.
 #[cfg(test)]
 fn peak(signal: &[f32]) -> f32 {
     signal.iter().fold(0.0f32, |top, s| top.max(s.abs()))

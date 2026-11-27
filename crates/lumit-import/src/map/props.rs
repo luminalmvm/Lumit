@@ -32,7 +32,6 @@ use crate::report::{ItemPath, Outcome, Reason};
 
 use super::Conv;
 
-/// The direct child of `props` with this match name, group or leaf.
 pub(crate) fn child<'a>(props: &'a [Property], match_name: &str) -> Option<&'a Property> {
     props
         .iter()
@@ -74,7 +73,6 @@ pub(crate) fn axis_of(value: &serde_json::Value, axis: usize) -> Option<f64> {
     }
 }
 
-/// What a keyframed control Lumit does not animate imports as.
 pub(crate) const STARTS_ON: &str = "the value it starts on — Lumit's control is not animated";
 
 /// The number behind a control Lumit does not animate, and whether it was
@@ -86,8 +84,6 @@ pub(crate) fn starting_value(leaf: &Property) -> (Option<f64>, bool) {
     }
 }
 
-/// One axis of a property, as the still number it is now. Used for the
-/// switches and sizes Lumit does not animate.
 pub(crate) fn still(props: &[Property], match_name: &str, axis: usize) -> Option<f64> {
     let node = find(props, match_name)?;
     match node.separated.as_deref().and_then(|f| f.get(axis)) {
@@ -127,8 +123,6 @@ pub(crate) fn scalar(
     from_node(conv, path, node, axis, fallback)
 }
 
-/// The same, from a node already in hand (an effect parameter, a mask's
-/// opacity — the cases where the caller found the node itself).
 pub(crate) fn from_node(
     conv: &mut Conv<'_>,
     path: &ItemPath,
@@ -162,8 +156,6 @@ pub(crate) fn from_node(
     // drives it here; the keys underneath are the bundle's to keep.
     if let Some(source) = node.expression.as_deref().filter(|s| !s.trim().is_empty()) {
         let keyed = node.keyframes.as_deref().is_some_and(|k| !k.is_empty());
-        // An After Effects expression is JavaScript, and is brought across as
-        // JavaScript wherever Lumit has every name it uses.
         let javascript = lumit_core::expression::is_javascript(source);
         let reason = if node.expression_enabled != Some(true) {
             Reason::ExpressionDisabledCarried
@@ -318,7 +310,6 @@ pub(crate) fn display_name<'a>(node: &'a Property, fallback: &'a str) -> &'a str
     node.name.as_deref().unwrap_or(fallback)
 }
 
-/// A one-key `ae` namespace map, the shape every carried-through AE fact takes.
 pub(crate) fn ae_extra(
     key: &str,
     value: serde_json::Value,
@@ -326,7 +317,6 @@ pub(crate) fn ae_extra(
     ae_map(vec![(key, value)])
 }
 
-/// An `ae` namespace map from several facts.
 pub(crate) fn ae_map(
     pairs: Vec<(&str, serde_json::Value)>,
 ) -> serde_json::Map<String, serde_json::Value> {
@@ -342,8 +332,6 @@ pub(crate) fn ae_map(
     outer
 }
 
-/// Two linear keys running `value` against `time` — the shape both the Retime
-/// identity and the stretch conversion need.
 pub(crate) fn ramp(from: Rational, from_v: f64, to: Rational, to_v: f64) -> LumProperty {
     let key = |time: Rational, value: f64| Keyframe {
         time,

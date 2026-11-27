@@ -101,8 +101,6 @@ pub(crate) fn pixels_of_walk<'a>(
     for layer in &comp.layers {
         place(layer.id);
     }
-    // A node graph files its footage under its boxes, and a graph nested in it
-    // under its own.
     let mut boxes = Vec::new();
     for node in comp.graph.iter().flat_map(|g| &g.nodes) {
         place(node.id());

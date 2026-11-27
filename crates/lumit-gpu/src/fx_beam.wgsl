@@ -16,14 +16,14 @@
 
 struct Params {
     start_axis: vec4<f32>,  // start.xy, (end − start).xy, raster px
-    inside: vec4<f32>,      // the core's colour; the alpha lane is ignored
-    outside: vec4<f32>,     // the rim's colour
+    inside: vec4<f32>,
+    outside: vec4<f32>,
     inv_len2: f32,          // 1 ÷ |axis|², floored
     u0: f32,                // the tail, as a fraction of the axis
-    u1: f32,                // the head
+    u1: f32,
     inv_span: f32,          // 1 ÷ (u1 − u0), floored
     half0: f32,             // the half-thickness at the tail, raster px
-    half1: f32,             // and at the head
+    half1: f32,
     soft: f32,              // Softness ÷ 100, floored above zero
     mix_amt: f32,           // 0..1, blended against the unprocessed input
     is_active: f32,         // 0 when the drawn interval is empty

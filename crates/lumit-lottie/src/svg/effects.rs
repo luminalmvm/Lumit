@@ -43,7 +43,6 @@ impl Svg<'_> {
                 );
             }
         }
-        // Each effect's opening tags, and how many groups they open.
         let mut groups: Vec<(String, usize)> = Vec::new();
         let filter = |id: String| (format!("<g filter=\"url(#{id})\">"), 1);
         for e in layer.effects.iter().filter(|e| e.enabled) {
@@ -116,7 +115,6 @@ impl Svg<'_> {
         Ok(groups.iter().map(|(_, n)| n).sum())
     }
 
-    /// A line saying `e`'s control `what` is left out.
     fn control_left_out(
         &mut self,
         place: &Place,
@@ -213,7 +211,6 @@ impl Svg<'_> {
             v("rotation")?,
             [v("skew")?, v("skew_axis")?],
         ) else {
-            // Scaled to nothing.
             return hidden();
         };
         let [m0, m1, m2, m3] = m.map(f64::from);
@@ -320,7 +317,6 @@ impl Svg<'_> {
         Some(id)
     }
 
-    /// One number of an effect as a value on `layer`'s clock.
     fn param(
         &mut self,
         scope: &Scope<'_>,
@@ -335,7 +331,6 @@ impl Svg<'_> {
         }
     }
 
-    /// The filter element opening for `layer`, its region padded by `pad`.
     fn filter_open(&mut self, scope: &Scope<'_>, layer: &Layer, pad: f64) -> (String, String) {
         let (x0, y0, x1, y1) = self.content_box(scope, layer);
         let id = self.id("f");
@@ -367,8 +362,6 @@ impl Svg<'_> {
         id
     }
 
-    /// Drop shadow: the shape's alpha blurred, moved, tinted and put under
-    /// it, or alone when Shadow only is on.
     fn drop_shadow(&mut self, scope: &Scope<'_>, layer: &Layer, e: &EffectInstance) -> String {
         let sigma = self
             .param(scope, layer, e, "softness", tolerance::PIXELS)
@@ -431,8 +424,6 @@ impl Svg<'_> {
         };
         let x_of = |v: &[f64]| self.px(v.first().copied().unwrap_or(0.0));
         let y_of = |v: &[f64]| self.px(v.get(1).copied().unwrap_or(0.0));
-        // Blur the alpha, move it, tint it, then lay the shape over it
-        // unless only the shadow is wanted.
         f.push_str("<feGaussianBlur in=\"SourceAlpha\"");
         self.attr(&mut f, "stdDeviation", &sigma, &px);
         f.push('>');
@@ -465,7 +456,6 @@ impl Svg<'_> {
     }
 }
 
-/// The largest the first number of `value` gets across `times`.
 fn most(value: &Value, times: &[f64]) -> f64 {
     match value {
         Value::Still(v) => v.first().copied().unwrap_or(0.0).abs(),
@@ -490,13 +480,11 @@ pub(super) fn label(e: &EffectInstance, style: bool) -> String {
     found.map_or_else(|| name.to_owned(), |d| d.schema().label.to_owned())
 }
 
-/// The Mix every effect ends with, as a fraction, or `None` when it moves.
 fn mix(e: &EffectInstance) -> Option<f64> {
     e.param("mix")
         .map_or(Some(1.0), |_| still(e, "mix").map(|v| v / 100.0))
 }
 
-/// A still parameter's number; `None` when it is missing or moves.
 fn still(e: &EffectInstance, id: &str) -> Option<f64> {
     match e.param(id) {
         Some(EffectValue::Float(p)) => match p.animation {

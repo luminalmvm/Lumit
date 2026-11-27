@@ -120,11 +120,7 @@ int rotoCoveredFrames(BridgeRotoStatus status) {
   return (last - first + 1).clamp(0, status.clipFrames);
 }
 
-/// The line under the Roto brush's Propagate and Cancel buttons: how far the
-/// matte reaches, how the propagation is getting on, and which frame it is
-/// working outward from.
 class RotoDisplayFrb extends StatefulWidget {
-  /// The layer the effect sits on — what the base frame is written through.
   final LayerReference? layer;
 
   /// The node graph the brush is a box in, where it is one rather than an
@@ -140,7 +136,6 @@ class RotoDisplayFrb extends StatefulWidget {
   /// the engine per rebuild is exactly the traffic the budget gates forbid.
   final int playheadFrame;
 
-  /// Something changed that the rest of the interface should re-read.
   final VoidCallback onChanged;
 
   /// Bumped by the panel every time one of the effect's Action buttons is
@@ -234,12 +229,10 @@ class _RotoDisplayFrbState extends State<RotoDisplayFrb>
     try {
       final graph = widget.graph;
       if (graph != null) {
-        // A brush box: the same edit, through the graph's own commit.
         final source = graph
             .graphBoxSource(
                 effect: widget.effectId, frame: widget.playheadFrame)
             .frame;
-        // The file will not read, so there is no frame of it to name.
         if (source == null) return;
         final staged = graph.getNodeGraphInstances();
         final instance =
@@ -263,8 +256,6 @@ class _RotoDisplayFrbState extends State<RotoDisplayFrb>
       widget.onChanged();
       sample();
     } catch (_) {
-      // Not a footage layer, or its media will not probe: there is no source
-      // frame to move the base to, and the line above already says so.
     }
   }
 
@@ -278,9 +269,6 @@ class _RotoDisplayFrbState extends State<RotoDisplayFrb>
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // The same bar the two tracking displays draw, measuring the same
-          // thing in the same two weights: how much of the shot the answer
-          // reaches, in the accent, against how much it does not.
           if (status != null && status.clipFrames > 0)
             TrackSpanBar(
               key: const ValueKey('fx-roto-span'),
@@ -297,9 +285,6 @@ class _RotoDisplayFrbState extends State<RotoDisplayFrb>
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              // The one refusal with somewhere to go: the seed row asked for a
-              // model and this machine has no addon for it, which is a button
-              // press away from being mended.
               if (status?.failure == BridgeRotoFailure.modelMissing &&
                   !kIsWeb) ...[
                 const SizedBox(width: 6),

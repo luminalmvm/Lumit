@@ -16,12 +16,10 @@
 //! build and the composite — the video frames underneath are never decoded
 //! again. That is what makes a value drag feel instant.
 
-/// One decoded layer ready to composite (evaluator v0).
 pub struct MatteDraw {
     pub rgba: Vec<u8>,
     pub tex_w: u32,
     pub tex_h: u32,
-    /// How wide `rgba`'s samples are; see [`DrawSource::Pixels::format`].
     pub format: lumit_media::decode::PixelFormat,
     pub natural_size: (f32, f32),
     pub position: (f32, f32),
@@ -62,7 +60,6 @@ pub struct MatteDraw {
     /// Roto brush or a Depth gates the consumer with its plain footage
     /// (docs/impl/addons.md §6.1 and §13).
     pub roto_mattes: Vec<Option<RotoMatteDraw>>,
-    /// The matte source's own planes, for [`Self::roto_mattes`]'s reason.
     pub planes: Vec<Option<PlaneDraw>>,
     /// Set when the matte source is a **Precomp**: the nested comp's
     /// own draw list, realised recursively exactly as a Precomp layer's
@@ -157,7 +154,6 @@ pub struct DofInputDraw {
     /// a Matte row at rendered as a passthrough and the consumer read the plain
     /// footage (docs/impl/addons.md §13).
     pub roto_mattes: Vec<Option<RotoMatteDraw>>,
-    /// The referenced layer's own planes, for [`Self::roto_mattes`]'s reason.
     pub planes: Vec<Option<PlaneDraw>>,
     /// Set when the referenced layer is a **Precomp**: the nested
     /// comp's own draw list, realised recursively exactly as a Precomp
@@ -268,13 +264,10 @@ pub enum LayerInputDraw {
     Late(Box<LateClones>),
 }
 
-/// Where a [`LayerInputDraw::Late`] list belongs: enough for
-/// the builder to walk back to the effect and make its pictures.
 pub struct LateClones {
     /// The document the walk read. Inside a copy of a graphics template that
     /// is the copy's own, not the frame's.
     pub doc: std::sync::Arc<lumit_core::model::Document>,
-    /// The composition, the layer the effect is on, and the effect.
     pub comp: uuid::Uuid,
     pub owner: uuid::Uuid,
     pub effect: uuid::Uuid,
@@ -307,13 +300,11 @@ pub struct NestedInputDraw {
     /// Also hand over the 3D layers themselves, for rays to meet: a Depth row
     /// naming its own layer's precomp, on an effect that traces rays.
     pub trace_layers: bool,
-    /// The strokes painted on the Precomp layer itself, and when to read them.
     pub paint: Vec<lumit_core::paint::PaintStroke>,
     pub paint_time: f64,
 }
 
 impl NestedInputDraw {
-    /// Whether it reads as distance from its camera rather than a picture.
     pub(crate) fn reads_depth(&self) -> bool {
         use lumit_core::fx::effects::scene_pass::PassKind;
         self.read
@@ -407,7 +398,6 @@ pub enum GraphStep {
         /// effects are handed theirs. Empty for every other box.
         points: Vec<lumit_core::fx::points::PointsSchedule>,
     },
-    /// Picture A laid over picture B, the node a layer stack has no word for.
     Merge {
         a: Option<usize>,
         b: Option<usize>,
@@ -445,9 +435,6 @@ pub struct NestedFlow {
     pub params: lumit_core::retime::FlowParams,
 }
 
-/// Where a draw's pixels come from: decoded/synthesised bytes, a nested
-/// comp realised recursively on the GPU (Precomp layers), or a node graph
-/// walked box by box.
 pub enum DrawSource {
     Pixels {
         /// The picture itself. A decoded layer with nothing stamped into it
@@ -478,7 +465,6 @@ pub enum DrawSource {
         height: u32,
         background: [f64; 4],
         draws: Vec<CompLayerDraw>,
-        /// The nested comp's own active camera at this time.
         camera: Option<lumit_core::model::CameraPose>,
         /// The nested frame's own content name: the frame key of the
         /// nested comp at this layer time and quality tier, the same whichever
@@ -519,7 +505,6 @@ pub enum DrawSource {
     /// in the air and its boxes of smoke, laid over everything below it once that
     /// is composited.
     Haze(crate::haze::HazeLights),
-    /// A Model layer's 3D model, for the mesh pass.
     Model(Box<crate::model::ModelDraw>),
     /// The comp's Environment light (`crate::environment`), at the head of
     /// its list.
@@ -564,7 +549,6 @@ pub struct AccumulationBelow {
     /// nothing prepares this matte at the dispatch seam, because there is no
     /// dispatch.
     pub matte_channel: u32,
-    /// See [`matte_channel`](Self::matte_channel).
     pub matte_invert: bool,
     /// Where the frame's own time falls across the open shutter, 0..1
     /// (`AccumulationMbParams::shutter_anchor`): the point a darker matte
@@ -599,6 +583,10 @@ pub struct CompLayerDraw {
     pub ends_run: bool,
     pub matte: Option<MatteDraw>,
     pub blend: lumit_gpu::composite::Blend,
+    /// The comp this draw is composited in blends in display values. Carried
+    /// for the reason `colour_space` is: a collapsed Precomp's draws land in
+    /// their parent's list, and mix as the parent does.
+    pub display_blend: bool,
     /// Layer-space mask coverage (white RGBA, alpha = coverage) for
     /// GPU-sourced layers — Precomps, whose pixels never exist CPU-side.
     pub mask_cov: Option<(Vec<u8>, u32, u32)>,
@@ -852,6 +840,7 @@ impl CompLayerDraw {
             three_d: false,
             ends_run: false,
             matte: None,
+            display_blend: false,
             blend: lumit_gpu::composite::Blend::Normal,
             mask_cov: None,
             pre: None,

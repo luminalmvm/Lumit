@@ -12,7 +12,6 @@ fn fx(match_name: &str) -> GraphNode {
     GraphNode::Fx(instantiate(match_name).expect("the catalogue knows it"))
 }
 
-/// An Fx box with one of its numbers typed in.
 fn fx_with(match_name: &str, param: &str, value: f64) -> GraphNode {
     let mut inst = instantiate(match_name).expect("the catalogue knows it");
     set_param(
@@ -70,9 +69,6 @@ fn built(nodes: Vec<GraphNode>, edges: Vec<GraphEdge>) -> CompGraph {
     }
 }
 
-/// An old Depth of field pro box's depth wires land on its one Depth
-/// socket, metres winning over a pass as they did, and a box already moved
-/// on keeps a mask wired to its matte.
 #[test]
 fn dof_pro_depth_wires_merge_on_open() {
     let (pass, metres) = (fx("depth"), fx("depth"));
@@ -99,8 +95,6 @@ fn dof_pro_depth_wires_merge_on_open() {
     );
 }
 
-/// The shape every other test bends: one Read through a blur into the
-/// Output.
 fn read_blur_output() -> (CompGraph, Uuid, Uuid, Uuid) {
     let item = Uuid::now_v7();
     let source = read(item);
@@ -138,6 +132,7 @@ fn comp() -> Composition {
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         beat_grid: None,
         graph: None,
@@ -163,11 +158,6 @@ fn footage(name: &str) -> FootageItem {
     }
 }
 
-// -- 1.4, the rules ------------------------------------------------------
-
-/// Types must match, with **one exception**: a matte socket takes a
-/// picture as well as a matte, because what the row means by matte is the
-/// picture's own channel.
 #[test]
 fn a_mistyped_wire_is_refused_and_a_picture_into_a_matte_is_not() {
     let (mut graph, source_id, blur_id, _) = read_blur_output();
@@ -204,7 +194,6 @@ fn a_loop_through_image_wires_is_refused() {
     let graph = built(vec![first, second, out], edges);
     assert_eq!(graph.validate(None), Err(GraphError::Cycle));
 
-    // The smallest loop of all: a box wired into itself.
     let alone = fx("blur");
     let out = GraphNode::Output { id: Uuid::now_v7() };
     let edges = vec![wire(&alone, OUTPUT_PORT.id, &alone, INPUT_PORT.id)];
@@ -212,14 +201,10 @@ fn a_loop_through_image_wires_is_refused() {
     assert_eq!(graph.validate(None), Err(GraphError::Cycle));
 }
 
-// -- 1.4, the sockets ----------------------------------------------------
-
 fn ids(ports: &[GraphPort]) -> Vec<&str> {
     ports.iter().map(|p| p.id.as_str()).collect()
 }
 
-/// An image effect with a matte row and a layer row: its picture, its
-/// matte, the layer row as an **image socket**, then its numbers.
 #[test]
 fn an_image_effects_sockets_are_its_picture_its_matte_and_its_rows() {
     let graph = built(vec![GraphNode::Output { id: Uuid::now_v7() }], Vec::new());
@@ -238,8 +223,6 @@ fn an_image_effects_sockets_are_its_picture_its_matte_and_its_rows() {
     assert_eq!(ids(&outs), vec!["output"]);
 }
 
-/// A view menu gives the box a socket per option beside `output`, and a
-/// graph that only ever wired `output` is still a sound one.
 #[test]
 fn a_view_menu_gives_the_box_a_socket_per_option() {
     let (source, dof, out) = (
@@ -279,13 +262,10 @@ fn a_view_menu_gives_the_box_a_socket_per_option() {
     let display = held.params.iter().find(|p| p.id == "display");
     assert_eq!(display.map(|p| &p.value), Some(&EffectValue::Choice(2)));
     assert!(held_on_view(inst, "output").is_none());
-    // An effect with no view menu has the one picture output it always had.
     let (_, plain) = ports_of(&graph("output"), &fx("blur"), None);
     assert_eq!(ids(&plain), vec!["output"]);
 }
 
-/// A Switch always draws **one spare socket** beyond the last one wired,
-/// which is what makes it grow by being used.
 #[test]
 fn a_switch_shows_one_spare_socket_beyond_the_last_wired() {
     let switch = fx("switch");
@@ -307,9 +287,6 @@ fn a_switch_shows_one_spare_socket_beyond_the_last_wired() {
     assert_eq!(ids(&ins), vec!["in0", "in1", "in2", "index"]);
 }
 
-/// A Node graph box's sockets are the Inputs of the comp it names: the
-/// first picture is its own `input`, then its Matte, then every other
-/// Input a socket of its own.
 #[test]
 fn a_node_graph_box_shows_the_inputs_of_the_comp_it_names() {
     let inner = built(
@@ -341,7 +318,6 @@ fn a_node_graph_box_shows_the_inputs_of_the_comp_it_names() {
     assert_eq!(ins[3].ty, PortType::Number);
     assert_eq!(ids(&outs), vec!["output"]);
 
-    // A picture wired into its Matte is taken.
     let source = read(Uuid::now_v7());
     let matted = built(
         vec![
@@ -356,10 +332,6 @@ fn a_node_graph_box_shows_the_inputs_of_the_comp_it_names() {
         .expect("the matte socket takes a picture");
 }
 
-// -- 2.2, the projection -------------------------------------------------
-
-/// A driver into an Fx parameter comes out as the very edge the layer's
-/// driver walk already resolves.
 #[test]
 fn a_driver_wire_projects_onto_the_layer_graph() {
     let wiggle = fx("wiggle");
@@ -414,10 +386,6 @@ fn an_input_bakes_its_default_and_the_override_when_one_is_given() {
     assert_eq!(radius(&graph.project(&over)), 3.0);
 }
 
-// -- 5.2 and 5.4, the cone and the times ---------------------------------
-
-/// The cone is the boxes that make the picture, in an order where a box's
-/// sources are always earlier than the box.
 #[test]
 fn the_cone_is_topological_and_leaves_an_idle_branch_out() {
     let read = read(Uuid::now_v7());
@@ -440,8 +408,6 @@ fn the_cone_is_topological_and_leaves_an_idle_branch_out() {
     );
     assert_eq!(graph.cone_of(blur_id), vec![read_id, blur_id]);
 
-    // A Switch on its second socket leaves the first socket's branch out,
-    // unless something else in the cone reads that branch too.
     let (a, b) = (self::read(Uuid::now_v7()), self::read(Uuid::now_v7()));
     let heavy = fx("blur");
     let switch = fx(SWITCH);
@@ -468,8 +434,6 @@ fn the_cone_is_topological_and_leaves_an_idle_branch_out() {
     assert!(cone.contains(&heavy_id) && cone.contains(&b_id), "{cone:?}");
 }
 
-/// A Time offset before a temporal box shifts every neighbour that box asks
-/// for, and a temporal box inside a neighbour holds a still (§5.2).
 #[test]
 fn a_shift_reaches_every_neighbour_and_a_window_never_nests() {
     let read = read(Uuid::now_v7());
@@ -498,15 +462,9 @@ fn a_shift_reaches_every_neighbour_and_a_window_never_nests() {
         ts.sort_by(f64::total_cmp);
         ts
     };
-    // Motion blur asks its input at 4 and at the frame after it; the shift
-    // moves both of them on by its second.
     assert_eq!(times(inner_id), vec![5.0, 5.5]);
-    // Datamosh is only ever asked at a time other than the graph's own, so
-    // it holds a still: no window opens inside a window.
     assert_eq!(times(read_id), vec![5.0, 5.5]);
 }
-
-// -- 2.1, a Read box is a layer ------------------------------------------
 
 #[test]
 fn a_read_box_is_a_layer_at_default_placement() {
@@ -528,15 +486,11 @@ fn a_read_box_is_a_layer_at_default_placement() {
     assert_eq!(layer.in_point.0, Rational::ZERO);
     assert_eq!(layer.out_point.0, host.duration.0);
     assert_eq!(layer.start_offset.0, Rational::ZERO);
-    // Centred at its natural size: the anchor is the item's middle, the
-    // position the comp's.
     assert_eq!(layer.transform.anchor_x.value_at(0.0), 320.0);
     assert_eq!(layer.transform.anchor_y.value_at(0.0), 240.0);
     assert_eq!(layer.transform.position_x.value_at(0.0), 960.0);
     assert_eq!(layer.transform.position_y.value_at(0.0), 540.0);
 
-    // Footage has no size in the document, so it is centred at comp size -
-    // what a fresh footage layer of unprobed media already gets.
     let item = footage("plate");
     let layer = read_layer(Uuid::now_v7(), &ProjectItem::Footage(item.clone()), &host)
         .expect("footage is a layer");
@@ -589,7 +543,6 @@ fn the_footage_walk_follows_a_node_graph_effect() {
         inst
     };
 
-    // On a layer of a comp with no source of its own.
     let mut host = comp();
     let solid = SolidDef {
         id: Uuid::now_v7(),
@@ -609,7 +562,6 @@ fn the_footage_walk_follows_a_node_graph_effect() {
         "a graph applied as an effect brings its own footage"
     );
 
-    // The same box, inside another graph.
     let mut outer = comp();
     outer.graph = Some(built(
         vec![
@@ -624,7 +576,6 @@ fn the_footage_walk_follows_a_node_graph_effect() {
         "and so does a nested Node graph box"
     );
 
-    // A graph that applies itself stops at the guard.
     let mut looped = comp();
     let looped_id = looped.id;
     looped.graph = Some(built(
@@ -642,8 +593,6 @@ fn the_footage_walk_follows_a_node_graph_effect() {
         "a graph that reads itself terminates"
     );
 }
-
-// -- the copies ----------------------------------------------------------
 
 #[test]
 fn viewing_at_a_box_rewires_the_output_to_it() {
@@ -680,8 +629,6 @@ fn viewing_at_a_box_rewires_the_output_to_it() {
     );
 }
 
-// -- the file ------------------------------------------------------------
-
 #[test]
 fn a_whole_graph_round_trips_through_json() {
     let (mut graph, source_id, blur_id, _) = read_blur_output();
@@ -701,9 +648,6 @@ fn a_whole_graph_round_trips_through_json() {
     assert_eq!(back, graph);
 }
 
-/// **A Repeat pair holds the boxes between it, and nothing leaves them
-/// but through the end.** A nested pair is inside, a wire from inside to
-/// the Output is refused, and an end with no start of its own is refused.
 #[test]
 fn a_repeat_pair_holds_the_boxes_between_it() {
     let src = read(Uuid::now_v7());
@@ -743,9 +687,6 @@ fn a_repeat_pair_holds_the_boxes_between_it() {
         .expect("inner");
     assert_eq!(inner.body, vec![blur.id()]);
 
-    // One time of the outer pair is a graph of its own: the start an
-    // Input under its own id, the end its Output, and nothing wired in
-    // from outside. Its numbers are named for the start.
     let (time, fed) = graph.repeat_graph(outer);
     assert!(fed.is_empty());
     assert_eq!(time.output_id(), Some(end.id()));
@@ -760,15 +701,12 @@ fn a_repeat_pair_holds_the_boxes_between_it() {
         .iter()
         .all(|(id, _)| time.inputs().any(|i| i.id == *id)));
 
-    // Out of the middle straight to the Output, past both ends.
     edges[5] = wire(&blur, "output", &out, "input");
     assert_eq!(
         built(nodes.clone(), edges).validate(None),
         Err(GraphError::RepeatLeak)
     );
 
-    // An end on its own hands its picture on, and two ends on one start
-    // are refused.
     let lone = fx(REPEAT_END);
     let graph = built(
         vec![src.clone(), lone.clone(), out.clone()],
@@ -800,8 +738,6 @@ fn a_repeat_pair_holds_the_boxes_between_it() {
     );
     assert_eq!(graph.validate(None), Err(GraphError::RepeatUnpaired));
 
-    // Each path: a Read of a comp hands on a box round each path of its
-    // shape layers, laid where the Read lays the comp.
     let mut art = comp();
     let square = |x: f64| {
         crate::shape::ShapeItem::filled(

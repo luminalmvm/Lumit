@@ -1,9 +1,3 @@
-// The Anchor point (pan behind) tool's two modifiers: the key points a
-// held Ctrl snaps the pivot to, and the axis a held Shift locks the drag to.
-//
-// The compensation itself — the Position that cancels the jump — is
-// `panBehindPosition`, ported and tested in viewer_layer_map's own suite; what
-// is new here is which anchor a gesture asks for in the first place.
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,7 +8,6 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:uuid/uuid.dart';
 
 void main() {
-  /// A 200×100 layer at (300, 200), anchored on its middle, drawn 1:1.
   LayerBox box({double scale = 100, double rotation = 0}) => LayerBox(
         layer: LayerReference(
           internalprojectId: UuidValue.fromString(const Uuid().v4()),
@@ -46,9 +39,6 @@ void main() {
     });
 
     test('the distance is measured on screen, not in layer pixels', () {
-      // At 10% the whole 200-pixel layer is 20 pixels wide, so a point 6 layer
-      // pixels from the corner is well within the screen tolerance — where at
-      // 100% it is on the edge of it and at 1000% it is far outside.
       expect(snapAnchor(const Offset(6, 5), box(scale: 10)), Offset.zero,
           reason: 'shrunk right down, everything is near everything');
       expect(snapAnchor(const Offset(6, 5), box(scale: 1000)),

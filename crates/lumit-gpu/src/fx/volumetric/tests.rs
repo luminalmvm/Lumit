@@ -3,9 +3,6 @@
 use crate::fx::common::{readback_linear_f32, upload_linear_f32};
 use crate::fx::lighting::{CasterPlane, LightingKind, LightingLight};
 
-/// A box of even smoke leaves what Beer and Lambert say of what is behind
-/// it, stops at a surface in front of it and shows its colour where light
-/// reaches it, and a ray past the box gets nothing.
 #[test]
 fn smoke_in_a_box_dims_by_its_thickness_and_stops_at_depth() {
     let Some(ctx) = crate::test_support::lease() else {
@@ -34,7 +31,6 @@ fn smoke_in_a_box_dims_by_its_thickness_and_stops_at_depth() {
         },
         fields.size(),
     );
-    // A 24 pixel cube in the middle of the comp, two ray lengths from the eye.
     let look = super::VolumeLook {
         from_box: [
             [24.0, 0.0, 0.0],
@@ -80,14 +76,11 @@ fn smoke_in_a_box_dims_by_its_thickness_and_stops_at_depth() {
     };
     let far = 65000.0;
     let open = walk(far);
-    // Down the middle the ray crosses all 24 pixels of the box.
     let [r, g, b, left] = pixel(&open, 32, 32);
     let want = (-0.5f32 * 0.1 * 24.0).exp();
     assert!((left - want).abs() < 0.02, "left {left}, want {want}");
     assert!(r > g && g > b && b > 0.0, "the smoke's colour: {r} {g} {b}");
-    // Off to the side it misses the box altogether.
     assert_eq!(pixel(&open, 4, 4), [0.0, 0.0, 0.0, 1.0]);
-    // A surface in front of the box hides all of it, one half way in hides half.
     let hidden = pixel(&walk(1.0), 32, 32);
     assert_eq!(hidden, [0.0, 0.0, 0.0, 1.0]);
     let half_in = pixel(&walk(2.0), 32, 32)[3];
@@ -95,8 +88,6 @@ fn smoke_in_a_box_dims_by_its_thickness_and_stops_at_depth() {
     assert!((half_in - want).abs() < 0.03, "left {half_in}, want {want}");
 }
 
-/// The walk must agree with `lumit_core::haze::march`, and a spot's beam
-/// must show where its cone is and be cut below a card that casts.
 #[test]
 fn haze_matches_the_oracle_and_a_caster_cuts_the_beam() {
     use lumit_core::haze::{jitter, march, HazeLook, HazeView};
@@ -109,7 +100,6 @@ fn haze_matches_the_oracle_and_a_caster_cuts_the_beam() {
     };
     let fx = ctx.fx();
     let (w, h) = (64u32, 48u32);
-    // A spot overhead, aimed straight down through the middle.
     let at = [32.0, -40.0, 60.0];
     let (cone_cos, cone_inner) = (20f32.to_radians().cos(), 15f32.to_radians().cos());
     let spot = ShadingLight {
@@ -186,10 +176,8 @@ fn haze_matches_the_oracle_and_a_caster_cuts_the_beam() {
         volumes: Vec::new(),
         no_shadow: None,
     };
-    // Nothing in the scene, so every ray runs out of the haze.
     let far = 60000.0;
     let depth = upload_linear_f32(&ctx, &[far, 0.0, 0.0, 1.0].repeat((w * h) as usize), w, h);
-    // A flat card across the beam, below the light.
     let plane = CasterPlane {
         origin: [12.0, 10.0, 20.0],
         u: [40.0, 0.0, 0.0],
@@ -241,9 +229,6 @@ fn haze_matches_the_oracle_and_a_caster_cuts_the_beam() {
         let i = ((y * hw + x) * 4) as usize;
         img[i] + img[i + 1] + img[i + 2]
     };
-    // Above the card the beam shows and the card changes nothing; below
-    // it the card has cut the beam away; well off to the side there is no
-    // beam at all.
     let (above, below) = ((16, 2), (16, 20));
     assert!(lum(&open, above.0, above.1) > 0.05);
     assert!((lum(&shut, above.0, above.1) - lum(&open, above.0, above.1)).abs() < 1e-3);

@@ -127,6 +127,7 @@ are exact seconds, on the comp's clock.
 | `markers.set` | `{markers}`, how many were set. |
 | `effect.list` | `{effects}`, a list of effects, top first. |
 | `effect.get`, `effect.add`, `effect.set` | The effect. |
+| `layer.drive` | `{drivers, effect, param}`: the ids of the drivers it made, the effect's id and the row's id. |
 | `footage.import` | `{items}`, each `{id, name}`. |
 | `export.start` | `{job}`, a number for `export.status` and `export.cancel`. |
 | `export.status` | `{state, done, total, path, message}`. `state` is `running`, `done`, `failed` or `cancelled`, `done` and `total` count frames, and `message` says why it failed. |
@@ -136,10 +137,10 @@ Over MCP, `undo` and `redo` answer `{done}`, false when there was nothing to und
 | Answer | Fields |
 | --- | --- |
 | A comp | `id`, `name`, `width`, `height`, `frame_rate` as `{num, den}`, `duration`, `frames`, `background`, `node_graph`, and `layers`, a count. |
-| A layer | `id`, `name`, `kind`, `index`, `parent`, `in`, `out`, `start_offset`, `three_d`, `after_effects_order`, `two_node` and `switches`. `kind` is `footage`, `solid`, `precomp`, `text`, `camera`, `sequence`, `adjustment`, `null`, `shape`, `light`, `model` or `mesh`. `two_node` is `null` unless the layer is a camera. |
+| A layer | `id`, `name`, `kind`, `index`, `parent`, `in`, `out`, `start_offset`, `three_d`, `after_effects_order`, `curved_path`, `two_node` and `switches`. `kind` is `footage`, `solid`, `precomp`, `text`, `camera`, `sequence`, `adjustment`, `null`, `shape`, `light`, `model` or `mesh`. `two_node` is `null` unless the layer is a camera. |
 | An item | `id`, `name`, `kind`, `folder` and `comment`. `kind` is `footage`, `folder`, `comp` or `solid`. Footage adds `sequence`, `frame_rate`, `path` and `media`, and a solid adds `media`: `{width, height, frame_rate, duration}`, or `null` for footage that cannot be read. |
 | An effect | `id`, `index`, `effect`, `name`, `enabled`, `after_effects` and `params`, a list of `{id, label, kind, value}`. `kind` is `float`, `point`, `colour`, `bool`, `choice`, `seed` or `other`. |
-| A marker | `id`, `time`, `label`, `colour`, `duration` in frames, and `chapter`. |
+| A marker | `id`, `time`, `label`, `colour`, `duration` in frames, `chapter`, and `beat`, a beat marker's confidence and `null` on any other. |
 
 In `layer.get`, `properties` holds `anchor`, `position`, `scale`, `rotation`, `rotation_x`,
 `rotation_y`, `orientation`, `opacity`, `point_of_interest`, `zoom`, `focus_distance` and
@@ -154,7 +155,9 @@ row's `value`, is a number, a list of keys as `{time, value, hold, in, out}`, or
   the project, or in the script's folder when the project has no file.
 - `layer.add`: a colour or a size on anything but a solid, and a comp placed inside itself.
   The layer goes to the top of the stack unless `index` says otherwise.
-- `shape.add`: an item with fewer than two vertices.
+- `shape.add`: an item with fewer than two vertices. A path, group or modifier with no `id`
+  or `name` is given one, inside groups too: `Path` or `Group` and its place, or the
+  modifier's name.
 - `layer.add` and `layer.write`: an `id` among `fields`.
 - `layer.set`: `jump` without `parent`, `two_node` on anything but a camera, and
   `after_effects_order` while an expression drives a rotation.
@@ -165,22 +168,27 @@ row's `value`, is a number, a list of keys as `{time, value, hold, in, out}`, or
   folder cannot go inside itself.
 - `effect.add`: an effect that goes in a node graph and not on a layer.
 - `effect.set`: more than one of `value`, `keys` and `expression`, or one without `param`.
-  Layer, file and text rows cannot be set.
+  File and text rows cannot be set.
+- `layer.drive`: a `driver` that is not a driver, and a `param` the effect does not have.
 - `footage.import`: a file that is missing or cannot be read. Nothing is imported then.
 - `export.start`: a second export while one runs. Without `out`, the file is an H.264 mp4
   named after the comp, beside the project, numbered when that file is there.
 - `markers.set` replaces every marker. One given the `id` of a marker already there keeps
-  what a script cannot set.
+  what a script cannot set. One given `beat`, a confidence from 0 to 1, is a
+  [beat marker](/use/markers/#beat-markers), which
+  [Beat trigger](/effects/drivers/beat-trigger/) fires on.
 
 ## Effects
 
 `effect.add` takes Lumit's name for an effect, its id, or After Effects' match name. It also
-takes the effects an extension carries, by name.
+takes the effects an extension carries, by name. A points effect added below a producer is
+wired to the nearest one above it, as in the [node graph](/use/nodes/#mattes-and-points).
 
 `effect.get` answers one effect with every row it has, including the rows an LFX effect's or
 a Custom shader's `Params` declare. `effect.set` sets a row by its id or its label. A number
-row takes a number, a point two, a colour three or four, a checkbox `true` or `false`, and a
-menu or a seed a whole number:
+row takes a number, a point two, a colour three or four, a checkbox `true` or `false`, a
+menu or a seed a whole number, a layer row a layer's id or name, or `null` for none, and a
+curve a list of `[x, y]` points from 0 to 1:
 
 ```js
 const at = { comp: "Stripes", layer: "Stripe 1" };
@@ -190,6 +198,16 @@ lumit.effect.get({ ...at, effect: 0 }).params;
 ```
 
 [Blinds](/make/lfx-effects/#your-first-effect) is the first example in LFX effects.
+
+`layer.drive` wires a [driver](/use/nodes/#drivers), named by its id, onto an effect's row,
+as [**Drive with**](/use/effects/#edit-the-parameters) does: `audio_level` through a Remap
+and a Smooth, `beat_trigger` through a Remap, `wiggle` through a Math that adds the row's
+number, and any other driver straight in. A wire already on the row is replaced. Its other
+arguments are in the [Scripting reference](/reference/scripting/).
+
+```js
+lumit.layer.drive({ ...at, effect: "Blinds", param: "Spacing", driver: "audio_level", low: 4, high: 40 });
+```
 
 ## Sharing a script
 

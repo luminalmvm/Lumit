@@ -1,5 +1,3 @@
-//! The point track.
-
 use super::*;
 
 /// Two textured squares on a flat background, each sliding its **own** way.
@@ -10,12 +8,10 @@ struct PatchShot;
 
 impl PatchShot {
     const FRAMES: usize = 12;
-    /// Half a patch's side.
     const HALF: f64 = 26.0;
     const P1: [f64; 2] = [110.0, 90.0];
     const P2: [f64; 2] = [290.0, 200.0];
 
-    /// Where each patch's centre is on frame `n` — two unrelated slides.
     fn centres(n: usize) -> [[f64; 2]; 2] {
         let d = n as f64;
         [
@@ -81,9 +77,6 @@ fn point_job(track: Uuid, tag: &str, two: bool) -> Job {
     }
 }
 
-/// The whole point path, end to end: a real analysis of two independently
-/// moving patches, the reported box against the similarity the render
-/// actually applied, and the answer reaching the store.
 #[test]
 fn a_two_point_analysis_follows_both_patches_and_reaches_the_store() {
     let _serial = serially();
@@ -124,8 +117,6 @@ fn a_two_point_analysis_follows_both_patches_and_reaches_the_store() {
     }
     assert!(worst < 2.0, "worst corner error {worst} px");
 
-    // And into the store, under the effect instance, readable the way the
-    // Corner pin and the transform keys read it.
     publish_planar(effect, fps, clip_frames, *track);
     let range = Store.planar_range(effect).expect("filed under the effect");
     assert_eq!(range.first_frame, 0);

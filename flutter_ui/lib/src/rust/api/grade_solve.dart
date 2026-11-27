@@ -4,11 +4,10 @@
 // ignore_for_file: invalid_use_of_internal_member, unused_import, unnecessary_import
 
 import '../frb_generated.dart';
-import 'assets.dart';
 import 'effect.dart';
-import 'layer.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
+import 'shape.dart';
 
 // These functions are ignored because they are not marked as `pub`: `bridge_rows`, `circle`, `cut_stack`, `node_input_picture`, `pick_mode`, `primaries`, `read_node`, `rows_out`, `solve_error`, `solving`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `NodeInput`, `Solving`, `StackCut`

@@ -18,7 +18,6 @@ use serde_json::Value;
 use crate::commands::COMMANDS;
 use crate::mcp::tool_name;
 
-/// What rewrites the page.
 const REGENERATE: &str = "cargo test -p lumit-script regenerate_scripting_reference -- --ignored";
 
 const INTRO: &str = "Every command a [script](/use/scripts/) or
@@ -85,10 +84,8 @@ pub fn reference_page() -> String {
     page
 }
 
-/// One row of a command's argument table.
 struct Row {
     path: String,
-    /// The values it may take, as JSON, when the schema lists them.
     values: Vec<String>,
     kinds: Vec<String>,
     required: bool,
@@ -311,7 +308,6 @@ fn literal(v: &Json) -> String {
     }
 }
 
-/// "`a`, `b` or `c`".
 fn either(names: &[String]) -> String {
     let names: Vec<String> = names.iter().map(|n| format!("`{n}`")).collect();
     match names.split_last() {
@@ -420,8 +416,6 @@ mod tests {
             .join("../../web-docs/src/content/docs/reference/scripting.md")
     }
 
-    /// The manual's page is the command table's own. A command added, or an
-    /// argument changed, fails here until the page is written again.
     #[test]
     fn the_scripting_reference_matches_the_commands() {
         let got = std::fs::read_to_string(page_path()).unwrap_or_default();

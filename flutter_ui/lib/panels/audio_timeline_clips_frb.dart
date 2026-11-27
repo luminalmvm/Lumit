@@ -44,19 +44,14 @@ import 'timeline_snap.dart';
 import 'volume_band_frb.dart';
 import 'waveform_frb.dart';
 
-/// How tall a clip's header strip is: the name and the three controls, laid
-/// over the top of the clip's picture.
 const double audioClipHeader = 16;
 
 /// The narrowest clip that wears its name. Below this a name is a letter and an
 /// ellipsis, which says less than the box's own colour already does.
 const double audioClipNameMinWidth = 44;
 
-/// The narrowest clip that has room for the three controls beside its name.
 const double audioClipHeaderMinWidth = 110;
 
-/// How far the pointer must travel before a press counts as a drag rather than
-/// as the click that picks a clip.
 const double _clickSlop = 3;
 
 /// Where a clip's picture is anchored, in the clip's own placed seconds.
@@ -94,8 +89,6 @@ int? audioSourceStartFrame({
         ? reachStartFrame
         : null;
 
-/// The mark at that point: six pixels across, four deep, pointing down at the
-/// frame the sound starts on.
 const double _sourceMarkWidth = 6;
 const double _sourceMarkHeight = 4;
 
@@ -120,8 +113,6 @@ int? audioTrackAt(List<AudioTrackRow> tracks, double y) {
   return null;
 }
 
-/// Whether [y] is past the bottom of the last track: the empty ground where a
-/// clip dragged off the table goes on to a track of its own.
 bool audioBelowTracks(List<AudioTrackRow> tracks, double y) =>
     y >= tracks.fold<double>(0, (sum, track) => sum + track.height);
 
@@ -165,7 +156,6 @@ bool audioBelowTracks(List<AudioTrackRow> tracks, double y) =>
 String clipGainWords(double gainDb) =>
     '${gainDb > 0 ? '+' : ''}${gainDb.toStringAsFixed(1)} ${l10n.unitSymbolDb}';
 
-/// The loudest a clip's own gain goes, in dB.
 const double clipGainTopDb = 24;
 
 /// Where a clip's gain line lies, in the strip's own pixels: [clipGainTopDb] at
@@ -219,8 +209,6 @@ typedef AudioClipEdit = ({
 /// Audio layer, whose bar is its one clip.
 typedef AudioClipDrag = ({String? clip, BarGrab grab, int shift});
 
-/// A gesture in flight: what it has hold of, where it began, where the pointer
-/// is now, and whether it has travelled far enough to be a drag at all.
 typedef _ClipDrag = ({
   BridgeClip? clip,
   BarGrab grab,
@@ -230,14 +218,12 @@ typedef _ClipDrag = ({
   bool stretch,
 });
 
-/// One track's clips, over the two lane rows the track is tall.
 class AudioClipStrip extends StatefulWidget {
   final AudioTrackRow track;
   final TimelineAxis axis;
   final double fps;
   final double height;
 
-  /// Which picture a clip draws, from the track's own lane-mode chip.
   final LaneMode mode;
   final WaveformStyle style;
 
@@ -247,8 +233,6 @@ class AudioClipStrip extends StatefulWidget {
 
   final List<SnapTarget> snapTargets;
 
-  /// Whether a moved clip lands on a whole frame. Off, it goes where the
-  /// pointer puts it.
   final bool quantise;
 
   /// Where the box stands while a drag is on, for the fade layer the panel
@@ -257,8 +241,6 @@ class AudioClipStrip extends StatefulWidget {
   /// under them (docs/impl/audio-timeline.md §5).
   final ValueNotifier<AudioClipDrag?> preview;
 
-  /// The picked clips' ids, drawn lit. The table's own list, so a pick reaching
-  /// across tracks reads the same on each.
   final Set<String> selected;
 
   /// Which clips on this track are twirled open, by id - the drop-down rows
@@ -282,7 +264,6 @@ class AudioClipStrip extends StatefulWidget {
   final void Function(BridgeClip clip, bool into, Offset at) onFadeMenu;
   final void Function(AudioClipEdit edit) onCommit;
 
-  /// Committed something from the header strip; the panel refreshes.
   final VoidCallback onChanged;
 
   /// The header's three controls. Null draws them without a gesture, which is
@@ -295,8 +276,6 @@ class AudioClipStrip extends StatefulWidget {
   final void Function(BridgeClip clip, BuildContext at)? onAddEffect;
   final void Function(BridgeClip clip, BuildContext at)? onToggleOpen;
 
-  /// Where each clip's wave is handed on as it lands, by clip id, so the
-  /// track's lanes can draw it faint behind their curves.
   final ValueNotifier<Map<String, BridgeAudioPeaks>>? waves;
 
   const AudioClipStrip({
@@ -332,11 +311,8 @@ class AudioClipStrip extends StatefulWidget {
 }
 
 class _AudioClipStripState extends State<AudioClipStrip> {
-  /// The gesture in flight: which clip it has hold of, what of it, where it
-  /// started and where the pointer is now. Null between gestures.
   _ClipDrag? _drag;
 
-  /// Escape's way out of the drag, which writes nothing.
   final DragEscape _escape = DragEscape();
 
   /// Whether the press that is running began on one of the header's controls.
@@ -375,8 +351,6 @@ class _AudioClipStripState extends State<AudioClipStrip> {
 
   List<BridgeClip> get _clips => widget.track.entry.info.clips;
 
-  /// The comp frames a clip covers as it is drawn right now: the document's,
-  /// plus whatever the drag in flight has done to them.
   (int, int) _span(BridgeClip clip) {
     final drag = _drag;
     final moving = drag != null && drag.clip?.id == clip.id;
@@ -389,10 +363,8 @@ class _AudioClipStripState extends State<AudioClipStrip> {
     );
   }
 
-  /// How far a drag has travelled in whole frames, with the magnet applied.
   int _shiftOf(_ClipDrag drag) => _travelOf(drag).$1;
 
-  /// The part of a frame a move carries past [_shiftOf].
   double _subOf(_ClipDrag drag) => _travelOf(drag).$2;
 
   /// A drag's travel: whole frames, and for a move the part of a frame past
@@ -441,7 +413,6 @@ class _AudioClipStripState extends State<AudioClipStrip> {
           controlPressed: HardwareKeyboard.instance.isControlPressed),
     );
     if (drag.grab != BarGrab.move) return (snapped.delta, 0);
-    // An unconverted Audio layer's bar is its one clip, and moves the same.
     if (!widget.quantise && snapped.caught == null) {
       return (raw.floor(), raw - raw.floor());
     }
@@ -451,8 +422,6 @@ class _AudioClipStripState extends State<AudioClipStrip> {
       clip == null ? 0 : -(clip.startExact - clip.startFrame.toInt()),
     );
   }
-
-  // ------------------------------------------------------------ the gestures
 
   /// The pointer went down on a clip's box, or on an unconverted layer's bar.
   ///
@@ -492,7 +461,6 @@ class _AudioClipStripState extends State<AudioClipStrip> {
           from: event.position,
           at: event.position,
           moved: false,
-          // Shift on an end changes the clip's speed instead of its trim.
           stretch: grab != BarGrab.move &&
               HardwareKeyboard.instance.isShiftPressed,
         ));
@@ -503,7 +471,6 @@ class _AudioClipStripState extends State<AudioClipStrip> {
     _publish();
   }
 
-  /// Tell the fade layer stacked over this strip where the box stands now.
   void _publish() {
     final held = _drag;
     widget.preview.value = held == null
@@ -553,8 +520,6 @@ class _AudioClipStripState extends State<AudioClipStrip> {
     // picked by it, and the razor does not also cut through it.
     if (onControl) return;
     if (!held.moved) {
-      // A press that never travelled is a click: cut it with the razor in
-      // hand, and pick it otherwise.
       if (widget.razor) {
         widget.onRazor(widget.razorFrameAt(_localX(event.position)).round());
       } else if (held.clip case final clip?) {
@@ -575,8 +540,6 @@ class _AudioClipStripState extends State<AudioClipStrip> {
       stretch: held.stretch,
     ));
   }
-
-  // ---------------------------------------------------------------- the gain
 
   /// The pointer went down on a clip's gain line.
   ///
@@ -617,7 +580,6 @@ class _AudioClipStripState extends State<AudioClipStrip> {
         ));
   }
 
-  /// Let go: the gain is written once, and only where the drag moved it.
   void _gainUp(BridgeClip clip) {
     final held = _gain;
     final commit = _escape.end();
@@ -627,7 +589,6 @@ class _AudioClipStripState extends State<AudioClipStrip> {
     widget.onChanged();
   }
 
-  /// This clip's picture origin, with the drag in flight in it.
   double _originOf(BridgeClip clip) {
     final drag = _drag;
     final trimIn =
@@ -661,8 +622,6 @@ class _AudioClipStripState extends State<AudioClipStrip> {
     final box = context.findRenderObject();
     return box is RenderBox ? box.globalToLocal(global).dx : global.dx;
   }
-
-  // ------------------------------------------------------------- the picture
 
   /// Ask for the summary of the part of [clip] that is on screen, at one bucket
   /// per pixel column of it, so a clip's picture gains detail as the lanes zoom
@@ -741,8 +700,6 @@ class _AudioClipStripState extends State<AudioClipStrip> {
     });
   }
 
-  // ---------------------------------------------------------------- the draw
-
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
@@ -792,15 +749,12 @@ class _AudioClipStripState extends State<AudioClipStrip> {
     ]);
   }
 
-  /// What the pointer would take hold of where it is resting.
   BarGrab? _hover;
 
   void _hoverAt(BarGrab? grab) {
     if (grab != _hover) setState(() => _hover = grab);
   }
 
-  /// A hand over the body, as a layer bar shows one, and the trim arrows only
-  /// at the ends that trim.
   MouseCursor _cursor() {
     if (widget.razor) return SystemMouseCursors.none;
     return switch (_drag?.grab ?? _hover) {
@@ -815,8 +769,6 @@ class _AudioClipStripState extends State<AudioClipStrip> {
   /// a strip cannot sit anywhere but on its own clip.
   (double, double) _place(BridgeClip clip) {
     final (start, end) = _span(clip);
-    // To the part of a frame: where the clip sits, and where a move in hand
-    // has carried it.
     final drag = _drag;
     final sub = drag != null && drag.clip?.id == clip.id ? _subOf(drag) : 0.0;
     return audioClipBox(
@@ -828,9 +780,6 @@ class _AudioClipStripState extends State<AudioClipStrip> {
 
   double _widthOf(BridgeClip clip) => _place(clip).$2;
 
-  /// Where a clip being dragged came from, while it is being dragged: a
-  /// hairline and nothing in it, so the box under the pointer is read as the
-  /// clip and this as the place it is leaving.
   Widget _ghost(LumitTheme t, BridgeClip clip) {
     final left = widget.axis.xOf(clip.startExact);
     return Positioned(
@@ -853,7 +802,6 @@ class _AudioClipStripState extends State<AudioClipStrip> {
     );
   }
 
-  /// One clip's header strip, laid over the band on the clip's own box.
   Widget _headerBox(LumitTheme t, BridgeClip clip) {
     final (left, width) = _place(clip);
     return Positioned(
@@ -867,7 +815,6 @@ class _AudioClipStripState extends State<AudioClipStrip> {
   }
 
   Widget _clip(LumitTheme t, BridgeClip clip) {
-    // The clip's own colour where it has one, its track's where not.
     final label = t.labelColour(clip.label ?? widget.track.entry.info.label);
     final (left, width) = _place(clip);
     // After layout, since a zoom only moves the scroll there and the offset
@@ -886,13 +833,8 @@ class _AudioClipStripState extends State<AudioClipStrip> {
         duration: ThemeScope.of(context).motion.mark.duration,
         curve: ThemeScope.of(context).motion.mark.curve,
         decoration: BoxDecoration(
-          // The label's own colour thinned over the ground, with the solid
-          // leading edge below carrying it at full strength - the layer bar's
-          // own treatment, and a picked clip is the same colour held stronger.
           color: label.withValues(
               alpha: picked ? clipFillSelectedAlpha : clipFillAlpha),
-          // Desk marks a picked clip with its accent outline, the other
-          // shapes with the foreground.
           border: Border.all(
               color: picked
                   ? (t.shape == ThemeShape.desk ? t.accent : t.textPrimary)
@@ -1008,7 +950,6 @@ class _AudioClipStripState extends State<AudioClipStrip> {
     ];
   }
 
-  /// The clip's leading edge and its own picture, behind the header.
   Widget _content(LumitTheme t, BridgeClip clip, Color label, double width) {
     final id = clip.id.toString();
     final originSeconds = _originOf(clip);
@@ -1062,7 +1003,6 @@ class _AudioClipStripState extends State<AudioClipStrip> {
                 ),
               ),
       ),
-      // The box clips this, so a sound starting past the tail draws nothing.
       if (_sourceStartOf(clip) case final frame?)
         Positioned(
           key: ValueKey<String>('atl-source-start-${clip.id}'),
@@ -1256,8 +1196,6 @@ class _AudioClipStripState extends State<AudioClipStrip> {
   }
 }
 
-/// The mark at the source's start: a filled triangle pointing down at the
-/// frame the sound begins on.
 class _SourceStartMark extends CustomPainter {
   final Color colour;
 

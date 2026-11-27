@@ -1,7 +1,3 @@
-// The master's loudness as quiet numbers, under the Audio panel's levels and
-// beside the Mixer's Master meter: short-term, integrated and the true peak,
-// and on the Master the momentary loudness and the range too. A click on the
-// integrated number starts it afresh.
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -11,8 +7,6 @@ import '../state/ui_state.dart';
 import '../widgets/controls.dart';
 import 'audio_meters_feed.dart';
 
-/// How the numbers stand: side by side, stacked with each mark over its number
-/// for a strip, or the integrated number alone where a strip has no room.
 enum LoudnessLayout { row, column, integrated }
 
 class LoudnessReadout extends StatelessWidget {
@@ -24,8 +18,6 @@ class LoudnessReadout extends StatelessWidget {
   /// read against it, or null when the comp has none.
   final double? target;
 
-  /// Whether the target stands after the integrated reading, where there is
-  /// room for it.
   final bool targetBeside;
 
   const LoudnessReadout(
@@ -56,7 +48,6 @@ class LoudnessReadout extends StatelessWidget {
                   key: ValueKey<String>(key),
                   maxLines: 1,
                   softWrap: false,
-                  // Nothing measured recedes, like the label beside it.
                   style: mark.copyWith(
                     color: Color.lerp(
                         value.isFinite ? ink ?? t.textSecondary : t.textMuted,
@@ -66,7 +57,6 @@ class LoudnessReadout extends StatelessWidget {
                 );
                 final words =
                     Text(letters, maxLines: 1, softWrap: false, style: mark);
-                // The target, quiet, after the reading it is read against.
                 final reading = after == null
                     ? number
                     : Row(mainAxisSize: MainAxisSize.min, children: [
@@ -191,7 +181,6 @@ class _LoudnessHistoryGraphState extends State<LoudnessHistoryGraph> {
   @override
   void didUpdateWidget(LoudnessHistoryGraph old) {
     super.didUpdateWidget(old);
-    // Another comp up: its loudness is not this one's.
     if (widget.ui.selectedComp?.internalid != _comp?.internalid) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _read();
@@ -260,8 +249,6 @@ class _HistoryPainter extends CustomPainter {
   final double left;
   final Color ground, grid, trace, aim;
 
-  /// The reading's face, which the right-hand room is measured in, and the
-  /// faces of the scale and the target beside the graph.
   final TextStyle text, scale, aimWords;
 
   _HistoryPainter({
@@ -277,7 +264,6 @@ class _HistoryPainter extends CustomPainter {
     required this.aimWords,
   }) : super(repaint: history);
 
-  /// The room a reading takes at the right, as the level bars leave it.
   late final double _right = () {
     final widest = TextPainter(
       text: TextSpan(text: '-00.0', style: text),
@@ -310,7 +296,6 @@ class _HistoryPainter extends CustomPainter {
       canvas.drawRect(
           Rect.fromLTWH(plot.left, y - 0.5, plot.width, 1),
           Paint()..color = grid);
-      // A mark the target's own number would sit on gives way to it.
       if (aimAt == null || (yOf(aimAt) - y).abs() > 9) {
         word('${lufs.round()}', y, plot.right + 4, scale);
       }

@@ -1,6 +1,3 @@
-// The graph editor's edit operations: how a gesture or a menu writes curves
-// back through the bridge. Split out of graph_editor_frb.dart, which
-// re-exports it.
 
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -29,8 +26,6 @@ Map<GraphChannel, BridgeScalar> withLinkedPartners(
   final out = Map.of(edits);
   edits.forEach((channel, next) {
     if (channel.linkedParam case final half?) {
-      // An effect's chained pair: the other half is read off the instance,
-      // where a layer's is read off its transform.
       BridgeScalar? was;
       for (final v in channel.effect?.values ?? const <BridgeParamValue>[]) {
         if (v.id == half.id && v.value is BridgeEffectValue_Float) {
@@ -152,7 +147,6 @@ BridgeScalar keptUnderExpression(BridgeScalar was, BridgeScalar next) =>
 /// expression off.
 void commitChannelEdits(Map<GraphChannel, BridgeScalar> edits,
     {bool replace = false}) {
-  // Transform channels, grouped by layer.
   final transforms = <String,
       (LayerReference, List<BridgeTransformProp>, List<BridgeScalar>)>{};
   final effects =
@@ -187,11 +181,11 @@ void commitChannelEdits(Map<GraphChannel, BridgeScalar> edits,
       writeTextAnimatorScalar(
         layer: channel.entry.layer,
         index: channel.animator,
+        selector: channel.animatorSelector,
         value: value,
         to: next,
       );
     } else if (channel.isShapePath) {
-      // As a mask's shape below: only the keys' times and eases are written.
       channel.entry.layer.setShapePathKeys(
         id: channel.shape!.id,
         keys: keysOf(next),
@@ -211,9 +205,6 @@ void commitChannelEdits(Map<GraphChannel, BridgeScalar> edits,
         keys: keysOf(next),
       );
     } else if (channel.mask case final mask?) {
-      // A mask edit takes the whole mask, so there is nothing to batch per
-      // property; two curves on one mask are two writes and two undo steps,
-      // which is what `SetLayerMasks` costs until it grows a per-key op.
       channel.entry.layer.setMask(
         mask:
             maskWithScalar(mask, channel.maskValue!, next, channel.maskVertex),
@@ -224,8 +215,6 @@ void commitChannelEdits(Map<GraphChannel, BridgeScalar> edits,
   for (final (layer, props, values) in transforms.values) {
     layer.setTransforms(props: props, values: values);
   }
-  // Each of the layer's lists an edit lands on, staged and committed alone:
-  // the stack, its styles, a placed graph's Inputs.
   for (final (layer, byEffect) in effects.values) {
     for (final staged in [
       layer.getEffects(),
@@ -318,7 +307,6 @@ void previewChannelEdits({
   }
 
   if (lead.effect == null || lead.param == null) return;
-  // A Node graph driver's curve previews through the graph's own patch.
   final drivers = layer.getGraphDrivers();
   final driver =
       drivers.any((d) => d.id().toString() == lead.effect!.id.toString());
@@ -372,9 +360,6 @@ BridgeSideInterp sideWithInfluence(
           (percent / 100).clamp(minTangentReach, maxInfluence).toDouble(),
     ));
 
-/// Set one or both sides of every selected key to [side] — the F9 family and
-/// the bottom bar's Linear / Bezier / Hold buttons. `inSide`/`outSide` pick
-/// which sides change (ease-in touches only the in side, and so on).
 void applyInterpToSelection({
   required List<GraphChannel> channels,
   required Set<String> selectedKeys,
@@ -458,7 +443,6 @@ void applyTangentModeToSelection({
   return null;
 }
 
-/// Typed speed and influence onto every selected key, one write per curve.
 void applyKeyEaseToSelection({
   required List<GraphChannel> channels,
   required Set<String> selectedKeys,
@@ -511,7 +495,6 @@ BridgeKeyframe keyWithHandlesJoined(List<BridgeKeyframe> keys, int i) {
   );
 }
 
-/// Join handles on every selected key that has them split.
 void joinHandlesOnSelection({
   required List<GraphChannel> channels,
   required Set<String> selectedKeys,
@@ -534,8 +517,6 @@ void joinHandlesOnSelection({
   if (edits.isNotEmpty) commitChannelEdits(edits);
 }
 
-/// Lay the handles of every selected key flat: the curve stops as it passes
-/// through the key. [isOut] names one side, or null for both.
 void flattenHandlesOnSelection({
   required List<GraphChannel> channels,
   required Set<String> selectedKeys,
@@ -566,8 +547,6 @@ void flattenHandlesOnSelection({
   if (edits.isNotEmpty) commitChannelEdits(edits);
 }
 
-/// Whether any selected key has two eased sides aimed apart, which is what
-/// Join handles can do something about.
 bool anyHandlesSplit({
   required List<GraphChannel> channels,
   required Set<String> selectedKeys,

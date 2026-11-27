@@ -1,7 +1,3 @@
-//! A Model layer's material rows ([`lumit_core::model_material`]) beside its
-//! file: what each starts at, what the layer keeps of them, and what they
-//! come to at a moment for the mesh pass.
-
 use std::borrow::Cow;
 use std::sync::Arc;
 
@@ -58,8 +54,6 @@ pub(crate) fn kept_for<'a>(
     (at.custom_name.is_none() || at.custom_name.as_deref() == name).then_some(at)
 }
 
-/// Material `index`'s rows on Model layer `layer` as `m` in its file has
-/// them.
 pub(crate) fn offered(layer: Uuid, index: usize, m: &Material) -> Option<EffectInstance> {
     let mut rows = lumit_core::fx::builtins::instantiate(MATCH_NAME)?;
     rows.id = material_id(layer, index);
@@ -114,8 +108,6 @@ pub fn rows(doc: &Document, layer: &Layer) -> Option<Vec<EffectInstance>> {
     Some(scene.map_or_else(Vec::new, |s| rows_of(layer.id, settings, &s)))
 }
 
-/// Material `id`'s rows on Model layer `layer` as its file has them, which
-/// a preset and a Reset start from.
 pub fn file_rows(doc: &Document, layer: &Layer, id: Uuid) -> Option<EffectInstance> {
     let LayerKind::Model { item, .. } = &layer.kind else {
         return lumit_core::extrude::takes_geometry(layer)
@@ -131,8 +123,6 @@ fn rows_of(layer: Uuid, settings: &ModelSettings, scene: &ModelScene) -> Vec<Eff
     rows_from(layer, &settings.materials, &materials_of(scene), 0)
 }
 
-/// The rows of each of `file`'s materials on layer `layer`, numbered on from
-/// `first`: what `kept` holds, or the material's own values.
 pub(crate) fn rows_from(
     layer: Uuid,
     kept: &[Option<EffectInstance>],
@@ -149,7 +139,6 @@ pub(crate) fn rows_from(
                     custom_name: (!m.name.is_empty()).then(|| m.name.clone()),
                     ..rows.clone()
                 };
-                // Rows kept before a row was added get it at its default.
                 lumit_core::fx::builtins::backfill_builtin_params(std::slice::from_mut(&mut rows));
                 Some(rows)
             }
@@ -158,8 +147,6 @@ pub(crate) fn rows_from(
         .collect()
 }
 
-/// For each of `file`'s materials whether `kept` leaves its Base colour row
-/// as the material has it.
 pub(crate) fn plain_faces(
     layer: Uuid,
     kept: &[Option<EffectInstance>],
@@ -217,7 +204,6 @@ fn kept_of(
     Some(out)
 }
 
-/// Whether staged `list` is Model layer `layer`'s rows.
 #[must_use]
 pub fn owns(layer: &Layer, list: &[EffectInstance]) -> bool {
     (matches!(layer.kind, LayerKind::Model { .. }) || lumit_core::extrude::takes_geometry(layer))
@@ -226,8 +212,6 @@ pub fn owns(layer: &Layer, list: &[EffectInstance]) -> bool {
             .is_some_and(|rows| index_of(layer.id, rows.id).is_some())
 }
 
-/// Lay staged `list`, Model layer `layer`'s rows in the file's order, over
-/// what it keeps, for a preview of an edit not yet made.
 pub fn stage(layer: &mut Layer, list: Vec<EffectInstance>) {
     if let LayerKind::Model { settings, .. } = &mut layer.kind {
         settings.materials = list.into_iter().map(Some).collect();
@@ -238,23 +222,15 @@ pub fn stage(layer: &mut Layer, list: Vec<EffectInstance>) {
     }
 }
 
-/// One material as its rows have it at a moment, and the pictures its
-/// layer rows name ([`PICTURES`]).
 pub(crate) struct Look {
     pub index: usize,
     pub material: Material,
     pub pictures: Vec<LayerInputDraw>,
-    /// Whether the file's base colour and metal-rough pictures still show.
     pub textures: bool,
-    /// Where its base colour is seen from, when it isn't on the model's uvs.
     pub projector: Option<crate::projection::Projector>,
-    /// The look whose picture it projects too, in place of one of its own.
     pub plate_from: Option<usize>,
 }
 
-/// Every material of `scene` that a Model layer's `settings` change, or that
-/// is glass, at layer time `lt`. `picture` resolves a row naming a layer, as
-/// an effect's layer rows are.
 pub(crate) fn looks(
     settings: &ModelSettings,
     scene: &ModelScene,
@@ -271,7 +247,6 @@ pub(crate) fn looks(
     )
 }
 
-/// [`looks`], of any list of `materials` and the rows `kept` for them.
 pub(crate) fn looks_of(
     kept: &[Option<EffectInstance>],
     materials: &[Material],
@@ -330,7 +305,6 @@ pub(crate) fn looks_of(
         if matches!(pictures.get(1), Some(LayerInputDraw::Layer(_))) && m.emissive == [0.0; 3] {
             m.emissive = [1.0; 3];
         }
-        // Seen through anywhere, it blends.
         let opacity_picture = matches!(pictures.get(2), Some(LayerInputDraw::Layer(_)));
         if m.alpha_mode == AlphaMode::Opaque && (m.base_colour[3] < 1.0 || opacity_picture) {
             m.alpha_mode = AlphaMode::Blend;
@@ -352,8 +326,6 @@ pub(crate) fn looks_of(
 mod tests {
     use super::*;
 
-    /// An edited material is kept with its keys, an untouched one isn't, and
-    /// the kept rows come back as they were edited, for the mesh pass too.
     #[test]
     fn only_a_changed_material_is_kept() {
         let layer = Uuid::now_v7();
@@ -389,7 +361,6 @@ mod tests {
         assert_eq!(seen.len(), 1);
         assert_eq!((seen[0].index, seen[0].material.roughness), (1, 0.8));
 
-        // A named material keeps its edits when the file moves it.
         let mut named = scene.clone();
         named.materials[1].name = "Body".into();
         let mut rows = rows_of(layer, &ModelSettings::default(), &named);

@@ -28,14 +28,12 @@ import '../widgets/controls.dart';
 import 'status_poller.dart' show statusPoll;
 import 'viewer_noise_sample.dart' show noiseMeasures;
 
-/// The plot's size: the Levels histogram's width, a little taller.
 const double _plotWidth = 200;
 const double _plotHeight = 64;
 
 /// The frequency axis, as the engine's grid has it.
 const double _lowHz = 20, _highHz = 20000;
 
-/// The level axis, in dB.
 const double _topDb = 0, _bottomDb = -100;
 
 /// What the engine's view answers for each effect that is not a plain
@@ -43,7 +41,6 @@ const double _topDb = 0, _bottomDb = -100;
 /// reverb time.
 const int _kindHum = 1, _kindClicks = 2, _kindReverb = 3;
 
-/// The sound clean-up effects this display draws for.
 const Set<String> repairEffects = {
   'audio_denoise',
   'audio_dehum',
@@ -62,7 +59,6 @@ class RepairDisplayFrb extends StatefulWidget {
   /// row while it moves.
   final Map<String, BridgeEffectValue> values;
 
-  /// Bumped by the panel when one of the effect's buttons is pressed.
   final int pressed;
 
   const RepairDisplayFrb({
@@ -99,8 +95,6 @@ class _RepairDisplayFrbState extends State<RepairDisplayFrb> {
     if (_learns) noiseMeasures.addListener(_watchLearn);
   }
 
-  /// A Learn has been asked for, here or from a key or a menu: follow it, and
-  /// draw the profile it leaves.
   void _watchLearn() {
     if (!mounted || !_learns) return;
     final BridgeNoiseStatus next;
@@ -196,7 +190,6 @@ class _RepairDisplayFrbState extends State<RepairDisplayFrb> {
     };
   }
 
-  /// De-esser's Frequency, drawn as a mark on the axis.
   double? _crossover() {
     if (widget.matchName != 'audio_deess') return null;
     final v = widget.values['frequency'];
@@ -370,7 +363,6 @@ class _SpectrumPainter extends CustomPainter {
             ..color = output
             ..strokeWidth = 1.25);
     }
-    // The hum and its harmonics, as ticks along the top.
     if (view.kind == _kindHum && view.value > 0) {
       final tick = Paint()
         ..color = floor
@@ -402,11 +394,9 @@ class _SpectrumPainter extends CustomPainter {
       old.grid != grid;
 }
 
-/// The axis under a spectrum: 100, 1k and 10k under their hairlines.
 class _AxisPainter extends CustomPainter {
   final TextStyle style;
 
-  /// The marks' labels at 100 Hz, 1 kHz and 10 kHz.
   final List<String> labels;
 
   const _AxisPainter({required this.style, required this.labels});
@@ -436,8 +426,6 @@ class _AxisPainter extends CustomPainter {
       old.labels[2] != labels[2];
 }
 
-/// The sound around the playhead as columns of its range, with each click
-/// found marked across it.
 class _ClicksPainter extends CustomPainter {
   /// Min and max per column, -1 to 1, in pairs.
   final List<double> wave;
@@ -465,8 +453,6 @@ class _ClicksPainter extends CustomPainter {
       canvas.drawLine(Offset(x, mid - wave[c * 2 + 1] * mid),
           Offset(x, mid - wave[c * 2] * mid), line);
     }
-    // Ticks along the top, as Hum removal marks its harmonics, so a stretch
-    // dense with clicks still shows the sound under them.
     final mark = Paint()..color = markColour;
     for (var i = 0; i + 1 < marks.length; i += 2) {
       final a = (marks[i] * size.width).floorToDouble();

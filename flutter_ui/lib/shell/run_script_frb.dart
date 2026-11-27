@@ -1,5 +1,3 @@
-// File ▸ Scripts: a JavaScript or After Effects script run on the open
-// project, picked, from the Scripts folder or dropped on the window.
 
 import 'dart:async';
 
@@ -137,7 +135,6 @@ Future<void> runScriptFrb(
   app.notifyDocumentChanged();
 }
 
-/// The file's name without its folder or extension.
 String _scriptName(String path) {
   final file = path.split(RegExp(r'[\\/]')).last;
   final dot = file.lastIndexOf('.');
@@ -177,13 +174,11 @@ void installEventScripts(BuildContext context) {
   };
 }
 
-/// Whether [path] is a script, by its extension.
 bool isScriptFile(String path) {
   final lower = path.toLowerCase();
   return lower.endsWith('.js') || lower.endsWith('.jsx');
 }
 
-/// Ask once for each script among [dropped], and run the ones agreed to.
 Future<void> runDroppedScripts(
     BuildContext context, Iterable<String> dropped) async {
   final app = context.read<LumitState>();
@@ -210,7 +205,6 @@ Future<void> runDroppedScripts(
   }
 }
 
-/// What the script [name] printed, in a window of its own, with Copy.
 Future<void> showScriptLog(
         BuildContext context, String name, List<String> log) =>
     showLumitModal<void>(

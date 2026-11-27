@@ -1,5 +1,3 @@
-//! Which ops need a composition that holds layers.
-
 use super::*;
 
 /// The composition an op edits **the layers of**, or `None` when the op has
@@ -36,6 +34,7 @@ pub(super) fn comp_guards(op: &Op) -> Option<Uuid> {
         | Op::SetSequenceClips { comp, .. }
         | Op::SetLayerKind { comp, .. }
         | Op::SetLayerOrient { comp, .. }
+        | Op::SetLayerMotionPath { comp, .. }
         | Op::SetLayerAdjustment { comp, .. }
         | Op::SetLayerPitchFollowsSpeed { comp, .. }
         | Op::SetLayerAudible { comp, .. }

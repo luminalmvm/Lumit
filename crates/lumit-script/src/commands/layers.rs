@@ -1,6 +1,7 @@
 use lumit_core::anim::Property;
 use lumit_core::edits;
 use lumit_core::model::{Composition, Document, LayerKind, ProjectItem};
+use lumit_core::motion_path::MotionPath;
 use lumit_core::ops::Op;
 use lumit_core::time::{CompTime, Rational};
 use serde::Deserialize;
@@ -42,7 +43,6 @@ pub(super) struct AddArgs {
     fields: Option<serde_json::Map<String, Value>>,
 }
 
-/// Whether `comp`, or a comp anywhere inside it, holds comp `id`.
 pub(super) fn holds(doc: &Document, comp: &Composition, id: Uuid, seen: &mut Vec<Uuid>) -> bool {
     edits::nested_comps(doc, comp).into_iter().any(|inner| {
         if inner == id {
@@ -223,6 +223,47 @@ pub(super) struct ShapeArgs {
     name: Option<String>,
     index: Option<usize>,
     items: Vec<Value>,
+    anchor: Option<ShapeAnchor>,
+    #[serde(default)]
+    masks: Vec<Value>,
+}
+
+/// Where a new shape layer turns, in the paths' own pixels.
+#[derive(Deserialize)]
+#[serde(untagged)]
+pub(super) enum ShapeAnchor {
+    Named(String),
+    Point([f64; 2]),
+}
+
+/// Give every entry without one an id and a name, inside groups too: a path
+/// is Path and its place, a group Group, a modifier its kind.
+fn named(entries: &mut [Value]) -> Result<(), ScriptError> {
+    for (n, entry) in entries.iter_mut().enumerate() {
+        let Some(object) = entry.as_object_mut() else {
+            return Err(bad("Each item is an object."));
+        };
+        object.entry("id").or_insert_with(|| json!(Uuid::now_v7()));
+        let name = match (object.get("modifier"), object.get("entries")) {
+            (Some(kind), _) => match kind.as_str() {
+                Some("repeat") => "Repeater",
+                Some("trim") => "Trim paths",
+                Some("offset") => "Offset paths",
+                Some("twist") => "Twist",
+                Some("deform") => "Deform",
+                Some("smooth") => "Smooth",
+                _ => "Modifier",
+            }
+            .to_owned(),
+            (None, Some(_)) => format!("Group {}", n + 1),
+            (None, None) => format!("Path {}", n + 1),
+        };
+        object.entry("name").or_insert_with(|| json!(name));
+        if let Some(Value::Array(inner)) = object.get_mut("entries") {
+            named(inner)?;
+        }
+    }
+    Ok(())
 }
 
 pub(super) fn shape_add(host: &dyn Host, a: ShapeArgs) -> Result<Value, ScriptError> {
@@ -231,15 +272,7 @@ pub(super) fn shape_add(host: &dyn Host, a: ShapeArgs) -> Result<Value, ScriptEr
     let doc = store.snapshot();
     let comp = find_comp(&doc, &a.comp)?;
     let mut items = a.items;
-    for (n, item) in items.iter_mut().enumerate() {
-        let Some(object) = item.as_object_mut() else {
-            return Err(bad("Each item is an object."));
-        };
-        object.entry("id").or_insert_with(|| json!(Uuid::now_v7()));
-        object
-            .entry("name")
-            .or_insert_with(|| json!(format!("Path {}", n + 1)));
-    }
+    named(&mut items)?;
     // Read as a file's contents are, so an item written the old way, with
     // its trim or its copies as fields, still lands as entries.
     let contents = lumit_core::shape::modifier::read_entries(Value::Array(items))
@@ -252,24 +285,52 @@ pub(super) fn shape_add(host: &dyn Host, a: ShapeArgs) -> Result<Value, ScriptEr
             return Err(bad(format!("Item {} needs two vertices or more.", n + 1)));
         }
     }
-    // The art is drawn in comp pixels, so the layer sits on the art's own box
-    // with its anchor at the corner, as the pen tool's layers do.
-    let (x0, y0, _, _) = lumit_core::shape::contents_bounds(&contents, 0.0)
+    // The art is drawn in comp pixels and the layer's own pixels start at the
+    // corner of its box. The anchor sits at the corner, as the pen tool's
+    // layers do, or where it is asked for, and the position puts it back where
+    // the paths have it, so the art draws where its paths say.
+    let (x0, y0, x1, y1) = lumit_core::shape::contents_bounds(&contents, 0.0)
         .ok_or_else(|| bad("The paths draw nothing."))?;
+    let (ax, ay) = match a.anchor {
+        None => (x0, y0),
+        Some(ShapeAnchor::Named(name)) => match name.as_str() {
+            "corner" => (x0, y0),
+            "centre" => ((x0 + x1) * 0.5, (y0 + y1) * 0.5),
+            _ => return Err(bad("The anchor is \"corner\", \"centre\" or [x, y].")),
+        },
+        Some(ShapeAnchor::Point([x, y])) => (x, y),
+    };
+    // Masks come in the paths' pixels and are kept in the layer's own.
+    let mut masks = Vec::new();
+    for (n, mut mask) in a.masks.into_iter().enumerate() {
+        let Some(object) = mask.as_object_mut() else {
+            return Err(bad("Each mask is an object."));
+        };
+        object.entry("id").or_insert_with(|| json!(Uuid::now_v7()));
+        object
+            .entry("name")
+            .or_insert_with(|| json!(format!("Mask {}", n + 1)));
+        masks.push(
+            serde_json::from_value::<lumit_core::mask::Mask>(mask)
+                .map_err(|e| bad(format!("Mask {}: {e}.", n + 1)))?,
+        );
+    }
+    let masks = lumit_core::shape::masks_on_art(&masks, (x0, y0)).unwrap_or(masks);
     let layer = edits::base_layer(
         a.name.unwrap_or_else(|| "Shape".into()),
         LayerKind::Shape { contents },
         comp.duration.0,
         TransformGroup {
-            anchor_x: Property::fixed(0.0),
-            anchor_y: Property::fixed(0.0),
-            position_x: Property::fixed(x0),
-            position_y: Property::fixed(y0),
+            anchor_x: Property::fixed(ax - x0),
+            anchor_y: Property::fixed(ay - y0),
+            position_x: Property::fixed(ax),
+            position_y: Property::fixed(ay),
             ..TransformGroup::default()
         },
     );
     let id = layer.id;
     let mut layer = layer;
+    layer.masks = masks;
     edits::solo_on_arrival(&mut layer, comp.layers.iter());
     commit(
         store,
@@ -279,7 +340,11 @@ pub(super) fn shape_add(host: &dyn Host, a: ShapeArgs) -> Result<Value, ScriptEr
             layer: Box::new(layer),
         }],
     )?;
-    layer_now(store, comp.id, id)
+    let mut answer = layer_now(store, comp.id, id)?;
+    answer["origin"] = json!([x0, y0]);
+    answer["anchor"] = json!([ax - x0, ay - y0]);
+    answer["position"] = json!([ax, ay]);
+    Ok(answer)
 }
 
 #[derive(Deserialize)]
@@ -327,6 +392,7 @@ struct SwitchArgs {
     motion_blur: Option<bool>,
     fx: Option<bool>,
     accepts_lights: Option<bool>,
+    collapse: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -347,6 +413,7 @@ pub(super) struct SetArgs {
     index: Option<usize>,
     two_node: Option<bool>,
     after_effects_order: Option<bool>,
+    curved_path: Option<bool>,
     #[serde(default)]
     switches: SwitchArgs,
 }
@@ -429,6 +496,17 @@ pub(super) fn layer_set(host: &dyn Host, a: SetArgs) -> Result<Value, ScriptErro
                 }),
         );
     }
+    if let Some(curved) = a.curved_path {
+        ops.push(Op::SetLayerMotionPath {
+            comp: c,
+            layer,
+            path: if curved {
+                MotionPath::Curved
+            } else {
+                MotionPath::Straight
+            },
+        });
+    }
     if let Some(three_d) = a.three_d {
         ops.push(Op::SetLayerThreeD {
             comp: c,
@@ -457,7 +535,7 @@ pub(super) fn layer_set(host: &dyn Host, a: SetArgs) -> Result<Value, ScriptErro
         });
     }
     type Switch = fn(Uuid, Uuid, bool) -> Op;
-    let switches: [(Option<bool>, Switch); 8] = [
+    let switches: [(Option<bool>, Switch); 9] = [
         (s.visible, |comp, layer, visible| Op::SetLayerVisible {
             comp,
             layer,
@@ -497,6 +575,11 @@ pub(super) fn layer_set(host: &dyn Host, a: SetArgs) -> Result<Value, ScriptErro
                 layer,
                 accepts_lights,
             }
+        }),
+        (s.collapse, |comp, layer, collapse| Op::SetLayerCollapse {
+            comp,
+            layer,
+            collapse,
         }),
     ];
     for (on, op) in switches {

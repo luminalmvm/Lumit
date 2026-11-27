@@ -1,22 +1,3 @@
-// Manual screenshots, sweep 6: the two tree panels.
-//
-// project-panel · hierarchy
-//
-// One project serves both: a title sequence that uses a second composition as a
-// precomp, which is exactly the shape the Hierarchy page is about — "this shot
-// uses that comp" — and gives the Project panel a composition to hold beside
-// the footage.
-//
-// **No folder is staged, and that is not an oversight.** The Project panel
-// draws folders, and the document model has them, but nothing in the bridge
-// makes one: there is no New folder command anywhere in the application. A
-// folder in this shot would have to be written into a document by hand, and the
-// manual would then show a control the reader cannot find.
-//
-//   cargo build -p lumit_bridge
-//   cd flutter_ui
-//   $env:LUMIT_SHOTS=1   # PowerShell; LUMIT_SHOTS=1 elsewhere
-//   flutter run -d windows -t tool/shots/shots_6.dart
 
 import 'dart:io';
 import 'dart:typed_data';
@@ -52,9 +33,6 @@ Future<void> main() async {
   final (state, ui) = await bootLumit();
   final project = state.project!;
 
-  // The precomp first, so the titles can use it. Three layers inside, because a
-  // precomp twirled open in the Hierarchy panel is only worth photographing if
-  // there is something under it.
   final lower = project.newComposition(
     name: 'Lower third',
     settings: _settings('Lower third', 4),
@@ -85,7 +63,6 @@ Future<void> main() async {
     settings: _settings('Opening titles', 10),
   );
 
-  // Bottom of the stack upwards.
   final music = project.importFootage(path: '$fixtures/Music.wav');
   final gameplay = project.importFootage(path: '$fixtures/Gameplay.mp4');
   final card = project.importFootage(path: '$fixtures/Title card.mp4');
@@ -109,14 +86,8 @@ Future<void> main() async {
     BridgeScalar.static_(840),
   ]);
 
-  // Imported but not placed — every project has one of those.
   project.importFootage(path: '$fixtures/Logo.png');
 
-  // One item given a proxy, and set to use it, so the row wears the `proxy`
-  // badge beside `in use` and the manual's picture of the panel shows
-  // both of the marks a row can carry. A second fixture stands in for the
-  // smaller file somebody would really have made: what the badge is about is
-  // that a substitute is attached and switched on, not what is inside it.
   gameplay.setProxy(path: '$fixtures/Title card.mp4');
   gameplay.setUseProxy(on_: true);
 
@@ -134,7 +105,6 @@ Future<void> main() async {
   ui.setSelectedComp(comp);
   ui.playheadFrame.value = 48;
 
-  // The sweeps photograph the shell; the welcome screen has its own sweep.
   runApp(shotRoot(LumitAppNew(state, ui, welcome: false)));
   await pause(2);
   await sizeWindow(1720, 1000);

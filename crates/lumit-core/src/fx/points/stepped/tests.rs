@@ -1,5 +1,3 @@
-//! Particulate's walk from the in point, on the host.
-
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use crate::expression::ExpressionContext;
@@ -12,11 +10,6 @@ use crate::mask::MaskPolyline;
 use crate::model::{EffectInstance, EffectValue};
 use std::sync::Arc;
 
-/// **A collider's walk lands in one place however it is reached**: a frame
-/// stepped to from a kept state is the frame walked from the in point, which
-/// is what lets an export match the Viewer, and so is one told to stop part
-/// way and asked again. And the floor holds. A flock and sparks land in one
-/// place too.
 #[test]
 fn a_stepped_frame_is_the_walk_from_the_start() {
     use super::{stop_when, stream_at, Collider, Inputs, SAME, SPARK_ID};
@@ -46,14 +39,11 @@ fn a_stepped_frame_is_the_walk_from_the_start() {
     let at = |lt: f64| inputs(&e, lt, Some(floor));
     let dt = 1.0 / 30.0;
     let key = |n: u8| [n; 32];
-    // Walked whole, under a name nothing else uses.
     let whole = stream_at(key(201), 43.0 * dt, dt, &at).expect("a walk");
-    // Walked past it first, so the frame is three steps on from a kept one.
     stream_at(key(202), 45.0 * dt, dt, &at).expect("a walk");
     let resumed = stream_at(key(202), 43.0 * dt, dt, &at).expect("a walk");
     assert!(!whole.is_empty(), "nothing was born");
     assert_eq!(whole, resumed, "a kept walk landed somewhere else");
-    // Stopped after ten steps, then asked again.
     static ASKED: AtomicU32 = AtomicU32::new(0);
     fn tenth() -> bool {
         ASKED.fetch_add(1, Ordering::Relaxed) >= 10
@@ -69,7 +59,6 @@ fn a_stepped_frame_is_the_walk_from_the_start() {
         "a particle went through the floor"
     );
 
-    // A flock with nothing to hit, and sparks off a floor that kills.
     let rows = [("emit_rate", fixed(400.0)), ("initial_speed", fixed(150.0))];
     let flock = particulate(
         &[
@@ -110,9 +99,6 @@ fn a_stepped_frame_is_the_walk_from_the_start() {
     );
 }
 
-/// **A collider turned against the particles in 3D is a surface**: a floor
-/// tilted flat under them holds them up, and one facing the way they do is
-/// walls.
 #[test]
 fn a_collider_turned_in_3d_is_a_surface() {
     use super::{stream_at, Collider, Inputs};
@@ -136,6 +122,7 @@ fn a_collider_turned_in_3d_is_a_surface() {
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -159,7 +146,6 @@ fn a_collider_turned_in_3d_is_a_surface() {
     };
     let owner = layer(&comp);
     let facing = layer(&comp);
-    // Laid flat, a little below the emitter.
     let mut floor = layer(&comp);
     floor.transform.rotation_x = Property::fixed(-90.0);
     floor.transform.position_y = Property::fixed(800.0);
@@ -186,7 +172,6 @@ fn a_collider_turned_in_3d_is_a_surface() {
         ("position_y", fixed(500.0)),
         ("turbulence_amount", fixed(0.0)),
     ]);
-    // Trails off, and the walk is the collider's alone.
     assert!(!crate::fx::points::stepped::trails(&comp, &e));
     let at = |lt: f64| {
         let bag = resolve_bag(

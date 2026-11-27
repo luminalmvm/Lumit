@@ -29,10 +29,8 @@ import 'timeline_extras_frb.dart';
 import 'timeline_layer_menu_frb.dart' show revealInProject, showMenuEntriesAt;
 import 'timeline_outline_row_frb.dart' show showLayerRowMenu;
 
-/// How far the tree will walk before it stops, whatever the document says.
 const int _maxDepth = 10;
 
-/// How far each level indents.
 const double _indent = 14;
 
 class HierarchyPanelFrb extends StatefulWidget {
@@ -43,16 +41,13 @@ class HierarchyPanelFrb extends StatefulWidget {
 }
 
 class _HierarchyPanelFrbState extends State<HierarchyPanelFrb> {
-  /// Which precomp rows are open, by layer id.
   final Set<String> _open = {};
 
-  /// Every precomp row drawn, by layer id, for Expand all.
   final Set<String> _openable = {};
 
   @override
   Widget build(BuildContext context) {
     final ui = Provider.of<LumitUiState>(context);
-    // Nothing to show is nothing shown: no comp, or a comp with no layers.
     if (ui.selectedComp == null) return const SizedBox.expand();
 
     // The fronted comp's rows come from the read model — zero bridge calls;
@@ -102,7 +97,6 @@ class _HierarchyPanelFrbState extends State<HierarchyPanelFrb> {
       showLayerRowMenu(context, layer.internallayerId, at, view: view);
       return;
     }
-    // The ground picks the comp's layers, as the Timeline's does.
     final ground = [
       if (layer == null) ...[
         MenuEntry(
@@ -194,7 +188,6 @@ class _HierarchyPanelFrbState extends State<HierarchyPanelFrb> {
     }
   }
 
-  /// The composition a precomp layer draws, if it is still in the document.
   CompositionReference? _compOf(LayerReference layer) {
     final item = layer.getSourceItem();
     return item is ItemReference_Composition ? item.field0 : null;
@@ -245,8 +238,6 @@ class _HierarchyRow extends StatelessWidget {
           color: selected ? t.surface2 : null,
           child: Stack(
             children: [
-              // A line down from each level above, joining a precomp to what
-              // is inside it.
               for (var level = 0; level < depth; level++)
                 PositionedDirectional(
                   start: 6 + level * _indent + 6,

@@ -1,5 +1,3 @@
-//! Film's GPU pass, kept beside the dispatch table rather than in it.
-
 use lumit_core::fx::effects::film::{Film as Declared, FilmFrame};
 use lumit_core::fx::film::{tables, Spread, Stage};
 use lumit_core::fx::params::Params;

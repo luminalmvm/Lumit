@@ -19,7 +19,7 @@ use crate::api::{effect::BridgeScalar, layer::LayerReference, solid::SolidRefere
 
 pub(crate) mod animators;
 pub(crate) mod style;
-use style::{paragraph_of, read_paragraph, read_style, restyle_shift, style_of};
+use style::{paragraph_of, read_paragraph, read_style, style_of};
 
 /// A colour as the document stores it: scene-linear RGBA, which may exceed 1
 /// (an HDR tint) or dip below 0 (a lift), so it is not a byte triple.
@@ -210,6 +210,37 @@ pub fn text_font_faces(family: String) -> Vec<String> {
 pub enum BridgeSelectorBasis {
     Characters,
     Words,
+    CharactersExcludingSpaces,
+    Lines,
+}
+
+/// How a selector after the first is put together with the ones above it;
+/// Subtract is the selector's `invert`.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeSelectorCombine {
+    Add,
+    Intersect,
+    Min,
+    Max,
+    Difference,
+}
+
+/// What a Range selector's Start, End and Offset count in.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeSelectorUnits {
+    Percentage,
+    Indexed,
+}
+
+/// What a Stagger selector does after Amount's last key.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeStaggerRepeat {
+    Once,
+    Loop,
+    PingPong,
 }
 
 /// How a range selector's weight falls off across its range.
@@ -241,6 +272,18 @@ pub enum BridgeSelectorKind {
     Range,
     Proximity,
     Wiggly,
+    Stagger,
+}
+
+/// The order a Stagger selector starts its units in.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeStaggerOrder {
+    Forward,
+    Backward,
+    FromCentre,
+    FromEdges,
+    Random,
 }
 
 /// Which stretch of the words an animator reaches, in per cent of the run, or
@@ -262,6 +305,22 @@ pub struct BridgeRangeSelector {
     /// Px in the text layer's own pixels.
     pub radius: BridgeScalar,
     pub invert: bool,
+    /// Per cent, −100 to 100: After Effects' Ease High and Ease Low on a
+    /// Range selector's ramp.
+    pub ease_high: BridgeScalar,
+    pub ease_low: BridgeScalar,
+    /// A Stagger selector: the animation every unit plays (per cent), the
+    /// seconds between starts, how the delays are shared out (per cent) and
+    /// the order. Its Random order uses `seed`.
+    pub amount: BridgeScalar,
+    pub delay: BridgeScalar,
+    pub delay_ease: BridgeScalar,
+    pub order: BridgeStaggerOrder,
+    /// A Stagger selector's bounce: amplitude (0 is none), swings a second
+    /// and how fast it dies away.
+    pub bounce_amplitude: BridgeScalar,
+    pub bounce_frequency: BridgeScalar,
+    pub bounce_decay: BridgeScalar,
     /// A Wiggly selector: the range of weights, per cent, how often they
     /// change course a second, how much the letters wander together, per
     /// cent, and which wander.
@@ -270,6 +329,19 @@ pub struct BridgeRangeSelector {
     pub wiggles: BridgeScalar,
     pub correlation: BridgeScalar,
     pub seed: u32,
+    /// How the selector is put together with the ones above it.
+    pub combine: BridgeSelectorCombine,
+    /// Per cent or units, for a Range's Start, End and Offset.
+    pub units: BridgeSelectorUnits,
+    /// A Range's Randomize order, by `seed`.
+    pub randomize: bool,
+    /// A Stagger's Delay shown in frames; it is seconds either way.
+    pub delay_frames: bool,
+    /// A Stagger's Delay is the whole spread.
+    pub total: bool,
+    pub repeat: BridgeStaggerRepeat,
+    /// Bounce after Amount's last key only.
+    pub bounce_last: bool,
 }
 
 /// One font axis an animator moves its letters along: a tag such as `wght`
@@ -354,6 +426,24 @@ pub fn text_variable_font_families() -> Vec<String> {
 pub struct BridgeTextAnimator {
     pub name: String,
     pub selector: BridgeRangeSelector,
+    /// More selectors after the first, top to bottom.
+    pub selectors: Vec<BridgeRangeSelector>,
+    /// The eye, and solo.
+    pub enabled: bool,
+    pub solo: bool,
+    /// Per cent: the whole animator's strength.
+    pub amount: BridgeScalar,
+    /// Another animator whose selection this one follows, by name, and the
+    /// seconds it is read later.
+    pub follow: Option<String>,
+    pub follow_offset: f64,
+    /// Degrees of slant and of its axis, thousandths of an em of tracking,
+    /// px of blur, and places a character is moved on.
+    pub skew: BridgeScalar,
+    pub skew_axis: BridgeScalar,
+    pub tracking: BridgeScalar,
+    pub blur: BridgeScalar,
+    pub character_offset: BridgeScalar,
     pub position_x: BridgeScalar,
     pub position_y: BridgeScalar,
     pub rotation: BridgeScalar,
@@ -377,6 +467,44 @@ pub struct BridgeTextAnimator {
     /// The property groups the animator lists, in the order added; `None`
     /// lists them all.
     pub properties: Option<Vec<String>>,
+}
+
+/// Animators as a user preset's text, their keys moved back by `from` so the
+/// first one lands where the preset is later put.
+///
+/// # Errors
+/// A time or key the document cannot hold.
+#[allow(clippy::needless_pass_by_value)]
+pub fn text_animators_to_json(
+    animators: Vec<BridgeTextAnimator>,
+    from: crate::api::effect::BridgeRational,
+) -> Result<String, BridgeError> {
+    let offset = lumit_core::time::Rational::new(from.num, from.den)
+        .map_err(|_| BridgeError::InvalidTime)?;
+    let core = animators
+        .into_iter()
+        .map(|a| animators::animator_from(a, offset))
+        .collect::<Result<Vec<_>, _>>()?;
+    serde_json::to_string_pretty(&core).map_err(|_| BridgeError::InvalidPreset)
+}
+
+/// A user preset's animators, their keys moved on by `at`.
+///
+/// # Errors
+/// Text that is not a list of animators.
+#[allow(clippy::needless_pass_by_value)]
+pub fn text_animators_from_json(
+    json: String,
+    at: crate::api::effect::BridgeRational,
+) -> Result<Vec<BridgeTextAnimator>, BridgeError> {
+    let offset =
+        lumit_core::time::Rational::new(at.num, at.den).map_err(|_| BridgeError::InvalidTime)?;
+    let core: Vec<lumit_core::text::TextAnimator> =
+        serde_json::from_str(&json).map_err(|_| BridgeError::InvalidPreset)?;
+    Ok(core
+        .iter()
+        .map(|a| animators::read_animator(a, offset))
+        .collect())
 }
 
 /// A solid asset's definition.
@@ -521,12 +649,13 @@ impl LayerReference {
         };
         let offset = layer.start_offset.0;
         let after = text_document_of(document, offset)?;
-        let shift = restyle_shift(before, &after);
+        let shift = lumit_text::restyle::shift(before, &after);
 
         let set = lumit_core::ops::Op::SetTextDocument {
             comp: self.comp_id,
             layer: self.layer_id,
             document: after,
+            graph: None,
         };
         if shift == (0.0, 0.0) {
             return self.commit(set);
@@ -583,6 +712,7 @@ impl LayerReference {
             comp: self.comp_id,
             layer: self.layer_id,
             document: text_document_of(document, offset)?,
+            graph: None,
         }];
         for (prop, value) in [
             (TransformProp::AnchorX, anchor_x),

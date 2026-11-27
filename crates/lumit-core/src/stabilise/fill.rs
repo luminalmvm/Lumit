@@ -21,7 +21,6 @@ use crate::fx::effects::stabilise;
 use crate::fx::params::{ParamId, Params, Value};
 use crate::model::EffectInstance;
 
-/// The most neighbours one frame is filled from.
 pub const MAX_NEIGHBOURS: usize = 8;
 
 /// `(1, count, 0, 0)` when the frame is filled, followed by `count` neighbour
@@ -167,7 +166,6 @@ pub fn neighbours(
         .collect()
 }
 
-/// Hand the neighbour maps to the GPU op as the values it reads.
 pub fn push(push: &mut dyn FnMut(ParamId, Value), maps: &[(i32, usize, Mat3)]) {
     let maps = maps.get(..maps.len().min(MAX_NEIGHBOURS)).unwrap_or(&[]);
     push(
@@ -194,7 +192,6 @@ pub struct Neighbour {
     pub motion: [f32; 4],
 }
 
-/// A filled frame in the raster being drawn.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Fill {
     /// The part of every frame that is used, `[x0, y0, x1, y1]`: inside the
@@ -250,7 +247,6 @@ pub fn fill_params(p: Params<'_>, w: u32, h: u32, s: f32, off: [f32; 2]) -> Opti
     })
 }
 
-/// The map a frame's own pixels are laid with: each point is where it is.
 pub const SAME_FRAME: [[f32; 3]; 3] = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
 
 /// How much of a frame shows at `q`, a point of it: all of it farther than
@@ -270,7 +266,6 @@ pub fn coverage(q: [f32; 2], rect: [f32; 4], feather: f32) -> f32 {
     }
 }
 
-/// One frame of a fill, as one pass of the kernel lays it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Layer {
     /// Output pixel to a pixel of the frame being drawn.

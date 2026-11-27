@@ -7,7 +7,6 @@ use crate::GpuContext;
 use lumit_scene::ModelScene;
 use wgpu::util::DeviceExt;
 
-/// What a model's faces show in a view.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub enum Shading {
     /// Lit by the comp's own lights, as it exports.
@@ -15,15 +14,12 @@ pub enum Shading {
     Final,
     /// Lit by a studio light of its own, whatever lights the comp has.
     Shaded,
-    /// Its edges only.
     Wireframe,
-    /// Shaded, with its edges over the faces.
     ShadedWire,
     /// Which way each pixel faces, as colour.
     Normals,
 }
 
-/// How one view shows models.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub struct ModelDisplay {
     pub shading: Shading,
@@ -130,11 +126,6 @@ pub(super) fn wire_pipeline(
     })
 }
 
-/// A model's edges as lines, two corners each, laid out like its triangles
-/// so a part's run of them starts at twice its first index. `None` when the
-/// card has no room for them, asked again the next time a view draws lines.
-// ponytail: an edge two triangles share is drawn twice; weld them if the
-// memory is ever missed.
 pub(super) fn edges(
     ctx: &GpuContext,
     scene: &ModelScene,

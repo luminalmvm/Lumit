@@ -33,20 +33,16 @@ use crate::suites;
 /// a memory leak a chatty plugin controls (docs/14 §5).
 const MESSAGE_LOG_CAPACITY: usize = 64;
 
-/// One message a plugin asked us to show.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HostMessage {
     /// One of [`crate::ffi::message_types`].
     pub message_type: String,
-    /// The plugin's own identifier for the message, often empty.
     pub message_id: String,
     /// The format string, verbatim (see [`crate::ffi::OfxMessageSuiteV1`]).
     pub text: String,
 }
 
-/// Everything the suites read and write.
 pub struct HostState {
-    /// Every property set the host owns, including its own.
     pub props: HandleRegistry<PropertySet>,
     /// Every effect descriptor a describe pass has minted, and every instance:
     /// they are one kind of handle, so they are one registry
@@ -59,10 +55,7 @@ pub struct HostState {
     /// in here: a clip handle names a live image input, and a description has
     /// none.
     pub clips: HandleRegistry<ClipBinding>,
-    /// The host's own property set, once it exists.
     pub host_props: Option<Handle>,
-    /// Every lock a plugin asked the host to keep for it
-    /// ([`crate::suites::multi_thread`]).
     pub mutexes: HandleRegistry<std::sync::Arc<suites::multi_thread::HostMutex>>,
     /// Live plugin allocations: address to size. Keeping the addresses means
     /// `memoryFree` can reject one we never handed out **without following
@@ -156,7 +149,6 @@ unsafe impl Sync for HostPtr {}
 
 static HOST: OnceLock<HostPtr> = OnceLock::new();
 
-/// The host struct, built once.
 #[must_use]
 pub fn host() -> *const OfxHost {
     HOST.get_or_init(|| {
@@ -268,7 +260,6 @@ fn host_property_set() -> PropertySet {
     seed_string(&mut set, keys::VERSION_LABEL, env!("CARGO_PKG_VERSION"));
 
     set.seed(keys::VERSION, PropValue::Int(package_version()));
-    // Spec 1.4 semantics (docs/12 §2.1).
     set.seed(keys::API_VERSION, PropValue::Int(vec![1, 4]));
 
     if let Ok(components) = PropValue::strings(&[values::COMPONENT_RGBA]) {
@@ -288,8 +279,6 @@ fn host_property_set() -> PropertySet {
 
     // Lumit is an interactive application, not a render farm node.
     set.seed(keys::HOST_IS_BACKGROUND, PropValue::int(0));
-    // No interact suite yet, so no overlays. Saying otherwise would have
-    // plugins draw into a viewer that never asks them to.
     set.seed(keys::SUPPORTS_OVERLAYS, PropValue::int(0));
     // What the OFX 1.3 to 1.5 additions ask a host, answered honestly: a GPU
     // render only through what this broker really opened (never OpenGL),
@@ -325,8 +314,6 @@ fn host_property_set() -> PropertySet {
     set.seed(keys::SETABLE_FIELDING, PropValue::int(0));
     set.seed(keys::SEQUENTIAL_RENDER, PropValue::int(0));
 
-    // The parameter suite is a later package; every answer here is "not yet",
-    // and each becomes a considered yes when the thing it names is built.
     set.seed(keys::PARAM_SUPPORTS_STRING_ANIMATION, PropValue::int(0));
     set.seed(keys::PARAM_SUPPORTS_CUSTOM_INTERACT, PropValue::int(0));
     set.seed(keys::PARAM_SUPPORTS_CHOICE_ANIMATION, PropValue::int(0));

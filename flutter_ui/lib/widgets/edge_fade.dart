@@ -1,18 +1,13 @@
-// A scrolling strip that fades out at whichever end has more to scroll, so a
-// row of tabs or a list cut off at its edge says there is more of it.
 
 import 'package:flutter/widgets.dart';
 
 import 'controls/base.dart';
 
 class EdgeFade extends StatefulWidget {
-  /// A scroll view, running the way [axis] says.
   final Widget child;
 
-  /// The way the strip scrolls. Sideways unless told otherwise.
   final Axis axis;
 
-  /// How far in from a cut edge the fade reaches.
   final double reach;
 
   const EdgeFade({

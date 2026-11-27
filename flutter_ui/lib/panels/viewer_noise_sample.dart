@@ -40,10 +40,8 @@ import 'viewer_gizmo.dart' show LayerBox, gizmoHandleSize;
 import 'viewer_layer_map.dart' show ViewerLayerMap;
 import 'viewer_menus.dart' show viewerRow;
 
-/// The effect the square belongs to, by its match name.
 const String denoiseMatchName = 'denoise';
 
-/// The rows the square reads and a release writes.
 const String sampleX = 'sample_x', sampleY = 'sample_y', sampleSize = 'sample_size';
 
 /// The smallest and largest square, in the layer's own pixels: the Sample size
@@ -53,7 +51,6 @@ const double _minSide = 16, _maxSide = 512;
 /// How far round a corner a press still takes the corner, in screen pixels.
 const double _cornerSlop = 12;
 
-/// One Denoise's square on screen.
 class _Square {
   final LayerReference layer;
   final UuidValue effect;
@@ -77,7 +74,6 @@ class _Square {
   String get key => '${layer.internallayerId}/$effect';
 }
 
-/// What a press took hold of.
 enum _Grip { move, topLeft, topRight, bottomLeft, bottomRight }
 
 class ViewerNoiseSample extends StatefulWidget {
@@ -91,7 +87,6 @@ class ViewerNoiseSample extends StatefulWidget {
   /// The armed tool. Only Selection moves the square.
   final ToolMode tool;
 
-  /// Told once a release has been written.
   final VoidCallback onChanged;
 
   const ViewerNoiseSample({
@@ -108,9 +103,6 @@ class ViewerNoiseSample extends StatefulWidget {
 }
 
 class _ViewerNoiseSampleState extends State<ViewerNoiseSample> {
-  /// The square in hand, what took it, the corner of its patch on screen and
-  /// the press within it, and the square as the drag has it now, in the
-  /// layer's own pixels.
   _Square? _held;
   _Grip _grip = _Grip.move;
   Offset _patch = Offset.zero;
@@ -427,7 +419,6 @@ void learnNoise(LayerReference layer, UuidValue effect, LumitUiState ui) {
   noiseMeasures.value++;
 }
 
-/// Measure in a square the hand put down, and write it with what it found.
 Future<void> measureNoiseAt(
     LayerReference layer, UuidValue effect, LumitUiState ui,
     {required Offset centre, required double side}) async {
@@ -449,7 +440,6 @@ Future<void> measureNoiseAt(
 /// The squares: a hairline in the accent with a handle at each corner, the
 /// transform gizmo's own figure, so the two read as one family.
 class _SquarePainter extends CustomPainter {
-  /// Each square's corners on screen, in order round it.
   final List<List<Offset>> quads;
   final List<bool> lit;
   final Color accent, surface;
@@ -499,7 +489,6 @@ class _SquarePainter extends CustomPainter {
       !listEquals(old.lit, lit);
 }
 
-/// [child], taking the pointer only inside [shape] when there is one.
 class _Shaped extends StatelessWidget {
   final Path? shape;
   final Widget child;

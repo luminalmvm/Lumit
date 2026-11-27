@@ -15,7 +15,6 @@ use crate::{Bounds, ModelScene, SceneError};
 /// The most cells along any side, past which a volume is read every so many.
 const MOST_CELLS: i64 = 256;
 
-/// The grid names read as density, and as heat, the first found of each.
 const DENSITY: [&str; 2] = ["density", "smoke"];
 const HEAT: [&str; 4] = ["flame", "fire", "temperature", "heat"];
 
@@ -31,7 +30,6 @@ pub struct DenseVolume {
 }
 
 impl DenseVolume {
-    /// Roughly the memory it holds.
     #[must_use]
     pub fn byte_size(&self) -> usize {
         self.values.len() * 2
@@ -67,7 +65,6 @@ fn read_file(path: &FilePath) -> Result<VdbReader<Cursor<Vec<u8>>>, SceneError> 
     VdbReader::new(Cursor::new(bytes)).map_err(|e| fail(path, e.to_string()))
 }
 
-/// The first of `names` the file holds as a grid of floats.
 fn grid_named(reader: &VdbReader<Cursor<Vec<u8>>>, names: &[&str]) -> Option<String> {
     let have = reader.available_grids();
     names
@@ -199,7 +196,6 @@ fn dense(path: &FilePath, gain: f32) -> Result<DenseVolume, SceneError> {
     })
 }
 
-/// A grid of either width of float.
 enum Grid {
     Half(vdb_rs::Grid<half::f16>),
     Full(vdb_rs::Grid<f32>),
@@ -213,7 +209,6 @@ impl Grid {
         }
     }
 
-    /// Every cell or tile in use: where it is, its value, and how wide it is.
     fn each(&self, f: &mut dyn FnMut([i64; 3], f32, i64)) {
         let tile = |l: VdbLevel| l.scale() as i64;
         match self {
@@ -297,7 +292,6 @@ pub fn frames(path: &FilePath) -> Vec<PathBuf> {
 mod tests {
     use super::*;
 
-    /// A file that is no volume is an error, never a panic.
     #[test]
     fn a_broken_file_is_refused() {
         let dir = tempfile::tempdir().unwrap();
@@ -307,7 +301,6 @@ mod tests {
         assert!(scene(&path).is_err());
     }
 
-    /// A numbered file reads the neighbours after it, in number order.
     #[test]
     fn numbered_neighbours_are_its_frames() {
         let dir = tempfile::tempdir().unwrap();

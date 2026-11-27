@@ -20,7 +20,6 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 
-/// The most a project's document may unpack to and still be compared.
 const int _mostUnpacked = 192 * 1024 * 1024;
 
 /// Takes what a zip entry unpacks to, and stops at the size it was said to
@@ -95,9 +94,7 @@ Uint8List? zipEntry(Uint8List file, String name, {int most = _mostUnpacked}) {
   }
 }
 
-/// What a project file holds, as far as comparing two of them needs.
 class ProjectShape {
-  /// The Lumit that wrote the file, as its manifest says.
   final String writer;
 
   /// Each composition's name, by its id, in the project's own order.
@@ -110,7 +107,6 @@ class ProjectShape {
   /// The ids of the effects on each layer, by the layer's id.
   final Map<String, Set<String>> effects = {};
 
-  /// The id of every footage item.
   final Set<String> footage = {};
 
   ProjectShape(this.writer);
@@ -170,7 +166,6 @@ Future<ProjectShape?> readProjectShape(Uint8List file, String hash) =>
     Isolate.run(() =>
         '${sha256.convert(file)}' == hash ? projectShape(file) : null);
 
-/// What is different in one save of a project from the save before it.
 class ProjectChanges {
   int compsAdded = 0, compsRemoved = 0, compsRenamed = 0;
   int layersAdded = 0, layersRemoved = 0, layersChanged = 0;

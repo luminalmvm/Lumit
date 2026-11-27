@@ -24,7 +24,6 @@ pub fn srgb_encode(v: f32) -> u8 {
     (e * 255.0).round() as u8
 }
 
-/// Inverse of [`srgb_encode`] (colour pickers hand back sRGB bytes).
 pub fn srgb_decode(v: u8) -> f32 {
     let e = f32::from(v) / 255.0;
     if e <= 0.040_45 {
@@ -72,11 +71,8 @@ pub fn fit_contain(src_w: u32, src_h: u32, dst_w: u32, dst_h: u32) -> (u32, u32,
 /// once and this says what "full" means and how a channel is written into a
 /// file. Nothing here decides colour; it is arithmetic about width.
 pub trait Channel: Copy {
-    /// Full scale: white, opaque, all the way up.
     const FULL: Self;
-    /// Full scale as a float, for the arithmetic that has to normalise.
     const SCALE: f64;
-    /// How many bytes one channel occupies in a file.
     const BYTES: usize;
     fn to_f64(self) -> f64;
     /// Rounded to the nearest code and clamped into range — one rule, so no
@@ -85,7 +81,6 @@ pub trait Channel: Copy {
     /// Append this channel to a file buffer, little-endian (the byte order the
     /// encoder seam expects; each format's own order is its business).
     fn write_le(self, out: &mut Vec<u8>);
-    /// Append a run of channels, as [`Self::write_le`] would one at a time.
     fn write_all_le(run: &[Self], out: &mut Vec<u8>) {
         for c in run {
             c.write_le(out);
@@ -106,7 +101,6 @@ impl Channel for u8 {
     fn write_le(self, out: &mut Vec<u8>) {
         out.push(self);
     }
-    /// Bytes are already in file order, so a run goes in as one copy.
     fn write_all_le(run: &[Self], out: &mut Vec<u8>) {
         out.extend_from_slice(run);
     }
@@ -177,7 +171,6 @@ struct Taps {
     weights: Vec<f64>,
 }
 
-/// The Lanczos-3 kernel. `sinc(x)·sinc(x/3)` for |x| < 3, zero outside.
 fn lanczos3(x: f64) -> f64 {
     const A: f64 = 3.0;
     if x == 0.0 {
@@ -240,7 +233,6 @@ fn lanczos_resample<C: Channel>(
 ) -> Vec<f64> {
     let xt = lanczos_taps(src_w, dst_w);
     let yt = lanczos_taps(src_h, dst_h);
-    // Horizontal pass: dst_w x src_h, still in source rows.
     let mut mid = vec![0.0f64; (dst_w as usize) * (src_h as usize) * 4];
     for y in 0..src_h as usize {
         let row = y * (src_w as usize) * 4;
@@ -255,7 +247,6 @@ fn lanczos_resample<C: Channel>(
             }
         }
     }
-    // Vertical pass.
     let mut out = vec![0.0f64; (dst_w as usize) * (dst_h as usize) * 4];
     for (y, t) in yt.iter().enumerate() {
         for x in 0..dst_w as usize {
@@ -290,7 +281,7 @@ pub fn letterbox_resize<C: Channel>(
 ) -> Vec<C> {
     let mut out = vec![C::from_f64(0.0); (dst_w as usize) * (dst_h as usize) * 4];
     for px in out.chunks_exact_mut(4) {
-        px[3] = C::FULL; // opaque black background
+        px[3] = C::FULL;
     }
     let (w, h, ox, oy) = fit_contain(src_w, src_h, dst_w, dst_h);
     if w == 0 || h == 0 || src.len() < (src_w as usize) * (src_h as usize) * 4 {
@@ -399,7 +390,6 @@ pub fn f32_at(buf: &[u8], i: usize) -> f32 {
         .map_or(0.0, f32::from_le_bytes)
 }
 
-/// Pixel `n`'s four channels out of a `LinearF32` buffer.
 #[must_use]
 pub fn f32_px(buf: &[u8], n: usize) -> [f32; 4] {
     let base = n.saturating_mul(4);
@@ -520,7 +510,6 @@ pub fn dissolve_f32(top: &mut [u8], under: Option<&[u8]>, gain: f64) {
         match under {
             None => out[3] = t[3] * g,
             Some(under) => {
-                // Nought where the picture under this one stops short.
                 let u = f32_px(under, n);
                 let (coming, going) = (t[3] * g, u[3] * (1.0 - g));
                 out[3] = coming + going;
@@ -572,8 +561,6 @@ pub fn frame_pick(
     let v = (source_time * r).max(0.0);
     let floor_v = v.floor();
     let w = (v - floor_v) as f32;
-    // Map a virtual (conform-rate) frame index back to the nearest native
-    // frame to decode.
     let to_native = |vi: f64| (((vi / r) * fps).round().max(0.0) as usize).min(last);
     let a = to_native(floor_v);
     let b = to_native(floor_v + 1.0);
@@ -589,9 +576,6 @@ pub fn frame_pick(
 mod tests {
     use super::*;
 
-    /// The middle of a dissolve between two flat colours is their even mix
-    /// in linear light, its ends are each picture alone, and a fade over
-    /// nothing takes the picture to transparent and leaves its colour be.
     #[test]
     fn a_dissolve_mixes_evenly_and_a_lone_fade_goes_to_transparent() {
         const RED: [u8; 4] = [255, 0, 0, 255];
@@ -606,19 +590,15 @@ mod tests {
         // Half the light of each: 188 is what sRGB writes for a half.
         assert_eq!(mixed(RED, 0.5, Some(&blue)), [188, 0, 188, 255].repeat(2));
         assert_eq!(mixed(RED, 1.0, Some(&blue)), RED.repeat(2), "the incoming");
-        // Every byte comes back as itself, so an end is the clip exactly.
         for v in 0..=u8::MAX {
             let grey = [v, v, v, 255];
             assert_eq!(mixed(grey, 0.3, Some(&grey.repeat(2))), grey.repeat(2));
         }
-        // A clip with nothing in it does not hold the other one whole under
-        // it: the outgoing clip is half gone at the middle.
         assert_eq!(mixed([0; 4], 0.5, Some(&blue)), [0, 0, 255, 128].repeat(2));
         assert_eq!(mixed(RED, 0.0, None), [255, 0, 0, 0].repeat(2));
         assert_eq!(mixed(RED, 0.5, None), [255, 0, 0, 128].repeat(2));
         assert_eq!(mixed(RED, 1.0, None), RED.repeat(2));
 
-        // The float road gives the same answers, above white too.
         let float = |px: [f32; 4]| px.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>();
         let mut top = float([4.0, 0.0, 0.0, 1.0]);
         dissolve_f32(&mut top, Some(&float([0.0, 0.0, 2.0, 1.0])), 0.5);
@@ -629,22 +609,18 @@ mod tests {
 
     #[test]
     fn blend_and_frame_pick() {
-        // Half-blend of black and mid-grey is mid-value.
         assert_eq!(
             blend_rgba(&[0, 0, 0, 0], &[100, 100, 100, 100], 0.5),
             vec![50, 50, 50, 50]
         );
-        assert_eq!(blend_rgba(&[0; 4], &[80; 4], 0.0), vec![0; 4]); // t=0 → a
-        assert_eq!(blend_rgba(&[0; 4], &[80; 4], 1.0), vec![80; 4]); // t=1 → b
-                                                                     // Nearest rounds to a single frame.
+        assert_eq!(blend_rgba(&[0; 4], &[80; 4], 0.0), vec![0; 4]);
+        assert_eq!(blend_rgba(&[0; 4], &[80; 4], 1.0), vec![80; 4]);
         assert_eq!(frame_pick(1.017, 30.0, 100, false, None), (31, None));
-        // Blend straddles two frames with the fractional weight.
         let (f, b) = frame_pick(1.017, 30.0, 100, true, None);
         assert_eq!(f, 30);
         let (c, w) = b.unwrap();
         assert_eq!(c, 31);
         assert!((w - 0.51).abs() < 0.01);
-        // An exact frame doesn't blend; past the end clamps to the last frame.
         assert_eq!(frame_pick(1.0, 30.0, 100, true, None), (30, None));
         assert_eq!(frame_pick(100.0, 30.0, 100, true, None), (99, None));
         // Conform: a 60fps clip conformed to 15fps brackets frames
@@ -655,7 +631,6 @@ mod tests {
         let (c, w) = b.unwrap();
         assert_eq!(c, 4);
         assert!((w - 0.75).abs() < 0.01);
-        // A conform rate at or above native is a no-op (adjacent frames).
         let (f, b) = frame_pick(1.017, 30.0, 100, true, Some(60.0));
         assert_eq!(f, 30);
         let (c, w) = b.unwrap();
@@ -670,10 +645,10 @@ mod tests {
         let red = [255u8, 0, 0, 255];
         let src: Vec<u8> = red.iter().copied().cycle().take(4 * 2 * 4).collect();
         let out = letterbox_resize(&src, 4, 2, 2, 2, Resample::Fast);
-        assert_eq!(&out[0..4], &red); // (0,0) red
-        assert_eq!(&out[4..8], &red); // (1,0) red
-        assert_eq!(&out[8..12], &[0, 0, 0, 255]); // (0,1) black bar
-        assert_eq!(&out[12..16], &[0, 0, 0, 255]); // (1,1) black bar
+        assert_eq!(&out[0..4], &red);
+        assert_eq!(&out[4..8], &red);
+        assert_eq!(&out[8..12], &[0, 0, 0, 255]);
+        assert_eq!(&out[12..16], &[0, 0, 0, 255]);
     }
 
     /// An 8×8 black/white checker box-downscaled to 2×2 has one analytic

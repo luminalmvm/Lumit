@@ -195,7 +195,7 @@ Script: `lumit.layer.add({ ... })`. MCP tool: `layer_add`.
 
 ## shape.add
 
-Add a shape layer drawn from paths, each item in the form a .lum file keeps it: path, fill, stroke, stroke_width, opacity, gradient and the rest.
+Add a shape layer drawn from paths, each item in the form a .lum file keeps it: path, fill, stroke, stroke_width, opacity, gradient, stroke_gradient and the rest.
 
 Script: `lumit.shape.add({ ... })`. MCP tool: `shape_add`.
 
@@ -205,6 +205,8 @@ Script: `lumit.shape.add({ ... })`. MCP tool: `shape_add`.
 | `name` | string |  |  |
 | `index` | integer (at least 0) |  | Where in the stack, 0 is the top |
 | `items` | list of object | yes | The shape items as a .lum file keeps them. Each path is {vertices:[{pos:[x,y],tan_in:[x,y],tan_out:[x,y]}],closed}, in comp pixels with tangents relative to their vertex. Colours are linear-light RGBA. An id and a name are made for any item without one |
+| `anchor` | `"corner"`, `"centre"` or list of 2 numbers |  | Where the layer turns from, in the paths' pixels: the corner of the art's box (the default), its centre, or [x, y]. The position goes to the same point, so the art draws where its paths say. The answer adds origin, the point in the paths' pixels where the layer's own pixels start, and the anchor and position it set |
+| `masks` | list of object |  | Masks as a .lum file keeps them, with paths in the same pixels as the items. They are kept in the layer's own pixels, which start at origin |
 
 ## layer.read
 
@@ -227,11 +229,11 @@ Script: `lumit.layer.write({ ... })`. MCP tool: `layer_write`.
 | --- | --- | --- | --- |
 | `comp` | string | yes | The comp's id or name |
 | `layer` | string | yes | The layer's id, or its name in the comp |
-| `fields` | object | yes | Laid over the layer as JSON Merge Patch does: objects merge key by key, null takes a field away, anything else replaces it, and a choice such as {"Keyframed": [...]} replaces another such as {"Static": 1}. Times are exact seconds as [num, den], colours linear-light RGBA. The layer keeps its id and its place |
+| `fields` | object | yes | Laid over the layer as JSON Merge Patch does: objects merge key by key, null takes a field away, anything else replaces it, and a choice such as {"Keyframed": [...]} replaces another such as {"Static": 1}. Times are exact seconds as [num, den], colours linear-light RGBA. The layer keeps its id and its place. A text layer keeps its words where they were when its text, style or animators change, as the app does, unless these set its anchor |
 
 ## comp.write
 
-Change a comp's motion blur, lighting or node graph, in the form a .lum file keeps them.
+Change a comp's motion blur, lighting, blending or node graph, in the form a .lum file keeps them.
 
 Script: `lumit.comp.write({ ... })`. MCP tool: `comp_write`.
 
@@ -241,6 +243,7 @@ Script: `lumit.comp.write({ ... })`. MCP tool: `comp_write`.
 | `fields` | object | yes | Each laid over the comp's own as JSON Merge Patch does |
 | `fields.motion_blur` | object |  |  |
 | `fields.lighting` | object |  |  |
+| `fields.blending` | `"linear"`, `"display"` |  | What the layers mix in: linear light, or display values as a browser does |
 | `fields.graph` | object |  |  |
 
 ## layer.composite
@@ -271,7 +274,7 @@ Script: `lumit.layer.get({ ... })`. MCP tool: `layer_get`.
 
 ## layer.set
 
-Change a layer's name, parent, span, switches, 3D switch, rotation order or place in the stack.
+Change a layer's name, parent, span, switches, 3D switch, rotation order, motion path or place in the stack.
 
 Script: `lumit.layer.set({ ... })`. MCP tool: `layer_set`.
 
@@ -289,6 +292,7 @@ Script: `lumit.layer.set({ ... })`. MCP tool: `layer_set`.
 | `index` | integer (at least 0) |  | Where in the stack, 0 is the top |
 | `two_node` | boolean |  | For a camera, whether it aims at its point of interest |
 | `after_effects_order` | boolean |  | Turn X, Y and Z Rotation in After Effects' order rather than Lumit's. The rotations are rewritten so the layer keeps its pose |
+| `curved_path` | boolean |  | Run Position along a smooth path through its keys, as After Effects' auto bezier does, rather than straight from key to key. Motion blur follows it |
 | `switches` | object |  |  |
 | `switches.visible` | boolean |  |  |
 | `switches.audible` | boolean |  |  |
@@ -299,6 +303,7 @@ Script: `lumit.layer.set({ ... })`. MCP tool: `layer_set`.
 | `switches.motion_blur` | boolean |  |  |
 | `switches.fx` | boolean |  |  |
 | `switches.accepts_lights` | boolean |  |  |
+| `switches.collapse` | boolean |  | A precomp's collapse switch: its layers are drawn straight into this comp, its shapes and text as large as they are shown |
 
 ## layer.delete
 
@@ -356,6 +361,7 @@ Script: `lumit.markers.set({ ... })`. MCP tool: `markers_set`.
 | `markers[].colour` | integer (0 to 255) |  |  |
 | `markers[].duration` | integer |  | Frames it spans |
 | `markers[].chapter` | boolean |  | Whether it starts a chapter |
+| `markers[].beat` | number (0 to 1) |  | Makes it a beat marker with this confidence, as Detect beats does. Beat trigger fires on beat markers |
 
 ## effect.list
 
@@ -419,6 +425,27 @@ Script: `lumit.effect.set({ ... })`. MCP tool: `effect_set`.
 | `keys[].out.speed` | number |  | Units a second |
 | `keys[].out.influence` | number (0.1 to 100) |  | Per cent of the span |
 | `expression` | string |  | A JavaScript expression, as After Effects writes them |
+
+## layer.drive
+
+Drive an effect's control from a driver on the layer's node graph, as Drive with does: Audio level and Beat trigger through Remap (and Smooth), Wiggle about the control's number, or any other driver straight in.
+
+Script: `lumit.layer.drive({ ... })`. MCP tool: `layer_drive`.
+
+| Argument | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `comp` | string | yes | The comp's id or name |
+| `layer` | string | yes | The layer's id, or its name in the comp |
+| `effect` | string or integer (at least 0) | yes | The driven effect's id or name, or its place in the stack, 0 the top |
+| `param` | string | yes | The control's id or name |
+| `driver` | string | yes | The driver's id: audio_level, beat_trigger, wiggle, colour_cycle, expression, oscillator, value_noise, ring_wave and the rest |
+| `listen` | string |  | For Audio level and Beat trigger, the layer whose sound they hear, by id or name. The whole comp when left out |
+| `output` | string |  | The driver's output to wire, its first (Amplitude, Envelope) when left out |
+| `low` | number |  | For a sound: the control's value in silence, its own number when left out |
+| `high` | number |  | For a sound: the control's value at the loud end, the top of its range when left out |
+| `in_high` | number |  | For a sound: the level that reaches high, 0.3 for Audio level and 1 for Beat trigger when left out |
+| `settings` | object |  | The driver's own controls, by id or name, to their values: band, decay, window, frequency, amount and so on |
+| `expression` | string |  | For the Expression driver, its source |
 
 ## grade.get
 

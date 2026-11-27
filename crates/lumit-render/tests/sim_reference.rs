@@ -111,7 +111,6 @@ struct Part {
     life: f32,
 }
 
-/// One walk's worth of [`Part`]s, each frame cut into the same steps as the card's.
 fn walk(rows: &Particulate, dt: f64) -> Vec<Part> {
     let p = rows.points().framed(1920.0, 1080.0);
     let phys = physics(rows);
@@ -211,8 +210,6 @@ fn layer(def: Uuid) -> Layer {
     }
 }
 
-/// A thousand particles under every field at once, and a floor to bounce on: the
-/// card lands where the reference does.
 #[test]
 fn the_card_walks_where_the_reference_walks() {
     let mut e = instantiate("particulate").unwrap();
@@ -273,6 +270,7 @@ fn the_card_walks_where_the_reference_walks() {
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,

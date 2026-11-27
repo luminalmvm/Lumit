@@ -1,5 +1,6 @@
 //! A layer's Orient across the seam: the choice, and the turn it comes to at a
-//! frame, so the Viewer's box sits where the picture has it.
+//! frame, so the Viewer's box sits where the picture has it. The motion path
+//! it turns along is set here too.
 
 use flutter_rust_bridge::frb;
 use lumit_core::orient::{Orient, Turn};
@@ -50,6 +51,22 @@ impl LayerReference {
             comp: self.comp_id,
             layer: self.layer_id,
             orient: orient.core(),
+        })
+    }
+
+    /// Run Position along a smooth path through its keys, or straight from
+    /// key to key.
+    #[frb(sync)]
+    pub fn set_curved_path(&self, curved: bool) -> Result<(), BridgeError> {
+        use lumit_core::motion_path::MotionPath;
+        self.commit(lumit_core::ops::Op::SetLayerMotionPath {
+            comp: self.comp_id,
+            layer: self.layer_id,
+            path: if curved {
+                MotionPath::Curved
+            } else {
+                MotionPath::Straight
+            },
         })
     }
 

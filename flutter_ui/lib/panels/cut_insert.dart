@@ -109,7 +109,6 @@ void openTypeEdit(LumitUiState ui, LayerReference layer) {
   });
 }
 
-/// The Solid dialogue, then the same placement as a title.
 void insertSolid(BuildContext context, CompositionReference comp, int frame,
         int? row,
         {required VoidCallback onDone}) =>
@@ -121,7 +120,6 @@ void insertSolid(BuildContext context, CompositionReference comp, int frame,
       onDone: onDone,
     );
 
-/// The Insert title and Insert solid rows, for the ground and gap menus.
 List<Widget> cutInsertRows(
   BuildContext context,
   LumitUiState ui,

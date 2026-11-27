@@ -34,33 +34,23 @@ use uuid::Uuid;
 use crate::comp::{add_footage, id, layer, rat};
 use crate::media::{self, LongMedia, LONG_FILE_S, LONG_ITEMS};
 
-/// Frames a second, the reference comp's own rate.
 pub const FPS: i64 = 60;
-/// The comp's length in frames: two hours.
 pub const FRAMES: i64 = 2 * 60 * 60 * FPS;
-/// How many clips the seven rows hold between them.
 pub const CLIP_COUNT: usize = 2000;
-/// The main picture row, and the sound row its clips are linked to.
 pub const MAIN_PICTURE: &str = "V1";
 pub const MAIN_SOUND: &str = "A1";
 
-/// Where the montage starts, in frames: a minute in.
 pub const MONTAGE_START: i64 = 60 * FPS;
 /// How long the montage runs, in frames. Inside it `V1` cuts every
 /// [`MONTAGE_CUT`] frames, `V2` every other cut and `V3` every fourth, each
 /// clip from a different file, which is the passage the playback scenario
 /// plays across.
 pub const MONTAGE_FRAMES: i64 = 8 * FPS;
-/// Frames between `V1`'s cuts inside the montage.
 pub const MONTAGE_CUT: i64 = 12;
 
-/// The longest a clip can be: the whole of its file.
 const FILE_FRAMES: i64 = LONG_FILE_S * FPS;
-/// The shortest clip the generator makes.
 const MIN_CLIP: i64 = 30;
 
-/// One row of the cut: its name, how many clips it holds outside the montage,
-/// which footage items it draws on, and how much of its length they cover.
 struct Row {
     name: &'static str,
     clips: usize,
@@ -72,7 +62,6 @@ struct Row {
     /// Montage clips are this many of `V1`'s cuts long.
     montage_every: i64,
     opacity: f64,
-    /// The sound row carrying this row's linked sound, when it has one.
     sound: Option<&'static str>,
 }
 
@@ -119,13 +108,10 @@ const ROWS: [Row; 3] = [
 const FREE_SOUND: [(&str, usize, i64, i64); 2] =
     [("A3", 130, 1200, FILE_FRAMES), ("A4", 120, MIN_CLIP, 300)];
 
-/// Generate the media into `media_dir` and build the long-form comp over it.
-/// Returns the document and the id of the comp to render.
 pub fn long_comp(media_dir: &Path) -> Result<(Document, Uuid), String> {
     build(&media::generate_long(media_dir)?)
 }
 
-/// [`long_comp`] over media already generated.
 pub fn build(media: &LongMedia) -> Result<(Document, Uuid), String> {
     if media.files.len() != LONG_ITEMS {
         return Err(format!(
@@ -165,8 +151,6 @@ pub fn build(media: &LongMedia) -> Result<(Document, Uuid), String> {
                 clip(&mut rng, row.name, k, item, start, len)
             })
             .collect();
-        // The first two rows carry their sound on a row of its own: the same
-        // clip again, in the same place, sharing a link.
         if let Some(name) = row.sound {
             let mut linked = clips.clone();
             let mut paired = clips;
@@ -227,7 +211,6 @@ pub fn warm_up(media: &LongMedia) -> Result<(Document, Uuid), String> {
     Ok((doc, comp_id))
 }
 
-/// A 1080p60 comp of `frames` frames holding `layers`.
 fn composition(
     comp_id: Uuid,
     name: &str,
@@ -241,6 +224,7 @@ fn composition(
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -347,8 +331,6 @@ fn overlapping(
     longest: i64,
     items: &[Uuid],
 ) -> Vec<Clip> {
-    // What is left of the comp once every clip is laid end to end, shared out
-    // among the joins that are gaps.
     let lens: Vec<i64> = (0..n).map(|_| rng.range(shortest, longest)).collect();
     let spare = (FRAMES - lens.iter().sum::<i64>()).max(0) / n as i64;
     let mut cursor = 0;
@@ -357,7 +339,6 @@ fn overlapping(
         out.push(clip(rng, row, k, items[k % items.len()], cursor, len));
         cursor += len;
         if rng.chance(45) {
-            // Back over the tail of this clip, by less than the shortest one.
             cursor -= rng.range(10, MIN_CLIP - 5);
         } else {
             cursor += rng.range(spare / 2, spare);
@@ -384,7 +365,6 @@ impl Rng {
         lo + (self.next() % span) as i64
     }
 
-    /// True `percent` times in a hundred.
     fn chance(&mut self, percent: u64) -> bool {
         self.next() % 100 < percent
     }
@@ -396,7 +376,6 @@ mod tests {
     use super::*;
     use lumit_core::model::Layer;
 
-    /// The comp over paths that need not exist: nothing here opens a file.
     fn built() -> (Document, Uuid) {
         let files = (0..LONG_ITEMS)
             .map(|i| format!("long_{i:03}.mp4").into())
@@ -431,13 +410,10 @@ mod tests {
         assert!(all
             .clone()
             .all(|c| c.place_start >= Rational::ZERO && c.place_end() <= end));
-        // A clip never asks for more of its file than the file holds.
         assert!(all
             .clone()
             .all(|c| c.source_in >= Rational::ZERO && c.source_out <= rat(LONG_FILE_S, 1)));
 
-        // One frame shows one clip: a picture row never overlaps itself, and
-        // the generator leaves both gaps and shared edit points on it.
         for row in &picture {
             let mut sorted = clips(row).to_vec();
             sorted.sort_by_key(|c| c.place_start);
@@ -448,7 +424,6 @@ mod tests {
             assert!(joins.clone().any(|(end, next)| end < next), "{}", row.name);
             assert!(joins.clone().any(|(end, next)| end == next), "{}", row.name);
         }
-        // Sound may overlap, and on the free rows some of it does.
         let crossfades = sound.iter().filter(|row| {
             let mut sorted = clips(row).to_vec();
             sorted.sort_by_key(|c| c.place_start);
@@ -458,7 +433,6 @@ mod tests {
         });
         assert_eq!(crossfades.count(), 2);
 
-        // Every clip of the main picture row has its sound in the same place.
         let main = picture.iter().find(|l| l.name == MAIN_PICTURE).unwrap();
         let main_sound = sound.iter().find(|l| l.name == MAIN_SOUND).unwrap();
         for c in clips(main) {
@@ -477,7 +451,6 @@ mod tests {
             );
         }
 
-        // The montage: twelve-frame cuts between different files.
         let at = |f: i64| rat(f, FPS);
         let montage: Vec<&Clip> = clips(main)
             .iter()
@@ -487,7 +460,6 @@ mod tests {
         assert_eq!(montage.len() as i64, MONTAGE_FRAMES / MONTAGE_CUT);
         assert!(montage.windows(2).all(|w| w[0].source != w[1].source));
 
-        // The same comp every time, ids and all.
         assert_eq!(built().0.items, doc.items);
     }
 }

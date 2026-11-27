@@ -1,8 +1,3 @@
-// The Transcript panel's windows: Export transcript, Assemble from script,
-// the speakers' names, and the lines a script had that nobody said.
-//
-// Each asks its questions and answers with a plain record; the panel turns
-// the answer into the engine's call.
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/cut/transcript.dart'
@@ -16,7 +11,6 @@ import '../shell/question_window.dart';
 import '../widgets/controls.dart';
 import 'transcript_text.dart';
 
-/// Which words a transcript file holds.
 enum TranscriptRange { whole, selection, workArea }
 
 class TranscriptExportChoice {
@@ -50,7 +44,6 @@ String _formatName(BridgeTranscriptFormat f) => switch (f) {
       BridgeTranscriptFormat.webVtt => l10n.transcriptFormatWebVtt,
     };
 
-/// The file's extension for each kind.
 String transcriptExtension(BridgeTranscriptFormat f) => switch (f) {
       BridgeTranscriptFormat.text => 'txt',
       BridgeTranscriptFormat.word => 'docx',
@@ -64,7 +57,6 @@ String transcriptExtension(BridgeTranscriptFormat f) => switch (f) {
 
 const double _labelColumn = 110;
 
-/// Ask how to write the transcript. Null when the window was closed.
 Future<TranscriptExportChoice?> askTranscriptExport(
   BuildContext context, {
   required bool hasSelection,
@@ -217,10 +209,8 @@ Future<TranscriptExportChoice?> askTranscriptExport(
 class TranscriptAssembleChoice {
   final String script;
 
-  /// Every transcribed item, or only the Project panel's selected ones.
   final bool allFootage;
 
-  /// A new composition, or the fronted one at the playhead.
   final bool intoNew;
   final String name;
 
@@ -359,7 +349,6 @@ Future<TranscriptAssembleChoice?> askTranscriptAssemble(
                 label: l10n.cancel,
                 onPressed: () => close(null)),
             const SizedBox(width: 8),
-            // Listens to the script so the button wakes as text arrives.
             ListenableBuilder(
               listenable: script,
               builder: (context, _) => dialogFilledAction(t,
@@ -470,7 +459,6 @@ Future<void> showTranscriptSpeakers(
   });
 }
 
-/// The script's lines that were found in no footage.
 Future<void> showLinesNotFound(BuildContext context, List<String> lines) =>
     showLumitModal<void>(
       context: context,

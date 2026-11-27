@@ -52,24 +52,18 @@ pub enum OpError {
     /// node-graph-comp.md §1.1). A comp is one thing or the other.
     #[error("a node graph has no layers")]
     CompIsNodeGraph,
-    /// [`Op::SetLayerKind`] was pointed at a kind it does not convert: Solid
-    /// and Adjustment flip, and footage, solid and precomp layers swap sources.
     #[error("those layer kinds don't convert to one another")]
     KindNotConvertible,
-    /// A camera channel was named on a layer that is not a camera
-    /// (docs/impl/camera.md §1).
     #[error("the property is not on this layer")]
     PropNotOnLayer,
-    /// [`Op::SetLayerRoutes`] or [`Op::SetLayerDuck`] would send sound
-    /// somewhere it cannot go ([`crate::routes::check_routes`]).
     #[error("{0}")]
     InvalidRoute(#[from] crate::routes::RouteError),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "op_type")]
+#[allow(clippy::large_enum_variant)]
 pub enum Op {
-    /// Insert a project item at an index in the Project panel order.
     AddItem {
         index: usize,
         item: Box<ProjectItem>,
@@ -112,7 +106,6 @@ pub enum Op {
         id: Uuid,
         trim: Option<Box<crate::model::FootageTrim>>,
     },
-    /// Land, correct or take away a footage item's transcript.
     EditTranscript {
         item: Uuid,
         edit: Box<crate::transcript::TranscriptEdit>,
@@ -178,7 +171,6 @@ pub enum Op {
         layer: Uuid,
         new_index: usize,
     },
-    /// Set a layer's span on the comp timeline.
     SetLayerSpan {
         comp: Uuid,
         layer: Uuid,
@@ -268,7 +260,6 @@ pub enum Op {
         layer: Uuid,
         inputs: Option<Box<crate::model::EffectInstance>>,
     },
-    /// Replace a layer's stored grade versions ([`crate::grade::versions`]).
     SetLayerGradeVersions {
         comp: Uuid,
         layer: Uuid,
@@ -294,7 +285,6 @@ pub enum Op {
         layer: Uuid,
         graph: Box<crate::graph::LayerGraph>,
     },
-    /// The fx switch: bypass a layer's whole effect stack (docs/08 §1.5).
     SetLayerFx {
         comp: Uuid,
         layer: Uuid,
@@ -346,45 +336,42 @@ pub enum Op {
         layer: Uuid,
         adjustment: bool,
     },
-    /// Whether a layer's sound changes pitch with its speed
-    /// ([`crate::model::Layer::pitch_follows_speed`]).
     SetLayerPitchFollowsSpeed {
         comp: Uuid,
         layer: Uuid,
         follows: bool,
     },
-    /// How a layer turns by itself ([`crate::orient`]).
     SetLayerOrient {
         comp: Uuid,
         layer: Uuid,
         orient: crate::orient::Orient,
     },
-    /// Mute or unmute a layer's audio (the audible switch).
+    /// How a layer's Position travels between keys ([`crate::motion_path`]).
+    SetLayerMotionPath {
+        comp: Uuid,
+        layer: Uuid,
+        path: crate::motion_path::MotionPath,
+    },
     SetLayerAudible {
         comp: Uuid,
         layer: Uuid,
         audible: bool,
     },
-    /// Show or hide a layer (the visible switch).
     SetLayerVisible {
         comp: Uuid,
         layer: Uuid,
         visible: bool,
     },
-    /// Toggle a layer's solo / isolate switch.
     SetLayerSolo {
         comp: Uuid,
         layer: Uuid,
         solo: bool,
     },
-    /// Toggle a layer's per-layer motion-blur switch.
     SetLayerMotionBlur {
         comp: Uuid,
         layer: Uuid,
         motion_blur: bool,
     },
-    /// Toggle a layer's Accepts lights switch: whether the comp's
-    /// Light layers shade it.
     SetLayerAcceptsLights {
         comp: Uuid,
         layer: Uuid,
@@ -448,7 +435,6 @@ pub enum Op {
         comp: Uuid,
         group: Uuid,
     },
-    /// Rename a layer group.
     SetGroupName {
         comp: Uuid,
         group: Uuid,
@@ -490,8 +476,6 @@ pub enum Op {
         comp: Uuid,
         graph: Box<crate::comp_graph::CompGraph>,
     },
-    /// Set a composition's motion-blur shutter: the master enable plus
-    /// the shutter angle/phase and sample count.
     SetCompMotionBlur {
         comp: Uuid,
         motion_blur: crate::model::MotionBlur,
@@ -506,19 +490,18 @@ pub enum Op {
         comp: Uuid,
         background: crate::model::LinearColour,
     },
-    /// Toggle a Precomp layer's collapse-transformations switch (docs/06 §1.4).
     SetLayerCollapse {
         comp: Uuid,
         layer: Uuid,
         collapse: bool,
     },
-    /// Replace a Text layer's document (exactly invertible).
     SetTextDocument {
         comp: Uuid,
         layer: Uuid,
         document: crate::model::TextDocument,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        graph: Option<crate::graph::LayerGraph>,
     },
-    /// Change a Text layer's captions ([`crate::captions::CaptionsEdit`]).
     EditCaptions {
         comp: Uuid,
         layer: Uuid,
@@ -546,7 +529,6 @@ pub enum Op {
         layer: Uuid,
         blend: BlendMode,
     },
-    /// Point a layer at another layer as its matte (or clear it).
     SetLayerMatte {
         comp: Uuid,
         layer: Uuid,
@@ -629,10 +611,14 @@ pub enum Op {
         layer: Uuid,
         settings: crate::model::LightSettings,
     },
-    /// Switch how a composition's lights fall on its layers.
     SetCompLighting {
         comp: Uuid,
         lighting: crate::model::CompLighting,
+    },
+    /// Switch what a composition's layers mix in.
+    SetCompBlending {
+        comp: Uuid,
+        blending: crate::model::blending::CompBlending,
     },
     /// Replace whether a layer casts and accepts shadows, as one undo step.
     SetMaterialSettings {
@@ -700,19 +686,16 @@ pub enum Op {
         layer: Uuid,
         streams: crate::model::AudioStreams,
     },
-    /// Set a layer's **Gain**, its own sound in dB before its rack and Volume.
     SetLayerAudioGain {
         comp: Uuid,
         layer: Uuid,
         db: f64,
     },
-    /// Choose how a layer's faders write their keys while the comp plays.
     SetLayerAutomation {
         comp: Uuid,
         layer: Uuid,
         mode: crate::mixer::AutomationMode,
     },
-    /// Toggle a layer's solo safe switch.
     SetLayerSoloSafe {
         comp: Uuid,
         layer: Uuid,
@@ -740,12 +723,10 @@ pub enum Op {
         comp: Uuid,
         keys: Option<Animation>,
     },
-    /// Choose how the master fader writes its keys.
     SetMasterAutomationMode {
         comp: Uuid,
         mode: crate::mixer::AutomationMode,
     },
-    /// Set or clear the loudness a comp's mix is made for.
     SetLoudnessTarget {
         comp: Uuid,
         target: Option<crate::mixer::LoudnessTarget>,
@@ -811,7 +792,6 @@ pub enum Op {
         folder: Uuid,
         children: Vec<Uuid>,
     },
-    /// Point an auto-filing slot (Solids / Compositions) at a folder.
     SetAutoFolder {
         kind: AutoFolderKind,
         folder: Option<Uuid>,
@@ -863,15 +843,12 @@ pub enum Op {
     SetProjectSwatches {
         swatches: Vec<crate::model::Swatch>,
     },
-    /// Replace the grade groups whole ([`crate::grade::groups`]).
     SetGradeGroups {
         groups: Vec<crate::grade::groups::GradeGroup>,
     },
-    /// Replace the grade memories whole ([`crate::grade::memories`]).
     SetGradeMemories {
         memories: Vec<crate::grade::memories::GradeMemory>,
     },
-    /// Replace the project's notes whole. It changes no pixel.
     SetNotes {
         notes: String,
     },
@@ -892,14 +869,10 @@ pub enum Op {
     SetColourWorkingSpace {
         working_space: crate::model::WorkingSpace,
     },
-    /// Say what colour space a footage item arrives in, by the loaded config's
-    /// name, or clear it back to the built-in interpretation defaults.
     SetFootageColourSpace {
         id: Uuid,
         space: Option<String>,
     },
-    /// Change how a footage item's file is read: its alpha, rate, fields,
-    /// pixel shape, loop and colour, all at once (AE: Interpret Footage).
     SetFootageInterpretation {
         id: Uuid,
         interpretation: Box<crate::interpretation::Interpretation>,
@@ -916,7 +889,6 @@ pub enum Op {
         duration: Duration,
         background: LinearColour,
     },
-    /// Edit a SolidDef asset (colour/size/name); every layer using it updates.
     SetSolidDef {
         def: Uuid,
         name: String,
@@ -946,21 +918,14 @@ pub enum Op {
         comp: Uuid,
         start: CompTime,
     },
-    /// Make a composition a multicam comp, change the angles its clips start
-    /// on, or make it an ordinary comp again (`None`).
     SetCompMulticam {
         comp: Uuid,
         multicam: Option<Box<crate::multicam::Multicam>>,
     },
-    /// Set a composition's graphics template: its controls, its poster and
-    /// where its intro ends and its outro starts. `None` takes it away, and
-    /// the composition is an ordinary one again.
     SetCompTemplate {
         comp: Uuid,
         template: Option<Box<crate::template::Template>>,
     },
-    /// Link data to a composition's graphics template, change what its
-    /// columns feed, or take it away (`None`).
     SetCompTemplateData {
         comp: Uuid,
         data: Option<Box<crate::template::feed::Data>>,
@@ -1046,6 +1011,7 @@ impl Op {
             Op::SetSequenceClips { .. } => "Edit clips",
             Op::SetLayerKind { .. } => "Change layer kind",
             Op::SetLayerOrient { .. } => "Set orient",
+            Op::SetLayerMotionPath { .. } => "Set motion path",
             Op::SetLayerAdjustment { .. } => "Adjustment switch",
             Op::SetLayerPitchFollowsSpeed { .. } => "Keep pitch",
             Op::SetLayerAudible { .. } => "Audible switch",
@@ -1122,6 +1088,7 @@ impl Op {
             Op::SetFootageInterpretation { .. } => "Interpret footage",
             Op::SetCompSettings { .. } => "Composition settings",
             Op::SetCompLighting { .. } => "Set lighting",
+            Op::SetCompBlending { .. } => "Set blending",
             Op::SetSolidDef { .. } => "Edit solid",
             Op::SetCompStart { .. } => "Composition settings",
             Op::SetCompMulticam { .. } => "Set multicam",
@@ -1142,7 +1109,6 @@ pub enum AutoFolderKind {
     Compositions,
 }
 
-/// Whether `comp` is a node graph, and so holds boxes instead of layers.
 #[must_use]
 fn is_node_graph(doc: &Document, comp: Uuid) -> bool {
     doc.comp(comp).is_some_and(|c| c.graph.is_some())
@@ -1225,7 +1191,6 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             else {
                 return Err(OpError::UnknownItem);
             };
-            // Only a run of stills has a rate of its own to set.
             let run = f.sequence.as_mut().ok_or(OpError::UnknownItem)?;
             let previous = std::mem::replace(&mut run.frame_rate, *frame_rate);
             Ok(Op::SetSequenceRate {
@@ -1701,6 +1666,9 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             layer,
             orient,
         } => crate::orient::set(doc, *comp, *layer, *orient),
+        Op::SetLayerMotionPath { comp, layer, path } => {
+            crate::motion_path::set(doc, *comp, *layer, *path)
+        }
         Op::SetLayerPitchFollowsSpeed {
             comp,
             layer,
@@ -1871,9 +1839,6 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 return Err(OpError::BadIndex);
             }
             let stack: Vec<Uuid> = c.layers.iter().map(|l| l.id).collect();
-            // Three refusals, in the order that reads: the shape of the
-            // selection, then whether those layers are free, then whether this
-            // group already exists.
             if !crate::group::is_contiguous(&stack, &group.members) {
                 return Err(OpError::InvalidGroup);
             }
@@ -2038,6 +2003,7 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             comp,
             layer,
             document,
+            graph,
         } => {
             let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
             let l = c
@@ -2045,6 +2011,21 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 .iter_mut()
                 .find(|l| l.id == *layer)
                 .ok_or(OpError::UnknownLayer)?;
+            // The wires into the animators' numbers follow the animators, or
+            // the graph the inverse carries is put back.
+            let previous_graph = match (graph, &l.kind) {
+                (Some(g), _) => Some(std::mem::replace(&mut l.graph, g.clone())),
+                (None, crate::model::LayerKind::Text { document: current }) => {
+                    let mut g = l.graph.clone();
+                    crate::text::ports::remap_text_ports(
+                        &mut g,
+                        &current.animators,
+                        &document.animators,
+                    )
+                    .then(|| std::mem::replace(&mut l.graph, g))
+                }
+                (None, _) => None,
+            };
             let crate::model::LayerKind::Text { document: current } = &mut l.kind else {
                 return Err(OpError::UnknownLayer);
             };
@@ -2058,6 +2039,7 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 comp: *comp,
                 layer: *layer,
                 document: previous,
+                graph: previous_graph,
             })
         }
         Op::SetWorkArea { comp, work_area } => {
@@ -2155,9 +2137,6 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             parent,
         } => {
             let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
-            // Validate against the current comp before mutating: the target
-            // layer must exist, and a Some(parent) must be a different, real
-            // layer that does not already descend from `layer` (no cycle).
             if !c.layers.iter().any(|l| l.id == *layer) {
                 return Err(OpError::UnknownLayer);
             }
@@ -2354,6 +2333,14 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 lighting: previous,
             })
         }
+        Op::SetCompBlending { comp, blending } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let previous = std::mem::replace(&mut c.blending, *blending);
+            Ok(Op::SetCompBlending {
+                comp: *comp,
+                blending: previous,
+            })
+        }
         Op::SetMaterialSettings {
             comp,
             layer,
@@ -2418,9 +2405,7 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 // start meaning a difference, so the pose they hold is that
                 // difference's zero.
                 (true, false) => *correction_base = pose.map(Box::new),
-                // No link, no correction lane.
                 (false, _) => *correction_base = None,
-                // Re-pointed at another tracked layer: the nudge rides on.
                 (true, true) => {}
             }
             Ok(Op::SetCameraSolveLink {
@@ -2789,44 +2774,6 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
     }
 }
 
-/// `animation` with every value `v` made `gain * v + offset`, or `None` for
-/// an expression, which has no values to move. A key's speed is a slope, so
-/// it takes the gain and not the offset.
-#[must_use]
-pub fn remapped(animation: &Animation, gain: f64, offset: f64) -> Option<Animation> {
-    use crate::anim::SideInterp as S;
-    let side = |s: S| match s {
-        S::Bezier { speed, influence } => S::Bezier {
-            speed: speed * gain,
-            influence,
-        },
-        S::Auto {
-            clamped,
-            speed,
-            influence,
-        } => S::Auto {
-            clamped,
-            speed: speed * gain,
-            influence,
-        },
-        other => other,
-    };
-    match animation {
-        Animation::Static(v) => Some(Animation::Static(gain * v + offset)),
-        Animation::Keyframed(keys) => Some(Animation::Keyframed(
-            keys.iter()
-                .map(|k| crate::anim::Keyframe {
-                    value: gain * k.value + offset,
-                    interp_in: side(k.interp_in),
-                    interp_out: side(k.interp_out),
-                    ..*k
-                })
-                .collect(),
-        )),
-        Animation::Expression(_) => None,
-    }
-}
-
 /// The ops that make a folder — the Project panel's bottom-bar **Folder**
 /// button (docs/07 §3.1) — plus the new folder's id.
 ///
@@ -3073,7 +3020,7 @@ pub fn edit_layer_span(
 ) -> Option<(CompTime, CompTime, CompTime)> {
     match edit {
         SpanEdit::MoveIn => {
-            let d = playhead.delta(in_point).ok()?; // playhead − in
+            let d = playhead.delta(in_point).ok()?;
             Some((
                 playhead,
                 out_point.add_dur(d).ok()?,
@@ -3081,7 +3028,7 @@ pub fn edit_layer_span(
             ))
         }
         SpanEdit::MoveOut => {
-            let d = playhead.delta(out_point).ok()?; // playhead − out
+            let d = playhead.delta(out_point).ok()?;
             Some((
                 in_point.add_dur(d).ok()?,
                 playhead,

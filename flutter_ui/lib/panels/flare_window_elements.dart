@@ -1,11 +1,8 @@
-// The Flare window's left side: the list of elements in draw order, the Add
-// menu, and the glyph each kind is drawn with.
 
 part of 'flare_window.dart';
 
 extension _Elements on _FlareWindowState {
   Widget _elementsPane(LumitTheme t) {
-    // The one Add button: in the header, or in the middle of an empty list.
     final add = KeyedSubtree(
       key: _addKey,
       child: HouseButton(
@@ -122,7 +119,6 @@ extension _Elements on _FlareWindowState {
           child: Row(
             children: [
               Container(width: 2, color: on ? t.accent : null),
-              // The grip: drag it up or down to change the draw order.
               GestureDetector(
                 key: ValueKey('flare-grip-$i'),
                 behavior: HitTestBehavior.opaque,
@@ -291,7 +287,6 @@ extension _Elements on _FlareWindowState {
   }
 }
 
-/// Two columns of three dots.
 class _GripPainter extends CustomPainter {
   final Color colour;
   const _GripPainter(this.colour);
@@ -311,7 +306,6 @@ class _GripPainter extends CustomPainter {
   bool shouldRepaint(_GripPainter old) => old.colour != colour;
 }
 
-/// A kind's glyph, drawn to fit the box it is given.
 class _KindGlyph extends CustomPainter {
   final String kind;
   final Color colour;

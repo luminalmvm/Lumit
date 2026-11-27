@@ -32,8 +32,6 @@ void main() {
   setUpAll(initEngineForTests);
 
   group('The Viewer stage during a split drag (frb)', () {
-    /// A comp with a layer selected, which is what puts a wireframe on the
-    /// picture at all.
     ({LumitState state, LumitUiState uiState}) selected() {
       final p = freshProject();
       final comp = p.state.project!.newComposition(name: 'Scene');
@@ -61,9 +59,6 @@ void main() {
           shape: shape,
         );
 
-    /// The drag itself: one tree, re-laid-out at every width the pointer
-    /// passes through. Nothing may throw, and the clip must survive every one
-    /// of them — a clip that is there at rest and gone mid-gesture is no clip.
     testWidgets('thrashing the split width in one tree stays sound',
         (tester) async {
       final p = selected();

@@ -1,6 +1,3 @@
-//! Particulate's simulation through the whole renderer: a frame comes out the
-//! same however it was reached, and particles hit what they should.
-
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use lumit_core::anim::Property;
@@ -29,7 +26,6 @@ fn float(e: &mut EffectInstance, id: &str, v: f64) {
     set(e, id, EffectValue::Float(Property::fixed(v)));
 }
 
-/// A row going evenly from one value to another, from the start to `end`.
 fn moving(from: f64, to: f64, end: Rational) -> Property {
     let key = |time: Rational, value: f64| lumit_core::anim::Keyframe {
         time,
@@ -92,7 +88,6 @@ fn solid_layer(def: Uuid) -> Layer {
     }
 }
 
-/// Particles falling from the top of a black solid, turned by the flow.
 fn project(rows: impl FnOnce(&mut EffectInstance)) -> (Arc<Document>, Uuid) {
     let def = Uuid::now_v7();
     let mut doc = Document::new();
@@ -125,6 +120,7 @@ fn project(rows: impl FnOnce(&mut EffectInstance)) -> (Arc<Document>, Uuid) {
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -174,11 +170,9 @@ fn a_frame_is_the_same_however_it_is_reached() {
         return;
     };
     assert!(walked.iter().step_by(4).any(|v| *v > 40), "particles drew");
-    // On past it, keeping a state at 40 on the way, and back to it.
     let _ = pixels(&doc, id, 57);
     assert!(pixels(&doc, id, 44).unwrap() == walked, "scrubbed back");
     assert!(pixels(&doc, id, 33).unwrap() != walked, "another frame");
-    // A floor that moves is where its row says at the start of each frame.
     let (doc, id) = project(|e| {
         set(e, "ground", EffectValue::Bool(true));
         set(
@@ -190,7 +184,6 @@ fn a_frame_is_the_same_however_it_is_reached() {
     let walked = walked_alone(&doc, id, 44).unwrap();
     let _ = pixels(&doc, id, 57);
     assert!(pixels(&doc, id, 44).unwrap() == walked, "moving floor");
-    // A comp that changes size moves the floor, so nothing kept before it serves.
     let (doc, id) = project(|e| {
         set(e, "ground", EffectValue::Bool(true));
         float(e, "ground_height", 0.0);
@@ -263,7 +256,6 @@ fn a_look_row_draws_again_without_walking() {
     );
 }
 
-/// A 2D layer is walls along its outline, found through the walls' grid.
 #[test]
 fn walls_stop_what_falls() {
     let row =
@@ -295,7 +287,6 @@ fn walls_stop_what_falls() {
     };
     assert!(!row(&landed, 250), "the wall at 170 holds them");
     assert!(row(&landed, 160), "and they land on it");
-    // A wall coming up through falling particles lifts them.
     let mut rising = Document::clone(&walled);
     let c = rising.comp_mut(id).unwrap();
     c.layers.last_mut().unwrap().transform.position_y =
@@ -305,7 +296,6 @@ fn walls_stop_what_falls() {
     assert!(row(&lifted, 80), "they are riding on it");
 }
 
-/// The floor stops what falls on it: below it nothing lands.
 #[test]
 fn the_ground_stops_what_falls() {
     let row =
@@ -325,7 +315,6 @@ fn the_ground_stops_what_falls() {
     assert!(row(&landed, 190), "and they land on it");
 }
 
-/// A 3D card lying flat stops what falls on it, and what misses it falls on.
 #[test]
 fn a_3d_card_stops_what_falls() {
     let row = |pixels: &[u8], y: usize, from: usize, to: usize| {
@@ -375,8 +364,6 @@ fn a_3d_card_stops_what_falls() {
     let landed = pixels(&shut, id, 45).unwrap();
     assert!(!row(&landed, 250, 200, 280), "the card at 180 holds them");
     assert!(row(&landed, 170, 200, 280), "and they land on it");
-    // A card coming up through falling particles lifts them, rather than
-    // leaving them below it.
     let (rising, id) = with_card(carded(true));
     let mut rising = Document::clone(&rising);
     let c = rising.comp_mut(id).unwrap();
@@ -391,7 +378,6 @@ fn a_3d_card_stops_what_falls() {
     assert!(row(&lifted, 90, 200, 280), "they are riding on it");
 }
 
-/// A frame read from a bake is the frame walked from the in point.
 #[test]
 fn a_baked_frame_is_the_walked_frame() {
     use lumit_render::track::{progress, Progress};
@@ -430,7 +416,6 @@ fn a_baked_frame_is_the_walked_frame() {
     std::fs::remove_dir_all(folder.path().join("sim")).unwrap();
     assert!(lumit_render::sim::bake::status(&doc, id, layer, effect).is_none());
     assert!(walked_alone(&doc, id, 44).unwrap() == baked, "walked again");
-    // A layer shown late is baked for the frames it shows, and none before.
     let mut late = Document::clone(&doc);
     let shown = &mut late.comp_mut(id).unwrap().layers[0];
     shown.in_point = CompTime(Rational::new(4, 1).unwrap());
@@ -455,7 +440,6 @@ fn a_baked_frame_is_the_walked_frame() {
     lumit_render::sim::bake::set_root(None);
 }
 
-/// Every frame baked under `dir`.
 fn walkdir_frames(dir: &std::path::Path) -> Vec<i64> {
     let mut out = Vec::new();
     for entry in std::fs::read_dir(dir).unwrap().flatten() {
@@ -468,8 +452,6 @@ fn walkdir_frames(dir: &std::path::Path) -> Vec<i64> {
     out
 }
 
-/// Sparks are thrown from what dies on a floor and from what bounces off it, out
-/// to the sides where nothing else lands, and each frame they are the same.
 #[test]
 fn sparks_fly_from_where_particles_hit() {
     let sides = |pixels: &[u8]| {
@@ -505,8 +487,6 @@ fn sparks_fly_from_where_particles_hit() {
     }
 }
 
-/// A flock pulls a cloud together, however the threads add it up: two walks of it
-/// come out the same.
 #[test]
 fn a_flock_steers_and_stays_the_same() {
     let flock = |cohesion: f64| {
@@ -529,8 +509,6 @@ fn a_flock_steers_and_stays_the_same() {
     assert!(pixels(&doc, id, 30).unwrap() == drawn, "the same each walk");
 }
 
-/// A frame nobody wants any more stops walking, and the walk carries on from
-/// where it stopped.
 #[test]
 fn a_stop_reaches_a_long_walk() {
     use lumit_eval::epoch::Epoch;

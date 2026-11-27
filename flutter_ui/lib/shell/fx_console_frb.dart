@@ -46,31 +46,22 @@ import '../widgets/escape_ladder.dart';
 /// the pointer has ever been seen, which falls back to centre.
 Offset? lastKnownPointerPosition;
 
-/// What kind of thing a search row is — what the ranking keeps apart.
 enum FxConsoleKind {
-  /// A built-in effect, applied to the selection.
   effect,
 
-  /// A composition, fronted in the Timeline.
   composition,
 }
 
-/// One row the console's search can find.
 class FxConsoleEntry {
   final String label;
   final FxConsoleKind kind;
 
-  /// The group the row files under — an effect's category, or nothing. It is
-  /// the inline heading the list draws over the row's run, and what the
-  /// category strip filters by.
   final String? group;
   final VoidCallback run;
 
-  /// Whether the row is starred, and the star, where the row can have one.
   final bool? favourite;
   final VoidCallback? onFavourite;
 
-  /// The row's page in the manual, where it has one.
   final String? manual;
 
   /// A saved preset's library rows, where the row is one: Rename and Delete
@@ -97,8 +88,6 @@ class FxConsoleEntry {
   });
 }
 
-/// Everything the console shows, gathered by the caller from the live
-/// selection — see `menu_bar_frb.dart`, which builds it beside the menus.
 class FxConsoleModel {
   final List<FxConsoleEntry> entries;
 
@@ -234,7 +223,6 @@ class _FxConsole extends StatefulWidget {
   final Offset? anchor;
   final VoidCallback onClose;
 
-  /// Shown and not used: see [showFxConsoleExhibitFrb].
   final bool exhibit;
   const _FxConsole({
     required this.model,
@@ -268,7 +256,6 @@ class _FxConsoleState extends State<_FxConsole> {
   final FocusNode _queryFocus = FocusNode(debugLabel: 'fx-console-query');
   int _highlighted = 0;
 
-  /// The category the strip has narrowed to, or null for All.
   String? _category;
 
   final ScrollController _strip = ScrollController();
@@ -277,7 +264,6 @@ class _FxConsoleState extends State<_FxConsole> {
   void initState() {
     super.initState();
     _query.addListener(() => setState(() => _highlighted = 0));
-    // One that is only being shown claims nothing.
     if (widget.exhibit) return;
     // Escape has to work with focus anywhere. A handler on the search field's
     // node covers only the field, so this claims the ladder's dialogue rung
@@ -318,7 +304,6 @@ class _FxConsoleState extends State<_FxConsole> {
     if (mounted && !_queryFocus.hasFocus) _queryFocus.requestFocus();
   }
 
-  /// How to stand down from the ladder.
   VoidCallback? _escapeRelease;
 
   bool _escapeAnywhere() {
@@ -494,7 +479,6 @@ class _FxConsoleState extends State<_FxConsole> {
   static double _fit(double v, double lo, double hi) =>
       hi < lo ? lo : (v < lo ? lo : (v > hi ? hi : v));
 
-  /// The popover: the standard float surface with the board's four bands.
   Widget _popover(LumitTheme t, List<FxConsoleEntry> matches, double room) =>
       Container(
         decoration: BoxDecoration(
@@ -605,7 +589,6 @@ class _FxConsoleState extends State<_FxConsole> {
             thumbVisibility: true,
             thickness: 2,
             crossAxisMargin: 0,
-            // A word cut at the strip's end fades rather than stopping.
             child: EdgeFade(
               child: SingleChildScrollView(
                 controller: _strip,
@@ -670,7 +653,6 @@ class _FxConsoleState extends State<_FxConsole> {
       if (heading != null && heading != last) {
         rows.add(GestureDetector(
           behavior: HitTestBehavior.opaque,
-          // The strip's choice, from the heading: this group alone, or all.
           onSecondaryTapUp: (d) => showMenuAt<void>(
             context: context,
             position: d.globalPosition,
@@ -705,9 +687,6 @@ class _FxConsoleState extends State<_FxConsole> {
     }
     return ConstrainedBox(
       constraints: BoxConstraints(maxHeight: room.clamp(48.0, _listMax)),
-      // ponytail: children not builder — a console list is at most a few
-      // hundred rows; switch back to a builder if a plugin catalogue makes
-      // the open-frame build measurable.
       child: ListView(shrinkWrap: true, children: rows),
     );
   }
@@ -783,7 +762,6 @@ class _FxConsoleState extends State<_FxConsole> {
             widget.onClose();
             entry.run();
           },
-          // The Effects & presets row's menu, with what this row has of it.
           onSecondaryTapUp: (d) => _entryMenu(entry, d.globalPosition),
           child: Container(
             height: _rowHeight,

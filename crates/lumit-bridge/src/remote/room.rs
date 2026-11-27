@@ -14,17 +14,12 @@ use web_time::{Duration, Instant};
 use super::Remote;
 use crate::api::remote::{BridgeComputer, BridgeRemoteSay};
 
-/// How long a command waits for its answer before it is said again.
 const AGAIN: Duration = Duration::from_secs(15);
 
-/// How often a check is said before it is given up on.
 const CHECK_TRIES: u32 = 4;
 
-/// How long a computer may be away, in seconds, before it leaves the list
-/// of those an export can go to.
 const AWAY_MOST: i64 = 30 * 24 * 60 * 60;
 
-/// One of the account's computers as the room last listed it.
 #[derive(Debug, Clone, Default)]
 pub(super) struct Computer {
     pub id: String,
@@ -46,9 +41,7 @@ pub(super) struct Computer {
     pub key: String,
     pub queued: u32,
     pub exporting: bool,
-    /// Its queue's items that belong to a job.
     pub jobs: Vec<Value>,
-    /// Its mirrors of the jobs it sent: how each stands there.
     pub mirrors: Vec<Value>,
 }
 
@@ -141,7 +134,6 @@ impl Computer {
     }
 }
 
-/// The room as last heard: this computer's id, and the others.
 #[derive(Debug, Default)]
 pub(super) struct Room {
     pub me: String,
@@ -174,10 +166,8 @@ impl Room {
     }
 }
 
-/// What a command was for, so its answer can be put to use.
 #[derive(Debug, Clone, PartialEq)]
 pub(super) enum For {
-    /// A fit, kept under this composition and revision.
     Check {
         comp: Uuid,
         revision: u64,
@@ -188,11 +178,9 @@ pub(super) enum For {
     /// A hold, or letting go. While it is unanswered, what the other
     /// computer says of the job's hold is from before it heard.
     Pause(Uuid),
-    /// Nothing comes of the answer: a cancel, a landing.
     Tell,
 }
 
-/// A command said and not answered yet.
 #[derive(Debug, Clone)]
 pub(super) struct Said {
     pub id: String,
@@ -202,12 +190,10 @@ pub(super) struct Said {
     /// When it was last said. `None` before it could be.
     pub at: Option<Instant>,
     pub tries: u32,
-    /// Answered `offline`: said again once that computer is back.
     pub waits: bool,
 }
 
 impl Remote {
-    /// Take in the room's list of the account's computers.
     pub(super) fn hear(&self, said: &Value) {
         let Some(listed) = said.get("computers").and_then(Value::as_array) else {
             return;
@@ -276,14 +262,12 @@ impl Remote {
         id
     }
 
-    /// Whether a command for `what` is waiting for its answer.
     pub(super) fn asking(&self, what: &For) -> bool {
         self.said
             .lock()
             .is_ok_and(|all| all.iter().any(|s| s.what == *what))
     }
 
-    /// Forget the commands for `job`, once it has ended.
     pub(super) fn unsay(&self, job: Uuid) {
         if let Ok(mut all) = self.said.lock() {
             all.retain(|s| {
@@ -292,8 +276,6 @@ impl Remote {
         }
     }
 
-    /// Say each command that is due: not said yet, or not answered in
-    /// [`AGAIN`], and whose computer is there to hear it.
     pub(super) fn resay(&self) {
         let mut out = Vec::new();
         let mut gave_up = Vec::new();
@@ -358,7 +340,6 @@ impl Remote {
         }
     }
 
-    /// Answer the command `id` from `to`, with a body or an error code.
     pub(super) fn answer(&self, id: &str, to: &str, body: Option<Value>, error: &str) {
         let key = self.computer(to).map(|c| c.key).unwrap_or_default();
         let body = body.map(|b| b.to_string()).unwrap_or_default();
@@ -377,8 +358,6 @@ impl Remote {
         }
     }
 
-    /// The answer to the command `id`, as the room or the other computer
-    /// gave it.
     pub(super) fn settle(self: &Arc<Self>, id: &str, body: &str, error: &str) {
         let said = {
             let Ok(mut all) = self.said.lock() else {
@@ -387,7 +366,6 @@ impl Remote {
             let Some(at) = all.iter().position(|s| s.id == id) else {
                 return;
             };
-            // The other computer is away: said again once it is back.
             if matches!(error, "offline" | "no_answer") && said_again(&all[at].what) {
                 all[at].waits = true;
                 let what = all[at].what.clone();
@@ -401,7 +379,6 @@ impl Remote {
         self.answered(said, body, error);
     }
 
-    /// Put an answer to use.
     fn answered(self: &Arc<Self>, said: Said, body: Option<Value>, error: &str) {
         match said.what {
             For::Check { comp, revision } => {
@@ -414,7 +391,6 @@ impl Remote {
         }
     }
 
-    /// Say `lumit` about `job` to the other computer, with `more` beside it.
     pub(super) fn tell(&self, to: &str, lumit: &str, job: Uuid, more: Value) {
         let mut body = json!({ "lumit": lumit, "job": job });
         if let (Some(body), Value::Object(more)) = (body.as_object_mut(), more) {

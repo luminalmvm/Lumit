@@ -1,25 +1,6 @@
-//! A Precomp layer's paint strokes.
-
 use super::Realiser;
 
 impl Realiser<'_> {
-    /// Stamp a Precomp layer's paint strokes into its realised picture.
-    ///
-    /// Every other kind of layer is painted on the CPU, in the layer's own
-    /// 8-bit sRGB raster, before it is uploaded — a Precomp has no such
-    /// raster, because its picture is made on the graphics card. So the
-    /// picture comes back the way an export reads it (the neutral display
-    /// encode, never the Viewer's exposure), goes through the *same*
-    /// `apply_strokes` every other layer uses, and is uploaded again. One
-    /// rasteriser, one set of rules, and a stroke that lands identically
-    /// wherever it is painted.
-    ///
-    /// ponytail: an 8-bit round trip per painted Precomp per frame — the
-    /// nested picture is quantised to the depth every footage layer is
-    /// painted at anyway, and read back synchronously (in the browser build,
-    /// an earlier frame's copy). A GPU stamping pass (docs/impl/paint.md, "Not
-    /// built") is the upgrade if a painted Precomp ever shows in a profile.
-    /// Costs nothing on the Precomp layers that carry no paint.
     pub(super) fn paint_over(
         &self,
         tex: wgpu::Texture,

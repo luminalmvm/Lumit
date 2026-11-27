@@ -19,7 +19,6 @@ final ValueNotifier<String?> liveProgram = ValueNotifier(null);
 
 StreamSubscription<BridgeLiveEvent>? _listening;
 
-/// Whether the busy card up now is a program's script.
 bool _scriptShown = false;
 
 /// Starts and stops, one after another, so a quick off and on lands in the
@@ -30,8 +29,6 @@ Future<void> _calls = Future.value();
 /// has overtaken is left for that call to settle.
 int _applied = 0;
 
-/// Start or stop the endpoint, as [on] says. Off lets go of the program
-/// connected.
 void applyLiveEndpointFrb(bool on, LumitState app, LumitUiState ui) {
   final applied = ++_applied;
   unawaited(_listening?.cancel());

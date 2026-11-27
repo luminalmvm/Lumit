@@ -24,7 +24,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// The panel's one disclosure — the loop controls, as §3.38's are.
 pub const ROUGHEN_EDGES_GROUPS: &[ParamGroup] = &[ParamGroup {
     label: "Evolution options",
     params: &["cycle_evolution", "cycle"],
@@ -33,8 +32,6 @@ pub const ROUGHEN_EDGES_GROUPS: &[ParamGroup] = &[ParamGroup {
     visible_when_lens_elements: None,
 }];
 
-/// A loop length means nothing until the field is looping, and an edge colour
-/// means nothing until the edge is being coloured.
 pub const ROUGHEN_EDGES_ENABLED_WHEN: &[EnabledWhen] = &[
     EnabledWhen {
         param: "cycle",
@@ -48,7 +45,6 @@ pub const ROUGHEN_EDGES_ENABLED_WHEN: &[EnabledWhen] = &[
     },
 ];
 
-/// Roughen edges' controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "roughen_edges",
@@ -162,11 +158,9 @@ pub struct RoughenEdges {
     #[colour(label = "Edge colour", default = [1.0, 1.0, 1.0, 1.0], max = 4.0)]
     pub edge_colour: [f32; 4],
 
-    /// Which field this instance chews with (§2.4).
     #[seed]
     pub seed: u32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -184,7 +178,6 @@ impl RoughenEdges {
     /// doubling, fixed for the same reason — AE does not expose them here
     /// either, and an edge is judged by its shape.
     pub const GAIN: f32 = 0.5;
-    /// See [`GAIN`](Self::GAIN).
     pub const LACUNARITY: f32 = 2.0;
 
     /// The bundle both kernels consume (docs/impl/effect-registry.md §2.4).
@@ -215,7 +208,6 @@ impl RoughenEdges {
                 gain: Self::GAIN,
                 lacunarity: Self::LACUNARITY,
                 perlin: true,
-                // Spiky is the ridged sum; the other two are the signed one.
                 turbulent: self.edge_type == 2,
                 cycle,
             },
@@ -228,7 +220,6 @@ impl RoughenEdges {
             // antialiasing for an effect the user has turned off.
             active: self.border > 0.0,
             influence: (self.fractal_influence / 100.0).max(0.0),
-            // Cut ignores the sharpness and takes the hardest cut there is.
             half_width: if self.edge_type == 1 {
                 Self::MIN_HALF_WIDTH
             } else {
@@ -251,7 +242,6 @@ impl RoughenEdges {
     pub const MIN_HALF_WIDTH: f32 = 1e-2;
 }
 
-/// Roughen edges' behaviour.
 pub struct RoughenEdgesDef;
 
 impl EffectDef for RoughenEdgesDef {

@@ -52,8 +52,6 @@ use crate::props::{PropValue, PropertySet};
 use crate::render::{OUTPUT_CLIP, SOURCE_CLIP};
 use crate::status::Status;
 
-/// What a plugin says about running two renders at once
-/// (`kOfxImageEffectPluginRenderThreadSafety`, docs/12 §2.3).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ThreadSafety {
     /// `kOfxImageEffectRenderFullySafe` — any number of renders, any number of
@@ -80,7 +78,6 @@ impl ThreadSafety {
         }
     }
 
-    /// The OFX name.
     #[must_use]
     pub const fn ofx_name(self) -> &'static str {
         match self {
@@ -99,7 +96,6 @@ impl ThreadSafety {
 /// lock *is* the bundle's.
 static UNSAFE_PLUGIN_LOCK: Mutex<()> = Mutex::new(());
 
-/// The lock a render of this instance must hold, if any.
 pub(crate) fn render_lock(safety: ThreadSafety, instance: &Arc<Mutex<()>>) -> Option<RenderGuard> {
     match safety {
         ThreadSafety::FullySafe => None,
@@ -111,9 +107,7 @@ pub(crate) fn render_lock(safety: ThreadSafety, instance: &Arc<Mutex<()>>) -> Op
 /// A held render lock. Taking it is [`RenderGuard::hold`], because the lock is
 /// chosen before the render and taken around it.
 pub(crate) enum RenderGuard {
-    /// One instance's own lock.
     Instance(Arc<Mutex<()>>),
-    /// The whole bundle's.
     Bundle,
 }
 
@@ -135,9 +129,7 @@ impl RenderGuard {
 /// the allow below says out loud rather than papering over.
 #[allow(dead_code)]
 pub(crate) enum HeldGuard<'a> {
-    /// One instance's lock, borrowed from the guard that chose it.
     Instance(parking_lot::MutexGuard<'a, ()>),
-    /// The bundle's, which is a static and so borrows nothing.
     Bundle(parking_lot::MutexGuard<'static, ()>),
 }
 
@@ -159,14 +151,11 @@ pub struct ParamSnapshot {
 }
 
 impl ParamSnapshot {
-    /// An empty snapshot.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// The snapshot a freshly created instance starts from: every parameter at
-    /// the default the plugin declared for it.
     #[must_use]
     pub fn from_defaults(descriptor: &PluginDescriptor) -> Self {
         let mut values = BTreeMap::new();
@@ -181,23 +170,19 @@ impl ParamSnapshot {
         }
     }
 
-    /// Set one control's value, replacing whatever was there.
     pub fn set(&mut self, name: &str, value: PropValue) {
         self.values.insert(name.to_owned(), value);
     }
 
-    /// One control's value.
     #[must_use]
     pub fn get(&self, name: &str) -> Option<&PropValue> {
         self.values.get(name)
     }
 
-    /// Every control and its value, by name.
     pub fn iter(&self) -> impl Iterator<Item = (&String, &PropValue)> {
         self.values.iter()
     }
 
-    /// Whether there is nothing in it.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.values.is_empty()
@@ -222,9 +207,7 @@ pub struct Controls {
 /// holds, its own writes included, and what it did to its controls.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Settled {
-    /// Every control's value as the plugin holds it.
     pub params: ParamSnapshot,
-    /// What it is hiding, greying and listing.
     pub controls: Controls,
 }
 
@@ -241,12 +224,8 @@ fn same(held: &PropValue, handed: &PropValue) -> bool {
     }
 }
 
-/// The live state hanging off an instance's handle, beside the clips and
-/// parameters it shares its shape with a descriptor.
 pub struct InstanceState {
-    /// Which context it was created in.
     pub context: Context,
-    /// What every control reads.
     pub params: ParamSnapshot,
     /// What the host last handed over. A value that differs from this next
     /// time is one the host changed, and the plugin is told so; a value that
@@ -255,9 +234,7 @@ pub struct InstanceState {
     /// Each choice's list as it was described, to tell which ones the plugin
     /// has relisted since.
     pub described_options: BTreeMap<String, PropValue>,
-    /// The controls the host changed since the plugin was last told.
     pub pending: Vec<String>,
-    /// What the plugin said about running two renders at once.
     pub thread_safety: ThreadSafety,
     /// The pictures for the render **currently in flight**, by clip name.
     ///
@@ -275,8 +252,6 @@ pub struct InstanceState {
     /// in-process there is nothing to prefetch from, so the map is empty and
     /// every time answers with the frame in hand.
     pub images_at: BTreeMap<(String, i64), Image>,
-    /// This instance's own render lock, for a `kOfxImageEffectRenderInstanceSafe`
-    /// plugin.
     pub lock: Arc<Mutex<()>>,
 }
 
@@ -372,25 +347,21 @@ impl Instance {
         })
     }
 
-    /// The handle the plugin holds.
     #[must_use]
     pub const fn handle(&self) -> Handle {
         self.handle
     }
 
-    /// The context it was created in.
     #[must_use]
     pub const fn context(&self) -> Context {
         self.context
     }
 
-    /// What the plugin declared about concurrent renders.
     #[must_use]
     pub const fn thread_safety(&self) -> ThreadSafety {
         self.thread_safety
     }
 
-    /// The lock a render of this instance queues behind, if any.
     pub(crate) fn render_lock(&self) -> Option<RenderGuard> {
         render_lock(self.thread_safety, &self.lock)
     }
@@ -425,12 +396,6 @@ impl Instance {
         Ok(())
     }
 
-    /// Every value the plugin holds and what it has done to its controls,
-    /// read off the live instance.
-    ///
-    /// # Errors
-    ///
-    /// [`Status::ErrBadHandle`] if the instance is gone.
     pub fn settled(&self) -> Result<Settled, Status> {
         let state = state();
         let effect = state.effects.get(self.handle)?;
@@ -553,8 +518,6 @@ impl Instance {
         self.notify(plugin, &[name.to_owned()], reason, time)
     }
 
-    /// The bracket itself: begin, one `kOfxActionInstanceChanged` per name,
-    /// end.
     fn notify(
         &self,
         plugin: &PluginRef,
@@ -838,8 +801,6 @@ fn seed_clip_instance_properties(props: &mut PropertySet, name: &str) {
     );
 }
 
-/// The project size an instance is born with, in pixels: 1080p, replaced by the
-/// real frame at the first render ([`set_project_size`]).
 const DEFAULT_PROJECT: (f64, f64) = (1920.0, 1080.0);
 
 /// Tell an instance how big the picture it is about to be handed is.
@@ -978,7 +939,6 @@ pub(crate) fn take_all_images(handle: Handle) -> Result<ImagesAndTimes, Status> 
     ))
 }
 
-/// The frame in hand by clip, and the other times by clip and [`time_key`].
 pub(crate) type ImagesAndTimes = (BTreeMap<String, Image>, BTreeMap<(String, i64), Image>);
 
 /// Take the pictures back off the instance at the end of a render. The caller

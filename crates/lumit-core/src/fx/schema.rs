@@ -3,7 +3,6 @@ use super::params::Unit;
 
 mod matte_role;
 
-/// Cost class (docs/08 §1.3) — consumed by degradation ordering and budgets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CostClass {
     Trivial,
@@ -12,7 +11,6 @@ pub enum CostClass {
     Heavy,
 }
 
-/// Region-of-interest support (docs/08 §1.3).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Roi {
     /// Output pixel needs only the same input pixel.
@@ -22,7 +20,6 @@ pub enum Roi {
     /// the effect's own hard maximum, so a typed radius can never reach past
     /// the tile it was given.
     PaddedPx(f32),
-    /// Needs the whole input.
     FullFrame,
 }
 
@@ -46,7 +43,6 @@ impl Roi {
     }
 }
 
-/// Static trait declaration (docs/08 §1.3), read by the scheduler and caches.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct EffectTraits {
     pub cost: CostClass,
@@ -59,7 +55,6 @@ pub struct EffectTraits {
     pub beat_input: bool,
 }
 
-/// One declared parameter (docs/08 §1.2).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ParamSchema {
     /// Stable snake_case identifier (expressions address this).
@@ -97,9 +92,7 @@ pub struct ParamSchema {
 pub struct ParamPair {
     /// The shared name: `light`, `centre`, `focus_point`.
     pub stem: &'static str,
-    /// The x half's parameter id.
     pub x: &'static str,
-    /// The y half's parameter id.
     pub y: &'static str,
 }
 
@@ -120,20 +113,16 @@ pub struct ParamPair {
 /// arrives to consume it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PortType {
-    /// A picture.
     Image,
     /// Coverage — a picture read for how much of it there is, not what colour.
     Matte,
-    /// One number.
     Number,
     /// Scene-linear RGBA.
     Colour,
-    /// Vector geometry.
     Shape,
     /// A points stream: one frame's particles or instances. Evaluated
     /// data like an image, never stored in the document.
     Points,
-    /// Sound.
     Audio,
     /// Distance from the camera: a picture whose every pixel is metres.
     Depth,
@@ -156,7 +145,6 @@ pub struct Port {
     pub id: &'static str,
     /// The word drawn beside the socket, in British English.
     pub label: &'static str,
-    /// What travels through it, which is also what colours it.
     pub ty: PortType,
     /// **3D awareness**, for a [`PortType::Points`] port only.
     ///
@@ -184,8 +172,6 @@ impl Port {
         }
     }
 
-    /// The same port, declared **3D-aware**: its consumer reads the
-    /// stream's three axes rather than the projected two.
     #[must_use]
     pub const fn three_d(self) -> Port {
         Port {
@@ -252,7 +238,6 @@ pub enum ParamKind {
     Int {
         default: i64,
         slider: (i64, i64),
-        /// Hard bounds; either side may be None, matching Float.
         hard: (Option<i64>, Option<i64>),
     },
     /// An angle in degrees — the parameter type docs/08 §1.1 has listed since
@@ -554,7 +539,6 @@ impl EdgesMode {
     /// uses).
     pub const OPTIONS: &'static [&'static str] = &["None", "Edge repeat", "Mirror repeat"];
 
-    /// The wire code the resolved ops and the WGSL kernels read.
     pub const fn code(self) -> u32 {
         match self {
             EdgesMode::Transparent => 0,
@@ -589,9 +573,7 @@ pub struct ParamGroup {
     /// the member rows appear in place with no twirl — the shape a
     /// conditional run of parameters wants (the Lens flare's matte rows).
     pub label: &'static str,
-    /// The member parameter ids, naming params in the same schema.
     pub params: &'static [&'static str],
-    /// Whether the twirl starts closed (the advanced-by-default case).
     pub collapsed: bool,
     /// When set, the whole group is shown only while the named sibling
     /// Choice parameter holds one of the given indices — how an effect's
@@ -642,11 +624,8 @@ pub struct ParamGroup {
 /// that does nothing.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct EnabledWhen {
-    /// The parameter whose row this governs — the one that greys out.
     pub param: &'static str,
-    /// The parameter whose value decides it.
     pub on: &'static str,
-    /// What `on` must hold for `param` to be editable.
     pub cond: EnabledCond,
 }
 
@@ -659,17 +638,12 @@ pub struct EnabledWhen {
 /// test — do not grow this into a scripting surface.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum EnabledCond {
-    /// Editable while the named [`ParamKind::Bool`] holds this value.
     BoolIs(bool),
-    /// Editable while the named [`ParamKind::Choice`] is on this option index.
     ChoiceIs(u32),
-    /// Editable while the named [`ParamKind::Choice`] is on anything *but*
-    /// this option index — the "…unless it is set to None" shape.
     ChoiceIsNot(u32),
     /// Editable while the named [`ParamKind::Layer`] actually names a layer.
     /// An unset or dangling reference greys the dependent row.
     LayerSet,
-    /// Editable while the named [`ParamKind::Layer`] names no layer.
     LayerUnset,
     /// Editable while the named number is a still nought. A keyed or an
     /// expression track greys the dependent row, as any other number does.
@@ -678,16 +652,21 @@ pub enum EnabledCond {
     Or(&'static str, &'static EnabledCond),
 }
 
-/// The Add-effect menu's grouping: every schema declares one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FxCategory {
     BlurSharpen,
     Colour,
     Distortion,
     /// The effects that **make** pixels rather than change them: Fill,
-    /// Gradient, Noise, Fractal noise. Three of the four never read the incoming
-    /// picture at all, which is why none of the other six describes them.
+    /// Gradient, Noise, Beam, Lightning. Most never read the incoming picture at
+    /// all, which is why none of the other families describes them.
     Generate,
+    /// The **procedural textures**: a pattern worked out at every pixel and
+    /// filling the layer, never a drawn thing: Fractal noise, Voronoi,
+    /// Checkerboard, Tile patterns, Woodgrain and their kin. Filed under Generate
+    /// they were half of it, and a hand looking for a wood or a noise looks for
+    /// the textures, as Blender and Octane keep them together.
+    Textures,
     /// The effects that make, change or use a **stream of points**: Grid,
     /// Scatter, Pick points, Sort distribution, Clone to points, Label points
     /// and their kin. Filed under Generate they were most of that heading;
@@ -760,6 +739,7 @@ impl FxCategory {
             FxCategory::Colour => "Colour",
             FxCategory::Distortion => "Distortion",
             FxCategory::Generate => "Generate",
+            FxCategory::Textures => "Textures",
             FxCategory::Points => "Points",
             FxCategory::Stylise => "Stylise",
             FxCategory::Temporal => "Temporal",
@@ -798,11 +778,12 @@ impl FxCategory {
     }
 
     /// Every category, in menu order.
-    pub const ALL: [FxCategory; 14] = [
+    pub const ALL: [FxCategory; 15] = [
         FxCategory::BlurSharpen,
         FxCategory::Colour,
         FxCategory::Distortion,
         FxCategory::Generate,
+        FxCategory::Textures,
         FxCategory::Points,
         FxCategory::Stylise,
         FxCategory::Temporal,
@@ -823,7 +804,6 @@ impl FxCategory {
         // rather than from the Add-effect menu, so it sits after the family it
         // is kin to.
         FxCategory::Drivers,
-        // The Siceliot drivers after Lumit's own, under their own heading.
         FxCategory::SiceliotDrivers,
     ];
 }
@@ -836,7 +816,6 @@ impl FxCategory {
 /// bound to a layer nobody renders.
 pub const MATTE_PARAM: &str = "matte";
 
-/// The id of the Invert switch that rides beside [`MATTE_PARAM`].
 pub const MATTE_INVERT_PARAM: &str = "matte_invert";
 
 /// [`MATTE_INVERT_PARAM`]'s resolved id — what the generic post-lerp reads the
@@ -854,7 +833,6 @@ pub const MATTE_INVERT_ID: super::params::ParamId = super::params::ParamId::new(
 /// kernel learns about it.
 pub const MATTE_CHANNEL_PARAM: &str = "matte_channel";
 
-/// [`MATTE_CHANNEL_PARAM`]'s resolved id.
 pub const MATTE_CHANNEL_ID: super::params::ParamId =
     super::params::ParamId::new(MATTE_CHANNEL_PARAM);
 
@@ -864,7 +842,6 @@ pub const MATTE_CHANNEL_ID: super::params::ParamId =
 /// 100 and the seam applies the Mix itself, after the blend.
 pub const MIX_PARAM: &str = "mix";
 
-/// [`MIX_PARAM`]'s resolved id.
 pub const MIX_ID: super::params::ParamId = super::params::ParamId::new(MIX_PARAM);
 
 /// Where the frame sits on the raster an op runs on, `[x, y, width, height]`
@@ -872,7 +849,6 @@ pub const MIX_ID: super::params::ParamId = super::params::ParamId::new(MIX_PARAM
 /// frame sets it; everywhere else the raster is the frame and it is absent.
 pub const FRAME_RECT: super::params::ParamId = super::params::ParamId::new("derived.frame_rect");
 
-/// [`FRAME_RECT`] when the op was told one.
 #[must_use]
 pub fn frame_rect(p: super::params::Params<'_>) -> Option<[f32; 4]> {
     match p.get(FRAME_RECT)? {
@@ -893,7 +869,6 @@ const DISTANCES: &[&str] = &["shift"];
 /// it.
 pub const BLEND_PARAM: &str = "blend";
 
-/// [`BLEND_PARAM`]'s resolved id.
 pub const BLEND_ID: super::params::ParamId = super::params::ParamId::new(BLEND_PARAM);
 
 /// How much of an effect's result its Blend keeps, 0..1, on top of its Mix.
@@ -951,7 +926,6 @@ pub enum MatteRole {
     },
 }
 
-/// One built-in effect's full declaration.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct EffectSchema {
     /// Stable match name (participates in the cache key with `version`).
@@ -965,8 +939,6 @@ pub struct EffectSchema {
     /// of `params` the Effect Controls tucks behind a twirl. Empty for the
     /// effects that declare none.
     pub groups: &'static [ParamGroup],
-    /// Rows that grey out while another parameter says so. Empty for the
-    /// effects whose controls are all independent, which is most of them.
     pub enabled_when: &'static [EnabledWhen],
     /// What this effect's Matte row means, and therefore who consumes it — see
     /// [`MatteRole`].
@@ -1104,8 +1076,6 @@ impl EffectSchema {
         })
     }
 
-    /// How many polylines this effect's slot in the carriage holds — zero for
-    /// the effects that take no path at all.
     #[must_use]
     pub fn mask_path_count(&self) -> usize {
         self.mask_paths().count()
@@ -1133,9 +1103,6 @@ impl EffectSchema {
         self.layer_inputs().next()
     }
 
-    /// Every [`ParamKind::Layer`] row that is not the effect's matte, in
-    /// declaration order. One for most effects that have any. Clone to points
-    /// has four.
     pub fn layer_inputs(&self) -> impl Iterator<Item = &'static str> + '_ {
         let matte = self.matte.param();
         self.params

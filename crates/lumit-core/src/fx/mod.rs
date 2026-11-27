@@ -1,82 +1,39 @@
-//! The built-in effect registry and CPU reference implementations
-//! (docs/08-EFFECTS.md §1). The WGSL production path lives in `lumit-gpu`
-//! (docs/05 crate table); this module is the engine-pure side: what each
-//! effect *is* (schema, parameters, traits), how an instance is born with
-//! tasteful defaults, how a stack resolves to plain evaluated numbers at a
-//! frame, and the CPU maths that serve as the test oracle (§1.6) and the
-//! degradation ladder's fallback rung.
-//!
-//! In plain terms: this file is the effects catalogue. Each entry declares
-//! its parameters (names, defaults, slider ranges) and its cost/behaviour
-//! traits; dropping one on a layer copies the declared defaults into the
-//! project. At render time the animatable parameters are evaluated at the
-//! frame's time into a flat list of numbers — the same list the GPU kernels
-//! and these CPU functions both consume, which is what makes "the GPU must
-//! agree with the CPU" a testable promise.
-
-/// The layer's audio insert chain: sound through the plugins in its stack,
-/// ahead of Volume and Pan (docs/impl/audio-plugins.md §2).
 pub mod audio_chain;
 pub mod builtins;
-/// Registration: the list of effects this build has (§2.6).
 pub mod catalogue;
-/// Spectral colour tables for the Lens flare (docs/impl/lens-flare.md §5).
 pub mod cie;
 pub mod colour_name;
 /// A Gradient row's stops between its two colour rows.
 pub mod colour_stops;
-/// Denoise's maths: the CPU twin of its kernels, and Learn.
 pub mod denoise;
-/// The drivers and the driver-graph evaluation: one module per driver,
-/// plus the demand-driven walk that works out what every wire carries.
 pub mod drivers;
-/// One module per migrated built-in: its declaration and its behaviour (§2.1).
 pub mod effects;
 pub mod enabled;
-/// The in-house FFT / fractional Fourier transform the Lens flare bakes use.
 pub mod fft;
-/// Film's model: stocks, their spectra, and the passes they make.
 pub mod film;
-/// The Sprite flare's design: its elements and how they are drawn.
 pub mod flare;
 pub mod follow;
-/// The Lens flare optics core, bake, and CPU reference (docs/08 §3.27).
 pub mod labels;
-/// Lenses as both lens effects read them, and a lens kept in the effect.
 pub mod lens;
-/// Depth of field pro's bake: a lens traced into its out-of-focus shapes.
 pub mod lens_blur;
 pub mod lens_flare;
 /// The bundled lens prescription library: 1303 .lens files as
 /// embedded text, generated from the FlareSim / PhotonsToPhotos collection.
 pub mod lens_library;
-/// The WGSL effects extensions carry: the table of them.
 pub mod lfx;
 pub mod markers;
 pub mod maths;
 pub mod moments;
 pub mod names;
-/// The shared procedural noise core (docs/08 §3.37): seeded 3-D value and
-/// Perlin noise and the fractal sum over them, reused by the displacement
-/// family.
 pub mod noise;
-/// The resolved key/value parameter form a frame renders from
-/// (docs/impl/effect-registry.md §2.3).
 pub mod params;
-/// The points stream and its closed forms: one frame's
-/// particles, worked out from their birth indices and nothing else.
 pub mod points;
 pub mod presets;
-/// The catalogue as JSON, for the manual's per-effect parameter tables.
 pub mod reference;
-/// What an effect is, as a value rather than a variant (§2.4).
 pub mod registry;
 pub mod resolved;
 pub mod schema;
-/// The Custom shader's text side: the declaration grammar, the assembler and
-/// the uniform layout (docs/impl/custom-shader.md).
 pub mod shader;
-/// A Shape row's points: an outline inside a box.
 pub mod shape_points;
 /// The layer styles (docs/impl/layer-styles.md): nine named slots a
 /// layer wears, in one pinned order — a second, order-locked list beside the
@@ -84,8 +41,6 @@ pub mod shape_points;
 pub mod styles;
 pub mod temporal;
 
-/// CPU reference implementations (docs/08 §1.6): identical semantics to the
-/// WGSL kernels, plain and readable — the oracle the GPU must agree with.
 pub mod cpu;
 
 #[cfg(test)]

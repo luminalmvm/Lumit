@@ -26,7 +26,6 @@ use std::sync::atomic::Ordering;
 #[cfg(not(target_arch = "wasm32"))]
 use std::sync::Arc;
 
-/// How far past the playhead each ring is kept filled, in milliseconds.
 pub const RACK_AHEAD_MS: i64 = 250;
 
 /// How long the thread rests once every ring is full. Swaps, seeks and play
@@ -34,17 +33,13 @@ pub const RACK_AHEAD_MS: i64 = 250;
 #[cfg(not(target_arch = "wasm32"))]
 const RACK_REST: std::time::Duration = std::time::Duration::from_millis(5);
 
-/// What the rack thread keeps from step to step.
 pub(crate) struct RackThread {
     rate: u32,
-    /// Runs the streams and works out each rack's input.
     puller: RackPuller,
     /// Per rack, how much further than [`RACK_AHEAD_MS`] its ring is filled:
     /// the longest run of delays of the racks downstream of it.
     lead: Vec<i64>,
-    /// The plan's racks, upstream first.
     order: Vec<usize>,
-    /// One block of a rack's output on its way to the ring.
     block: Vec<f32>,
     /// How far the playhead moved during the last step that started a ring
     /// again while playing: how long that takes.
@@ -55,7 +50,6 @@ pub(crate) struct RackThread {
 }
 
 impl RackThread {
-    /// For sound at `rate`.
     pub(crate) fn new(rate: u32) -> Self {
         Self {
             rate,
@@ -68,7 +62,6 @@ impl RackThread {
         }
     }
 
-    /// Put the plan's racks upstream first and work out each one's lead.
     fn plan_order(&mut self, plan: &MixPlan) {
         let count = plan.racks.len();
         self.order.clear();
@@ -91,7 +84,6 @@ impl RackThread {
     }
 }
 
-/// Start the rack thread.
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn spawn(shared: Arc<Shared>, rate: u32) -> std::io::Result<std::thread::Thread> {
     std::thread::Builder::new()
@@ -194,8 +186,6 @@ mod tests {
     use std::sync::atomic::AtomicUsize;
     use std::sync::Arc;
 
-    /// A rack that turns its input upside down, with a second's tail. Each
-    /// block it runs while playing takes as long as 200 frames of playback.
     struct Invert {
         shared: Arc<Shared>,
         opens: Arc<AtomicUsize>,
@@ -235,12 +225,6 @@ mod tests {
         }
     }
 
-    /// A clip through a strip into a racked bus: once the rack thread has
-    /// caught up, the callback hears the rack's output on the clip's own
-    /// frames. A seek far off starts the ring again there, and nothing of the
-    /// old window is read back. Playing, a seek whose start takes longer
-    /// than a block of playback still catches the playhead, and the rack is
-    /// never opened again for it.
     #[test]
     fn the_rack_thread_fills_the_ring_and_a_seek_starts_it_again() {
         let rate = 8_000u32;
@@ -303,7 +287,6 @@ mod tests {
             assert!((f[0] + wave(300 + k)).abs() < 1e-6, "frame {}", 300 + k);
         }
 
-        // A seek far off: nothing there until the thread has been round.
         let far = 20_000;
         shared.playhead.store(far, Ordering::Relaxed);
         assert_eq!(heard(far, &mut work, &mut out), 1_000);
@@ -313,13 +296,10 @@ mod tests {
         for (k, f) in out.chunks_exact(2).enumerate() {
             assert!((f[0] + wave(far + k)).abs() < 1e-6, "frame {}", far + k);
         }
-        // The old window is gone from the ring.
         let ring = &plan.racks[0].ring;
         assert_eq!(ring.valid_from(), far as i64);
         assert_eq!(ring.read(300, 1_000, &mut out), 0);
 
-        // Playing, a seek back: the rack's second of tail takes 17 blocks to
-        // run in, far longer than a block of playback.
         shared.playing.store(true, Ordering::Relaxed);
         shared.playhead.store(5_000, Ordering::Relaxed);
         let mut steps = 0;
@@ -336,7 +316,6 @@ mod tests {
                 }
                 break;
             }
-            // The callback plays on.
             shared.playhead.store(at + 1_000, Ordering::Relaxed);
         }
         assert_eq!(opens.load(Ordering::Relaxed), 1);

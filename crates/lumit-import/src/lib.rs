@@ -54,14 +54,12 @@ use std::fs::{self, File};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-/// The only `format` string a bundle may carry.
 pub const FORMAT: &str = "lumit-ae-bundle";
 
 /// The capture-schema major version this reader understands. A bundle with a
 /// higher major is refused; lower and equal are read (docs/11 §2.3).
 pub const SUPPORTED_MAJOR: u64 = 1;
 
-/// Everything a bundle holds, parsed.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Bundle {
     pub manifest: Manifest,
@@ -82,13 +80,10 @@ pub struct Bundle {
     pub footage_only: bool,
 }
 
-/// Where a [`Bundle`] came from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum BundleSource {
-    /// A Lumit Bridge bundle — a folder or a zip written by the walker script.
     #[default]
     Bridge,
-    /// An After Effects project file, read directly.
     Aep,
 }
 
@@ -217,7 +212,6 @@ pub fn note_skipped_chunks(bundle: &Bundle, report: &mut ImportReport) {
     }
 }
 
-/// Whether the file begins with a RIFF/RIFX container's magic.
 fn is_rifx(path: &Path) -> bool {
     let mut magic = [0_u8; 4];
     File::open(path)
@@ -276,7 +270,6 @@ fn major_of(version: &str) -> Option<u64> {
     version.split('.').next()?.parse().ok()
 }
 
-/// A bundle's three files, wherever they physically live.
 enum Source {
     Dir(PathBuf),
     // Boxed because a `ZipArchive` is far larger than a `PathBuf`.
@@ -294,7 +287,6 @@ impl Source {
         }
     }
 
-    /// The named file's bytes, or `None` when the bundle has no such file.
     fn read(&mut self, name: &str) -> Result<Option<Vec<u8>>, ImportError> {
         match self {
             Source::Dir(dir) => match fs::read(dir.join(name)) {
@@ -401,11 +393,6 @@ mod tests {
         })
     }
 
-    /// **A preset's expressions find its controls once both are on a layer.**
-    ///
-    /// This is what bringing a rig across means: the pseudo effect arrives as
-    /// a set of controls under the name the expressions ask for, each control
-    /// under its own, and the expression beside it runs as it was written.
     #[test]
     fn a_presets_expressions_read_its_controls() {
         use crate::aep::ffx::tests::{preset_bytes, Slider};
@@ -451,7 +438,6 @@ mod tests {
             .iter()
             .any(|row| row.reason == Reason::ExpressionCarried));
 
-        // 3 under the expression, plus twice the control's 12.5.
         let context = on_a_layer(effects, 0.0);
         let layer = &context.document.comp(context.comp.unwrap()).unwrap().layers[0];
         assert_eq!(
@@ -485,8 +471,6 @@ mod tests {
             other => panic!("expected a refusal, got {other:?}"),
         }
 
-        // The same bundle one minor version ahead opens, because the schema
-        // grows by addition.
         fs::write(
             bundle.join("manifest.json"),
             br#"{ "format": "lumit-ae-bundle", "version": "1.7.0" }"#,
@@ -585,8 +569,6 @@ mod tests {
             BundleSource::Bridge
         );
 
-        // A RIFX file named `.zip`: the bytes win, and it reaches the parser
-        // (which then refuses it for having no item tree, not for its name).
         let temp = tempfile::tempdir().unwrap();
         let renamed = temp.path().join("project.zip");
         fs::write(&renamed, b"RIFX\0\0\0\x04Egg!").unwrap();
@@ -602,8 +584,6 @@ mod tests {
         assert_eq!(opened_zip.source, BundleSource::Bridge);
         assert_eq!(opened_zip, opened());
 
-        // And a file that is neither goes down the bundle road, where the
-        // answer is the plain refusal rather than a RIFX error.
         let neither = temp.path().join("notes.aep");
         fs::write(&neither, b"hello").unwrap();
         assert!(open_ae(&neither).is_err());
@@ -646,7 +626,6 @@ mod tests {
             bundle.capture.items.len().to_string()
         );
 
-        // A whole parse says nothing of the kind.
         bundle.footage_only = false;
         let mut report = ImportReport::default();
         note_skipped_chunks(&bundle, &mut report);

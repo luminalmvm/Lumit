@@ -22,8 +22,6 @@
 //! destroys the device, so the second render is genuinely being served by a
 //! device that did not exist when the first one was.
 
-// A test binary: a failed setup step should stop this test, loudly, and the
-// no-panic rule of docs/14 is about the engine's own paths.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use lumit_core::model::{
@@ -58,6 +56,7 @@ fn project() -> (Arc<Document>, Uuid) {
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -132,7 +131,6 @@ fn a_renderer_rebuilt_after_a_device_loss_draws_the_picture_again() {
         "a renderer that has just drawn is not lost"
     );
 
-    // Take the device away for real.
     renderer.simulate_device_loss();
     assert!(
         renderer.device_lost(),

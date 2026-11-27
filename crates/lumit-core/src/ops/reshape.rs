@@ -1,7 +1,4 @@
-//! The batches behind the two commands that reshape a whole comp: trim to
-//! the work area, and crop to a region.
-
-use super::{remapped, Op, OpError};
+use super::{Op, OpError};
 use crate::anim::Animation;
 use crate::model::{Document, Layer, TransformProp};
 use crate::time::{CompTime, Duration};
@@ -176,5 +173,5 @@ fn shifted(animation: &Animation, delta: f64) -> Option<Animation> {
     if delta == 0.0 {
         return None;
     }
-    remapped(animation, 1.0, delta)
+    crate::anim::remapped(animation, 1.0, delta)
 }

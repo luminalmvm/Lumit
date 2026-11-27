@@ -1,6 +1,3 @@
-//! What crosses between a host and a guest, and the encrypted channel it
-//! crosses in. Used from the reader and writer threads.
-
 use crate::{bulk::Held, Person, Presence, Refusal, ShareError};
 use lumit_core::{model::Document, ops::Op};
 use parking_lot::Mutex;
@@ -37,7 +34,6 @@ pub(crate) const EDIT_LIMIT: u32 = 64 << 20;
 /// each has to be small.
 pub(crate) const NOTE_LIMIT: usize = 4 << 20;
 
-/// How long either end has to finish the handshake and say hello.
 pub(crate) const GREETING: Duration = Duration::from_secs(10);
 
 /// How long a quiet connection is believed. Three missed pings.
@@ -45,7 +41,6 @@ pub(crate) const QUIET: Duration = Duration::from_secs(20);
 
 const PING: Duration = Duration::from_secs(5);
 
-/// How often a writer looks for something to send besides its queue.
 const TICK: Duration = Duration::from_millis(50);
 
 /// How many messages wait for one connection. A host drops a guest that falls
@@ -54,7 +49,6 @@ pub(crate) const OUTBOX: usize = 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) enum Message {
-    /// A guest's first words.
     Hello {
         protocol: u32,
         version: String,
@@ -98,7 +92,6 @@ pub(crate) enum Message {
         id: u64,
         op: Op,
     },
-    /// The host applied this guest's edit as it was sent.
     Accepted {
         id: u64,
     },
@@ -111,9 +104,7 @@ pub(crate) enum Message {
         presence: Presence,
     },
     Ping,
-    /// The host has stopped sharing.
     Closed,
-    /// The host has taken this guest out of the project.
     Removed,
     /// The host has replaced the invite, having taken someone out. A guest
     /// finds its host by these from now on: the key the channel opens with,
@@ -186,9 +177,6 @@ fn scrub(
                             }
                             *path = name;
                         } else {
-                            // ponytail: the top of the folder only, by name.
-                            // A walk, when files kept in folders inside it
-                            // have to be found too.
                             let found = names.get(&name).cloned().or_else(|| {
                                 let here = root?.join(&name);
                                 here.is_file().then(|| here.to_string_lossy().into_owned())
@@ -238,8 +226,6 @@ pub(crate) fn scrubbed(value: &impl Serialize, names: &Names) -> Result<Vec<u8>,
     Ok(serde_json::to_vec(&value)?)
 }
 
-/// Read what [`scrubbed`] wrote on another machine, with [`scrub`] run over
-/// it again on the way in.
 pub(crate) fn unscrubbed<T: serde::de::DeserializeOwned>(
     bytes: &[u8],
     names: &Names,
@@ -250,7 +236,6 @@ pub(crate) fn unscrubbed<T: serde::de::DeserializeOwned>(
     Ok(serde_json::from_value(value)?)
 }
 
-/// The sending half of a connection.
 pub(crate) struct Sender {
     socket: BufWriter<TcpStream>,
     noise: Arc<StatelessTransportState>,
@@ -258,7 +243,6 @@ pub(crate) struct Sender {
     sealed: Vec<u8>,
 }
 
-/// The receiving half of a connection.
 pub(crate) struct Receiver {
     socket: BufReader<TcpStream>,
     noise: Arc<StatelessTransportState>,
@@ -344,7 +328,6 @@ impl Sender {
         Ok(())
     }
 
-    /// Close the connection for both halves.
     pub(crate) fn close(&mut self) {
         let _ = self.socket.flush();
         let _ = self.socket.get_ref().shutdown(Shutdown::Both);
@@ -352,7 +335,6 @@ impl Sender {
 }
 
 impl Receiver {
-    /// How long to wait for the other end before calling it gone.
     pub(crate) fn patience(&self, wait: Duration) {
         let _ = self.socket.get_ref().set_read_timeout(Some(wait));
     }
@@ -383,7 +365,6 @@ impl Receiver {
         Ok(bytes)
     }
 
-    /// Read and open one Noise message into `self.plain`.
     fn chunk(&mut self) -> Result<usize, ShareError> {
         let mut len = [0u8; 2];
         self.socket.read_exact(&mut len)?;
@@ -397,10 +378,8 @@ impl Receiver {
     }
 }
 
-/// What waits in a connection's queue.
 pub(crate) enum Out {
     Bytes(Arc<[u8]>),
-    /// Send what is queued ahead of this, then close.
     Close,
 }
 
@@ -444,11 +423,6 @@ pub(crate) fn write_loop(
 mod tests {
     use super::*;
 
-    /// A peer is only ever trusted with file names. Paths typed straight into
-    /// the JSON, as a hostile one would send them, never reach this machine's
-    /// disk: a media reference is cut down to its file name, a path this
-    /// machine is meant to have found for itself is thrown away, and the cache
-    /// folder cannot be moved at all.
     #[test]
     fn a_peer_cannot_name_a_path_on_this_machine() {
         let nothing = serde_json::json!({ "op_type": "Batch", "ops": [] });

@@ -34,14 +34,14 @@
 //    still, in which case every tap lands on the pixel and the result is the
 //    bit-exact input.
 
-const DOM_TEMPER: f32 = 0.6; // lumit_core::fx::cpu::MB_DOM_TEMPER
+const DOM_TEMPER: f32 = 0.6;
 
 struct Params {
     shutter_frac: f32, // shutter / 360: streak length as a fraction of motion
     samples: i32,      // the *cap* on taps; the count adapts to the streak
     mix_amt: f32,      // 0..1, blended against the unprocessed input
     view: i32,         // 0 Rendered, 1 Motion vectors, 2 Confidence, 3 Dominant motion
-    tile: i32,         // MB_TILE: tile side in pixels
+    tile: i32,
     quality: i32,      // 0 Normal, 1 High (curved trails, half the tap spacing)
     matte_on: f32,     // 1 = the matte scales Shutter angle per pixel
     pad1: i32,
@@ -207,7 +207,6 @@ fn motion_blur(@builtin(global_invocation_id) gid: vec3<u32>) {
     // neighbourhood agrees it is doing (what to borrow).
     let dom = neighbour_max(xy / p.tile, tdim);
     let lend = tile_bilinear(pos, tdim);
-    // Diagnostic views (FX-19), matching cpu::motion_blur exactly.
     if (p.view == 1) {
         // Motion vectors: red = +x, green = +y, mid-grey = still. Opaque.
         let k = 1.0 / 32.0;

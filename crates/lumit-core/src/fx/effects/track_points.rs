@@ -33,13 +33,10 @@ use lumit_fx_macros::Effect;
 /// compare against it.
 pub const MATCH_NAME: &str = "track_points";
 
-/// The same Points output every producer declares.
 const POINTS_OUT: &[Port] = &[Port::new("points", "Points", PortType::Points)];
 
-/// Mode's option labels, in index order.
 pub const MODE_OPTIONS: &[&str] = &["Features", "Blobs"];
 
-/// The Mode index meaning blobs.
 const MODE_BLOBS: u32 = 1;
 
 const fn group(
@@ -56,7 +53,6 @@ const fn group(
     }
 }
 
-/// Each mode shows its own rows, then what a point looks like.
 pub const TRACK_POINTS_GROUPS: &[ParamGroup] = &[
     group(
         "",
@@ -77,7 +73,6 @@ pub const TRACK_POINTS_GROUPS: &[ParamGroup] = &[
     group("Point", &["size", "feather", "colour"], None),
 ];
 
-/// Track points' controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "track_points",
@@ -85,7 +80,6 @@ pub const TRACK_POINTS_GROUPS: &[ParamGroup] = &[
     version = 1,
     category = Points,
     cost = Moderate,
-    // A track may be anywhere, and the discs are drawn over the whole picture.
     roi = FullFrame,
     premultiplied = true,
     // Not seeded: the points move with the footage, and the footage's own
@@ -94,7 +88,6 @@ pub const TRACK_POINTS_GROUPS: &[ParamGroup] = &[
     groups = TRACK_POINTS_GROUPS,
 )]
 pub struct TrackPoints {
-    /// What is followed: corners in the picture, or whole bright regions.
     #[choice(label = "Mode", options = MODE_OPTIONS, default = 0)]
     pub mode: u32,
 
@@ -136,7 +129,6 @@ pub struct TrackPoints {
     )]
     pub threshold: f32,
 
-    /// Follow dark blobs on a light picture instead.
     #[toggle(default = false)]
     pub invert: bool,
 
@@ -160,15 +152,12 @@ pub struct TrackPoints {
     #[slider(min = 0.0, max = 500.0, default = 50.0, hard_min = 0.0, unit = Px)]
     pub max_distance: f32,
 
-    /// Which frames Analyse tracks - see [`crate::planes::FRAMES_OPTIONS`].
     #[choice(options = *crate::planes::FRAMES_OPTIONS, default = 0, label = "Frames")]
     pub frames: u32,
 
-    /// Start the analysis. A button, not a value.
     #[action(label = "Analyse")]
     pub analyse: (),
 
-    /// Stop a running analysis.
     #[action(label = "Cancel")]
     pub cancel: (),
 
@@ -177,7 +166,6 @@ pub struct TrackPoints {
     #[slider(min = 0.0, max = 200.0, default = 8.0, hard_min = 0.0, unit = Px)]
     pub size: f32,
 
-    /// How soft that disc's edge is, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -283,12 +271,9 @@ impl Analysis {
     }
 }
 
-/// One followed point: where it was on each frame from `first` on.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Followed {
-    /// The id the point keeps for its whole life.
     pub id: u32,
-    /// The source frame it was first seen on.
     pub first: u32,
     /// One entry per frame from `first`, with no gaps: x and y in the
     /// footage's own pixels, then the tracker's confidence 0..1 for a
@@ -296,14 +281,11 @@ pub struct Followed {
     pub at: Vec<[f32; 3]>,
 }
 
-/// A finished analysis, as a frame reads it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Baked {
-    /// What it was analysed under.
     pub analysis: Analysis,
     /// The footage's own rate, which the frame numbers count at.
     pub fps: f64,
-    /// How many frames the clip has.
     pub frames: u32,
     /// Every followed point, in id order.
     pub tracks: Vec<Followed>,
@@ -320,14 +302,12 @@ fn table() -> &'static RwLock<HashMap<Uuid, Arc<Baked>>> {
     TABLE.get_or_init(|| RwLock::new(HashMap::new()))
 }
 
-/// Put a finished analysis in the table under the instance it was made for.
 pub fn publish(effect: Uuid, baked: Baked) {
     if let Ok(mut held) = table().write() {
         held.insert(effect, Arc::new(baked));
     }
 }
 
-/// The analysis in hand for `effect`, whatever it was analysed under.
 #[must_use]
 pub fn baked(effect: Uuid) -> Option<Arc<Baked>> {
     table().read().ok()?.get(&effect).cloned()
@@ -357,7 +337,6 @@ impl TrackPoints {
     /// number when there is no analysis to read.
     pub const DERIVED_FRAME: ParamId = ParamId::new("derived.frame");
 
-    /// This instance's raster factor, read back out of a resolved bag.
     #[must_use]
     pub fn px_scale_of(p: Params<'_>) -> f32 {
         p.float(Self::DERIVED_PX_SCALE, 1.0)
@@ -425,7 +404,6 @@ impl TrackPoints {
             // life to divide by.
             out.life.push(track.at.len() as f32 / fps);
             out.size.push(if blobs {
-                // The diameter of a disc of the blob's area.
                 2.0 * (extra.max(0.0) / std::f32::consts::PI).sqrt() * scale
             } else {
                 size
@@ -448,7 +426,6 @@ impl TrackPoints {
         out
     }
 
-    /// How the stream is drawn: a feathered disc per point, and the Mix.
     #[must_use]
     pub fn draw_style(self) -> DrawStyle {
         DrawStyle {
@@ -469,7 +446,6 @@ impl EffectDef for TrackPointsDef {
         &<TrackPoints as EffectMetadata>::SCHEMA
     }
 
-    /// The picture and the data, as every producer declares it.
     fn signature(&self) -> Signature {
         Signature::Image {
             inputs: &[],

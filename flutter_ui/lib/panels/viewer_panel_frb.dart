@@ -30,15 +30,6 @@
 // in docs/TODO.md — none is blocked on the engine. The grid and the safe areas
 // *are* here (`viewer_overlays.dart`), as is the region of interest.
 
-// **Where the rest of it is.** The Viewer is four files, split along the seams
-// it already had: this one holds the panel — the magnification, the
-// pan, the snapshot slot and the transport's two calls — and hands the rest
-// down. `viewer_stage.dart` is the picture and everything drawn over it,
-// `viewer_strips.dart` the header strip and the vocabulary both strips are made
-// of, `viewer_bar.dart` the bottom bar, and `viewer_dropper_layer.dart` the
-// armed dropper. They are re-exported below, so anything that imported this
-// file for a piece of the Viewer still finds it here.
-
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -48,7 +39,6 @@ import 'dart:ui' as dartui;
 
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/gestures.dart';
-// For [RenderRepaintBoundary], which is what a snapshot is photographed from.
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/services.dart';
@@ -133,7 +123,6 @@ GlobalKey? viewerPictureKey;
 /// hand knows whether Compare ▸ Snapshot can do anything.
 final Set<int> _snapshotViews = {};
 
-/// Whether the view [viewId] holds a snapshot.
 bool viewerHasSnapshot(int viewId) => _snapshotViews.contains(viewId);
 
 /// Photograph the composition on screen as a small PNG, for the welcome
@@ -178,14 +167,7 @@ Rect visiblePictureCrop(RenderRepaintBoundary picture, RenderBox panel) {
       .intersect(Offset.zero & picture.size);
 }
 
-/// One Viewer panel: the views it holds, laid out (docs/impl/multi-viewer.md
-/// §3.2).
-///
-/// The panel is what the dock knows about and the views live inside it. One,
-/// two or four of them, across or down, and a compare puts two of them
-/// together as a wipe or a split with a draggable divider.
 class ViewerPanelFrb extends StatefulWidget {
-  /// Which Viewer pane this is. The dock can hold more than one.
   final PaneId pane;
 
   const ViewerPanelFrb({
@@ -342,8 +324,6 @@ class _ViewerPanelLayoutState extends State<ViewerPanelFrb>
   }
 }
 
-/// One picture surface, with its own bars: the Viewer as it was, now bound to
-/// one view rather than to "the" composition.
 class ViewerViewSurface extends StatefulWidget {
   final PaneId pane;
   final ViewerSurface view;
@@ -493,8 +473,6 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
     if (identical(viewerPictureKey, _pictureKey)) viewerPictureKey = null;
   }
 
-  /// The one slot. AE's four-slot family can follow on this same mechanism if
-  /// it is ever asked for; one is what a before/after actually needs.
   dartui.Image? _snapshot;
 
   /// Which slice of the picture that snapshot is, as fractions of the picture's
@@ -503,10 +481,8 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
   /// *now*, at whatever magnification has happened since.
   Rect? _snapshotArea;
 
-  /// Whether the Show button is being held down this instant.
   bool _showingSnapshot = false;
 
-  /// What the menus opened from this view's bars and picture ask of it.
   final ViewerMenuHost _menus = ViewerMenuHost();
 
   @override
@@ -551,7 +527,6 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
     try {
       shot = await layer.toImage(crop, pixelRatio: ratio);
     } catch (_) {
-      // A boundary that has not been painted yet has nothing to hand over.
       return;
     }
     if (!mounted) {
@@ -583,7 +558,6 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
     setState(() => _showingSnapshot = held);
   }
 
-  /// Forget the stored picture, after the frame for [_takeSnapshot]'s reason.
   void _clearSnapshot() {
     final old = _snapshot;
     _snapshotViews.remove(widget.view.engineId);
@@ -661,7 +635,6 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
       return _facts = (
         settings: comp.getSettings(),
         size: comp.getSize(),
-        // The frame the clock reads at the first frame: the Start timecode.
         start: comp.frameAtTime(time: comp.getStartTimecode()),
       );
     } catch (_) {
@@ -671,7 +644,6 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
     }
   }
 
-  /// Which of the comp's layers have a file behind them, off the read model.
   List<FootageReference> _footageOf(LumitUiState ui) => <FootageReference>[
         for (final entry in ui.model.heldLayers)
           if (entry.info.source case ItemReference_Footage(:final field0))
@@ -753,8 +725,6 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
     // guaranteed to agree with the panels that follow it
     // (docs/impl/multi-viewer.md §1.4).
     final comp = ui.compFor(widget.view) ?? ui.selectedComp;
-    // Nothing to show: the ways to start work, or this panel's ordinary empty
-    // line when the project does have compositions (shell/welcome_frb).
     if (comp == null) return const EmptyStageFrb();
     // A newly fronted composition is a new picture to ask for. Nothing else
     // asks: the playhead has not moved and no edit has landed, so without this
@@ -763,7 +733,6 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
     // ahead of the playhead until the first edit happened to ask for a frame.
     if (_askedFor != comp.internalid) {
       _askedFor = comp.internalid;
-      // Another composition is another set of facts.
       _facts = null;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _onPlayheadChanged();
@@ -781,17 +750,10 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
     final scope = ThemeScope.of(context);
     final t = scope.theme;
     _zoomFlight = scope.motion.zoom;
-    // Roomed panes part the bars from the picture and gather the transport
-    // into one pill; flush panes weld the bars on.
     final round = t.tokens.roomed;
 
-    // How the chrome is arranged round the picture, from the setting: the
-    // drawing's split by default, or everything gathered into one strip at
-    // whichever end is asked for.
     final arrangement = ui.workspace.interface.viewerBarsFor(t.shape);
     final split = arrangement == ViewerBars.split;
-    // The deck: the ways of looking above the picture, and everything about
-    // playing in a strip of its own under it.
     final deck = arrangement == ViewerBars.deck;
 
     // The panel's own header strip: the Viewer's kicker, and the three
@@ -804,7 +766,6 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
     // what the measured rectangle in the layout builder knows.
     void goToNamedZoom(double? z) =>
         _goToZoom(z, Offset.zero, from: _shownScale);
-    // A 3D viewport says so where the panel's name goes.
     final viewport = ui.isViewport(widget.view.engineId);
     _menus
       ..comp = comp
@@ -813,7 +774,6 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
       ..shownScale = _shownScale
       ..onZoom = goToNamedZoom
       ..channel = _channel
-      // The video monitor shows the channel too, so the views say so.
       ..onChannel = ((c) {
         setState(() => _channel = c);
         ui.views.touch();
@@ -859,7 +819,6 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
           playing: playing,
           playhead: ui.playheadFrame,
           settings: settings,
-          // The clock reads from the comp's Start timecode, held with its facts.
           startFrame: facts.start,
           comp: comp,
           compSize: facts.size,
@@ -885,8 +844,6 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
           loop: ui.workspace.performance.loop,
           onLoop: ui.workspace.setLoopMode,
           viewId: widget.view.engineId,
-          // Gathered: the header's contents lead the one strip, in the
-          // order the two strips read.
           leading: split
               ? const []
               : [
@@ -914,9 +871,6 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
       ),
     );
 
-    // The picture. The preview progress bar used to float over the bottom of
-    // it; it now rides on the right of the transport instead, where it
-    // covers nothing and has a place of its own that is always the same size.
     final stage = LayoutBuilder(
       key: const ValueKey('viewer-stage'),
       builder: (context, constraints) {
@@ -989,7 +943,6 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
                 ? _snapshot
                 : null,
             snapshotArea: _snapshotArea,
-            // Held, the snapshot covers all of it again.
             snapshotFrom: _comparingSnapshot(ui) && !_showingSnapshot
                 ? ui.views.dividerOf(widget.pane)
                 : null,
@@ -1053,8 +1006,6 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
     ];
     final below = <Widget>[
       if (split || arrangement == ViewerBars.bottom) bar,
-      // The deck listens to the same two notifiers as the bar: where the
-      // playhead is, and whether it is running.
       if (deck)
         ValueListenableBuilder<bool>(
           valueListenable: ui.playing,
@@ -1132,7 +1083,6 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
         ],
       ],
     );
-    // A wipe's second side lets the first side's room show through.
     if (wipe != null) {
       return KeyedSubtree(
           key: const ValueKey('viewer-comp-view'), child: column);
@@ -1144,8 +1094,6 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
     );
   }
 
-  /// A wipe's second side: its picture on its side of the line, the line on
-  /// it, and a quiet name on each side of the line where the two differ.
   Widget _wiped(ViewerWipe wipe, Widget stage, String compName) =>
       LayoutBuilder(builder: (context, box) {
         final side = [
@@ -1183,7 +1131,6 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
         );
       });
 
-  /// Whether this view is wiped against its own snapshot.
   bool _comparingSnapshot(LumitUiState ui) =>
       _snapshot != null &&
       ui.views.compareOf(widget.pane) == CompareMode.snapshot;
@@ -1216,7 +1163,6 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
         );
       });
 
-  /// How far a wipe's side names sit from the line and the picture's foot.
   static const double _wipeTagGap = 8;
 
   /// The picture a 3D viewport fills, on screen: round the comp's middle out
@@ -1265,7 +1211,6 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
       pan = Offset.lerp(_panFrom, _pan, t) ?? _pan;
     }
     final drawn = Size(w * scale, h * scale);
-    // Centred in what the rulers have left, and pushed past them.
     final area = _pictureArea(constraints);
     final centre = Offset(
       _band + (area.width - drawn.width) / 2,
@@ -1310,8 +1255,6 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
     });
   }
 
-  /// Move the picture by a drag's worth, whether that drag came from the Hand
-  /// tool, a press on empty space or the middle button.
   void _panBy(Offset delta) => setState(() {
         // A pan during a zoom flight would be fighting it, so the flight ends
         // where it is and the drag takes over.
@@ -1320,7 +1263,6 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
         _pan += delta;
       });
 
-  /// The magnification "Fit" means here: the whole picture in the panel.
   double _fitScale(BoxConstraints constraints, BridgeCompSize size) {
     final w = size.width.toDouble();
     final h = size.height.toDouble();
@@ -1387,7 +1329,6 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
 
   Offset get _bandOffset => Offset(_band, _band);
 
-  /// The stage's rectangle with the strips taken off it.
   Size _pictureArea(BoxConstraints constraints) =>
       Size(constraints.maxWidth - _band, constraints.maxHeight - _band);
 
@@ -1494,7 +1435,6 @@ class FootageStageFrb extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Every angle of a multicam comp, on the same surface.
     if (view.angles) return AngleStageFrb(view: view);
     final ui = Provider.of<LumitUiState>(context);
     final footage = ui.footageOf(view);
@@ -1506,11 +1446,7 @@ class FootageStageFrb extends StatelessWidget {
     }
     final t = ThemeScope.of(context).theme;
     final frames = LumitUiState.framesOf(facts);
-    // Roomed panes part the bars from the picture, flush panes weld them on:
-    // the composition's side beside this one does the same.
     final round = t.tokens.roomed;
-    // The side's own name and the clip's, where the composition's side has its
-    // header.
     final header = Container(
       key: const ValueKey('footage-view-header'),
       height: viewerStripHeightFor(t),
@@ -1528,7 +1464,6 @@ class FootageStageFrb extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          // Let the clip go and the composition has the pane back.
           if (ui.sourceBesideComposition(view))
             LumitTooltip(
               message: l10n.close,
@@ -1575,15 +1510,12 @@ class FootageStageFrb extends StatelessWidget {
                   child: _FootagePicture(uiState: ui, view: view),
                 ),
               ),
-              // The same message the composition's stage shows when the runner
-              // has had to refuse the texture.
               const Positioned.fill(child: ViewerGpuMismatchNotice()),
             ],
           );
         },
       ),
     );
-    // The same rows from anywhere on the source view, and the item's markers.
     final markers = ui.sourceMarkers(view, facts);
     List<Widget> rows(VoidCallback close) => [
           ...viewerSourceRows(ui, view, close),
@@ -1603,7 +1535,6 @@ class FootageStageFrb extends StatelessWidget {
       detached: round,
       markers: [for (final m in markers) m.frame],
       onSeek: (frame) => ui.seekFootageView(view, frame),
-      // Near a tick the menu offers that marker first.
       onMenu: (at, near) => showMenuAt<void>(
         context: context,
         position: at,
@@ -1655,7 +1586,6 @@ class FootageStageFrb extends StatelessWidget {
     ));
   }
 
-  /// The item at the size that fits the pane, its shape kept.
   static Size _fitted(BoxConstraints box, BridgeMediaInfo facts) {
     final scale = math.min(
       box.maxWidth / facts.width,
@@ -1666,8 +1596,6 @@ class FootageStageFrb extends StatelessWidget {
   }
 }
 
-/// Whatever the worker last published for this view, in the channel the view is
-/// looking through. A platform texture, like every other picture in the Viewer.
 class _FootagePicture extends StatelessWidget {
   final LumitUiState uiState;
   final ViewerSurface view;
@@ -1693,14 +1621,12 @@ class SourceStrip extends StatelessWidget {
   final int frames;
   final ValueChanged<int> onSeek;
 
-  /// The item's markers, in its own frames, drawn as ticks.
   final List<int> markers;
 
   /// A right-click on the strip, with the index of the marker under the
   /// pointer when one is. Null leaves the menu to whatever is round the strip.
   final void Function(Offset at, int? near)? onMenu;
 
-  /// Standing apart as a pill of its own, as the strips do in a roomed pane.
   final bool detached;
 
   const SourceStrip({
@@ -1796,7 +1722,6 @@ class _SourceStripPainter extends CustomPainter {
         Paint()..color = colour.withValues(alpha: 0.35),
       );
     }
-    // A marker is a short tick from the top, as the ruler's are.
     final tick = Paint()..color = markerColour;
     for (final marker in markers) {
       canvas.drawRect(
@@ -1832,7 +1757,6 @@ class SourceBar extends StatefulWidget {
   final ViewerSurface view;
   final BridgeMediaInfo facts;
 
-  /// Standing apart as a pill of its own, as the bars do in a roomed pane.
   final bool detached;
 
   const SourceBar({
@@ -1851,7 +1775,6 @@ class _SourceBarState extends State<SourceBar>
   late final Ticker _ticker = createTicker(_tick);
   LumitUiState? _ui;
 
-  /// The frame this run began on.
   int _from = 0;
 
   /// Whether this run is following the file's sound, and whether that sound
@@ -1860,7 +1783,6 @@ class _SourceBarState extends State<SourceBar>
   bool _sound = false;
   bool _heard = false;
 
-  /// Whether Fit to fill has a work area, asked once a document revision.
   bool _canFit = false;
   int? _fitAskedAt;
 
@@ -1881,7 +1803,6 @@ class _SourceBarState extends State<SourceBar>
     final ui = Provider.of<LumitUiState>(context, listen: false);
     if (identical(ui, _ui)) return;
     _letGo();
-    // Space plays this side while it is in front.
     _ui = ui
       ..playing.addListener(_onTransport)
       ..sourcePlayToggle = _toggle;
@@ -1895,7 +1816,6 @@ class _SourceBarState extends State<SourceBar>
   @override
   void didUpdateWidget(SourceBar old) {
     super.didUpdateWidget(old);
-    // Another clip was loaded under a run: the run was the old clip's.
     if (old.view.itemId != view.itemId) _stop();
   }
 
@@ -1924,7 +1844,6 @@ class _SourceBarState extends State<SourceBar>
     if (ui == null || facts.fpsNum <= 0) return;
     if (ui.playing.value) ui.requestTogglePlay();
     final frames = LumitUiState.framesOf(facts);
-    // From the top when it stands on the last frame, as a transport does.
     if (view.sourceFrame >= frames - 1) ui.seekFootageView(view, 0);
     _from = view.sourceFrame;
     _heard = false;
@@ -1932,11 +1851,9 @@ class _SourceBarState extends State<SourceBar>
     // An angle viewer has no footage of its own to hear: counted on silent.
     if (footage != null && facts.audioCodec != null) {
       try {
-        // A file with several audio streams is heard as it would be placed.
         _sound = footage.previewAudioFrom(
             startSeconds: _from / _rate, arrival: ui.streamsArrival);
       } catch (_) {
-        // No sound to follow, so the picture is counted on by itself.
       }
     }
     _ticker.start();
@@ -1963,7 +1880,6 @@ class _SourceBarState extends State<SourceBar>
         _heard = true;
         seconds = clock.seconds;
       } else if (_heard || elapsed > const Duration(seconds: 20)) {
-        // The sound ran out or was stopped, or never came.
         _stop();
         return;
       } else {
@@ -1991,8 +1907,6 @@ class _SourceBarState extends State<SourceBar>
     final face = t.mono.copyWith(fontSize: viewerTimecodeSize);
     final label = face.copyWith(color: t.textMuted);
     final value = face.copyWith(color: t.textSecondary);
-    // The length in the marked stretch's own tint, so it reads as that
-    // stretch on the strip above.
     final marked = face.copyWith(color: t.accent);
     final whole = TextSpan(children: [
       TextSpan(text: '${l10n.sourceMarkIn} ', style: label),
@@ -2021,7 +1935,6 @@ class _SourceBarState extends State<SourceBar>
           : Text.rich(shown, key: const ValueKey('source-marks'), maxLines: 1);
       return Align(
         alignment: Alignment.centerRight,
-        // The length alone says the marks in full when the pointer asks.
         child: text != null && identical(shown, short)
             ? LumitTooltip(
                 message: '${l10n.sourceMarkIn} ${at(a)}   '
@@ -2138,7 +2051,6 @@ class _SourceBarState extends State<SourceBar>
             ),
           Expanded(child: _marks(t)),
           Text(
-            // From the footage's own start timecode, where it has one.
             timecodeOfRate(view.sourceFrame + facts.startFrame.toInt(),
                 facts.fpsNum, facts.fpsDen,
                 dropFrame: facts.startDropFrame),

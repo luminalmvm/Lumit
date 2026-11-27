@@ -10,7 +10,6 @@ use super::fillers::fold;
 use crate::model::Document;
 use uuid::Uuid;
 
-/// A run of words in one item's transcript that says a line.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Match {
     pub item: Uuid,
@@ -35,7 +34,6 @@ const ENOUGH: usize = 6;
 /// The places its rarest word is said come first.
 const SEEDS: usize = 64;
 
-/// Words a full stop follows without ending the sentence, folded.
 const ABBREVIATIONS: &[&str] = &["dr", "mr", "mrs", "ms", "prof", "st", "vs"];
 
 /// The lines of `script` worth looking for: split at blank lines and at the
@@ -62,7 +60,6 @@ pub fn lines(script: &str) -> Vec<String> {
                     .next_back()
                     .is_some_and(|w| ABBREVIATIONS.contains(&fold(w).as_str()));
             if stop || matches!(c, '?' | '!' | '。' | '？' | '！') {
-                // A closing quote or bracket stays with the sentence it closes.
                 while let Some(n) =
                     chars.next_if(|n| matches!(n, '"' | '\'' | '”' | '’' | '»' | ')' | ']'))
                 {
@@ -94,7 +91,6 @@ pub fn lines(script: &str) -> Vec<String> {
     out
 }
 
-/// Add a sentence to the lines when it has a word in it.
 fn keep(out: &mut Vec<String>, sentence: &str) {
     let sentence = sentence.trim();
     if sentence.split_whitespace().any(|w| !fold(w).is_empty()) {
@@ -112,7 +108,6 @@ fn is_name(line: &str) -> bool {
         && !name.chars().any(|c| c.is_alphabetic() && !c.is_uppercase())
 }
 
-/// A direction: a line wholly in brackets.
 fn is_direction(line: &str) -> bool {
     (line.starts_with('(') && line.ends_with(')')) || (line.starts_with('[') && line.ends_with(']'))
 }
@@ -122,7 +117,6 @@ fn is_direction(line: &str) -> bool {
 /// first: the later item in `items`, or later in the same one.
 #[must_use]
 pub fn find(doc: &Document, items: &[Uuid], lines: &[String]) -> Vec<Vec<Match>> {
-    // Every transcript's words folded, and where each word is said.
     let said: Vec<(Uuid, Vec<String>)> = items
         .iter()
         .filter_map(|item| {
@@ -156,7 +150,6 @@ pub fn find(doc: &Document, items: &[Uuid], lines: &[String]) -> Vec<Vec<Match>>
         .collect()
 }
 
-/// One line's matches.
 fn find_line(
     said: &[(Uuid, Vec<String>)],
     index: &HashMap<&str, Vec<(usize, usize)>>,
@@ -165,8 +158,6 @@ fn find_line(
     if line.is_empty() {
         return Vec::new();
     }
-    // The line's words the transcripts say, rarest first, and the places
-    // they are said, up to the limit.
     let mut seen: Vec<&Vec<(usize, usize)>> = Vec::new();
     for word in line {
         if let Some(places) = index.get(word.as_str()) {

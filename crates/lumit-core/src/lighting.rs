@@ -61,7 +61,6 @@ pub struct ShadingLight {
     pub shadow_diffusion: f32,
 }
 
-/// Which law shades a [`ShadingLight`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShadingKind {
     /// A point or a spot: the cosine law from its centre.
@@ -102,8 +101,6 @@ pub struct ShadingSurface {
     pub normal: [f32; 3],
 }
 
-/// How a layer takes light, its Material options as fractions, and where it
-/// is seen from.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ShadingMaterial {
     /// What a pixel's light starts from: 1 where light adds to the picture,
@@ -258,8 +255,6 @@ pub(crate) fn arrival(p: [f32; 3], light: &ShadingLight) -> Option<([f32; 3], f3
     let centre = light.centre();
     let to_light = match light.kind {
         ShadingKind::Ambient => return None,
-        // Every ray runs the same way, so the light arrives from straight
-        // back up the axis wherever the point is.
         ShadingKind::Parallel => [-light.axis[0], -light.axis[1], -light.axis[2]],
         _ => sub(centre, p),
     };
@@ -301,8 +296,6 @@ pub fn irradiance(p: [f32; 3], n: [f32; 3], light: &ShadingLight) -> f32 {
     let e = if light.kind == ShadingKind::Area {
         rect_form_factor(p, n, &light.corners)
     } else {
-        // The cosine law: a point light's brightness is how squarely the
-        // surface faces it, and nothing else. Distance is the falloff above.
         match normalise(to_light) {
             Some(dir) => dot(n, dir).max(0.0),
             None => 0.0,
@@ -835,10 +828,6 @@ pub fn shade_with_shadows(
 mod tests {
     use super::*;
 
-    /// A square light directly overhead, at a distance, as the classic sanity
-    /// check on any form-factor implementation: it must land between 0 and 1,
-    /// grow as the light grows, and shrink as the light retreats. Any sign
-    /// error or missing normalisation breaks one of the three.
     #[test]
     fn a_rectangle_overhead_covers_more_sky_as_it_grows_and_less_as_it_retreats() {
         let n = [0.0, 0.0, -1.0];
@@ -867,8 +856,6 @@ mod tests {
         );
         assert!(far < small, "a further light covers less: {far} vs {small}");
 
-        // A light that fills nearly the whole sky approaches 1, and never
-        // exceeds it — the property that keeps the exposure sane.
         let huge = rect_form_factor(p, n, &rect(100_000.0, -1.0));
         assert!(
             huge > 0.98 && huge <= 1.0,
@@ -876,8 +863,6 @@ mod tests {
         );
     }
 
-    /// Light adds, it does not replace: no lights leaves
-    /// the picture untouched to the bit, and a light can only brighten.
     #[test]
     fn shading_without_lights_changes_nothing_and_a_light_only_brightens() {
         let base: Vec<f32> = (0..16 * 4).map(|i| (i % 7) as f32 * 0.1).collect();
@@ -923,9 +908,6 @@ mod tests {
         assert!(lit != base, "a light overhead actually did something");
     }
 
-    /// A point light obeys the cosine law and nothing else, and a spot cuts
-    /// off outside its cone — the two non-area kinds, which would otherwise
-    /// silently do nothing at all.
     #[test]
     fn a_point_light_follows_the_cosine_law_and_a_spot_respects_its_cone() {
         let n = [0.0, 0.0, -1.0];
@@ -959,8 +941,6 @@ mod tests {
             "a light behind the surface lights nothing"
         );
 
-        // A narrow spot aimed straight down the +z axis: lit under it, dark
-        // well outside it.
         let mut spot = at(0.0, 0.0, -100.0);
         spot.cone_cos = 20f32.to_radians().cos();
         spot.cone_inner = spot.cone_cos + (1.0 - spot.cone_cos) * 0.1;
@@ -970,9 +950,6 @@ mod tests {
         assert_eq!(aside, 0.0, "outside the cone is dark, got {aside}");
     }
 
-    /// The terms the light rows brought, each against the plain light it
-    /// refines: the feather, the two falloffs with their radius, the parallel
-    /// light and the ambient one.
     #[test]
     fn feather_falloff_parallel_and_ambient_shade_as_after_effects_does() {
         use crate::model::LightFalloff;
@@ -993,8 +970,6 @@ mod tests {
         };
         let close = |a: f32, b: f32| (a - b).abs() < 1e-4;
 
-        // A 30 degree spot seen 25 degrees off its axis: no feather is full
-        // strength there, all feather has started to fade.
         let cos30 = 30f32.to_radians().cos();
         let off_axis = [100.0 * 25f32.to_radians().tan(), 0.0, 0.0];
         let hard = ShadingLight {
@@ -1012,9 +987,6 @@ mod tests {
         );
         assert!(s > 0.0 && s < h * 0.5, "the feather fades: {s} vs {h}");
 
-        // 100 pixels away: inside a 150 radius is full strength, a smooth
-        // falloff halfway out is a half, and the inverse square from a radius
-        // of 50 is a quarter.
         let below = [0.0, 0.0, 0.0];
         let smooth = |radius_px, falloff_px| ShadingLight {
             falloff: LightFalloff::Smooth,
@@ -1040,8 +1012,6 @@ mod tests {
                 "{d} px: {reach}, After Effects {ae}"
             );
         }
-        // An old light keeps the eased ramp it had, and a distance of nought
-        // there is no falloff at all.
         let old = |radius_px, falloff_px| ShadingLight {
             legacy: true,
             ..smooth(radius_px, falloff_px)
@@ -1055,15 +1025,12 @@ mod tests {
         };
         assert!(close(irradiance(below, n, &inverse), 0.25));
 
-        // A parallel light shining straight in lights every point fully,
-        // however far from its layer.
         let sun = ShadingLight {
             kind: ShadingKind::Parallel,
             ..plain
         };
         assert!(close(irradiance([5000.0, -3000.0, 0.0], n, &sun), 1.0));
 
-        // An ambient light lifts a surface facing anywhere by its colour.
         let ambient = ShadingLight {
             kind: ShadingKind::Ambient,
             colour: [0.5, 0.25, 0.0],
@@ -1079,7 +1046,6 @@ mod tests {
         shade(&mut px, 1, 1, &surface, &ShadingMaterial::PLAIN, &[ambient]);
         assert!(close(px[0], 0.6) && close(px[1], 0.5) && close(px[2], 0.4));
 
-        // A negative light takes light away, down to black and no further.
         let dark = ShadingLight {
             colour: [-0.5, -3.0, 0.0],
             ..ambient
@@ -1089,10 +1055,6 @@ mod tests {
         assert!(close(px[0], 0.2) && px[1] == 0.0 && close(px[2], 0.4));
     }
 
-    /// The Material options: Diffuse scales the light, with a half the light
-    /// as it always was, and Specular adds a highlight under a light and an eye
-    /// straight overhead that fades away from them, tinted by the picture when
-    /// metal and by the light when not.
     #[test]
     fn diffuse_scales_the_light_and_specular_adds_a_highlight() {
         use crate::model::LightFalloff;
@@ -1171,8 +1133,6 @@ mod tests {
             ) == grey,
             "no diffuse takes no light"
         );
-        // After Effects' way lights the layer from black: a light straight
-        // on at a Diffuse of a half gives half the picture.
         let ae = shaded(
             ShadingMaterial {
                 base: 0.0,
@@ -1182,8 +1142,6 @@ mod tests {
             grey,
         );
         assert!((ae[0] - 0.125).abs() < 1e-4, "{ae:?}");
-        // And without Linearize working space it lights what the screen
-        // shows: half the encoded grey, decoded again.
         let shown = shaded(
             ShadingMaterial {
                 base: 0.0,
@@ -1196,8 +1154,6 @@ mod tests {
         let want = decode(encode(0.25) * 0.5);
         assert!((shown[0] - want).abs() < 1e-4, "{shown:?} vs {want}");
 
-        // A black pixel has no colour of its own for a metal highlight to
-        // take, so only the light's own highlight shows on it.
         let black = [0.0, 0.0, 0.0, 1.0];
         let shiny = ShadingMaterial {
             specular: 0.5,
@@ -1216,13 +1172,6 @@ mod tests {
         assert!(shaded(shiny, grey)[0] > half[0], "the highlight adds");
     }
 
-    /// A card halfway between a light and a floor shades the floor under it
-    /// and nowhere else, by its darkness. A red card letting light through
-    /// tints it red, the card never shades itself, a floor showing only
-    /// shadows is black under the card whichever way it faces, red under the
-    /// red one, and clear beside it, and an unlit one is only darkened.
-    /// Diffusion leaves the shadow of a card just off the floor hard and
-    /// softens one further up.
     #[test]
     fn a_card_casts_its_shadow_on_the_floor_beneath_it() {
         use crate::model::{LightFalloff, ShadowMode};
@@ -1259,7 +1208,6 @@ mod tests {
             size: 64,
         };
         let white = card([1.0, 1.0, 1.0], 0.0);
-        // Two floor texels: one under the card, one well to the side.
         let floor = ShadingSurface {
             origin: [-50.0, -0.5, 0.0],
             du: [100.0, 0.0, 0.0],
@@ -1324,7 +1272,6 @@ mod tests {
             "its back to the light"
         );
 
-        // Accepts lights off: left as it is, but still in the shadow.
         let unlit = ShadingMaterial { unlit: true, ..m };
         let px = lit(&unlit, &light, &[white], None);
         assert!(
@@ -1332,8 +1279,6 @@ mod tests {
             "shadowed, not lit: {px:?}"
         );
 
-        // A row of floor across the shadow's edge, and how many of its pixels
-        // are neither lit nor in shadow.
         let soft = ShadingLight {
             shadow_diffusion: 20.0,
             ..light

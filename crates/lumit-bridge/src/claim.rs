@@ -12,7 +12,6 @@ use std::sync::Mutex;
 use lumit_project::OpenClaim;
 use uuid::Uuid;
 
-/// The claim held, and the project it is held for.
 static HELD: Mutex<Option<(Uuid, OpenClaim)>> = Mutex::new(None);
 
 /// Claim the project saved at `path`, without letting go of the claim held.
@@ -64,7 +63,6 @@ pub(crate) fn bring_forward(holder: u32) -> bool {
         SetForegroundWindow, ShowWindow, GW_OWNER, SW_RESTORE,
     };
 
-    /// Whose window is wanted, and the one found.
     struct Search {
         process: u32,
         window: Option<HWND>,
@@ -111,21 +109,6 @@ pub(crate) fn bring_forward(holder: u32) -> bool {
     }
 }
 
-/// Bring the Lumit that is the process `holder` forward. False when macOS
-/// knows no application by that number or will not make it active.
-///
-/// macOS lets the application in front hand its place on, and whoever asked
-/// to open a project has just used this one. A second Lumit is rare on a Mac,
-/// where the Finder hands a document to the one already running: it takes
-/// `open -n`, a second copy of the application, or the program started from a
-/// terminal.
-///
-/// Spoken to the Objective-C runtime directly, as `api::system` does for the
-/// machine's memory, rather than through a binding crate nothing else here
-/// needs. Called from whichever thread is opening the project, which AppKit
-/// allows of `NSRunningApplication` and of little else.
-// ponytail: a window minimised to the Dock stays there, with its application
-// in front. Restoring it takes a reopen Apple event sent to `holder`.
 #[cfg(target_os = "macos")]
 pub(crate) fn bring_forward(holder: u32) -> bool {
     use std::ffi::{c_char, c_void};
@@ -145,7 +128,6 @@ pub(crate) fn bring_forward(holder: u32) -> bool {
         fn objc_autoreleasePoolPush() -> *mut c_void;
         fn objc_autoreleasePoolPop(pool: *mut c_void);
     }
-    /// `NSApplicationActivateAllWindows`, from NSRunningApplication.h.
     const ALL_WINDOWS: usize = 1;
 
     let Ok(holder) = i32::try_from(holder) else {

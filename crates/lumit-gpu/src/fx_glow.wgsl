@@ -83,7 +83,6 @@ fn glow_combine(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let o = textureLoad(orig, xy, 0);
-    // Neutral short-circuit (== the CPU reference's early return).
     if (p.intensity == 0.0) {
         textureStore(dst, xy, o);
         return;

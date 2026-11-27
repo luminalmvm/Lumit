@@ -1,5 +1,3 @@
-//! A float plate reaching the draw list still float.
-
 use super::*;
 
 // The float import's end of the bargain (docs/impl/media-io.md §5): a plate
@@ -28,7 +26,6 @@ fn a_float_plate_reaches_the_draw_list_still_float() {
     match &draws[0].source {
         DrawSource::Pixels { format, rgba, .. } => {
             assert_eq!(*format, lumit_media::decode::PixelFormat::LinearF32);
-            // Eight bytes a pixel, and the value untouched on the way through.
             assert_eq!(rgba.len(), 4 * 4 * 16);
             assert_eq!(float_px(rgba, 0)[0], 4.0);
         }
@@ -36,14 +33,10 @@ fn a_float_plate_reaches_the_draw_list_still_float() {
     }
 }
 
-/// Read pixel `n`'s four channels out of a float buffer.
 fn float_px(rgba: &[u8], n: usize) -> [f32; 4] {
     lumit_core::pixels::f32_px(rgba, n)
 }
 
-/// A one-layer comp over a 4×4 float plate carrying 4.0 in every colour
-/// channel and an opaque alpha, with whatever masks and paint the caller wants
-/// on the layer.
 fn float_layer_comp(
     masks: Vec<lumit_core::mask::Mask>,
     paint: Vec<lumit_core::paint::PaintStroke>,
@@ -94,6 +87,7 @@ fn float_layer_comp(
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,

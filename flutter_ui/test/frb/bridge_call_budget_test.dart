@@ -41,7 +41,6 @@ import 'package:uuid/uuid.dart';
 
 import 'frb_test_support.dart';
 
-/// Counts every call that crosses the bridge, by name.
 class CountingHandler extends BaseHandler {
   final Map<String, int> calls = {};
   bool counting = false;
@@ -54,7 +53,6 @@ class CountingHandler extends BaseHandler {
 
   void reset() => calls.clear();
 
-  /// The counts as a readable ranking, for the failure message.
   String ranking() {
     final entries = calls.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
@@ -93,7 +91,6 @@ void main() {
         (tester) async {
       final p = freshProject();
       final comp = p.state.project!.newComposition(name: 'Scene');
-      // Two layers with an effect each — a small but honest document.
       comp.addSolidLayer().addEffect(name: 'blur');
       comp.addTextLayer().addEffect(name: 'sharpen');
       p.uiState.setSelectedComp(comp);
@@ -189,7 +186,6 @@ void main() {
       ));
       await settleFrb(tester, minRounds: 8);
 
-      // Ten rebuilds of the ruler, driven the way playback drives it.
       counter
         ..reset()
         ..counting = true;
@@ -209,7 +205,6 @@ void main() {
             '${counter.ranking()}',
       );
 
-      // And the drag: one write, not one per frame crossed.
       final flag = find
           .byKey(ValueKey<String>('tl-marker-${markersOf(comp).single.id}'));
       counter
@@ -545,7 +540,6 @@ void main() {
       counter
         ..reset()
         ..counting = true;
-      // Back and forth across every row, twice.
       for (var pass = 0; pass < 2; pass++) {
         for (final row in rows) {
           await mouse.moveTo(tester.getCenter(row));
@@ -884,7 +878,6 @@ void main() {
     /// complaint was that scrubbing got worse the more lanes were open.
     testWidgets('a scrub costs the same with twice the rows open',
         (tester) async {
-      // Every layer's open rows on screen, for the taps that open them.
       tester.view.physicalSize = const Size(1000, 1100);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
@@ -1141,7 +1134,6 @@ void main() {
         reason: 'the picture stayed at the scale the window opened at:\n'
             '${counter.ranking()}',
       );
-      // Once for the change, not once for each layout it caused.
       expect(
         counter.calls['composition_reference_render_frame'] ?? 0,
         lessThanOrEqualTo(2),
@@ -1328,7 +1320,6 @@ void main() {
       ));
       await settleFrb(tester, minRounds: 8);
 
-      // Pressed on the X arrow, where the gizmo drew it.
       final gizmo = find.byKey(const ValueKey('viewer-gizmo'));
       final painter = tester.widget<CustomPaint>(gizmo).painter as dynamic;
       final arrows = (painter.handles3d as List).single.gizmo;
@@ -1396,7 +1387,6 @@ void main() {
       ));
       await settleFrb(tester, minRounds: 8);
 
-      // Round the Z ring, which faces the camera, where the tool drew it.
       final paint = find.byWidgetPredicate((w) =>
           w is CustomPaint &&
           w.painter.runtimeType.toString() == '_RotateCursorPainter');
@@ -1740,6 +1730,8 @@ void main() {
             gradientEndY: const BridgeScalar.static_(0),
             gradientStartOpacity: const BridgeScalar.static_(100),
             gradientEndOpacity: const BridgeScalar.static_(100),
+            gradientHighlight: const BridgeScalar.static_(0),
+            gradientHighlightAngle: const BridgeScalar.static_(0),
             gradientStops: const [],
             combine: 0,
             hidden: false,
@@ -1752,7 +1744,6 @@ void main() {
       p.uiState
         ..setSelectedComp(comp)
         ..setSelection([shape]);
-      // A shape's points are offered while its Path row is picked.
       p.uiState.selectedProperties.value = [
         '${shape.internallayerId}/contents/$item/path'
       ];

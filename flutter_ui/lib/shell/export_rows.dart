@@ -1,10 +1,7 @@
-// Rows of the export dialog kept apart from it: a GIF's own, and what
-// happens to the comp's caption layers.
 
 part of 'export_dialog_frb.dart';
 
 extension _Rows on _ExportDialogState {
-  /// Dither, palette and plays, live only for a GIF.
   List<Widget> _gifRows(LumitTheme t, bool dim) {
     final why = _caps.gif ? null : l10n.tipExportFormatLimit;
     final forever = _gifPlays == 0;
@@ -94,8 +91,6 @@ extension _Rows on _ExportDialogState {
   bool get _captionsBeside =>
       _captions == BridgeCaptionsOut.srt || _captions == BridgeCaptionsOut.vtt;
 
-  /// Drawn into the picture, a file beside it, or inside the video file
-  /// where the format can carry them.
   Widget _captionsRow(LumitTheme t, bool dim) {
     String? why(BridgeCaptionsOut c) =>
         c == BridgeCaptionsOut.embed && !_caps.subtitles

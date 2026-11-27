@@ -15,7 +15,6 @@ use super::{Scope, Svg};
 use crate::fit::tolerance;
 
 impl Svg<'_> {
-    /// A gradient fill in the art's own pixels, and its id.
     pub(super) fn gradient(
         &mut self,
         scope: &Scope<'_>,
@@ -94,10 +93,10 @@ impl Svg<'_> {
             .is_some_and(|c| c.iter().any(|p| !still(p)))
             || !still(&item.gradient_start_opacity)
             || !still(&item.gradient_end_opacity)
-            || item
-                .gradient_stops
-                .iter()
-                .any(|s| !still(&s.position) || !still(&s.opacity));
+            || item.gradient_colour.iter().flatten().any(|p| !still(p))
+            || item.gradient_stops.iter().any(|s| {
+                !still(&s.position) || !still(&s.opacity) || s.colour.iter().any(|p| !still(p))
+            });
         let clock = Svg::layer_clock(scope, layer);
         let display = |c: [f64; 3]| self.host.display(c);
         if !moves {
@@ -199,8 +198,6 @@ fn write_stop(svg: &Svg<'_>, out: &mut String, s: &[f64; 5], animations: &str) {
 /// and alpha.
 type Point = (f64, [f64; 4]);
 
-/// Where stops go between each two of a gradient's own, placed for every
-/// moment in `moments`.
 fn splits(moments: &[Vec<Point>], display: &dyn Fn([f64; 3]) -> [f64; 3]) -> Vec<Vec<f64>> {
     let colours: Vec<Vec<[f64; 3]>> = moments
         .iter()
@@ -238,7 +235,6 @@ fn stops(
     out
 }
 
-/// The stops of `item`'s gradient at `lt`, in linear light.
 fn points(item: &ShapeItem, lt: f64) -> Vec<Point> {
     let faded = |p: &Property| p.value_at(lt).clamp(0.0, 100.0) / 100.0;
     let from = item
@@ -249,7 +245,10 @@ fn points(item: &ShapeItem, lt: f64) -> Vec<Point> {
         .map(f64::from);
     let to = item
         .gradient_colour
-        .unwrap_or(lumit_core::model::LinearColour::BLACK)
+        .as_ref()
+        .map_or(lumit_core::model::LinearColour::BLACK, |c| {
+            lumit_core::shape::colour::at(c, lt)
+        })
         .0
         .map(f64::from);
     let mut between: Vec<(f64, &GradientStop)> = item
@@ -271,7 +270,9 @@ fn points(item: &ShapeItem, lt: f64) -> Vec<Point> {
         ],
     ));
     for (at, stop) in between {
-        let c = stop.colour.0.map(f64::from);
+        let c = lumit_core::shape::colour::at(&stop.colour, lt)
+            .0
+            .map(f64::from);
         points.push((
             (at.clamp(0.0, 100.0)) / 100.0,
             [c[0], c[1], c[2], c[3] * faded(&stop.opacity)],
@@ -289,7 +290,6 @@ fn points(item: &ShapeItem, lt: f64) -> Vec<Point> {
     points
 }
 
-/// A radial gradient's radius from its start and end points.
 fn radius(v: &[f64]) -> f64 {
     let g = |i: usize| v.get(i).copied().unwrap_or(0.0);
     (g(2) - g(0)).hypot(g(3) - g(1))

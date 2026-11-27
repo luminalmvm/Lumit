@@ -33,8 +33,6 @@
 //! without the identity tests here failing first. Determinism is asserted
 //! directly.
 
-// A test binary: a failed setup step should stop this test, loudly, and the
-// no-panic rule of docs/14 is about the engine's own paths.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use lumit_core::group::LayerGroup;
@@ -117,6 +115,7 @@ fn comp_of(name: &str, layers: Vec<Layer>, groups: Vec<LayerGroup>) -> Compositi
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups,
         beat_grid: None,
@@ -145,7 +144,6 @@ fn group(members: &[Uuid], effects: Vec<EffectInstance>) -> LayerGroup {
     }
 }
 
-/// A fresh builtin instance with `edits` applied to its float rows.
 fn effect(name: &str, edits: &[(&str, f64)]) -> EffectInstance {
     let mut inst = lumit_core::fx::builtins::instantiate(name)
         .unwrap_or_else(|| panic!("{name} is a builtin"));
@@ -204,10 +202,6 @@ fn key_of(doc: &Arc<Document>, comp: Uuid) -> lumit_eval::FrameKey {
         .expect("a solid comp is always keyable")
 }
 
-/// **Test 1 — identity.** An empty header, and a wholly bypassed one, render
-/// byte-identical to the same comp with no group at all, and share its frame
-/// key; and the group's own file form carries no `effects` key while the list
-/// is empty, so every older project re-saves byte-identical.
 #[test]
 fn a_header_with_no_live_effects_changes_nothing_at_all() {
     let build = |effects: Option<Vec<EffectInstance>>| {
@@ -221,7 +215,6 @@ fn a_header_with_no_live_effects_changes_nothing_at_all() {
         doc.items.push(ProjectItem::Composition(comp));
         (Arc::new(doc), id)
     };
-    // The serde skip: an effect-less group writes no `effects` key.
     let bare = group(&[Uuid::now_v7()], Vec::new());
     let json = serde_json::to_value(&bare).unwrap();
     assert!(
@@ -277,7 +270,6 @@ fn a_live_group_is_the_precompose_it_claims_to_be() {
     };
     let fx = || vec![effect("blur", &[("radius", 5.0)])];
 
-    // The grouped document: a Multiply member over a full-frame white plate.
     let mut doc_g = Document::new();
     let (grey, white) = mk_items(&mut doc_g);
     let mut member = placed("member", grey, 20.0, 20.0);
@@ -289,8 +281,6 @@ fn a_live_group_is_the_precompose_it_claims_to_be() {
     doc_g.items.push(ProjectItem::Composition(comp_g));
     let doc_g = Arc::new(doc_g);
 
-    // The oracle: the same member packed into a nested comp, the same stack
-    // on the Precomp layer, the same plate below.
     let mut doc_p = Document::new();
     let (grey, white) = mk_items(&mut doc_p);
     let mut member = placed("member", grey, 20.0, 20.0);
@@ -319,8 +309,6 @@ fn a_live_group_is_the_precompose_it_claims_to_be() {
             "a live group at scale {scale} must be the Precomp picture exactly"
         );
     }
-    // And the isolation is real: ungrouped, the Multiply member darkens the
-    // white plate; grouped-with-live-header it no longer can.
     let mut doc_u = Document::new();
     let (grey, white) = mk_items(&mut doc_u);
     let mut member = placed("member", grey, 20.0, 20.0);
@@ -343,10 +331,6 @@ fn a_live_group_is_the_precompose_it_claims_to_be() {
     );
 }
 
-/// **Test 7 — the frame key moves when the picture can.** A header effect
-/// renames the frame, a parameter edit renames it again, bypassing the last
-/// instance restores the no-effects name, and a membership change that moves
-/// the drawn run renames it while the layers themselves stand still.
 #[test]
 fn the_frame_key_follows_the_header_and_the_run() {
     let build = |fx: Vec<EffectInstance>, members_of: fn(&[Uuid]) -> Vec<Uuid>| {
@@ -382,8 +366,6 @@ fn the_frame_key_follows_the_header_and_the_run() {
         "bypassing the last instance restores the no-effects name"
     );
 
-    // Same layers, same order, same stack — only the run the header acts on
-    // differs, so the name must differ: the effect reaches other pixels.
     let (doc, comp) = build(vec![effect("blur", &[("radius", 6.0)])], two);
     let wide = key_of(&doc, comp);
     assert_ne!(live, wide, "widening the drawn run must rename the frame");

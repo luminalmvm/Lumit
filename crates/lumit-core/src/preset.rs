@@ -25,18 +25,14 @@ pub struct EffectPreset {
     pub wiring: Option<GroupPreset>,
 }
 
-/// The current on-disk format version.
 pub const PRESET_FORMAT: u32 = 1;
 
-/// The file extension presets use (a plain JSON document inside).
 pub const PRESET_EXTENSION: &str = "lumfx";
 
-/// Serialise a stack to the preset JSON text.
 pub fn to_json(name: &str, effects: &[EffectInstance]) -> Result<String, String> {
     to_json_wired(name, effects, None)
 }
 
-/// [`to_json`] with the wiring the effects were copied with.
 pub fn to_json_wired(
     name: &str,
     effects: &[EffectInstance],
@@ -66,7 +62,6 @@ pub fn wiring_of(
 ) -> Option<GroupPreset> {
     use crate::graph::{InputRef, NodeRef, OutputRef};
     let mut members: Vec<NodeRef> = effects.iter().map(|id| NodeRef::Effect(*id)).collect();
-    // The drivers upstream, until a pass finds no new one.
     loop {
         let found: Vec<NodeRef> = graph
             .edges
@@ -200,7 +195,6 @@ fn for_each_property(effects: &[EffectInstance], visit: &mut impl FnMut(&crate::
     }
 }
 
-/// The mutable twin of [`for_each_property`], same exhaustive match.
 fn for_each_property_mut(
     effects: &mut [EffectInstance],
     visit: &mut impl FnMut(&mut crate::anim::Property),
@@ -257,7 +251,6 @@ pub fn list_presets(dir: &std::path::Path) -> Vec<PresetEntry> {
     let mut out: Vec<PresetEntry> = Vec::new();
     for entry in read.flatten() {
         let path = entry.path();
-        // Match the extension case-insensitively; skip anything else.
         if path
             .extension()
             .and_then(|e| e.to_str())
@@ -299,17 +292,13 @@ pub fn list_presets(dir: &std::path::Path) -> Vec<PresetEntry> {
 // A wire that left the group is not saved: it named something the group does
 // not carry, and inventing an end for it on the way back in would be a guess.
 
-/// A saved set of a layer graph's boxes and the wires between them.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct GroupPreset {
     pub format: u32,
     pub name: String,
-    /// Which chip of the label palette the group wears, as an index.
     #[serde(default)]
     pub colour: u32,
-    /// The driver instances, in the order the graph carried them.
     pub nodes: Vec<EffectInstance>,
-    /// The wires with both ends inside the set, naming the saved nodes' ids.
     #[serde(default)]
     pub edges: Vec<crate::graph::Edge>,
     /// One position per node, **relative to the set's top-left corner**, so a
@@ -322,14 +311,12 @@ pub struct GroupPreset {
     /// grouped reads and writes as it did.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub effects: Vec<EffectInstance>,
-    /// One position per effect, from the same corner as [`Self::layout`].
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub effect_layout: Vec<[f64; 2]>,
     /// The groups inside this one. A member is a place in `nodes`, counting
     /// on into `effects`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub inner: Vec<InnerGroup>,
-    /// The ties on the saved wires, from the same corner as [`Self::layout`].
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ties: Vec<crate::wire_tie::WireTie>,
 }
@@ -366,11 +353,8 @@ fn inner_groups<T: PartialEq>(
     .collect()
 }
 
-/// The current on-disk format version for a group.
 pub const GROUP_FORMAT: u32 = 1;
 
-/// The file extension node groups use — a plain JSON document, beside the
-/// `.lumfx` effect presets in the same per-user library.
 pub const GROUP_EXTENSION: &str = "lumgrp";
 
 /// Gather `members` out of `graph` and the stack it sits beside as a saveable
@@ -488,7 +472,6 @@ pub fn group_from_graph(
     }
 }
 
-/// Serialise a group to its JSON text.
 pub fn group_to_json(preset: &GroupPreset) -> Result<String, String> {
     serde_json::to_string_pretty(preset).map_err(|e| e.to_string())
 }
@@ -499,19 +482,14 @@ pub fn group_from_json(text: &str) -> Result<GroupPreset, String> {
     serde_json::from_str::<GroupPreset>(text).map_err(|e| e.to_string())
 }
 
-/// Everything one insert adds to a layer, handed over in a piece so the caller
-/// extends its lists and commits once.
 #[derive(Debug, Clone)]
 pub struct InsertedGroup {
-    /// What joins the end of the layer's effect stack.
     pub effects: Vec<EffectInstance>,
     pub nodes: Vec<EffectInstance>,
     pub edges: Vec<crate::graph::Edge>,
     pub layout: Vec<(crate::graph::NodeRef, [f64; 2])>,
     pub group: crate::graph::NodeGroup,
-    /// The groups nested inside [`Self::group`].
     pub inner: Vec<crate::graph::NodeGroup>,
-    /// The ties on its wires, renamed to the fresh ids.
     pub ties: Vec<crate::wire_tie::WireTie>,
 }
 
@@ -629,38 +607,30 @@ pub fn group_instantiated(preset: &GroupPreset, at: [f64; 2]) -> InsertedGroup {
 // the other's file: the two canvases hold different kinds of box and a group of
 // one means nothing to the other.
 
-/// A saved set of a node graph's boxes and the wires between them (§5.8).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct CompGroupPreset {
     pub format: u32,
     pub name: String,
-    /// Which chip of the label palette the group wears, as an index.
     #[serde(default)]
     pub colour: u32,
     /// The boxes, in the order the graph carried them. **Never the Output**:
     /// every graph has exactly one and it cannot be deleted, so a second one
     /// arriving in a group would be a graph the validator refuses.
     pub nodes: Vec<crate::comp_graph::GraphNode>,
-    /// The wires with both ends inside the set.
     #[serde(default)]
     pub edges: Vec<crate::comp_graph::GraphEdge>,
     /// One position per box, **relative to the set's top-left corner**, so a
     /// group dropped anywhere keeps the shape it was saved in.
     #[serde(default)]
     pub layout: Vec<[f64; 2]>,
-    /// The groups inside this one. A member is a place in `nodes`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub inner: Vec<InnerGroup>,
-    /// The ties on the saved wires, from the same corner as [`Self::layout`].
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ties: Vec<crate::wire_tie::WireTie>,
 }
 
-/// The current on-disk format version for a node graph group.
 pub const COMP_GROUP_FORMAT: u32 = 1;
 
-/// The file extension node graph groups use - a plain JSON document, beside the
-/// `.lumgrp` driver groups in the same per-user library.
 pub const COMP_GROUP_EXTENSION: &str = "lumngrp";
 
 /// Gather `members` out of `graph` as a saveable group.
@@ -738,7 +708,6 @@ pub fn comp_group_from_graph(
     }
 }
 
-/// Serialise a node graph group to its JSON text.
 pub fn comp_group_to_json(preset: &CompGroupPreset) -> Result<String, String> {
     serde_json::to_string_pretty(preset).map_err(|e| e.to_string())
 }
@@ -749,17 +718,13 @@ pub fn comp_group_from_json(text: &str) -> Result<CompGroupPreset, String> {
     serde_json::from_str::<CompGroupPreset>(text).map_err(|e| e.to_string())
 }
 
-/// Everything one insert adds to a node graph - handed over in a piece so the
-/// caller extends four lists and commits once.
 #[derive(Debug, Clone)]
 pub struct InsertedCompGroup {
     pub nodes: Vec<crate::comp_graph::GraphNode>,
     pub edges: Vec<crate::comp_graph::GraphEdge>,
     pub layout: Vec<(uuid::Uuid, [f64; 2])>,
     pub group: crate::comp_graph::GraphGroup,
-    /// The groups nested inside [`Self::group`].
     pub inner: Vec<crate::comp_graph::GraphGroup>,
-    /// The ties on its wires, renamed to the fresh ids.
     pub ties: Vec<crate::wire_tie::WireTie>,
 }
 

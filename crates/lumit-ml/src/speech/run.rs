@@ -78,7 +78,6 @@ struct Piece {
     again: bool,
 }
 
-/// A word as the run keeps it until the end.
 #[derive(Debug, Clone)]
 struct Word {
     text: String,
@@ -90,7 +89,6 @@ struct Word {
     opens: bool,
 }
 
-/// One fingerprint and the time it heard.
 #[derive(Debug, Clone)]
 struct Print {
     start: f64,
@@ -98,18 +96,15 @@ struct Print {
     print: Vec<f32>,
 }
 
-/// Everything a run keeps between calls.
 #[derive(Debug)]
 pub(super) struct State {
     options: Options,
-    /// The vocabulary as word pieces.
     vocabulary: Vec<u32>,
     language: Option<String>,
     /// Samples from `base` on that something still needs.
     audio: Vec<f32>,
     base: usize,
     received: usize,
-    /// Chunks the listener has heard.
     chunks: usize,
     /// Each chunk's probability, from chunk `chance_base` on.
     chances: Vec<f32>,
@@ -151,7 +146,6 @@ impl State {
         }
     }
 
-    /// Keep one chunk's chance, and note it if it was voiced.
     fn heard(&mut self, chance: f32) {
         self.chances.push(chance);
         if chance >= VOICED {
@@ -163,12 +157,10 @@ impl State {
         }
     }
 
-    /// Samples waiting in pieces.
     fn waiting(&self) -> usize {
         self.pending.iter().map(|p| p.end - p.start).sum()
     }
 
-    /// A stretch has ended: keep it, padded, for a window.
     fn close(&mut self, stretch: Stretch, cut: bool) {
         let (start, end) = (stretch.start * CHUNK, stretch.end * CHUNK);
         let after_cut = self.cut_at == Some(start);
@@ -247,7 +239,6 @@ impl State {
         out
     }
 
-    /// Let go of audio and chances nothing will read again.
     fn forget(&mut self) {
         let mut keep = (self.chunks * CHUNK).saturating_sub(PAD);
         if let Some(first) = self.pending.first() {
@@ -293,7 +284,6 @@ impl Run<'_> {
         Ok(())
     }
 
-    /// One chunk heard.
     fn listened(&mut self, chance: f32) -> Result<(), MlError> {
         let state = &mut self.state;
         state.heard(chance);
@@ -340,11 +330,6 @@ impl Run<'_> {
         done as f64 / RATE as f64
     }
 
-    /// Write down what is left and put it all together.
-    ///
-    /// # Errors
-    ///
-    /// Whatever a model refuses.
     pub fn finish(mut self) -> Result<Heard, MlError> {
         // The last partial chunk, padded with silence.
         let heard_to = self.state.chunks * CHUNK;
@@ -412,7 +397,6 @@ impl Run<'_> {
         })
     }
 
-    /// Write down the next window.
     fn write_window(&mut self) -> Result<(), MlError> {
         let pieces = self.state.take_window();
         if pieces.is_empty() {
@@ -560,7 +544,6 @@ impl Run<'_> {
         Ok((gap.1 - gap.0 >= SHORT && first_try).then_some(gap))
     }
 
-    /// Fingerprints over one window's pieces.
     fn prints_of(&mut self, pieces: &[Piece]) -> Result<(), MlError> {
         let Some(model) = self.speech.voices.as_mut() else {
             return Ok(());
@@ -637,7 +620,6 @@ fn take(pieces: &mut Vec<Piece>, from: usize, to: usize) -> Vec<Piece> {
     taken
 }
 
-/// Whether the audio `at` samples into a window is already a second try.
 fn on_retry(pieces: &[Piece], at: usize) -> bool {
     let mut left = at;
     for piece in pieces {
@@ -756,7 +738,6 @@ fn fillers(words: Vec<Word>, voiced: &[(usize, usize)]) -> Vec<Word> {
     out
 }
 
-/// Who said each word, and the stretches of one voice.
 fn speakers(words: &mut [HeardWord], prints: &[Print], count: Option<usize>) -> Vec<Voice> {
     if prints.is_empty() || words.is_empty() {
         return Vec::new();
@@ -888,8 +869,6 @@ mod tests {
             cut: false,
             again: false,
         };
-        // Two seconds kept, a second of silence left out, two more kept, with
-        // a voice heard in each but for the padding.
         let pieces = [piece(0, 2 * RATE), piece(3 * RATE, 5 * RATE)];
         let voiced = [
             (RATE / 10, 2 * RATE - PAD),
@@ -920,15 +899,12 @@ mod tests {
             )
         };
 
-        // Timed from the padding before the join: it starts when it is said.
         let (start, end) = word(1.9, 2.5);
         assert!((start - 3.2).abs() < 1e-3, "starts at {start}");
         assert!((end - 3.5).abs() < 1e-3, "ends at {end}");
-        // Timed to the padding after the join: it ends when it was said.
         let (start, end) = word(1.5, 2.1);
         assert!((start - 1.5).abs() < 1e-3, "starts at {start}");
         assert!((end - 1.8).abs() < 1e-3, "ends at {end}");
-        // An edge on the join itself goes with its word.
         assert!((on_recording(2.0, &pieces, true) - 3.0).abs() < 1e-9);
         assert!((on_recording(2.0, &pieces, false) - 2.0).abs() < 1e-9);
     }

@@ -1,8 +1,4 @@
-//! Layers and comps read and written in the form a .lum file keeps them, so a
-//! script reaches everything a project can hold, not only what the other
-//! commands name.
-
-use lumit_core::anim::Property;
+use lumit_core::anim::{Animation, Property};
 use lumit_core::edits;
 use lumit_core::model::{
     Composition, Layer, LayerKind, LightDef, LinearColour, TextDocument, TransformGroup,
@@ -44,7 +40,6 @@ fn merge(onto: &mut Value, patch: Value) {
     }
 }
 
-/// `value` with `patch` laid over it, read back as its own type.
 fn patched<T: serde::Serialize + serde::de::DeserializeOwned>(
     value: &T,
     patch: Value,
@@ -144,12 +139,40 @@ pub(super) fn with_fields(
     if fields.contains_key("id") {
         return Err(bad("A layer keeps its id."));
     }
-    let anchored = fields
-        .get("transform")
-        .and_then(Value::as_object)
-        .is_some_and(|t| t.contains_key("anchor_x") || t.contains_key("anchor_y"));
+    let anchored = sets_anchor(&fields);
     let layer = patched(&layer, Value::Object(fields), "Fields")?;
     Ok(centred(layer, anchored))
+}
+
+/// Whether `fields` set the anchor themselves.
+fn sets_anchor(fields: &Map<String, Value>) -> bool {
+    fields
+        .get("transform")
+        .and_then(Value::as_object)
+        .is_some_and(|t| t.contains_key("anchor_x") || t.contains_key("anchor_y"))
+}
+
+/// A text layer written with new words, style or animators keeps its words
+/// where they were, as the app's own text edits do. The first animator grows
+/// the box the words are drawn in, so without this they would jump.
+fn kept_in_place(old: &Layer, mut layer: Layer) -> Layer {
+    let (LayerKind::Text { document: before }, LayerKind::Text { document: after }) =
+        (&old.kind, &layer.kind)
+    else {
+        return layer;
+    };
+    let (dx, dy) = lumit_text::restyle::shift(before, after);
+    for (property, by) in [
+        (&mut layer.transform.anchor_x, dx),
+        (&mut layer.transform.anchor_y, dy),
+    ] {
+        match &mut property.animation {
+            Animation::Static(v) => *v += by,
+            Animation::Keyframed(keys) => keys.iter_mut().for_each(|k| k.value += by),
+            Animation::Expression(_) => {}
+        }
+    }
+    layer
 }
 
 fn centred(mut layer: Layer, anchored: bool) -> Layer {
@@ -195,7 +218,13 @@ pub(super) fn layer_write(host: &dyn Host, a: LayerWriteArgs) -> Result<Value, S
     if a.fields.contains_key("id") {
         return Err(bad("A layer keeps its id."));
     }
+    let anchored = sets_anchor(&a.fields);
     let layer = patched(old, Value::Object(a.fields), "Fields")?;
+    let layer = if anchored {
+        layer
+    } else {
+        kept_in_place(old, layer)
+    };
     let index = comp.layers.iter().position(|l| l.id == old.id).unwrap_or(0);
     commit(
         store,
@@ -236,6 +265,10 @@ pub(super) fn comp_write(host: &dyn Host, a: CompWriteArgs) -> Result<Value, Scr
                 comp: comp.id,
                 lighting: patched(&comp.lighting, patch, "lighting")?,
             },
+            "blending" => Op::SetCompBlending {
+                comp: comp.id,
+                blending: patched(&comp.blending, patch, "blending")?,
+            },
             "graph" => Op::SetCompGraph {
                 comp: comp.id,
                 graph: Box::new(
@@ -245,7 +278,7 @@ pub(super) fn comp_write(host: &dyn Host, a: CompWriteArgs) -> Result<Value, Scr
             },
             _ => {
                 return Err(bad(format!(
-                    "comp.write sets motion_blur, lighting and graph, not {key}."
+                    "comp.write sets motion_blur, lighting, blending and graph, not {key}."
                 )))
             }
         });
@@ -256,6 +289,7 @@ pub(super) fn comp_write(host: &dyn Host, a: CompWriteArgs) -> Result<Value, Scr
     Ok(json!({
         "motion_blur": comp.motion_blur,
         "lighting": comp.lighting,
+        "blending": comp.blending,
         "graph": comp.graph,
     }))
 }

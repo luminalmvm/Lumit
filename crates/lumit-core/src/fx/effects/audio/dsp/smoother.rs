@@ -21,7 +21,6 @@ pub fn coeff_of_ms(ms: f64, rate: f64) -> f64 {
     }
 }
 
-/// A value on its way to a target.
 #[derive(Clone, Copy, Debug)]
 pub struct Smoother {
     coeff: f64,
@@ -46,24 +45,20 @@ impl Smoother {
         self.coeff = coeff_of_ms(ms, rate);
     }
 
-    /// Aim at a new value: what a block start does with a baked row.
     pub fn set_target(&mut self, target: f64) {
         self.target = target;
     }
 
-    /// What it is aiming at, arrived or not.
     #[must_use]
     pub fn target(&self) -> f64 {
         self.target
     }
 
-    /// Where it stands, without moving it.
     #[must_use]
     pub fn value(&self) -> f64 {
         self.value
     }
 
-    /// One frame along.
     pub fn step(&mut self) -> f64 {
         self.value = self.target + (self.value - self.target) * self.coeff;
         self.value

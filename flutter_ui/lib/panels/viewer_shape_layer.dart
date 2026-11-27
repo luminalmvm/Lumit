@@ -27,6 +27,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/src/rust/api/assets.dart' show BridgeColourRgba;
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -37,6 +38,7 @@ import 'package:uuid/uuid.dart';
 import '../l10n/strings.dart';
 import '../widgets/controls.dart';
 import 'layer_fold_frb.dart' show shapeItemWith, stillColour;
+import 'shape_target.dart';
 import 'timeline_extras_frb.dart' show showMenuAt;
 import 'viewer_gizmo.dart';
 import 'viewer_menus.dart' show viewerRow;
@@ -58,9 +60,7 @@ const double closingRingRadius = 10;
 /// shape is not there yet — and high enough to answer "what colour is this?".
 const double previewOpacity = 0.5;
 
-/// The shape tools over the picture.
 class ViewerShapeLayer extends StatefulWidget {
-  /// Whether a shape tool is armed. Inert otherwise.
   final bool active;
 
   final ToolMode tool;
@@ -71,12 +71,8 @@ class ViewerShapeLayer extends StatefulWidget {
   /// map that turns the pointer into layer coordinates.
   final List<LayerBox> boxes;
 
-  /// The composition, for the shape layer a drag makes when nothing is
-  /// selected.
   final CompositionReference comp;
 
-  /// Where the picture sits on screen, and the comp's own size — the two that
-  /// turn a pointer into composition pixels when there is no layer to ask.
   final Rect fitted;
   final Size compSize;
 
@@ -84,7 +80,6 @@ class ViewerShapeLayer extends StatefulWidget {
 
   final VoidCallback onChanged;
 
-  /// Where a right click goes while no path is in progress.
   final void Function(TapUpDetails)? onPictureMenu;
 
   const ViewerShapeLayer({
@@ -107,7 +102,6 @@ class ViewerShapeLayer extends StatefulWidget {
 }
 
 class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
-  /// The drag in flight, in screen space.
   Offset? _from;
   Offset? _to;
 
@@ -117,26 +111,18 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
   /// shape.
   Offset? _downAt;
 
-  /// The path being built with the Pen, and the pointer drawing its next edge.
   PathDraft _draft = const PathDraft();
   Offset? _penPointer;
 
-  /// The open path the Pen is carrying on, when the draft began on one of
-  /// its ends.
   _Carrying? _carrying;
 
   /// Where the pointer is, for the drawn cursor. Tracked for every
   /// shape tool, not only the Pen, because every one of them wears one.
   Offset? _pointer;
 
-  /// The handle being pulled out of the vertex just placed, if the click that
-  /// placed it turned into a drag.
   Offset? _handleFrom;
   Offset? _handleTo;
 
-  /// Whether the Pen is in hand. Only the Pen itself builds a path; its four
-  /// siblings (add/delete/convert vertex, mask feather) edit a *finished* one,
-  /// which is not built (docs/TODO.md).
   bool get _isPen => widget.tool == ToolMode.pen;
 
   @override
@@ -146,7 +132,6 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
     _escapeRelease = EscapeLadder.register(EscapeRung.gesture, _escape);
   }
 
-  /// How to stand down from the ladder.
   VoidCallback? _escapeRelease;
 
   /// Escape ends a path in progress and keeps it open, as After Effects does —
@@ -180,7 +165,6 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
     });
   }
 
-  /// The path in progress, applied as it stands: open.
   void _finishOpen() {
     final path = _draft.vertices;
     final carrying = _carrying;
@@ -198,8 +182,6 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
   /// Viewer, which would end the path it's about.
   bool _menuUp = false;
 
-  /// With a path in progress, what to do with it. Otherwise it's the picture's
-  /// click.
   Future<void> _onSecondaryTapUp(TapUpDetails details) async {
     if (!_isPen || _draft.isEmpty) {
       widget.onPictureMenu?.call(details);
@@ -244,8 +226,6 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
     _menuUp = false;
   }
 
-  /// A finished Pen path, onto [box] or into a new shape layer, or over the
-  /// path it carried on.
   void _place(List<BridgeVertex> path, LayerBox? box,
       {required bool closed, required _Carrying? carrying}) {
     if (carrying != null) {
@@ -303,7 +283,6 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
     }
     if (undo || key == LogicalKeyboardKey.backspace) {
       _held = key;
-      // A carried path gives back the points added to it, then lets go.
       setState(() => _draft.vertices.length == _carrying?.had
           ? _clearDraft()
           : _draft = _draft.withoutLast());
@@ -360,7 +339,6 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
     return _space.toScreen(last.x, last.y);
   }
 
-  /// The layer a shape would be drawn on: the primary selection.
   LayerBox? get _target =>
       primarySelectedBox(widget.boxes, widget.uiState.selectedLayerIds);
 
@@ -371,6 +349,18 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
     return box == null ||
         (box.shapeContents.isNotEmpty &&
             !HardwareKeyboard.instance.isAltPressed);
+  }
+
+  ShapePaint get _paint {
+    final box = _target;
+    final tools = widget.uiState.tools;
+    final held = box == null
+        ? null
+        : shapeTargets(widget.uiState, only: box.id).firstOrNull;
+    return held == null
+        ? paintOfTools(tools)
+        : paintOfShape(shownShape(held), tools, widget.comp,
+            widget.uiState.playheadFrame.value);
   }
 
   /// The space the art being drawn lives in, and how to get it back on screen.
@@ -394,8 +384,8 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
     // A carried path is already on the picture, so its draft is outline only.
     final art = _drawsArt && _carrying == null;
     final space = _space;
+    final paint = _paint;
     return Positioned.fill(
-      // A click anywhere outside the Viewer ends a Pen path, open.
       child: TapRegion(
         onTapOutside: (_) {
           if (_isPen && !_draft.isEmpty && !_menuUp) _finishOpen();
@@ -408,8 +398,6 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
           cursor: SystemMouseCursors.precise,
           onPointer: (at) => setState(() {
             _pointer = at;
-            // The Pen also draws the edge it would place next, from the last
-            // point placed to here.
             _penPointer = _isPen ? at : null;
           }),
           child: Listener(
@@ -435,15 +423,13 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
                       fill: !art
                           ? widget.accent
                               .withValues(alpha: _carrying == null ? 1 : 0)
-                          : widget.uiState.tools.fillOn
-                              ? colourOf(widget.uiState.tools.fill)
+                          : paint.fillOn
+                              ? colourOf(paint.fill)
                               : const Color(0x00000000),
-                      stroke: art && widget.uiState.tools.strokeOn
-                          ? colourOf(widget.uiState.tools.stroke)
+                      stroke: art && paint.strokeOn
+                          ? colourOf(paint.stroke)
                           : null,
-                      strokeWidth: art
-                          ? widget.uiState.tools.strokeWidth * space.screenScale
-                          : 0,
+                      strokeWidth: art ? paint.width * space.screenScale : 0,
                       from: _from,
                       to: _to,
                       square: HardwareKeyboard.instance.isShiftPressed,
@@ -474,15 +460,9 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
     );
   }
 
-  // --- The dragged shapes ---------------------------------------------------
-
   void _onPanStart(DragStartDetails details) {
     final at = _downAt ?? details.localPosition;
-    // Where the crosshair is drawn is [DrawnPointerRegion]'s business, whichever
-    // button is down.
     if (_isPen) {
-      // A click that became a drag: the vertex lands where the press was, and
-      // the drag pulls its handles out.
       setState(() {
         _handleFrom = _locked(at, _lastPoint);
         _handleTo = details.localPosition;
@@ -557,10 +537,6 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
         _handleTo = null;
       });
 
-  // --- The Pen --------------------------------------------------------------
-
-  /// A plain click: place a corner, or close the path when it lands on the
-  /// first point.
   void _onPenTap(TapUpDetails details) {
     // The path is built in the layer's coordinates when there is a layer, and
     // in the composition's when there is not — the same path either way, and
@@ -607,8 +583,6 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
     return true;
   }
 
-  /// A click that turned into a drag: the vertex is placed where the press was
-  /// and its handles are pulled out to the pointer.
   void _finishHandleDrag() {
     final from = _handleFrom;
     final raw = _handleTo;
@@ -626,10 +600,6 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
         ));
   }
 
-  // --- Committing -----------------------------------------------------------
-
-  /// A new shape layer holding this art, at the top of the composition — what a
-  /// shape tool or the Pen does with nothing selected.
   void _commitShapeLayer(ToolMode tool, List<BridgeVertex> path,
       {BridgeShapePrimitive? primitive, bool closed = true}) {
     if (path.length < 2) return;
@@ -650,24 +620,21 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
   /// swatches that had nothing to paint until there were shape layers.
   BridgeShapeItem _item(ToolMode tool, List<BridgeVertex> path,
       BridgeShapePrimitive? primitive, bool closed) {
-    final tools = widget.uiState.tools;
+    final paint = _paint;
+    BridgeColour still(ToolColour c) =>
+        stillColour(BridgeColourRgba(r: c.r, g: c.g, b: c.b, a: 1));
     return BridgeShapeItem(
       id: UuidValue.fromString(const Uuid().v4()),
       name: shapeMaskName(tool),
       vertices: path,
-      // A shape tool draws a closed figure; the Pen's path is closed when
-      // it came back to its first point.
       closed: closed,
-      fill: tools.fillOn ? stillColour(tools.fillRgba) : null,
-      stroke: tools.strokeOn && tools.strokeWidth > 0
-          ? stillColour(tools.strokeRgba)
-          : null,
-      strokeWidth: BridgeScalar.static_(tools.strokeWidth),
+      fill: paint.fillOn ? still(paint.fill) : null,
+      stroke:
+          paint.strokeOn && paint.width > 0 ? still(paint.stroke) : null,
+      strokeWidth: BridgeScalar.static_(paint.width),
       opacity: const BridgeScalar.static_(100),
-      // Solid, until somebody dashes it.
       dashes: const [],
       dashOffset: const BridgeScalar.static_(0),
-      // A flat fill, until somebody ramps it.
       gradient: 0,
       gradientColour: null,
       gradientStartX: const BridgeScalar.static_(0),
@@ -676,6 +643,8 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
       gradientEndY: const BridgeScalar.static_(0),
       gradientStartOpacity: const BridgeScalar.static_(100),
       gradientEndOpacity: const BridgeScalar.static_(100),
+      gradientHighlight: const BridgeScalar.static_(0),
+      gradientHighlightAngle: const BridgeScalar.static_(0),
       gradientStops: const [],
       combine: 0,
       hidden: false,
@@ -708,8 +677,6 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
     }
   }
 
-  /// The carried path written back over itself, the way round it was, in one
-  /// undo step.
   void _carryOn(LayerBox box, _Carrying carrying, List<BridgeVertex> path,
       bool closed) {
     final points = carrying.turned ? _turned(path) : path;
@@ -778,11 +745,8 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
   }
 }
 
-/// An open path the Pen carries on: which one, whether its points were turned
-/// round so the clicked end is last, and how many it had.
 typedef _Carrying = ({UuidValue id, bool shape, bool turned, int had});
 
-/// [path] moved by [by].
 List<BridgeVertex> _shifted(List<BridgeVertex> path, Offset by) => [
       for (final v in path)
         BridgeVertex(
@@ -794,8 +758,6 @@ List<BridgeVertex> _shifted(List<BridgeVertex> path, Offset by) => [
             tanOutY: v.tanOutY),
     ];
 
-/// [path] run the other way: its points reversed, each with its handles
-/// swapped.
 List<BridgeVertex> _turned(List<BridgeVertex> path) => [
       for (final v in path.reversed)
         BridgeVertex(
@@ -829,7 +791,6 @@ class ShapeSpace {
     this.screenScale = 1,
   });
 
-  /// The selected layer's own coordinates, through its map.
   factory ShapeSpace.ofLayer(LayerBox box) => ShapeSpace(
         toScreen: box.map.toScreen,
         ofScreen: (at) {
@@ -873,7 +834,6 @@ class ShapePreviewPainter extends CustomPainter {
   final Offset? handleFrom;
   final Offset? handleTo;
 
-  /// Whether a click where the pointer is would close the path.
   final bool closing;
   final Color accent;
 
@@ -989,8 +949,6 @@ class ShapePreviewPainter extends CustomPainter {
       }
     }
 
-    // The handles being pulled out of a vertex, with their mirror — the same
-    // pair of arms the graph editor draws on a keyframe.
     final hFrom = handleFrom;
     final hTo = handleTo;
     if (hFrom != null && hTo != null) {

@@ -95,9 +95,6 @@ pub fn fed(
     (!values::is_bare(&inst)).then_some(inst)
 }
 
-/// The ops that feed every copy of template `comp` that follows a row from
-/// `data` again: what linking other data, changing what a column feeds and
-/// reloading the file all end with.
 #[must_use]
 pub fn refeed_ops(
     doc: &Document,
@@ -157,26 +154,17 @@ pub fn refeed_ops(
     ops
 }
 
-/// Where a copy that follows each row in turn sits: a Precomp layer, or a
-/// clip of a Sequence layer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Host {
-    /// The composition the copy is in.
     pub comp: Uuid,
-    /// The Precomp layer, or the Sequence layer holding the clip.
     pub layer: Uuid,
-    /// The clip, for a copy that is one.
     pub clip: Option<Uuid>,
 }
 
-/// One row's version of the project.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RowVersion {
-    /// The edits that make it.
     pub ops: Vec<Op>,
-    /// The composition to export.
     pub comp: Uuid,
-    /// What the row read as.
     pub read: RowValues,
 }
 
@@ -351,7 +339,6 @@ pub fn row_name(
             ("row", None) => made.push_str(&(row + 1).to_string()),
             ("comp", None) => made.push_str(comp_name),
             ("date", None) => made.push_str(today),
-            // Not a token of ours: left as it was written.
             _ => made.push_str(&rest[open..=open + close]),
         }
         rest = &rest[open + close + 1..];

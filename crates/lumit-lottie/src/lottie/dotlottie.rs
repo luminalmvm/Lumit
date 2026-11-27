@@ -14,8 +14,6 @@ use zip::{CompressionMethod, DateTime, ZipWriter};
 
 use crate::LottieError;
 
-/// `json` and `pictures` (file name, bytes) as a `.lottie`, the animation
-/// named from `stem`.
 pub fn pack(
     stem: &str,
     json: &[u8],

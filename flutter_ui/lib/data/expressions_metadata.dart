@@ -13,8 +13,8 @@ class ExpressionsMetadata {
     final parsed = jsonDecode(data);
     var a = ExpressionsApi.fromJson(parsed);
     final regExp = RegExp(
-        r'[\^$*.\[\]{}()?\-"!@#%&/\,><:;_~`+=' // <-- Notice the escaped symbols
-        "'" // <-- ' is added to the expression
+        r'[\^$*.\[\]{}()?\-"!@#%&/\,><:;_~`+='
+        "'"
         ']');
 
 
@@ -102,8 +102,8 @@ class FunctionDef {
           .map((i) => i.toString())
           .toList(),
       signature: (json['signature'] as String)
-          .replaceAll(": Dynamic", "") // dont show types for dynamic args
-          .replaceAll("&mut ", ""), // expression users dont care about mutability
+          .replaceAll(": Dynamic", "")
+          .replaceAll("&mut ", ""),
     );
   }
 }

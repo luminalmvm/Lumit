@@ -14,10 +14,15 @@ use lumit_core::mask::{BezierPath, MaskPolyline, Vertex};
 use lumit_core::model::{LinearColour, TextDocument};
 use lumit_core::text::{GlyphXform, ParagraphStyle, TextAnimator, TextStyle};
 
+pub mod animated;
 pub mod blend;
 mod block_key;
+mod blur;
 pub mod fonts;
+pub mod restyle;
 mod styled;
+
+use animated::{animator_margin, rasterise_line_animated, rasterise_on_path_animated};
 
 /// Inter Regular, embedded at compile time — deterministic across machines.
 pub(crate) static INTER: &[u8] = include_bytes!("../../../assets/fonts/Inter-Regular.otf");
@@ -38,7 +43,6 @@ pub struct RasterText {
     pub rgba: Vec<u8>,
 }
 
-/// Everything about a Text layer's words that decides the picture.
 #[derive(Clone, Copy)]
 pub struct TextBlock<'a> {
     pub text: &'a str,
@@ -103,7 +107,6 @@ pub struct BlockLine {
     pub carets: Vec<f32>,
 }
 
-/// The layout of a block, drawn with or without animators.
 #[must_use]
 pub fn layout(block: &TextBlock<'_>, animated: bool) -> BlockLayout {
     if !block.plain() {
@@ -125,7 +128,6 @@ pub fn layout(block: &TextBlock<'_>, animated: bool) -> BlockLayout {
     }
 }
 
-/// Draw a block, with its animators applied when there are any.
 #[must_use]
 pub fn rasterise(block: &TextBlock<'_>, xforms: &[GlyphXform]) -> RasterText {
     if block.plain() {
@@ -180,7 +182,7 @@ pub fn glyph_middles(
     let laid = layout(&block, spine.is_none() && !document.animators.is_empty());
     let mut out = vec![None; line.chars().count()];
     let half = (laid.ascent - laid.descent) * 0.5;
-    #[allow(clippy::cast_possible_truncation)] // px
+    #[allow(clippy::cast_possible_truncation)]
     let mut along = document.path_offset.value_at(lt) as f32;
     for row in &laid.lines {
         let first = row.carets.first().copied().unwrap_or(0.0);
@@ -215,15 +217,22 @@ pub fn glyph_middles(
 /// its letters never blur. The raster grows by `zoom`; the layer keeps its
 /// own size (the second answer), for the placement to draw it at.
 ///
-/// A `zoom` of 1 or less is [`rasterise`] itself, byte for byte.
+/// A `zoom` of 1 or less is [`rasterise`] itself, byte for byte. `grow` is
+/// how much more room animated letters get on the left, top, right and
+/// bottom, what [`animated::overhang`] measures; the layer's size grows with it.
 #[must_use]
 pub fn rasterise_at(
     block: &TextBlock<'_>,
     xforms: &[GlyphXform],
     zoom: f32,
+    grow: [u32; 4],
 ) -> (RasterText, (u32, u32)) {
     if !zoom.is_finite() || zoom <= 1.0 + 1e-3 {
-        let plain = rasterise(block, xforms);
+        let plain = if block.plain() {
+            animated::rasterise_line_grown(block.text, block.size, block.fill, xforms, grow)
+        } else {
+            styled::rasterise_zoomed(block, xforms, 1.0, None, grow)
+        };
         let size = (plain.width, plain.height);
         return (plain, size);
     }
@@ -232,25 +241,28 @@ pub fn rasterise_at(
     // larger drawing is fitted into that same frame and nothing moves as the
     // layer crosses 100 %.
     let laid = layout(block, !xforms.is_empty());
+    let [left, top, right, bottom] = grow;
+    let size = (laid.width + left + right, laid.height + top + bottom);
+    #[allow(clippy::cast_precision_loss)] // px
     let fit = block.plain().then(|| {
         let line = laid.lines.first();
         (
             [
                 line.and_then(|l| l.carets.first().copied())
-                    .unwrap_or(laid.left),
-                line.map_or(0.0, |l| l.baseline),
+                    .unwrap_or(laid.left)
+                    + left as f32,
+                line.map_or(0.0, |l| l.baseline) + top as f32,
             ],
-            (laid.width, laid.height),
+            size,
         )
     });
-    let raster = styled::rasterise_zoomed(block, xforms, zoom, fit);
+    let raster = styled::rasterise_zoomed(block, xforms, zoom, fit, grow);
     if raster.width <= 1 && raster.height <= 1 {
         return (raster, (1, 1));
     }
-    (raster, (laid.width, laid.height))
+    (raster, size)
 }
 
-/// [`rasterise_along`] drawn `zoom` times as large, the same way.
 #[must_use]
 pub fn rasterise_along_at(
     block: &TextBlock<'_>,
@@ -267,8 +279,6 @@ pub fn rasterise_along_at(
     styled::rasterise_on_path(block, path, offset, width, height, xforms, zoom)
 }
 
-/// Draw a block along `path` into a `width` × `height` buffer, the box
-/// [`path_box`] hands out.
 #[must_use]
 pub fn rasterise_along(
     block: &TextBlock<'_>,
@@ -447,7 +457,6 @@ pub fn rasterise_line(text: &str, size: f32, rgb8: [u8; 3]) -> RasterText {
     let font = font();
     let size = size.clamp(4.0, 512.0);
 
-    // First pass: measure.
     let Walk {
         glyphs,
         pen_x,
@@ -464,7 +473,6 @@ pub fn rasterise_line(text: &str, size: f32, rgb8: [u8; 3]) -> RasterText {
     let width = pen_x.ceil().max(1.0) as u32;
     let height = (max_y - min_y).ceil().max(1.0) as u32;
 
-    // Second pass: blit coverage into the buffer.
     let mut rgba = vec![0u8; (width * height * 4) as usize];
     for (ch, x0, metrics) in glyphs {
         let (_, bitmap) = font.rasterize(ch, size);
@@ -566,7 +574,7 @@ pub fn rasterise_on_path(
         let wanted = offset + pen;
         pen += metrics.advance_width;
         if metrics.width == 0 || metrics.height == 0 {
-            continue; // a space carries advance and no ink
+            continue;
         }
         // Where this glyph's origin sits on the curve. A closed path has no
         // ends to fall off, so it wraps; an open one drops what does not fit.
@@ -599,7 +607,6 @@ pub fn rasterise_on_path(
                 o[1] + lx * tan[1] + ly * nrm[1],
             ]
         };
-        // The turned glyph's axis-aligned footprint, clipped to the buffer.
         let corners = [
             to_world(lx0, ly0),
             to_world(lx0 + gw, ly0),
@@ -675,294 +682,6 @@ fn sample_coverage(bitmap: &[u8], bw: usize, bh: usize, fx: f32, fy: f32) -> u8 
     let bottom = at(ix, iy + 1.0) * (1.0 - tx) + at(ix + 1.0, iy + 1.0) * tx;
     (top * (1.0 - ty) + bottom * ty).round().clamp(0.0, 255.0) as u8
 }
-
-// ---- Text animators -----------------------------------------------------
-
-/// The room an animated line is given round the words, in pixels a side.
-///
-/// One text size, which is about as far as a letter is usually thrown in a
-/// cascade — far enough for a drop-in from above or a hundred per cent scale,
-/// and small enough that a title does not quietly become a four-times-larger
-/// buffer. A letter thrown further than this is clipped at the layer's edge,
-/// exactly as a mask point dragged off the layer is.
-///
-/// It is a **constant** of the text size rather than a fit to the letters'
-/// actual reach, so the layer's box does not change from frame to frame as the
-/// range sweeps: a box that breathed would move the picture inside it.
-#[must_use]
-pub fn animator_margin(size: f32) -> f32 {
-    size.clamp(4.0, 512.0).round()
-}
-
-/// Stamp one glyph into `rgba`, turned, scaled, faded and tinted by `x`.
-///
-/// `pen` is where the glyph sits on the baseline and `tan`/`nrm` are the
-/// directions its own x and y run in there — `(1, 0)` and `(0, 1)` for a
-/// straight line, the curve's own frame for a line on a path. Everything the
-/// animator does happens **inside that frame**, so a letter on a curve is
-/// pushed along and away from the curve rather than across the picture.
-///
-/// The turn is about the letter's own middle on the baseline, which is where a
-/// letter looks like it is pivoting from; pivoting about the pen point swings
-/// tall letters out of the line.
-///
-/// Inverse mapping, the same reason [`rasterise_on_path`] gives: walking the
-/// target pixels and asking the glyph what it has there leaves no holes when
-/// the turn is not a right angle.
-#[allow(clippy::too_many_arguments)]
-fn stamp_glyph(
-    rgba: &mut [u8],
-    w: u32,
-    h: u32,
-    bitmap: &[u8],
-    metrics: &fontdue::Metrics,
-    pen: [f32; 2],
-    tan: [f32; 2],
-    nrm: [f32; 2],
-    x: &GlyphXform,
-    rgb8: [u8; 3],
-) {
-    if metrics.width == 0 || metrics.height == 0 {
-        return; // a space carries advance and no ink
-    }
-    let (sx, sy) = (x.scale[0], x.scale[1]);
-    if x.opacity <= 0.0 || sx.abs() < 1e-4 || sy.abs() < 1e-4 || !x.opacity.is_finite() {
-        return; // scaled or faded to nothing
-    }
-    #[allow(clippy::cast_precision_loss)]
-    let (gw, gh) = (metrics.width as f32, metrics.height as f32);
-    let lx0 = metrics.xmin as f32;
-    let ly0 = -(metrics.ymin as f32) - gh;
-    // The letter's own middle on the baseline: what it turns and scales about.
-    let anchor = [metrics.advance_width * 0.5, 0.0];
-
-    let (sin, cos) = x.rotation.to_radians().sin_cos();
-    let along = [cos * tan[0] + sin * nrm[0], cos * tan[1] + sin * nrm[1]];
-    let down = [-sin * tan[0] + cos * nrm[0], -sin * tan[1] + cos * nrm[1]];
-    let origin = [
-        pen[0] + (x.position[0] + anchor[0]) * tan[0] + (x.position[1] + anchor[1]) * nrm[0],
-        pen[1] + (x.position[0] + anchor[0]) * tan[1] + (x.position[1] + anchor[1]) * nrm[1],
-    ];
-    let to_world = |lx: f32, ly: f32| {
-        let (ax, ay) = ((lx - anchor[0]) * sx, (ly - anchor[1]) * sy);
-        [
-            origin[0] + ax * along[0] + ay * down[0],
-            origin[1] + ax * along[1] + ay * down[1],
-        ]
-    };
-    let corners = [
-        to_world(lx0, ly0),
-        to_world(lx0 + gw, ly0),
-        to_world(lx0, ly0 + gh),
-        to_world(lx0 + gw, ly0 + gh),
-    ];
-    let (mut x0, mut y0, mut x1, mut y1) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
-    for c in corners {
-        x0 = x0.min(c[0]);
-        y0 = y0.min(c[1]);
-        x1 = x1.max(c[0]);
-        y1 = y1.max(c[1]);
-    }
-    if !(x0.is_finite() && y0.is_finite() && x1.is_finite() && y1.is_finite()) {
-        return;
-    }
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let (px0, py0, px1, py1) = (
-        x0.floor().max(0.0) as u32,
-        y0.floor().max(0.0) as u32,
-        (x1.ceil().max(0.0) as u32).min(w),
-        (y1.ceil().max(0.0) as u32).min(h),
-    );
-
-    let opacity = x.opacity.clamp(0.0, 1.0);
-    for py in py0..py1 {
-        for px in px0..px1 {
-            #[allow(clippy::cast_precision_loss)]
-            let (dx, dy) = (px as f32 + 0.5 - origin[0], py as f32 + 0.5 - origin[1]);
-            let u = (dx * along[0] + dy * along[1]) / sx + anchor[0];
-            let v = (dx * down[0] + dy * down[1]) / sy + anchor[1];
-            let cov = sample_coverage(bitmap, metrics.width, metrics.height, u - lx0, v - ly0);
-            if cov == 0 {
-                continue;
-            }
-            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-            let cov = (f32::from(cov) * opacity).round().clamp(0.0, 255.0) as u8;
-            if cov == 0 {
-                continue;
-            }
-            let idx = ((py * w + px) * 4) as usize;
-            // Each letter carries its own colour once an animator tints it, so
-            // where two letters overlap the one with more ink there wins —
-            // rather than the first one's colour keeping the second one's
-            // coverage, which is what a plain `max` on alpha would do.
-            if cov >= rgba[idx + 3] {
-                rgba[idx] = rgb8[0];
-                rgba[idx + 1] = rgb8[1];
-                rgba[idx + 2] = rgb8[2];
-                rgba[idx + 3] = cov;
-            }
-        }
-    }
-}
-
-/// This letter's fill: the layer's own, plus whatever the animators added,
-/// encoded the way every other solid colour in the engine is.
-fn tinted(fill: LinearColour, x: &GlyphXform) -> [u8; 3] {
-    let c = LinearColour([
-        fill.0[0] + x.fill[0],
-        fill.0[1] + x.fill[1],
-        fill.0[2] + x.fill[2],
-        fill.0[3],
-    ]);
-    let rgba = lumit_core::pixels::solid_rgba(c);
-    [rgba[0], rgba[1], rgba[2]]
-}
-
-/// A straight line with its animators applied.
-///
-/// **With no animators this is [`rasterise_line`], byte for byte** — it calls
-/// it, rather than taking a second path that happens to agree. That is the
-/// guarantee: adding the feature cannot change one pixel of a layer nobody
-/// has animated, and cannot retire one frame anybody has cached.
-///
-/// With animators the box grows by [`animator_margin`] a side and the words sit
-/// that far in, so a letter dropping in from above has somewhere to drop from.
-#[must_use]
-pub fn rasterise_line_animated(
-    text: &str,
-    size: f32,
-    fill: LinearColour,
-    xforms: &[GlyphXform],
-) -> RasterText {
-    let rgba8 = lumit_core::pixels::solid_rgba(fill);
-    let rgb8 = [rgba8[0], rgba8[1], rgba8[2]];
-    if xforms.is_empty() {
-        return rasterise_line(text, size, rgb8);
-    }
-    let font = font();
-    let size = size.clamp(4.0, 512.0);
-    let margin = animator_margin(size);
-
-    // The same measuring walk as `rasterise_line`, so the un-animated words
-    // land in the same place inside the grown box.
-    let Walk {
-        glyphs,
-        pen_x,
-        min_y,
-        max_y,
-    } = walk(text, size);
-    if glyphs.is_empty() || min_y > max_y {
-        return RasterText {
-            width: 1,
-            height: 1,
-            rgba: vec![0; 4],
-        };
-    }
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let width = (pen_x.ceil().max(1.0) + 2.0 * margin).min(MAX_PATH_BOX_PX) as u32;
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let height = ((max_y - min_y).ceil().max(1.0) + 2.0 * margin).min(MAX_PATH_BOX_PX) as u32;
-    let mut rgba = vec![0u8; (width as usize) * (height as usize) * 4];
-
-    for (i, (ch, x0, metrics)) in glyphs.into_iter().enumerate() {
-        let (_, bitmap) = font.rasterize(ch, size);
-        let x = xforms.get(i).copied().unwrap_or_default();
-        stamp_glyph(
-            &mut rgba,
-            width,
-            height,
-            &bitmap,
-            &metrics,
-            [x0 + margin, -min_y + margin],
-            [1.0, 0.0],
-            [0.0, 1.0],
-            &x,
-            tinted(fill, &x),
-        );
-    }
-    RasterText {
-        width,
-        height,
-        rgba,
-    }
-}
-
-/// A line on a path with its animators applied.
-///
-/// With no animators this is [`rasterise_on_path`], byte for byte, for the
-/// reason [`rasterise_line_animated`] gives. The box is the one `path_box`
-/// already hands out — its corner is the layer's own origin and it already
-/// carries a text size of room, so an animated line on a curve neither grows
-/// nor moves the layer.
-#[allow(clippy::too_many_arguments)]
-#[must_use]
-pub fn rasterise_on_path_animated(
-    text: &str,
-    size: f32,
-    fill: LinearColour,
-    path: &MaskPolyline,
-    offset: f32,
-    width: u32,
-    height: u32,
-    xforms: &[GlyphXform],
-) -> RasterText {
-    let rgba8 = lumit_core::pixels::solid_rgba(fill);
-    let rgb8 = [rgba8[0], rgba8[1], rgba8[2]];
-    if xforms.is_empty() {
-        return rasterise_on_path(text, size, rgb8, path, offset, width, height);
-    }
-    let font = font();
-    let size = size.clamp(4.0, 512.0);
-    let (w, h) = (width.max(1), height.max(1));
-    let mut rgba = vec![0u8; (w as usize) * (h as usize) * 4];
-    let total = path.length();
-    if path.is_empty() || !total.is_finite() {
-        return RasterText {
-            width: w,
-            height: h,
-            rgba,
-        };
-    }
-
-    let mut pen = 0.0f32;
-    for (i, ch) in text.chars().enumerate() {
-        let (metrics, bitmap) = font.rasterize(ch, size);
-        let wanted = offset + pen;
-        pen += metrics.advance_width;
-        let s = if path.closed {
-            if total > 0.0 {
-                wanted.rem_euclid(total)
-            } else {
-                0.0
-            }
-        } else if wanted < 0.0 || wanted > total {
-            continue; // ran off the end, exactly as the un-animated walk does
-        } else {
-            wanted
-        };
-        let tan = path.tangent_at(s);
-        let x = xforms.get(i).copied().unwrap_or_default();
-        stamp_glyph(
-            &mut rgba,
-            w,
-            h,
-            &bitmap,
-            &metrics,
-            path.point_at(s),
-            tan,
-            [-tan[1], tan[0]],
-            &x,
-            tinted(fill, &x),
-        );
-    }
-    RasterText {
-        width: w,
-        height: h,
-        rgba,
-    }
-}
-
-// ---- Glyph outlines -----------------------------------------------------
 
 /// One glyph's curves, in the same layer pixels the raster would be drawn into.
 ///
@@ -1053,7 +772,7 @@ pub fn glyph_outlines(
                         0.0
                     }
                 } else if wanted < 0.0 || wanted > total {
-                    continue; // ran off the end, exactly as the raster does
+                    continue;
                 } else {
                     wanted
                 };
@@ -1077,7 +796,7 @@ pub fn glyph_outlines(
         };
         let mut outliner = Outliner::new(|x: f32, y: f32| frame.point(x * scale, -y * scale));
         if face.outline_glyph(id, &mut outliner).is_none() {
-            continue; // a space, or a glyph the font draws with nothing
+            continue;
         }
         let contours = outliner.finish();
         if !contours.is_empty() {
@@ -1113,12 +832,10 @@ impl<P: Fn(f32, f32) -> (f64, f64)> Outliner<P> {
         }
     }
 
-    /// A font point, placed.
     fn at(&self, x: f32, y: f32) -> (f64, f64) {
         (self.place)(x, y)
     }
 
-    /// A font-space offset, turned. `from` is the point it leaves.
     fn handle(&self, from: (f64, f64), cx: f32, cy: f32) -> (f64, f64) {
         let c = self.at(cx, cy);
         (c.0 - from.0, c.1 - from.1)
@@ -1252,8 +969,6 @@ mod tests {
         assert_eq!(r.rgba[3], 0);
     }
 
-    /// One unstyled line goes down the old path and draws the old bytes. A
-    /// style, or a line break, is what sends a block to the shaper.
     #[test]
     fn an_unstyled_line_draws_the_bytes_it_always_drew() {
         let (style, paragraph) = (TextStyle::default(), ParagraphStyle::default());
@@ -1284,8 +999,6 @@ mit",
         assert!(broken.height > l.height);
     }
 
-    /// One gap per character and one more, walking right, and the last one is
-    /// on the raster's right edge.
     #[test]
     fn carets_step_through_every_gap() {
         let l = line_layout("Hello", 72.0, false);
@@ -1298,15 +1011,11 @@ mit",
             "{last} vs {}",
             l.width
         );
-        // Inter's "l" is far narrower than its "H".
         let h = l.carets[1] - l.carets[0];
         let el = l.carets[3] - l.carets[2];
         assert!(el < h * 0.5, "l {el} vs H {h}");
-        // Counted in characters, not bytes.
         assert_eq!(line_layout("é", 72.0, false).carets.len(), 2);
     }
-
-    // ---- Text on a path --------------------------------------------------
 
     /// A polyline through `points`, arc-length measured the way `flatten_path`
     /// measures one.
@@ -1328,7 +1037,6 @@ mit",
         }
     }
 
-    /// The bounding box of everything with any alpha in it, or `None`.
     fn ink_box(r: &RasterText) -> Option<(u32, u32, u32, u32)> {
         let (mut x0, mut y0, mut x1, mut y1) = (u32::MAX, u32::MAX, 0u32, 0u32);
         for y in 0..r.height {
@@ -1344,9 +1052,6 @@ mit",
         (x0 != u32::MAX).then_some((x0, y0, x1, y1))
     }
 
-    /// **The offset is measured in arc length, and nothing else.** Sliding the
-    /// line 50 px along a straight path moves its ink exactly 50 px — the one
-    /// number this whole layout is built on, so it is asserted to the pixel.
     #[test]
     fn the_offset_walks_the_line_along_the_path_by_arc_length() {
         let path = poly(vec![[10.0, 120.0], [400.0, 120.0]], false);
@@ -1358,17 +1063,12 @@ mit",
         let (sx0, sy0, sx1, sy1) = at(50.0);
         assert_eq!((sx0 - x0, sx1 - x1), (50, 50), "the walk is not arc length");
         assert_eq!((sy0, sy1), (y0, y1), "a straight path moved the baseline");
-        // And it starts where the path starts: the first glyph's left bearing
-        // is small at 48 px, so the ink begins within a couple of pixels of the
-        // path's own first vertex.
         assert!(
             (x0 as i64 - 10).abs() <= 6,
             "the line did not start at the path (x0 {x0}, path starts at 10)"
         );
     }
 
-    /// A path that names nothing — the empty polyline every "no mask" reading
-    /// comes to — draws nothing rather than faulting (docs/14 §4).
     #[test]
     fn an_empty_path_draws_nothing() {
         let r = rasterise_on_path(
@@ -1384,9 +1084,6 @@ mit",
         assert!(r.rgba.iter().all(|b| *b == 0));
     }
 
-    // ---- Glyph outlines --------------------------------------------------
-
-    /// A plain line's shape items, out of their groups.
     fn plain_items(text: &str, size: f32) -> Vec<lumit_core::shape::ShapeItem> {
         let (style, paragraph) = (TextStyle::default(), ParagraphStyle::default());
         let block = TextBlock {
@@ -1419,8 +1116,6 @@ mit",
         let items = plain_items(text, size);
         assert!(!items.is_empty(), "no outlines came back");
 
-        // Draw the art into the raster's own box, so the two are comparable
-        // pixel for pixel.
         let (w, h) = (raster.width, raster.height);
         let entries: Vec<_> = items
             .iter()
@@ -1464,10 +1159,6 @@ mit",
         assert!((0.85..1.2).contains(&ratio), "ink ratio {ratio}");
     }
 
-    /// **A counter is a hole.** An `o` is two rings, and the second combines
-    /// into the first by `Xor`, which is exactly the even-odd rule this crate's
-    /// rasteriser fills by — so the middle comes out empty with no winding rule
-    /// to reason about.
     #[test]
     fn a_letter_with_a_counter_is_two_rings_and_a_hole() {
         let items = plain_items("o", 96.0);
@@ -1475,7 +1166,6 @@ mit",
         assert_eq!(items[0].combine, 0, "the first ring starts a run");
         assert_eq!(items[1].combine, 4, "the counter cuts by even-odd");
 
-        // And the middle of the drawn `o` really is empty.
         let entries: Vec<_> = items
             .iter()
             .cloned()
@@ -1486,7 +1176,6 @@ mit",
         let centre = ((50 * 100 + 50) * 4 + 3) as usize;
         assert_eq!(art[centre], 0, "the counter filled in");
 
-        // Two letters do not cancel each other: each starts a run of its own.
         let pair = plain_items("oo", 96.0);
         assert_eq!(
             pair.iter().filter(|i| i.combine == 0).count(),
@@ -1494,8 +1183,6 @@ mit",
             "the second letter joined the first letter's run"
         );
     }
-
-    // ---- Text animators --------------------------------------------------
 
     fn white() -> lumit_core::model::LinearColour {
         lumit_core::model::LinearColour([1.0, 1.0, 1.0, 1.0])
@@ -1518,10 +1205,6 @@ mit",
         assert_eq!(plain.rgba, through.rgba);
     }
 
-    /// **The weight is what reaches the picture.** An opacity animator over the
-    /// first half of the run takes the first half of the letters away and
-    /// leaves the rest alone — the shortest end-to-end check that the selector,
-    /// the weight and the draw agree about which letter is which.
     #[test]
     fn an_opacity_animator_takes_away_the_letters_the_selector_names() {
         use lumit_core::anim::Property;
@@ -1534,8 +1217,6 @@ mit",
         let (x0, _, x1, _) = ink_box(&faded).expect("two letters are still there");
         let whole = rasterise_line_animated("AAAA", 48.0, white(), &[]);
         let (wx0, _, wx1, _) = ink_box(&whole).expect("ink");
-        // The right-hand half survived: the ink now starts about half a line
-        // in, and still ends where the line ended.
         let width = wx1 - wx0;
         assert!(
             x0 > wx0 + width / 3,
@@ -1543,8 +1224,70 @@ mit",
         );
     }
 
-    /// Same document, same frame, same bytes — the rule the frame cache lives
-    /// by, and the one a per-letter walk is easiest to break.
+    /// **Blur, skew and tracking reach the picture**, on the plain line and on
+    /// the styled one: a blurred letter spreads its ink wider, a skewed one
+    /// leans it, tracking pushes the letters after it along.
+    #[test]
+    fn blur_skew_and_tracking_reach_the_letters() {
+        use lumit_core::text::GlyphXform;
+        let all = |x: GlyphXform| vec![x; 4];
+        let still = vec![GlyphXform::default(); 4];
+        let plain = |x: &[GlyphXform]| rasterise_line_animated("IIII", 48.0, white(), x);
+        let (bx0, _, bx1, _) = ink_box(&plain(&still)).expect("ink");
+        let blurred = plain(&all(GlyphXform {
+            blur: 6.0,
+            ..GlyphXform::default()
+        }));
+        let (x0, _, x1, _) = ink_box(&blurred).expect("ink");
+        assert!(x0 < bx0 && x1 > bx1, "blur did not spread the ink");
+        let tracked = plain(&all(GlyphXform {
+            tracking: 500.0,
+            ..GlyphXform::default()
+        }));
+        let (_, _, tx1, _) = ink_box(&tracked).expect("ink");
+        // Pushed along, as far as the animated margin of one text size lets it.
+        assert!(tx1 > bx1 + 30, "tracking did not push the letters along");
+        let skewed = plain(&all(GlyphXform {
+            skew: 30.0,
+            ..GlyphXform::default()
+        }));
+        assert_ne!(skewed.rgba, plain(&still).rgba, "skew changed nothing");
+
+        // The styled path: a block with a style of its own.
+        let style = TextStyle {
+            tracking: 1.0,
+            ..TextStyle::default()
+        };
+        let paragraph = ParagraphStyle::default();
+        let block = TextBlock {
+            text: "IIII",
+            size: 48.0,
+            fill: white(),
+            style: &style,
+            paragraph: &paragraph,
+            boxed: false,
+        };
+        let base = rasterise(&block, &still);
+        let blurred = rasterise(
+            &block,
+            &all(GlyphXform {
+                blur: 6.0,
+                ..GlyphXform::default()
+            }),
+        );
+        let skewed = rasterise(
+            &block,
+            &all(GlyphXform {
+                skew: 30.0,
+                ..GlyphXform::default()
+            }),
+        );
+        let (sx0, _, sx1, _) = ink_box(&base).expect("ink");
+        let (b0, _, b1, _) = ink_box(&blurred).expect("ink");
+        assert!(b0 < sx0 && b1 > sx1, "styled blur did not spread the ink");
+        assert_ne!(skewed.rgba, base.rgba, "styled skew changed nothing");
+    }
+
     #[test]
     fn an_animated_line_is_deterministic() {
         use lumit_core::anim::Property;
@@ -1561,8 +1304,6 @@ mit",
         assert!(ink_box(&rasterise_line_animated("Lumit", 36.0, white(), &xforms)).is_some());
     }
 
-    /// A letter scaled to nothing, and one faded to nothing, draw nothing —
-    /// and neither divides by the zero it was scaled by (docs/14 §4).
     #[test]
     fn a_letter_scaled_or_faded_to_nothing_draws_nothing() {
         use lumit_core::text::GlyphXform;
@@ -1580,14 +1321,11 @@ mit",
         assert_eq!(ink_box(&r), None, "a letter with no size drew something");
     }
 
-    /// The box reaches the far side of the curve with room for the letters,
-    /// and keeps its corner at the layer's own origin.
     #[test]
     fn the_path_box_covers_the_curve() {
         let path = poly(vec![[10.0, 20.0], [300.0, 90.0]], false);
         let (w, h) = path_box(&path, 48.0);
         assert_eq!((w, h), (348, 138));
-        // A curve dragged somewhere absurd cannot ask for an absurd buffer.
         let wild = poly(vec![[0.0, 0.0], [1.0e9, 1.0e9]], false);
         assert_eq!(path_box(&wild, 48.0), (16_384, 16_384));
     }

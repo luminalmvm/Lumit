@@ -21,7 +21,6 @@ const WINDOW: usize = 4096;
 /// How far below full scale a band still shows, in dB. Quieter draws nothing.
 const FLOOR_DB: f32 = -60.0;
 
-/// The reading of a silent sound.
 #[must_use]
 pub fn silence(s: &AudioSpectrum) -> Vec<f32> {
     vec![0.0; s.bands.max(1) as usize]
@@ -57,8 +56,6 @@ pub fn reading(
         inst.param("shape"),
         Some(EffectValue::Choice(SHAPE_WAVEFORM))
     );
-    // The whole stretch is read as one window centred on the frame, with the
-    // frames before it inside.
     let half = if wave {
         step * (1 + frames) as f64 / 2.0
     } else {
@@ -99,7 +96,6 @@ pub fn reading(
     sum
 }
 
-/// The window of sound the Source row asks for, and the rate it came at.
 fn read(inst: &EffectInstance, tap: &dyn AudioTap, half: f64, out: &mut Vec<f32>) -> Option<f64> {
     let layer = inst.layer_ref("audio");
     match inst.param("source") {

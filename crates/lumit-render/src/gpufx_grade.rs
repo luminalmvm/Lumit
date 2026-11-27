@@ -1,6 +1,3 @@
-//! CDL's and the colour warper's GPU passes, kept beside the dispatch table
-//! rather than in it.
-
 use lumit_core::fx::effects::{cdl::Cdl, colour_warper::ColourWarper};
 use lumit_core::fx::params::Params;
 use lumit_core::fx::registry::EffectMetadata;

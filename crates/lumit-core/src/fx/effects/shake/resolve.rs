@@ -1,6 +1,3 @@
-//! Shake's resolve step: the noise, the waves, the Channels and the two
-//! legacy folds, sampled at resolve time and pushed as `derived.*` values.
-
 use super::Shake;
 use crate::anim::Animation;
 use crate::fx::{
@@ -14,7 +11,6 @@ use crate::model::EffectValue;
 /// Scale, Crop and Blend fade out.
 const SETTLE_PX: f64 = 4.0;
 
-/// See [`ShakeDef::resolve_derived`](super::ShakeDef).
 pub(super) fn derived(cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
     let (e, lt) = (cx.inst, cx.lt);
     let fl = |id: &str| e.float_at_with_context(id, lt, cx.context.clone());
@@ -115,8 +111,6 @@ pub(super) fn derived(cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) 
     if settle < 1.0 {
         push(BLEND_FADE, Value::Float(settle as f32));
     }
-    // Channels: each colour's amount and phase, and the wobble of its own
-    // that Channel randomness adds. Untouched, the channels stay together.
     let colours = [
         ("red_amount", "red_phase"),
         ("green_amount", "green_phase"),

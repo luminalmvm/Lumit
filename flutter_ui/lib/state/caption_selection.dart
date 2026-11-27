@@ -8,10 +8,8 @@ import 'package:uuid/uuid.dart' show UuidValue;
 /// Captions are named by their place in the layer's own list, as the bridge
 /// names them.
 class CaptionSelection extends ChangeNotifier {
-  /// The caption layer the choice is on.
   UuidValue? layer;
 
-  /// The chosen captions.
   Set<int> cues = const {};
 
   /// The caption to open for typing, set with [typeRequest].
@@ -21,7 +19,6 @@ class CaptionSelection extends ChangeNotifier {
   /// for typing, from the Timeline or the Viewer.
   final ValueNotifier<int> typeRequest = ValueNotifier(0);
 
-  /// Choose [cues] on [layer].
   void choose(UuidValue? layer, Set<int> cues) {
     if (this.layer == layer && setEquals(this.cues, cues)) return;
     this.layer = layer;
@@ -29,7 +26,6 @@ class CaptionSelection extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Choose caption [cue] on [layer] and ask for it to be typed into.
   void requestTyping(UuidValue layer, int cue) {
     choose(layer, {cue});
     typing = cue;

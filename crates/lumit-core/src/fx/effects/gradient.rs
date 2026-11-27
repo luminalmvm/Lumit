@@ -1,4 +1,4 @@
-//! Gradient (docs/08 §3.35): a linear or radial ramp of two to five colours, with scatter.
+//! Gradient (docs/08 §3.35): a linear, radial or angle ramp of two to five colours, with scatter.
 //!
 //! **In plain terms.** Two points and two colours. Everything on the line
 //! through the first point is the first colour, everything at the second point
@@ -7,14 +7,35 @@
 //! pixel, which is the standard cure for the contour rings a long, shallow ramp
 //! shows on an 8-bit display.
 
+use crate::anim::Property;
 use crate::fx::{
-    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
-    schema::ParamGroup,
+    cpu, params::ParamId, params::Params, registry::EffectDef, registry::EffectMetadata,
+    schema::EffectSchema, schema::ParamGroup,
 };
+use crate::model::{EffectInstance, EffectValue};
 use lumit_fx_macros::Effect;
 
-/// Each colour in between shows only once Colours counts it.
+/// Set on a Gradient, and a Gradient overlay style, whose layer is in a comp
+/// that blends in display: its colours mix as display values. Never a panel
+/// row: the comp decides it.
+pub const DERIVED_DISPLAY: ParamId = ParamId::new("derived.display");
+
+/// Whether a resolved Gradient mixes its colours as display values.
+#[must_use]
+pub fn in_display(p: Params<'_>) -> bool {
+    p.int(DERIVED_DISPLAY, 0) != 0
+}
+
+/// Each colour in between shows only once Colours counts it, and the
+/// highlight only on a radial ramp.
 pub const GRADIENT_GROUPS: &[ParamGroup] = &[
+    ParamGroup {
+        label: "",
+        params: &["highlight", "highlight_angle"],
+        collapsed: false,
+        visible_when: Some(("shape", &[1])),
+        visible_when_lens_elements: None,
+    },
     ParamGroup {
         label: "",
         params: &["colour_2", "position_2"],
@@ -50,7 +71,8 @@ pub const GRADIENT_GROUPS: &[ParamGroup] = &[
 #[effect(
     match_name = "gradient",
     label = "Gradient",
-    version = 1,
+    // 2: the colours' alpha comes through (`migrate_v1`).
+    version = 2,
     category = Generate,
     cost = Cheap,
     roi = Exact,
@@ -62,8 +84,9 @@ pub const GRADIENT_GROUPS: &[ParamGroup] = &[
 )]
 pub struct Gradient {
     /// Linear projects onto the axis; Radial measures distance from Start, with
-    /// End sitting on the outer edge.
-    #[choice(options = ["Linear", "Radial"], default = 0)]
+    /// End sitting on the outer edge; Angle sweeps round Start, clockwise from
+    /// End.
+    #[choice(options = ["Linear", "Radial", "Angle"], default = 0)]
     pub shape: u32,
 
     /// px@comp. The default pair runs top-to-bottom down a 1080p frame.
@@ -74,7 +97,8 @@ pub struct Gradient {
     #[slider(label = "Start y", min = 0.0, max = 2160.0, default = 0.0, unit = Px)]
     pub start_y: f32,
 
-    /// The colour at Start. Scene-linear and open above 1 (§2.1).
+    /// The colour at Start. Scene-linear and open above 1 (§2.1). Its alpha
+    /// comes through, so a ramp can fade to clear.
     #[colour(label = "Start colour", default = [1.0, 1.0, 1.0, 1.0], max = 4.0)]
     pub start_colour: [f32; 4],
 
@@ -86,16 +110,31 @@ pub struct Gradient {
     #[slider(label = "End y", min = 0.0, max = 2160.0, default = 1080.0, unit = Px)]
     pub end_y: f32,
 
-    /// The colour at End.
     #[colour(label = "End colour", default = [0.0, 0.0, 0.0, 1.0], max = 4.0)]
     pub end_colour: [f32; 4],
+
+    /// Per cent of the radius: how far a radial ramp's bright centre sits
+    /// off Start, for a sphere lit from one side. 0 is centred.
+    #[slider(
+        label = "Highlight length",
+        min = -100.0,
+        max = 100.0,
+        default = 0.0,
+        hard_min = -100.0,
+        hard_max = 100.0,
+        unit = Percent
+    )]
+    pub highlight: f32,
+
+    /// Which way the highlight sits, degrees clockwise from the line to End.
+    #[dial(label = "Highlight angle", default = 0.0, step = 15.0)]
+    pub highlight_angle: f32,
 
     /// How many colours the ramp runs through: Start colour, the colours
     /// in between, End colour.
     #[choice(label = "Colours", options = ["Two", "Three", "Four", "Five"], default = 0)]
     pub colours: u32,
 
-    /// The first colour after Start colour.
     #[colour(label = "Colour 2", default = [1.0, 0.5, 0.0, 1.0], max = 4.0)]
     pub colour_2: [f32; 4],
 
@@ -111,7 +150,6 @@ pub struct Gradient {
     )]
     pub position_2: f32,
 
-    /// The next colour, with Four or Five.
     #[colour(label = "Colour 3", default = [0.0, 0.5, 1.0, 1.0], max = 4.0)]
     pub colour_3: [f32; 4],
 
@@ -127,7 +165,6 @@ pub struct Gradient {
     )]
     pub position_3: f32,
 
-    /// The last colour before End colour, with Five.
     #[colour(label = "Colour 4", default = [0.0, 1.0, 1.0, 1.0], max = 4.0)]
     pub colour_4: [f32; 4],
 
@@ -163,7 +200,6 @@ pub struct Gradient {
     )]
     pub scatter: f32,
 
-    /// Which draw the scatter follows (§2.4).
     #[seed]
     pub seed: u32,
 
@@ -183,32 +219,18 @@ pub struct Gradient {
 impl Gradient {
     /// The bundle both kernels consume (docs/impl/effect-registry.md §2.4).
     ///
-    /// Both reciprocals are taken here, once, and floored against the same
-    /// epsilon: Start and End at the same place give a zero-length axis, and the
-    /// floor collapses the ramp to one flat colour rather than dividing by zero
-    /// (docs/14 §4). The two points
-    /// arrive already scaled to the raster by the declared `Px` unit. Both render
-    /// paths read this one method, so the CPU reference and the WGSL kernel
-    /// cannot drift apart.
+    /// The axis's numbers are worked out once, by
+    /// [`GradientParams::aimed`](cpu::gradient::GradientParams::aimed). The two
+    /// points arrive already scaled to the raster by the declared `Px` unit.
+    /// Both render paths read this one method, so the CPU reference and the
+    /// WGSL kernel cannot drift apart.
     #[must_use]
-    pub fn packed(self) -> cpu::GradientParams {
+    pub fn packed(self) -> cpu::gradient::GradientParams {
         let axis = [self.end_x - self.start_x, self.end_y - self.start_y];
-        let len2 = axis[0] * axis[0] + axis[1] * axis[1];
-        // One epsilon, applied to the squared length, so the linear and radial
-        // reciprocals degenerate at exactly the same point.
-        let len2 = len2.max(1e-6);
-        cpu::GradientParams {
-            radial: self.shape == 1,
-            start: [self.start_x, self.start_y],
-            axis,
-            inv_len2: 1.0 / len2,
-            inv_len: 1.0 / len2.sqrt(),
-            c0: [
-                self.start_colour[0],
-                self.start_colour[1],
-                self.start_colour[2],
-            ],
-            c1: [self.end_colour[0], self.end_colour[1], self.end_colour[2]],
+        cpu::gradient::GradientParams {
+            shape: self.shape.min(cpu::gradient::ANGLE),
+            c0: self.start_colour,
+            c1: self.end_colour,
             scatter: (self.scatter / 100.0).clamp(0.0, 1.0),
             seed: self.seed,
             mix: (self.mix / 100.0).clamp(0.0, 1.0),
@@ -218,6 +240,9 @@ impl Gradient {
             clip_to_alpha: self.paint == 0,
             mids: self.colours.min(3),
             mid: self.mids(),
+            mid_alpha: [self.colour_2[3], self.colour_3[3], self.colour_4[3]],
+            focal: cpu::gradient::focal(axis, self.highlight, self.highlight_angle),
+            ..cpu::gradient::GradientParams::aimed([self.start_x, self.start_y], axis)
         }
     }
 
@@ -238,7 +263,21 @@ impl Gradient {
     }
 }
 
-/// Gradient's behaviour.
+/// A Gradient saved before its colours' alpha came through drew every colour
+/// solid, whatever its alpha said. Each colour's alpha is made full, so the
+/// picture stays exactly as it was.
+pub(crate) fn migrate_v1(e: &mut EffectInstance) {
+    if e.effect.match_name != "gradient" || e.effect.version >= 2 {
+        return;
+    }
+    e.effect.version = 2;
+    for p in &mut e.params {
+        if let EffectValue::Colour(c) = &mut p.value {
+            c[3] = Property::fixed(1.0);
+        }
+    }
+}
+
 pub struct GradientDef;
 
 impl EffectDef for GradientDef {
@@ -247,7 +286,8 @@ impl EffectDef for GradientDef {
     }
 
     fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
-        cpu::gradient(rgba, w, h, &Gradient::read(p).packed());
+        let g = Gradient::read(p).packed().in_display(in_display(p));
+        cpu::gradient::gradient(rgba, w, h, &g);
     }
 }
 
@@ -269,17 +309,19 @@ mod tests {
             ..plain()
         }
         .packed();
-        assert_eq!(cpu::gradient_ramp(&g, 0.5), [1.0, 0.5, 0.0]);
-        assert_eq!(cpu::gradient_ramp(&g, 0.0), [1.0, 1.0, 1.0]);
-        assert_eq!(cpu::gradient_ramp(&g, 1.0), [1.0, 1.0, 1.0]);
-        let quarter = cpu::gradient_ramp(&g, 0.25);
+        assert_eq!(cpu::gradient::gradient_ramp(&g, 0.5), [1.0, 0.5, 0.0, 1.0]);
+        assert_eq!(cpu::gradient::gradient_ramp(&g, 0.0), [1.0; 4]);
+        assert_eq!(cpu::gradient::gradient_ramp(&g, 1.0), [1.0; 4]);
+        let quarter = cpu::gradient::gradient_ramp(&g, 0.25);
         assert!((quarter[1] - 0.75).abs() < 1e-6);
-        // Two colours ignore the ones in between.
         let two = Gradient {
             colours: 0,
             ..plain()
         }
         .packed();
-        assert_eq!(cpu::gradient_ramp(&two, 0.5), [0.5, 0.5, 0.5]);
+        assert_eq!(
+            cpu::gradient::gradient_ramp(&two, 0.5),
+            [0.5, 0.5, 0.5, 1.0]
+        );
     }
 }

@@ -40,12 +40,10 @@ pub enum Language {
     /// in a project saved before there was a choice.
     #[default]
     Rhai,
-    /// JavaScript as After Effects has it.
     JavaScript,
 }
 
 impl Language {
-    /// The word a document stores a language as.
     #[must_use]
     pub const fn id(self) -> &'static str {
         match self {
@@ -90,17 +88,13 @@ pub struct Slot {
     len: u8,
     /// Which number of the expression's answer this property takes.
     pub axis: u8,
-    /// What tells this property's random numbers from another's.
     pub seed: u32,
-    /// The language the expression is written in.
     pub language: Language,
 }
 
-/// The key a [`Slot`] is kept under in a property's `extra`.
 pub const SLOT_KEY: &str = "expr";
 
 impl Slot {
-    /// A slot for the property that is number `axis` of `value`.
     #[must_use]
     pub fn new(value: &[f64], axis: usize, seed: u32) -> Slot {
         let mut slot = Slot {
@@ -115,7 +109,6 @@ impl Slot {
         slot
     }
 
-    /// The same slot, for an expression written in `language`.
     #[must_use]
     pub fn in_language(mut self, language: Language) -> Slot {
         self.language = language;
@@ -156,7 +149,6 @@ impl Slot {
         self
     }
 
-    /// Read a slot back out of a property's `extra`.
     #[must_use]
     pub fn read(extra: &serde_json::Map<String, serde_json::Value>) -> Slot {
         let Some(kept) = extra.get(SLOT_KEY).and_then(serde_json::Value::as_object) else {
@@ -189,7 +181,6 @@ impl Slot {
         }
     }
 
-    /// Write this slot into a property's `extra`.
     pub fn write(&self, extra: &mut serde_json::Map<String, serde_json::Value>) {
         let mut kept = serde_json::Map::new();
         // The keys kept under the expression live in the same note, and are
@@ -226,7 +217,6 @@ impl Slot {
     }
 }
 
-/// What an expression came to.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Answer {
     Number(f64),
@@ -234,7 +224,6 @@ pub(crate) enum Answer {
     Text(String),
 }
 
-/// Read `source` as an expression in this language.
 pub(crate) fn compile(source: &str) -> Result<Program, String> {
     parse::parse(source)
 }
@@ -254,7 +243,6 @@ pub(crate) fn is_input(name: &str) -> bool {
         .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
 }
 
-/// Run `program` and say what it came to, or why it did not.
 pub(crate) fn run(
     program: &Program,
     context: &ExpressionContext,

@@ -28,14 +28,12 @@ use uuid::Uuid;
 use super::{read, Cx};
 use crate::LottieError;
 
-/// The most entries a `.lottie` may hold.
 const MAX_ENTRIES: usize = 10_000;
 
 /// A `.lottie` opened: the animation's JSON, and each picture by its path in
 /// the zip, in lower case.
 pub(super) type Unzipped = (Vec<u8>, BTreeMap<String, Vec<u8>>);
 
-/// The animation and the pictures of a `.lottie`.
 pub(super) fn unzip(bytes: &[u8], budget: &mut Budget) -> Result<Unzipped, LottieError> {
     let zip_err = |e: zip::result::ZipError| LottieError::Zip(e.to_string());
     let mut zip = zip::ZipArchive::new(std::io::Cursor::new(bytes)).map_err(zip_err)?;
@@ -134,7 +132,6 @@ pub(super) fn image(
         .unwrap_or(if p.starts_with("data:") { id } else { p })
         .to_owned();
 
-    // The zip's entry for this picture, by its whole path or its name alone.
     let entry = |cx: &Cx| {
         let key = format!("{}{}", u.trim_start_matches('/'), p).to_lowercase();
         if cx.zipped.contains_key(&key) {
@@ -272,7 +269,6 @@ fn safe_name(name: &str, ext: &str) -> String {
     safe
 }
 
-/// A path in the pictures folder that no other picture of this import takes.
 fn unique(cx: &Cx<'_>, file: &str) -> std::path::PathBuf {
     let (stem, ext) = file.rsplit_once('.').unwrap_or((file, ""));
     let mut n = 1;

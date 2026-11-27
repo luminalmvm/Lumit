@@ -59,7 +59,6 @@ pub struct LightingLight {
     pub shadow_diffusion: f32,
 }
 
-/// The oracle's `ShadingKind`, restated.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LightingKind {
     Point,
@@ -413,7 +412,6 @@ pub(crate) fn gpu_light(l: &LightingLight, mask: u32, maps: Option<&ShadowMaps>)
     }
 }
 
-/// The frame's casters on their own, as the mesh pass reads them.
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct CasterSet {
@@ -422,7 +420,6 @@ struct CasterSet {
     casters: [GpuCaster; MAX_SHADOW_CASTERS],
 }
 
-/// The casters' uniform for the mesh pass.
 pub(crate) fn caster_set(casters: Option<&ShadowCasters>) -> Vec<u8> {
     let (casters, count, size) = gpu_casters(casters);
     bytemuck::bytes_of(&CasterSet {
@@ -432,7 +429,6 @@ pub(crate) fn caster_set(casters: Option<&ShadowCasters>) -> Vec<u8> {
     .to_vec()
 }
 
-/// The frame's casters as the kernel reads them, how many and their side.
 fn gpu_casters(casters: Option<&ShadowCasters>) -> ([GpuCaster; MAX_SHADOW_CASTERS], usize, u32) {
     let mut planes = [GpuCaster::default(); MAX_SHADOW_CASTERS];
     let (count, size) = casters.map_or((0, 0), |c| (c.planes.len(), c.size));
@@ -477,9 +473,6 @@ pub(super) fn air_params(
     .to_vec()
 }
 
-/// The pass's own layouts and pipelines: the lighting kernel, which reads the
-/// casters' array through a sampler, and the two that make a caster's square
-/// and its smaller levels.
 pub(crate) struct LightingFx {
     layout: wgpu::BindGroupLayout,
     pipeline: wgpu::ComputePipeline,
@@ -496,8 +489,6 @@ pub(crate) struct LightingFx {
     no_environment: environment::Fallback,
 }
 
-/// The three entries the models' shadow maps take in a layout, from
-/// `first`: the maps, their sampler and their uniform.
 pub(crate) fn map_layout(
     first: u32,
     stages: wgpu::ShaderStages,
@@ -533,7 +524,6 @@ pub(crate) fn map_layout(
 }
 
 impl LightingFx {
-    /// The maps as [`map_layout`] binds them, or the empty ones.
     pub(crate) fn map_view(&self, maps: Option<&ShadowMaps>) -> wgpu::TextureView {
         maps.map_or(&self.no_maps.0, |m| &m.texture)
             .create_view(&wgpu::TextureViewDescriptor {
@@ -542,7 +532,6 @@ impl LightingFx {
             })
     }
 
-    /// [`map_layout`]'s entries, `view` from [`Self::map_view`].
     pub(crate) fn map_entries<'a>(
         &'a self,
         first: u32,
@@ -573,7 +562,6 @@ impl LightingFx {
 const SQUARE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
 impl LightingFx {
-    /// Compiled on the pool with the rest of the engine.
     pub(super) fn start(ctx: &GpuContext) -> crate::compiling::Compiling<Self> {
         let device = ctx.device.clone();
         let working = ctx.working();
@@ -863,7 +851,6 @@ impl FxEngine {
         casters: Option<&ShadowCasters>,
     ) -> wgpu::Texture {
         let size = (src.width(), src.height());
-        // ponytail: particles take no model's shadow yet.
         self.lighting_at(ctx, src, size, op, (casters, None, None), Some(depth))
     }
 
@@ -887,7 +874,6 @@ impl FxEngine {
         let live = op.lights.len().min(MAX_LIT_LIGHTS);
         let receiver = op.corners(w, h);
         for (slot, l) in lights.iter_mut().zip(&op.lights) {
-            // Only the casters that can reach this layer are read for it.
             let mask = casters.map_or(0u32, |c| {
                 c.planes
                     .iter()

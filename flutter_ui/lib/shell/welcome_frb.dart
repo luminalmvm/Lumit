@@ -62,10 +62,8 @@ import 'package:lumit_flutter/state/platform.dart'
 // written into the widgets so `welcome_metrics_test` can assert against the
 // same numbers the screen is built from.
 
-/// The width of the whole stack — cards, recents and footer alike.
 const double welcomeColumnWidth = 560;
 
-/// The air between the four blocks: wordmark, cards, recents, footer.
 const double welcomeBlockGap = 28;
 
 /// The wordmark: the brand's own lockup rather than the word set in type, 22
@@ -73,8 +71,6 @@ const double welcomeBlockGap = 28;
 /// drawing's 22px mono mark stood at. Its width follows the lockup.
 const double welcomeWordmarkHeight = 22;
 
-/// A start card: the drawing's 63, hairline counted in, with its title
-/// centred.
 const double welcomeCardHeight = 63;
 const double welcomeCardGap = 10;
 const EdgeInsets welcomeCardPadding = EdgeInsets.symmetric(
@@ -82,7 +78,6 @@ const EdgeInsets welcomeCardPadding = EdgeInsets.symmetric(
   vertical: 14,
 );
 
-/// The kicker strip over the recents well — the word and 6px under it.
 const double welcomeRecentHeaderHeight = 18;
 
 /// One recent project. The seam under it is drawn on top, so a row measures 52
@@ -99,7 +94,6 @@ const EdgeInsets welcomeRecentRowPadding = EdgeInsets.symmetric(horizontal: 14);
 const double welcomeThumbHeight = 36;
 const double welcomeThumbWidth = 64;
 
-/// The air between the thumbnail and the name column.
 const double welcomeThumbGap = 12;
 
 /// The recents' fixed columns: the date, and the button that forgets the row.
@@ -122,8 +116,6 @@ const double welcomeNameGap = 16;
 /// what gives way to make room, which is step 1 of §12A.6's ladder.
 const double welcomeForgetGap = 8;
 
-/// The footer strip, and the outlined buttons in it. 22 of content inside a
-/// hairline either side.
 const double welcomeFooterHeight = 28;
 const double welcomeButtonHeight = 24;
 
@@ -132,8 +124,6 @@ const double welcomeButtonHeight = 24;
 /// carries.
 TextStyle welcomeNote(LumitTheme t) => t.kicker.copyWith(letterSpacing: 0.54);
 
-/// A recent project's factual column — when it was last opened — mono at 10,
-/// muted, exactly as the drawing sets it.
 TextStyle welcomeFact(LumitTheme t) =>
     t.mono.copyWith(fontSize: 10, color: t.textMuted);
 
@@ -145,8 +135,6 @@ TextStyle welcomeFact(LumitTheme t) =>
 class WelcomeScreenFrb extends StatefulWidget {
   final VoidCallback onDone;
 
-  /// The file picker, so a widget test can answer it — no plugin channel opens
-  /// a real dialogue in one. The same seam `openProjectFrb` already takes.
   final Future<String?> Function()? openPicker;
 
   const WelcomeScreenFrb({
@@ -179,7 +167,6 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
   /// a build, since it asks the disk where each one is.
   List<BackupProject> _backedUp = const [];
 
-  /// The one being fetched.
   String? _fetching;
 
   void _sortBackedUp() {
@@ -239,7 +226,6 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
     super.dispose();
   }
 
-  /// How to stand down from the ladder.
   VoidCallback? _escapeRelease;
 
   bool _escapeCloses() {
@@ -247,8 +233,6 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
     return true;
   }
 
-  /// Follow a link, saying so in the status line when the desktop will not take
-  /// it — the same courtesy the Help menu's rows pay.
   Future<void> _link(LumitState app, String url) async {
     if (await openExternalLink(url)) return;
     app.postNotice(l10n.couldNotOpenLink(url), error: true);
@@ -278,8 +262,6 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
                     LumitWordmark(
                       key: const ValueKey('welcome-wordmark'),
                       height: welcomeWordmarkHeight,
-                      // The page's own ground, which is what the lettering has
-                      // to be read against.
                       ground: t.surface0,
                     ),
                     const SizedBox(height: welcomeBlockGap),
@@ -322,8 +304,6 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
     );
   }
 
-  /// The three ways to start: give the project a home now, start without one,
-  /// or open one that exists.
   Widget _cards() => SizedBox(
         width: welcomeColumnWidth,
         child: StartCards(
@@ -459,7 +439,6 @@ class RecentProjectsList extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
-              // No heading over nothing.
               if (paths.isNotEmpty)
                 SizedBox(
                   key: const ValueKey('welcome-recent-header'),
@@ -526,7 +505,6 @@ class RecentProjectsList extends StatelessWidget {
     );
   }
 
-  /// A recent project's menu.
   void _recentMenu(BuildContext context, LumitState app, Workspace workspace,
       String path, Offset at) {
     unawaited(showMenuAt<void>(
@@ -573,8 +551,6 @@ class RecentProjectsList extends StatelessWidget {
   }
 }
 
-// --- The two ways to start work -------------------------------------------
-
 /// New project: no file, no questions.
 ///
 /// From the welcome screen there is nothing to make — the empty project the
@@ -587,14 +563,12 @@ class RecentProjectsList extends StatelessWidget {
 /// in it has nothing to lose, so where it lives is a question for the first
 /// save rather than for the door.
 void startNewProject(LumitState app, {VoidCallback? onStarted}) {
-  // A template is worth starting again for, even from an empty project.
   if (app.project?.path() != null || app.projectTemplate?.call() != null) {
     app.newProject();
   }
   onStarted?.call();
 }
 
-/// Open: the very call File ▸ Open makes.
 Future<void> startOpenProject(
   LumitState app, {
   Future<String?> Function()? picker,
@@ -669,8 +643,6 @@ class StartCards extends StatelessWidget {
 /// A project that *has* compositions and simply has none fronted is a different
 /// sentence, and keeps the panel's ordinary empty line.
 class EmptyStageFrb extends StatelessWidget {
-  /// The picker, so a widget test can answer it — the same seam the welcome
-  /// screen takes.
   final Future<String?> Function()? openPicker;
 
   const EmptyStageFrb({super.key, this.openPicker});
@@ -717,7 +689,6 @@ class EmptyStageFrb extends StatelessWidget {
   }
 }
 
-/// One start card: a title, and the whole thing is the button.
 class _WelcomeCard extends StatefulWidget {
   final String id;
   final String title;
@@ -751,11 +722,7 @@ class _WelcomeCardState extends State<_WelcomeCard> {
           height: welcomeCardHeight,
           padding: welcomeCardPadding,
           decoration: BoxDecoration(
-            // Resting is the drawing's own: the card sits a step above the
-            // page in `surface_1` behind a plain hairline. Hover takes both up
-            // one step, which is the same grammar every house button uses.
             color: _hover ? t.surface2 : t.surface1,
-            // A card is a band on the page, so it wears the section's corner.
             borderRadius: BorderRadius.circular(t.tokens.sectionRadius),
             border: Border.all(color: _hover ? t.hairlineStrong : t.hairline),
           ),
@@ -772,9 +739,6 @@ class _WelcomeCardState extends State<_WelcomeCard> {
   }
 }
 
-/// One recent project: how it looked when it was last saved, what it is
-/// called, where it lives, when it was last opened here, and the × that
-/// forgets it.
 class _RecentRow extends StatefulWidget {
   final int index;
   final String path;
@@ -782,14 +746,10 @@ class _RecentRow extends StatefulWidget {
   final bool last;
   final VoidCallback onOpen;
 
-  /// Null for a row there is nothing to forget about.
   final VoidCallback? onForget;
 
-  /// A right press on the row, at where it landed. Null for a row with no menu.
   final ValueChanged<Offset>? onMenu;
 
-  /// For a row that is not a file on this machine, a backed-up project: what
-  /// it is called, the line under that, and its picture.
   final String? name, detail;
   final Widget? picture;
 
@@ -838,8 +798,6 @@ class _RecentRowState extends State<_RecentRow> {
           padding: welcomeRecentRowPadding,
           decoration: BoxDecoration(
             color: _hover ? t.surface2 : null,
-            // The seam between rows, and none under the last: the well's own
-            // border closes it off.
             border: widget.last
                 ? null
                 : Border(bottom: BorderSide(color: t.hairline)),
@@ -867,7 +825,6 @@ class _RecentRowState extends State<_RecentRow> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    // In the browser the path is a made-up folder.
                     if (widget.detail != null || !kIsWeb) ...[
                       const SizedBox(height: 2),
                       MiddleEllipsis(
@@ -1007,8 +964,6 @@ class _ForgetState extends State<_Forget> {
             width: welcomeForgetColumnWidth,
             height: welcomeRecentRowHeight,
             child: Center(
-              // The composition tabs' own close mark (timeline_extras_frb):
-              // muted, no box, and it brightens under the pointer.
               child: Text(
                 '×',
                 style: t.body.copyWith(
@@ -1023,7 +978,6 @@ class _ForgetState extends State<_Forget> {
   }
 }
 
-/// A word that acts and draws nothing — Clear, beside the recents heading.
 class _Quiet extends StatefulWidget {
   final String id;
   final String label;
@@ -1065,9 +1019,6 @@ class _QuietState extends State<_Quiet> {
   }
 }
 
-/// One of the footer's two outlined links. The house button's resting face —
-/// an outline over the page's own surface — at the drawing's 24 and with its
-/// label in the secondary grey rather than the primary one.
 class _OutlineLink extends StatelessWidget {
   final String id;
   final String label;
@@ -1096,8 +1047,6 @@ class _OutlineLink extends StatelessWidget {
   }
 }
 
-// --- What a row says about a project --------------------------------------
-
 /// A project's name: the file's, without the extension. The engine has no other
 /// name for a document, and the file is what the user called it.
 String projectDisplayName(String path) {
@@ -1121,9 +1070,6 @@ String shortenHomePath(String path) {
       : forward;
 }
 
-/// When the project was last opened on this machine: today says so in words,
-/// anything older is the day and the month, and anything from another year
-/// the month and the year.
 String recentWhen(DateTime? when) {
   if (when == null) return '';
   final now = DateTime.now();

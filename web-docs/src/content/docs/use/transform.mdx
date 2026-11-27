@@ -102,6 +102,7 @@ separates or combines it on every selected layer.
 | **Centre anchor point** | `Ctrl+Alt+Home`. Moves the anchor point to the middle of the layer and leaves the picture where it is. Greyed on cameras and lights, and while Anchor point, Position, Scale or Rotation is keyed or driven by an expression. |
 | **Fit to comp** to **Fit to comp height** | See [Fit to comp](#fit-to-comp). |
 | **Orient ▸** | See [Orient](#orient). |
+| **Curved motion path** | Position runs along a smooth path through its keyframes. See [The motion path](#the-motion-path). |
 | **Separate** … **axes** | The same rows as **Animation ▸ Separate dimensions**. |
 
 ## Move the anchor point
@@ -154,6 +155,17 @@ on the layer sets a keyframe at the playhead.
 - Drag a keyframe's box to move that keyframe.
 - Drag a handle to bend the path. `Alt` breaks a smooth keyframe's handles apart.
 - Right-click a keyframe's box for **Go to keyframe** and **Delete keyframe**.
+
+Position goes straight from one keyframe to the next. With **Layer ▸ Transform ▸ Curved
+motion path** checked it runs along a smooth path through them, as After Effects' auto
+bezier does. A path that ends where it starts goes round smoothly through that keyframe.
+The keyframes' eases still set the pace. The path stays straight with fewer than three
+keyframes, while any keyframe holds, and while an expression drives Position. The Viewer
+draws no handles on a curved path.
+
+Motion blur places the layer afresh at every moment the shutter is open, parents and
+expressions included: a layer on a curved path, a turning layer and a layer parented to a
+turning null each blur in an arc.
 
 ## Parenting
 

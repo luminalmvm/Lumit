@@ -1,8 +1,3 @@
-// The keyboard picture on Settings → Shortcuts and the After Effects import,
-// against the real engine.
-//
-// Both read the same keymap the keys do, so each test checks the picture and
-// the lookup together.
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
@@ -14,8 +9,6 @@ import 'package:lumit_flutter/widgets/controls.dart';
 
 import 'frb_test_support.dart';
 
-/// A few lines in After Effects' own layout, with Split layer moved off its
-/// usual chord.
 const _afterEffectsFile = '''
 # After Effects Shortcut Preferences (modify at your own risk)
 
@@ -84,14 +77,12 @@ void main() {
       await openKeymapPage(tester);
       final gesture = await mouse(tester);
 
-      // L is the one key the shipped map gives two meanings.
       await pointAt(tester, gesture, 'L');
       expect(inReadout('Shuttle forwards'), findsOneWidget);
       expect(inReadout('Anywhere'), findsOneWidget);
       expect(inReadout('Reveal Audio'), findsOneWidget);
       expect(inReadout('Timeline'), findsOneWidget);
 
-      // A key with nothing on it says so.
       await pointAt(tester, gesture, 'F4');
       expect(inReadout('Not set'), findsOneWidget);
     });
@@ -110,7 +101,6 @@ void main() {
       expect(inReadout('Ctrl+S'), findsOneWidget);
       expect(inReadout('Save the project'), findsOneWidget);
 
-      // And it comes off again.
       await tester.tap(find.byKey(const ValueKey('keymap-key-Mod')));
       await tester.pump();
       await pointAt(tester, gesture, 'S');
@@ -121,7 +111,6 @@ void main() {
       await openKeymapPage(tester);
       final gesture = await mouse(tester);
 
-      // The table shows Ctrl+Right for Next frame. Page Down steps one as well.
       await pointAt(tester, gesture, 'PageDown');
       expect(inReadout('Next frame'), findsOneWidget);
     });
@@ -166,7 +155,6 @@ void main() {
         keymapLookup(context: BridgeKeyContext.tools, chord: 'H'),
         isNull,
       );
-      // Everything else is the After Effects preset.
       expect(
         keymapLookup(context: BridgeKeyContext.global, chord: 'J'),
         'keyframe.prev',

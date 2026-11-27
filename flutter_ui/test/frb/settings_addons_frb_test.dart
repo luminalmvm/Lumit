@@ -25,8 +25,6 @@ void main() {
   setUpAll(initEngineForTests);
 
   group('Settings → Addons (frb)', () {
-    /// Open Settings and front the Addons page, either by tapping its entry or,
-    /// when [straightThere], by asking for it as the window opens.
     Future<LumitUiState> open(WidgetTester tester,
         {bool straightThere = false}) async {
       tester.view.physicalSize = const Size(1200, 900);
@@ -64,8 +62,6 @@ void main() {
       final ui = await open(tester);
       final service = ui.addons;
 
-      // The page draws from the reading `_showPage` took: the folder is where
-      // the engine says addons live, and the installed list is its scan.
       expect(service.folder, isNotNull);
       expect(service.stage, AddonStage.idle);
       expect(service.failure, isNull);

@@ -40,19 +40,13 @@ pub struct Manifest {
     pub format: Option<String>,
     /// Semver of the *capture schema*, not of Lumit or of the Bridge.
     pub version: Option<String>,
-    /// The After Effects build that was walked, e.g. `26.0x67`.
     pub ae_version: Option<String>,
-    /// The Bridge script's own version.
     pub bridge_version: Option<String>,
-    /// Export date, as the Bridge wrote it.
     pub exported: Option<String>,
 }
 
-/// `capture.json` — the whole walk: the project-wide settings, the flat item
-/// list, and the comps.
 #[derive(Debug, Clone, PartialEq, Default, Deserialize)]
 pub struct Capture {
-    /// The settings that belong to the project rather than to any item.
     pub project: Option<Project>,
     /// The project's items, flat; the tree is rebuilt from `parent_id`.
     #[serde(default)]
@@ -100,8 +94,6 @@ pub struct Item {
     /// `folder` | `comp` | `footage` | `solid`.
     pub kind: Option<String>,
 
-    // --- footage ---
-    /// The file on disk, as AE recorded it.
     pub path: Option<String>,
     pub fps: Option<f64>,
     /// The file's own frame rate, before any override — the only way to tell
@@ -117,7 +109,6 @@ pub struct Item {
     /// The matte colour a premultiplied item is unmultiplied against.
     pub premul_colour: Option<Vec<f64>>,
     pub invert_alpha: Option<bool>,
-    /// AE's loop count.
     #[serde(rename = "loop")]
     pub loop_count: Option<i64>,
     /// `OFF` | `UPPER_FIELD_FIRST` | `LOWER_FIELD_FIRST`.
@@ -126,9 +117,7 @@ pub struct Item {
     pub remove_pulldown: Option<String>,
     /// Separate fields with high quality, which keeps the edges.
     pub high_quality_fields: Option<bool>,
-    /// Interpret As Linear Light set to On.
     pub linear_light: Option<bool>,
-    /// Preserve RGB.
     pub preserve_rgb: Option<bool>,
     /// The OCIO colour space the file is read in, by the config's own name.
     pub colour_space: Option<String>,
@@ -167,7 +156,6 @@ pub struct Comp {
     pub id: Option<i64>,
     pub width: Option<u32>,
     pub height: Option<u32>,
-    /// Pixel aspect ratio.
     pub par: Option<f64>,
     pub fps: Option<f64>,
     pub duration: Option<f64>,
@@ -177,13 +165,10 @@ pub struct Comp {
     pub motion_blur: Option<MotionBlur>,
     /// Classic 3D / Advanced 3D / CINEMA 4D, recorded verbatim.
     pub renderer: Option<String>,
-    /// "Preserve frame rate when nested" (docs/11 §2.2 item 2).
     pub preserve_nested_fps: Option<bool>,
-    /// "Preserve resolution when nested".
     pub preserve_nested_resolution: Option<bool>,
     #[serde(default)]
     pub markers: Vec<Marker>,
-    /// The composition's Essential Graphics, where it has any.
     #[serde(default)]
     pub essential: Option<Essential>,
     /// In AE's stacking order, top first.
@@ -198,7 +183,6 @@ pub struct Comp {
 /// in its own property tree, one leaf a controller, in this order.
 #[derive(Debug, Clone, PartialEq, Default, Deserialize)]
 pub struct Essential {
-    /// The name the template is exported under.
     pub name: Option<String>,
     /// The controllers in the order the panel lists them, the members of a
     /// group in the group's place.
@@ -213,35 +197,27 @@ pub struct Controller {
     /// After Effects' own id for it, which a placing layer names it by. Only
     /// the project file has one.
     pub id: Option<String>,
-    /// The name the panel shows.
     pub name: Option<String>,
     /// `checkbox` | `slider` | `angle` | `colour` | `point` | `scale` | `text`
     /// | `menu` | `media` | `comment` | `group`, or the file's own number
     /// written out for a kind this reader does not know.
     pub kind: Option<String>,
-    /// The item id of the composition the source is in.
     pub comp_id: Option<i64>,
-    /// The stacking index of the layer the source is on.
     pub layer_index: Option<u32>,
     /// From that layer down to the source property. Empty for replaceable
     /// media, which names the layer itself.
     #[serde(default)]
     pub path: Vec<Step>,
-    /// The ends of a slider's travel, where After Effects states them.
     pub range: Option<(f64, f64)>,
-    /// A menu's options, in order.
     #[serde(default)]
     pub options: Vec<String>,
     /// For text: whether a placing layer may change the font. Only the
     /// project file says.
     pub font: Option<bool>,
-    /// For text: whether a placing layer may change the size.
     pub size: Option<bool>,
-    /// The group it sits in.
     pub group: Option<String>,
 }
 
-/// One step of a path through a layer's property tree.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
 pub struct Step {
     pub match_name: Option<String>,
@@ -258,7 +234,6 @@ pub struct MotionBlur {
     pub enabled: Option<bool>,
     pub shutter_angle: Option<f64>,
     pub shutter_phase: Option<f64>,
-    /// Samples per frame.
     pub samples: Option<u32>,
     pub adaptive_limit: Option<u32>,
 }
@@ -270,13 +245,10 @@ pub struct Marker {
     pub t: Option<f64>,
     pub duration: Option<f64>,
     pub comment: Option<String>,
-    /// AE's chapter-link text.
     pub chapter: Option<String>,
-    /// AE's label colour index.
     pub label: Option<u32>,
 }
 
-/// One layer of a comp (docs/11 §2.2 item 3).
 #[derive(Debug, Clone, PartialEq, Default, Deserialize)]
 pub struct Layer {
     /// AE's 1-based stacking index; `parent_index` and `Matte::layer_index`
@@ -294,7 +266,6 @@ pub struct Layer {
     /// AE's time stretch, as a percentage (100 = unstretched).
     pub stretch: Option<f64>,
     pub parent_index: Option<u32>,
-    /// AE's label colour index.
     pub label: Option<u32>,
     /// Blend mode, as the DOM names it — `NORMAL`, `SCREEN`, `DISSOLVE`.
     pub blend: Option<String>,
@@ -327,7 +298,6 @@ pub struct Matte {
     /// `LUMA_INVERTED`.
     #[serde(rename = "type")]
     pub kind: Option<String>,
-    /// The matte layer's stacking index, where the 23.0+ form named one.
     pub layer_index: Option<u32>,
     /// Whether *this* layer is being used as somebody else's matte — which is
     /// all the legacy above-layer form has to say about itself.
@@ -339,7 +309,6 @@ pub struct Matte {
 /// `PIXEL_MOTION`) are AE enum names rather than booleans.
 #[derive(Debug, Clone, PartialEq, Default, Deserialize)]
 pub struct Switches {
-    /// AE's video switch — whether the layer draws at all.
     pub enabled: Option<bool>,
     pub audio: Option<bool>,
     pub solo: Option<bool>,
@@ -353,7 +322,6 @@ pub struct Switches {
     pub collapse: Option<bool>,
     pub frame_blending: Option<String>,
     pub guide: Option<bool>,
-    /// AE's fx switch — whether the layer's effect stack renders at all.
     pub effects_active: Option<bool>,
 }
 
@@ -407,9 +375,7 @@ pub struct Property {
     /// effect's own definitions, and it is what tells a pseudo effect's
     /// checkbox from its slider, both of which hold one number.
     pub control: Option<String>,
-    /// The ends of a slider's travel, where the file states them.
     pub range: Option<(f64, f64)>,
-    /// A popup's options, in order.
     pub options: Option<Vec<String>>,
     /// On a leaf under `ADBE Layer Overrides`: whether the layer set this
     /// Essential Property itself. The leaves it did not set follow the
@@ -439,13 +405,10 @@ pub struct Mask {
 }
 
 impl Property {
-    /// The children of a group node, or nothing for a leaf.
     pub fn children(&self) -> &[Property] {
         self.group.as_deref().unwrap_or(&[])
     }
 
-    /// This node's static value read as a bezier path, for mask and shape
-    /// paths. Returns `None` when the value is absent or is not a path.
     pub fn shape(&self) -> Option<Shape> {
         let value = self.value.clone()?;
         serde_json::from_value(value).ok()
@@ -484,7 +447,6 @@ pub struct Keyframe {
     /// Captured as-is.
     pub in_ease: Option<Vec<Ease>>,
     pub out_ease: Option<Vec<Ease>>,
-    /// Spatial tangents, where the property is spatial.
     pub in_tangent: Option<Vec<f64>>,
     pub out_tangent: Option<Vec<f64>>,
     pub roving: Option<bool>,
@@ -517,16 +479,12 @@ pub struct Report {
     pub unreadables: Vec<Unreadable>,
 }
 
-/// One property the walker could not read, and where it was.
 #[derive(Debug, Clone, PartialEq, Default, Deserialize)]
 pub struct Unreadable {
-    /// The comp's name.
     pub comp: Option<String>,
-    /// The layer's name.
     pub layer: Option<String>,
     /// The property path within the layer, as a reader would say it.
     pub path: Option<String>,
     pub match_name: Option<String>,
-    /// The ExtendScript error text, verbatim.
     pub error: Option<String>,
 }

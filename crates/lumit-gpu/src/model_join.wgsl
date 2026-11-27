@@ -3,13 +3,12 @@
 // model and the run's layers cut through each other as solids do.
 
 struct Join {
-    // The full-frame quad to clip space.
     matrix: mat4x4<f32>,
     // x: opacity, y: the clip z its run is cut at, z: the clip w scene depth
     // is counted from, w: metres per clip w.
     params: vec4<f32>,
     // x: 1 to clear what a later run covers, for scene depth, y: 1 for a
-    // holdout.
+    // holdout, z: 1 when the run's target holds display values.
     flags: vec4<f32>,
 };
 
@@ -51,18 +50,28 @@ struct Drawn {
     @builtin(frag_depth) depth: f32,
 };
 
+// The colour as display values, alpha left alone (composite.wgsl's
+// display_premul).
+fn display_premul(c: vec4<f32>) -> vec4<f32> {
+    if (c.a <= 0.0) {
+        return c;
+    }
+    let v = max(c.rgb / c.a, vec3<f32>(0.0));
+    let e = select(1.055 * pow(v, vec3<f32>(1.0 / 2.4)) - 0.055, v * 12.92, v <= vec3<f32>(0.0031308));
+    return vec4<f32>(e * c.a, c.a);
+}
+
 @fragment
 fn fs_join(in: VsOut) -> Drawn {
-    let c = textureSample(colour, samp, in.uv) * u.params.x;
+    var c = textureSample(colour, samp, in.uv) * u.params.x;
+    if (u.flags.z > 0.5) {
+        c = display_premul(c);
+    }
     let iw = inv_w_at(in.uv);
     if (iw <= 0.0) {
         discard;
     }
     if (u.flags.y > 0.5) {
-        // Its own picture, its shadows, over what was under the run.
-        // ponytail: a holdout is the model's sharp outline, so a blurred
-        // object in the footage isn't matched. Its motion would want a
-        // coverage the depth can't carry.
         let under = textureLoad(plate, vec2<i32>(in.pos.xy), 0);
         return Drawn(c + under * (1.0 - c.a), min(u.params.y * iw, 1.0));
     }

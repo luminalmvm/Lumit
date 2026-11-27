@@ -96,7 +96,6 @@ fn dx_frame() -> vec2<f32> {
     return lumit_size() / max(lumit.comp_scale, 1e-6);
 }
 
-// HSL of a straight colour.
 fn dx_hsl(c: vec3<f32>) -> vec3<f32> {
     let hi = max(c.r, max(c.g, c.b));
     let lo = min(c.r, min(c.g, c.b));
@@ -120,7 +119,6 @@ fn dx_hsl(c: vec3<f32>) -> vec3<f32> {
     return vec3<f32>(h / 6.0, clamp(s, 0.0, 1.0), l);
 }
 
-// One picture's value on the chosen channel.
 fn dx_channel(premult: vec4<f32>) -> f32 {
     let c = lumit_unpremult(premult);
     switch p.channel {
@@ -132,7 +130,6 @@ fn dx_channel(premult: vec4<f32>) -> f32 {
         case 6u: { return dx_hsl(c.rgb).y; }
         case 7u: { return dx_hsl(c.rgb).z; }
         default: {
-            // Luminance, dark where the layer is clear.
             return dot(premult.rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
         }
     }
@@ -180,7 +177,6 @@ fn dx_sigma() -> f32 {
     return max(p.softness * lumit.comp_scale * 0.5, 1e-3) / 2.0;
 }
 
-// Pass one: the map blurred across.
 fn map_h(uv: vec2<f32>) -> vec4<f32> {
     let size = lumit_size() * 0.5;
     let sigma = dx_sigma();
@@ -196,7 +192,6 @@ fn map_h(uv: vec2<f32>) -> vec4<f32> {
     return vec4<f32>(sum / max(weight, 1e-6), 0.0, 0.0, 1.0);
 }
 
-// Pass two: down, reading pass one.
 fn map_v(uv: vec2<f32>) -> vec4<f32> {
     let size = lumit_size() * 0.5;
     let sigma = dx_sigma();
@@ -261,12 +256,10 @@ fn dx_fold(x: f32, lo: f32, hi: f32) -> f32 {
     if (p.edge == 2u) {
         return lo + fract(t) * span;
     }
-    // Mirror repeat: a triangle wave across the span.
     let m = abs(fract(t * 0.5) * 2.0 - 1.0);
     return lo + (1.0 - m) * span;
 }
 
-// The picture at q, in comp pixels, by Edge behaviour.
 fn dx_read(q: vec2<f32>) -> vec4<f32> {
     let b = dx_bounds();
     var at = q;
@@ -311,7 +304,6 @@ fn dx_take(q: vec2<f32>, a: f32) -> vec4<f32> {
     return dx_read(back);
 }
 
-// One point of the picture with every iteration and the channels' shares.
 fn dx_point(q: vec2<f32>, uv: vec2<f32>) -> vec4<f32> {
     let a = dx_amount(dx_map(uv));
     let n = clamp(i32(round(p.iterations)), 1, 32);
@@ -319,7 +311,6 @@ fn dx_point(q: vec2<f32>, uv: vec2<f32>) -> vec4<f32> {
     let split = p.red != 1.0 || p.green != 1.0 || p.blue != 1.0;
     var sum = vec4<f32>(0.0);
     for (var i = 0; i < n; i += 1) {
-        // From the full amount back toward none across the shutter.
         var f = 1.0;
         if (n > 1) {
             f = 1.0 - spread * f32(i) / f32(n - 1);

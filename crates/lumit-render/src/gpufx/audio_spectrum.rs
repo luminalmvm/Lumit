@@ -46,7 +46,6 @@ impl GpuEffect for AudioSpectrum {
     }
 }
 
-/// One frame's drawing on the card, from what the CPU reference draws from.
 fn draw_on(fx: &FxEngine, ctx: &GpuContext, tex: &Tex, w: u32, h: u32, laid: &Laid) -> Tex {
     fx.audio_spectrum(
         ctx,
@@ -74,12 +73,10 @@ mod tests {
     use lumit_core::fx::effects::audio_spectrum::{draw::render, SHAPE_LINE, SHAPE_RING};
     use lumit_core::fx::markers::MarkerContext;
 
-    /// The card draws what the CPU reference draws, across the shapes, over a
-    /// picture with some alpha, on and off the original, and with a soft edge.
     #[test]
     fn the_card_draws_what_the_cpu_reference_draws() {
         let Some(gpu) = lumit_gpu::test_support::lease() else {
-            return; // no GPU here
+            return;
         };
         let (w, h) = (160u32, 96u32);
         let e = lumit_core::fx::builtins::instantiate("audio_spectrum").unwrap();

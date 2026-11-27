@@ -12,8 +12,6 @@ use super::fx_colour::Fx;
 use super::props::match_name_of;
 use super::Conv;
 
-/// This file's claim on a match name: the row whose conversion is
-/// `warp_stabilizer`.
 pub(super) fn claim(
     conv: &mut Conv<'_>,
     path: &ItemPath,
@@ -34,12 +32,10 @@ pub(super) fn claim(
     Some(inst)
 }
 
-/// The parameter's id, `ADBE SubspaceStabilizer-00nn`.
 fn id(n: u32) -> String {
     format!("ADBE SubspaceStabilizer-{n:04}")
 }
 
-/// The four Synthesis Edge Cropping sides onto the four trims.
 const TRIMS: [(u32, &str); 4] = [
     (31, "trim_left"),
     (32, "trim_top"),

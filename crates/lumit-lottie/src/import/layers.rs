@@ -72,7 +72,6 @@ pub(super) fn comp(
         built.push(layer(cx, &place, v, n, *id, &by_ind)?);
     }
 
-    // Mattes: the layer `tp` names, or the one directly above.
     for n in 0..built.len() {
         let Some(v) = layers.get(n) else { continue };
         let mode = num(v.get("tt")).unwrap_or(0.0) as i64;
@@ -146,6 +145,7 @@ pub(super) fn comp(
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -164,7 +164,6 @@ pub(super) fn comp(
     })
 }
 
-/// One layer, and what its moving groups became.
 fn layer(
     cx: &mut Cx<'_>,
     comp: &ItemPath,
@@ -469,7 +468,6 @@ fn retime(
     }))
 }
 
-/// A transform: the layer's `ks`, or a shape group's `tr`.
 pub(super) fn transform(
     cx: &mut Cx<'_>,
     path: &ItemPath,
@@ -556,7 +554,6 @@ pub(super) fn markers(cx: &Cx<'_>, list: &[Value]) -> Vec<Marker> {
         .collect()
 }
 
-/// A blend mode by its Lottie number.
 fn blend(code: i64) -> BlendMode {
     match code {
         1 => BlendMode::Multiply,
@@ -586,7 +583,6 @@ pub(super) fn linear(c: [f64; 3]) -> LinearColour {
     LinearColour([r, g, b, 1.0])
 }
 
-/// Every value of a property moved by `by`, keys and all.
 pub(super) fn shift(p: &mut Property, by: f64) {
     match &mut p.animation {
         Animation::Static(v) => *v += by,

@@ -1,6 +1,3 @@
-//! The bridge audio tests: the jobs signature, the plan, the output
-//! choice and the audio insert chain.
-
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use super::*;
@@ -26,6 +23,7 @@ fn bare() -> (Arc<Document>, lumit_core::model::Composition) {
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -45,7 +43,6 @@ fn bare() -> (Arc<Document>, lumit_core::model::Composition) {
     (Arc::new(Document::new()), comp)
 }
 
-/// The plan the engine would play for `jobs`, and the layer of each node.
 fn plan_of(
     jobs: &[AudioJob],
     decoded: &HashMap<Uuid, Arc<lumit_media::audio::AudioBuffer>>,
@@ -57,7 +54,6 @@ fn plan_of(
     (plan, info.nodes.iter().map(|n| n.layer).collect())
 }
 
-/// The export's mix of `decoded`, through the desk.
 fn baked(
     decoded: &[(Arc<lumit_media::audio::AudioBuffer>, AudioJob)],
     rate: u32,
@@ -71,7 +67,7 @@ fn job(path: &str, in_s: f64, out_s: f64, offset_s: f64) -> AudioJob {
     let item = Uuid::now_v7();
     AudioJob {
         item,
-        layer: item, // one job, one strip: the test's own layer identity
+        layer: item,
         clip: None,
         sound: lumit_media::audio::SoundSource::file(path),
         in_s,
@@ -89,9 +85,6 @@ fn job(path: &str, in_s: f64, out_s: f64, offset_s: f64) -> AudioJob {
     }
 }
 
-/// The signature is the mix-change detector: identical jobs agree, and a
-/// move, a trim, a Volume nudge, a removed job, or a new duration each
-/// change it — the exact edits that must re-plan (docs/09 §6).
 #[test]
 fn the_signature_tracks_everything_that_changes_the_sound() {
     // The same rows each time: which strip a job sums into is part of the mix.
@@ -153,9 +146,6 @@ fn the_signature_tracks_everything_that_changes_the_sound() {
     );
 }
 
-/// Plan building is pure: placed clips land where `place_on_timeline`
-/// says, a job with no decoded source contributes nothing, and the strip
-/// length follows the comp duration.
 #[test]
 fn build_plan_places_decoded_clips_and_skips_missing_ones() {
     let rate = 48_000u32;
@@ -166,7 +156,7 @@ fn build_plan_places_decoded_clips_and_skips_missing_ones() {
         placed.item,
         Arc::new(lumit_media::audio::AudioBuffer {
             rate,
-            samples: vec![0.25; 4 * rate as usize * 2], // 4 s of quiet tone
+            samples: vec![0.25; 4 * rate as usize * 2],
         }),
     );
     let (plan, strips) = plan_of(&[placed.clone(), missing.clone()], &decoded, rate, 5.0);
@@ -178,11 +168,9 @@ fn build_plan_places_decoded_clips_and_skips_missing_ones() {
     assert_eq!(plan.clips[0].node, 0);
     assert_eq!(plan.total_frames, 5 * rate as usize);
     assert_eq!(plan.clips.len(), 1, "the undecoded job contributes nothing");
-    // The layer starts at comp second 1 and sounds for its 2-second span.
     assert_eq!(plan.clips[0].start_frame, i64::from(rate));
     assert_eq!(plan.clips[0].src_start, 0);
     assert_eq!(plan.clips[0].len, 2 * rate as usize);
-    // Frame 0 is silence; a frame inside the span carries the source.
     assert_eq!(plan.frame_at(0), (0.0, 0.0));
     let (l, _r) = plan.frame_at(rate as usize + 10);
     assert!((l - 0.25).abs() < 1e-6);
@@ -275,7 +263,6 @@ fn meter_slots_follow_the_mixer_strips_and_the_bank_is_bounded() {
             samples: vec![0.25; rate as usize * 2],
         })
     };
-    // Two jobs sharing a strip (one Precomp row), then a strip of its own.
     let a = job("a.wav", 0.0, 1.0, 0.0);
     let mut b = job("b.wav", 0.0, 1.0, 0.0);
     b.layer = a.layer;
@@ -292,8 +279,6 @@ fn meter_slots_follow_the_mixer_strips_and_the_bank_is_bounded() {
         "the shared row's two sources meter onto the one slot"
     );
 
-    // More strips than the bank holds: the first MAX_NODES are metered,
-    // the rest play with no bar rather than being dropped from the mix.
     let many: Vec<AudioJob> = (0..lumit_audio::plan::MAX_NODES + 3)
         .map(|_| job("x.wav", 0.0, 1.0, 0.0))
         .collect();
@@ -350,14 +335,11 @@ fn choosing_an_output_closes_the_stream_and_repeating_it_does_not() {
     assert!(!devices().2, "the system default is never a fallback");
 }
 
-// ------------------------------------------- the audio insert chain --
-
 /// A stand-in audio plugin: it multiplies by its one row and then **hard
 /// clips**, which is what makes it useful for the order-of-stages test —
 /// a plain gain would commute with the fader and prove nothing about where
 /// the insert sits.
 struct TestInsert {
-    /// The block to refuse, which is what a crashed or hung plugin costs.
     refuse: Option<usize>,
     latency: u32,
 }
@@ -456,7 +438,6 @@ fn register_insert(name: &'static str, refuse: Option<usize>, latency: u32) {
     })));
 }
 
-/// One instance of a stand-in plugin, its `p1` row holding `value`.
 fn insert_instance(name: &str, value: Property) -> lumit_core::model::EffectInstance {
     lumit_core::model::EffectInstance {
         id: Uuid::now_v7(),
@@ -481,7 +462,6 @@ fn insert_instance(name: &str, value: Property) -> lumit_core::model::EffectInst
     }
 }
 
-/// The chain a job carries for `effects`.
 fn chain_of(
     effects: Vec<lumit_core::model::EffectInstance>,
 ) -> Arc<lumit_render::mix::jobs::AudioChain> {
@@ -545,7 +525,6 @@ fn an_animated_plugin_parameter_bakes_per_block_and_repeats_exactly() {
     use lumit_core::anim::{Animation, Keyframe, SideInterp};
     let rate = 48_000u32;
     register_insert("clap:lumit.test.sweep", None, 0);
-    // 0 → 1 across the second, on a quiet source so the clipper never bites.
     let key = |t: i64, v: f64| Keyframe {
         time: lumit_core::time::Rational::new(t, 1).unwrap(),
         value: v,
@@ -660,9 +639,6 @@ fn a_latent_plugin_is_placed_earlier_by_exactly_its_latency() {
     );
 }
 
-// ------------------------------------- the clip's rack and its fades --
-
-/// A clip fade of `head`/`tail` seconds with the two shapes on it.
 fn clip_fade(
     start_s: f64,
     head_s: f64,
@@ -691,8 +667,6 @@ fn a_shaped_crossfade_with_a_clip_effect_mixes_the_same_in_both_paths() {
     use lumit_core::sequence::FadeShape;
     let rate = 48_000u32;
     register_insert("clap:lumit.test.crossfade", None, 0);
-    // Clip A runs 0..1 and goes out over its last half second; clip B runs
-    // 0.5..1.5 and comes in over its first, through its own plugin.
     let a_source = tone(rate, 1.0, 0.4);
     let b_source = tone(rate, 1.5, 0.8);
     let mut a = job("a.mp4", 0.0, 1.0, 0.0);
@@ -731,8 +705,6 @@ fn a_shaped_crossfade_with_a_clip_effect_mixes_the_same_in_both_paths() {
             "frame {i}: the live plan and the export disagree"
         );
     }
-    // And both really happened: past the join B stands alone, held at the
-    // plugin's ±0.5, and half way across it neither clip is at full level.
     let after = baked[(rate as usize * 6 / 5) * 2];
     assert!(
         (after - 0.5).abs() < 1e-5,
@@ -742,10 +714,6 @@ fn a_shaped_crossfade_with_a_clip_effect_mixes_the_same_in_both_paths() {
     assert!(middle > 0.0 && middle < 0.9, "a shaped join, got {middle}");
 }
 
-/// The signature catches every edit the Audio timeline can make that
-/// changes the sound without moving a clip (plan 5): a fade's shape, a
-/// clip's bypass, an effect added to a clip, and the row's own fx
-/// switch.
 #[test]
 fn the_signature_tracks_the_fades_and_both_racks() {
     use lumit_core::sequence::FadeShape;

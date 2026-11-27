@@ -35,7 +35,6 @@ fn is_weight(i: i32) -> f32 {
     return exp(-4.0 * x * x);
 }
 
-// Pass one, half size: the outside, moved and blurred across.
 fn spread_x(uv: vec2<f32>) -> vec4<f32> {
     let dir = vec2<f32>(cos(radians(p.angle)), sin(radians(p.angle)));
     let start = uv - is_uv(dir * p.distance);
@@ -51,7 +50,6 @@ fn spread_x(uv: vec2<f32>) -> vec4<f32> {
     return vec4<f32>(v, v, v, 1.0);
 }
 
-// Pass two, half size: the same blur down.
 fn spread_y(uv: vec2<f32>) -> vec4<f32> {
     let step = is_uv(vec2<f32>(0.0, p.size / f32(IS_TAPS)));
     var sum = 0.0;
@@ -65,7 +63,6 @@ fn spread_y(uv: vec2<f32>) -> vec4<f32> {
     return vec4<f32>(v, v, v, 1.0);
 }
 
-// Pass three: the shadow over the layer, inside it only.
 fn shade(uv: vec2<f32>) -> vec4<f32> {
     let here = lumit_sample(uv);
     var s = lumit_read(pass_spread_y, uv).r;

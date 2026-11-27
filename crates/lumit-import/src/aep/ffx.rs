@@ -32,7 +32,6 @@ const EFFECT_PARADE: &str = "ADBE Effect Parade";
 /// The one name on the path that closes the list of paths.
 const SENTINEL: &str = "ADBE End of path sentinel";
 
-/// Fixed offsets inside the `beso` record.
 mod beso {
     /// How many of the file's time units make a second.
     pub const TIMEBASE: usize = 12;
@@ -42,19 +41,16 @@ mod beso {
     pub const LAYER_HEIGHT: usize = 30;
 }
 
-/// Everything one preset holds that Lumit reads.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Preset {
     /// The effects, top of the stack first, as the capture's own nodes.
     pub effects: Vec<Property>,
-    /// What was passed over, ready to be report rows.
     pub skipped: Vec<Unreadable>,
     /// The size of the layer the preset was saved from, which an effect's
     /// points are measured against.
     pub size: (f64, f64),
 }
 
-/// Whether these bytes are an After Effects animation preset.
 #[must_use]
 pub fn is_preset(bytes: &[u8]) -> bool {
     bytes.get(..4) == Some(b"RIFX") && bytes.get(8..12) == Some(b"FaFX")
@@ -250,8 +246,6 @@ pub(crate) mod tests {
         file
     }
 
-    /// A preset's effects come out in order, each with its own name, its rows'
-    /// names and their expressions, and a file that is not a preset is refused.
     #[test]
     fn a_presets_effects_are_read_in_order() {
         let bytes = preset_bytes(&[

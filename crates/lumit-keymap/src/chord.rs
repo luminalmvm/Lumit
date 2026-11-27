@@ -1,5 +1,3 @@
-//! Reading a chord from text and writing it back.
-
 use super::{Chord, ChordError, Modifiers};
 use std::fmt;
 use std::str::FromStr;

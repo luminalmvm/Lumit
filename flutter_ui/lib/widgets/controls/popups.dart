@@ -1,6 +1,3 @@
-// The popup chain: one authority over every menu, dropdown, picker and
-// flyout on screen, the layout that keeps them inside the window, and the
-// tooltip that is placed by the same delegate.
 
 import 'dart:async';
 
@@ -21,11 +18,9 @@ import '../escape_ladder.dart';
 import 'base.dart';
 import 'motion.dart';
 
-/// One popup on the chain: the handle that takes it back down again.
 class _PopupHandle {
   _PopupHandle(this.dismiss);
 
-  /// Closes this popup with nothing picked, exactly as clicking away does.
   final VoidCallback dismiss;
 }
 
@@ -69,7 +64,6 @@ void _notePopupLeft(int depth) {
   });
 }
 
-/// Close every popup at [depth] and deeper, innermost first.
 void _truncatePopups(int depth) {
   while (_popupChain.length > depth) {
     _notePopupLeft(_popupChain.length - 1);
@@ -82,10 +76,8 @@ void _truncatePopups(int depth) {
   }
 }
 
-/// Take down every open menu, dropdown and flyout.
 void closeLumitPopups() => _truncatePopups(0);
 
-/// Whether [context] is inside a popup.
 bool inLumitPopup(BuildContext context) =>
     context.getInheritedWidgetOfExactType<_PopupScope>() != null;
 
@@ -104,8 +96,6 @@ bool closeLumitFlyout(BuildContext context) {
 /// this is for tests and for Escape, not for gating commands.
 bool get lumitPopupOpen => _popupChain.isNotEmpty;
 
-/// The same answer as something to listen to, for a control that draws
-/// differently under its own open menu and has to know when the menu goes.
 final ValueNotifier<bool> lumitPopupUp = ValueNotifier<bool>(false);
 
 /// Escape while a chain is up dismisses all of it.
@@ -168,6 +158,10 @@ Future<T?> showLumitPopup<T>({
   // navigated — and nothing else does: a dropdown that let the panel behind it
   // light up under the pointer would be answering to a click it will not get.
   bool hoverThrough = false,
+  // Where a click does not count as a click away, in window coordinates: the
+  // submenu row a flyout opened from, so clicking that row leaves the menu
+  // open rather than closing the whole chain.
+  Rect? keepOpenOn,
 }) {
   final overlay = Overlay.of(context);
   var anchor = overlayLocal(context, position);
@@ -184,7 +178,6 @@ Future<T?> showLumitPopup<T>({
     if (completer.isCompleted) return;
     completer.complete(v);
     entry.remove();
-    // Anything this popup itself opened goes with it.
     final at = _popupChain.indexOf(handle);
     if (at >= 0) _truncatePopups(at);
   }
@@ -222,8 +215,6 @@ Future<T?> showLumitPopup<T>({
   }
   _truncatePopups(parentDepth + 1);
   final depth = _popupChain.length;
-  // Whether this one takes over from a popup that left at the same depth
-  // during this very event, in which case it arrives without an entrance.
   final takesOver = _popupJustLeft.contains(depth);
   handle = _PopupHandle(() => close(null));
   _popupChain.add(handle);
@@ -250,9 +241,10 @@ Future<T?> showLumitPopup<T>({
                 behavior: hoverThrough
                     ? HitTestBehavior.translucent
                     : HitTestBehavior.opaque,
-                // One click away is one dismissal: the whole chain goes, not
-                // just the popup whose barrier caught the click.
-                onTap: closeLumitPopups,
+                onTapUp: (d) {
+                  if (keepOpenOn?.contains(d.globalPosition) ?? false) return;
+                  closeLumitPopups();
+                },
               ),
             ),
           ),
@@ -260,9 +252,6 @@ Future<T?> showLumitPopup<T>({
             child: CustomSingleChildLayout(
               delegate: _PopupLayout(anchor,
                   above: above, flipped: flipped, rtl: rtl),
-              // Scrolls only when it has to: a shorter popup shrink-wraps and
-              // behaves exactly as before. One that does scroll fades at the
-              // cut end rather than stopping dead.
               child: EdgeFade(
                 axis: Axis.vertical,
                 child: SingleChildScrollView(
@@ -367,8 +356,6 @@ class _PopupEntrance extends StatelessWidget {
   final bool flyout;
   final bool still;
 
-  /// Placed above its anchor for want of room below, so it comes up from
-  /// under rather than down onto the control that opened it.
   final bool up;
   final bool rtl;
   final Widget child;
@@ -392,8 +379,6 @@ class _PopupEntrance extends StatelessWidget {
       spec: motion.popup,
       rise: up ? -motion.popupRise : motion.popupRise,
       scale: motion.popupScale,
-      // Grown from the corner it is anchored at, which is the control that
-      // opened it.
       alignment: Alignment(rtl ? 1 : -1, up ? 1 : -1),
       leads: true,
       child: child,
@@ -440,7 +425,6 @@ class _PopupLayout extends SingleChildLayoutDelegate {
   @override
   Offset getPositionForChild(Size size, Size childSize) {
     final over = above;
-    // Above only where it does not fit below and there is more room above.
     final up = over != null &&
         anchor.dy + childSize.height > size.height &&
         over > size.height - anchor.dy;
@@ -539,7 +523,6 @@ class _HoverTipState extends State<_HoverTip> {
   /// so it does not come up over what the press did.
   bool _pressed = false;
 
-  /// Which way the tip went, above its control or below.
   final ValueNotifier<bool> _flipped = ValueNotifier<bool>(false);
 
   /// When a tip last went away. The next one within a moment is shown at
@@ -599,9 +582,6 @@ class _HoverTipState extends State<_HoverTip> {
       return Positioned.fill(
         child: IgnorePointer(
           ignoring: body == null,
-          // Pulled back on screen when it would hang off an edge — a control
-          // near the bottom (the Viewer's transport) would otherwise tip below
-          // the window entirely.
           child: CustomSingleChildLayout(
             delegate: _PopupLayout(origin, above: above, flipped: _flipped),
             child: MouseRegion(
@@ -609,7 +589,6 @@ class _HoverTipState extends State<_HoverTip> {
               onExit: (_) => _leave(),
               child: ValueListenableBuilder<bool>(
                 valueListenable: _flipped,
-                // A tip over its control rises onto it from below.
                 builder: (_, up, child) => Entrance(
                   spec: still ? MotionSpec.still : scope.motion.tooltip,
                   rise: up

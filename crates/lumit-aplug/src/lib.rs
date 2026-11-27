@@ -109,7 +109,6 @@ mod tests_vst3;
 /// parameter and one block; the reporter personality of the test plugin records
 /// exactly this.
 pub const HOST_ACTIONS: [&str; 21] = [
-    // Scan: the factory names what is in the file.
     "factory",
     // Describe: create it, ask, destroy it. The latency is deliberately *not*
     // asked for here — CLAP's `latency.get` is an active-state call, and a
@@ -123,7 +122,6 @@ pub const HOST_ACTIONS: [&str; 21] = [
     "params.count",
     "params.get_info",
     "destroy",
-    // The instance a layer holds.
     "create",
     "init",
     // The plugin's own memory of itself first…
@@ -159,7 +157,6 @@ pub const HOST_ACTIONS: [&str; 21] = [
 /// `initialize`, a `terminate` and a `setState` and a log that did not say which
 /// object answered would prove nothing.
 pub const VST3_HOST_ACTIONS: [&str; 33] = [
-    // Scan: the factory names the classes in the bundle.
     "factory",
     // Describe: create both halves, ask, throw them away. The latency is
     // deliberately *not* asked for here — it is an active-state number, and a
@@ -175,7 +172,6 @@ pub const VST3_HOST_ACTIONS: [&str; 33] = [
     "getParameterInfo",
     "controller.terminate",
     "terminate",
-    // The instance a layer holds.
     "create",
     "initialize",
     "controller.initialize",
@@ -220,14 +216,12 @@ pub mod discover {
 
     pub type ScanCache = BTreeMap<PathBuf, serde_json::Value>;
 
-    /// A plugin found by a scan. None ever is here.
     pub struct DiscoveredPlugin {
         pub match_name: String,
         pub label: String,
         pub def: NoPlugin,
     }
 
-    /// A definition the browser build cannot make.
     pub enum NoPlugin {}
 
     impl NoPlugin {

@@ -31,8 +31,6 @@ use crate::matrix;
 use crate::op::{Chain, Direction, GammaLogParams, LogParams, Negatives, Op, RangeParams};
 use std::path::{Path, PathBuf};
 
-/// Tier one: the styles implemented directly. Listed so a caller can say what
-/// is supported without guessing at a refusal.
 pub const IMPLEMENTED: [&str; 29] = [
     "IDENTITY",
     "pass_thru",
@@ -65,8 +63,6 @@ pub const IMPLEMENTED: [&str; 29] = [
     "CANON_CLOG3-CGAMUT_to_ACES2065-1",
 ];
 
-/// Tier two: the styles answered by a vendored reference bake rather than by
-/// code. Listed for the same reason [`IMPLEMENTED`] is.
 pub const VENDORED: [&str; 8] = [
     "ACES-OUTPUT - ACES2065-1_to_CIE-XYZ-D65 - SDR-100nit-REC709_2.0",
     "ACES-OUTPUT - ACES2065-1_to_CIE-XYZ-D65 - SDR-100nit-P3-D65_2.0",
@@ -197,9 +193,7 @@ fn canon(centre: f64, params: LogParams) -> Result<Chain> {
             no_clamp: false,
         }),
         Op::Matrix([
-            1.0, 0.0, 0.0, -centre, //
-            0.0, 1.0, 0.0, -centre, //
-            0.0, 0.0, 1.0, -centre,
+            1.0, 0.0, 0.0, -centre, 0.0, 1.0, 0.0, -centre, 0.0, 0.0, 1.0, -centre,
         ]),
         Op::Negatives {
             style: Negatives::Mirror,
@@ -347,7 +341,6 @@ fn mirrored(curve: Op) -> Op {
     }
 }
 
-/// A plain display gamma, run backwards.
 fn gamma(exp: f32) -> Op {
     Op::Exponent {
         exp: [exp; 3],
@@ -355,7 +348,6 @@ fn gamma(exp: f32) -> Op {
     }
 }
 
-/// The sRGB piecewise curve, run backwards.
 fn srgb_curve() -> Op {
     Op::MonCurve {
         gamma: [2.4; 3],
@@ -364,13 +356,11 @@ fn srgb_curve() -> Op {
     }
 }
 
-/// Resolve a `BuiltinTransform` style into a chain, or refuse it by name.
 pub fn resolve(style: &str, dir: Direction) -> Result<Chain> {
     let forward = match style {
         // `pass_thru` is the identity under a second name: OCIO's own word for
         // a view transform that leaves the reference space alone.
         "IDENTITY" | "pass_thru" => Chain::identity(),
-        // The ACEScct log undone, then AP1 primaries into AP0.
         "ACEScct_to_ACES2065-1" => Chain::new(vec![
             Op::Log {
                 params: acescct_params(),
@@ -437,9 +427,7 @@ pub fn resolve(style: &str, dir: Direction) -> Result<Chain> {
             Chain::new(vec![
                 Op::Matrix(matrix::xyz_d65_to(&matrix::REC2020)?),
                 Op::Matrix(matrix::from_3x3(&[
-                    scale, 0.0, 0.0, //
-                    0.0, scale, 0.0, //
-                    0.0, 0.0, scale,
+                    scale, 0.0, 0.0, 0.0, scale, 0.0, 0.0, 0.0, scale,
                 ])),
                 Op::Surround {
                     exp: (1.0 / gamma) as f32,
@@ -491,12 +479,6 @@ pub fn resolve(style: &str, dir: Direction) -> Result<Chain> {
         "UTILITY - ACES-AP1_to_CIE-XYZ-D65_BFD" => {
             Chain::new(vec![Op::Matrix(matrix::rgb_to_xyz_d65(&matrix::AP1)?)])
         }
-        // Tier two: a vendored bake, read as chain steps. A style in neither
-        // tier refuses by name, `ADX10_to_ACES2065-1` and its 16-bit twin
-        // among them: the film-density curve at the heart of both is an
-        // eleven-knot table at spacings of the reference's own choosing, with a
-        // straight extrapolation and a clamp at each end, and nothing in the op
-        // set holds a table that is not evenly spaced.
         other => match vendored_chain(other) {
             Some(chain) => chain,
             None => {
@@ -566,10 +548,6 @@ mod tests {
         assert!(close(got, want, 2e-3), "{got:?} vs {want:?}");
     }
 
-    /// A vendored file that lost its provenance header is not a golden, and
-    /// [`VendoredArtefact::from_text`] refuses it — which would leave the style
-    /// refusing by name and the config not loading. This says so out loud, so
-    /// a truncated or hand-edited artefact fails here rather than in a view.
     #[test]
     fn every_vendored_style_has_an_artefact_with_its_provenance() {
         for style in VENDORED {

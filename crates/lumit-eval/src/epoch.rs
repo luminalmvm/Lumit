@@ -13,7 +13,6 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
-/// A worker's job was invalidated mid-flight; unwind quietly.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Cancelled;
 
@@ -35,12 +34,10 @@ impl Epoch {
         Self::default()
     }
 
-    /// Invalidate all outstanding tokens (playhead moved, stop pressed…).
     pub fn bump(&self) {
         self.0.fetch_add(1, Ordering::Relaxed);
     }
 
-    /// Stamp a token for work scheduled now.
     pub fn token(&self) -> EpochToken {
         EpochToken {
             epoch: self.clone(),
@@ -49,7 +46,6 @@ impl Epoch {
     }
 }
 
-/// The ticket a job carries; check it between small steps.
 pub struct EpochToken {
     epoch: Epoch,
     seen: u64,
@@ -61,7 +57,6 @@ impl EpochToken {
         self.epoch.0.load(Ordering::Relaxed) != self.seen
     }
 
-    /// `token.check()?` — the form every worker loop uses.
     #[inline]
     pub fn check(&self) -> Result<(), Cancelled> {
         if self.cancelled() {
@@ -78,7 +73,6 @@ mod tests {
     use super::*;
     use std::time::{Duration, Instant};
 
-    /// Tokens issued before a bump cancel; tokens issued after don't.
     #[test]
     fn bump_invalidates_outstanding_tokens_only() {
         let epoch = Epoch::new();
@@ -124,7 +118,6 @@ mod tests {
         let token = epoch.token();
         let (tx, rx) = std::sync::mpsc::channel();
         let worker = std::thread::spawn(move || {
-            // A "4 second render": 4000 × ~1 ms steps, token check each step.
             for _ in 0..4000 {
                 if token.check().is_err() {
                     let _ = tx.send(Instant::now());
@@ -137,7 +130,7 @@ mod tests {
             }
             let _ = tx.send(Instant::now());
         });
-        std::thread::sleep(Duration::from_millis(30)); // let it get going
+        std::thread::sleep(Duration::from_millis(30));
         let bumped_at = Instant::now();
         epoch.bump();
         let stopped_at = rx.recv().unwrap();

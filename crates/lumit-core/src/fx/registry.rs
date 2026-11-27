@@ -51,7 +51,6 @@ pub struct ResolveCx<'a> {
     /// The layer's §1.4 marker context ([`MarkerContext::NONE`] where no comp is
     /// in play — every marker-driven effect falls back gracefully on it).
     pub markers: &'a MarkerContext,
-    /// The context every animated read evaluates through, expressions included.
     pub context: Arc<ExpressionContext>,
 }
 
@@ -67,7 +66,6 @@ pub struct ResolveCx<'a> {
 /// unchanged.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Signature {
-    /// A picture operation — every effect until now, and the default.
     Image {
         /// The **data** inputs this picture operation declares beside its
         /// picture (points-stream.md §4.1) — wire-only, with no stored
@@ -89,7 +87,6 @@ pub enum Signature {
         /// one method whichever kind an entry is.
         extra: &'static [super::schema::Port],
     },
-    /// A driver: no image kernel, and these named data ports.
     Data {
         /// The **data** input ports (points-stream.md §4.1): wire-only,
         /// with no stored value, nothing to keyframe and no panel row.
@@ -106,15 +103,11 @@ pub enum Signature {
 }
 
 impl Signature {
-    /// The type of the named output port, or `None` for a port this signature
-    /// does not declare.
     #[must_use]
     pub fn output(self, port: &str) -> Option<super::schema::PortType> {
         self.outputs().iter().find(|p| p.id == port).map(|p| p.ty)
     }
 
-    /// The type of the named **data input** port, or `None` for a port this
-    /// signature does not declare.
     #[must_use]
     pub fn input(self, port: &str) -> Option<super::schema::PortType> {
         self.inputs().iter().find(|p| p.id == port).map(|p| p.ty)
@@ -148,7 +141,6 @@ impl Signature {
     }
 }
 
-/// What a driver is handed when it computes its outputs.
 pub struct DriverCx<'a> {
     /// The driver instance's id — Wiggle seeds its noise from it, which is what
     /// makes two Wiggles on one layer wobble differently and the same Wiggle
@@ -302,7 +294,6 @@ pub struct ModifyCx<'a> {
 }
 
 impl<'a> ModifyCx<'a> {
-    /// The first input, which is the only one most modifiers have.
     #[must_use]
     pub fn input(&self) -> Option<&'a super::points::PointsStream> {
         self.inputs.first().copied()
@@ -494,8 +485,6 @@ pub trait EffectDef: Sync + Send + 'static {
         false
     }
 
-    /// The built-in presets its menu offers ([`crate::fx::presets`]). None by
-    /// default.
     fn presets(&self) -> &'static [crate::fx::presets::EffectPreset] {
         &[]
     }
@@ -809,13 +798,9 @@ pub struct PressFrame<'a> {
     pub height: u32,
 }
 
-/// What one instance has done to its own rows, by row id
-/// ([`EffectDef::row_state`]).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RowState {
-    /// Rows the panel skips.
     pub hidden: Vec<&'static str>,
-    /// Rows the panel greys.
     pub disabled: Vec<&'static str>,
     /// Choice rows whose list is not the schema's, with the list to draw.
     pub options: Vec<(&'static str, Vec<String>)>,
@@ -825,7 +810,6 @@ pub struct RowState {
     pub labels: Vec<(&'static str, &'static str)>,
 }
 
-/// What an effect wrote while it was pressed, or in answer to an edit.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Pressed {
     /// Row values the effect set, by the row's schema id.
@@ -859,8 +843,6 @@ pub struct Catalogue {
 }
 
 impl Catalogue {
-    /// Wrap a list of definitions. `catalogue!` calls this; nothing else should
-    /// need to.
     pub const fn new(defs: &'static [&'static dyn EffectDef]) -> Self {
         Self {
             defs,
@@ -931,7 +913,6 @@ impl Catalogue {
         self.defs.iter().copied()
     }
 
-    /// How many effects this session knows — built in and registered.
     pub fn len(&self) -> usize {
         self.defs.len() + self.registered().len()
     }
@@ -962,7 +943,6 @@ impl Catalogue {
 #[macro_export]
 macro_rules! catalogue {
     ($($def:expr => $decl:ty),* $(,)?) => {
-        /// Every built-in effect's definition, in menu order.
         pub static BUILTIN_DEFS: $crate::fx::registry::Catalogue =
             $crate::fx::registry::Catalogue::new(&[$(&$def),*]);
 
@@ -986,7 +966,6 @@ macro_rules! catalogue {
 /// beside the declaration, because an effect's CPU reference is real code and
 /// generating it would only hide it.
 pub trait EffectMetadata: Sized {
-    /// The generated declaration.
     const SCHEMA: EffectSchema;
 
     /// Read this effect's parameters out of a resolved bag, filling each field

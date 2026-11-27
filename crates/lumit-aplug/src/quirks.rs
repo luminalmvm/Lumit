@@ -27,8 +27,6 @@ use std::time::Duration;
 
 use serde::Deserialize;
 
-/// The control-action deadline (docs/12 §2.3's two seconds, which describe,
-/// create and save inherit unchanged).
 const DEFAULT_CONTROL_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// One block's own length in time: 512 frames at 48 kHz, to the nanosecond.
@@ -39,7 +37,6 @@ const DEFAULT_CONTROL_TIMEOUT: Duration = Duration::from_secs(2);
 /// blocks that were never going to be late.
 pub const BLOCK_PERIOD: Duration = Duration::from_nanos(10_666_667);
 
-/// The whole table.
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct QuirksTable {
@@ -49,16 +46,12 @@ pub struct QuirksTable {
     plugins: Vec<PluginQuirks>,
 }
 
-/// One plugin's entry.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PluginQuirks {
-    /// The plugin's own stable identifier, matched exactly.
     identifier: String,
-    /// Override the control-action deadline, in milliseconds.
     #[serde(default)]
     control_timeout_ms: Option<u64>,
-    /// Raise the floor under the per-block deadline, in milliseconds.
     #[serde(default)]
     block_floor_ms: Option<u64>,
     /// Why this entry exists. Nothing branches on it; it is carried through so
@@ -67,16 +60,10 @@ pub struct PluginQuirks {
     note: Option<String>,
 }
 
-/// The answers for one plugin, defaults filled in.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Quirks {
-    /// The deadline for describe, create, save and the other control actions.
     pub control_timeout: Duration,
-    /// The shortest deadline a block may be given, whatever margin the caller
-    /// has left.
     pub block_floor: Duration,
-    /// Why this plugin has an entry, for the diagnostics panel and for the next
-    /// person to read the table.
     pub note: Option<String>,
 }
 
@@ -91,8 +78,6 @@ impl Default for Quirks {
 }
 
 impl Quirks {
-    /// The deadline one block gets: the caller's remaining lookahead margin,
-    /// never less than the floor.
     #[must_use]
     pub fn block_deadline(&self, margin: Duration) -> Duration {
         margin.max(self.block_floor)
@@ -111,16 +96,10 @@ impl QuirksTable {
         Self::parse(include_str!("../quirks.json")).unwrap_or_default()
     }
 
-    /// Parse a table.
-    ///
-    /// # Errors
-    ///
-    /// The `serde_json` error, so a test can say what is wrong with the file.
     pub fn parse(json: &str) -> Result<Self, serde_json::Error> {
         serde_json::from_str(json)
     }
 
-    /// The answers for one plugin.
     #[must_use]
     pub fn for_plugin(&self, identifier: &str) -> Quirks {
         let mut quirks = Quirks::default();

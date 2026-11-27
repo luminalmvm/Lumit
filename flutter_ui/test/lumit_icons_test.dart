@@ -1,6 +1,3 @@
-// The icon set is generated (tool/icons/gen_lumit_icons.dart), so the thing
-// worth testing is that the generated file still matches its source and that a
-// glyph actually draws.
 
 import 'dart:convert';
 import 'dart:io';

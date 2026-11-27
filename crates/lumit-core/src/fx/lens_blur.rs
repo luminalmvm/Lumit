@@ -23,22 +23,18 @@ use super::lens_flare::{
 };
 use super::noise;
 
-/// Places from the frame centre to its corner.
 pub const FIELD_BINS: usize = 10;
 /// Defocus planes, half in front of best focus and half behind.
 pub const DEFOCUS_BINS: usize = 24;
 /// Turns of the iris against the radial direction, over half a blade.
 pub const AZIMUTH_BINS: usize = 4;
-/// Each kernel is this many cells square.
 pub const KERNEL_RES: usize = 40;
-/// Kernels in the table.
 pub const SLICES: usize = FIELD_BINS * DEFOCUS_BINS * AZIMUTH_BINS;
 /// The furthest defocus plane, as a fraction of the focal length. Past it the
 /// last kernel is scaled up rather than traced.
 pub const DZ_MAX_OF_FOCAL: f32 = 0.12;
 /// The widest a kernel may grow, half-width in pixels. The effect pads by it.
 pub const MAX_SPAN_PX: f32 = 256.0;
-/// Sensor widths for the Sensor row, mm.
 pub const SENSOR_WIDTHS_MM: [f32; 4] = [36.0, 24.89, 23.6, 17.3];
 
 const HALF: usize = DEFOCUS_BINS / 2;
@@ -46,7 +42,6 @@ const PUPIL_GRID: usize = 160;
 const LAMBDA_UM: [f32; 3] = [0.62, 0.55, 0.46];
 const LAMBDA_D_UM: f32 = 0.587_56;
 
-/// What the bake depends on.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BokehLens {
     /// Index into the bundled library, used when no lens text is given.
@@ -72,7 +67,6 @@ pub struct BokehBake {
     pub kernels: Vec<[f32; 3]>,
     /// Each slice's half-width on the sensor at its own defocus plane, mm.
     pub span_mm: Vec<f32>,
-    /// The furthest defocus plane, mm.
     pub dz_max_mm: f32,
     /// The image height of the last field bin: the sensor's half-diagonal.
     pub field_max_mm: f32,
@@ -104,7 +98,6 @@ pub fn dz_bin(dz: f32, dz_max: f32) -> usize {
     }
 }
 
-/// The key a cached bake is kept under.
 pub fn bake_key(p: &BokehLens, text_hash: Option<u64>) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
@@ -176,7 +169,6 @@ fn intersect(p: [f32; 3], d: [f32; 3], radius: f32, z: f32) -> Option<([f32; 3],
     Some((hit, n))
 }
 
-/// The iris: blade count, roundness and turn, in the bake's frame.
 #[derive(Clone, Copy)]
 struct Iris {
     blades: u32,
@@ -361,7 +353,6 @@ impl Lens {
     }
 }
 
-/// One field and iris turn: every surviving ray at all three wavelengths.
 fn bundle(lens: &Lens, theta: f32, iris: Iris, fr: f32, ep: f32, start_z: f32) -> [Vec<Exit>; 3] {
     let dir = [0.0, theta.sin(), theta.cos()];
     let y0 = lens.chief_start(dir, start_z);
@@ -502,10 +493,8 @@ fn splat(
     span
 }
 
-/// One field and iris turn's kernels and half-widths, every defocus plane.
 type Traced = (Vec<[f32; 3]>, Vec<f32>);
 
-/// The front glass picture's side, cells.
 pub const GLASS_RES: usize = 128;
 
 /// What the Ray traced method takes to the card: the lens at this f-stop,
@@ -529,14 +518,12 @@ pub struct RayLens {
     /// crosses behind it.
     pub inf_cross_z: f32,
     pub focus_h: f32,
-    /// Scales the glass's dispersion, as [`BokehLens::fringing`].
     pub fringing: f32,
     /// How much light the front glass lets through over its clear disc,
     /// [`GLASS_RES`] square. Empty when it is clean.
     pub glass: Vec<f32>,
 }
 
-/// The lens for the Ray traced method, from the same set-up as the bake.
 pub fn ray_lens(p: &BokehLens, lens_text: Option<&str>) -> Option<RayLens> {
     let Setup {
         lens,
@@ -601,12 +588,9 @@ pub fn ray_lens(p: &BokehLens, lens_text: Option<&str>) -> Option<RayLens> {
     })
 }
 
-/// The lens as both methods use it: the f-stop applied, focused at infinity.
 struct Setup {
     lens: Lens,
-    /// The entrance pupil's radius, mm.
     ep: f32,
-    /// Where rays start in front of the first surface, mm.
     start_z: f32,
     roundness: f32,
     /// The light an on-axis bundle carries, for the corners to be read against.
@@ -703,7 +687,6 @@ pub fn bake(p: &BokehLens, lens_text: Option<&str>) -> Option<BokehBake> {
     let cells = KERNEL_RES * KERNEL_RES;
     let azimuths = if round { 1 } else { AZIMUTH_BINS };
 
-    // Each field and iris turn is its own bundle, so they trace side by side.
     let jobs: Vec<(usize, usize)> = (0..FIELD_BINS)
         .flat_map(|f| (0..azimuths).map(move |a| (f, a)))
         .collect();
@@ -780,16 +763,13 @@ pub struct FanRay {
     pub clipped: bool,
 }
 
-/// The lens window's ray drawing.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RayFan {
     pub rays: Vec<FanRay>,
-    /// Where the sensor sits at best focus, mm.
     pub sensor_z_mm: f32,
     /// The iris's radius at this f-stop, and wide open, mm.
     pub stop_r_mm: f32,
     pub stop_full_mm: f32,
-    /// The widest the lens opens.
     pub native_fstop: f32,
 }
 

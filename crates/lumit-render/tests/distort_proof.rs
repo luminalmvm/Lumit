@@ -82,8 +82,6 @@ fn ramp_matte(w: u32, h: u32) -> Vec<f32> {
     m
 }
 
-/// The generic strength dissolve, for comparison: the effect in full, lerped
-/// back towards its input by the matte's luma (docs/08 §2.6).
 fn dissolved(input: &[f32], processed: &mut [f32], matte: &[f32]) {
     cpu::matte_mix(processed, input, matte, false);
 }
@@ -130,8 +128,6 @@ fn render_the_five_distort_effects() {
         };
         write("0-source", &a.rgba);
 
-        // ---- Turbulent displace: a gentle warp and a violent one, then the
-        // matted pair that is the point of the override.
         let td = |amount: f32, size: f32, complexity: i32, pinning: u32| {
             let mut t = TurbulentDisplace::read(Params::EMPTY);
             t.amount = amount;
@@ -204,7 +200,6 @@ fn render_the_five_distort_effects() {
         );
         write("6-tile-mirrored-phased", &to_srgb(&fancy));
 
-        // ---- Offset: a diagonal wrap, and a half-frame wrap (the seam test).
         let offset = |x: f32, y: f32| {
             let mut o = Offset::read(Params::EMPTY);
             o.shift_x = x;
@@ -220,7 +215,6 @@ fn render_the_five_distort_effects() {
         cpu::offset(&mut halved, w, h, shift, mix);
         write("8-offset-half", &to_srgb(&halved));
 
-        // ---- Mirror: the vertical axis, and a diagonal off-centre one.
         let mirror = |cx: f32, cy: f32, angle: f32| {
             let mut m = Mirror::read(Params::EMPTY);
             m.centre_x = cx;
@@ -237,14 +231,13 @@ fn render_the_five_distort_effects() {
         cpu::mirror(&mut diag, w, h, c, n, mx);
         write("10-mirror-diagonal", &to_srgb(&diag));
 
-        // ---- Lens distort: a wide barrel, its exact undo, and the round trip.
         let lens = |fov: f32, reverse: bool| {
             let mut l = LensDistort::read(Params::EMPTY);
             l.fov = fov;
             l.reverse = reverse;
             l.centre_x = fw * 0.5;
             l.centre_y = fh * 0.5;
-            l.edge = 1; // Repeat, so the corners show the mapping rather than a hole
+            l.edge = 1;
             l.packed()
         };
         let mut barrel = lin.clone();

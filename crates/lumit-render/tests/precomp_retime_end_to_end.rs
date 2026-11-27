@@ -94,6 +94,7 @@ fn comp_of(name: &str, layers: Vec<Layer>, duration_s: i64) -> Composition {
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -112,8 +113,6 @@ fn comp_of(name: &str, layers: Vec<Layer>, duration_s: i64) -> Composition {
     }
 }
 
-/// A Retime property from `(layer time, source time)` pairs, straight between
-/// them - the shape a constant speed or a ramp has once it is keyframes.
 fn retime(points: &[(i64, f64)]) -> Property {
     Property {
         animation: Animation::Keyframed(
@@ -131,11 +130,6 @@ fn retime(points: &[(i64, f64)]) -> Property {
     }
 }
 
-/// The project: a nested comp holding one white square that slides from the
-/// left edge to the right over the comp's one second, and a parent that places
-/// it. `map` is the Precomp layer's Retime.
-///
-/// Answers the document and the parent comp's id.
 fn project(map: Option<Property>) -> (Arc<Document>, Uuid) {
     let square = Uuid::now_v7();
     let mut doc = Document::new();
@@ -179,8 +173,6 @@ fn project(map: Option<Property>) -> (Arc<Document>, Uuid) {
     (Arc::new(doc), parent_id)
 }
 
-/// Whether any pixel of the frame is lit - a nested comp past its own end draws
-/// nothing at all, and this is how that is read.
 fn lit(rgba: &[u8]) -> bool {
     rgba.chunks_exact(4).any(|px| px[0] > 8)
 }
@@ -191,8 +183,6 @@ fn a_retimed_precomp_shows_the_frame_its_map_points_at() {
         lumit_gpu::no_adapter();
         return;
     };
-    // One shot of the parent comp: the export path at full size, or the
-    // preview path at whatever quality is asked for.
     let mut render = |map: Option<Property>, frame: u64, q: Option<lumit_render::plan::Quality>| {
         let (doc, comp) = project(map);
         match q {
@@ -205,8 +195,6 @@ fn a_retimed_precomp_shows_the_frame_its_map_points_at() {
         }
     };
 
-    // Half speed: two seconds of the layer are one of the comp inside it, so
-    // frame 2N of the retimed parent is frame N of the plain one.
     let half = retime(&[(0, 0.0), (2, 1.0)]);
     for n in [6u64, 15, 29] {
         assert_eq!(
@@ -217,8 +205,6 @@ fn a_retimed_precomp_shows_the_frame_its_map_points_at() {
         );
     }
 
-    // And at half the render scale, where the nested comp's intermediate is
-    // half size: the map is read on the clock, not on the raster.
     let half_res = lumit_render::plan::Quality {
         auto_res: true,
         display_scale: 0.5,
@@ -230,7 +216,6 @@ fn a_retimed_precomp_shows_the_frame_its_map_points_at() {
         "and the same at half preview resolution"
     );
 
-    // A freeze: one source time for every layer time, so one picture for ever.
     let frozen = retime(&[(0, 0.25), (4, 0.25)]);
     let held = render(Some(frozen.clone()), 90, None);
     assert_eq!(
@@ -244,8 +229,6 @@ fn a_retimed_precomp_shows_the_frame_its_map_points_at() {
         "and holds it however far the parent runs"
     );
 
-    // Overrun: a map that runs past the nested comp holds its last frame,
-    // rather than landing on the empty moment after it (docs/04 §11.3).
     let fast = retime(&[(0, 0.0), (1, 4.0)]);
     let past = render(Some(fast), 180, None);
     assert!(
@@ -262,8 +245,6 @@ fn a_retimed_precomp_shows_the_frame_its_map_points_at() {
         "and the picture it holds is the nested comp's last frame"
     );
 
-    // And with no map at all, nothing is drawn past the nested duration -
-    // the behaviour that was there before this, pinned so it stays.
     assert!(
         !lit(&render(
             None,
@@ -288,7 +269,6 @@ fn flow_on_a_slowed_precomp_makes_the_frame_between() {
         return;
     };
     let (doc, comp) = project(Some(retime(&[(0, 0.0), (2, 1.0)])));
-    // Big enough for the motion to be measured.
     let (w, h) = (256, 144);
     let mut doc = Arc::unwrap_or_clone(doc);
     for item in &mut doc.items {
@@ -326,7 +306,6 @@ fn flow_on_a_slowed_precomp_makes_the_frame_between() {
         }
     }
     let doc = Arc::new(doc);
-    // Where the square is, and how much of it is fully lit.
     let mut at = |frame: u64| {
         let rgba = r.render_rgba(&doc, comp, frame, 1.0).expect("the render").0;
         let (mut sum, mut n, mut whole) = (0.0, 0.0, 0);
@@ -338,7 +317,6 @@ fn flow_on_a_slowed_precomp_makes_the_frame_between() {
         }
         (sum / n.max(1.0), whole)
     };
-    // Parent frames 2 and 4 are nested frames 1 and 2; frame 3 is between.
     let ((before, lit_before), (between, lit_between), (after, _)) = (at(2), at(3), at(4));
     assert!(
         (between - (before + after) / 2.0).abs() < 1.0,

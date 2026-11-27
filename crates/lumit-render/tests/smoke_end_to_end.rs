@@ -1,7 +1,3 @@
-//! Smoke and fire through the whole renderer: a frame comes out the same however
-//! it was reached, a bake stands in for the walk, and a card that can't hold the
-//! grid draws no smoke rather than falling over.
-
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use lumit_core::anim::Property;
@@ -25,8 +21,6 @@ fn float(e: &mut EffectInstance, id: &str, v: f64) {
         EffectValue::Float(Property::fixed(v));
 }
 
-/// A small fire in a box, on a dark comp. What it returns names its comp, layer
-/// and effect.
 fn project(depth: ColourDepth, seconds: i32) -> (Arc<Document>, Uuid, Uuid, Uuid) {
     let mut doc = Document::new();
     doc.colour_depth = depth;
@@ -74,6 +68,7 @@ fn project(depth: ColourDepth, seconds: i32) -> (Arc<Document>, Uuid, Uuid, Uuid
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -116,8 +111,6 @@ fn a_frame_is_the_same_however_it_is_reached() {
     for f in [10u64, 30, 60, 90] {
         r.render_rgba(&doc, id, f, 1.0).unwrap();
     }
-    // Back past where it stopped, from states kept on the way, on a renderer that
-    // has never drawn this frame.
     assert!(
         r.render_rgba(&doc, id, 44, 1.0).unwrap().0 == walked,
         "scrubbed back"
@@ -193,8 +186,6 @@ fn a_stop_leaves_a_particle_fed_walk_right() {
     assert!(r.render_rgba(&doc, id, 50, 1.0).unwrap().0 == whole);
 }
 
-/// A bake stands in for the walk, and is the same frame. A bake with no room on
-/// the card is refused in words, with nothing written.
 #[test]
 fn a_baked_frame_is_the_walked_frame() {
     let (doc, id, layer, effect) = project(ColourDepth::Sixteen, 2);
@@ -230,8 +221,6 @@ fn a_baked_frame_is_the_walked_frame() {
     lumit_render::sim::bake::set_root(None);
 }
 
-/// The finest grid on a card with no room draws no smoke, says so, and comes
-/// back once there is room.
 #[test]
 fn a_grid_too_big_for_the_card_is_refused() {
     let (doc, id, layer, effect) = project(ColourDepth::Sixteen, 2);

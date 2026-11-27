@@ -1,0 +1,51 @@
+---
+title: Flakes
+description: "The glittering flakes of metallic paint."
+---
+
+Flakes is a **Textures** effect.
+
+## What it does
+
+Scatters round flakes over a base colour. Each flake is tilted its own way, and is brighter
+the more it faces the light.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Base colour** | Colour | Each channel 0 to 1 | 0.008, 0.012, 0.06 | - |
+| **Flake colour** | Colour | Each channel 0 to 1 | 0.7, 0.75, 1 | - |
+| **Flake size** | Slider | 1 to 100; any value by typing | 6 | Pixels at composition size |
+| **Flake size variance** | Slider | 0 to 100 | 50 | - |
+| **Density** | Slider | 0 to 100 | 80 | - |
+| **Sparkle** | Slider | 0 to 100 | 60 | - |
+| **Blend factor** | Slider | 0 to 100 | 0 | - |
+| **Light angle** | Dial | Any angle | 0° | Degrees |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Paint** | Dropdown | Inside layer · Whole frame | Inside layer | - |
+
+## What each control does
+
+- **Base colour**: the colour of the paint, and of a flake facing away from the light.
+- **Flake colour**: the colour of a flake facing the light.
+- **Flake size**: how wide a flake is.
+- **Flake size variance**: how much the flakes differ in size.
+- **Density**: how many of the places a flake can fall hold one.
+- **Sparkle**: narrows the light each flake catches, leaving fewer bright ones.
+- **Blend factor**: fades the flakes into Base colour.
+- **Light angle**: the direction the light comes from.
+- **Seed**: where the flakes fall, and how each is tilted.
+- **Paint**: **Inside layer** paints only where the layer draws, and **Whole frame** fills
+  the whole of the layer's picture.
+- **Mix**: how much of the result replaces the original.
+- **Blend**: the blend mode the result is laid over the original with.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
+
+## Related
+
+- [Scratches](/effects/generate/scratches/)
+- [Noise](/effects/generate/noise/)
+- [Textures](/effects/#textures)
+- [Effects](/use/effects/)

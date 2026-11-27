@@ -21,7 +21,6 @@ use crate::fx::{
 use crate::mask::MaskPolyline;
 use lumit_fx_macros::Effect;
 
-/// Mask path greys while Follow is Shape.
 pub const CONTOUR_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
     param: "mask_path",
     on: "path_from",
@@ -77,7 +76,6 @@ pub fn centre_of(piece: &[[f32; 2]]) -> ([f32; 2], f32) {
     )
 }
 
-/// Contour points' controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "contour_points",
@@ -96,11 +94,9 @@ pub struct ContourPoints {
     #[choice(label = "Follow", options = ["Mask", "Shape"], default = 1)]
     pub path_from: u32,
 
-    /// Which of the layer's masks.
     #[mask_path(label = "Mask path")]
     pub mask_path: bool,
 
-    /// Each point as big as a circle of its piece's area, rather than Size.
     #[toggle(label = "Size from area", default = false)]
     pub size_from_area: bool,
 
@@ -108,7 +104,6 @@ pub struct ContourPoints {
     #[slider(min = 0.0, max = 200.0, default = 8.0, hard_min = 0.0, unit = Px)]
     pub size: f32,
 
-    /// How soft that disc's edge is, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -119,7 +114,6 @@ pub struct ContourPoints {
     )]
     pub feather: f32,
 
-    /// The colour a point is drawn in.
     #[colour(default = [1.0, 1.0, 1.0, 1.0], max = 4.0)]
     pub colour: [f32; 4],
 
@@ -140,13 +134,11 @@ impl ContourPoints {
     /// The raster factor, since the path arrives in px@comp.
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
 
-    /// This instance's raster factor, read back out of a resolved bag.
     #[must_use]
     pub fn px_scale_of(p: Params<'_>) -> f32 {
         p.float(Self::DERIVED_PX_SCALE, 1.0)
     }
 
-    /// A point on each piece of `path`, in the path's units.
     #[must_use]
     pub fn stream(self, path: &MaskPolyline, projection: Projection) -> PointsStream {
         let mut out = PointsStream {
@@ -183,7 +175,6 @@ impl ContourPoints {
         out
     }
 
-    /// How the stream is drawn — a feathered disc per point, and the host Mix.
     #[must_use]
     pub fn draw_style(self) -> DrawStyle {
         DrawStyle {
@@ -195,7 +186,6 @@ impl ContourPoints {
     }
 }
 
-/// Contour points' behaviour, Points along path's shape.
 pub struct ContourPointsDef;
 
 impl EffectDef for ContourPointsDef {

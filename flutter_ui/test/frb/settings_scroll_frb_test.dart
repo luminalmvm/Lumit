@@ -45,7 +45,6 @@ void main() {
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('open-settings')));
       await tester.pumpAndSettle();
-      // Appearance is the long page — the one that has somewhere to scroll to.
       await tester.tap(find.byKey(ValueKey('settings-page-$name')));
       await tester.pumpAndSettle();
     }

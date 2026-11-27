@@ -1,5 +1,3 @@
-//! One layer's picture: its source made ready, then its effect stack run.
-
 use super::{straight_to_composite, upload_roto_matte, Realiser};
 use crate::draw::{CompLayerDraw, DrawSource};
 
@@ -40,16 +38,6 @@ impl Realiser<'_> {
         self.paint_over(nested, w, h, &n.paint, n.paint_time)
     }
 
-    /// A Precomp on Flow: the picture `phase` of the way from `a` to `b`,
-    /// measured on the card and painted by the synthesis footage on Flow is
-    /// painted by, in linear float so nothing above white is lost. Without a
-    /// flow engine, or if either step fails, the two are mixed. With RIFE the
-    /// model paints it where it can, and where it cannot preview says so on
-    /// `layer`'s row and an export fails the frame.
-    ///
-    /// ponytail: both pictures come back off the card and the painting runs on
-    /// the processor, the float path footage takes too. A painting pass that
-    /// reads textures would keep it on the card.
     fn flow_between(
         &self,
         layer: uuid::Uuid,
@@ -226,7 +214,6 @@ impl Realiser<'_> {
             } => {
                 let mut nested =
                     self.realise_nested(*key, *camera, *width, *height, *background, draws);
-                // A Precomp on Flow: the frame after, and the picture between.
                 if let Some(f) = flow {
                     let then = self.realise(f.camera, *width, *height, *background, &f.draws);
                     nested = self.flow_between(l.layer, &nested, &then, f.phase, &f.params);
@@ -306,7 +293,6 @@ impl Realiser<'_> {
                         } => (*format, colour_space.clone()),
                         _ => (lumit_media::decode::PixelFormat::Srgb8, None),
                     };
-                    // A frame read last time is the picture made of it then.
                     let upload = |rgba: &[u8], nw, nh| {
                         self.upload_source(rgba, nw, nh, format, &colour_space)
                     };

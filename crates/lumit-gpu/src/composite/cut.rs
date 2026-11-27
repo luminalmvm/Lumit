@@ -1,5 +1,4 @@
-//! The draws of a run of 3D layers: cut where they meet, and their depth.
-
+use super::display::{display_colour, Seed};
 use super::{
     scaled_size, Blend, CompositeLayer, Compositor, Cut, LayerUniform, Region, CUT_DEPTH,
     PIECE_CORNERS,
@@ -277,7 +276,6 @@ impl Compositor {
                             continue;
                         }
                         for (model, bind) in list {
-                            // A model's own draw, the depth or the clear.
                             match joins.as_ref().filter(|_| *model) {
                                 Some(j) => {
                                     pass.set_pipeline(&j[join]);
@@ -330,6 +328,7 @@ impl Compositor {
             region,
             cuts,
             &[],
+            false,
         )
     }
 
@@ -340,6 +339,10 @@ impl Compositor {
     ///
     /// ponytail: a model draws Normal in a run cut by depth, whatever its
     /// blend mode, and takes no track matte or mask there.
+    ///
+    /// With `display` the layers mix in display values, as a comp that blends
+    /// in display asks: the target holds display values while they go in, and
+    /// what comes back is linear, as it is otherwise.
     #[allow(clippy::too_many_arguments)]
     pub fn composite_joined(
         &self,
@@ -355,7 +358,14 @@ impl Compositor {
         region: Option<Region>,
         cuts: &[Option<Cut>],
         models: &[ModelPicture],
+        display: bool,
     ) -> wgpu::Texture {
+        let shown = f32::from(u8::from(display));
+        let background = if display {
+            display_colour(background)
+        } else {
+            background
+        };
         let model_of = |l: &CompositeLayer<'_>| models.iter().find(|m| &m.colour == l.texture);
         let cut_of = |i: usize| cuts.get(i).copied().flatten();
         let (tw, th) = match region {
@@ -461,7 +471,6 @@ impl Compositor {
             })
         });
 
-        // Every draw's uniform in one buffer, each at its own offset.
         let size = std::mem::size_of::<LayerUniform>() as u64;
         let stride = wgpu::util::align_to(
             size,
@@ -489,9 +498,9 @@ impl Compositor {
                     f32::from(layer.premultiplied),
                 ],
                 cut: match cut_of(i) {
-                    Some(Cut::Depth(z)) => [z, 0.0, 0.0, 0.0],
-                    Some(Cut::Piece { count, .. }) => [0.0, count as f32, 0.0, 0.0],
-                    None => [0.0; 4],
+                    Some(Cut::Depth(z)) => [z, 0.0, shown, 0.0],
+                    Some(Cut::Piece { count, .. }) => [0.0, count as f32, shown, 0.0],
+                    None => [0.0, 0.0, shown, 0.0],
                 },
                 piece: match cut_of(i) {
                     Some(Cut::Piece { corners, .. }) => std::array::from_fn(|k| {
@@ -512,8 +521,6 @@ impl Compositor {
                 usage: wgpu::BufferUsages::UNIFORM,
             },
         );
-        // The draws of one picture, the pieces of a split layer, share one
-        // bind group.
         type Picture = (
             wgpu::Texture,
             Option<wgpu::Texture>,
@@ -615,11 +622,12 @@ impl Compositor {
         // counts (trap 1) — so the seed is *drawn* full-frame into the
         // multisample attachment instead, by `fs_seed`, which reads its own
         // pixel with `textureLoad` and so reproduces the seed exactly.
+        // A comp that blends in display draws it too, as display values.
         // `seed_keep` holds the uniform buffer and bind group alive until submit.
         let mut seed_keep: Option<(wgpu::Buffer, wgpu::BindGroup)> = None;
         if let Some(s) = seed {
-            match &msaa_view {
-                None => encoder.copy_texture_to_texture(
+            match (&msaa_view, display) {
+                (None, false) => encoder.copy_texture_to_texture(
                     s.as_image_copy(),
                     target.as_image_copy(),
                     wgpu::Extent3d {
@@ -628,76 +636,16 @@ impl Compositor {
                         depth_or_array_layers: 1,
                     },
                 ),
-                Some(ms) => {
-                    let uniform = LayerUniform {
-                        matrix: self.full_frame_matrix(width, height, None),
-                        params: [1.0, 0.0, 0.0, 0.0],
-                        target: [tw as f32, th as f32, -1.0, 0.0],
-                        cut: [0.0; 4],
-                        piece: [[0.0; 4]; PIECE_CORNERS / 2],
-                    };
-                    let buffer = wgpu::util::DeviceExt::create_buffer_init(
-                        &ctx.device,
-                        &wgpu::util::BufferInitDescriptor {
-                            label: Some("composite-seed-uniform"),
-                            contents: bytemuck::bytes_of(&uniform),
-                            usage: wgpu::BufferUsages::UNIFORM,
-                        },
-                    );
-                    let white_view = self.white.create_view(&Default::default());
-                    let bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                        label: Some("composite-seed"),
-                        layout: &self.layout,
-                        entries: &[
-                            wgpu::BindGroupEntry {
-                                binding: 0,
-                                resource: wgpu::BindingResource::TextureView(
-                                    &s.create_view(&Default::default()),
-                                ),
-                            },
-                            wgpu::BindGroupEntry {
-                                binding: 1,
-                                resource: wgpu::BindingResource::Sampler(&self.sampler),
-                            },
-                            wgpu::BindGroupEntry {
-                                binding: 2,
-                                resource: buffer.as_entire_binding(),
-                            },
-                            wgpu::BindGroupEntry {
-                                binding: 3,
-                                resource: wgpu::BindingResource::TextureView(&white_view),
-                            },
-                            wgpu::BindGroupEntry {
-                                binding: 5,
-                                resource: wgpu::BindingResource::TextureView(&white_view),
-                            },
-                            wgpu::BindGroupEntry {
-                                binding: 4,
-                                resource: wgpu::BindingResource::TextureView(
-                                    &self.black.create_view(&Default::default()),
-                                ),
-                            },
-                        ],
-                    });
-                    let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                        label: Some("composite-seed"),
-                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                            view: ms,
-                            resolve_target: Some(&view),
-                            ops: wgpu::Operations {
-                                load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                                store: wgpu::StoreOp::Store,
-                            },
-                        })],
-                        ..Default::default()
-                    });
-                    if let Some(seed) = &pipelines.seed {
-                        rpass.set_pipeline(seed);
-                    }
-                    rpass.set_bind_group(0, &bind, &[0]);
-                    rpass.draw(0..6, 0..1);
-                    drop(rpass);
-                    seed_keep = Some((buffer, bind));
+                _ => {
+                    seed_keep = Some(self.seed_draw(
+                        ctx,
+                        &mut encoder,
+                        pipelines.seed.as_ref(),
+                        s,
+                        attachment(wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)),
+                        (width, height),
+                        if display { Seed::ToDisplay } else { Seed::Copy },
+                    ));
                 }
             }
         }
@@ -731,7 +679,6 @@ impl Compositor {
             }
             i = end;
         }
-        // The depth they test against, made only when a layer is cut.
         let cut_depth = (draws.len() > layers.len()).then(|| {
             let depth = ctx.device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("comp-cut-depth"),
@@ -756,8 +703,6 @@ impl Compositor {
                 depth.create_view(&Default::default()),
             )
         });
-        // A model in a run cut by depth draws its own way, each pixel at the
-        // model's own depth.
         let joins =
             (cut_depth.is_some() && !models.is_empty()).then(|| self.join_set(ctx, samples));
         let joined: Vec<Option<wgpu::BindGroup>> = match joins {
@@ -770,7 +715,7 @@ impl Compositor {
                     };
                     let params = [(l.opacity / 100.0).clamp(0.0, 1.0), z, 0.0, 0.0];
                     let matrix = self.full_frame_matrix(width, height, region);
-                    let flags = [0.0, f32::from(u8::from(model.holdout)), 0.0, 0.0];
+                    let flags = [0.0, f32::from(u8::from(model.holdout)), shown, 0.0];
                     let under = plate.as_ref().filter(|_| model.holdout);
                     Some(self.join_group(ctx, model, matrix, params, flags, under))
                 })
@@ -790,8 +735,6 @@ impl Compositor {
                     picture_of[before] == picture_of[idx] && before != idx
                 })
         };
-        // The first draw of a run with a holdout, where what is under the run
-        // is kept for it.
         let plate_at = |k: usize| {
             let run = draws[k].2;
             run.is_some()
@@ -832,15 +775,12 @@ impl Compositor {
                     );
                 }
             }
-            // One pass: this draw plus any following fixed-function draws,
-            // and only those of the same run, if it has one.
             let mut end = k + 1;
             while end < draws.len() && !snaps(end) && draws[end].2 == run {
                 end += 1;
             }
             let depth = match (run, &cut_depth) {
                 (Some(run), Some((_, _, view))) => {
-                    // A run starts with nothing in the way.
                     let load = if cleared == Some(run) {
                         wgpu::LoadOp::Load
                     } else {
@@ -906,7 +846,6 @@ impl Compositor {
                     let Some(pipeline) = pipeline else {
                         continue;
                     };
-                    // A piece draws as a fan of triangles over its corners.
                     let vertices = match cut_of(idx) {
                         Some(Cut::Piece { count, .. }) => count.saturating_sub(2) as u32 * 3,
                         _ => 6,
@@ -923,13 +862,19 @@ impl Compositor {
             k = end;
         }
         if first_pass {
-            // No layers at all: still clear to the background.
             let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("composite-clear"),
                 color_attachments: &[Some(attachment(clear))],
                 ..Default::default()
             });
         }
+        // A target of display values goes back to linear before anyone reads it.
+        let (target, linear_keep) = if display {
+            let (linear, keep) = self.to_linear(ctx, &mut encoder, &target, (width, height));
+            (linear, Some(keep))
+        } else {
+            (target, None)
+        };
         // Recording ends here; whether the buffer goes to the driver now or at
         // the end of the frame's batch is the encoder guard's business.
         // The seed's buffer and bind group are released after it either way —
@@ -937,6 +882,7 @@ impl Compositor {
         // the deferred submission still has them.
         drop(encoder);
         drop(seed_keep);
+        drop(linear_keep);
         if let Some(msaa) = msaa {
             self.give_back(ctx, msaa);
         }

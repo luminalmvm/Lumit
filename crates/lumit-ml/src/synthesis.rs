@@ -24,12 +24,9 @@ use crate::{
     store, tensor,
 };
 
-/// An open synthesis model, ready to paint in-between frames.
 #[derive(Debug)]
 pub struct Synthesis {
     session: Session,
-    /// What the pack's manifest calls the tensors, and how far the graph
-    /// wants the frame grown before it will take it.
     names: Rife,
     identity: [u8; 32],
 }
@@ -75,8 +72,6 @@ impl Synthesis {
         self.identity
     }
 
-    /// Which provider took the session: part of the same answer, and what the
-    /// Addons page's runtime row shows.
     #[must_use]
     pub fn provider(&self) -> &'static str {
         self.session.provider()
@@ -164,11 +159,6 @@ pub fn endpoint<'f>(a: &'f [u8], b: &'f [u8], phi: f32) -> Option<&'f [u8]> {
     None
 }
 
-/// What the installed synthesis pack is, without opening it, or `None` when
-/// none is installed or nothing on this machine could run one.
-///
-/// [`store::installed_identity`] does the work and remembers the answer; this
-/// is the synthesis tier's door to it, and the one the frame key calls.
 #[must_use]
 pub fn installed_identity() -> Option<[u8; 32]> {
     store::installed_identity(Task::Synthesis)
@@ -180,7 +170,6 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
-    /// A manifest for a RIFE pack of `bytes` bytes sitting in a folder.
     fn a_rife_manifest(id: &str, version: &str, bytes: u64, digest: &str) -> String {
         format!(
             r#"{{"format":1,"id":"{id}","kind":"model","name":"RIFE",
@@ -194,10 +183,6 @@ mod tests {
         )
     }
 
-    /// **Two packs, two versions and two digests each name themselves
-    /// differently, and the same pack names itself the same way twice.**
-    /// Every frame a model paints is filed under this, so a collision serves
-    /// one pack's picture for another's (§7).
     #[test]
     fn a_pack_names_itself_stably_and_apart_from_every_other() {
         let one = "afb6a5c28f3b6bf1618c6e43f02073ef9dfdc70e937502d51603e57b0a1df10c";
@@ -237,13 +222,10 @@ mod tests {
 
         let named = installed_identity();
         let runtime = runtime::status();
-        // And twice, because the answer is remembered between the two.
         let again = installed_identity();
         store::with_dir(None);
 
         assert_eq!(named, again, "the same folder is the same answer");
-        // Both endings are written down, so the test is true on a machine
-        // carrying the runtime as well as on one without it.
         if matches!(runtime, runtime::RuntimeStatus::Missing) {
             assert!(
                 named.is_none(),
@@ -254,14 +236,12 @@ mod tests {
         }
     }
 
-    /// Where the real RIFE file sits on the reference machine.
     fn real_rife() -> Option<PathBuf> {
         let packs = crate::test_support::packs_dir()?;
         let file = packs.join("rife49_ensemble_True_scale_1_sim.onnx");
         file.is_file().then_some(file)
     }
 
-    /// A frame with a white square whose top-left corner is at `x`.
     fn square(x: usize, side: usize) -> Vec<u8> {
         let mut rgba = vec![0u8; 4 * side * side];
         for pixel in rgba.chunks_exact_mut(4) {
@@ -276,7 +256,6 @@ mod tests {
         rgba
     }
 
-    /// Where the bright pixels of a frame have their middle, horizontally.
     fn centre(rgba: &[u8], side: usize) -> f64 {
         let mut sum = 0.0;
         let mut count = 0.0;
@@ -292,12 +271,6 @@ mod tests {
         sum / count
     }
 
-    /// **On the reference machine, RIFE paints the frame in the middle.**
-    ///
-    /// A square moved eight pixels between two frames: at half way the model
-    /// has to put it four pixels along, which no copy of either input and no
-    /// crossfade of the two does. Skipped politely wherever the runtime and
-    /// the pack are not installed, which is every CI runner.
     #[test]
     fn the_real_model_paints_the_square_between_the_two_frames() {
         let (Some(runtime_dir), Some(model)) = (crate::test_support::runtime_dir(), real_rife())
@@ -308,7 +281,6 @@ mod tests {
         runtime::load(&runtime_dir).expect("the runtime would not load");
 
         let _serial = crate::test_support::serially();
-        // A pack of its own, so nothing here reads or writes the user's.
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("rife");
         std::fs::create_dir_all(&home).unwrap();
@@ -350,7 +322,6 @@ mod tests {
             "the square landed at {is}, and the two frames have it at {was} and {now}"
         );
 
-        // The ends are the frames themselves, through the same door.
         assert_eq!(
             synthesis
                 .synthesise(&first, &second, side, side, 0.0)

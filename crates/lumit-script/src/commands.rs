@@ -1,6 +1,5 @@
-//! The commands themselves: the table, and one function each.
-
 mod comps;
+mod drive;
 mod effects;
 mod grade;
 mod items;
@@ -45,8 +44,6 @@ macro_rules! time {
         r#"{"oneOf":[{"type":"integer","description":"A frame on the comp's rate"},{"type":"object","properties":{"num":{"type":"integer"},"den":{"type":"integer","minimum":1}},"required":["num","den"],"additionalProperties":false,"description":"Exact seconds"}]}"#
     };
 }
-// How a key meets the curve on one side, and an ease as After Effects gives
-// one.
 macro_rules! ease {
     () => {
         r#"{"type":"object","properties":{"speed":{"type":"number","description":"Units a second"},"influence":{"type":"number","minimum":0.1,"maximum":100,"description":"Per cent of the span"}},"additionalProperties":false}"#
@@ -63,7 +60,6 @@ macro_rules! side {
         )
     };
 }
-// One key whose value is `$value`.
 macro_rules! key {
     ($value:literal) => {
         concat!(
@@ -84,7 +80,6 @@ macro_rules! expression {
         r#"{"type":"string","description":"A JavaScript expression, as After Effects writes them"}"#
     };
 }
-// One `layer.keys` form: the properties named, and the value each takes.
 macro_rules! keys_form {
     ($names:literal, $value:literal) => {
         concat!(
@@ -109,8 +104,6 @@ macro_rules! rate {
         r#"{"description":"1 to 999 frames a second","oneOf":[{"type":"integer","minimum":1,"maximum":999},{"type":"object","properties":{"num":{"type":"integer","minimum":1},"den":{"type":"integer","minimum":1}},"required":["num","den"],"additionalProperties":false}]}"#
     };
 }
-// Controls and the values to set them to, as `comp.controls` and
-// `layer.values` take them.
 macro_rules! control_values {
     () => {
         r#"{"type":"object","description":"Control, by id or label, to its value: a number, a point as [x, y], a colour as #RRGGBB or [r, g, b, a] scene-linear, true or false, a menu option's name or number from 0, text, a font as {family, face}, or a footage item's or comp's id or name"}"#
@@ -128,7 +121,6 @@ macro_rules! comp_settings {
     };
 }
 
-/// Every command, in the order a list of them reads best.
 pub const COMMANDS: &[Command] = &[
     Command {
         name: "project.info",
@@ -248,11 +240,11 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "shape.add",
-        summary: "Add a shape layer drawn from paths, each item in the form a .lum file keeps it: path, fill, stroke, stroke_width, opacity, gradient and the rest",
+        summary: "Add a shape layer drawn from paths, each item in the form a .lum file keeps it: path, fill, stroke, stroke_width, opacity, gradient, stroke_gradient and the rest",
         schema: concat!(
             r#"{"type":"object","properties":{"comp":"#,
             comp!(),
-            r#","name":{"type":"string"},"index":{"type":"integer","minimum":0,"description":"Where in the stack, 0 is the top"},"items":{"type":"array","minItems":1,"description":"The shape items as a .lum file keeps them. Each path is {vertices:[{pos:[x,y],tan_in:[x,y],tan_out:[x,y]}],closed}, in comp pixels with tangents relative to their vertex. Colours are linear-light RGBA. An id and a name are made for any item without one","items":{"type":"object"}}},"required":["comp","items"],"additionalProperties":false}"#
+            r#","name":{"type":"string"},"index":{"type":"integer","minimum":0,"description":"Where in the stack, 0 is the top"},"items":{"type":"array","minItems":1,"description":"The shape items as a .lum file keeps them. Each path is {vertices:[{pos:[x,y],tan_in:[x,y],tan_out:[x,y]}],closed}, in comp pixels with tangents relative to their vertex. Colours are linear-light RGBA. An id and a name are made for any item without one","items":{"type":"object"}},"anchor":{"oneOf":[{"enum":["corner","centre"]},{"type":"array","items":{"type":"number"},"minItems":2,"maxItems":2}],"description":"Where the layer turns from, in the paths' pixels: the corner of the art's box (the default), its centre, or [x, y]. The position goes to the same point, so the art draws where its paths say. The answer adds origin, the point in the paths' pixels where the layer's own pixels start, and the anchor and position it set"},"masks":{"type":"array","description":"Masks as a .lum file keeps them, with paths in the same pixels as the items. They are kept in the layer's own pixels, which start at origin","items":{"type":"object"}}},"required":["comp","items"],"additionalProperties":false}"#
         ),
     },
     Command {
@@ -274,16 +266,16 @@ pub const COMMANDS: &[Command] = &[
             comp!(),
             r#","layer":"#,
             layer!(),
-            r#","fields":{"type":"object","description":"Laid over the layer as JSON Merge Patch does: objects merge key by key, null takes a field away, anything else replaces it, and a choice such as {\"Keyframed\": [...]} replaces another such as {\"Static\": 1}. Times are exact seconds as [num, den], colours linear-light RGBA. The layer keeps its id and its place"}},"required":["comp","layer","fields"],"additionalProperties":false}"#
+            r#","fields":{"type":"object","description":"Laid over the layer as JSON Merge Patch does: objects merge key by key, null takes a field away, anything else replaces it, and a choice such as {\"Keyframed\": [...]} replaces another such as {\"Static\": 1}. Times are exact seconds as [num, den], colours linear-light RGBA. The layer keeps its id and its place. A text layer keeps its words where they were when its text, style or animators change, as the app does, unless these set its anchor"}},"required":["comp","layer","fields"],"additionalProperties":false}"#
         ),
     },
     Command {
         name: "comp.write",
-        summary: "Change a comp's motion blur, lighting or node graph, in the form a .lum file keeps them",
+        summary: "Change a comp's motion blur, lighting, blending or node graph, in the form a .lum file keeps them",
         schema: concat!(
             r#"{"type":"object","properties":{"comp":"#,
             comp!(),
-            r#","fields":{"type":"object","properties":{"motion_blur":{"type":"object"},"lighting":{"type":"object"},"graph":{"type":"object"}},"additionalProperties":false,"description":"Each laid over the comp's own as JSON Merge Patch does"}},"required":["comp","fields"],"additionalProperties":false}"#
+            r#","fields":{"type":"object","properties":{"motion_blur":{"type":"object"},"lighting":{"type":"object"},"blending":{"enum":["linear","display"],"description":"What the layers mix in: linear light, or display values as a browser does"},"graph":{"type":"object"}},"additionalProperties":false,"description":"Each laid over the comp's own as JSON Merge Patch does"}},"required":["comp","fields"],"additionalProperties":false}"#
         ),
     },
     Command {
@@ -310,7 +302,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "layer.set",
-        summary: "Change a layer's name, parent, span, switches, 3D switch, rotation order or place in the stack",
+        summary: "Change a layer's name, parent, span, switches, 3D switch, rotation order, motion path or place in the stack",
         schema: concat!(
             r#"{"type":"object","properties":{"comp":"#,
             comp!(),
@@ -322,7 +314,7 @@ pub const COMMANDS: &[Command] = &[
             time!(),
             r#","start_offset":"#,
             time!(),
-            r#","three_d":{"type":"boolean"},"index":{"type":"integer","minimum":0,"description":"Where in the stack, 0 is the top"},"two_node":{"type":"boolean","description":"For a camera, whether it aims at its point of interest"},"after_effects_order":{"type":"boolean","description":"Turn X, Y and Z Rotation in After Effects' order rather than Lumit's. The rotations are rewritten so the layer keeps its pose"},"switches":{"type":"object","properties":{"visible":{"type":"boolean"},"audible":{"type":"boolean"},"solo":{"type":"boolean"},"locked":{"type":"boolean"},"shy":{"type":"boolean"},"guide":{"type":"boolean"},"motion_blur":{"type":"boolean"},"fx":{"type":"boolean"},"accepts_lights":{"type":"boolean"}},"additionalProperties":false}},"required":["comp","layer"],"additionalProperties":false}"#
+            r#","three_d":{"type":"boolean"},"index":{"type":"integer","minimum":0,"description":"Where in the stack, 0 is the top"},"two_node":{"type":"boolean","description":"For a camera, whether it aims at its point of interest"},"after_effects_order":{"type":"boolean","description":"Turn X, Y and Z Rotation in After Effects' order rather than Lumit's. The rotations are rewritten so the layer keeps its pose"},"curved_path":{"type":"boolean","description":"Run Position along a smooth path through its keys, as After Effects' auto bezier does, rather than straight from key to key. Motion blur follows it"},"switches":{"type":"object","properties":{"visible":{"type":"boolean"},"audible":{"type":"boolean"},"solo":{"type":"boolean"},"locked":{"type":"boolean"},"shy":{"type":"boolean"},"guide":{"type":"boolean"},"motion_blur":{"type":"boolean"},"fx":{"type":"boolean"},"accepts_lights":{"type":"boolean"},"collapse":{"type":"boolean","description":"A precomp's collapse switch: its layers are drawn straight into this comp, its shapes and text as large as they are shown"}},"additionalProperties":false}},"required":["comp","layer"],"additionalProperties":false}"#
         ),
     },
     Command {
@@ -373,7 +365,7 @@ pub const COMMANDS: &[Command] = &[
             layer!(),
             r#","markers":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string","description":"An existing marker's id, to keep what it was"},"time":"#,
             time!(),
-            r#","label":{"type":"string"},"colour":{"type":"integer","minimum":0,"maximum":255},"duration":{"type":"integer","description":"Frames it spans"},"chapter":{"type":"boolean","description":"Whether it starts a chapter"}},"required":["time"],"additionalProperties":false}}},"required":["comp","markers"],"additionalProperties":false}"#
+            r#","label":{"type":"string"},"colour":{"type":"integer","minimum":0,"maximum":255},"duration":{"type":"integer","description":"Frames it spans"},"chapter":{"type":"boolean","description":"Whether it starts a chapter"},"beat":{"type":"number","minimum":0,"maximum":1,"description":"Makes it a beat marker with this confidence, as Detect beats does. Beat trigger fires on beat markers"}},"required":["time"],"additionalProperties":false}}},"required":["comp","markers"],"additionalProperties":false}"#
         ),
     },
     Command {
@@ -422,6 +414,17 @@ pub const COMMANDS: &[Command] = &[
             r#"},"expression":"#,
             expression!(),
             r#"},"required":["comp","layer","effect"],"additionalProperties":false}"#
+        ),
+    },
+    Command {
+        name: "layer.drive",
+        summary: "Drive an effect's control from a driver on the layer's node graph, as Drive with does: Audio level and Beat trigger through Remap (and Smooth), Wiggle about the control's number, or any other driver straight in",
+        schema: concat!(
+            r#"{"type":"object","properties":{"comp":"#,
+            comp!(),
+            r#","layer":"#,
+            layer!(),
+            r#","effect":{"description":"The driven effect's id or name, or its place in the stack, 0 the top","oneOf":[{"type":"string"},{"type":"integer","minimum":0}]},"param":{"type":"string","description":"The control's id or name"},"driver":{"type":"string","description":"The driver's id: audio_level, beat_trigger, wiggle, colour_cycle, expression, oscillator, value_noise, ring_wave and the rest"},"listen":{"type":"string","description":"For Audio level and Beat trigger, the layer whose sound they hear, by id or name. The whole comp when left out"},"output":{"type":"string","description":"The driver's output to wire, its first (Amplitude, Envelope) when left out"},"low":{"type":"number","description":"For a sound: the control's value in silence, its own number when left out"},"high":{"type":"number","description":"For a sound: the control's value at the loud end, the top of its range when left out"},"in_high":{"type":"number","description":"For a sound: the level that reaches high, 0.3 for Audio level and 1 for Beat trigger when left out"},"settings":{"type":"object","description":"The driver's own controls, by id or name, to their values: band, decay, window, frequency, amount and so on"},"expression":{"type":"string","description":"For the Expression driver, its source"}},"required":["comp","layer","effect","param","driver"],"additionalProperties":false}"#
         ),
     },
     Command {
@@ -594,6 +597,7 @@ pub(crate) fn run(
         "effect.get" => effects::get(host, parse(args)?),
         "effect.add" => effects::add(host, parse(args)?),
         "effect.set" => effects::set(host, parse(args)?),
+        "layer.drive" => drive::drive(host, parse(args)?),
         "grade.get" => grade::get(host, parse(args)?),
         "grade.set" => grade::set(host, parse(args)?),
         "grade.groups" => grade::group_list(host, parse(args)?),
@@ -757,6 +761,7 @@ fn layer_json(comp: &Composition, layer: &Layer) -> Value {
         "start_offset": exact(layer.start_offset.0),
         "three_d": s.three_d,
         "after_effects_order": layer.transform.after_effects_order,
+        "curved_path": !layer.transform.motion_path.is_straight(),
         "switches": {
             "visible": s.visible,
             "audible": s.audible,
@@ -767,12 +772,12 @@ fn layer_json(comp: &Composition, layer: &Layer) -> Value {
             "motion_blur": s.motion_blur,
             "fx": s.fx,
             "accepts_lights": s.accepts_lights,
+            "collapse": s.collapse,
         },
         "two_node": two_node,
     })
 }
 
-/// The layer `id` of comp `comp` as the store now holds it.
 fn layer_now(store: &DocumentStore, comp: Uuid, id: Uuid) -> Result<Value, ScriptError> {
     let doc = store.snapshot();
     let comp = doc

@@ -1,6 +1,3 @@
-//! Where a layer sits: its own placement and its parents', as the compositor
-//! places it.
-
 use std::sync::Arc;
 
 use lumit_core::expression::ExpressionContext;
@@ -22,7 +19,6 @@ pub fn parent_world_placement(
     context: Arc<ExpressionContext>,
 ) -> Option<[[f32; 4]; 4]> {
     let mut world: Option<[[f32; 4]; 4]> = None;
-    // Outermost first, so concat_place(outer, inner) = outer × inner.
     let read = lumit_core::model::context_reader(&context, t_comp);
     let solves = crate::track::solves_for(&context.document);
     for (_, p) in lumit_core::model::parent_placements(comp, layer, t_comp, &read, solves) {
@@ -35,8 +31,6 @@ pub fn parent_world_placement(
     world
 }
 
-/// Where `layer` sits in `comp` at comp time `t_comp`, parents and all: its
-/// own pixels to comp pixels, as the compositor places it.
 pub(crate) fn world_placement(
     comp: &lumit_core::model::Composition,
     layer: &lumit_core::model::Layer,
@@ -50,7 +44,6 @@ pub(crate) fn world_placement(
     }
 }
 
-/// `layer`'s own placement at comp time `t_comp`, before any parent's.
 pub(crate) fn own_placement(
     layer: &lumit_core::model::Layer,
     t_comp: f64,
@@ -65,8 +58,6 @@ pub(crate) fn own_placement(
     })
 }
 
-/// What the compositor draws `layer` with at layer time `lt`, each property
-/// read under `context`, with its Orient in it.
 pub(crate) fn drawn_placement(
     layer: &lumit_core::model::Layer,
     lt: f64,
@@ -84,6 +75,33 @@ pub(crate) fn drawn_placement(
         }
     }
     p
+}
+
+/// What the compositor draws `layer`'s own picture with at layer time `lt`,
+/// each property read under `context`: any Orientation turned into the
+/// rotations and Anchor Z into the position. A 2D layer's hidden 3D values
+/// count as nought, as the compositor draws them.
+pub(crate) fn drawn(
+    layer: &lumit_core::model::Layer,
+    lt: f64,
+    context: &Arc<ExpressionContext>,
+) -> lumit_gpu::composite::MbSample {
+    let p = drawn_placement(layer, lt, context);
+    let at = p.flat_position();
+    // A Shape layer's art moving under keys moves its picture too.
+    let (dx, dy) = lumit_core::model::art_shift(layer, lt);
+    // So does a caption moved off where the layer puts it.
+    let (cx, cy) = lumit_core::captions::show::moved(layer, context);
+    lumit_gpu::composite::MbSample {
+        position: (at.0 as f32, at.1 as f32),
+        anchor: ((p.anchor.0 - dx - cx) as f32, (p.anchor.1 - dy - cy) as f32),
+        scale: (p.scale.0 as f32, p.scale.1 as f32),
+        rotation_deg: p.rotation_deg.2 as f32,
+        z: at.2 as f32,
+        rotation_x_deg: p.rotation_deg.0 as f32,
+        rotation_y_deg: p.rotation_deg.1 as f32,
+        pre: None,
+    }
 }
 
 fn place_of(p: &lumit_core::model::Placement) -> [[f32; 4]; 4] {
@@ -157,8 +175,6 @@ mod tests {
         drawn
     }
 
-    /// Along path is the tangent plus the layer's own Rotation, and a layer
-    /// with Orient off draws exactly what it draws without any of this.
     #[test]
     fn a_layer_is_drawn_along_its_path() {
         let moving = |l: &mut Layer| {
@@ -177,8 +193,6 @@ mod tests {
         close(along.rotation_deg.2, 55.0);
     }
 
-    /// A 3D layer off to one side of the camera turns to face it, with its z
-    /// axis pointing away from the eye.
     #[test]
     fn a_layer_is_drawn_towards_the_camera() {
         let off_side = |l: &mut Layer| {

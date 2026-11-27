@@ -1,6 +1,3 @@
-// A track's automation mode on its head, in the Audio timeline: the mode's
-// name in caption type, coloured by what the mode does, and a click that
-// picks another (docs/impl/audio-timeline.md §5).
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/mixer.dart';
@@ -11,7 +8,6 @@ import '../widgets/controls.dart';
 import 'audio_routes_frb.dart' show automationModeLabel;
 import 'timeline_extras_frb.dart' show showMenuAt;
 
-/// The cell the chip stands in, beside the switches.
 const double automationChipWidth = 34;
 
 /// What [mode] is drawn in: Write in the error tone, the modes that write
@@ -28,7 +24,6 @@ Color automationModeInk(LumitTheme t, BridgeAutomationMode mode,
       BridgeAutomationMode.read => keyed ? t.accent : t.textMuted,
     };
 
-/// The five modes as menu rows, [current] ticked.
 List<Widget> automationModeRows({
   required String keyPrefix,
   required BridgeAutomationMode current,
@@ -47,7 +42,6 @@ List<Widget> automationModeRows({
         ),
     ];
 
-/// The chip itself. [onPick] writes the mode chosen from its menu.
 class AutomationModeChip extends StatelessWidget {
   final String id;
   final BridgeAutomationMode mode;

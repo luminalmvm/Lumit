@@ -151,8 +151,6 @@ void main() {
               'them, so an action it never heard of keeps its key');
     });
 
-    /// The Dragging section sits under the scroll wheel's, and picking Ctrl
-    /// there is what the engine then holds.
     testWidgets('the handle modifier is picked under the scroll wheel',
         (tester) async {
       await openKeymapPage(tester);
@@ -181,8 +179,6 @@ void main() {
   });
 
   group('The scroll wheel (frb)', () {
-    /// Someone who wants Alt+wheel to zoom the Timeline gets exactly that, and
-    /// Ctrl+wheel stops zooming.
     testWidgets('the Timeline zooms on whichever modifier is set',
         (tester) async {
       tester.view.physicalSize = const Size(1600, 900);
@@ -287,7 +283,6 @@ void main() {
         await tester.pump();
       }
 
-      // U: the heading, the keyed row under it, and nothing else.
       await pressU();
       expect(find.text('Transform'), findsOneWidget,
           reason: 'the heading over a keyed row is kept, so the row is placed');
@@ -299,7 +294,6 @@ void main() {
       expect(find.text('Position'), findsNothing,
           reason: 'nor is an untouched sibling dragged along by the heading');
 
-      // UU, inside the window: the modified reveal, and a heading opens whole.
       await pressU();
       expect(find.text('Rotation'), findsOneWidget,
           reason: 'the second tap opens everything under the heading');
@@ -308,7 +302,6 @@ void main() {
           reason:
               'the keyed row is still there — UU is a superset, not a swap');
 
-      // UUU: shut, exactly as before.
       await pressU();
       expect(find.text('Transform'), findsNothing,
           reason: 'the third tap collapses the layer, cycle unchanged');

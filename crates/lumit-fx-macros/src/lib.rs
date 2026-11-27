@@ -84,7 +84,6 @@ pub fn derive_effect(input: TokenStream) -> TokenStream {
     }
 }
 
-/// The struct-level `#[effect(...)]` attribute, parsed.
 struct EffectAttr {
     match_name: String,
     label: String,
@@ -141,7 +140,6 @@ enum MatteAttr {
 }
 
 impl MatteAttr {
-    /// The parameter id the matte layer is stored under, if any.
     fn role(&self) -> Option<&str> {
         match self {
             MatteAttr::None => None,
@@ -211,7 +209,6 @@ fn expand(input: DeriveInput) -> syn::Result<TokenStream2> {
         });
         let const_name = format_ident!("{}", name.to_string().to_uppercase());
         id_consts.push(quote! {
-            /// The compile-time id of this effect's parameter of the same name.
             pub const #const_name: ::lumit_core::fx::params::ParamId =
                 ::lumit_core::fx::params::ParamId::new(#id);
         });
@@ -295,8 +292,6 @@ fn expand(input: DeriveInput) -> syn::Result<TokenStream2> {
                 unit: ::lumit_core::fx::params::Unit::Raw,
             }
         });
-        // The Channel choice, unless the effect picks its matte's
-        // channels itself.
         if matte_channel {
             schemas.push(quote! {
                 ::lumit_core::fx::schema::ParamSchema {
@@ -481,7 +476,6 @@ fn parse_effect_attr(input: &DeriveInput) -> syn::Result<EffectAttr> {
     })
 }
 
-/// One parsed parameter: what goes in the schema, and how it is read back.
 struct Param {
     id: String,
     label: String,
@@ -778,7 +772,6 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
                 quote! { p.curve(#idc) },
             )
         }
-        // An outline inside a box. No arguments: a fresh row has no points.
         "shape" => (
             quote! { ::lumit_core::fx::schema::ParamKind::Shape },
             quote! { p.shape(#idc) },
@@ -824,7 +817,6 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
     })
 }
 
-/// `Some(x)` / `None`, for the one-sided hard bounds.
 fn opt(v: Option<TokenStream2>) -> TokenStream2 {
     match v {
         Some(v) => quote! { Some(#v) },
@@ -841,8 +833,6 @@ fn lit_str(e: &Expr) -> syn::Result<String> {
     }
 }
 
-/// `near_aperture` → `Near aperture`: the UI label a parameter gets when it does
-/// not declare one. Sentence case, per docs/15-DESIGN.md.
 fn sentence_case(id: &str) -> String {
     let spaced = id.replace('_', " ");
     let mut chars = spaced.chars();

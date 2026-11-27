@@ -32,17 +32,13 @@ import 'settings_account.dart' show askBefore;
 
 const double backupsWidth = 800;
 
-/// The grid: three cards across, and the air round and between them. The
-/// air round them is the inset every other edge of the window takes.
 const int _across = 3;
 const double _edge = dialogPadding;
 const double _gap = 14;
 
-/// A card's own inset, and the room under its picture for its three lines.
 const double _inset = 8;
 const double _words = 72;
 
-/// How wide a card is, and how tall.
 const double _card =
     (backupsWidth - _edge * 2 - _gap * (_across - 1)) / _across;
 const double _cardHeight = _inset + (_card - _inset * 2) * 9 / 16 + _words;
@@ -104,8 +100,6 @@ class _BackupsState extends State<_Backups> {
   final _search = TextEditingController();
   final _scroll = ScrollController();
 
-  /// The project being fetched, and what the last thing asked for came back
-  /// with when it failed.
   String? _fetching;
   String? _said;
 
@@ -140,7 +134,6 @@ class _BackupsState extends State<_Backups> {
     if (mounted) setState(() {});
   }
 
-  /// Run something the person asked for, and say its refusal in the strip.
   Future<void> _run(Future<void> Function() what) async {
     setState(() => _said = null);
     try {
@@ -263,7 +256,6 @@ class _BackupsState extends State<_Backups> {
     }
     final line = _line(all);
     return DialogFrame(
-      // A window with one line to say is as wide as the line wants.
       width: line == null ? backupsWidth : proWindowWidth,
       children: [
         title,
@@ -318,8 +310,6 @@ class _BackupsState extends State<_Backups> {
         ),
       );
 
-  /// The cards. The window shows two whole rows of them, or one when one is
-  /// all there are, and the thumb down its side says when there are more.
   Widget _grid(LumitTheme t, List<BackupProject> all) {
     final wanted = _search.text.trim().toLowerCase();
     final shown = [
@@ -365,14 +355,12 @@ class _BackupsState extends State<_Backups> {
   }
 }
 
-/// One backed-up project, and the whole of it is the button.
 class _Card extends StatefulWidget {
   final BackupState backup;
   final BackupProject project;
   final bool fetching;
   final VoidCallback onOpen;
 
-  /// Asks for the card's menu, at a place on the screen.
   final void Function(Offset at) onMenu;
 
   const _Card({
@@ -456,7 +444,6 @@ class _CardState extends State<_Card> {
                             child: FittedText(project.name,
                                 t.bodyPrimary.copyWith(fontSize: 12)),
                           ),
-                          // Hidden marks take no clicks either.
                           IgnorePointer(
                             ignoring: !_hover,
                             child: Opacity(
@@ -486,7 +473,6 @@ class _CardState extends State<_Card> {
                       Text(
                         [
                           backupWhen(project.updated),
-                          // Said only when it was another machine.
                           if (head != null &&
                               head.device.isNotEmpty &&
                               head.device != AccountState.deviceLabel)
@@ -497,8 +483,6 @@ class _CardState extends State<_Card> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 4),
-                      // How many versions, and what they come to: the
-                      // figure to go by when room has to be made.
                       Text(
                           [
                             l10n.backupVersions(project.versions),

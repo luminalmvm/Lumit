@@ -34,8 +34,6 @@ fn unpremult(c: vec4<f32>) -> vec3<f32> {
     return vec3<f32>(0.0);
 }
 
-// One clamped tap, already unpremultiplied and put on the perceptual curve
-// (== cpu::perceptual of cpu::unpremult).
 fn pt(xy: vec2<i32>, dx: i32, dy: i32, size: vec2<i32>) -> vec3<f32> {
     let c = clamp(xy + vec2<i32>(dx, dy), vec2<i32>(0, 0), size - vec2<i32>(1, 1));
     return sqrt(max(unpremult(textureLoad(src, c, 0)), vec3<f32>(0.0)));

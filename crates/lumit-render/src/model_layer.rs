@@ -1,8 +1,3 @@
-//! A Model layer in the realiser: the mesh pass's picture and depth for one
-//! Model draw, and the order of a run of 3D layers that holds one. The
-//! compositor joins the two with
-//! [`lumit_gpu::composite::Compositor::composite_joined`].
-
 use crate::draw::{CompLayerDraw, DrawSource};
 use crate::model::{Behind, ModelDraw};
 use crate::realise::Realiser;
@@ -51,13 +46,11 @@ impl Realiser<'_> {
             .map(|p| Mat4::from_cols_array_2d(p) * Mat4::from_cols_array_2d(&m.model_to_comp))
             .collect();
         let takes = !m.holdout || l.material.accepts_shadows != LightingShadows::Off;
-        // The glass is left out of the picture it bends.
         let behind = match m.behind.lock().as_deref() {
             Ok(Behind::LeftOut) => return None,
             Ok(Behind::Bends(picture)) => Some(picture.clone()),
             _ => None,
         };
-        // Lines show no material, so they make no layer's picture.
         let wire = display.shading == Shading::Wireframe;
         let (mut depths, mut looks) = (Vec::new(), Vec::new());
         for k in m.looks.iter().filter(|_| !wire) {
@@ -86,10 +79,6 @@ impl Realiser<'_> {
             },
             instances: &[],
             casters: casters.filter(|_| takes),
-            // ponytail: a holdout takes no model's shadow, as the maps hold its
-            // own and the footage has those already. A map without it if a
-            // model's shadow on a stand-in is missed. One carrying a projection
-            // has nothing under it to show those shadows, so it takes them.
             maps: maps.filter(|_| takes && (!m.holdout || projected)),
             display,
             environment,
@@ -98,7 +87,6 @@ impl Realiser<'_> {
             poses: &m.poses,
         };
         let picture = self.fx.model(&self.ctx, &m.scene, &view).ok()?;
-        // A holdout stands in for something in the footage, sharp or not.
         let lens = camera.filter(|_| !m.holds_out()).and_then(|cam| {
             let (bounds, placed) = (&m.scene.bounds, to_comp(m));
             crate::realise::dof::model_lens(cam, bounds, placed, (width, height), self.render_scale)
@@ -127,8 +115,6 @@ impl Realiser<'_> {
         if !crate::model::display().takes_shadows() {
             return None;
         }
-        // ponytail: a faded model casts its whole shadow, as a depth can't
-        // carry how see-through it is. Fade it into the maps if it's missed.
         let casters: Vec<MapCaster> = layers
             .iter()
             .filter(|l| l.material.casts_shadows != LightingShadows::Off && l.opacity > 0.0)
@@ -180,8 +166,6 @@ impl Realiser<'_> {
         self.fx.shadow_maps(&self.ctx, &casters, &lights, side)
     }
 
-    /// A material's rows for the mesh pass, the layers they name made into
-    /// pictures at their own size.
     fn look(
         &self,
         look: &crate::model_material::Look,
@@ -224,7 +208,6 @@ impl Realiser<'_> {
         }
     }
 
-    /// A layer a material reads, made into a picture at its own size.
     fn look_picture(&self, slot: &crate::draw::LayerInputDraw) -> Option<wgpu::Texture> {
         let [w, h] = slot.size()?;
         let px = |v: f32| ((v * self.render_scale).ceil() as u32).clamp(1, 8192);
@@ -272,7 +255,6 @@ impl Realiser<'_> {
     }
 }
 
-/// How many layers from `i` on make a run of 3D layers.
 fn run_from(layers: &[CompLayerDraw], i: usize) -> usize {
     let in_run = |l: &CompLayerDraw| l.three_d && !l.ends_run;
     let starts = layers.get(i).is_some_and(in_run) && (i == 0 || !in_run(&layers[i - 1]));
@@ -289,13 +271,6 @@ pub(crate) fn glass_starts(layers: &[CompLayerDraw], i: usize) -> bool {
 }
 
 impl Realiser<'_> {
-    /// Lay the picture behind the glass in the run of 3D layers that begins
-    /// at `i`, if it has any: `seed`, the comp under the run, with the run
-    /// drawn over it without its glass. Cards in front of the glass are in it
-    /// too, but they cover the glass by depth.
-    // ponytail: the run is drawn twice, so glass costs about an adjustment
-    // layer plus the run again. Drawing the run's pictures once and
-    // compositing them twice is the upgrade.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn lay_behind(
         &self,
@@ -351,17 +326,14 @@ pub(crate) fn glass(l: &CompLayerDraw) -> Option<&ModelDraw> {
     (bends && m.looks.iter().any(|k| k.material.transmission > 0.0)).then_some(m)
 }
 
-/// Whether any of `m`'s materials is projected from a camera.
 fn projects(m: &ModelDraw) -> bool {
     m.looks.iter().any(|k| k.projector.is_some())
 }
 
-/// A Model draw's metres to comp pixels, parents and all.
 pub(crate) fn to_comp(m: &ModelDraw) -> Mat4 {
     Mat4::from_cols_array_2d(&m.placement) * Mat4::from_cols_array_2d(&m.model_to_comp)
 }
 
-/// The middle of a Model draw's box in comp pixels, `None` for any other draw.
 pub(crate) fn middle(l: &CompLayerDraw) -> Option<Vec3> {
     let DrawSource::Model(m) = &l.source else {
         return None;

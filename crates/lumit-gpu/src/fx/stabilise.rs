@@ -1,5 +1,3 @@
-//! Stabilise's warp on the card (`fx_stabilise.wgsl`), and its Fill.
-
 use crate::GpuContext;
 
 use super::{work_texture, FxEngine};
@@ -18,7 +16,6 @@ pub struct StabiliseOp {
     pub readout: [f32; 4],
 }
 
-/// A filled frame in the raster being drawn.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct StabiliseFillOp {
     /// Output pixel to a pixel of the frame drawn.
@@ -27,9 +24,7 @@ pub struct StabiliseFillOp {
     pub rect: [f32; 4],
     /// How far in from that edge a frame fades in, in pixels.
     pub feather: f32,
-    /// How the frame drawn moved while it was read.
     pub motion: [f32; 4],
-    /// The rolling shutter, as [`StabiliseOp::readout`].
     pub readout: [f32; 4],
 }
 
@@ -58,8 +53,6 @@ fn row(r: [f32; 3]) -> [f32; 4] {
 }
 
 impl FxEngine {
-    /// Draw a linear working texture through one frame's warp, returning a new
-    /// texture of the same size.
     pub fn stabilise(
         &self,
         ctx: &GpuContext,
@@ -170,10 +163,6 @@ mod tests {
             .fold(0.0, f32::max)
     }
 
-    /// The warp on the card agrees with its CPU reference on a slide, a turn,
-    /// a lean and a rolling shutter taken out, gives the picture back for the
-    /// identity, leaves the edges a move drags in transparent, keeps only
-    /// Crop's frame, and is bit-stable.
     #[test]
     fn wgsl_stabilise_matches_the_cpu_oracle() {
         let Some(ctx) = crate::test_support::lease() else {
@@ -251,8 +240,6 @@ mod tests {
                     worst(&gpu, &img) < 1e-3,
                     "the identity gives the picture back"
                 ),
-                // Output pixel x shows input x + 3.25: the rightmost columns
-                // read past the input and are transparent.
                 "slide" => assert_eq!(gpu[((5 * w + (w - 1)) * 4 + 3) as usize], 0.0),
                 "crop" => {
                     assert_eq!(
@@ -288,10 +275,6 @@ mod tests {
         }
     }
 
-    /// Fill: the strip a slide drags into view comes from the neighbour, from
-    /// the right place of it; the interior is the frame's own, as the plain
-    /// warp draws it; what no frame reaches stays empty; and the card agrees
-    /// with the CPU reference with a feather and trims.
     #[test]
     fn wgsl_stabilise_fill_takes_the_edge_from_the_neighbour() {
         let Some(ctx) = crate::test_support::lease() else {
@@ -352,7 +335,6 @@ mod tests {
         for x in 0..w {
             assert_eq!(px(&gpu, x, 1)[3], 0.0, "nothing reaches above the frame");
         }
-        // With a rolling shutter taken out, each frame by its own motion.
         let (m_now, m_next) = ([0.01, -0.02, 3.0, 1.5], [-0.01, 0.015, 5.0, -1.0]);
         let readout = [0.7, 1.0, h as f32, 0.0];
         for (feather, rect, readout) in [
@@ -386,8 +368,6 @@ mod tests {
                 "feather {feather}, readout {readout:?}: worst diff {d}"
             );
         }
-        // A picture with transparency: where its frame covers, it stays
-        // transparent, and the neighbour shows only past its edge.
         let mut holed = now.clone();
         for (i, px) in holed.chunks_mut(4).enumerate() {
             if (i as u32 % w) < 20 {

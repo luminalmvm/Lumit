@@ -34,7 +34,6 @@ import 'package:lumit_flutter/state/platform.dart'
 String get cloudUrl =>
     Platform.environment['LUMIT_CLOUD'] ?? 'https://cloud.lumitlab.com';
 
-/// The page a browser is left on once a sign-in from it has reached Lumit.
 const String signedInPage = 'https://lumitlab.com/signed-in';
 
 /// What the server refused with, or `offline` when it was not reached.
@@ -52,7 +51,6 @@ class CloudError implements Exception {
   String toString() => 'CloudError($code, $status)';
 }
 
-/// What one plan costs, as the server reads it from the shop.
 class CloudPrice {
   final String amount;
   final String currency;
@@ -72,7 +70,6 @@ class CloudConfig {
   /// Pro is free for everyone who signs in, while it is being tried out.
   final bool preview;
 
-  /// Whether a subscription can be bought yet.
   final bool billing;
   final CloudPrice? monthly, yearly;
 
@@ -104,7 +101,6 @@ class CloudConfig {
   bool get anySignIn => email || google || discord || apple;
 }
 
-/// A subscription as the shop last described it.
 class CloudSubscription {
   /// `active`, `trialing`, `past_due`, `paused` or `canceled`.
   final String status;
@@ -112,7 +108,6 @@ class CloudSubscription {
   /// `month`, `year`, or null when the shop did not say.
   final String? interval;
 
-  /// When it next renews, and when it ends if it has been cancelled.
   final DateTime? renews, ends;
 
   const CloudSubscription(this.status, this.interval, this.renews, this.ends);
@@ -127,7 +122,6 @@ class CloudSubscription {
   }
 }
 
-/// The account a profile is signed in to.
 class CloudAccount {
   final String id, email, name;
 
@@ -138,7 +132,6 @@ class CloudAccount {
   final String? avatar;
   final bool pro;
 
-  /// Pro only because everyone is, for now.
   final bool preview;
   final CloudSubscription? subscription;
 
@@ -202,7 +195,6 @@ class CloudAccount {
   bool get onIphone => store == 'apple';
 }
 
-/// Another account, by the username it is found by and the name it shows.
 typedef Friend = ({String username, String name});
 
 /// The account's friends, who has asked to be one, and whom it has asked.
@@ -229,7 +221,6 @@ class Friends {
   }
 }
 
-/// Who a person can sign in with besides a password.
 enum SignInWith { google, discord, apple }
 
 /// How many times a password is stretched, and the shortest one taken. The
@@ -237,11 +228,6 @@ enum SignInWith { google, discord, apple }
 const int _stretch = 600000;
 const int shortestPassword = 10;
 
-/// The key sent in place of [password]: PBKDF2-HMAC-SHA256 over it, salted
-/// with the address it belongs to so the same password on two accounts comes
-/// to two keys. About two seconds, off the UI thread.
-// ponytail: plain Dart, so a slow machine waits a few seconds to sign in.
-// The engine could do it in a tenth of the time if that ever matters.
 Future<String> passwordKey(String email, String password) => Isolate.run(() {
       final salt = sha256
           .convert(utf8.encode('lumit-cloud/v1/${email.trim().toLowerCase()}'))
@@ -270,8 +256,6 @@ Uint8List _random(int count) {
 String _base64Url(List<int> bytes) =>
     base64Url.encode(bytes).replaceAll('=', '');
 
-/// The account the current profile is signed in to, if it is, and every call
-/// made on its behalf.
 class AccountState extends ChangeNotifier {
   /// What to say this machine is, on the list of places an account is signed
   /// in. Its name and nothing else.
@@ -290,7 +274,6 @@ class AccountState extends ChangeNotifier {
   bool get signedIn => account != null;
   bool get pro => account?.pro ?? false;
 
-  /// The secret store's name for the current profile's long token.
   String? _slot;
   String? _access;
   DateTime _accessExpires = DateTime.fromMillisecondsSinceEpoch(0);
@@ -334,8 +317,6 @@ class AccountState extends ChangeNotifier {
     }
     return config;
   }
-
-  // --- Requests ------------------------------------------------------------
 
   /// One request. Throws a [CloudError] for anything but a 2xx answer.
   Future<(int, Map<String, dynamic>)> _send(String method, String path,
@@ -464,7 +445,6 @@ class AccountState extends ChangeNotifier {
     return false;
   }
 
-  /// Take a sign-in the server just handed over and make it this profile's.
   Future<void> _adopt(Map<String, dynamic> signIn) async {
     final slot = _slot;
     if (slot == null) throw const CloudError('no_profile');
@@ -474,8 +454,6 @@ class AccountState extends ChangeNotifier {
     notifyListeners();
     unawaited(loadFriends());
   }
-
-  // --- Signing in ----------------------------------------------------------
 
   /// Ask for an account under [email]. The server posts a six-digit code to
   /// it either way, and says nothing here about whether the address was
@@ -534,7 +512,6 @@ class AccountState extends ChangeNotifier {
     _pending = null;
   }
 
-  /// Post a code to [email] for choosing a new password.
   Future<void> resetStart(String email) async =>
       _send('POST', '/v1/auth/reset/start', body: {'email': email.trim()});
 
@@ -549,8 +526,6 @@ class AccountState extends ChangeNotifier {
         .$2);
   }
 
-  /// The door a sign-in in the browser comes back through, while one is
-  /// under way.
   HttpServer? _returning;
 
   /// Sign in with a Google, Discord or Apple account, in the person's own
@@ -625,14 +600,12 @@ class AccountState extends ChangeNotifier {
     }
   }
 
-  /// Stop waiting for the browser to come back.
   void cancelSignIn() {
     final waiting = _returning;
     _returning = null;
     waiting?.close(force: true);
   }
 
-  /// Sign out of this profile's account, here and at the server.
   Future<void> signOut() async {
     final token = _access;
     if (token != null) {
@@ -645,9 +618,6 @@ class AccountState extends ChangeNotifier {
     await _signedOut();
   }
 
-  // --- The account ---------------------------------------------------------
-
-  /// Read the account again: its name, and whether it has Pro.
   Future<void> refreshAccount() async {
     try {
       account = CloudAccount.from(await call('GET', '/v1/me'));
@@ -670,8 +640,6 @@ class AccountState extends ChangeNotifier {
         await call('PATCH', '/v1/me', body: {'username': username.trim()}));
     notifyListeners();
   }
-
-  // --- Friends -------------------------------------------------------------
 
   /// The friends last read, cleared with the account.
   Friends friends = const Friends();
@@ -709,8 +677,6 @@ class AccountState extends ChangeNotifier {
   Future<void> sendToFriend(String id, String username) =>
       call('POST', '/v1/shared', body: {'id': id, 'to': username});
 
-  /// Whether the server emails the account about new comments on any of
-  /// its review links.
   Future<void> setReviewMail(bool on) async {
     account = CloudAccount.from(
         await call('PATCH', '/v1/me', body: {'review_mail': on}));
@@ -723,12 +689,10 @@ class AccountState extends ChangeNotifier {
     await _signedOut();
   }
 
-  /// The shop's page for buying Pro by the month or the year.
   Future<String> checkoutUrl({required bool yearly}) async =>
       (await call('POST', '/v1/billing/checkout',
           body: {'plan': yearly ? 'yearly' : 'monthly'}))['url'] as String;
 
-  /// The shop's page for changing or ending a subscription.
   Future<String> portalUrl() async =>
       (await call('POST', '/v1/billing/portal'))['url'] as String;
 

@@ -48,9 +48,7 @@ type Tex = wgpu::Texture;
 /// the slot over without knowing anything else about the effect.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AuxKind {
-    /// Nothing beside the op — every effect but a handful.
     None,
-    /// The parallel LUT list (docs/08 §3.11): one parsed cube per `lut` op.
     Lut,
     /// The Lens flare's custom prescription: one `.lens` file per flare
     /// op. Its Matte source used to be counted off this same index; it is now
@@ -61,7 +59,6 @@ pub enum AuxKind {
     /// The layer's decoded motion — the dense field and the neighbour frames
     /// beside it, both whole, never per-op.
     FlowField,
-    /// Every motion field measured, by offset, and the neighbour frames.
     FlowFields,
 }
 
@@ -105,7 +102,6 @@ pub struct AuxSlot<'a> {
 /// (14-ENGINEERING-RULES §4).
 #[derive(Clone, Copy)]
 pub enum AuxData<'a> {
-    /// The effect declared [`AuxKind::None`].
     None,
     /// This op's colour table - a `lut` op's parsed cube or an OCIO op's baked
     /// table - or `None` when the file was unset, missing, 1D or unreadable,
@@ -128,13 +124,10 @@ pub enum AuxData<'a> {
         field: Option<&'a Tex>,
         neighbours: &'a [(i32, Tex)],
     },
-    /// Every field by offset, at its measured size, then the neighbour frames.
     FlowFields(&'a [(i32, Tex)], &'a [(i32, Tex)]),
 }
 
 impl<'a> AuxSlot<'a> {
-    /// Bundle one op's aux data with its generic matte, its auxiliary layer
-    /// and its mask path.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         data: AuxData<'a>,
@@ -312,15 +305,7 @@ impl<'a> AuxSlot<'a> {
     }
 }
 
-/// One migrated effect's GPU pass.
-///
-/// The arguments are what [`crate::fxops::run_ops`] already holds when an op
-/// comes round: the engine, the device, the picture the chain is carrying, its
-/// size, and whatever the render prepared beside the stack for it. `run` returns
-/// the picture after the pass, which for most effects is a new texture.
 pub trait GpuEffect: Sync + 'static {
-    /// The stable name this answers to — the same `match_name` the effect's
-    /// declaration carries in `lumit-core`.
     fn match_name(&self) -> &'static str;
 
     /// Which parallel input list this effect consumes a slot of.
@@ -349,8 +334,6 @@ pub trait GpuEffect: Sync + 'static {
         None
     }
 
-    /// Draw the effect, with its parameters read from the resolved bag and its
-    /// side-table input (if it declared one) already bound.
     #[allow(clippy::too_many_arguments)]
     fn run(
         &self,
@@ -364,7 +347,6 @@ pub trait GpuEffect: Sync + 'static {
     ) -> Tex;
 }
 
-/// Every migrated effect's GPU pass, in the catalogue's order.
 static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &CustomShader,
     &Blur,
@@ -509,11 +491,6 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &PointsModifier("flow_points"),
     &PointsModifier("bake_points"),
     &PointsModifier("sort_points"),
-    // The seven layer styles that render (docs/impl/layer-styles.md §8).
-    // Satin and Bevel and emboss are declared in `lumit_core::fx::styles` but
-    // have no pass here, so an instance of one resolves to an op this table
-    // misses and the picture passes through untouched — the same calm degrade a
-    // missing LUT takes, never a fault.
     &StyleDropShadow,
     &StyleOuterGlow,
     &StyleGradientOverlay,
@@ -567,8 +544,6 @@ pub fn gpu_effect(match_name: &str) -> Option<&'static dyn GpuEffect> {
         })
 }
 
-/// Every name this table answers to, for the test that holds it against the
-/// catalogue. Built-ins first, then whatever registered at run time.
 pub fn gpu_effect_names() -> impl Iterator<Item = &'static str> {
     GPU_EFFECTS
         .iter()
@@ -638,9 +613,6 @@ impl GpuEffect for DirectionalBlur {
     ) -> Tex {
         let (length_px, angle_deg, edge, mix) =
             effects::directional_blur::DirectionalBlur::read(p).packed();
-        // The unit direction and the tap count are derived here exactly as the
-        // old `run_ops` arm derived them, from the same two numbers the CPU
-        // reference derives them from.
         let (dx, dy) = lumit_core::fx::maths::rgb_split_offset(1.0, angle_deg);
         fx.dir_blur(
             ctx,
@@ -1174,8 +1146,6 @@ impl GpuEffect for ChromaticAberration {
                     mix,
                 },
             ),
-            // The radial spectral split: the old arm passed angle 0.0,
-            // so the offset vector is the same `(amount_px, 0)` it always was.
             effects::chromatic_aberration::Fringe::Spectral {
                 amount_px,
                 samples,
@@ -1519,27 +1489,33 @@ impl GpuEffect for Gradient {
         _aux: AuxSlot<'_>,
     ) -> Tex {
         let g = effects::gradient::Gradient::read(p).packed();
-        fx.gradient(
-            ctx,
-            tex,
-            w,
-            h,
-            &lumit_gpu::fx::generate::GradientOp {
-                radial: g.radial,
-                start: g.start,
-                axis: g.axis,
-                inv_len2: g.inv_len2,
-                inv_len: g.inv_len,
-                c0: g.c0,
-                c1: g.c1,
-                scatter: g.scatter,
-                seed: g.seed,
-                mix: g.mix,
-                clip_to_alpha: g.clip_to_alpha,
-                mids: g.mids,
-                mid: g.mid,
-            },
-        )
+        let g = g.in_display(effects::gradient::in_display(p));
+        fx.gradient(ctx, tex, w, h, &gradient_op(&g))
+    }
+}
+
+/// The Gradient kernel's numbers as the GPU op takes them, field for field.
+fn gradient_op(
+    p: &lumit_core::fx::cpu::gradient::GradientParams,
+) -> lumit_gpu::fx::generate::GradientOp {
+    lumit_gpu::fx::generate::GradientOp {
+        shape: p.shape,
+        start: p.start,
+        axis: p.axis,
+        inv_len2: p.inv_len2,
+        inv_len: p.inv_len,
+        turn: p.turn,
+        focal: p.focal,
+        c0: p.c0,
+        c1: p.c1,
+        scatter: p.scatter,
+        seed: p.seed,
+        mix: p.mix,
+        clip_to_alpha: p.clip_to_alpha,
+        mids: p.mids,
+        mid: p.mid,
+        mid_alpha: p.mid_alpha,
+        display: p.display,
     }
 }
 
@@ -1606,6 +1582,9 @@ impl GpuEffect for FractalNoise {
                 lacunarity: f.field.lacunarity,
                 perlin: f.field.perlin,
                 turbulent: f.field.turbulent,
+                base: f.base,
+                kind: f.kind,
+                distortion: f.distortion,
                 cycle: f.field.cycle,
                 cos_sin: f.cos_sin,
                 offset: f.offset,
@@ -1660,6 +1639,7 @@ impl GpuEffect for TurbulentDisplace {
                 pin: t.pin,
                 inv_pin_band: t.inv_pin_band,
                 mix: t.mix,
+                bulge: t.bulge,
             },
         )
     }
@@ -2059,7 +2039,6 @@ impl GpuEffect for MeshWarp {
         aux: AuxSlot<'_>,
     ) -> Tex {
         let m = effects::mesh_warp::MeshWarp::packed_in(p);
-        // A flat grid changes nothing, so it costs nothing.
         if m.is_flat() {
             return tex.clone();
         }
@@ -2700,8 +2679,6 @@ impl GpuEffect for Dof {
         p: Params<'_>,
         aux: AuxSlot<'_>,
     ) -> Tex {
-        // An empty slot — unset, missing or cyclic — is the labelled no-op,
-        // exactly as the old arm's `if let Some` was.
         let Some(depth) = aux.matte() else {
             return tex.clone();
         };
@@ -3092,33 +3069,11 @@ impl GpuEffect for StyleGradientOverlay {
         _aux: AuxSlot<'_>,
     ) -> Tex {
         let d = lumit_core::fx::styles::defs::GradientOverlay::read(p).packed(w, h);
-        fx.gradient(
-            ctx,
-            tex,
-            w,
-            h,
-            &lumit_gpu::fx::generate::GradientOp {
-                radial: d.radial,
-                start: d.start,
-                axis: d.axis,
-                inv_len2: d.inv_len2,
-                inv_len: d.inv_len,
-                c0: d.c0,
-                c1: d.c1,
-                scatter: d.scatter,
-                seed: d.seed,
-                mix: d.mix,
-                clip_to_alpha: d.clip_to_alpha,
-                mids: d.mids,
-                mid: d.mid,
-            },
-        )
+        let d = d.in_display(effects::gradient::in_display(p));
+        fx.gradient(ctx, tex, w, h, &gradient_op(&d))
     }
 }
 
-/// Stroke (**style**) — the one kernel this package brings that nothing
-/// else in the tree already had: a separable dilate and erode of the layer's
-/// alpha, with the band between them painted and laid over the layer.
 struct StyleStroke;
 impl GpuEffect for StyleStroke {
     fn match_name(&self) -> &'static str {
@@ -4874,7 +4829,6 @@ impl GpuEffect for Grid {
             return crate::grid_lines::draw(fx, ctx, tex, w, h, &inst, G::px_scale_of(p));
         }
         let style = inst.draw_style();
-        // The camera, in the raster this frame is drawn at.
         let projection = aux
             .schedule()
             .and_then(|s| s.projection)
@@ -5020,7 +4974,6 @@ impl GpuEffect for PointsModifier {
         let px_scale = p.float(ParamId::new("derived.px_scale"), 1.0);
         let mix = (p.float(ParamId::new("mix"), 100.0) / 100.0).clamp(0.0, 1.0);
         let stream = self.modified(fx, ctx, tex, w, h, p, aux, px_scale);
-        // Nothing wired, or nothing to show: the picture passes through.
         let Some(stream) = stream.filter(|_| mix > 0.0) else {
             return tex.clone();
         };
@@ -5170,8 +5123,6 @@ impl GpuEffect for Scatter {
     }
 }
 
-/// What Scatter and Emit from image post to the card: the candidates, the
-/// picture they are tested against, and the rule.
 struct Thrown {
     candidates: lumit_core::fx::points::PointsStream,
     /// `None` reads the effect's own input.
@@ -5365,7 +5316,6 @@ impl GpuEffect for CloneToPoints {
         let frame = [w as f32 / px_scale.max(1e-6), h as f32 / px_scale.max(1e-6)];
         let mut stamps = inst.stamps(&stream, of);
         if inst.distribution == lumit_core::fx::effects::clone_to_points::DIST_LAYOUT {
-            // Each copy's length along the line is its picture's.
             let unit = |i: usize| {
                 let which = stamps.index_of(i) as usize;
                 let size = pictures
@@ -5385,13 +5335,6 @@ impl GpuEffect for CloneToPoints {
             .schedule()
             .and_then(|c| c.projection)
             .map(|proj| proj.rescaled(px_scale));
-        // One draw per run of neighbours that share a picture, so the stamps
-        // still go down in the stream's one order whichever layer each takes.
-        //
-        // ponytail: a pass and two small buffers per run, so a few thousand
-        // points choosing at random between layers is a few thousand passes.
-        // Bind the pictures as one array and choose per instance in the
-        // kernel if a profile shows that costing.
         let mut runs = Vec::new();
         let mut from = 0usize;
         for to in 1..=points.len() {
@@ -5427,15 +5370,6 @@ impl GpuEffect for CloneToPoints {
     }
 }
 
-/// Clone deformer: the copies a Clone to points above drew, aligned or cut as
-/// one group.
-///
-/// Nothing here decides anything — `CloneDeformer::apply` does it, on the
-/// picture read back. What this settles is the picture, the Boolean layer's
-/// picture at this raster, and the outlines the builder laid beside the op.
-///
-/// ponytail: a read back and an upload per frame. Move the cut and the
-/// shift into a kernel, with the outlines as coverage, if a profile shows it.
 struct CloneDeformer;
 impl GpuEffect for CloneDeformer {
     fn match_name(&self) -> &'static str {
@@ -5530,7 +5464,6 @@ impl GpuEffect for Trail {
             .schedule()
             .map(|c| c.input.iter().map(|s| s.rescaled(px_scale)).collect())
             .unwrap_or_default();
-        // Nothing wired: the picture passes through, the documented calm.
         if samples.is_empty() {
             return tex.clone();
         }
@@ -5588,7 +5521,6 @@ impl GpuEffect for ConnectPoints {
         let inst = C::read(p);
         let px_scale = C::px_scale_of(p);
         let style = inst.draw_style();
-        // Nothing wired: the picture passes through, the documented calm.
         let Some(stream) = points_input_at(aux, 0, px_scale) else {
             return tex.clone();
         };
@@ -5640,7 +5572,6 @@ impl GpuEffect for PointsField {
     ) -> Tex {
         use lumit_core::fx::effects::points_field::PointsField as F;
         let inst = F::read(p);
-        // Nothing wired: the picture passes through.
         let Some(stream) = points_input_at(aux, 0, F::px_scale_of(p)) else {
             return tex.clone();
         };
@@ -5654,7 +5585,6 @@ impl GpuEffect for PointsField {
     }
 }
 
-/// A stream's seeds as the card's pass takes them.
 fn field_points(
     inst: lumit_core::fx::effects::points_field::PointsField,
     stream: &lumit_core::fx::points::PointsStream,
@@ -5669,7 +5599,6 @@ fn field_points(
         .collect()
 }
 
-/// Points field's rows as the card's pass takes them.
 fn points_field_op(
     inst: lumit_core::fx::effects::points_field::PointsField,
     points: &[lumit_gpu::fx::points_field::FieldPoint],
@@ -5706,8 +5635,6 @@ fn text_points(
     (stream, projection)
 }
 
-/// Text to points: a point per character, word or line of a Text layer,
-/// drawn through the shared points draw as Grid's are.
 struct TextToPoints;
 impl GpuEffect for TextToPoints {
     fn match_name(&self) -> &'static str {
@@ -5816,8 +5743,6 @@ impl GpuEffect for LabelPoints {
         let px_scale = L::px_scale_of(p);
         let mix = (inst.mix / 100.0).clamp(0.0, 1.0);
         let sched = aux.schedule();
-        // Nothing wired, no Text layer or nothing to show: the picture passes
-        // through.
         let (Some(stream), Some(doc), true) = (
             sched.and_then(|c| c.input.first()),
             sched.and_then(|c| c.label.as_deref()),
@@ -5878,7 +5803,6 @@ impl GpuEffect for LabelPoints {
                 Placed::new(d, label, octave_size(k), anchor)
             })
             .collect();
-        // The box round every label, kept to the frame.
         let (mut x0, mut y0, mut x1, mut y1) = (i64::from(w), i64::from(h), 0i64, 0i64);
         for l in &placed {
             x0 = x0.min(l.bounds[0]);
@@ -6156,7 +6080,6 @@ impl GpuEffect for TypeFill {
         } else {
             inst.pieces(&bands, &free, &along, w as f32, px_scale)
         };
-        // Back from the frame on its side: each box turned to the picture.
         if down {
             for piece in &mut pieces {
                 let [x0, y0, x1, y1] = piece.rect;
@@ -6266,8 +6189,6 @@ impl GpuEffect for AddGrain {
     }
 }
 
-/// A stream worked out on the host, drawn through the shared points draw in
-/// `style` under the comp's camera, as Grid's is.
 #[allow(clippy::too_many_arguments)]
 fn draw_host_stream(
     fx: &FxEngine,
@@ -6299,7 +6220,6 @@ fn draw_host_stream(
     )
 }
 
-/// Math points: a formula worked out on the host, as Grid's lattice is.
 struct MathPoints;
 impl GpuEffect for MathPoints {
     fn match_name(&self) -> &'static str {
@@ -6326,8 +6246,6 @@ impl GpuEffect for MathPoints {
     }
 }
 
-/// Contour points: the pieces of the mask's or the shapes' flattened line,
-/// worked out on the host, as Points along path is.
 struct ContourPoints;
 impl GpuEffect for ContourPoints {
     fn match_name(&self) -> &'static str {
@@ -6356,8 +6274,6 @@ impl GpuEffect for ContourPoints {
     }
 }
 
-/// Intersection points: where the mask's or the shapes' flattened line
-/// crosses itself, worked out on the host, as Points along path is.
 struct IntersectionPoints;
 impl GpuEffect for IntersectionPoints {
     fn match_name(&self) -> &'static str {
@@ -6407,14 +6323,11 @@ impl GpuEffect for TimeLoop {
         use lumit_core::fx::effects::time_loop::TimeLoop as L;
         let pictures = aux.layer_inputs();
         let picture = |k: usize| pictures.get(k).and_then(Option::as_ref).map(|l| &l.tex);
-        // No source, or none at that moment: the picture passes through.
         let Some(now) = picture(0) else {
             return tex.clone();
         };
         let mix = (L::read(p).mix / 100.0).clamp(0.0, 1.0);
         let share = p.float(L::DERIVED_NEXT_SHARE, 0.0);
-        // Source layer empty: the layer itself at the loop's moments, in
-        // the place of its picture.
         let replace = p.float(L::DERIVED_OWN, 0.0) > 0.5;
         fx.time_loop(ctx, tex, now, picture(1), share, replace, w, h, mix)
     }
@@ -6426,8 +6339,6 @@ mod tests {
     use super::*;
     use crate::gpufx_particulate::{particulate_frames, particulate_op};
     use lumit_core::fx::catalogue::BUILTIN_DEFS;
-
-    // ------------------------------------------------------ Particulate (PS2)
 
     /// One Particulate fixture: a busy, non-degenerate parameter set with every
     /// force on, so a kernel that quietly skipped the drag terms or the
@@ -6597,7 +6508,7 @@ mod tests {
         projection: Option<lumit_core::fx::points::Projection>,
     ) {
         let Some(ctx) = lumit_gpu::test_support::lease() else {
-            return; // no GPU here — skip, as the gpu crate's own tests do
+            return;
         };
         let fx = ctx.fx();
         let (w, h) = (128u32, 96u32);
@@ -6758,9 +6669,6 @@ mod tests {
         );
     }
 
-    /// The picture, in all three render modes (particulate.md §9 item 8): the
-    /// instanced quads land where the software dabs land, inside the
-    /// `moderate` class's perceptual epsilon.
     #[test]
     fn the_particulate_draw_matches_the_cpu_reference_in_every_mode() {
         draw_matches_the_cpu_reference(None);
@@ -6778,18 +6686,15 @@ mod tests {
         let sprite_tex = lumit_gpu::fx::common::upload_linear_f32(&ctx, &sprite_px, 8, 8);
         for mode in [0u32, 1, 2] {
             let (mut inst, sched, carriage) = particulate_fixture_3d(mode, 4_000, projection);
-            // Wrapped at the frame's edge, which moves a streak's tail with
-            // its head.
             inst.edge = 2;
             inst.edge_margin = 0.0;
-            // Opacity by a number of each particle's own, colour by speed.
             inst.opacity_by = 2;
             inst.colour_by = 1;
             // Through Colour over life, one stop faded, so the card reads the
             // ramp the CPU bakes.
             let stop = |at: f64, c: [f32; 4], opacity: f64| lumit_core::shape::GradientStop {
                 position: lumit_core::anim::Property::fixed(at),
-                colour: lumit_core::model::LinearColour(c),
+                colour: lumit_core::shape::colour::still(lumit_core::model::LinearColour(c)),
                 opacity: lumit_core::anim::Property::fixed(opacity),
             };
             inst.colour_over_life = lumit_core::fx::colour_stops::ColourStops::sanitised(
@@ -6878,20 +6783,15 @@ mod tests {
             eprintln!("particulate mode {mode}: worst |Δ| {worst:.3e}");
             assert!(worst < 2e-2, "mode {mode}: worst |Δ| {worst}");
 
-            // Bit-stable against itself (docs/08 §2.4): two evaluations of one
-            // frame are one picture.
             let again = fx.particulate(&ctx, &tex, w, h, (mode == 1).then_some(&sprite_tex), &op);
             let twice =
                 lumit_gpu::fx::common::readback_linear_f32(&ctx, &again, w, h).expect("readback");
             assert_eq!(gpu, twice, "mode {mode} is not bit-stable");
         }
 
-        // Particle blend, over a picture: Add as the card blends it, and a
-        // spread of the modes the tiles work out, against the CPU's formula.
         let (mut inst, sched, carriage) = particulate_fixture_3d(0, 4_000, projection);
         let ground: Vec<f32> = (0..w * h).flat_map(|_| [0.2, 0.1, 0.05, 1.0]).collect();
         let tex = lumit_gpu::fx::common::upload_linear_f32(&ctx, &ground, w, h);
-        // Add, Multiply, Screen, Overlay, Darken and Luminosity.
         for blend in [6u32, 2, 8, 11, 1, 25] {
             inst.particle_blend = blend;
             let (packed, style, frames, curves) = particulate_pieces(inst, &carriage);
@@ -6936,8 +6836,6 @@ mod tests {
             assert_eq!(gpu, twice, "blend {blend} is not bit-stable");
         }
     }
-
-    // ------------------------------------------------- Grid
 
     /// A Grid over the little raster, off-centre and jittered, so nothing in
     /// the comparison below can pass by symmetry.
@@ -7035,14 +6933,11 @@ mod tests {
         eprintln!("grid draw: worst |Δ| {worst:.3e}");
         assert!(worst < 2e-2, "worst |Δ| {worst}");
 
-        // Bit-stable against itself (docs/08 §2.4).
         let again = fx.points_draw(&ctx, &tex, w, h, None, &op);
         let twice =
             lumit_gpu::fx::common::readback_linear_f32(&ctx, &again, w, h).expect("readback");
         assert_eq!(gpu, twice, "the generic draw is not bit-stable");
     }
-
-    // ---------------------------------------------- Scatter
 
     /// **The rejection agrees, path for path**: the vertex stage keeps
     /// the candidates the CPU reference keeps, and refuses the ones it refuses.
@@ -7068,8 +6963,6 @@ mod tests {
                 max_points: 20_000,
                 mix: 100.0,
             };
-            // Left half opaque, right half clear — the same field both paths
-            // read, uploaded once.
             let mut field = vec![0.0f32; (w * h * 4) as usize];
             for y in 0..h {
                 for x in 0..w {
@@ -7120,8 +7013,6 @@ mod tests {
             assert!(worst < 2e-2, "invert {invert}: worst |Δ| {worst}");
         }
     }
-
-    // ---------------------------------------- Emit from image
 
     /// **The brightness rejection agrees, path for path**: the vertex
     /// stage keeps the candidates the CPU reference keeps, and refuses the ones
@@ -7214,8 +7105,6 @@ mod tests {
         eprintln!("emit from image draw: worst |Δ| {worst:.3e}");
         assert!(worst < 2e-2, "worst |Δ| {worst}");
     }
-
-    // ---------------------------------------- Clone to points
 
     /// **A stamp laid by a consumer is a stamp Particulate lays**: the
     /// instanced draw and the CPU reference put the same layer in the same
@@ -7384,15 +7273,11 @@ mod tests {
         eprintln!("clone to points draw: worst |Δ| {worst:.3e}");
         assert!(worst < 2e-2, "worst |Δ| {worst}");
 
-        // Bit-stable against itself (docs/08 §2.4).
         let again = fx.points_draw_runs(&ctx, &tex, w, h, &runs);
         let twice =
             lumit_gpu::fx::common::readback_linear_f32(&ctx, &again, w, h).expect("readback");
         assert_eq!(gpu, twice, "the stamped draw is not bit-stable");
 
-        // Copy blend, over a picture and split into two runs, so the second
-        // run's stamps meet the first's: Add as the card blends it, and
-        // Multiply, Screen and Difference through the tiles.
         let ground: Vec<f32> = (0..w * h).flat_map(|_| [0.2, 0.1, 0.05, 1.0]).collect();
         let tex = lumit_gpu::fx::common::upload_linear_f32(&ctx, &ground, w, h);
         let half = points.len() / 2;
@@ -7443,8 +7328,6 @@ mod tests {
         }
     }
 
-    // ---------------------------------------------- Points field
-
     /// The card's jump flooding finds the points the brute-force reference
     /// finds. Compared on Distance, which runs smoothly across the edge
     /// between two points' cells, so a pixel that settles on the other of two
@@ -7493,8 +7376,6 @@ mod tests {
         // the pass's second look next door, one pixel here is past it.
         assert!(worst < 5e-3, "worst |Δ| {worst}");
     }
-
-    // ---------------------------------------------------- Trail
 
     /// **The tail the card draws is the tail the reference drew**: the
     /// instanced quads land where the software dabs land, inside the `moderate`
@@ -7553,7 +7434,6 @@ mod tests {
         assert!(stream.len() > 20, "the fixture drew {} dabs", stream.len());
         let style = trail.draw_style();
 
-        // What the trail alone draws, to measure the line below against.
         let mut bare = vec![0.0f32; (w * h * 4) as usize];
         lumit_core::fx::points::draw_stream(&mut bare, w, h, &stream, &tails, &style, None);
         // One more capsule, 1 px wide, lying along the join between pixel
@@ -7575,7 +7455,6 @@ mod tests {
 
         let mut cpu = vec![0.0f32; (w * h * 4) as usize];
         lumit_core::fx::points::draw_stream(&mut cpu, w, h, &stream, &tails, &style, None);
-        // Half its light in each of the two rows, over whatever was there.
         for y in [89u32, 90] {
             let at = ((y * w + 64) * 4 + 3) as usize;
             let added = cpu[at] - bare[at];
@@ -7630,18 +7509,11 @@ mod tests {
         let flat = lumit_gpu::fx::common::readback_linear_f32(&ctx, &flat, w, h).expect("readback");
         assert_ne!(gpu, flat, "the capsules joined nothing up");
 
-        // Bit-stable against itself (docs/08 §2.4).
         let again = fx.points_draw(&ctx, &tex, w, h, None, &op);
         let twice =
             lumit_gpu::fx::common::readback_linear_f32(&ctx, &again, w, h).expect("readback");
         assert_eq!(gpu, twice, "the tail draw is not bit-stable");
     }
-
-    // ------------------------------------------- Connect points
-
-    // ---------------------------------------------------------------
-    // The goldens (PS7; points-stream.md §5, particulate.md §9)
-    // ---------------------------------------------------------------
 
     /// Where the checked-in expectation lives: the crate root, following the
     /// `fx-labels.txt`/`fx-reference.json` convention it is regenerated by.
@@ -7729,7 +7601,6 @@ mod tests {
         ]
     }
 
-    /// The CPU reference's stream for the golden fixture.
     fn golden_stream() -> lumit_core::fx::points::PointsStream {
         let (packed, _, sched, carriage) = particulate_golden_fixture(0);
         lumit_core::fx::points::evaluate(
@@ -7740,7 +7611,6 @@ mod tests {
         )
     }
 
-    /// The CPU reference's picture for one mode, on the golden raster.
     fn golden_frame(mode: u32, sprite: &[f32]) -> Vec<f32> {
         let (packed, style, sched, carriage) = particulate_golden_fixture(mode);
         let (stream, tails) = lumit_core::fx::points::evaluate_with_tail(
@@ -7798,7 +7668,6 @@ mod tests {
         out
     }
 
-    /// The golden file as blocks: each header's words, then its numbers.
     fn golden_blocks() -> Vec<(Vec<String>, Vec<f64>)> {
         let text = std::fs::read_to_string(golden_path()).unwrap_or_default();
         let mut blocks: Vec<(Vec<String>, Vec<f64>)> = Vec::new();
@@ -7822,7 +7691,6 @@ mod tests {
         blocks
     }
 
-    /// The numbers of the block whose header starts with these words.
     fn golden_block(name: &str, second: Option<&str>) -> Vec<f64> {
         golden_blocks()
             .into_iter()
@@ -8116,7 +7984,6 @@ mod tests {
     /// these.
     struct RunTimeDef {
         schema: &'static lumit_core::fx::schema::EffectSchema,
-        /// Whether this definition's render fails, as a disabled plugin's does.
         fails: std::sync::atomic::AtomicBool,
     }
 
@@ -8126,7 +7993,7 @@ mod tests {
         }
         fn apply_cpu(&self, rgba: &mut [f32], _w: u32, _h: u32, _p: Params<'_>) {
             if self.fails.load(std::sync::atomic::Ordering::SeqCst) {
-                return; // identity, byte for byte
+                return;
             }
             for (i, v) in rgba.iter_mut().enumerate() {
                 if i % 4 != 3 {
@@ -8141,8 +8008,6 @@ mod tests {
         }
     }
 
-    /// A leaked declaration under a plugin-shaped name, as the OFX host leaks
-    /// one for a plugin it has just described.
     fn a_run_time_def(match_name: &'static str) -> &'static RunTimeDef {
         Box::leak(Box::new(RunTimeDef {
             schema: Box::leak(Box::new(lumit_core::fx::schema::EffectSchema {
@@ -8167,7 +8032,6 @@ mod tests {
         }))
     }
 
-    /// An instance of a registered effect, in the namespace a plugin's carries.
     fn a_run_time_instance(match_name: &str) -> lumit_core::model::EffectInstance {
         lumit_core::fx::builtins::instantiate(match_name).expect("the catalogue knows it")
     }
@@ -8184,11 +8048,10 @@ mod tests {
     #[test]
     fn a_run_time_effect_renders_between_two_builtins() {
         let Some(ctx) = lumit_gpu::test_support::lease() else {
-            return; // no GPU here — skip, as the gpu crate's own tests do
+            return;
         };
         let def = a_run_time_def("ofx:test.render.stack");
         assert!(crate::gpufx::ofx::register(def), "it registered");
-        // Both halves arrived, and the pass is the definition's own.
         assert!(gpu_effect("ofx:test.render.stack").is_some());
         assert!(BUILTIN_DEFS.get("ofx:test.render.stack").is_some());
         assert!(
@@ -8328,7 +8191,6 @@ mod tests {
                 .any(|(id, why)| *id == inst.id && why.contains("disabled")),
             "the failure was not filed under the row it happened on: {badged:?}"
         );
-        // And it is forgotten once the row is gone, or once it works again.
         crate::gpufx::ofx::clear_errored(inst.id);
         assert!(!crate::gpufx::ofx::errored_ops()
             .iter()
@@ -8362,7 +8224,6 @@ mod tests {
         // value rather than an interpolation of it.
         let source: Vec<f32> = (0..(w * h)).flat_map(|_| [1.0f32, 1.0, 0.0, 1.0]).collect();
 
-        // A grade that takes green to zero and leaves red and blue alone.
         let cube: Vec<[f32; 3]> = (0..8u32)
             .map(|i| [(i & 1) as f32, 0.0, ((i >> 2) & 1) as f32])
             .collect();
@@ -8396,7 +8257,6 @@ mod tests {
             &ops,
             &[],
             &[],
-            // Slot 0 empty, slot 1 the grade: only the *second* op grades.
             &[None, Some(ColourTable::Cube(kill_green))],
             &[],
             &[],
@@ -8586,8 +8446,6 @@ mod tests {
             fresh,
             "a project saved before the Matte row existed renders different pixels"
         );
-        // And an explicitly Absent slot per op — what `build.rs` fills for an
-        // unset row — is the same nothing as no list at all.
         let absent: Vec<crate::fxops::LayerInput> =
             (0..3).map(|_| crate::fxops::LayerInput::Absent).collect();
         assert_eq!(
@@ -8616,9 +8474,7 @@ mod tests {
         };
         let fx = ctx.fx();
         let (w, h) = (16u32, 16u32);
-        // Opaque white, so any change in the picture is the coverage changing.
         let source: Vec<f32> = (0..(w * h)).flat_map(|_| [1.0f32, 1.0, 1.0, 1.0]).collect();
-        // A left half that shows and a right half that does not.
         let shape: Vec<f32> = (0..(w * h))
             .flat_map(|i| {
                 let lit = f32::from(i % w < w / 2);
@@ -8674,7 +8530,6 @@ mod tests {
             lumit_gpu::fx::common::readback_linear_f32(&ctx, &out, w, h).expect("readback")
         };
 
-        // Bound on the layer-input list: the picture wears the shape.
         let cut = rendered(&[crate::fxops::LayerInput::Texture(shape_tex.clone())], &[]);
         for y in 0..h {
             let left = ((y * w) * 4 + 3) as usize;
@@ -8683,7 +8538,6 @@ mod tests {
             assert_eq!(cut[right], 0.0, "the dark half must be cut away");
         }
 
-        // Unset: the labelled no-op, and the picture back untouched.
         let absent = rendered(&[crate::fxops::LayerInput::Absent], &[]);
         assert_eq!(absent, source, "an unset source must be the identity");
 

@@ -2,8 +2,6 @@
 // See fx_lens_flare_trace.wgsl for the pass map; this file is split from it
 // because each stage binds a different resource set.
 
-// The combine stage.
-
 // The layout fx_lens_flare_detect.wgsl fills and the trace reads. This pass
 // reads the emitting extent too: the starburst of an extended source
 // is the point sprite convolved with the source, and the stamp grid below is
@@ -164,13 +162,13 @@ fn flare_soft_light_d(d: vec4<f32>) -> vec4<f32> {
 fn flare_blend(mode: u32, d: vec4<f32>, e: vec4<f32>) -> vec4<f32> {
     let one = vec4<f32>(1.0);
     if (mode == 0u) {
-        return vec4<f32>(e.rgb, 1.0); // Normal: the element replaces the layer
+        return vec4<f32>(e.rgb, 1.0);
     } else if (mode == 1u) {
-        return d + e; // Add
+        return d + e;
     } else if (mode == 2u) {
-        return d + e - d * e; // Screen
+        return d + e - d * e;
     } else if (mode == 3u) {
-        return d * e; // Multiply
+        return d * e;
     } else if (mode == 4u) {
         // Overlay = hard light with the LAYER as the switch.
         let lo = 2.0 * d * e;
@@ -187,17 +185,17 @@ fn flare_blend(mode: u32, d: vec4<f32>, e: vec4<f32>) -> vec4<f32> {
         let hi = one - 2.0 * (one - d) * (one - e);
         return select(hi, lo, e <= vec4<f32>(0.5));
     } else if (mode == 7u) {
-        return max(d, e); // Lighten
+        return max(d, e);
     } else if (mode == 8u) {
-        return min(d, e); // Darken
+        return min(d, e);
     } else if (mode == 9u) {
-        return abs(d - e); // Difference
+        return abs(d - e);
     } else if (mode == 10u) {
-        return d + e - 2.0 * d * e; // Exclusion
+        return d + e - 2.0 * d * e;
     } else if (mode == 11u) {
-        return max(d - e, vec4<f32>(0.0)); // Subtract
+        return max(d - e, vec4<f32>(0.0));
     }
-    return max(d / max(e, vec4<f32>(1e-6)), vec4<f32>(0.0)); // Divide
+    return max(d / max(e, vec4<f32>(1e-6)), vec4<f32>(0.0));
 }
 
 @compute @workgroup_size(8, 8)
@@ -277,7 +275,6 @@ fn combine(@builtin(global_invocation_id) gid: vec3<u32>) {
                     if (u < 0.0 || u > 1.0 || v < 0.0 || v > 1.0) {
                         continue;
                     }
-                    // The two slices bracketing this stamp's field fraction.
                     let s = fa.x * f32(STARBURST_FIELDS - 1u);
                     let s0 = min(i32(floor(s)), i32(STARBURST_FIELDS) - 1);
                     let s1 = min(s0 + 1, i32(STARBURST_FIELDS) - 1);

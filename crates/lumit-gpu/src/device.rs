@@ -1,10 +1,6 @@
-//! Opening the graphics device, and in the browser build, showing a picture.
-
 #[cfg(target_arch = "wasm32")]
 use crate::GpuError;
 
-/// What every device is opened with: the card's own format features and
-/// float filtering where it has them, and its widest texture.
 pub(crate) fn descriptor(adapter: &wgpu::Adapter) -> wgpu::DeviceDescriptor<'static> {
     wgpu::DeviceDescriptor {
         required_features: adapter.features()
@@ -25,6 +21,58 @@ pub(crate) fn widest_texture(adapter: &wgpu::Adapter) -> wgpu::Limits {
         max_buffer_size: card.max_buffer_size,
         max_storage_buffer_binding_size: card.max_storage_buffer_binding_size,
         ..Default::default()
+    }
+}
+
+/// What went wrong on the card while it was watched ([`crate::GpuContext::faults`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Fault {
+    /// The card had no room for something it was asked to make, or the device
+    /// was lost. The picture is black or half drawn, and drawing it again once
+    /// the card has caught up may mend it.
+    Starved(String),
+    /// Something else the card refused. Drawing it again draws it the same.
+    Refused(String),
+}
+
+impl crate::GpuContext {
+    /// Start watching what the card refuses, until the matching
+    /// [`Self::faults`]. What it refuses meanwhile is answered there rather
+    /// than reported. Pairs nest. The browser build only hears of a lost
+    /// device, as it can't wait for the answer in place.
+    pub fn watch_faults(&self) {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.device.push_error_scope(wgpu::ErrorFilter::Validation);
+            self.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
+        }
+    }
+
+    /// The first thing that went wrong since [`Self::watch_faults`], if
+    /// anything did.
+    pub fn faults(&self) -> Option<Fault> {
+        #[cfg(not(target_arch = "wasm32"))]
+        let (full, refused) = (
+            pollster::block_on(self.device.pop_error_scope()),
+            pollster::block_on(self.device.pop_error_scope()),
+        );
+        #[cfg(target_arch = "wasm32")]
+        let (full, refused): (Option<wgpu::Error>, Option<wgpu::Error>) = (None, None);
+        if self.device_lost() {
+            return Some(Fault::Starved("the graphics device was lost".into()));
+        }
+        if let Some(e) = full {
+            return Some(Fault::Starved(crate::error_chain(&e)));
+        }
+        // wgpu files a descriptor heap that is full as a validation error.
+        refused.map(|e| {
+            let said = crate::error_chain(&e);
+            if said.contains("Not enough memory") {
+                Fault::Starved(said)
+            } else {
+                Fault::Refused(said)
+            }
+        })
     }
 }
 
@@ -120,7 +168,6 @@ pub fn read_stand_ins() -> u64 {
 #[cfg(target_arch = "wasm32")]
 pub mod read;
 
-/// The browser's card, once [`prepare_web`] has it.
 #[cfg(target_arch = "wasm32")]
 struct WebDevice {
     instance: wgpu::Instance,
@@ -165,14 +212,12 @@ pub async fn prepare_web() -> Result<(), GpuError> {
     Ok(())
 }
 
-/// The adapter, device and queue [`prepare_web`] opened.
 #[cfg(target_arch = "wasm32")]
 pub(crate) fn web_device() -> Result<(wgpu::Adapter, wgpu::Device, wgpu::Queue), GpuError> {
     let web = WEB_DEVICE.get().ok_or(GpuError::NoAdapter)?;
     Ok((web.adapter.clone(), web.device.clone(), web.queue.clone()))
 }
 
-/// One Viewer view's canvas, sized to the last picture shown on it.
 #[cfg(target_arch = "wasm32")]
 struct Canvas {
     canvas: web_sys::OffscreenCanvas,

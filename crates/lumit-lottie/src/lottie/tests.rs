@@ -18,7 +18,6 @@ use uuid::Uuid;
 use crate::settings::{Format, Settings};
 use crate::{Host, Picture, Still};
 
-/// A host whose every footage item is a small still.
 struct Stills;
 
 impl Host for Stills {
@@ -67,6 +66,7 @@ fn comp(name: &str, w: u32, h: u32, seconds: i64, layers: Vec<Layer>) -> Composi
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -101,12 +101,8 @@ fn vertex(x: f64, y: f64) -> Vertex {
     }
 }
 
-/// A comp with something of everything the emitter maps: eased keys, a
-/// morphing path, a trim, a precomp with Retime, a mask, a matte, text as
-/// shapes with an animator, an image, a solid and an expression.
 fn fixture() -> (Arc<Document>, Uuid) {
     let seconds = 4;
-    // The precomp: a ball crossing it.
     let mut ball = ShapeItem::filled(
         "Ball",
         BezierPath {
@@ -145,7 +141,6 @@ fn fixture() -> (Arc<Document>, Uuid) {
     let inner = comp("Inner", 300, 200, seconds, vec![ball_layer]);
     let inner_id = inner.id;
 
-    // The card: a rounded rectangle and a shape that morphs, trimmed.
     let mut card = ShapeItem::filled(
         "Card",
         BezierPath {
@@ -246,7 +241,6 @@ fn fixture() -> (Arc<Document>, Uuid) {
         &[("position_x", 12.0), ("rotation", 4.0)],
     ));
 
-    // The precomp layer, retimed and masked, its opacity an expression.
     let mut badge = base_layer(
         "Badge".into(),
         LayerKind::Precomp { comp: inner_id },
@@ -269,7 +263,6 @@ fn fixture() -> (Arc<Document>, Uuid) {
         extra: serde_json::Map::new(),
     };
 
-    // A title as shapes, a letter at a time, through a wipe.
     let mut animator = lumit_core::text::TextAnimator::new("Rise");
     animator.position_y = Property::fixed(30.0);
     animator.opacity = Property::fixed(0.0);
@@ -325,7 +318,6 @@ fn fixture() -> (Arc<Document>, Uuid) {
         source: Default::default(),
     });
 
-    // A still, scaling up, and a solid behind everything.
     let mut photo = base_layer(
         "Photo".into(),
         LayerKind::Footage {
@@ -373,7 +365,6 @@ fn fixture() -> (Arc<Document>, Uuid) {
     (Arc::new(doc), main_id)
 }
 
-/// A built-in effect with some of its numbers set.
 fn effect(name: &str, set: &[(&str, f64)]) -> lumit_core::model::EffectInstance {
     let mut e = lumit_core::fx::builtins::instantiate(name).unwrap();
     for (id, v) in set {
@@ -401,7 +392,6 @@ fn ball_layer_primitive() -> ShapePrimitive {
     }
 }
 
-/// A Lottie property's value at frame `f`, evaluated as a player does.
 fn play(p: &Value, f: f64) -> Vec<f64> {
     let nums = |v: &Value| -> Vec<f64> {
         match v {
@@ -455,10 +445,6 @@ fn layer<'a>(layers: &'a Value, name: &str) -> &'a Value {
         .unwrap_or_else(|| panic!("no layer {name}"))
 }
 
-/// The promise of the emitter: the file a player reads gives, frame by
-/// frame, the numbers Lumit draws, and everything in the comp arrives as
-/// what it is (keys, a precomp with its Retime, a mask, a matte, letters,
-/// an image).
 #[test]
 fn an_export_plays_back_what_lumit_draws() {
     let (doc, main) = fixture();
@@ -477,7 +463,6 @@ fn an_export_plays_back_what_lumit_draws() {
     for f in 0..=120 {
         let f = f64::from(f);
         let t = f / 30.0;
-        // Eased and held keys, on a layer that starts late.
         let card = lumit("Card");
         let lt = t - 0.5;
         let ks = &layer(layers, "Card")["ks"];
@@ -492,7 +477,6 @@ fn an_export_plays_back_what_lumit_draws() {
             "card r at {f}"
         );
 
-        // The precomp's Retime, and its expression baked to the frame.
         let badge = lumit("Badge");
         let l = layer(layers, "Badge");
         let tm = play(&l["tm"], f)[0];
@@ -508,7 +492,6 @@ fn an_export_plays_back_what_lumit_draws() {
         );
     }
 
-    // The morph eases between its two shapes as Lumit's does.
     let card = lumit("Card");
     let LayerKind::Shape { contents } = &card.kind else {
         panic!()
@@ -559,15 +542,12 @@ fn an_export_plays_back_what_lumit_draws() {
         }
     }
 
-    // A matte copy sits directly above the title and points at it.
     let list = layers.as_array().unwrap();
     let title = list.iter().position(|l| l["nm"] == "Title").unwrap();
     assert_eq!(list[title - 1]["td"], 1);
     assert_eq!(list[title]["tt"], 1);
     assert_eq!(list[title]["tp"], list[title - 1]["ind"]);
-    // Letters, one group each.
     assert_eq!(list[title]["shapes"].as_array().unwrap().len(), 5);
-    // The mask, the precomp's asset and the embedded picture.
     let badge = layer(layers, "Badge");
     assert_eq!(badge["hasMask"], true);
     assert_eq!(badge["masksProperties"][0]["mode"], "a");
@@ -578,7 +558,6 @@ fn an_export_plays_back_what_lumit_draws() {
     assert!(assets.iter().any(|a| a["p"]
         .as_str()
         .is_some_and(|p| p.starts_with("data:image/png;base64,"))));
-    // The expression was baked, and the check says so.
     assert!(out.issues.iter().any(|i| i.reason == "expression_baked"));
 
     // The effects lottie-web draws, in its units: a Transform's points in the
@@ -608,8 +587,6 @@ fn an_export_plays_back_what_lumit_draws() {
     assert_eq!(levels["ef"].as_array().unwrap().len(), 36);
 }
 
-/// A .lottie opens as a v2 dotLottie: its manifest, its animation and its
-/// picture inside, an opaque one as a JPEG when a quality is asked for.
 #[test]
 fn a_dotlottie_holds_its_manifest_animation_and_pictures() {
     let (doc, main) = fixture();
@@ -637,7 +614,6 @@ fn a_dotlottie_holds_its_manifest_animation_and_pictures() {
         .find(|a| a["u"] == "/i/")
         .unwrap();
     assert_eq!(image["e"], 0);
-    // An opaque picture with a quality asked for goes in as a JPEG.
     assert_eq!(image["p"], "image_1.jpg");
     let jpeg = read("i/image_1.jpg");
     assert_eq!(&jpeg[..2], &[0xFF, 0xD8]);

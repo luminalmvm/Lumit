@@ -14,23 +14,17 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use uuid::Uuid;
 
-/// The rate a mix is measured at.
 const RATE: u32 = 48_000;
 
 static MEASURING: AtomicBool = AtomicBool::new(false);
 static STOP: AtomicBool = AtomicBool::new(false);
 
-/// Why a measure has no answer.
 pub(crate) enum Refused {
-    /// Another measure is running.
     Busy,
-    /// Stopped before it finished.
     Stopped,
-    /// Nothing in the mix is heard.
     Silent,
 }
 
-/// Stop the measure running now, if there is one.
 pub(crate) fn stop() {
     STOP.store(true, Ordering::Relaxed);
 }
@@ -68,7 +62,6 @@ pub(crate) fn normalise(
     })
 }
 
-/// Run `f` as the one measure running.
 fn alone<T>(f: impl FnOnce() -> Result<T, Refused>) -> Result<T, Refused> {
     if MEASURING.swap(true, Ordering::AcqRel) {
         return Err(Refused::Busy);
@@ -79,7 +72,6 @@ fn alone<T>(f: impl FnOnce() -> Result<T, Refused>) -> Result<T, Refused> {
     answer
 }
 
-/// A measure of a mix with nothing heard in it is no answer.
 fn heard(m: Measured) -> Result<Measured, Refused> {
     if m.integrated.is_finite() {
         Ok(m)

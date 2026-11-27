@@ -87,7 +87,6 @@ class EffectsPresetsPanelFrb extends StatefulWidget {
   /// The library listing seam, injected by tests so no real library is read.
   final List<BridgePresetInfo> Function()? presetsLister;
 
-  /// The library's groups, on the same footing as [presetsLister].
   final List<String> Function()? groupsLister;
 
   /// The catalogue seam, on the same footing as [presetsLister]. It exists so a
@@ -126,7 +125,6 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb>
   /// rebuild, which would scan a folder on every search keystroke.
   List<BridgePresetInfo> _presets = const [];
 
-  /// Every group in the library, empty ones too, read alongside [_presets].
   List<String> _groups = const [];
 
   /// The headings the user has folded shut, by engine category name. Nothing
@@ -143,11 +141,8 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb>
   /// A group's name in [_shut] is its path after this.
   static const String _groupKey = '*group:';
 
-  /// How far each level of groups is set in: a group's triangle sits under
-  /// its parent's name.
   static const double _indent = 18;
 
-  /// The Favourites group's name in [_shut], on the same footing.
   static const String _favouritesKey = '*favourites';
 
   /// The star by the search box is on: only the favourites are listed. How
@@ -179,7 +174,6 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb>
     _boundUi = Provider.of<LumitUiState>(context, listen: false);
     _boundUi!.panelSearchRequest.addListener(_onSearchRequested);
     _boundUi!.presetsChanged.addListener(_refreshPresets);
-    // An extension installed or removed brings or takes its effects.
     _boundUi!.extensions.addListener(_extensionsChanged);
     _bindTileKeys(_boundUi!);
   }
@@ -203,7 +197,6 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb>
   void _readLibrary() {
     _readTemplates();
     _presets = (widget.presetsLister ?? listPresets)();
-    // A test that hands in its own presets reads no real groups either.
     _groups = (widget.groupsLister ??
         (widget.presetsLister == null
             ? listPresetGroups
@@ -262,7 +255,6 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb>
         headings.putIfAbsent(effect.category, () => heading);
       }
     }
-    // By name under each heading, as the menus list them.
     for (final effects in grouped.values) {
       effects.sort(byEffectLabel);
     }
@@ -356,7 +348,6 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb>
                 : grouped.isEmpty && presetRows.isEmpty && templateRows.isEmpty) {
               return Center(child: Text(l10n.noEffectsMatch, style: t.small));
             }
-            // The ground under the rows has a menu of its own.
             return GestureDetector(
               behavior: HitTestBehavior.opaque,
               onSecondaryTapDown: (d) => _groundMenu(d.globalPosition, ui),
@@ -401,7 +392,6 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb>
     );
   }
 
-  /// A small mark on the bar at the panel's top, greyed when it can do nothing.
   Widget _barButton(LumitTheme t, String key, String tip, String icon,
           VoidCallback? onPressed) =>
       LumitTooltip(
@@ -418,8 +408,6 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb>
         ),
       );
 
-  /// Whether anything would take an effect: a clip picked in the Cut timeline,
-  /// or a selected layer.
   bool _canApply(LumitUiState ui) =>
       ui.cutClip.value != null || ui.selectedLayers.value.isNotEmpty;
 
@@ -450,13 +438,10 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb>
     setState(() {});
   }
 
-  /// Every category heading drawn, for Collapse all.
   List<String> _categories = const [];
 
-  /// Open every heading.
   void _expandAll() => setState(_shut.clear);
 
-  /// Shut every heading, the groups in the library among them.
   void _collapseAll() => setState(() => _shut
     ..addAll(_categories)
     ..add(_favouritesKey)
@@ -478,7 +463,6 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb>
         ),
       ];
 
-  /// The menu on the panel's ground.
   void _groundMenu(Offset at, LumitUiState ui) {
     final layers = ui.selectedLayers.value;
     showMenuAt<void>(
@@ -689,7 +673,6 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb>
             '${group.replaceAll('/', Platform.pathSeparator)}');
   }
 
-  /// The menu on a saved preset.
   void _presetMenu(Offset at, LumitUiState ui, BridgePresetInfo preset) {
     final own = isOwnPreset(preset);
     final canApply = _canApply(ui);
@@ -774,7 +757,6 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb>
     _changeLibrary(() => renamePresetGroup(group: group, name: name));
   }
 
-  /// Delete a group, asking first when there are presets in it.
   Future<void> _deleteGroup(String group) async {
     final count = _presets
         .where((p) => p.group == group || p.group.startsWith('$group/'))
@@ -869,14 +851,11 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb>
     ];
   }
 
-  /// The saved-preset heading, its groups and the presets in them.
   List<Widget> _presetRows(LumitTheme t, LumitUiState ui, String needle) {
-    // A search finds a preset by its name or by a group it is in.
     final shown = _presets
         .where((p) =>
             needle.isEmpty || _presetId(p).toLowerCase().contains(needle))
         .toList();
-    // While searching, only the groups that hold something found.
     final groups = <String>{
       if (needle.isEmpty) ..._groups,
       for (final preset in shown) ..._withParents(preset.group),
@@ -893,8 +872,6 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb>
     ];
   }
 
-  /// The groups directly inside [parent], each with what is in it, then the
-  /// presets in [parent] itself.
   List<Widget> _groupRows(LumitTheme t, LumitUiState ui, String needle,
       String parent, Set<String> groups, List<BridgePresetInfo> shown) {
     final depth = parent.isEmpty ? 0 : '/'.allMatches(parent).length + 1;
@@ -938,7 +915,6 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb>
     return at < 0 ? '' : group.substring(0, at);
   }
 
-  /// [group] and every group above it.
   static Iterable<String> _withParents(String group) sync* {
     for (var at = group; at.isNotEmpty; at = _parentOf(at)) {
       yield at;
@@ -999,8 +975,6 @@ Widget _star(BuildContext context,
   );
 }
 
-/// One row in the list: the star, then the name, laid out so that starring
-/// something and dragging it onto a layer are the same row's two gestures.
 Widget _libraryRow(
   BuildContext context, {
   required String label,
@@ -1054,7 +1028,6 @@ Widget _libraryRow(
   );
 }
 
-/// Whether the pointer is over a row, for the star that only shows then.
 class _Hovered extends StatefulWidget {
   final Widget Function(BuildContext context, bool hovered) builder;
   const _Hovered({required this.builder});
@@ -1082,10 +1055,8 @@ class _PresetRow extends StatelessWidget {
   final bool favourite;
   final VoidCallback onToggleFavourite;
 
-  /// How far in it is set, by the groups it is in.
   final double indent;
 
-  /// Opens the preset's menu at a point in the window.
   final void Function(Offset at)? onMenu;
   const _PresetRow({
     super.key,
@@ -1100,7 +1071,6 @@ class _PresetRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    // Dragged as an effect is, onto a layer or a clip.
     return Draggable<EffectDragData>(
       data: EffectDragData.preset(preset.path, preset.name),
       dragAnchorStrategy: pointerDragAnchorStrategy,
@@ -1148,8 +1118,6 @@ class _EffectRow extends StatelessWidget {
   final bool favourite;
   final VoidCallback onToggleFavourite;
 
-  /// Something in the catalogue changed — a plugin was switched off, so the
-  /// listing has to be read again.
   final VoidCallback onCatalogueChanged;
   const _EffectRow({
     super.key,

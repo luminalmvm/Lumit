@@ -6,7 +6,6 @@ use crate::GpuContext;
 
 use super::{work_texture, FxEngine};
 
-/// One family of lines, as `GridLines` worked it out.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct LineAxisOp {
     pub cell: f32,
@@ -55,7 +54,6 @@ struct Params {
 }
 
 impl FxEngine {
-    /// Draws Grid's Lines over a linear working texture, returning a new one.
     pub fn grid_lines(
         &self,
         ctx: &GpuContext,

@@ -46,8 +46,6 @@ pub(crate) struct Guided {
 }
 
 impl Guided {
-    /// Size the working set to a frame, keeping the allocation when the size
-    /// has not changed.
     pub(crate) fn resize(&mut self, len: usize) {
         if self.len == len {
             return;
@@ -93,8 +91,6 @@ impl Guided {
             return;
         }
 
-        // Every box mean the local linear model needs, each read straight off
-        // the frame and the matte.
         box_mean(w, h, radius, &mut self.boxes, &mut self.mi_r, |i| {
             frame.px(i)[0]
         });
@@ -133,19 +129,6 @@ impl Guided {
             frame.px(i)[2] * frame.px(i)[2]
         });
 
-        // The per-window recipe. `a` overwrites the cross-covariance planes and
-        // `b` overwrites the matte mean: both are finished with by the time
-        // they are read here, and reusing them keeps the working set at thirteen
-        // planes rather than seventeen.
-        //
-        // ponytail: the ceiling here is **local-linear matting** — this is the
-        // fast approximation to closed-form matting, not the matting Laplacian,
-        // so long translucent strands crossing a busy background come back
-        // muddier than a learned matting head manages. The upgrade path is that
-        // head on the §9 seed seam, not a global Laplacian solve; O(N) is the
-        // budget's load-bearing fact. Observable trigger: a refine band over
-        // hair against a similarly-toned background returning a grey wash
-        // instead of separated strands.
         for i in 0..n {
             let mr = self.mi_r[i];
             let mg = self.mi_g[i];
@@ -160,8 +143,6 @@ impl Guided {
             let gg = self.s_gg[i] - mg * mg + eps;
             let gb = self.s_gb[i] - mg * mb;
             let bb = self.s_bb[i] - mb * mb + eps;
-            // The inverse of a symmetric 3×3 by its adjugate — three cofactors,
-            // one determinant, no library and no iteration.
             let c00 = gg * bb - gb * gb;
             let c01 = rb * gb - rg * bb;
             let c02 = rg * gb - rb * gg;
@@ -185,8 +166,6 @@ impl Guided {
             self.mp[i] = mp - a_r * mr - a_g * mg - a_b * mb;
         }
 
-        // Average the recipe over the windows a pixel belongs to, then read the
-        // matte back out of the guide through it.
         box_mean(w, h, radius, &mut self.boxes, &mut self.s_rr, |i| {
             self.mip_r[i]
         });
@@ -250,7 +229,6 @@ pub(crate) fn box_mean<F: Fn(usize) -> f32>(
     cols.clear();
     cols.resize(w, 0.0);
 
-    // Horizontal sums of row `y` into its slot in the ring.
     let mut row_sums = |y: usize, rows: &mut [f32]| {
         for (x, slot) in line.iter_mut().enumerate() {
             *slot = src(y * w + x);
@@ -279,7 +257,6 @@ pub(crate) fn box_mean<F: Fn(usize) -> f32>(
         at..(at + w).min(rows.len())
     };
 
-    // Vertical sums, then the division by the clipped window's area.
     for y in 0..=r.min(h - 1) {
         row_sums(y, rows);
         for (sum, v) in cols.iter_mut().zip(&rows[held(rows, y)]) {

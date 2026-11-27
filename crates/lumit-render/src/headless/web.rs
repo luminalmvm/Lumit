@@ -1,11 +1,6 @@
-//! The browser build's Viewer: a picture goes onto its view's canvas, and a
-//! read-back lands on a later turn.
-
 use super::{Arc, Document, HeadlessRenderer, PreparedFrame, Quality, SharedFrameInfo, Uuid};
 
 impl HeadlessRenderer {
-    /// Show an already-rendered frame on its view's canvas, where the front end
-    /// takes it as an image. The browser's sibling of the shared texture.
     pub fn present_prepared(
         &mut self,
         prepared: &PreparedFrame,
@@ -22,11 +17,7 @@ impl HeadlessRenderer {
     }
 }
 
-/// The browser build's read-backs, which land on a later turn rather than
-/// being waited for.
 impl HeadlessRenderer {
-    /// [`Self::render_preview`] without the wait. The bytes come back through
-    /// [`Self::poll_read`], at the read-back's own [`size`](lumit_gpu::PendingReadback::size).
     pub fn start_preview_scaled(
         &mut self,
         doc: &Arc<Document>,
@@ -53,8 +44,6 @@ impl HeadlessRenderer {
         Ok(parts.colour.start_readback8(&self.gpu, &reduced))
     }
 
-    /// Start reading a held frame back ([`Self::read_back_frame_texture`]
-    /// without the wait). `None` when it is not held.
     #[must_use]
     pub fn start_held_read(&self, key: u128, bgra: bool) -> Option<lumit_gpu::PendingReadback> {
         let held = self.frame_textures.peek(&(key, bgra))?;
@@ -62,7 +51,6 @@ impl HeadlessRenderer {
         Some(parts.colour.start_readback8(&self.gpu, &held.texture))
     }
 
-    /// Start a scope trace ([`Self::render_scope`] without the wait).
     pub fn start_scope(
         &self,
         rgba: &[u8],
@@ -81,8 +69,6 @@ impl HeadlessRenderer {
         Ok(parts.colour.start_readback8(&self.gpu, &trace))
     }
 
-    /// The bytes of a read-back started above, once they have landed. `None`
-    /// while they have not.
     pub fn poll_read(
         &self,
         read: &mut lumit_gpu::PendingReadback,

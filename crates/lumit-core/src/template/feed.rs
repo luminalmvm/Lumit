@@ -12,40 +12,28 @@ use super::data::{self, Table};
 use super::{Control, ControlKind, Template, Value};
 use crate::model::{Composition, Document};
 
-/// The data linked to a template: the file it came from, its rows as they
-/// were last read, and what each column feeds.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Data {
-    /// The file the rows were read from, for **Reload**.
     pub file: String,
-    /// The rows, kept in the project.
     pub table: Table,
     /// What each column feeds, in column order. A short list feeds nothing
     /// from the columns past its end.
     #[serde(default)]
     pub feeds: Vec<Feeds>,
-    /// Unknown fields from newer Lumit versions (docs/10-FILE-FORMAT.md §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
-/// What a column feeds.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "feeds", content = "control", rename_all = "snake_case")]
 pub enum Feeds {
-    /// Nothing.
     Nothing,
-    /// A control, by its id.
     Control(String),
-    /// A text control's font.
     Font(String),
-    /// A text control's size.
     Size(String),
-    /// A text control's colour.
     Colour(String),
     /// How long that row's version runs, in seconds.
     Length,
-    /// The name of that row's exported file.
     FileName,
 }
 
@@ -88,17 +76,14 @@ pub fn matched(template: &Template, columns: &[String]) -> Vec<Feeds> {
         .collect()
 }
 
-/// One cell that could not be read as what its column feeds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Fault {
     /// The column, counting from 0.
     pub column: usize,
 }
 
-/// One row read as what it gives a copy.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct RowValues {
-    /// Each control fed, by id, and its value.
     pub values: Vec<(String, Value)>,
     /// Each text control's font, size or colour fed: the row's id on a copy
     /// and its value.
@@ -108,7 +93,6 @@ pub struct RowValues {
     pub files: Vec<(String, String)>,
     /// How long this row's version runs, in seconds.
     pub length: Option<f64>,
-    /// The name of this row's exported file.
     pub file_name: Option<String>,
     /// The cells that could not be read. The template's own value stands
     /// there.
@@ -132,7 +116,6 @@ fn to_display(v: f64) -> f64 {
     }
 }
 
-/// A colour cell as a colour row keeps it.
 #[must_use]
 pub fn row_colour(cell: &str) -> Option<[f64; 4]> {
     let [r, g, b, a] = data::colour(cell)?;
@@ -148,7 +131,6 @@ fn font(cell: &str) -> Value {
     }
 }
 
-/// One cell read as the value of `control`. `None` when it cannot be.
 fn cell_value(control: &Control, cell: &str) -> Option<Value> {
     Some(match control.kind {
         ControlKind::Text => Value::Text(cell.to_owned()),

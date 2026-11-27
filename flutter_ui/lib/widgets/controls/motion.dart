@@ -40,7 +40,6 @@ class Entrance extends StatefulWidget {
   /// The size the child starts at, 1 being its own.
   final double scale;
 
-  /// The point the growth is measured from.
   final Alignment alignment;
 
   /// Whether the child only fades. Fixed by the call site rather than worked
@@ -48,8 +47,6 @@ class Entrance extends StatefulWidget {
   /// tree built here must not change shape under a child that is on screen.
   final bool fadeOnly;
 
-  /// The blur the child clears from, as a sigma. Only [Entrance.content]
-  /// takes one.
   final double blur;
 
   /// Whether this is what is on a surface rather than the surface itself. It
@@ -77,8 +74,6 @@ class Entrance extends StatefulWidget {
         blur = 0,
         follows = false;
 
-  /// An entrance that is a fade and nothing else, for a surface that fills
-  /// its place and has nowhere to travel from: a wash, a whole window.
   const Entrance.fade({super.key, required this.spec, required this.child})
       : rise = 0,
         scale = 1,
@@ -114,7 +109,6 @@ class Entrance extends StatefulWidget {
 
 class _EntranceState extends State<Entrance>
     with SingleTickerProviderStateMixin {
-  /// How far into its own time the content waits before it starts.
   static const double _lag = 0.2;
 
   AnimationController? _controller;
@@ -205,7 +199,6 @@ class _EntranceState extends State<Entrance>
       );
 }
 
-/// Tells what is on a surface how far the surface's own entrance has got.
 class _EntranceScope extends InheritedWidget {
   final Animation<double> progress;
 
@@ -301,7 +294,6 @@ class HoverGlow {
 
   HoverGlow(this._vsync, this._onChange);
 
-  /// Whether it is in the hand: a thumb being dragged.
   bool get held => _held;
 
   /// How lit it is, 0 at rest and 1 under the pointer or in the hand.
@@ -320,7 +312,6 @@ class HoverGlow {
       _run(_light ??= _make(), now ? motion.hoverIn : motion.hoverOut, now);
       _run(_swell ??= _make(), motion.swell, now);
     } else if (_held != wasHeld) {
-      // Still lit, but picked up or put down: its colour steps at once.
       _onChange();
     }
   }
@@ -355,8 +346,6 @@ class HoverGlow {
   AnimationController _make() =>
       AnimationController(vsync: _vsync)..addListener(_onChange);
 
-  /// To its on or off end the way [spec] says, or there at once where the
-  /// spec is still.
   static void _run(AnimationController controller, MotionSpec spec, bool on) {
     if (spec.isStill) {
       controller.value = on ? 1 : 0;
@@ -391,7 +380,6 @@ class HoverMark extends StatefulWidget {
   final bool swells;
   final MouseCursor cursor;
 
-  /// The point the growth is measured from.
   final Alignment alignment;
   final Widget Function(BuildContext context, double lit) builder;
 
@@ -460,7 +448,6 @@ class OpenReveal extends StatefulWidget {
 }
 
 class _OpenRevealState extends State<OpenReveal> {
-  /// How many times it has been opened while on screen.
   int _opened = 0;
 
   @override

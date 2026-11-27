@@ -11,25 +11,19 @@ use std::sync::OnceLock;
 
 use crate::fx::noise::hash01;
 
-/// Each texture's side, texels.
 pub const SIZE: usize = 256;
 
 /// How many there are. The controls number them from 1, 0 being none.
 pub const COUNT: usize = 10;
 
-/// The Rainbow texture's number, which [`super::raster`] colours.
 pub const RAINBOW: u32 = 8;
 
-/// The number past the made ones: the effect's Texture layer.
 pub const LAYER: u32 = COUNT as u32 + 1;
 
-/// Each texture's copies, halving from `SIZE` down to one texel.
 pub const LEVELS: u32 = 9;
 
-/// Floats one texture takes with all its copies.
 pub const STRIDE: usize = (4 * SIZE * SIZE - 1) / 3;
 
-/// Where copy `level` starts inside a texture.
 fn level_start(level: u32) -> usize {
     (4 * SIZE * SIZE - ((4 * SIZE * SIZE) >> (2 * level))) / 3
 }
@@ -48,7 +42,6 @@ pub fn all() -> &'static [f32] {
             let top = t.iter().copied().fold(0.0f32, f32::max).max(1e-6);
             t.iter_mut().for_each(|v| *v = (*v / top).clamp(0.0, 1.0));
             out.extend_from_slice(&t);
-            // Each copy is the average of four texels of the one before.
             let mut side = SIZE;
             while side > 1 {
                 let from = out.len() - side * side;
@@ -119,7 +112,6 @@ fn tiled(seed: u32, channel: u32, x: f32, y: f32, period: i32) -> f32 {
     top + (bottom - top) * v
 }
 
-/// A few octaves of [`tiled`], 0..1, starting at `cells` across the texture.
 fn fbm(seed: u32, x: f32, y: f32, cells: i32, octaves: u32) -> f32 {
     let (mut sum, mut amp, mut total, mut cells) = (0.0, 1.0, 0.0, cells);
     for o in 0..octaves {
@@ -140,8 +132,6 @@ fn each(mut f: impl FnMut(f32, f32) -> f32) -> Vec<f32> {
     out
 }
 
-/// Add `f(distance)` round `(cx, cy)` out to `radius`, wrapping round the
-/// edges.
 fn splat(t: &mut [f32], cx: f32, cy: f32, radius: f32, f: impl Fn(f32) -> f32) {
     let r = radius.ceil() as i32 + 1;
     for dy in -r..=r {
@@ -165,8 +155,6 @@ fn ramp(a: f32, b: f32, x: f32) -> f32 {
     t * t * (3.0 - 2.0 * t)
 }
 
-/// Out-of-focus dust on the glass: a faint haze, many small soft motes and
-/// a few big pale discs with brighter rims.
 fn dust() -> Vec<f32> {
     let mut t = each(|x, y| 0.04 * fbm(11, x, y, 4, 4));
     for i in 0..360 {
@@ -193,7 +181,6 @@ fn dust() -> Vec<f32> {
     t
 }
 
-/// Wiped fingerprints of grease: long, curving streaks in patches.
 fn smudge() -> Vec<f32> {
     each(|x, y| {
         // Bend the streaks with a slow field, then stretch them up and down.
@@ -207,8 +194,6 @@ fn smudge() -> Vec<f32> {
     })
 }
 
-/// The bright net light makes through rippled water: the edges between
-/// cells, at two sizes.
 fn caustic() -> Vec<f32> {
     let net = |seed: u32, cells: i32, x: f32, y: f32| {
         let size = SIZE as f32 / cells as f32;
@@ -232,21 +217,17 @@ fn caustic() -> Vec<f32> {
         (-(f2 - f1) / 0.06).exp()
     };
     each(|x, y| {
-        // A gentle wobble so the cells are not straight sided.
         let wx = x + 6.0 * (fbm(31, x, y, 4, 2) - 0.5);
         let wy = y + 6.0 * (fbm(32, x, y, 4, 2) - 0.5);
         0.7 * net(33, 6, wx, wy) + 0.4 * net(34, 12, wx, wy)
     })
 }
 
-/// Concentric rings that crowd together outwards, like light through a
-/// coated element, fading at the rim.
 fn rings() -> Vec<f32> {
     let half = SIZE as f32 * 0.5;
     each(|x, y| {
         let d = (x - half).hypot(y - half) / half;
         let a = (y - half).atan2(x - half);
-        // The wobble grows outwards, so the middle stays round.
         let wobble = d * (0.015 * (a * 7.0).sin() + 0.02 * (fbm(41, x, y, 8, 2) - 0.5));
         let phase = 9.0 * (d + wobble).powi(2) * TAU;
         let band = (0.5 + 0.5 * phase.cos()).powi(2);
@@ -254,7 +235,6 @@ fn rings() -> Vec<f32> {
     })
 }
 
-/// Sparse sharp glints of grit, a few much brighter than the rest.
 fn specks() -> Vec<f32> {
     let mut t = vec![0.0; SIZE * SIZE];
     for i in 0..220 {
@@ -269,7 +249,6 @@ fn specks() -> Vec<f32> {
     t
 }
 
-/// The shortest way from `a` to `b` round a texture that wraps.
 fn wrapped(a: f32, b: f32) -> f32 {
     let n = SIZE as f32;
     let d = (b - a).rem_euclid(n);
@@ -297,8 +276,6 @@ fn stamp(t: &mut [f32], cx: f32, cy: f32, reach: f32, f: impl Fn(f32, f32) -> f3
     }
 }
 
-/// Out-of-focus highlights through a six-bladed iris: hexagons of many
-/// sizes, all turned the same way, each with a brighter rim.
 fn hex_bokeh() -> Vec<f32> {
     let mut t = vec![0.0; SIZE * SIZE];
     let seg = TAU / 6.0;
@@ -320,8 +297,6 @@ fn hex_bokeh() -> Vec<f32> {
     t
 }
 
-/// Fine scratches on the glass: long hairlines, most running one way as a
-/// wipe leaves them, a few deeper and brighter, each fading at its ends.
 fn scratches() -> Vec<f32> {
     let mut t = each(|x, y| 0.03 * fbm(71, x, y, 8, 3));
     for i in 0..70 {
@@ -352,8 +327,6 @@ fn scratches() -> Vec<f32> {
     t
 }
 
-/// A rainbow's bow: a broad soft band round the middle with two faint ones
-/// inside it. [`super::raster`] colours it across the band.
 fn rainbow() -> Vec<f32> {
     let half = SIZE as f32 * 0.5;
     each(|x, y| {
@@ -372,8 +345,6 @@ pub fn rainbow_at(x: f32, y: f32) -> f32 {
     ((d - 0.6) / 0.3).clamp(0.0, 1.0)
 }
 
-/// Rain on the glass: round drops of many sizes, a few running, each dim
-/// inside with a bright rim below and a glint above.
 fn drops() -> Vec<f32> {
     let mut t = vec![0.0; SIZE * SIZE];
     for i in 0..90 {
@@ -382,7 +353,6 @@ fn drops() -> Vec<f32> {
             hash01(81, 1, i, 0, 0) * SIZE as f32,
         );
         let r = 1.5 + 11.0 * hash01(81, 2, i, 0, 0).powi(3);
-        // A running drop is drawn longer downwards.
         let run = if hash01(81, 3, i, 0, 0) < 0.12 {
             1.6
         } else {
@@ -393,7 +363,6 @@ fn drops() -> Vec<f32> {
             let qy = qy / run;
             let d = qx.hypot(qy) / r;
             let inside = 1.0 - ramp(0.9, 1.05, d);
-            // The rim catches the light most on its lower side.
             let lower = 0.5 + 0.5 * qy / (qx.hypot(qy) + 1e-3);
             let rim = ramp(0.65, 0.95, d) * (0.3 + 0.7 * lower);
             let gx = qx + 0.35 * r;
@@ -405,8 +374,6 @@ fn drops() -> Vec<f32> {
     t
 }
 
-/// Fine grain: small bright points thick across the whole square, so a
-/// glow or a ghost through it sparkles faintly.
 fn grain() -> Vec<f32> {
     each(|x, y| {
         let fine = tiled(91, 0, x, y, SIZE as i32);

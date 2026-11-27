@@ -76,7 +76,6 @@ class _StretchBodyState extends State<_StretchBody> {
     return scaled < 1 ? 1 : scaled;
   }
 
-  /// Typing a duration is asking for the speed that produces it.
   void _setFrames(num frames) {
     final from = widget.durationFrames;
     if (from == null) return;
@@ -86,7 +85,6 @@ class _StretchBodyState extends State<_StretchBody> {
 
   void _confirm() => widget.onConfirm(_speed);
 
-  /// The length as a timecode, as the Retime panel's well shows it.
   Widget _duration(LumitTheme t) {
     final (fpsNum, fpsDen) =
         Provider.of<LumitUiState>(context, listen: false).model.fpsExact;
@@ -110,8 +108,6 @@ class _StretchBodyState extends State<_StretchBody> {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final frames = widget.durationFrames;
-    // The dialogue takes focus when it opens, and Enter applies wherever that
-    // focus sits — the same rule the Pre-compose dialogue follows.
     return Focus(
       autofocus: true,
       onKeyEvent: (_, event) {

@@ -104,8 +104,10 @@ A project opened on a computer without the layer's font draws that layer in Inte
 
 A text layer is a layer, so it also takes [effects](/use/effects/),
 [layer styles](/use/layer-styles/), [masks](/use/masks/), and a
-[transform](/use/transform/) like any other. Scaled up, by its own transform or a
-parent's, it is drawn at that size and stays sharp.
+[transform](/use/transform/) like any other. Scaled up, by its own transform, a parent's or
+a [collapsed](/use/layers/#collapse-transformations) precomp's, it is drawn at that size
+and stays sharp. A 3D text layer the camera magnifies is drawn at the size the camera shows
+it. Past about 4096 × 4096 pixels it is drawn at that size and scaled.
 
 :::note[Limitation]
 A text layer has one style. Mixed styling within a single layer is planned.
@@ -269,6 +271,9 @@ A layer's animators move at most 8 font axes.
 
 A letter half inside the range gets half the offset. A letter turns about its own middle
 on the baseline, and everything an animator does happens inside the letter's own frame.
+A letter moved, turned or scaled well past the words is drawn in full, until the layer's
+picture holds as much as 4,096 by 4,096 pixels or is 16,384 on a side. A letter thrown
+further is clipped, as is one on a path that leaves its layer.
 
 Several animators on one layer **compose**: pushes, turns and tints add, scales and
 opacities multiply, and boxes lie one over the other. On a font axis each animator moves a

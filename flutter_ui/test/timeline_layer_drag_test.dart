@@ -1,6 +1,3 @@
-// A layer drag at Minimal and None: no row moves, a line marks where the drop
-// would land, and the layer lands there. The targeting arithmetic has its own
-// file (timeline_drag_test.dart). This one needs no engine.
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,8 +8,6 @@ import 'package:lumit_flutter/widgets/controls.dart';
 void main() {
   const row = 22.0;
 
-  /// A stack of named blocks, in [order], wrapped the way both halves of the
-  /// Timeline wrap theirs.
   Widget stack(
     LayerDragState drag,
     ScrollController scroll,
@@ -72,8 +67,6 @@ void main() {
     expect(layerDragMark(heights, const LayerDrag(0, 3)), 140);
   });
 
-  /// docs/15-DESIGN §8.1: at *Minimal* and *None* a layer is not carried. No
-  /// row moves, and a line marks the place the drop would take.
   testWidgets('a drag that is not carried moves nothing and marks the drop',
       (tester) async {
     for (final level in [AnimationLevel.minimal, AnimationLevel.none]) {
@@ -95,7 +88,6 @@ void main() {
       expect(drag.raised.value, isNull);
       expect(tester.hasRunningAnimations, isFalse);
 
-      // Back up past where it began, and on to the top.
       drag.carry(heights, 0);
       await tester.pump();
       expect(drag.mark.value, isNull, reason: 'back where it began');

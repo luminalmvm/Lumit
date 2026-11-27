@@ -45,20 +45,12 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Drop shadow (style) — §2's entry 1, behind everything.
-///
-/// **In plain terms.** The layer's own shape, softened, tinted, slid in the
-/// direction of the light and drawn underneath it. Two controls the Drop shadow
-/// *effect* does not have: **Spread**, which pushes the softened edge back out
-/// into a fatter, harder shadow, and **Layer knocks out shadow**, which decides
-/// whether the shadow is visible through a semi-transparent layer.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "style_drop_shadow",
     label = "Drop shadow",
     version = 1,
     category = Stylise,
-    // The same gaussian plus one composite the Drop shadow effect carries.
     cost = Moderate,
     // The shadow reaches Distance + Softness past every edge, and there is no
     // honest smaller bound without reading both sliders.
@@ -127,7 +119,6 @@ pub struct DropShadowStyle {
     #[toggle(label = "Layer knocks out shadow", default = true)]
     pub knockout: bool,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -169,7 +160,6 @@ impl DropShadowStyle {
     }
 }
 
-/// Drop shadow (style)'s behaviour.
 pub struct DropShadowStyleDef;
 
 impl EffectDef for DropShadowStyleDef {
@@ -186,12 +176,6 @@ impl EffectDef for DropShadowStyleDef {
     }
 }
 
-/// Colour overlay — §2's entry 5, interior, over the gradient overlay.
-///
-/// **In plain terms.** One flat colour painted across whatever the layer's alpha
-/// says the layer is, edges and feather intact. It is the Fill effect's kernel
-/// wearing a style's uniform, which is why it costs one multiply per pixel and
-/// nothing else.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "style_colour_overlay",
@@ -239,7 +223,6 @@ impl ColourOverlay {
     }
 }
 
-/// Colour overlay's behaviour.
 pub struct ColourOverlayDef;
 
 impl EffectDef for ColourOverlayDef {
@@ -252,18 +235,6 @@ impl EffectDef for ColourOverlayDef {
         cpu::fill(rgba, colour, mix);
     }
 }
-
-// ---------------------------------------------------------------------------
-// The other five that render (docs/impl/layer-styles.md §10's second package),
-// and then the two that do not.
-//
-// Four of the five are the drop-shadow core in another configuration — the
-// generalisation the note counted on: Outer glow is that kernel at zero offset,
-// Inner shadow is it reading the *inverted* alpha and compositing inside the
-// shape, and Inner glow is the inner shadow at zero offset with the Centre
-// source declining the inversion. Gradient overlay is the Gradient effect's own
-// ramp clipped to the coverage. Only Stroke brings a kernel of its own.
-// ---------------------------------------------------------------------------
 
 /// Outer glow — §2's entry 2, behind the layer and in front of its shadow.
 ///
@@ -287,7 +258,6 @@ pub struct OuterGlow {
     #[colour(label = "Glow colour", default = [1.0, 0.94, 0.72, 1.0], max = 4.0)]
     pub glow_colour: [f32; 4],
 
-    /// How strong the glow is, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -302,7 +272,6 @@ pub struct OuterGlow {
     #[slider(min = 0.0, max = 250.0, default = 12.0, hard_min = 0.0, unit = Px)]
     pub softness: f32,
 
-    /// How far the softened edge is pushed back out, per cent — as Drop shadow's.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -313,7 +282,6 @@ pub struct OuterGlow {
     )]
     pub spread: f32,
 
-    /// The host-uniform Mix (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -355,7 +323,6 @@ impl OuterGlow {
     }
 }
 
-/// Outer glow's behaviour.
 pub struct OuterGlowDef;
 
 impl EffectDef for OuterGlowDef {
@@ -388,11 +355,9 @@ impl EffectDef for OuterGlowDef {
     matte = false,
 )]
 pub struct GradientOverlay {
-    /// The colour at the ramp's start.
     #[colour(label = "Colour A", default = [1.0, 1.0, 1.0, 1.0], max = 4.0)]
     pub colour_a: [f32; 4],
 
-    /// The colour at the ramp's end.
     #[colour(label = "Colour B", default = [0.0, 0.0, 0.0, 1.0], max = 4.0)]
     pub colour_b: [f32; 4],
 
@@ -416,7 +381,6 @@ pub struct GradientOverlay {
     )]
     pub scale: f32,
 
-    /// Swap the two ends without retyping both colours.
     #[toggle(default = false)]
     pub reverse: bool,
 
@@ -435,27 +399,8 @@ pub struct GradientOverlay {
 }
 
 impl GradientOverlay {
-    /// The Gradient effect's own bundle, clipped to the coverage
-    /// (docs/impl/layer-styles.md §4).
-    ///
-    /// The style names an **angle and a scale** where the effect names two
-    /// points, so the two points are worked out here — once, host-side, in the
-    /// raster the style is about to run on. The axis is centred on that raster
-    /// and half as long as the raster's own support along the angle, which puts
-    /// Colour A at the first edge the ramp meets and Colour B at the last: scale
-    /// 100 % spans the picture exactly, and more of it spends the interesting
-    /// part of the ramp over a narrower band.
-    ///
-    /// Reverse swaps the two colours rather than the two points, because a
-    /// reversed ramp must sit where the unreversed one sat.
-    // ponytail: the ramp spans the RASTER, where Photoshop spans the layer's own
-    // bounds; ceiling = a small shape on a large layer raster (a precomp, an
-    // adjustment) gets only the middle of its gradient. Upgrade: carry the
-    // layer's alpha bounding box into the resolve, as the ROI padding path will
-    // already have to. Trigger: an import comparison or a report where the
-    // overlay reads flat.
     #[must_use]
-    pub fn packed(self, w: u32, h: u32) -> cpu::GradientParams {
+    pub fn packed(self, w: u32, h: u32) -> cpu::gradient::GradientParams {
         let theta = self.angle.to_radians();
         let (sin, cos) = theta.sin_cos();
         // "From straight up, clockwise" on a raster whose y grows downward —
@@ -470,27 +415,21 @@ impl GradientOverlay {
             // which a ramp centred on the raster has reached every corner.
             ([centre[0], centre[1]], [wf.hypot(hf) * 0.5 * s, 0.0])
         } else {
-            // The raster's support along the axis, halved: |dir·(w, h)| ÷ 2.
             let half = (dir[0].abs() * wf + dir[1].abs() * hf) * 0.5 * s;
             (
                 [centre[0] - dir[0] * half, centre[1] - dir[1] * half],
                 [dir[0] * half * 2.0, dir[1] * half * 2.0],
             )
         };
-        let len2 = (axis[0] * axis[0] + axis[1] * axis[1]).max(1e-6);
         let (a, b) = if self.reverse {
             (self.colour_b, self.colour_a)
         } else {
             (self.colour_a, self.colour_b)
         };
-        cpu::GradientParams {
-            radial: self.gradient_type == 1,
-            start,
-            axis,
-            inv_len2: 1.0 / len2,
-            inv_len: 1.0 / len2.sqrt(),
-            c0: [a[0], a[1], a[2]],
-            c1: [b[0], b[1], b[2]],
+        cpu::gradient::GradientParams {
+            shape: u32::from(self.gradient_type == 1),
+            c0: [a[0], a[1], a[2], 1.0],
+            c1: [b[0], b[1], b[2], 1.0],
             // The style has no Scatter: dither is the generator's cure for
             // banding across a whole frame, and an overlay rides whatever the
             // layer under it already does.
@@ -498,13 +437,11 @@ impl GradientOverlay {
             seed: 0,
             mix: (self.mix / 100.0).clamp(0.0, 1.0),
             clip_to_alpha: true,
-            mids: 0,
-            mid: [[0.0; 4]; 3],
+            ..cpu::gradient::GradientParams::aimed(start, axis)
         }
     }
 }
 
-/// Gradient overlay's behaviour.
 pub struct GradientOverlayDef;
 
 impl EffectDef for GradientOverlayDef {
@@ -513,21 +450,12 @@ impl EffectDef for GradientOverlayDef {
     }
 
     fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
-        cpu::gradient(rgba, w, h, &GradientOverlay::read(p).packed(w, h));
+        let display = crate::fx::effects::gradient::in_display(p);
+        let g = GradientOverlay::read(p).packed(w, h).in_display(display);
+        cpu::gradient::gradient(rgba, w, h, &g);
     }
 }
 
-/// Satin — §2's entry 6, interior. **Declared, not rendered** (§8).
-///
-/// Its offset-alpha intersection shading is a fiddly kernel for a style almost
-/// nobody uses. It carries its whole parameter set so that an AE import keeps
-/// every value losslessly and no `.lum` has to migrate when the kernel lands; it
-/// takes the default [`EffectDef::apply_cpu`] — the identity — and has no entry
-/// in the GPU table, so an instance resolves to an op that passes the picture
-/// through on **either** path: the same calm degrade a missing LUT already
-/// takes, never a fault (docs/14 §4). Bevel and emboss, below, is the other one.
-/// `the_two_unrendered_styles_are_the_identity` in `tests.rs` says so, and fails
-/// the day either grows a kernel without also growing a pass.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "style_satin",
@@ -540,11 +468,9 @@ impl EffectDef for GradientOverlayDef {
     matte = false,
 )]
 pub struct Satin {
-    /// The sheen's colour, scene-linear.
     #[colour(label = "Satin colour", default = [0.0, 0.0, 0.0, 1.0], max = 4.0)]
     pub satin_colour: [f32; 4],
 
-    /// How strong the sheen is, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -555,7 +481,6 @@ pub struct Satin {
     )]
     pub opacity: f32,
 
-    /// Which way the two offset copies of the shape are thrown, degrees.
     #[dial(default = 135.0, step = 15.0)]
     pub direction: f32,
 
@@ -567,11 +492,9 @@ pub struct Satin {
     #[slider(min = 0.0, max = 250.0, default = 14.0, hard_min = 0.0, unit = Px)]
     pub softness: f32,
 
-    /// Turn the sheen inside out.
     #[toggle(default = false)]
     pub invert: bool,
 
-    /// The host-uniform Mix (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -583,7 +506,6 @@ pub struct Satin {
     pub mix: f32,
 }
 
-/// Satin's behaviour.
 pub struct SatinDef;
 
 impl EffectDef for SatinDef {
@@ -608,11 +530,9 @@ impl EffectDef for SatinDef {
     matte = false,
 )]
 pub struct InnerGlow {
-    /// The glow's colour, scene-linear.
     #[colour(label = "Glow colour", default = [1.0, 0.94, 0.72, 1.0], max = 4.0)]
     pub glow_colour: [f32; 4],
 
-    /// How strong the glow is, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -627,8 +547,6 @@ pub struct InnerGlow {
     #[slider(min = 0.0, max = 250.0, default = 12.0, hard_min = 0.0, unit = Px)]
     pub softness: f32,
 
-    /// How far the softened edge is pulled back in, per cent — Spread's twin on
-    /// an interior style.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -639,11 +557,9 @@ pub struct InnerGlow {
     )]
     pub choke: f32,
 
-    /// Whether the glow grows in from the shape's edge or out from its centre.
     #[choice(options = ["Edge", "Centre"], default = 0)]
     pub source: u32,
 
-    /// The host-uniform Mix (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -687,7 +603,6 @@ impl InnerGlow {
     }
 }
 
-/// Inner glow's behaviour.
 pub struct InnerGlowDef;
 
 impl EffectDef for InnerGlowDef {
@@ -716,11 +631,9 @@ impl EffectDef for InnerGlowDef {
     matte = false,
 )]
 pub struct InnerShadow {
-    /// The shadow's colour, scene-linear.
     #[colour(label = "Shadow colour", default = [0.0, 0.0, 0.0, 1.0], max = 4.0)]
     pub shadow_colour: [f32; 4],
 
-    /// How dark the shadow is, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -743,7 +656,6 @@ pub struct InnerShadow {
     #[slider(min = 0.0, max = 250.0, default = 8.0, hard_min = 0.0, unit = Px)]
     pub softness: f32,
 
-    /// How far the softened edge is pulled back in, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -754,7 +666,6 @@ pub struct InnerShadow {
     )]
     pub choke: f32,
 
-    /// The host-uniform Mix (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -800,7 +711,6 @@ impl InnerShadow {
     }
 }
 
-/// Inner shadow's behaviour.
 pub struct InnerShadowDef;
 
 impl EffectDef for InnerShadowDef {
@@ -830,11 +740,9 @@ impl EffectDef for InnerShadowDef {
     matte = false,
 )]
 pub struct StrokeStyle {
-    /// The stroke's colour, scene-linear.
     #[colour(label = "Stroke colour", default = [1.0, 0.0, 0.0, 1.0], max = 4.0)]
     pub stroke_colour: [f32; 4],
 
-    /// How solid the stroke is, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -849,11 +757,9 @@ pub struct StrokeStyle {
     #[slider(min = 0.0, max = 250.0, default = 3.0, hard_min = 0.0, unit = Px)]
     pub size: f32,
 
-    /// Which side of the layer's own edge the thickness is spent on.
     #[choice(options = ["Outside", "Inside", "Centre"], default = 0)]
     pub position: u32,
 
-    /// The host-uniform Mix (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -897,7 +803,6 @@ impl StrokeStyle {
     }
 }
 
-/// Stroke (style)'s behaviour.
 pub struct StrokeStyleDef;
 
 impl EffectDef for StrokeStyleDef {
@@ -911,7 +816,6 @@ impl EffectDef for StrokeStyleDef {
 
     fn spread_px(&self, p: Params<'_>) -> [f32; 2] {
         let stroke = StrokeStyle::read(p).packed();
-        // As far as the outline is grown outward.
         let reach = if stroke.opacity > 0.0 && stroke.mix > 0.0 {
             stroke.grow_px
         } else {
@@ -921,12 +825,6 @@ impl EffectDef for StrokeStyleDef {
     }
 }
 
-/// Bevel and emboss — §2's entry 10, topmost. **Declared, not rendered** (§8),
-/// on exactly [`Satin`]'s terms.
-///
-/// A lighting model with five techniques and an altitude is the one genuinely
-/// expensive style, and shipping seven well beats shipping nine where two are
-/// wrong.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "style_bevel_emboss",
@@ -939,18 +837,15 @@ impl EffectDef for StrokeStyleDef {
     matte = false,
 )]
 pub struct BevelEmboss {
-    /// Where the relief sits relative to the shape's edge.
     #[choice(
         options = ["Outer bevel", "Inner bevel", "Emboss", "Pillow emboss", "Stroke emboss"],
         default = 1
     )]
     pub bevel_style: u32,
 
-    /// How the edge profile is found — smooth, or one of the two chisels.
     #[choice(options = ["Smooth", "Chisel hard", "Chisel soft"], default = 0)]
     pub technique: u32,
 
-    /// How pronounced the relief is, per cent.
     #[slider(
         min = 1.0,
         max = 1000.0,
@@ -960,7 +855,6 @@ pub struct BevelEmboss {
     )]
     pub depth: f32,
 
-    /// Whether the relief reads as raised or as carved in.
     #[choice(options = ["Up", "Down"], default = 0)]
     pub direction: u32,
 
@@ -985,7 +879,6 @@ pub struct BevelEmboss {
     #[colour(label = "Highlight colour", default = [1.0, 1.0, 1.0, 1.0], max = 4.0)]
     pub highlight_colour: [f32; 4],
 
-    /// How strong the lit face is, per cent.
     #[slider(
         label = "Highlight opacity",
         min = 0.0,
@@ -1001,7 +894,6 @@ pub struct BevelEmboss {
     #[colour(label = "Shadow colour", default = [0.0, 0.0, 0.0, 1.0], max = 4.0)]
     pub shadow_colour: [f32; 4],
 
-    /// How strong the shaded face is, per cent.
     #[slider(
         label = "Shadow opacity",
         min = 0.0,
@@ -1013,7 +905,6 @@ pub struct BevelEmboss {
     )]
     pub shadow_opacity: f32,
 
-    /// The host-uniform Mix (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -1025,7 +916,6 @@ pub struct BevelEmboss {
     pub mix: f32,
 }
 
-/// Bevel and emboss's behaviour.
 pub struct BevelEmbossDef;
 
 impl EffectDef for BevelEmbossDef {

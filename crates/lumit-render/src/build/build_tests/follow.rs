@@ -1,11 +1,5 @@
-//! Time effects that follow the layer's own motion: Echo and the rest.
-
 use super::*;
 
-/// **An Echo follows its layer's motion.** A solid moved by Position keys,
-/// with a Blur above its Echo: the layer is drawn into a comp-sized picture
-/// that the Echo runs on, and each picture the Echo reads is the solid where
-/// it was at that earlier frame, blurred as it was then.
 #[test]
 fn an_echo_trails_the_layers_own_motion() {
     use lumit_core::anim::{Animation, Keyframe, Property, SideInterp};
@@ -70,6 +64,7 @@ fn an_echo_trails_the_layers_own_motion() {
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -143,8 +138,6 @@ fn an_echo_trails_the_layers_own_motion() {
         assert_eq!(then[0].fx_ids.len(), 1, "and is blurred as it was then");
     }
 
-    // The frame's name holds those earlier moments: a key a frame back moved
-    // changes it, and with the Echo off it does not.
     struct Stub;
     impl lumit_eval::SourceStamper for Stub {
         fn stamp(&self, item: Uuid, lt: f64, _native: bool) -> Option<(String, u64)> {
@@ -213,8 +206,6 @@ fn an_echo_trails_the_layers_own_motion() {
     );
 }
 
-/// A 10 px white solid moved from x 20 to x 80 over the first second of a
-/// 100 x 40 comp at 30 fps, with `effects`.
 fn moving_solid(effects: Vec<lumit_core::model::EffectInstance>) -> (Document, Composition) {
     use lumit_core::anim::{Animation, Keyframe, Property, SideInterp};
     let solid_id = Uuid::now_v7();
@@ -274,6 +265,7 @@ fn moving_solid(effects: Vec<lumit_core::model::EffectInstance>) -> (Document, C
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -306,7 +298,6 @@ fn moving_solid(effects: Vec<lumit_core::model::EffectInstance>) -> (Document, C
     (doc, comp)
 }
 
-/// One effect by match name with some of its number rows set.
 fn effect_with(name: &str, rows: &[(&str, f64)]) -> lumit_core::model::EffectInstance {
     let mut e = lumit_core::fx::builtins::instantiate(name).unwrap();
     e.enabled = true;
@@ -317,8 +308,6 @@ fn effect_with(name: &str, rows: &[(&str, f64)]) -> lumit_core::model::EffectIns
     e
 }
 
-/// **Motion blur, Timewarp and Posterize time follow the layer's motion**,
-/// as Echo does: each reads the solid where it was at the moments it reads.
 #[test]
 fn time_effects_follow_the_layers_own_motion() {
     let x_at = |t: f64| 20.0 + 60.0 * t;
@@ -340,7 +329,6 @@ fn time_effects_follow_the_layers_own_motion() {
         _ => panic!("drawn as a comp-sized picture"),
     };
 
-    // Motion blur measures the solid's own motion against the next frame.
     let blurred = draw(vec![effect_with("motion_blur", &[])]);
     assert!((f64::from(members(&blurred)) - x_at(0.55)).abs() < 1e-3);
     assert_eq!(blurred.flow_below.len(), 1);
@@ -350,7 +338,6 @@ fn time_effects_follow_the_layers_own_motion() {
     let next = 0.55 + 1.0 / 30.0;
     assert!((f64::from(then[0].position.0) - x_at(next)).abs() < 1e-3);
 
-    // Posterize time holds the whole layer, its position too.
     let held = draw(vec![effect_with("posterize_time", &[("rate", 2.0)])]);
     assert!(
         (f64::from(members(&held)) - x_at(0.5)).abs() < 1e-3,
@@ -359,8 +346,6 @@ fn time_effects_follow_the_layers_own_motion() {
     );
     assert!(held.fx_ids.is_empty(), "nothing runs on the held picture");
 
-    // Timewarp at half speed shows the solid where it was a quarter second
-    // in, around the frame's moment.
     let slowed = draw(vec![effect_with("timewarp", &[("speed", 50.0)])]);
     let crate::draw::LayerInputDraw::Several(pictures) = &slowed.dof_inputs[0] else {
         panic!("Timewarp reads pictures of the placed layer");
@@ -378,9 +363,6 @@ fn time_effects_follow_the_layers_own_motion() {
     }
 }
 
-/// **Echo time spaces the echoes**, as in After Effects: a tenth of a second
-/// back, each echo is the solid where it was that much earlier; ahead, where
-/// it will be.
 #[test]
 fn echo_time_spaces_the_echoes() {
     for spacing in [-0.1, 0.1] {

@@ -63,8 +63,6 @@ import 'property_link.dart';
 /// up down the card, which is what makes a stack of numbers readable.
 const double transformCellWidth = 74;
 
-/// One axis of a transform row: which property it edits, and the display hints
-/// that make its drag feel right.
 class TransformAxis {
   final BridgeTransformProp prop;
   final String? suffix;
@@ -87,14 +85,8 @@ class TransformAxis {
   });
 }
 
-/// Which heading a transform row sits under in the fold-out: the Transform
-/// group itself, one of the option groups a camera or a light has inside it,
-/// or a 3D layer's Material options beside it.
 enum TransformSection { transform, camera, light, material }
 
-/// One row: its label, the axes it edits, and — on the three properties that
-/// have more than one axis — which pair it belongs to and how that pair is
-/// being shown.
 class TransformGroup {
   final String label;
   final List<TransformAxis> axes;
@@ -112,8 +104,6 @@ class TransformGroup {
   /// fold-out puts their own heading in front of them.
   final TransformSection section;
 
-  /// Three axes that are one colour, drawn as a swatch rather than as three
-  /// numbers.
   final bool colour;
 
   const TransformGroup(
@@ -125,7 +115,6 @@ class TransformGroup {
     this.colour = false,
   });
 
-  /// A linked row draws one box and carries the other axis with it.
   bool get isLinked => mode == BridgeAxisMode.linked && axes.length > 1;
 }
 
@@ -199,7 +188,6 @@ List<TransformGroup> transformGroups({
     ];
   }
 
-  // After Effects' Orientation: three angles on one row, turning as one.
   final orientation = TransformGroup(l10n.transformOrientation, const [
     TransformAxis(BridgeTransformProp.orientationX,
         suffix: '°', speed: 0.5, turns: false),
@@ -209,8 +197,6 @@ List<TransformGroup> transformGroups({
         suffix: '°', speed: 0.5, turns: false),
   ]);
 
-  // The placement a viewpoint has: where it stands, and which way it faces.
-  // An environment light is nowhere, so it only faces.
   List<TransformGroup> placement({bool placed = true}) => [
         if (placed)
           ...pairRows(
@@ -271,7 +257,6 @@ List<TransformGroup> transformGroups({
     final s = light ?? plainLight;
     const option = TransformSection.light;
     return [
-      // The point it is aimed at, while it is aimed and has a way to face.
       if (s.twoNode && lightAims(s.kind))
         TransformGroup(l10n.transformPointOfInterest, const [
           TransformAxis(BridgeTransformProp.poiX),
@@ -452,7 +437,6 @@ List<TransformGroup> transformGroups({
         kind != BridgeLayerKind.model &&
         kind != BridgeLayerKind.mesh)
       for (final (label, prop) in [
-        // Light passes through a layer only where it casts a shadow.
         if (material?.castsShadows != BridgeShadowMode.off)
           (l10n.materialLightTransmission, BridgeTransformProp.lightTransmission),
         (l10n.materialAmbient, BridgeTransformProp.ambient),
@@ -483,18 +467,13 @@ class TransformRowsFrb extends StatelessWidget {
   final BridgeTransform transform;
   final bool threeD;
 
-  /// What the layer is, and - on a camera - how it aims: the two other things
-  /// that decide which rows there are. A light's settings decide its own.
   final BridgeLayerKind kind;
   final bool twoNode;
   final BridgeLightSettings? light;
 
-  /// The layer's Accepts lights switch and its shadow settings, for the
-  /// Material options' own rows.
   final bool acceptsLights;
   final BridgeMaterialSettings? material;
 
-  /// How each pair is shown — which decides how many rows there are.
   final BridgeAxisModes axisModes;
   final int playheadFrame;
   final ValueChanged<int> onSeek;
@@ -508,10 +487,8 @@ class TransformRowsFrb extends StatelessWidget {
   /// them (the Timeline's lanes). Null lets each row take what it needs.
   final double? rowHeight;
 
-  /// Padding inside each row.
   final EdgeInsets rowPadding;
 
-  /// Lay the rows out as the Effect controls panel's two columns.
   final bool twoColumn;
 
   const TransformRowsFrb({
@@ -549,12 +526,8 @@ class TransformRowsFrb extends StatelessWidget {
     final out = <Widget>[];
     TransformSection? last;
     final seen = <TransformSection>{};
-    // The Effect controls card names each options group as the Timeline's
-    // headings do.
     void options(TransformSection section) {
       seen.add(section);
-      // While filtering, an option row shows only when its own name holds
-      // the text.
       bool kept(LayerSetting s) =>
           filter.isEmpty || s.label.toLowerCase().contains(filter);
       if (filter.isNotEmpty &&
@@ -614,7 +587,6 @@ class TransformRowsFrb extends StatelessWidget {
         twoColumn: twoColumn,
       ));
     }
-    // A section of switches with no numbers, as a Model layer's materials.
     for (final section in {for (final s in settings) s.section}) {
       if (!seen.contains(section)) options(section);
     }
@@ -628,8 +600,6 @@ class TransformRowsFrb extends StatelessWidget {
       );
 }
 
-/// The name over a camera's, a light's or a layer's option rows in the Effect
-/// controls card, in the label column.
 class _OptionsHeading extends StatelessWidget {
   final String label;
   const _OptionsHeading(this.label);
@@ -650,7 +620,6 @@ class _OptionsHeading extends StatelessWidget {
   }
 }
 
-/// One transform property group as a row.
 class TransformRowFrb extends StatefulWidget {
   final CompositionReference comp;
   final LayerReference layer;
@@ -767,7 +736,6 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
     _ui.liveTransforms.value = {widget.layer.internallayerId: staged};
   }
 
-  /// The gesture is over: the document is the truth again.
   void _clearLive() {
     if (_ui.liveTransforms.value.isNotEmpty) {
       _ui.liveTransforms.value = const {};
@@ -850,8 +818,6 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
       },
     );
 
-    // The name is the row's handle for the graph editor, so it is built once
-    // and drawn by whichever layout the row takes.
     final menu = _menu(group, keyframes, cells, transform);
     Widget name(double lit) => GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -871,8 +837,6 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
           ),
           ControlMark(
               transformControlRow(widget.layer.internallayerId, group)),
-          // One dot per axis in its stroke colour, so a two-axis property names
-          // both of its curves.
           if ((widget.graphColours?.length ?? 0) > 1)
             for (final colour in widget.graphColours!)
               Padding(
@@ -889,7 +853,6 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
         ],
       ),
     );
-    // Only a name that picks its property lights.
     final label = widget.onLabelTap == null
         ? name(0)
         : HoverMark(builder: (context, lit) => name(lit));
@@ -1009,7 +972,6 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
       {bool fixed = true, required TransformGroup group}) {
     if (group.colour) return _swatch(transform, group, frame);
     final scalar = read(transform, axis.prop);
-    // The axes this box drags along with it, none when it drags alone.
     final partners = [
       if (group.isLinked)
         for (final other in group.axes)
@@ -1032,7 +994,6 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
           set: (value) {
             final field = (value as BridgeEffectValue_Float).field0;
 
-            // An expression, edited or baked into keys, or a number.
             if (field is BridgeScalar_Static) {
               _commit(axis.prop, field.field0);
             } else {
@@ -1325,7 +1286,6 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
     widget.onChanged();
   }
 
-  /// A drag tick: hold the new value locally and render it, without committing.
   void _live(BridgeTransformProp prop, double value,
       [List<BridgeTransformProp> partners = const [], int frame = 0]) {
     var staged = write(_staged ?? widget.transform, prop, value);
@@ -1426,7 +1386,6 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
     ];
   }
 
-  /// What this row's right-click menu offers.
   ParamMenu _menu(TransformGroup group, KeyframeControlsFrb keys,
       List<TransformAxis> cells, BridgeTransform transform) {
     final props = [for (final axis in group.axes) axis.prop];
@@ -1499,7 +1458,6 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
             shown(p).toString(), newExpressionLanguage(context)));
 
     return ParamMenu(
-      // Every axis the row shows, in order.
       control: ControlRow(widget.comp,
           transformControlRow(widget.layer.internallayerId, group)),
       linkTo: (link) => _linkRef(link, group, cells),
@@ -1647,8 +1605,6 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
         _ => null,
       };
 
-  /// Whether [group] is one of X, Y and Z Rotation on a layer that turns in
-  /// 3D, which has a rotation order to choose.
   bool _turnsIn3d(TransformGroup group) =>
       widget.transform.depth != null &&
       const {
@@ -1706,7 +1662,6 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
         : LinkMark(name: engineLabel(group.label), link: link);
   }
 
-  /// What this row's link mark drags, and Paste link writes through.
   PropertyLink? _link(TransformGroup group, BridgeTransform transform) {
     final props = [for (final axis in group.axes) axis.prop];
     if (group.colour ||
@@ -1837,7 +1792,6 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
   }
 }
 
-/// What Copy on a Transform heading put down, curves and all.
 Map<BridgeTransformProp, BridgeScalar>? _copiedTransform;
 
 /// The Transform heading's menu, in Effect controls and in the Timeline: a
@@ -1896,7 +1850,6 @@ void showTransformMenu(BuildContext context, Offset at, LayerReference layer,
         copied == null
             ? null
             : onSelection(app, ui, (target) {
-                // The rows this layer has: a 2D layer takes no z.
                 final props = [
                   for (final group in groupsOf(target))
                     for (final axis in group.axes)
@@ -1922,7 +1875,6 @@ bool _isOrientation(BridgeTransformProp prop) =>
     prop == BridgeTransformProp.orientationY ||
     prop == BridgeTransformProp.orientationZ;
 
-/// One property out of a transform.
 BridgeScalar read(BridgeTransform tf, BridgeTransformProp prop) =>
     switch (prop) {
       BridgeTransformProp.anchorX => tf.anchorX,
@@ -2017,8 +1969,6 @@ BridgeTransform write(
         BridgeTransform tf, BridgeTransformProp prop, double value) =>
     writeScalar(tf, prop, BridgeScalar.static_(value));
 
-/// A copy of `tf` with one property's whole animation replaced — what a graph
-/// drag previews, where the provisional value is a curve rather than a number.
 BridgeTransform writeScalar(
     BridgeTransform tf, BridgeTransformProp prop, BridgeScalar replacement) {
   BridgeScalar pick(BridgeTransformProp p, BridgeScalar current) =>
@@ -2030,6 +1980,7 @@ BridgeTransform writeScalar(
   final depth = tf.depth;
   return BridgeTransform(
     orient: tf.orient,
+    curvedPath: tf.curvedPath,
     anchorX: pick(BridgeTransformProp.anchorX, tf.anchorX),
     anchorY: pick(BridgeTransformProp.anchorY, tf.anchorY),
     positionX: pick(BridgeTransformProp.positionX, tf.positionX),

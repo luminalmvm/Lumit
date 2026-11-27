@@ -23,15 +23,12 @@ use crate::fx::{
 use crate::model::{EffectInstance, EffectValue};
 use lumit_fx_macros::Effect;
 
-/// The shapes there are, in Choice order.
 pub const SHAPE_OPTIONS: &[&str] = &["Waves", "Rose", "Spiral"];
 const SHAPE_WAVES: u32 = 0;
 const SHAPE_ROSE: u32 = 1;
 
-/// The waves a Waves axis can run, in Choice order.
 pub const WAVE_OPTIONS: &[&str] = &["Linear", "Sine", "Cosine", "Triangle", "Square"];
 
-/// The rows only Waves reads, and the ones only Rose reads.
 const WAVES_ROWS: &[&str] = &[
     "x_wave",
     "x_amplitude",
@@ -45,7 +42,6 @@ const WAVES_ROWS: &[&str] = &[
 const ROSE_ROWS: &[&str] = &["petals", "denominator"];
 const ROUND_ROWS: &[&str] = &["radius", "turns"];
 
-/// Math points' controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "math_points",
@@ -57,11 +53,9 @@ const ROUND_ROWS: &[&str] = &["radius", "turns"];
     premultiplied = true,
 )]
 pub struct MathPoints {
-    /// The formula the points are laid out by.
     #[choice(label = "Shape", options = SHAPE_OPTIONS, default = 0)]
     pub shape: u32,
 
-    /// How many points there are.
     #[counter(
         label = "Count",
         min = 1,
@@ -85,7 +79,6 @@ pub struct MathPoints {
     #[dial(label = "Rotation", default = 0.0)]
     pub rotation: f32,
 
-    /// Waves: the wave across.
     #[choice(label = "Wave x", options = WAVE_OPTIONS, default = 0)]
     pub x_wave: u32,
 
@@ -103,7 +96,6 @@ pub struct MathPoints {
     #[dial(label = "Phase x", default = 0.0)]
     pub x_phase: f32,
 
-    /// Waves: the wave down.
     #[choice(label = "Wave y", options = WAVE_OPTIONS, default = 1)]
     pub y_wave: u32,
 
@@ -131,7 +123,6 @@ pub struct MathPoints {
     )]
     pub radius: f32,
 
-    /// Rose: the petals, over Denominator.
     #[slider(label = "Petals", min = 1.0, max = 20.0, default = 5.0, hard_min = 0.0, unit = Raw)]
     pub petals: f32,
 
@@ -147,7 +138,6 @@ pub struct MathPoints {
     )]
     pub denominator: f32,
 
-    /// Spiral: how many times it winds round from the first point to the last.
     #[slider(label = "Turns", min = 0.0, max = 20.0, default = 3.0, unit = Raw)]
     pub turns: f32,
 
@@ -166,7 +156,6 @@ pub struct MathPoints {
     )]
     pub feather: f32,
 
-    /// The colour a point is drawn in.
     #[colour(default = [1.0, 1.0, 1.0, 1.0], max = 4.0)]
     pub colour: [f32; 4],
 
@@ -207,7 +196,6 @@ impl MathPoints {
     /// The raster factor, for the camera, as Grid's.
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
 
-    /// This instance's raster factor, read back out of a resolved bag.
     #[must_use]
     pub fn px_scale_of(p: Params<'_>) -> f32 {
         p.float(Self::DERIVED_PX_SCALE, 1.0)
@@ -290,7 +278,6 @@ impl MathPoints {
         out
     }
 
-    /// How the stream is drawn — a feathered disc per point, and the host Mix.
     #[must_use]
     pub fn draw_style(self) -> DrawStyle {
         DrawStyle {
@@ -302,8 +289,6 @@ impl MathPoints {
     }
 }
 
-/// Math points' behaviour, Grid's shape: worked out on the host and drawn
-/// through the shared points draw.
 pub struct MathPointsDef;
 
 impl EffectDef for MathPointsDef {
@@ -322,7 +307,6 @@ impl EffectDef for MathPointsDef {
         push(MathPoints::DERIVED_PX_SCALE, Value::Float(cx.px_scale));
     }
 
-    /// Each shape shows its own rows and hides the others'.
     fn row_state(&self, inst: &EffectInstance) -> RowState {
         let shape = match inst.param("shape") {
             Some(EffectValue::Choice(v)) => *v,

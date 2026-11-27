@@ -20,17 +20,13 @@ typedef GradeRange = ({double low, double high, double soft});
 class GradeRangeBar extends StatefulWidget {
   final GradeRange range;
 
-  /// The hue circle: the bar wraps.
   final bool periodic;
 
-  /// The strip under the range, as a gradient across the bar.
   final List<Color> colours;
   final List<double>? stops;
 
   final bool enabled;
 
-  /// Whether the qualifier reads this bar at all. Off, the range is drawn
-  /// faint.
   final bool on;
   final bool keyed;
 
@@ -67,7 +63,6 @@ class _GradeRangeBarState extends State<GradeRangeBar> {
   _Grip _grip = _Grip.move;
   double _width = 1;
 
-  /// How close to a handle a press must land to take it.
   static const double _reach = 8;
   static const double _strip = 10;
   static const double _top = 9;
@@ -98,8 +93,6 @@ class _GradeRangeBarState extends State<GradeRangeBar> {
     widget.onStart();
   }
 
-  /// [v], moved a whole turn at a time on the hue circle until it is the
-  /// copy nearest [x].
   double _wrapNear(double v, double x) {
     if (!widget.periodic) return v;
     var out = v;
@@ -241,7 +234,6 @@ class _RangePainter extends CustomPainter {
         ..shader = LinearGradient(colors: colours, stops: stops)
             .createShader(strip),
     );
-    // What the range leaves out is dimmed, so the part keyed stands up.
     final dim = Paint()..color = ground.withValues(alpha: faint ? 0.3 : 0.6);
     void span(double a, double b, void Function(double x0, double x1) draw) {
       if (!periodic) {
@@ -276,7 +268,6 @@ class _RangePainter extends CustomPainter {
       canvas.drawRect(
           Rect.fromLTRB(x0, stripTop - 1, x1, stripTop + stripHeight + 1), line);
     });
-    // The edge handles above, the softness reach below.
     final grip = Paint()..color = faint ? edge.withValues(alpha: 0.4) : edge;
     final reach = Paint()
       ..color = soft

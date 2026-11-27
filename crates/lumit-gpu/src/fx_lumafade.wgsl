@@ -30,7 +30,6 @@ struct Params {
 // Bound to `src` when there is no matte, since a binding can't be left empty.
 @group(0) @binding(4) var matte: texture_2d<f32>;
 
-// == luma_fade_pattern, for a pattern other than Picture.
 fn pattern(xy: vec2<i32>) -> f32 {
     let dx = f32(xy.x) + 0.5 - p.centre.x;
     let dy = f32(xy.y) + 0.5 - p.centre.y;

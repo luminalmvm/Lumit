@@ -19,17 +19,10 @@ use super::{
     CaptionsError,
 };
 
-/// How long the last line stays up, with nothing after it to end it.
 const LAST_SECONDS: i64 = 4;
 
-/// The captions in an `.lrc` file, in order of time.
-///
-/// # Errors
-///
-/// [`CaptionsError::Empty`] for a file with no timed lines.
 pub fn read(text: &str) -> Result<Vec<Cue>, CaptionsError> {
     let text = text.trim_start_matches('\u{feff}');
-    // Every timed line, with each moment it is sung at.
     let mut sung: Vec<(Rational, String)> = Vec::new();
     for line in text.lines() {
         let mut rest = line.trim();
@@ -74,8 +67,6 @@ pub fn read(text: &str) -> Result<Vec<Cue>, CaptionsError> {
     Ok(cues)
 }
 
-/// One line as a cue, with the word times an enhanced file writes in front of
-/// its words.
 fn timed(line: &str, start: Rational, end: Rational) -> Option<Cue> {
     let mut plain = String::new();
     let mut moments: Vec<Option<Rational>> = Vec::new();

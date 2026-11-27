@@ -85,9 +85,6 @@ import 'timeline_extras_frb.dart' show showCompTabMenuFrb, showMenuAt;
 import 'timeline_outline_row_frb.dart' show showLayerRowMenu;
 import 'text_animator_rows_frb.dart' show TextAnimatorRowsFrb;
 
-/// The box the panel is drawing: which instance it is, whether it lives in the
-/// graph's driver list rather than in the effect stack, and the read model it
-/// was headed and filled from.
 class _Picked {
   final bool driver;
 
@@ -122,8 +119,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   /// the traffic `bridge_call_budget_test` guards against.
   _Picked? _picked;
 
-  /// Whether the picked box is a Text layer's Source, which lists the layer's
-  /// animators: the moved letters are what that box makes.
   bool _textSource = false;
   bool _animatorsOpen = true;
 
@@ -133,15 +128,11 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   UuidValue? _lastLayer;
   ({UuidValue id, String label, bool picture})? _lastCompNode;
 
-  /// With no box to draw, the layer's own boxes, each a click from being
-  /// picked, under the layer's name. A node graph composition lists its
-  /// boxes the same way under the composition's name.
   List<BridgeGraphNode> _index = const [];
   String _layerName = '';
   List<BridgeCompNode> _compIndex = const [];
   String _compName = '';
 
-  /// The listed boxes' colours, by box key, read with the list.
   Map<String, int> _colours = const {};
 
   /// While a list row's menu is up the list stays, though the right-click
@@ -157,7 +148,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   Map<String, ({String driver, BridgePortType type, bool noStream})> _driven =
       const {};
 
-  /// The row filter Ctrl+F opens in the header, the one Effect controls has.
   final RowFilter _filter = RowFilter();
 
   void _onSearchRequested() {
@@ -180,8 +170,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   BridgeCompNode? _box;
   BridgeGraphInput? _input;
 
-  /// The drag in flight on an effect box: staged, previewed, committed on
-  /// release as one op.
   final EffectStackEditor _stack = EffectStackEditor();
 
   /// The same for a driver box, which cannot ride [EffectStackEditor] because
@@ -253,7 +241,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     super.dispose();
   }
 
-  /// The one read. Everything the rows draw comes from here.
   void _reload() {
     if (!mounted) return;
     final ui = _ui;
@@ -303,7 +290,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
       try {
         textSource = layer.getText() != null;
       } catch (_) {
-        // The layer has gone since the pick was made.
       }
     }
     _lastNode = picked == null ? (textSource ? node : null) : node;
@@ -323,7 +309,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
           };
         }
       } catch (_) {
-        // The layer has gone; there is nothing to list.
       }
     }
     setState(() {
@@ -340,9 +325,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     });
   }
 
-  /// The same read for a **node graph's** pick: the box, its Input declaration
-  /// where it has one, and, for an Fx box, the staged instance whose rows this
-  /// panel draws.
   void _reloadGraphBox(LumitUiState ui, CompositionReference comp) {
     final picked = ui.compGraphNode.value ?? _lastCompNode;
     BridgeCompNode? box;
@@ -368,8 +350,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
           driven = _drivenInGraph(graph, picked.id);
         }
       } catch (_) {
-        // The comp or the box has gone since the pick was made; the
-        // placeholder is the honest answer until the canvas catches up.
       }
     }
     // A new pick fills the field; so does the document's label moving while
@@ -396,7 +376,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
         };
       }
     } catch (_) {
-      // The comp has gone; there is nothing to list.
     }
     setState(() {
       _layer = null;
@@ -411,8 +390,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     });
   }
 
-  /// Back to the index: the pick is let go of here and on the canvas, which
-  /// hears the cleared notifier.
   void _toIndex() {
     // Both notifiers first: each write reloads this panel, and a reload
     // with the other still set would keep the box as the last one.
@@ -434,8 +411,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     ui.compGraphPickAsk.value = (id: id);
   }
 
-  /// The picked box's enable tick, which the canvas's box wears too: the
-  /// same write for the same control. One op whichever box it is.
   void _setEnabled(_Picked picked, bool on) {
     final id = picked.info.id;
     try {
@@ -466,13 +441,10 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
         }
       }
     } catch (_) {
-      // The box changed under us; re-reading is the recovery.
     }
     _ui?.model.refresh();
   }
 
-  /// A list row's menu: [_askMenu], with the list kept on screen until the
-  /// menu goes, rather than the row's own rows swapped in under it.
   void _askRowMenu(String key, Offset at) {
     _menuPick = null;
     setState(() => _holdIndex = true);
@@ -505,7 +477,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     final picked = _picked;
     if (picked == null) return;
     final comp = ui.selectedComp;
-    // An effect on a layer, as against a driver or a node graph's box.
     final layer = picked.driver || picked.graph ? null : _layer;
     final viewHere = !picked.driver &&
         (picked.graph
@@ -514,7 +485,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     showGraphBoxMenu(
       context,
       at,
-      // An effect on a layer has its own menu, the one its box opens.
       effect: layer == null || comp == null
           ? null
           : EffectCommands(
@@ -532,8 +502,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     );
   }
 
-  /// Which of this box's parameters a wire is feeding, by socket id: the same
-  /// decoration the layer's graph draws, read off the node graph's own wires.
   Map<String, ({String driver, BridgePortType type, bool noStream})>
       _drivenInGraph(BridgeCompGraph graph, UuidValue id) {
     final out =
@@ -575,7 +543,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
               p
             ),
           BridgeOutputRef_SourceMatte() => ('source', 'matte'),
-          // A points wire's source is a *stack effect*.
           BridgeOutputRef_EffectData(:final effect, :final port) => (
               graphNodeKey(BridgeNodeRef.effect(effect)),
               port
@@ -603,9 +570,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     return out;
   }
 
-  // --- Writing -------------------------------------------------------------
-
-  /// A release, or a typed value: one op, one undo step.
   void _write(UuidValue effect, String param, BridgeEffectValue value) =>
       _writeAll(effect, {param: value});
 
@@ -613,8 +577,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   /// release is: both halves moved, and one undo puts both back.
   void _writeAll(UuidValue effect, Map<String, BridgeEffectValue> values) {
     if (_picked?.graph ?? false) {
-      // A node graph box: the same staged-instance path, committed by the
-      // graph's own op with the wiring exactly as it stands.
       final comp = _ui?.selectedComp;
       if (comp == null) return;
       _driverPreview.cancel();
@@ -627,8 +589,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
           wiring: comp.getNodeGraph().wiring,
         );
       } catch (_) {
-        // The graph changed under us, or the edit was refused; re-reading is
-        // the recovery.
       }
       _stagedDriver.clear();
       _ui?.model.refresh();
@@ -649,8 +609,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
           wiring: layer.getGraph().wiring,
         );
       } catch (_) {
-        // The graph changed under us, or the edit was refused (§1.5);
-        // re-reading is the recovery.
       }
       _stagedDriver.clear();
     } else {
@@ -659,7 +617,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     _ui?.model.refresh();
   }
 
-  /// A drag tick: show it, do not commit it.
   void _live(UuidValue effect, String param, BridgeEffectValue value) {
     final ui = _ui;
     if (ui == null) return;
@@ -784,7 +741,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
       fireEffectAction(
           layer: layer, effect: effect, param: param, frame: frame);
     } catch (_) {
-      // Refused; the effect's own status line says why.
     }
     setState(() => _pressed += 1);
   }
@@ -793,9 +749,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   /// reads again: a press moves no document revision to refresh against.
   int _pressed = 0;
 
-  /// The status card under the rows of a box that reads a file through an
-  /// analysis: how far the reading reaches and how it is getting on. The card
-  /// Effect controls draws, asked about the box rather than a layer's effect.
   Widget? _statusCard(
       LumitUiState ui, _Picked picked, LayerReference? layer, int playhead) {
     if (picked.driver || (layer == null && !picked.graph)) return null;
@@ -832,8 +785,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
           );
   }
 
-  /// Chain or unchain a pair on the picked box: one op, as a value edit is,
-  /// through whichever commit the box's own edits take.
   void _togglePairLink(_Picked picked, String stem) {
     final id = picked.info.id;
     final linked = !picked.info.linkedPairs.contains(stem);
@@ -863,13 +814,10 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
         layer.setEffects(effects: stack);
       }
     } catch (_) {
-      // The box changed under us; re-reading is the recovery.
     }
     _ui?.model.refresh();
   }
 
-  /// The layer's driver nodes, freshly read, with the drag in progress written
-  /// into the one being dragged — what both the preview and the commit send.
   List<BridgeEffectInstance> _driversWith(
       LayerReference layer, UuidValue node) {
     final drivers = layer.getGraphDrivers();
@@ -882,8 +830,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     return drivers;
   }
 
-  /// The graph's boxes, freshly read, with the drag in progress written into
-  /// the one being dragged, which is what both the preview and the commit send.
   List<BridgeEffectInstance> _graphInstancesWith(
       CompositionReference comp, UuidValue node) {
     final instances = comp.getNodeGraphInstances();
@@ -896,7 +842,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     return instances;
   }
 
-  /// What a row should *show*, which during a drag is the staged value.
   BridgeEffectValue? _staged(UuidValue effect, String param) {
     if ((_picked?.driver ?? false) || (_picked?.graph ?? false)) {
       return _stagedDriver[param];
@@ -904,13 +849,9 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     return _stack.stagedValue(effect, param);
   }
 
-  // --- Drawing -------------------------------------------------------------
-
   @override
   Widget build(BuildContext context) {
     final ui = Provider.of<LumitUiState>(context, listen: false);
-    // Inside a Custom shader, the Graph panel's face is its graph, and this
-    // panel follows it.
     if (ui.shaderGraphEntry.value case final entry?) {
       return ShaderNodeView(
         entry: entry,
@@ -921,8 +862,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     final picked = _holdIndex ? null : _picked;
     final layer = _layer;
     final comp = ui.selectedComp;
-    // A node graph's Read, Input and Output boxes carry no parameters, so they
-    // draw their own small face rather than a row list.
     if (comp != null && picked == null && _box != null && !_holdIndex) {
       final box = _box!;
       return Column(
@@ -941,8 +880,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
       );
     }
     if (_textSource && !_holdIndex && layer != null && comp != null) {
-      // A Text layer's Source: the words and the animators that move them,
-      // the same section the Effect controls panel draws.
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -966,6 +903,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
                     open: _animatorsOpen,
                     onToggle: () =>
                         setState(() => _animatorsOpen = !_animatorsOpen),
+                    renameScope: 'node',
                   ),
                 ],
               ),
@@ -975,8 +913,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
       );
     }
     if (picked == null && layer != null && comp != null && _index.isNotEmpty) {
-      // The layer's name, and the room under its boxes, are the layer: its
-      // menu, as anywhere a layer is shown.
       void layerMenu(Offset at) =>
           showLayerRowMenu(context, layer.internallayerId, at);
       return Column(
@@ -997,12 +933,10 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
         (_box == null || _holdIndex) &&
         comp != null &&
         ui.model.isNodeGraph) {
-      // The graph's boxes, or nothing at all for a graph with none.
       if (_compIndex.isEmpty) return const SizedBox.shrink();
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // The graph's name is the composition, with its menu.
           _header(context, _compName,
               onMenu: (at) => showCompTabMenuFrb(
                   context: context,
@@ -1033,7 +967,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
       builder: (context, playhead, _) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // The box's own title. The instance's name is its schema key.
           _header(
             context,
             switch (_box) {
@@ -1047,7 +980,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
             onEnabled: (on) => _setEnabled(picked, on),
             onMenu: (at) => _askMenu(key, at),
             filterable: true,
-            // A driver makes no picture to stop at.
             viewHere: !picked.driver &&
                 (picked.graph
                     ? ui.viewerGraphPoint != null
@@ -1059,9 +991,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     );
   }
 
-  /// A node graph's boxes, one row each, a click from being picked on the
-  /// canvas. The layer index's shape, with the Output and the Read and
-  /// Input boxes among the Fx ones.
   Widget _compIndexList(BuildContext context, LumitUiState ui) {
     final t = ThemeScope.of(context).theme;
     final dots = _compIndex.any((n) => _colours[compNodeKey(n.id)] != null);
@@ -1120,8 +1049,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     ));
   }
 
-  /// The layer's boxes, one row each, a click from being picked on the
-  /// canvas. A bypassed box reads quiet, as its card does.
   Widget _indexList(BuildContext context, LumitUiState ui) {
     final t = ThemeScope.of(context).theme;
     final dots = _index.any((n) => _colours[graphNodeKey(n.node)] != null);
@@ -1136,8 +1063,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
               onTap: () => ui.graphNode.value = n.node,
               onSecondaryTapUp: (d) =>
                   _askRowMenu(graphNodeKey(n.node), d.globalPosition),
-              // An effect's rows are a card in Effect controls as well, and
-              // a double-click goes there.
               onDoubleTap: switch (n.node) {
                 BridgeNodeRef_Effect(:final field0) when _layer != null => () =>
                     ui.revealEffectCard(_layer!, field0),
@@ -1149,8 +1074,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
                 color: t.surface2.withValues(alpha: lit),
                 child: Row(
                   children: [
-                    // The mark the Timeline gives an effect, and the wire
-                    // mark for a driver, so the two kinds read apart.
                     SizedBox(
                       width: 18,
                       child: switch (n.node) {
@@ -1204,8 +1127,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
               ),
       );
 
-  /// What a box with no parameters is called: the item's name for a Read, the
-  /// Input's own word, and the engine's word for the Output.
   String _boxName(BridgeCompNode box) => switch (box.kind) {
         BridgeCompNodeKind.read || BridgeCompNodeKind.input =>
           box.customName ?? box.label,
@@ -1272,7 +1193,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
                 child: Text('›', style: t.body.copyWith(color: t.textMuted)),
               ),
             ],
-            // The row filter's well takes the name's place while it is up.
             if (_filter.open)
               Expanded(
                 flex: 2,
@@ -1298,8 +1218,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
                 key: const ValueKey('node-driven-count'),
                 style: t.kicker,
               ),
-            // The Viewer's "at" chip from here: the picture stopping at this
-            // box. The accent says it is in force, as the chip does.
             if (viewHere && ui != null) ...[
               const SizedBox(width: 6),
               ValueListenableBuilder<bool>(
@@ -1360,7 +1278,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     // Scale holds its shape here as it does in Effect controls. A driver box
     // has none: its pairs are places, not sizes, and nothing there scales.
     final rows = <Widget>[
-      // A Custom shader's inner graph, small, and the way into it.
       if (picked.info.name == 'custom_shader')
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -1381,8 +1298,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
             },
           ),
         ),
-      // Levels draws its histogram above its rows here as it does in Effect
-      // controls, through the same two writes.
       if (picked.info.name == 'levels')
         LevelsDisplayFrb(
           key: ValueKey<String>('node-levels-display-$id'),
@@ -1399,8 +1314,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
               ? null
               : [for (final c in levelsChannels) curveChannelColour(c)],
         ),
-      // Denoise's and the sound clean-up effects' displays, as in Effect
-      // controls, on a box of a layer's graph.
       if (layer != null && picked.info.name == 'denoise')
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -1500,9 +1413,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
       return out;
     }
 
-    // The engine's groups, as Effect controls draws them: a fold per named
-    // group, shut where the schema says so, and a group whose condition is
-    // unmet left out whole.
     final groups = cachedListParameterGroups(picked.info.name);
     final byFirstMember = {for (final g in groups) g.params.first: g};
     final memberOf = {
@@ -1521,7 +1431,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
         }
         final flat = <BridgeParamInfo>[param];
         i += 1;
-        // A pair stays together when it is the next row along.
         if (param.id.endsWith('_x') &&
             i < params.length &&
             !memberOf.containsKey(params[i].id)) {
@@ -1601,15 +1510,12 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     );
   }
 
-  // --- The boxes with no parameters ----------------------------------------
-
   Widget _boxFace(
       LumitUiState ui, CompositionReference comp, BridgeCompNode box) {
     if (box.kind == BridgeCompNodeKind.input && _input != null) {
       return _inputForm(comp, box, _input!);
     }
     if (box.kind == BridgeCompNodeKind.read) return _readFace(ui, box);
-    // The Output is the picture the Viewer already shows, with nothing to set.
     return const SizedBox.shrink();
   }
 
@@ -1679,8 +1585,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
           BareDropdown<BridgeUnit>(
             key: const ValueKey('node-input-unit'),
             value: input.unit,
-            // The four units an Input declares; the rest belong to parameters
-            // the schema writes.
             options: const [
               BridgeUnit.raw,
               BridgeUnit.px,
@@ -1696,7 +1600,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     );
   }
 
-  /// A Read box: what it brings in, and the way into a composition.
   Widget _readFace(LumitUiState ui, BridgeCompNode box) {
     final t = ThemeScope.of(context).theme;
     return ListView(
@@ -1726,8 +1629,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     );
   }
 
-  /// One row of a form: its name on the left, its control beside it, in the two
-  /// columns every other row in this panel is laid out in.
   Widget _formRow(String name, Widget control) {
     final t = ThemeScope.of(context).theme;
     return fxTwoColumnRow(
@@ -1765,8 +1666,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
         BridgeUnit.percent => l10n.unitPercent,
         BridgeUnit.px => l10n.unitPixels,
         BridgeUnit.degrees => l10n.unitDegrees,
-        // An Input declares one of four units; every other one is a plain
-        // number as far as this form is concerned.
         _ => l10n.unitRaw,
       };
 

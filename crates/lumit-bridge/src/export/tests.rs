@@ -45,8 +45,6 @@ fn the_untouched_fields_mean_the_composition_s_own() {
     assert_eq!(to_export_spec(&backwards, 640, 360).unwrap().range, None);
 }
 
-/// A spec the format cannot honour is refused in the engine's own words,
-/// before anything is queued — and an exportable one says nothing.
 #[test]
 #[cfg(feature = "media")]
 fn a_format_refuses_what_it_cannot_carry() {
@@ -67,7 +65,6 @@ fn a_format_refuses_what_it_cannot_carry() {
     };
     assert!(spec_check(&alpha_mp4).contains("alpha"));
 
-    // The same two settings in a PNG sequence are perfectly ordinary.
     let stills = BridgeExportSpec {
         codec: "png".to_owned(),
         depth: 16,
@@ -77,8 +74,6 @@ fn a_format_refuses_what_it_cannot_carry() {
     assert_eq!(spec_check(&stills), "");
 }
 
-/// The crop is the typed insets, or the Viewer's region when that is asked
-/// for — and the reading is the frame that survives it.
 #[test]
 fn the_crop_answers_the_typed_insets_or_the_region() {
     let typed = BridgeExportSpec {
@@ -95,7 +90,6 @@ fn the_crop_answers_the_typed_insets_or_the_region() {
     );
     assert_eq!((crop.width, crop.height), (940, 460));
 
-    // The region wins when it is ticked and set.
     let region = BridgeExportSpec {
         use_region_of_interest: true,
         region: vec![0.25, 0.0, 0.75, 1.0],
@@ -105,7 +99,6 @@ fn the_crop_answers_the_typed_insets_or_the_region() {
     assert_eq!((crop.left, crop.right), (250, 250));
     assert_eq!((crop.width, crop.height), (500, 500));
 
-    // A degenerate region is no region, and the typed crop stands.
     let degenerate = BridgeExportSpec {
         region: vec![0.5, 0.5, 0.5, 0.5],
         ..region
@@ -113,10 +106,6 @@ fn the_crop_answers_the_typed_insets_or_the_region() {
     assert_eq!(crop_for(&degenerate, 1000, 500).left, 20);
 }
 
-/// A preset saved from the dialogue comes back as the settings that saved
-/// it — every field, not the eight the seam used to carry. The engine's own
-/// store is exercised by `export_presets`; this is the conversion round
-/// trip either side of it.
 #[test]
 #[cfg(feature = "media")]
 fn a_spec_survives_the_round_trip_through_the_engine_s_own() {
@@ -213,9 +202,6 @@ fn the_caps_row_says_what_the_engine_says() {
             engine.audio_depths.contains(&AudioDepth::TwentyFour),
             "{codec}: the 24-bit flag is the engine's own depth list"
         );
-        // The flag only stands in for the list while the list has two
-        // members; the moment a third width exists this row must become a
-        // `Vec<u32>` like `depths` (the ponytail note on the field).
         assert!(
             engine.audio_depths.len() <= AudioDepth::ALL.len() && AudioDepth::ALL.len() == 2,
             "{codec}: a third sample width means the flag is no longer enough"
@@ -252,8 +238,6 @@ fn the_caps_row_says_what_the_engine_says() {
     assert!(format_caps("wav").colour_spaces.is_empty());
 }
 
-/// Keep both never writes over a file: not the export's own name, and not
-/// frame one of a sequence under a numbered name either.
 #[test]
 #[cfg(feature = "media")]
 fn keep_both_finds_a_name_that_writes_over_nothing() {
@@ -276,7 +260,6 @@ fn keep_both_finds_a_name_that_writes_over_nothing() {
     );
     assert!(!taken::path_taken(&at("other.png"), "png", burn, &[]));
 
-    // A caption file beside it counts when the export writes one.
     std::fs::write(at("talk.en.srt"), b"").unwrap();
     assert!(!taken::path_taken(&at("talk.mp4"), "h264", burn, &[]));
     assert!(taken::path_taken(

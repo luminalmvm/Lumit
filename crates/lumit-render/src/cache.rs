@@ -31,9 +31,7 @@ use uuid::Uuid;
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum CacheTier {
     None,
-    /// In RAM at current quality — plays in real time now (green).
     Ram,
-    /// On disk only — promotable, not yet playable (blue).
     Disk,
 }
 
@@ -51,9 +49,6 @@ impl lumit_cache::ByteSized for CachedCompFrame {
     }
 }
 
-/// Supplies the content identity of footage pixels to [`lumit_eval::
-/// comp_frame_key`]: which source, and which source frame, a Footage layer shows
-/// at layer time `lt`. Built over any frontend's probe cache.
 pub struct Stamper<'a> {
     doc: &'a Document,
     probes: &'a dyn SourceProbes,
@@ -129,7 +124,6 @@ impl lumit_eval::SourceStamper for Stamper<'_> {
         crate::track::linked_pose(doc, comp, t).map(|l| l.pose)
     }
 
-    /// The same store, for a solved camera that is a parent.
     fn solves(&self) -> Option<&dyn lumit_core::track::CameraSolveStore> {
         Some(&crate::track::Store)
     }
@@ -231,8 +225,6 @@ impl lumit_eval::SourceStamper for Stamper<'_> {
 }
 
 impl Stamper<'_> {
-    /// [`lumit_eval::SourceStamper::stamp`], for a layer shown no larger than
-    /// `shown` of its own size.
     fn stamp_with(
         &self,
         item: Uuid,
@@ -463,7 +455,6 @@ impl NestedKeyer for NestedKeys<'_> {
     }
 }
 
-/// Frame count of a comp preview (comp duration × comp rate).
 #[must_use]
 pub fn comp_frame_count(comp: &Composition) -> usize {
     let dur = comp.duration.0.to_f64();
@@ -569,6 +560,7 @@ mod tests {
             master_automation: Default::default(),
             loudness_target: None,
             lighting: Default::default(),
+            blending: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -640,9 +632,6 @@ mod tests {
         probes
     }
 
-    /// A frame with unprobed footage has no name at all — it renders live and
-    /// is never banked, so it can never be filed under a promise it did not
-    /// keep. Once probed it names cleanly.
     #[test]
     fn an_unprobed_source_makes_the_frame_unkeyable() {
         let (doc, comp, item) = footage_comp();
@@ -654,9 +643,6 @@ mod tests {
         assert!(frame_key(&doc, &comp, 0, q, &probed(item)).is_some());
     }
 
-    /// The same frame at a different preview resolution is a DIFFERENT entry,
-    /// so a half-resolution scrub frame is never served as the full-resolution
-    /// one (docs/06 §5.2 quality axis).
     #[test]
     fn each_resolution_tier_names_separately() {
         let (doc, comp, item) = footage_comp();
@@ -676,8 +662,6 @@ mod tests {
         assert_ne!(full, half);
     }
 
-    /// A file saved over in place names new frames, so the old ones, on disk
-    /// beside the project too, are never shown for it.
     #[test]
     fn a_file_saved_over_names_new_frames() {
         let dir = tempfile::tempdir().unwrap();
@@ -697,9 +681,6 @@ mod tests {
         assert_ne!(frame_key(&doc, &comp, 0, q, &probes).unwrap(), before);
     }
 
-    /// An edit that cannot change the picture must not invalidate the cache —
-    /// this is the whole reason the key hashes content rather than document
-    /// identity. Renaming a layer keeps every frame; moving it does not.
     #[test]
     fn a_picture_free_edit_keeps_the_frames_and_a_move_retires_them() {
         let (doc, comp, item) = footage_comp();
@@ -723,8 +704,6 @@ mod tests {
         );
     }
 
-    /// The fill walk visits every work-area frame exactly once, starting at the
-    /// playhead and leaning forwards.
     #[test]
     fn the_fill_walk_covers_the_work_area_once_leaning_forward() {
         let order = fill_walk_order(5, 0, 12);
@@ -736,10 +715,8 @@ mod tests {
         assert_eq!(order[0], 5, "the playhead's own frame comes first");
         let ahead = order.iter().take(5).filter(|f| **f > 5).count();
         assert!(ahead >= 3, "the walk leans forward, got {order:?}");
-        // Playhead at the work-area start: everything is ahead, no panic.
         assert_eq!(fill_walk_order(0, 0, 4), vec![0, 1, 2, 3]);
         assert_eq!(fill_walk_order(0, 0, 1), vec![0]);
-        // Degenerate spans are empty rather than a panic.
         assert!(fill_walk_order(5, 0, 0).is_empty());
         assert!(fill_walk_order(0, 0, 0).is_empty());
         assert!(fill_walk_order(99, 0, 12).is_empty());
@@ -787,8 +764,6 @@ mod tests {
             "a stroke changes the picture, so it must change the frame's name"
         );
 
-        // And the stroke's own settings are content too: widening a brush
-        // repaints, so it cannot land on the name the thinner one holds.
         let mut wider = comp.clone();
         wider.layers[0].paint = vec![stroke(24.0)];
         assert_ne!(

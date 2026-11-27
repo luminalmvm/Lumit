@@ -38,7 +38,6 @@ fn bad(what: &str, reason: impl Into<String>) -> ColourError {
     }
 }
 
-/// The scale a bit depth puts its numbers on, or a refusal naming the depth.
 fn depth_scale(what: &str, depth: &str) -> Result<f32> {
     Ok(match depth {
         "8i" => 255.0,
@@ -55,7 +54,6 @@ fn depth_scale(what: &str, depth: &str) -> Result<f32> {
     })
 }
 
-/// One process node as it was read, before it becomes an [`Op`].
 #[derive(Default)]
 struct Node {
     kind: String,
@@ -63,7 +61,6 @@ struct Node {
     /// Child elements with attributes: `ExponentParams`, `LogParams`, `Array`.
     /// Kept in file order because per-channel params repeat the element.
     children: Vec<(String, BTreeMap<String, String>)>,
-    /// Leaf elements with text: `minInValue`, `Slope`, `Saturation`, …
     texts: BTreeMap<String, String>,
     array: Vec<f32>,
     array_dim: Vec<usize>,
@@ -84,7 +81,6 @@ impl Node {
         Ok((depth_scale(what, in_depth)?, depth_scale(what, out_depth)?))
     }
 
-    /// Nodes whose maths CLF defines on normalised values only.
     fn require_float_depths(&self, what: &str) -> Result<()> {
         let (i, o) = self.scales(what)?;
         if i == 1.0 && o == 1.0 {
@@ -96,7 +92,6 @@ impl Node {
         }
     }
 
-    /// Three per-channel numbers from a whitespace-separated text element.
     fn triple(&self, what: &str, key: &str, default: [f32; 3]) -> Result<[f32; 3]> {
         let Some(text) = self.texts.get(key) else {
             return Ok(default);
@@ -120,8 +115,6 @@ impl Node {
     }
 }
 
-/// Read a per-channel parameter set (`ExponentParams`, `LogParams`), honouring
-/// the optional `channel="R|G|B"` attribute that lets a file state three.
 fn per_channel(
     children: &[(String, BTreeMap<String, String>)],
     element: &str,
@@ -146,7 +139,6 @@ fn per_channel(
     out
 }
 
-/// Whether any of the named parameter elements states `key` at all.
 fn states(children: &[(String, BTreeMap<String, String>)], element: &str, key: &str) -> bool {
     children
         .iter()
@@ -429,7 +421,6 @@ const IGNORED: [&str; 10] = [
     "InputDescription",
 ];
 
-/// Parse CLF or CTF text into a resolved chain.
 pub fn parse_clf(what: &str, text: &str) -> Result<Chain> {
     let mut reader = Reader::from_str(text);
     reader.config_mut().trim_text(true);
@@ -461,7 +452,6 @@ pub fn parse_clf(what: &str, text: &str) -> Result<Chain> {
             }
             Event::Start(ref e) | Event::Empty(ref e) => {
                 let elem = String::from_utf8_lossy(e.name().as_ref()).into_owned();
-                // An empty element carries no text and closes on the spot.
                 let empty = matches!(event, Event::Empty(_));
                 if info_depth > 0 {
                     if !empty {

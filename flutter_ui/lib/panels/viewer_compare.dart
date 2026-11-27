@@ -53,7 +53,6 @@ class ViewerWipe {
   });
 }
 
-/// Everything right of `x`, or left of it when [swapped].
 class ViewerWipeClip extends CustomClipper<Rect> {
   final double x;
   final bool swapped;
@@ -88,7 +87,6 @@ class ViewerCompare extends StatelessWidget {
   final ViewerSurface leftView;
   final ViewerSurface rightView;
 
-  /// The second view drawn on the left, the first on the right.
   final bool swapped;
 
   const ViewerCompare({
@@ -199,7 +197,6 @@ Widget viewerCompareSeam(BuildContext context, LumitTheme t, double width,
           if (width <= 0) return;
           onDivider(((x + d.delta.dx) / width).clamp(0.0, 1.0));
         },
-        // A double click, or the menu, puts it back in the middle.
         onDoubleTap: () => onDivider(0.5),
         onSecondaryTapUp: (d) {
           final ui = context.read<LumitUiState>();

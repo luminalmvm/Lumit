@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 
 /// The most rows a table keeps. A file with more is refused, not cut short.
 pub const MAX_ROWS: usize = 100_000;
-/// The most columns a table keeps.
 pub const MAX_COLUMNS: usize = 512;
 
 /// A table: one name per column, and each row's cells in column order. Every
@@ -17,44 +16,34 @@ pub const MAX_COLUMNS: usize = 512;
 pub struct Table {
     /// The column names, from the file's first line or its objects' keys.
     pub columns: Vec<String>,
-    /// The rows, each as long as `columns`.
     pub rows: Vec<Vec<String>>,
 }
 
-/// Why a file could not be read as a table.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum TableError {
-    /// Nothing in the file but white space.
     #[error("the file is empty")]
     Empty,
-    /// More rows than [`MAX_ROWS`].
     #[error("the file has more than {MAX_ROWS} rows")]
     TooManyRows,
-    /// More columns than [`MAX_COLUMNS`].
     #[error("the file has more than {MAX_COLUMNS} columns")]
     TooManyColumns,
-    /// JSON that would not parse, with the parser's own words.
     #[error("the JSON could not be read: {0}")]
     Json(String),
-    /// JSON that parsed and holds no list of rows.
     #[error("the JSON holds no list of rows")]
     NoRows,
 }
 
-/// How a data file is written.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Format {
     /// Cells parted by a comma, or by a semicolon where the comma is the
     /// decimal mark. Which one is read from the first line.
     Csv,
-    /// Cells parted by a tab.
     Tsv,
     /// A list of objects, or a list of lists whose first is the names.
     Json,
 }
 
 impl Format {
-    /// The format a file name's ending says, or `None` for any other ending.
     #[must_use]
     pub fn of_name(name: &str) -> Option<Format> {
         let ending = name.rsplit('.').next()?.to_ascii_lowercase();
@@ -67,11 +56,6 @@ impl Format {
     }
 }
 
-/// Read `text` as a table.
-///
-/// # Errors
-///
-/// [`TableError`] when the text holds no table or one past the limits.
 pub fn parse(text: &str, format: Format) -> Result<Table, TableError> {
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     if text.trim().is_empty() {
@@ -231,7 +215,6 @@ impl<'de, V: Deserialize<'de>> Deserialize<'de> for Ordered<V> {
     }
 }
 
-/// One member of a JSON list of rows: an object, or a list of cells.
 #[derive(Deserialize)]
 #[serde(untagged)]
 enum Member {
@@ -239,8 +222,6 @@ enum Member {
     Cells(Vec<serde_json::Value>),
 }
 
-/// What an object holding the list has under one of its keys: the list, or
-/// something else, which is passed over.
 #[derive(Deserialize)]
 #[serde(untagged)]
 enum Held {
@@ -248,7 +229,6 @@ enum Held {
     Other(serde::de::IgnoredAny),
 }
 
-/// A JSON file's outermost value: the list itself, or an object holding it.
 #[derive(Deserialize)]
 #[serde(untagged)]
 enum Outer {
@@ -482,9 +462,6 @@ pub fn matched_name(name: &str) -> String {
 mod tests {
     use super::*;
 
-    /// The cells a spreadsheet writes that a careless reader breaks on: the
-    /// delimiter, a quote and a line break inside quotes, a trailing blank
-    /// line, a short row, and a semicolon file.
     #[test]
     fn a_csv_keeps_quoted_commas_quotes_and_line_breaks() {
         let text = "\u{feff}Name,Title,Note\r\n\"Lovelace, Ada\",\"The \"\"first\"\"\",\"two\nlines\"\r\nGrace,,\r\nShort\r\n\r\n";
@@ -498,7 +475,6 @@ mod tests {
                 vec!["Short", "", ""],
             ]
         );
-        // What was written reads back the same.
         assert_eq!(parse(&to_csv(&table), Format::Csv).unwrap(), table);
 
         let semicolons = parse("Name;Size\nAda;1,5\n", Format::Csv).unwrap();
@@ -508,8 +484,6 @@ mod tests {
         assert_eq!(number("1,250.5 px"), Some(1250.5));
     }
 
-    /// JSON as people have it: a list of objects whose keys differ from row
-    /// to row, numbers and booleans unquoted, and the list under a key.
     #[test]
     fn json_objects_become_rows_under_the_union_of_their_keys() {
         let text = r##"{"rows":[{"Name":"Ada","Size":72,"On":true},{"Name":"Grace","Colour":"#f80","At":[960,540]}]}"##;

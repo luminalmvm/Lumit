@@ -1,0 +1,68 @@
+---
+title: Woodgrain
+description: "A plank of wood, with growth rings and grain."
+---
+
+Woodgrain is a **Textures** effect.
+
+## What it does
+
+Draws a plank cut along a tree trunk. The growth rings show as long stripes, which open into
+arches where the trunk wobbles, and fine grain runs along the plank.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Light wood** | Colour | Each channel 0 to 1 | 0.5, 0.27, 0.11 | - |
+| **Dark wood** | Colour | Each channel 0 to 1 | 0.16, 0.065, 0.02 | - |
+| **Ring spacing** | Slider | 2 to 400; any value by typing | 24 | Pixels at composition size |
+| **Ring sharpness** | Slider | 0 to 100 | 40 | - |
+| **Ring intensity** | Slider | 0 to 100 | 80 | - |
+| **Ring unevenness** | Slider | 0 to 100 | 30 | - |
+| **Ring noise** | Slider | 0 to 100 | 20 | - |
+| **Ring noise size** | Slider | 4 to 1000; any value by typing | 60 | Pixels at composition size |
+| **Graininess** | Slider | 0 to 100 | 35 | - |
+| **Grain size** | Slider | 1 to 100; any value by typing | 3 | Pixels at composition size |
+| **Plank depth** | Slider | 0 to 2000; any value by typing | 160 | Pixels at composition size |
+| **Trunk wobble** | Slider | 0 to 500; any value by typing | 60 | Pixels at composition size |
+| **Trunk wobble length** | Slider | 20 to 4000; any value by typing | 900 | Pixels at composition size |
+| **Angular wobble** | Slider | 0 to 100 | 25 | - |
+| **Rotation** | Dial | Any angle | 0° | Degrees |
+| **Trunk centre** | Point | Any position | 960, 540 | Pixels at composition size |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Paint** | Dropdown | Inside layer · Whole frame | Inside layer | - |
+
+## What each control does
+
+- **Light wood** and **Dark wood**: the two colours. Each ring runs from the light one to
+  the dark one.
+- **Ring spacing**: how far apart the rings are.
+- **Ring sharpness**: how late and how suddenly each ring turns dark.
+- **Ring intensity**: how dark the rings get.
+- **Ring unevenness**: how much the rings differ in width.
+- **Ring noise**: how far noise roughens the rings.
+- **Ring noise size**: how big that noise is.
+- **Graininess**: how strong the grain is.
+- **Grain size**: how wide the streaks of grain are. Each is forty times as long.
+- **Plank depth**: how far from the middle of the trunk the plank is cut.
+- **Trunk wobble**: how far the trunk strays from a straight line.
+- **Trunk wobble length**: the distance along the plank over which it strays.
+- **Angular wobble**: how far the rings are from round.
+- **Rotation**: turns the plank.
+- **Trunk centre**: a point on the line the trunk runs along, and the point the plank turns
+  about.
+- **Seed**: which wobble and noise the plank gets.
+- **Paint**: **Inside layer** paints only where the layer draws, and **Whole frame** fills
+  the whole of the layer's picture.
+- **Mix**: how much of the result replaces the original.
+- **Blend**: the blend mode the result is laid over the original with.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
+
+## Related
+
+- [Wave pattern](/effects/generate/wave-pattern/)
+- [Fractal noise](/effects/generate/fractal-noise/)
+- [Textures](/effects/#textures)
+- [Effects](/use/effects/)

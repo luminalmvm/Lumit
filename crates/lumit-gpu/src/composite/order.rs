@@ -1,10 +1,6 @@
-//! How a run of 3D layers is ordered and cut where its layers meet.
-
 use super::{Cut, CUT_LIFT, CUT_NEAR, CUT_PLANES, PIECE_CORNERS};
 use glam::Mat4;
 
-/// One flat part of a run of 3D layers, as the order sees it: a whole layer,
-/// or a piece of one cut along the planes of the layers it crosses.
 struct Shape {
     layer: usize,
     /// Its corners in the layer's own 0..1 space, and in comp pixels.
@@ -49,7 +45,6 @@ impl Shape {
         }
     }
 
-    /// Where this shape crosses `plane`, as a span along `along`.
     fn chord(
         &self,
         (normal, origin): (glam::Vec3, glam::Vec3),
@@ -91,7 +86,6 @@ impl Ord for Far {
     }
 }
 
-/// Pairs of shapes, by index.
 type Pairs = Vec<(usize, usize)>;
 
 /// The order `shapes` draw in, farthest first, with the flush and crossing
@@ -148,8 +142,6 @@ fn arrange(
         }
     };
     let n = shapes.len();
-    // Each shape's list of shapes that must wait for it, and how many it
-    // waits for itself.
     let mut then: Vec<Vec<usize>> = vec![Vec::new(); n];
     let mut waits = vec![0usize; n];
     let (mut flush, mut cross) = (Vec::new(), Vec::new());

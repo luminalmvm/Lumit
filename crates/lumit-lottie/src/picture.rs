@@ -6,12 +6,9 @@
 
 use crate::Still;
 
-/// An encoded picture and what to call it.
 pub(crate) struct Encoded {
     pub bytes: Vec<u8>,
-    /// The file extension, without the dot.
     pub ext: &'static str,
-    /// The media type, for a data URI.
     pub mime: &'static str,
 }
 

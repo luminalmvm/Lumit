@@ -1,5 +1,3 @@
-//! A node graph's values turned into the shapes the engine already evaluates.
-
 use uuid::Uuid;
 
 use super::{

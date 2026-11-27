@@ -34,20 +34,14 @@ pub(super) const FREQUENCY_HZ: f64 = 5_000.0;
 const RANGE_DB: f64 = 10.0;
 const SPEED_MS: f64 = 60.0;
 
-/// Taps in the crossover at 48 kHz.
 const TAPS_AT_48K: f64 = 255.0;
 
-/// How far the sound runs behind the detector, in milliseconds.
 const LOOKAHEAD_MS: f64 = 3.0;
 
-/// How fast the reduction closes, in milliseconds.
 const ATTACK_MS: f64 = 0.5;
 
-/// How long it holds once the s is over, in milliseconds.
 const HOLD_MS: f64 = 30.0;
 
-/// How fast the two levels the detector compares follow the sound, in
-/// milliseconds.
 const LEVEL_MS: f64 = 1.0;
 
 /// Two thirds: the reduction per dB over the threshold, a three to one
@@ -58,7 +52,6 @@ const SLOPE: f64 = 2.0 / 3.0;
 /// ten dB.
 const QUIET_DB: f64 = -60.0;
 
-/// De-esser's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "audio_deess",
@@ -83,15 +76,12 @@ pub struct AudioDeess {
     /// How fast the reduction lets go, in milliseconds.
     #[bounded(min = 20.0, max = 200.0, default = SPEED_MS, unit = Raw)]
     pub speed: f32,
-    /// Turn the whole sound down on an ess, not just its top.
     #[toggle(default = false, label = "Whole sound")]
     pub wideband: bool,
-    /// Play only what was taken away.
     #[toggle(default = false, label = "Sibilance only")]
     pub ess_only: bool,
 }
 
-/// De-esser's behaviour.
 pub struct AudioDeessDef;
 
 impl EffectDef for AudioDeessDef {
@@ -164,7 +154,6 @@ fn dot(a: &[f32], b: &[f32]) -> f32 {
     lanes.iter().sum::<f32>() + rest
 }
 
-/// One open De-esser.
 struct Deess {
     state: Mutex<State>,
     latency: u32,
@@ -174,15 +163,12 @@ struct State {
     rate: f64,
     taps: usize,
     lookahead: usize,
-    /// The crossover, and the frequency it was built for.
     fir: Vec<f32>,
     fir_hz: f64,
     /// Each channel's last `taps` samples, written twice so a window of them
     /// is always one slice.
     history: Vec<Vec<f32>>,
     write: usize,
-    /// Each channel's low and high band, `lookahead` frames of them, as a
-    /// ring.
     low: Vec<Vec<f32>>,
     high: Vec<Vec<f32>>,
     ring: usize,
@@ -254,7 +240,6 @@ impl AudioProcessor for Deess {
             .chunks_exact(AUDIO_CHANNELS)
             .zip(output.chunks_exact_mut(AUDIO_CHANNELS))
         {
-            // Split each channel, and keep its bands for the lookahead.
             let mut e_high = 0.0f64;
             let mut e_full = 0.0f64;
             let mut bands = [(0.0f32, 0.0f32); AUDIO_CHANNELS];
@@ -280,7 +265,6 @@ impl AudioProcessor for Deess {
             }
             st.write = (st.write + 1) % taps;
 
-            // The detector, on the bands as they arrive.
             st.level_high += level * (e_high - st.level_high);
             st.level_full += level * (e_full - st.level_full);
             let full_db = 10.0 * (st.level_full / AUDIO_CHANNELS as f64).max(1e-20).log10();
@@ -297,7 +281,6 @@ impl AudioProcessor for Deess {
             }
             let gain = 10f64.powf(-st.reduction / 20.0) as f32;
 
-            // The sound, lookahead frames late.
             for (((band, low), high), slot) in bands
                 .iter()
                 .zip(st.low.iter_mut())
@@ -374,8 +357,6 @@ mod tests {
         harness::same_seconds_at_any_rate(&AudioDeessDef, &[], 7_000.0, 1.0, 0.03);
     }
 
-    /// **Plan 3**: bursts of hiss above 5 kHz over a low tone are ducked by
-    /// several dB in the high band, and the tone between them is untouched.
     #[test]
     fn it_ducks_the_esses_and_leaves_the_voice() {
         let rate = 48_000.0;
@@ -387,8 +368,6 @@ mod tests {
                 .wrapping_add(1_442_695_040_888_963_407);
             (seed >> 40) as f32 / (1u64 << 24) as f32 * 2.0 - 1.0
         };
-        // Hiss high-passed by a crude difference, in bursts of 120 ms every
-        // 400 ms.
         let mut prev = 0.0f32;
         let mut ess = vec![0.0f32; frames];
         for (n, e) in ess.iter_mut().enumerate() {
@@ -410,7 +389,6 @@ mod tests {
         let lat = p.latency() as usize;
         let out = harness::run(&*p, &input, &values);
 
-        // Inside a burst, away from its edges: the high part of the output.
         let power = |x: &dyn Fn(usize) -> f32, range: std::ops::Range<usize>| -> f64 {
             range.map(|n| f64::from(x(n)).powi(2)).sum()
         };
@@ -419,7 +397,6 @@ mod tests {
         let in_l = |n: usize| ess[n];
         let ducked = 10.0 * (power(&in_l, burst.clone()) / power(&out_l, burst)).log10();
         assert!(ducked > 6.0, "the esses came down only {ducked} dB");
-        // Between bursts the voice comes through as it went in.
         let gap = 19_200 * 3 + 9_000..19_200 * 3 + 18_000;
         let moved = gap
             .map(|n| (out[(n + lat) * 2] - voice[n]).abs())

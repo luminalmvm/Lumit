@@ -40,13 +40,10 @@ use crate::template::{
 };
 use lumit_fx_macros::Effect;
 
-/// The rows a copy's control list derives.
 mod rows;
 
-/// The effect's match name.
 pub const MATCH_NAME: &str = "template";
 
-/// The `extra` key a copy's [`Held`] lives under.
 pub const EXTRA_KEY: &str = "template";
 
 /// The effect a copy's values are kept as. It declares nothing: every row it
@@ -64,26 +61,20 @@ pub const EXTRA_KEY: &str = "template";
 )]
 pub struct TemplateValues {}
 
-/// What a copy's instance keeps beside its rows.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Held {
-    /// The template's composition.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub comp: Option<Uuid>,
     /// The template's controls as they were last read, without what a menu's
     /// options set. What the rows are derived from.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub controls: Vec<Control>,
-    /// Whether the template has an intro, and so the copy a row for playing it.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub intro: bool,
-    /// Whether the template has an outro.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub outro: bool,
-    /// The rows the copy has set itself.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub own: Vec<String>,
-    /// The rows the copy's data row feeds.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fed: Vec<String>,
     /// The data row the copy follows, counting from 0.
@@ -93,13 +84,11 @@ pub struct Held {
     /// out to be shown ([`offer`]). Never stored: [`settle`] takes it away.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub live: Vec<(String, EffectValue)>,
-    /// Unknown fields from newer Lumit versions (docs/10-FILE-FORMAT.md §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 impl Held {
-    /// Whether the copy has a value of its own for `row`, set or fed.
     #[must_use]
     pub fn has(&self, row: &str) -> bool {
         self.own.iter().chain(&self.fed).any(|r| r == row)
@@ -116,15 +105,12 @@ pub fn held(inst: &EffectInstance) -> Held {
         .unwrap_or_default()
 }
 
-/// Write what `inst` keeps beside its rows.
 pub fn set_held(inst: &mut EffectInstance, held: &Held) {
     if let Ok(v) = serde_json::to_value(held) {
         inst.extra.insert(EXTRA_KEY.to_owned(), v);
     }
 }
 
-/// The template composition `inst` holds values for, or `None` for an
-/// instance that is not a copy's.
 #[must_use]
 pub fn comp_of(inst: &EffectInstance) -> Option<Uuid> {
     if inst.effect.match_name != MATCH_NAME {
@@ -156,8 +142,6 @@ fn carried(template: &Template) -> Vec<Control> {
         .collect()
 }
 
-/// A fresh instance for a copy of the template in composition `comp`, with
-/// nothing set.
 #[must_use]
 pub fn instance_for(comp: Uuid, template: &Template) -> EffectInstance {
     let mut inst = EffectInstance {
@@ -210,7 +194,6 @@ pub fn refresh(inst: &mut EffectInstance, doc: &Document) -> bool {
     true
 }
 
-/// The rows a control keeps on a copy, each with the kind of value it holds.
 pub(crate) fn rows_of_control(control: &Control) -> Vec<(String, RowKind)> {
     let id = &control.id;
     match control.kind {
@@ -250,7 +233,6 @@ pub(crate) fn rows_of_control(control: &Control) -> Vec<(String, RowKind)> {
     }
 }
 
-/// What one row of a copy holds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum RowKind {
     Number,
@@ -267,7 +249,6 @@ pub(crate) enum RowKind {
     Fit,
 }
 
-/// The ids of every row `control` keeps on a copy.
 #[must_use]
 pub fn row_ids(control: &Control) -> Vec<String> {
     rows_of_control(control)
@@ -346,7 +327,6 @@ fn colour(
     }
 }
 
-/// The picture a footage control's rows hold.
 fn picture(inst: &EffectInstance, id: &str) -> Option<Picture> {
     let row = param(inst, id)?;
     let EffectValue::Text(item) = &row.value else {
@@ -473,7 +453,6 @@ pub fn settings_at(
         if control.kind != ControlKind::Text {
             continue;
         }
-        // A text control's further rows, each a row of the same layer.
         let layer = control.target.layer();
         let font = format!("{id}_font");
         if control.font && kept.has(&font) {
@@ -534,7 +513,6 @@ pub fn ends(inst: &EffectInstance) -> Ends {
 /// One row a value is kept as: its id, what it holds, and a picture's size.
 type KeptRow = (String, EffectValue, Option<(u32, u32)>);
 
-/// The rows `value` is kept as for `control`, with what each holds.
 fn rows_for(control: &Control, value: &Value) -> Option<Vec<KeptRow>> {
     let id = control.id.clone();
     let fixed = |v: f64| EffectValue::Float(Property::fixed(v));
@@ -623,7 +601,6 @@ pub fn feed_row(inst: &mut EffectInstance, row: &str, value: &Value) {
     set_held(inst, &kept);
 }
 
-/// Take away everything a copy's data row fed it, leaving what it set itself.
 pub fn unfeed(inst: &mut EffectInstance) {
     let mut kept = held(inst);
     let fed = std::mem::take(&mut kept.fed);
@@ -639,7 +616,6 @@ pub fn follow(inst: &mut EffectInstance, row: Option<u32>) {
     set_held(inst, &kept);
 }
 
-/// Mark `row` as the copy's own, or as its data row's.
 fn mark(kept: &mut Held, row: &str, fed: bool) {
     kept.own.retain(|r| r != row);
     kept.fed.retain(|r| r != row);
@@ -650,7 +626,6 @@ fn mark(kept: &mut Held, row: &str, fed: bool) {
     }
 }
 
-/// Set one text control's font, size or colour on a copy, by the row's id.
 pub fn set_row(inst: &mut EffectInstance, row: &str, value: EffectValue) {
     let mut kept = held(inst);
     put(inst, row.to_owned(), value);
@@ -825,7 +800,6 @@ pub fn offered_id(host: Uuid) -> Uuid {
     Uuid::from_bytes(bytes)
 }
 
-/// The Graphics template effect's behaviour.
 pub struct TemplateValuesDef;
 
 impl EffectDef for TemplateValuesDef {

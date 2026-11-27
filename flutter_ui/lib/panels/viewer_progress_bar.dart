@@ -40,10 +40,8 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/time_readout.dart';
 
-/// How tall the bar's own track is.
 const double _trackHeight = 3;
 
-/// One sweep of the sheen along the fill.
 const Duration _sheenPeriod = Duration(milliseconds: 1400);
 
 /// How wide the track is on the transport. Fixed, so the percentage beside it
@@ -55,16 +53,13 @@ const double _trackWidth = 64;
 /// than being allowed to push the bar about.
 const double _labelWidth = 110;
 
-/// The least room the stage name is worth showing in.
 const double _labelLeast = 40;
 
-/// What it keeps clear of the transport on its left.
 const double _clearOfTransport = 12;
 
 class ViewerProgressBar extends StatefulWidget {
   final PreviewProgressTracker tracker;
 
-  /// The comp's running analyses, shown while the preview frame is quiet.
   final StabiliseProgress? analysis;
 
   const ViewerProgressBar({super.key, required this.tracker, this.analysis});
@@ -197,8 +192,6 @@ class _ViewerProgressBarState extends State<ViewerProgressBar>
                     height: _trackHeight,
                     child: Stack(
                       children: [
-                        // The span bar's empty part, so the track reads on
-                        // the transport before anything has filled it.
                         Positioned.fill(
                           child: ColoredBox(color: t.surface3),
                         ),
@@ -233,7 +226,6 @@ class _ViewerProgressBarState extends State<ViewerProgressBar>
     });
   }
 
-  /// The filled part, with the sheen travelling along it.
   Widget _fill(LumitTheme t, Motion motion, double fraction) {
     final sheen = motion.carries;
     final bar = LayoutBuilder(
@@ -247,9 +239,6 @@ class _ViewerProgressBarState extends State<ViewerProgressBar>
               gradient: !sheen
                   ? null
                   : LinearGradient(
-                      // The sheen is one brighter band sliding from the left
-                      // edge of the fill to its right, and it is the whole of
-                      // the "it is still working" signal.
                       begin: Alignment(-1 + 2 * _sheen.value, 0),
                       end: Alignment(-0.4 + 2 * _sheen.value, 0),
                       colors: [t.accent, t.accentHover, t.accent],

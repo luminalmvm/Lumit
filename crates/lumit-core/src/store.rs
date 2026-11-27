@@ -15,8 +15,6 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
 
-/// One journal entry: the op as applied, its exact inverse, and what the step
-/// is called in the History list.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JournalEntry {
     pub op: Op,
@@ -49,7 +47,6 @@ pub struct RemoteTag {
     pub id: u64,
 }
 
-/// What a shared store reports each time the document moves.
 pub enum Moved<'a> {
     /// An edit made here. `id` is what the host's answer will quote, and
     /// `was` is what the edit replaced, which the host lands it with.
@@ -77,10 +74,8 @@ pub type Tap = Arc<dyn Fn(Moved<'_>) + Send + Sync>;
 /// had, and edits made here after it, each with what it replaced.
 pub type Apart = (Arc<Document>, Vec<(Op, Op)>);
 
-/// An edit made here that the host has not answered yet.
 struct Pending {
     id: u64,
-    /// The edit as it was made, and what it replaced then.
     op: Op,
     was: Op,
     /// How it sits on the document now: as applied, and the inverse of that.
@@ -89,7 +84,6 @@ struct Pending {
     landed: Option<(Op, Op)>,
 }
 
-/// Which end of a shared project this store is.
 enum Link {
     /// The host. Every edit is ordered here.
     Host,
@@ -186,50 +180,7 @@ struct Journal {
     /// What the open group's step is called when it folds, when not after
     /// its first edit.
     group_name: Option<Cow<'static, str>>,
-    /// Present while the project is shared.
     shared: Option<Shared>,
-}
-
-impl Journal {
-    /// An edit made here has moved the document. A guest queues it until the
-    /// host answers, a guest without its host keeps it for the merge, and the
-    /// tap is told either way.
-    fn moved_locally(&mut self, op: &Op, inverse: &Op) {
-        let Some(shared) = self.shared.as_mut() else {
-            return;
-        };
-        shared.next_id += 1;
-        let id = shared.next_id;
-        match &mut shared.link {
-            Link::Host => {}
-            Link::Guest { pending } => pending.push_back(Pending {
-                id,
-                op: op.clone(),
-                was: inverse.clone(),
-                landed: Some((op.clone(), inverse.clone())),
-            }),
-            Link::Adrift { since, .. } => {
-                since.push((op.clone(), inverse.clone()));
-                return;
-            }
-        }
-        let was = inverse;
-        (shared.tap)(Moved::Local { id, op, was });
-    }
-    /// Whether moving the document from `before` to `after` would write over
-    /// something another person changed after revision `at`. Undo and redo
-    /// skip a step that would.
-    fn overwrites_others(&self, before: &Document, after: &Document, at: u64) -> bool {
-        let Some(shared) = self.shared.as_ref() else {
-            return false;
-        };
-        if shared.touched.is_empty() {
-            return false;
-        }
-        let keys = footprint(before, after);
-        let later = shared.touched.iter().filter(|(_, rev)| **rev > at);
-        any_overlap(&keys, later.map(|(key, _)| key))
-    }
 }
 
 /// One row of the **History** list: what the step is called, and
@@ -308,7 +259,6 @@ impl DocumentStore {
         }
     }
 
-    /// A snapshot is about to be published: move the number on.
     fn bump_revision(&self) {
         self.revision
             .fetch_add(1, std::sync::atomic::Ordering::Release);
@@ -429,18 +379,12 @@ impl DocumentStore {
             if let Some(slot) = doc.packed_ref_mut(id) {
                 *slot = media;
             } else if let Some(path) = doc.packed_path_mut(id) {
-                // An effect's file: its parameter holds the one path.
                 *path = media.absolute_path;
             }
         }
         self.current.store(Arc::new(doc));
     }
 
-    /// Push one finished step onto the undo stack, keeping it bounded.
-    ///
-    /// Compaction (docs/14 §5): the history stays at [`MAX_UNDO_DEPTH`] by
-    /// dropping the oldest steps. Dropping history never changes the document
-    /// — only how far back an undo can reach.
     fn push_step(journal: &mut Journal, entry: JournalEntry) {
         journal.undo.push(entry);
         if journal.undo.len() > MAX_UNDO_DEPTH {
@@ -507,7 +451,6 @@ impl DocumentStore {
         Self::fold_group(&mut journal);
     }
 
-    /// Put the open group onto the history as one step.
     fn fold_group(journal: &mut Journal) {
         journal.group_redo = None;
         let named = journal.group_name.take();
@@ -614,7 +557,6 @@ impl DocumentStore {
         Ok(())
     }
 
-    /// Apply an operation, journal it, publish the new snapshot.
     pub fn commit(&self, op: Op) -> Result<Arc<Document>, OpError> {
         self.commit_as(op, None)
     }
@@ -668,7 +610,6 @@ impl DocumentStore {
         Ok(arc)
     }
 
-    /// Undo the most recent operation. Ok(None) when there is nothing to undo.
     pub fn undo(&self) -> Result<Option<Arc<Document>>, OpError> {
         let mut journal = self.journal.lock();
         let shared = journal.shared.is_some();
@@ -716,12 +657,10 @@ impl DocumentStore {
         Ok(Some(arc))
     }
 
-    /// Redo the most recently undone operation. Ok(None) when nothing to redo.
     pub fn redo(&self) -> Result<Option<Arc<Document>>, OpError> {
         let mut journal = self.journal.lock();
         let shared = journal.shared.is_some();
         let before = self.snapshot();
-        // The same landing and skipping as `undo`, for the same reasons.
         let (entry, doc, applied, inverse) = loop {
             let Some(entry) = journal.redo.pop() else {
                 return Ok(None);
@@ -983,7 +922,6 @@ impl DocumentStore {
         else {
             return Ok(());
         };
-        // It usually landed here the way it landed there.
         let same = pending.front().is_some_and(|p| {
             p.id == id && p.landed.as_ref().is_some_and(|(applied, _)| applied == op)
         });
@@ -1113,6 +1051,7 @@ impl DocumentStore {
 }
 
 mod history;
+mod journal;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -1156,8 +1095,6 @@ mod tests {
         assert!(store.snapshot().cache_location.is_none());
     }
 
-    /// A parent files the new folder inside it, and the whole thing is still
-    /// one undo step — the folder and its filing arrive and leave together.
     #[test]
     fn a_folder_can_be_made_inside_another() {
         let store = DocumentStore::new(Document::new());
@@ -1181,8 +1118,6 @@ mod tests {
         );
     }
 
-    /// A solid at the panel root, to have something that is not a folder to
-    /// file. Any item kind would do; a solid is the cheapest to build.
     fn loose_item(store: &DocumentStore) -> Uuid {
         let id = Uuid::now_v7();
         store
@@ -1356,7 +1291,6 @@ mod tests {
             Some("shot_proxy.mov".to_string())
         );
 
-        // The item's own switch: attached but not read.
         store
             .commit(Op::SetItemUseProxy {
                 id,
@@ -1366,7 +1300,6 @@ mod tests {
         assert!(store.snapshot().proxy(id).is_some(), "still attached");
         assert!(store.snapshot().proxy_in_use(id).is_none(), "but not read");
 
-        // The project switch overrules every item.
         store
             .commit(Op::SetItemUseProxy {
                 id,
@@ -1380,8 +1313,6 @@ mod tests {
         store.undo().unwrap();
         assert!(store.snapshot().proxy_in_use(id).is_some());
 
-        // Replacing one proxy with another is one step, and undo brings the
-        // first one back rather than leaving none.
         store
             .commit(Op::SetItemProxy {
                 id,
@@ -1404,7 +1335,6 @@ mod tests {
             Some("shot_proxy.mov".to_string())
         );
 
-        // Detaching removes the entry rather than leaving a disabled one.
         store.commit(Op::SetItemProxy { id, proxy: None }).unwrap();
         assert!(store.snapshot().proxies.is_empty());
         assert!(
@@ -1433,6 +1363,7 @@ mod tests {
             master_automation: Default::default(),
             loudness_target: None,
             lighting: Default::default(),
+            blending: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -1495,7 +1426,6 @@ mod tests {
         serde_json::to_string(doc).unwrap()
     }
 
-    /// Build a scripted edit sequence against a fresh store.
     fn scripted_ops(doc: &Document) -> (Vec<Op>, Uuid) {
         let comp = test_comp();
         let comp_id = comp.id;
@@ -1618,7 +1548,6 @@ mod tests {
             let weak = weak.clone();
             store.set_callback(Arc::new(move |_| {
                 if let Some(store) = weak.upgrade() {
-                    // Re-entry: locks the journal that commit just released.
                     *count.lock() = store.journal_ops().len();
                 }
             }));
@@ -1651,7 +1580,6 @@ mod tests {
         let store = DocumentStore::new(initial);
         let comp = test_comp();
         let comp_id = comp.id;
-        // One AddItem, then well over the cap of cheap renames.
         let ops: Vec<Op> = std::iter::once(Op::AddItem {
             index: 0,
             item: Box::new(ProjectItem::Composition(comp)),
@@ -1662,7 +1590,6 @@ mod tests {
         }))
         .collect();
 
-        // Oracle: apply every op straight through, no store, no cap.
         for op in &ops {
             apply(&mut oracle, op).unwrap();
         }
@@ -1670,19 +1597,14 @@ mod tests {
             store.commit(op).unwrap();
         }
 
-        // Compaction dropped old history but not state: the store matches the
-        // full replay exactly.
         assert_eq!(json(&store.snapshot()), json(&oracle));
-        // The history is bounded, not the full run of commits.
         assert_eq!(store.journal_ops().len(), MAX_UNDO_DEPTH);
 
-        // Every retained step undoes cleanly and no more (no underflow/panic).
         let mut undos = 0;
         while store.undo().unwrap().is_some() {
             undos += 1;
         }
         assert_eq!(undos, MAX_UNDO_DEPTH, "exactly the retained steps undo");
-        // Redo is transitively bounded — all of it redoes back to the full state.
         let mut redos = 0;
         while store.redo().unwrap().is_some() {
             redos += 1;
@@ -1795,7 +1717,6 @@ mod tests {
         assert_eq!(layer.transform.opacity.value_at(-1.0), 0.0);
         assert_eq!(layer.transform.opacity.value_at(99.0), 100.0);
 
-        // Undo restores the static default exactly.
         store.undo().unwrap();
         let doc = store.snapshot();
         let layer = doc
@@ -1820,7 +1741,6 @@ mod tests {
                 item: Box::new(ProjectItem::Composition(comp)),
             })
             .unwrap();
-        // Stack top-to-bottom: A (index 0), B, C.
         let mut ids = Vec::new();
         for _ in 0..3 {
             let layer = test_layer(Uuid::now_v7());
@@ -1844,7 +1764,6 @@ mod tests {
                 .collect()
         };
         let before = order(&store);
-        // Move the bottom layer to the top.
         let bottom = *before.last().unwrap();
         store
             .commit(Op::ReorderLayer {
@@ -1856,15 +1775,10 @@ mod tests {
         let after = order(&store);
         assert_eq!(after.first(), Some(&bottom), "moved layer is now on top");
         assert_eq!(after.len(), 3);
-        // Undo restores the exact original order.
         store.undo().unwrap();
         assert_eq!(order(&store), before, "reorder undo == original order");
     }
 
-    /// A camera layer's zoom and a layer's 3D switch both round-trip through
-    /// undo — the two ops the 2.5D camera work added.
-    /// Retime on a Footage layer round-trips through undo; the op refuses a
-    /// SetSequenceClips round-trips through undo (a cut is one such op).
     #[test]
     fn sequence_clips_op_round_trips() {
         use crate::model::{Layer, LayerKind, Switches, TransformGroup};
@@ -1924,7 +1838,6 @@ mod tests {
                 }),
             })
             .unwrap();
-        // Cut into two, commit as SetSequenceClips.
         let (l, rc) = one.cut(r(2)).unwrap();
         store
             .commit(Op::SetSequenceClips {
@@ -2039,7 +1952,6 @@ mod tests {
         let layer = comp.layers.iter().find(|l| l.id == layer_id).unwrap();
         assert!(layer.switches.three_d);
 
-        // Mute round-trips the same way (audible defaults true).
         store
             .commit(Op::SetLayerAudible {
                 comp: comp_id,
@@ -2073,7 +1985,6 @@ mod tests {
                 .audible
         );
 
-        // Collapse round-trips the same way (defaults false).
         let clp = |s: &DocumentStore| {
             s.snapshot()
                 .comp(comp_id)
@@ -2096,7 +2007,6 @@ mod tests {
         store.undo().unwrap();
         assert!(!clp(&store));
 
-        // The effect stack + fx switch round-trip the same way.
         let stack = vec![crate::model::EffectInstance {
             id: Uuid::now_v7(),
             effect: crate::model::EffectKey {
@@ -2156,7 +2066,6 @@ mod tests {
                 .fx
         );
 
-        // Visibility round-trips the same way (visible defaults true).
         let vis = |s: &DocumentStore| {
             s.snapshot()
                 .comp(comp_id)
@@ -2179,7 +2088,6 @@ mod tests {
         store.undo().unwrap();
         assert!(vis(&store));
 
-        // Lock and label round-trip the same way.
         let lock_label = |s: &DocumentStore| {
             let doc = s.snapshot();
             let l = doc
@@ -2212,8 +2120,6 @@ mod tests {
         store.undo().unwrap();
         assert_eq!(lock_label(&store), (false, 0));
 
-        // Relink (docs/07 §3.3): SetMediaRef swaps the whole reference and
-        // undoes to exactly the old one, so a relink is one clean step.
         let media_of = |s: &DocumentStore, id: Uuid| {
             s.snapshot().items.iter().find_map(|i| match i {
                 ProjectItem::Footage(f) if f.id == id => Some(f.media.clone()),
@@ -2244,7 +2150,6 @@ mod tests {
             );
         }
 
-        // Volume (docs/09 §6) round-trips like the transform properties.
         let vol = |s: &DocumentStore| {
             s.snapshot()
                 .comp(comp_id)
@@ -2267,7 +2172,6 @@ mod tests {
         store.undo().unwrap();
         assert_eq!(vol(&store), 0.0, "default volume is unity (0 dB)");
 
-        // Routing is one value, so undo puts the whole of it back.
         let routes = |s: &DocumentStore| {
             s.snapshot()
                 .comp(comp_id)
@@ -2279,7 +2183,6 @@ mod tests {
                 .audio_routes
                 .clone()
         };
-        // To a Bus layer of the comp: a route to anything else is refused.
         let mut bus = test_layer(Uuid::now_v7());
         bus.kind = LayerKind::Null;
         bus.audio_only = true;
@@ -2319,7 +2222,6 @@ mod tests {
             "a route to something that is not a bus is refused"
         );
 
-        // The mixer's own settings each round-trip as one op and one undo.
         let layer_of = |s: &DocumentStore| {
             s.snapshot()
                 .comp(comp_id)
@@ -2365,11 +2267,8 @@ mod tests {
             store.undo().unwrap();
         }
         assert_eq!(layer_of(&store), before);
-        // And the bus goes again, so the undos below reach the edits above.
         store.undo().unwrap();
 
-        // The master fader (docs/09 §3.1) is comp state and round-trips
-        // the same way — one op, one undo step, back to unity.
         let master = |s: &DocumentStore| s.snapshot().comp(comp_id).unwrap().master_volume_db;
         assert_eq!(master(&store), 0.0, "a comp opens at unity master");
         store
@@ -2418,9 +2317,6 @@ mod tests {
         }
         assert_eq!(comp_of(&store), before);
 
-        // The confirmed beat grid (docs/09 §5) is comp state on the
-        // same pattern: set, read back exactly, undone to nothing — and a
-        // grid with no tempo in it is refused rather than stored.
         let grid = |s: &DocumentStore| s.snapshot().comp(comp_id).unwrap().beat_grid;
         assert_eq!(grid(&store), None, "a comp opens with no beat grid");
         let confirmed = crate::model::BeatGrid {
@@ -2457,7 +2353,6 @@ mod tests {
         let layer = comp.layers.iter().find(|l| l.id == layer_id).unwrap();
         assert!(!layer.switches.three_d);
 
-        // Zoom on a non-camera layer is an error, not a silent no-op.
         assert!(store
             .commit(Op::SetCameraZoom {
                 comp: comp_id,
@@ -2467,9 +2362,6 @@ mod tests {
             .is_err());
     }
 
-    /// The asset-organisation ops behave: a batch is one undo step and
-    /// all-or-nothing; folder children, auto-folder slots, comp settings and
-    /// solid defs all round-trip exactly.
     #[test]
     fn batch_folder_and_settings_ops_round_trip() {
         use crate::model::{Folder, LinearColour, SolidDef};
@@ -2481,7 +2373,6 @@ mod tests {
             store.commit(op).unwrap();
         }
 
-        // One batch: create the Solids folder, remember it, add a solid to it.
         let folder_id = uuid::Uuid::now_v7();
         let solid_id = uuid::Uuid::now_v7();
         let n_items = store.snapshot().items.len();
@@ -2525,7 +2416,6 @@ mod tests {
         assert!(doc.solid(solid_id).is_some());
         assert!(!doc.root_items().contains(&solid_id), "filed, not root");
 
-        // One undo removes the whole batch.
         store.undo().unwrap();
         let doc = store.snapshot();
         assert_eq!(doc.auto_folders.solids, None);
@@ -2533,7 +2423,6 @@ mod tests {
         assert!(doc.folder(folder_id).is_none());
         store.redo().unwrap();
 
-        // A failing member rolls back the whole batch.
         let before = store.snapshot();
         assert!(store
             .commit(Op::Batch {
@@ -2543,14 +2432,13 @@ mod tests {
                         name: "Renamed".into(),
                     },
                     Op::RemoveItem {
-                        id: uuid::Uuid::now_v7(), // unknown: fails
+                        id: uuid::Uuid::now_v7(),
                     },
                 ],
             })
             .is_err());
         assert_eq!(*store.snapshot(), *before, "all-or-nothing");
 
-        // Comp settings round-trip.
         store
             .commit(Op::SetCompSettings {
                 comp: comp_id,
@@ -2571,7 +2459,6 @@ mod tests {
         let comp2 = comp2.comp(comp_id).unwrap();
         assert_eq!((comp2.width, comp2.height), (1920, 1080));
 
-        // Solid def edit round-trips and errors on non-solid targets.
         store
             .commit(Op::SetSolidDef {
                 def: solid_id,
@@ -2597,7 +2484,6 @@ mod tests {
 
     #[test]
     fn layers_saved_before_transforms_existed_still_load() {
-        // A pre-transform Layer JSON (as slice-3 Lumit wrote it).
         let old = r#"{
             "id": "018f0e9a-0000-7000-8000-000000000001",
             "name": "clip.mp4",
@@ -2719,7 +2605,6 @@ mod tests {
                 .clone()
         };
 
-        // The stack's own op, with the wired effect gone.
         store
             .commit(Op::SetLayerEffects {
                 comp,
@@ -2741,7 +2626,6 @@ mod tests {
             .validate(&[])
             .expect("what is left must be a graph the engine accepts");
 
-        // The proof the prune is *for*: the next graph write is not refused.
         store
             .commit(Op::SetLayerGraph {
                 comp,
@@ -2761,8 +2645,6 @@ mod tests {
         assert_eq!(read(&store), wired, "the undo brings the wires back");
     }
 
-    /// A comp holding one layer, and its ids — the setting every lock test
-    /// needs before it can lock anything.
     fn doc_with_layer() -> (DocumentStore, Uuid, Uuid) {
         let comp = test_comp();
         let comp_id = comp.id;
@@ -2795,8 +2677,6 @@ mod tests {
             .expect("the lock switch is never itself refused");
     }
 
-    /// The row families the backlog named — transform, effect and volume — plus
-    /// the structural edits, all refused through the one guard.
     #[test]
     fn a_locked_layer_refuses_every_family_of_edit() {
         let (store, comp, layer) = doc_with_layer();
@@ -2867,7 +2747,6 @@ mod tests {
                 label: 3,
             })
             .expect("a label colour is housekeeping");
-        // And the way back out.
         lock(&store, comp, layer, false);
         store
             .commit(Op::RenameLayer {
@@ -2894,7 +2773,6 @@ mod tests {
             .expect("edit while unlocked");
         lock(&store, comp, layer, true);
 
-        // Back past the lock…
         store.undo().expect("undo the lock");
         // …and then past the edit, which is only reachable because the layer is
         // unlocked again by the time the inverse is applied.
@@ -2904,10 +2782,6 @@ mod tests {
         assert!(!l.switches.locked, "the lock came off first");
         assert_ne!(l.name, "Edited", "and the edit under it came back out");
     }
-
-    // -----------------------------------------------------------------------
-    // Undo groups: one gesture, one step (docs/07 §4.7).
-    // -----------------------------------------------------------------------
 
     /// The claim the block tools rest on: several ops committed inside a group
     /// undo together, and one undo puts every one of them back. Fails without
@@ -2985,8 +2859,6 @@ mod tests {
         );
     }
 
-    /// The History list is the ops that were committed, named and in order,
-    /// and an undone step stays on it greyed rather than vanishing.
     #[test]
     fn the_history_list_names_the_ops_it_was_given() {
         let store = DocumentStore::new(Document::new());
@@ -3012,7 +2884,6 @@ mod tests {
         assert!(after.last().is_some_and(|e| e.undone));
         assert_eq!(store.applied_steps(), expected.len() - 1);
 
-        // A fresh commit replaces the forward history, so the row goes.
         store
             .commit(Op::SetAntiAliasing {
                 anti_aliasing: AntiAliasing::Off,
@@ -3023,8 +2894,6 @@ mod tests {
         assert_eq!(listed.last().map(|e| &*e.name), Some("Set anti-aliasing"));
     }
 
-    /// Jumping lands on exactly the document that stood at that point on the
-    /// road, forwards and backwards, and going back and forth is lossless.
     #[test]
     fn jumping_to_a_history_index_restores_that_state() {
         let store = DocumentStore::new(Document::new());
@@ -3051,7 +2920,6 @@ mod tests {
             );
         }
 
-        // Past either end simply stops there rather than failing.
         store.jump_to(total + 50).unwrap();
         assert_eq!(store.applied_steps(), total);
     }
@@ -3179,9 +3047,6 @@ mod tests {
         assert_eq!(json(&store.snapshot()), before, "one undo puts it all back");
     }
 
-    // -- The node graph composition (docs/impl/node-graph-comp.md §1.1, §3) ---
-
-    /// A comp with one Output box in it, filed and ready to be edited.
     fn doc_with_node_graph() -> (DocumentStore, Uuid, crate::comp_graph::CompGraph) {
         let seed = crate::comp_graph::CompGraph::new_with_output();
         let mut comp = test_comp();
@@ -3231,7 +3096,6 @@ mod tests {
         );
         assert_eq!(json(&store.snapshot()), before, "nothing was swapped");
 
-        // And the other way round: a comp that has layers never becomes one.
         let (layers, layer_comp, _) = doc_with_layer();
         let before = json(&layers.snapshot());
         assert_eq!(
@@ -3243,7 +3107,6 @@ mod tests {
         );
         assert_eq!(json(&layers.snapshot()), before);
 
-        // A comp-wide setting is legal on a node graph: it is a composition.
         store
             .commit(Op::SetCompBackground {
                 comp: comp_id,
@@ -3283,8 +3146,6 @@ mod tests {
             let roll = next() as usize;
             let mut candidate = graph.clone();
             match roll % 3 {
-                // Add a box, and wire it into the Output when it makes a
-                // picture and the Output is free.
                 0 => {
                     let name = names[roll % names.len()];
                     let inst =
@@ -3301,13 +3162,11 @@ mod tests {
                         });
                     }
                 }
-                // Move a box.
                 1 => {
                     if let Some(place) = candidate.layout.first_mut() {
                         place.1[0] += 10.0;
                     }
                 }
-                // Twirl one open, or shut again.
                 _ => {
                     let id = candidate.nodes.first().map(GraphNode::id);
                     if let Some(id) = id {

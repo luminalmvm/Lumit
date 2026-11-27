@@ -1,5 +1,3 @@
-//! A layer's motion path as the Viewer draws it.
-
 use lumit_core::anim::{Animation, Keyframe, Property};
 use lumit_core::model::Layer;
 use lumit_core::time::{CompTime, Rational};
@@ -35,7 +33,6 @@ pub(crate) fn motion_path_of(
     let offset = layer.start_offset.0;
     let comp_time = |t: Rational| CompTime(t.checked_add(offset).unwrap_or(t));
 
-    // Every time either axis has a key at, on the layer's clock, oldest first.
     let mut times: Vec<Rational> = kx
         .into_iter()
         .chain(ky)
@@ -53,10 +50,16 @@ pub(crate) fn motion_path_of(
     for frame in first_frame..=last_frame {
         let t = comp.frame_rate.time_of_frame(frame).ok()?.0;
         let local = lumit_core::time::layer_time(t.to_f64(), offset);
-        samples.push(px.value_at(local));
-        samples.push(py.value_at(local));
-        depths.extend(pz.map(|z| z.value_at(local)));
+        let (x, y, z) =
+            lumit_core::motion_path::position(&layer.transform, local, pz.is_none(), &|p| {
+                p.value_at(local)
+            });
+        samples.extend([x, y]);
+        depths.extend(pz.map(|_| z));
     }
+    // The handles below shape each axis' curve, so on a curved path they
+    // would point off it.
+    let curved = !layer.transform.motion_path.is_straight();
 
     // How far one axis' handle sits from its key on one side: the cubic's
     // first control point less the key, in that axis' own units. A straight
@@ -95,7 +98,7 @@ pub(crate) fn motion_path_of(
             let (ix, iy) = (index(kx), index(ky));
             let handle = |out: bool| -> Option<[f64; 2]> {
                 let (kx, ky, ix, iy) = (kx?, ky?, ix?, iy?);
-                if !eased(kx, ix, out) && !eased(ky, iy, out) {
+                if curved || (!eased(kx, ix, out) && !eased(ky, iy, out)) {
                     return None;
                 }
                 Some([x + reach(kx, ix, out)?, y + reach(ky, iy, out)?])

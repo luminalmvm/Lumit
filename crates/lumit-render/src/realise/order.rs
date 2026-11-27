@@ -1,5 +1,3 @@
-//! The order a segment's 3D layers draw in, and the runs it cuts them into.
-
 use super::placed_in_3d;
 use super::shadows::shadow_only;
 use crate::draw::CompLayerDraw;
@@ -59,7 +57,6 @@ pub(super) fn draw_order(
                 .into_iter()
                 .filter_map(|(i, cut)| Some((*run.get(i)?, cut))),
         );
-        // The 2D layer that ended the run keeps its place.
         if end < layers.len() && shown(&end) {
             order.push((end, None));
         }
@@ -68,8 +65,6 @@ pub(super) fn draw_order(
     order
 }
 
-/// The draws in their order cut into the runs [`draw_order`] sorted: each
-/// run of 3D layers, and each layer that ended one on its own.
 pub(super) fn runs_of<'a, 'b>(
     layers: &[CompLayerDraw],
     order: &[usize],

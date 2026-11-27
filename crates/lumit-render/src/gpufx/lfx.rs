@@ -36,20 +36,15 @@ pub fn register(effect: LfxEffect) -> Result<&'static dyn EffectDef, LfxError> {
     Ok(def)
 }
 
-/// Whether an LFX effect draws, and why not.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LfxStatus {
     Draws,
-    /// The project names it and no extension here carries it.
     Missing {
         extension: String,
     },
     /// The graphics device was lost twice while it ran.
     SwitchedOff,
-    /// The shader breaks the contract; the sentence says how.
     Refused(String),
-    /// The shader does not compile; the compiler's message, on the
-    /// shader's own lines.
     WontCompile(String),
 }
 
@@ -77,7 +72,6 @@ pub fn status(match_name: &str) -> LfxStatus {
     }
 }
 
-/// The compiler's word on every pass, kept per key hash.
 fn compiled(key: u64, program: &lumit_core::fx::shader::ShaderProgram) -> Option<String> {
     static SEEN: Mutex<Vec<(u64, Option<String>)>> = Mutex::new(Vec::new());
     if let Some((_, why)) = SEEN.lock().ok()?.iter().find(|(k, _)| *k == key) {
@@ -103,7 +97,6 @@ pub fn strike_in_flight(ctx: &GpuContext) {
     }
 }
 
-/// One installed effect's pass, by match name.
 struct LfxPass(&'static str);
 
 impl GpuEffect for LfxPass {
@@ -147,7 +140,6 @@ impl GpuEffect for LfxPass {
             }
         }
         let (instance, lt) = aux.op();
-        // The instance's own seed, as the Custom shader's.
         let seed = (instance.as_u128() as u64 ^ (instance.as_u128() >> 64) as u64) as u32;
         let input2 = aux.layer_input();
         let [fx0, fy0, fw, fh] =
@@ -252,8 +244,6 @@ mod tests {
     const W: u32 = 8;
     const H: u32 = 8;
 
-    /// A first pass at half size that writes its own uv and the input's
-    /// blue, and a last pass that reads it back at full size.
     const TWO_PASS: &str = r"
 fn half(uv: vec2<f32>) -> vec4<f32> {
     return vec4<f32>(uv.x, uv.y, lumit_sample(uv).b, 1.0);
@@ -305,8 +295,6 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
         out
     }
 
-    /// Two passes, the first at half size, against the same arithmetic done
-    /// on the CPU. Guards wrong pixels.
     #[test]
     fn a_two_pass_effect_draws_what_its_passes_say() {
         let Some(ctx) = lumit_gpu::test_support::lease() else {
@@ -364,8 +352,6 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
         );
         let got = lumit_gpu::fx::common::readback_linear_f32(&ctx, &out, W, H).expect("readback");
 
-        // The half-size pass: 4 by 4, each texel its own uv and the input's
-        // blue there.
         let (hw, hh) = (W / 2, H / 2);
         let mut half = Vec::new();
         for y in 0..hh {
@@ -433,7 +419,6 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
         }
     }
 
-    /// A gradient-free grey plate, with `effects` on it.
     fn project(effects: Vec<EffectInstance>) -> (Document, Uuid) {
         let def = Uuid::now_v7();
         let mut doc = Document::new();
@@ -454,6 +439,7 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
             master_automation: Default::default(),
             loudness_target: None,
             lighting: Default::default(),
+            blending: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -485,9 +471,6 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
             .expect("the comp")
     }
 
-    /// A project naming an LFX effect nobody installed here opens, draws its
-    /// input unchanged, and saves its values back as they were. Guards lost
-    /// work.
     #[test]
     fn a_missing_lfx_effect_opens_draws_nothing_and_keeps_its_values() {
         // Built from the Custom shader's rows, then renamed: what a project
@@ -540,9 +523,6 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
             .expect("the control renders");
         assert_eq!(with, without, "a missing effect leaves the picture alone");
     }
-    /// A backdrop effect at Mix 0 leaves its layer as it was drawn, and the
-    /// layer's other effects run on its own picture rather than on the comp
-    /// below. Guards wrong pixels.
     #[test]
     fn a_backdrop_effect_at_mix_0_leaves_its_layer_alone() {
         const MAGENTA: &str = r"
@@ -565,7 +545,6 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
             }
         }
         let invert = lumit_core::fx::builtins::instantiate("invert").expect("a built-in");
-        // A small plate over a full-frame one, so the comp below shows.
         let scene = |effects: Vec<EffectInstance>| {
             let (mut doc, id) = project(effects);
             let ground = Uuid::now_v7();
@@ -607,9 +586,6 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
         assert!(off <= 1, "off by {off}");
     }
 
-    /// An extension's effect has the Blend row every built-in has: a flat
-    /// grey drawn in Multiply darkens the plate by that grey, where Normal
-    /// replaces it. Guards wrong pixels.
     #[test]
     fn an_lfx_effect_blends_with_its_input() {
         const GREY: &str = r"
@@ -820,7 +796,6 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
             for p in &mut ramp.params {
                 match p.id.as_str() {
                     "paint" => p.value = EffectValue::Choice(paint),
-                    // Colour.
                     "blend" => p.value = EffectValue::Choice(24),
                     _ => {}
                 }

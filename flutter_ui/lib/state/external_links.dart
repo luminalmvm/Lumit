@@ -36,6 +36,9 @@ String? effectManualUrl({
   if (namespace != 'builtin') return null;
   final folder = switch (category) {
     'blur_sharpen' => 'blur-sharpen',
+    // Fractal noise, the one built-in texture, kept its page when the
+    // Textures family was split out of Generate.
+    'textures' => 'generate',
     'siceliot_drivers' => 'siceliot',
     // The one category that fills two folders.
     'controls' => const {
@@ -64,13 +67,9 @@ const String lumitGuidesUrl =
 /// are `web/src/pages/releases/`, not a docs page.
 const String lumitReleasesUrl = 'https://lumitlab.com/releases/';
 
-/// What an account stores and the terms it comes with. The sign-in window
-/// links both, so they can be read before an account is made.
 const String lumitPrivacyUrl = 'https://lumitlab.com/privacy/';
 const String lumitTermsUrl = 'https://lumitlab.com/terms/';
 
-/// Microsoft's download page for WebView2, which extensions need on
-/// Windows.
 const String webView2Url =
     'https://developer.microsoft.com/microsoft-edge/webview2/#download';
 
@@ -91,7 +90,6 @@ Future<bool> Function(String url) openExternalLink = launchInDefaultBrowser;
 /// line instead.
 Future<bool> launchInDefaultBrowser(String url) async {
   if (!_isWebAddress(url)) return false;
-  // A page hands the link to the browser it is in.
   if (kIsWeb) return openInTab(url);
   try {
     switch (Platform.operatingSystem) {
@@ -114,7 +112,6 @@ Future<bool> launchInDefaultBrowser(String url) async {
   }
 }
 
-/// Whether this is a web address and not something else wearing a URL's shape.
 bool _isWebAddress(String url) {
   final parsed = Uri.tryParse(url);
   return parsed != null &&

@@ -1,5 +1,3 @@
-//! Finding the point a row is one number of, on a layer.
-
 use super::Row;
 
 /// The properties of the point `row` is one number of on `layer`, in order,

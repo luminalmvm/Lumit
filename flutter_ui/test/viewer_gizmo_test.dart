@@ -1,10 +1,3 @@
-// The Viewer gizmo's arithmetic: which layer a point is inside, what a
-// marquee catches, where the handles sit once a layer is turned, and what a
-// handle drag means.
-//
-// All of it is pure, so all of it is checked here against hand-computed cases
-// rather than by dragging in a widget tree — the same reasoning as
-// viewer_layer_map.dart, whose maths these build on.
 
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -22,8 +15,6 @@ import 'package:lumit_flutter/state/tools.dart' show GizmoAxes;
 import 'package:uuid/uuid.dart';
 
 void main() {
-  /// A layer of [size] sitting at [at] in a comp drawn 1:1 from the origin,
-  /// anchored on its own middle — the arrangement a placed clip gets.
   LayerBox box({
     Size size = const Size(200, 100),
     Offset at = const Offset(300, 200),
@@ -68,9 +59,6 @@ void main() {
         motionPath: motionPath,
       );
 
-  /// A path from (100, 200) to (400, 500) in comp pixels over three frames,
-  /// with a key at each end — the shape the engine hands back for a position
-  /// keyed on both axes.
   BridgeMotionPath path() => BridgeMotionPath(
         firstFrame: 0,
         samples: Float64List.fromList([100, 200, 200, 300, 300, 400, 400, 500]),
@@ -91,7 +79,6 @@ void main() {
         ],
       );
 
-  /// A square mask in the layer's own coordinates, all corners.
   BridgeMask squareMask({
     double left = 20,
     double top = 20,
@@ -156,6 +143,8 @@ void main() {
         gradientEndY: const BridgeScalar.static_(0),
         gradientStartOpacity: const BridgeScalar.static_(100),
         gradientEndOpacity: const BridgeScalar.static_(100),
+        gradientHighlight: const BridgeScalar.static_(0),
+        gradientHighlightAngle: const BridgeScalar.static_(0),
         gradientStops: const [],
         combine: 0,
         hidden: false,
@@ -165,7 +154,6 @@ void main() {
         taper: null,
       );
 
-  /// [item] as the one entry of a layer's contents.
   List<BridgeShapeEntry> contentsOf(BridgeShapeItem item) =>
       [BridgeShapeEntry(depth: 0, kind: BridgeShapeEntryKind.item(item))];
 
@@ -201,7 +189,6 @@ void main() {
         anchorX: const BridgeScalar.static_(0),
         anchorY: const BridgeScalar.static_(0),
         positionX: BridgeScalar.keyframed([key(0, 100), key(3, 400)]),
-        // y is still: a key dot on the path moves x only.
         positionY: const BridgeScalar.static_(200),
         positionZ: const BridgeScalar.static_(0),
         scaleX: const BridgeScalar.static_(100),
@@ -237,7 +224,6 @@ void main() {
 
   group('What a point is inside', () {
     test('a rotated layer is tested in its own frame, not on screen', () {
-      // Quarter-turned, the 200×100 layer occupies a 100×200 patch of screen.
       final b = box(rotation: 90);
       expect(b.contains(const Offset(300, 290)), isTrue,
           reason: '90 px down the screen is along the layer\'s own long axis');
@@ -249,12 +235,9 @@ void main() {
       final top = box(size: const Size(50, 50));
       final under = box();
       expect(layerAtPoint([top, under], const Offset(300, 200))?.id, top.id);
-      // Beyond the small one, the big one below still answers.
       expect(layerAtPoint([top, under], const Offset(380, 200))?.id, under.id);
       expect(layerAtPoint([top, under], const Offset(600, 600)), isNull);
 
-      // Through a camera at rest over a 600 by 400 comp, 3D layers next to
-      // each other go nearest first, and a 2D layer above them still wins.
       ViewerDepth deep(double z) => ViewerDepth(
             view: () => const [1, 0, 0.3, 0, 0, 1, 0.2, 0, 0, 0, 0.001, 1],
             z: z,
@@ -279,9 +262,6 @@ void main() {
     });
   });
 
-  /// A mask's own points: with the Selection tool and the wireframes
-  /// on, every vertex of every mask is a thing you can aim at, sweep up and
-  /// drag. The arithmetic that decides *which* is here.
   group('A mask\'s points', () {
     test('a press near one names it, and one far away names nothing', () {
       final b = box(masks: [squareMask()]);
@@ -295,7 +275,6 @@ void main() {
 
     test('a sweep gathers every point inside it and no others', () {
       final b = box(masks: [squareMask()]);
-      // The top edge only: the two points at y = 170, not the two at y = 230.
       final caught =
           pathPointsInRect([b], const Rect.fromLTRB(200, 150, 300, 200));
       expect(caught, {
@@ -306,10 +285,6 @@ void main() {
     });
   });
 
-  /// A shape layer's own art is editable on the picture by the same gesture
-  /// a mask's points take. The arithmetic is shared with masks; what these
-  /// pin is that a shape item's points are found, named apart from a mask's,
-  /// and swept up the same way.
   group("A shape layer's points", () {
     test('a shape point and a mask point are never the same point', () {
       final id = UuidValue.fromString(const Uuid().v4());
@@ -328,9 +303,6 @@ void main() {
     /// from the art it belonged to — the box and the picture agreed, and only
     /// the points were somewhere else.
     test('are drawn from the art\'s own corner, not the path\'s numbers', () {
-      // A 60x60 layer at (300, 200) anchored in its middle: its origin is at
-      // (270, 170) on screen. The art is the same square, drawn at (120, 80) —
-      // so its first point is the layer's origin and nowhere else.
       final item = squareShape(left: 120, top: 80, side: 60);
       final b = box(
         size: const Size(60, 60),
@@ -380,8 +352,6 @@ void main() {
       final split = verticesWithPointAdded(const [a, b], 0, 0.3);
       expect(split, hasLength(3));
       for (final t in [0.0, 0.25, 0.5, 0.75, 1.0]) {
-        // The first half of the new path is the old edge up to 0.3, the
-        // second half the rest of it.
         final before = along(split[0], split[1], t) - along(a, b, 0.3 * t);
         final after =
             along(split[1], split[2], t) - along(a, b, 0.3 + 0.7 * t);
@@ -415,8 +385,6 @@ void main() {
   group('What a handle drag means', () {
     test('dragging a corner outward scales the layer up', () {
       final b = box();
-      // The bottom-right corner sits at (400, 250) and the anchor at (300,
-      // 200) — pulling the corner twice as far from the anchor doubles both.
       final (sx, sy) = scaleForGizmoHandle(
         box: b,
         handle: GizmoHandle.bottomRight,
@@ -436,7 +404,6 @@ void main() {
       final b = b0.copyWith(
           map: b0.map.pivotedAt(100.4, 99.7,
               position: b0.map.toScreen(100.4, 99.7)));
-      // The top edge's middle is at (300, 150), the pivot about 100 below.
       final (sx, sy) = scaleForGizmoHandle(
         box: b,
         handle: GizmoHandle.top,
@@ -475,7 +442,6 @@ void main() {
   group('A box scaled to a size it has not been committed at', () {
     test('a negative scale turns the layer over rather than collapsing it', () {
       final flipped = box(size: const Size(200, 100)).scaledTo(-100, 100);
-      // The layer's own top-left corner is now on the right of the anchor.
       expect(flipped.corners.first.dx, closeTo(400, 1e-6));
       expect(flipped.corners[1].dx, closeTo(200, 1e-6));
       expect(flipped.corners.first.dy, closeTo(150, 1e-6),
@@ -491,9 +457,6 @@ void main() {
     });
   });
 
-  /// **The 3D handles land where the pointer says.** A layer tilted under a
-  /// camera that is moved and turned, as the compositor projects it, and the
-  /// drags read back through the same rows.
   group('The 3D handles', () {
     // lumit_core::camera::projection for an eye at (200, 100, -900) turned
     // (-15, 30, 5) with a zoom of 900, over a 600 by 400 comp.
@@ -557,7 +520,6 @@ void main() {
       final from = rings.project(rings.ringPoint(0, 0.2)).$1;
       final to = rings.project(rings.ringPoint(0, 0.9)).$1;
       expect(RingTurn(rings, 0, from).sweptTo(to), closeTo(0.7, 1e-6));
-      // Turning about the X ring's own axis is X Rotation alone.
       near(turnedAbout(turn, rotationAxes(turn)[0], 0.7),
           (40 + 0.7 * 180 / math.pi, -25, 10));
     });
@@ -568,7 +530,6 @@ void main() {
       final vanishing = g.project((300, 200, 1e9)).$1;
       final from = shown(at);
       expect(g.along(2, from, Offset.lerp(from, vanishing, 0.5)!), isNotNull);
-      // Nearer than that the axis runs off ten times as deep and further.
       expect(g.along(2, from, Offset.lerp(from, vanishing, 0.99)!), isNull);
       final horizon = g.project((300, 1e9, 150)).$1;
       expect(g.across(0, from, Offset.lerp(from, horizon, 0.99)!), isNull);
@@ -643,8 +604,6 @@ void main() {
       final c = pickedPointsBox([b], keys)!.center;
       final contents = shapeContentsEdited(b, pointsTurned(b, keys, c, math.pi))!;
       final turned = (contents.single.kind as BridgeShapeEntryKind_Item).field0;
-      // Half a turn about the square's middle: each corner lands on the
-      // opposite one.
       expect(turned.vertices[0].x, closeTo(item.vertices[2].x, 1e-6));
       expect(turned.vertices[0].y, closeTo(item.vertices[2].y, 1e-6));
     });

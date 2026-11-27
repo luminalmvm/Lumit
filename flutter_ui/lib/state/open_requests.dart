@@ -1,5 +1,3 @@
-// What Lumit is asked to open by the system once it is running, or before
-// it has a window to open it in.
 
 import 'package:flutter/services.dart';
 

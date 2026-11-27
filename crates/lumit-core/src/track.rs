@@ -71,7 +71,6 @@ pub const CAMERA_TRACK: &str = "camera_track";
 /// that conversion should happen.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SolvedRange {
-    /// The rate the solved frames are numbered at (the media's own rate).
     pub fps: f64,
     /// First solved frame, inclusive.
     pub first_frame: i64,
@@ -105,13 +104,9 @@ pub trait CameraSolveStore {
     fn solved_pose(&self, media: Uuid, frame: i64) -> Option<CameraPose>;
 }
 
-/// How a Camera layer's placement was arrived at — the flag the interface must
-/// be able to read, so a link that stopped working says so.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LinkState {
-    /// No solve link: an ordinary camera, driven by its own properties.
     Unlinked,
-    /// Derived from the linked layer's solve, at the frame it asked for.
     Derived,
     /// Derived, but from the nearest solved frame rather than the one asked
     /// for — the layer has run past the solved range, or a retime reached
@@ -123,7 +118,6 @@ pub enum LinkState {
     Unresolved,
 }
 
-/// A camera's placement plus how it was arrived at.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LinkedPose {
     pub pose: CameraPose,
@@ -166,12 +160,10 @@ pub fn use_solve_store(store: &'static (dyn CameraSolveStore + Sync)) {
     let _ = SOLVES.set(store);
 }
 
-/// The renderer's solves, once it has handed them over.
 pub(crate) fn solve_store() -> Option<&'static dyn CameraSolveStore> {
     SOLVES.get().map(|store| *store as &dyn CameraSolveStore)
 }
 
-/// Nothing solved yet: a link with nothing to follow reads the stored pose.
 pub(crate) struct Unsolved;
 
 impl CameraSolveStore for Unsolved {
@@ -397,7 +389,6 @@ pub fn tracked_solved_frame(
     solved_frame(doc, comp, tracked, t, store, 0)
 }
 
-/// [`tracked_solved_frame`] with the precomp depth the walk is already at.
 fn solved_frame(
     doc: &Document,
     comp: &Composition,
@@ -497,8 +488,6 @@ fn tracked_source_at(
     }
 }
 
-/// One hop into a nested composition at *its* comp time `t`, continuing from
-/// the tracked layer inside it.
 fn descend(doc: &Document, nested: Uuid, t: f64, depth: u32) -> Option<(Uuid, f64)> {
     let nc = doc.comp(nested)?;
     let inner = tracked_layer(nc)?;
@@ -679,12 +668,6 @@ fn key(time: Rational, value: f64) -> Keyframe {
     }
 }
 
-// ---------------------------------------------------------------------------
-// The planar track, and the Corner pin it writes
-// ---------------------------------------------------------------------------
-
-/// The match name of the Planar track effect (docs/08 §3.87). One
-/// spelling, here, for [`CAMERA_TRACK`]'s reason.
 pub const PLANAR_TRACK: &str = "planar_track";
 
 /// The parameter id of the Planar track's **Pin layer** row — which layer both
@@ -723,7 +706,6 @@ pub type Quad = [[f64; 2]; 4];
 /// comp made from the shot — are the source raster's own, exactly as
 /// docs/impl/tracking.md §5b's second deviation reads a camera solve's world.
 pub trait PlanarTrackStore {
-    /// What has been tracked under `track`, or `None` when nothing has.
     fn planar_range(&self, track: Uuid) -> Option<SolvedRange>;
 
     /// The tracked quad at source frame `frame`. `None` outside the range,
@@ -732,7 +714,6 @@ pub trait PlanarTrackStore {
     fn planar_corners(&self, track: Uuid, frame: i64) -> Option<Quad>;
 }
 
-/// Whether `layer` carries an enabled Planar track.
 #[must_use]
 pub fn wears_planar_track(layer: &Layer) -> bool {
     layer
@@ -897,10 +878,6 @@ fn tracked_quads(
     (!out.is_empty()).then_some(out)
 }
 
-/// The parameter id of the Planar track's **Follow** row — what the analysis
-/// follows, and therefore what [`transform_from_track`] can write. Spelled once
-/// because the effect declares it and both the job and the gesture read it, and
-/// a typo would be a button that quietly wrote the wrong half.
 pub const FOLLOW_PARAM: &str = "follow";
 
 /// One quad read as a *pose*: where its centre is, which way it lies, and how

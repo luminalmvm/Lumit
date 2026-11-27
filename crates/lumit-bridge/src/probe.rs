@@ -103,7 +103,6 @@ struct Entry {
 #[derive(Default)]
 struct Cache {
     by_path: HashMap<MediaSource, Entry>,
-    /// Insertion order, oldest first.
     order: Vec<MediaSource>,
     /// Sources handed to the worker and not yet answered, so a file asked for
     /// five times in one rebuild is queued once.
@@ -248,7 +247,6 @@ fn store(src: &MediaSource, stamp: Stamp, probed: Probed, off_thread: bool) {
     }
 }
 
-/// Take `path` off the queue without filing anything — the worker's skip paths.
 #[cfg(feature = "media")]
 fn unqueue(src: &MediaSource) {
     if let Ok(mut held) = cache().lock() {
@@ -334,7 +332,6 @@ pub(crate) fn ensure_probed(
     let probed = match lookup(&src, stamp) {
         Some(hit) => hit,
         None => {
-            // Nothing held across the probe.
             let probed = probe_now(&src);
             store(&src, stamp, probed.clone(), false);
             probed
@@ -384,7 +381,6 @@ pub(crate) fn held_or_probed(
         .and_then(|held| held.by_path.get(&src).map(|e| e.probed.clone()));
     match held {
         Some(Probed::Ready(info)) => Some(info),
-        // Nothing held, or a file that would not read last time: ask again.
         _ => ensure_probed(src),
     }
 }
@@ -449,14 +445,12 @@ mod tests {
         false
     }
 
-    /// A requested file is probed by the worker and its answer is waiting when
-    /// the interface asks — the whole point of the thing.
     #[test]
     fn a_requested_file_is_probed_off_thread() {
         let _serial = serially();
         let dir = tempfile::tempdir().expect("temp dir");
         let Some(clip) = lumit_media::index::tests_support::fixture(dir.path()) else {
-            return; // no ffmpeg on this machine
+            return;
         };
 
         request(&clip);
@@ -476,8 +470,6 @@ mod tests {
         );
     }
 
-    /// A file that is not media answers "no" rather than panicking, and a file
-    /// that is not there answers "no" without opening anything.
     #[test]
     fn a_file_that_will_not_read_answers_none() {
         let _serial = serially();
@@ -503,9 +495,6 @@ mod tests {
         );
     }
 
-    /// The file at the path changed, so the held answer is not this file's
-    /// answer — it is probed again. This is what lets `get_status` keep
-    /// asking the file, as it did before there was a cache at all.
     #[test]
     fn a_changed_file_is_not_served_from_the_cache() {
         let _serial = serially();

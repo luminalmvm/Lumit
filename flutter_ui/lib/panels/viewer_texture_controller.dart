@@ -26,8 +26,6 @@ import 'package:flutter/services.dart';
 
 import '../state/faults.dart';
 
-/// Owns the `lumit/viewer_texture` platform-channel registration for one Viewer.
-/// A fake [MethodChannel] can be injected so tests drive it without the runner.
 class ViewerTextureController {
   /// The channel every runner listens on (see
   /// `windows/runner/viewer_texture_bridge.cpp`,
@@ -54,10 +52,8 @@ class ViewerTextureController {
   ViewerTextureController({MethodChannel? channel})
       : _channel = channel ?? const MethodChannel(channelName);
 
-  /// The current external-texture id, or null before the first registration.
   int? get textureId => _textureId;
 
-  /// True until the platform channel is found to be missing.
   bool get available => _available;
 
   /// The error code the Linux runner answers with when the Viewer's picture is
@@ -109,7 +105,6 @@ class ViewerTextureController {
     int? primaryMinor,
   }) async {
     if (!_available) return null;
-    // Identity is the fd on Linux (DMA-BUF) or the handle on Windows, plus size.
     if (_textureId != null &&
         _handle == handle &&
         _fd == fd &&
@@ -138,8 +133,6 @@ class ViewerTextureController {
     }
   }
 
-  /// The registration in flight and the identity it is for — see
-  /// [ensureRegistered].
   Future<int?>? _registering;
   (int, int?, int, int)? _wanted;
 
@@ -218,8 +211,6 @@ class ViewerTextureController {
       // exist, so the path latches off — but it says so on the way, because a
       // Viewer that goes blank without a word is what issue #104 cost a week.
       _available = false;
-      // The one refusal the Viewer explains on screen: the picture is on a
-      // different graphics card from the one Flutter is drawing with.
       if (err is PlatformException && err.code == gpuMismatchCode) {
         gpuMismatch.value = true;
       }
@@ -230,12 +221,10 @@ class ViewerTextureController {
       }
       return null;
     } finally {
-      // Linux only: the fd is what says this is the DMA-BUF path.
       if (fd != null) _recordDisplayGpu();
     }
   }
 
-  /// Whether this run has already asked the runner which card Flutter is on.
   static bool _displayGpuAsked = false;
 
   /// Write which graphics card Flutter is drawing with to the diagnostics file,
@@ -289,7 +278,6 @@ class ViewerTextureController {
   /// window that has not been painted yet is not mistaken for a broken path.
   static const int _graceFrames = 12;
 
-  /// True once the texture path has been seen to fail this way.
   bool get neverDrawn => _announced >= _graceFrames && _drawn == 0;
 
   /// The raw counters, for the integration test that hunts the silent-failure
@@ -347,7 +335,6 @@ class ViewerTextureController {
     try {
       await _channel.invokeMethod<void>('unregister', {'textureId': id});
     } catch (_) {
-      // Nothing to do on shutdown.
     }
   }
 }

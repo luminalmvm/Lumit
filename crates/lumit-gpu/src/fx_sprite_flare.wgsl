@@ -180,7 +180,6 @@ fn polygon(q: vec2<f32>, sides: f32, angle: f32, roundness: f32, notches: f32) -
     return p + (r - p) * roundness;
 }
 
-// Wrap `x` into 0..n.
 fn wrap(x: i32, n: i32) -> i32 {
     return ((x % n) + n) % n;
 }

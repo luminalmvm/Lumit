@@ -18,16 +18,9 @@ use super::{
     CaptionsError,
 };
 
-/// The captions in an `.ass` or `.ssa` file, in order of time.
-///
-/// # Errors
-///
-/// [`CaptionsError::Unreadable`] with the line of a dialogue line whose times
-/// will not read, and [`CaptionsError::Empty`] for a file with none.
 pub fn read(text: &str) -> Result<Vec<Cue>, CaptionsError> {
     let text = text.trim_start_matches('\u{feff}');
     let mut in_events = false;
-    // Where the start, end and text fields are, from the section's Format line.
     let mut fields: Option<(usize, usize, usize, usize)> = None;
     let mut cues = Vec::new();
     for (number, line) in text.lines().enumerate() {

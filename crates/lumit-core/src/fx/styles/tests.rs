@@ -1,8 +1,3 @@
-//! The style model's own rules (docs/impl/layer-styles.md §9): the order and
-//! the one-of-each cap, what a style declaration may and may not carry, the two
-//! new uniforms on the shared drop-shadow core, and the promise that a layer
-//! with no styles is the file and the picture it always was.
-
 use super::*;
 use crate::fx::{cpu, registry::EffectMetadata, schema::ParamKind};
 use crate::model::{EffectInstance, EffectValue};
@@ -11,8 +6,6 @@ fn style(name: &str) -> EffectInstance {
     crate::fx::builtins::instantiate(name).unwrap_or_else(|| panic!("{name} is a declared style"))
 }
 
-/// A hand-shuffled list — the shape a file written by another tool, or edited
-/// by hand, arrives in — comes back one-of-each and in order.
 #[test]
 fn normalising_dedupes_and_restores_the_pinned_order() {
     let mut list = vec![
@@ -48,8 +41,6 @@ fn normalising_dedupes_and_restores_the_pinned_order() {
     );
 }
 
-/// The degrade rule reaches styles too: a tenth style from a newer Lumit is
-/// kept, sorted to the end, and renders as identity — never thrown away.
 #[test]
 fn an_unknown_style_survives_and_sorts_last() {
     let mut future = style("style_stroke");
@@ -119,9 +110,6 @@ fn square(w: u32, h: u32, alpha: f32) -> Vec<f32> {
     px
 }
 
-/// Spread at 100 % is a **hard-edged** shadow: the gaussian's ramp is re-cut at
-/// its half-way line, so almost every shadow pixel is either absent or at full
-/// opacity, where the same shadow at Spread 0 is mostly ramp.
 #[test]
 fn spread_at_full_hardens_the_shadow() {
     let (w, h) = (32u32, 32u32);
@@ -140,7 +128,6 @@ fn spread_at_full_hardens_the_shadow() {
         invert: false,
         inner: false,
     };
-    // Shadow only, so the alpha that comes back IS the shadow's coverage.
     let ramps = |spread: f32| {
         let mut px = square(w, h, 1.0);
         cpu::drop_shadow(&mut px, w, h, &params(spread));
@@ -157,9 +144,6 @@ fn spread_at_full_hardens_the_shadow() {
     );
 }
 
-/// Colour overlay recolours what is there and **adds no pixels outside the
-/// layer's alpha** — the property that makes it an interior style rather than
-/// something that grows the shape (§9).
 #[test]
 fn a_colour_overlay_adds_no_pixels_outside_the_alpha() {
     let (w, h) = (16u32, 16u32);
@@ -196,9 +180,6 @@ fn a_colour_overlay_adds_no_pixels_outside_the_alpha() {
     );
 }
 
-/// A layer with no styles writes **no `styles` key at all**, and one written
-/// before the field existed reads back empty — the two halves of compatibility
-/// for a new field.
 #[test]
 fn an_empty_style_list_leaves_the_file_exactly_as_it_was() {
     let mut layer = crate::model::Layer {
@@ -272,10 +253,6 @@ fn an_empty_style_list_leaves_the_file_exactly_as_it_was() {
 use crate::fx::params::Params;
 use crate::fx::styles::defs::{GradientOverlay, InnerShadow, StrokeStyle};
 
-/// **An inner style stays inside the shape** (§9). Both halves matter: the
-/// alpha is never touched, and no pixel outside the layer's own coverage is
-/// written — which is what makes Inner shadow an *interior* style rather than a
-/// second shadow with the sign flipped.
 #[test]
 fn an_inner_shadow_leaves_no_pixel_outside_the_shape() {
     let (w, h) = (32u32, 32u32);
@@ -302,9 +279,6 @@ fn an_inner_shadow_leaves_no_pixel_outside_the_shape() {
         }
     }
     assert_ne!(before, after, "and it darkened something");
-    // The dark band lands on the side the light comes FROM: the default 135°
-    // throws the shadow down-and-right, so the inside of the TOP-LEFT edge is
-    // where the shape's own darkening shows.
     let at = |x: u32, y: u32| after[((y * w + x) * 4) as usize];
     let (near, far) = (at(w / 4 + 1, h / 4 + 1), at(3 * w / 4 - 2, 3 * h / 4 - 2));
     assert!(
@@ -314,10 +288,6 @@ fn an_inner_shadow_leaves_no_pixel_outside_the_shape() {
     );
 }
 
-/// **Stroke's Position is the whole of which side the thickness lands on** (§9):
-/// Outside adds nothing inside the shape, Inside adds nothing outside it, and
-/// both actually draw a band. Arithmetic rather than a clip — the fat copy is
-/// never smaller than the shape and the thin one never larger.
 #[test]
 fn stroke_outside_adds_nothing_inside_and_inside_nothing_outside() {
     let (w, h) = (32u32, 32u32);
@@ -354,8 +324,6 @@ fn stroke_outside_adds_nothing_inside_and_inside_nothing_outside() {
     assert!(changed(&run(0), false) > 0, "Outside must draw a band");
     assert!(changed(&run(1), true) > 0, "Inside must draw one too");
 
-    // Centre straddles: it has to touch both sides, which is what makes it a
-    // third position rather than a rounding of one of the other two.
     let centre = run(2);
     let (mut out_hits, mut in_hits) = (0usize, 0usize);
     for (a, b) in before.chunks_exact(4).zip(centre.chunks_exact(4)) {
@@ -373,9 +341,6 @@ fn stroke_outside_adds_nothing_inside_and_inside_nothing_outside() {
     );
 }
 
-/// **Gradient overlay is the ramp clipped to the coverage** (§4): it recolours
-/// the shape, leaves the alpha alone, adds nothing outside, and Reverse turns
-/// the ramp round without moving it.
 #[test]
 fn a_gradient_overlay_is_clipped_to_the_alpha_and_reverses_in_place() {
     let (w, h) = (32u32, 32u32);
@@ -386,7 +351,7 @@ fn a_gradient_overlay_is_clipped_to_the_alpha_and_reverses_in_place() {
         let p = g.packed(w, h);
         assert!(p.clip_to_alpha, "an overlay is not a generator");
         let mut px = before.clone();
-        cpu::gradient(&mut px, w, h, &p);
+        cpu::gradient::gradient(&mut px, w, h, &p);
         px
     };
     let plain = run(false);
@@ -406,8 +371,6 @@ fn a_gradient_overlay_is_clipped_to_the_alpha_and_reverses_in_place() {
             );
         }
     }
-    // The default angle runs the ramp top to bottom, from Colour A (white) to
-    // Colour B (black); Reverse swaps the ends and leaves the axis where it was.
     let at = |px: &[f32], y: u32| px[((y * w + w / 2) * 4) as usize];
     let (top, bottom) = (h / 4 + 1, 3 * h / 4 - 2);
     assert!(

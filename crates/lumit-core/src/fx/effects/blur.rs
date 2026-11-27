@@ -1,6 +1,3 @@
-//! Gaussian blur (docs/08 §3.8): the separable two-pass blur, one job
-//! per effect since the mode-driven Blur was split.
-
 use crate::fx::{
     cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
 };
@@ -58,7 +55,6 @@ pub struct Blur {
     #[toggle(label = "Repeat edge pixels", default = true)]
     pub repeat_edge_pixels: bool,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -87,7 +83,6 @@ impl Blur {
     }
 }
 
-/// Gaussian blur's behaviour.
 pub struct BlurDef;
 
 impl EffectDef for BlurDef {
@@ -95,7 +90,6 @@ impl EffectDef for BlurDef {
         &<Blur as EffectMetadata>::SCHEMA
     }
 
-    /// A hit that lands on the playhead.
     fn presets(&self) -> &'static [crate::fx::presets::EffectPreset] {
         use crate::fx::presets::PresetValue::Keys;
         &[crate::fx::presets::EffectPreset {

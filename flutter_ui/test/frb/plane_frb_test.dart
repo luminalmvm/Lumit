@@ -25,7 +25,6 @@ import 'frb_test_support.dart';
 void main() {
   setUpAll(initEngineForTests);
 
-  /// A comp with one footage layer carrying an enabled `name`, selected.
   ({LumitState state, LumitUiState uiState, LayerReference layer}) withLayer(
     String name,
   ) {
@@ -82,10 +81,8 @@ void main() {
       expect(analyse, findsOneWidget,
           reason: 'an Action parameter draws a button, not a value field');
       expect(cancel, findsOneWidget);
-      // The button says its own name; the row's name column is left empty.
       expect(find.text('Analyse'), findsOneWidget);
 
-      // The status line is there from the start, saying the truth.
       expect(find.byKey(const ValueKey('fx-depth-status')), findsOneWidget);
       expect(find.text('Not analysed yet'), findsOneWidget);
 
@@ -153,7 +150,6 @@ void main() {
       }
       expect(asked[0], 1, reason: 'a rebuild is not a press');
 
-      // A press is: one bump, one read.
       pressed.value = 1;
       await tester.pump();
       expect(asked[0], 2);

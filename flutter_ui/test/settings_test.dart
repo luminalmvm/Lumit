@@ -1,5 +1,3 @@
-// Settings defaults must be a no-op for existing installs, and the workspace
-// JSON must round-trip.
 
 import 'dart:io' hide Platform;
 import 'dart:ui';
@@ -27,10 +25,8 @@ void main() {
     test('a stored scale from before the baseline divides by it once', () {
       final old = InterfaceSettings.fromJson(const {'ui_scale': 1.0});
       expect(old.uiScale, closeTo(1 / uiScaleBaseline, 1e-9));
-      // The size on screen is what has to be unchanged, and it is.
       expect(effectiveUiScale(old.uiScale), closeTo(1.0, 1e-9));
 
-      // Written back and read again, it does not divide a second time.
       final again = InterfaceSettings.fromJson(old.toJson());
       expect(again.uiScale, closeTo(old.uiScale, 1e-9));
     });
@@ -256,7 +252,6 @@ void main() {
     expect(back.animationLevel, AnimationLevel.minimal);
     expect(back.performance.playback, PlaybackMode.everyFrame);
     expect((back.accentOverride!.r * 255).round(), 0x80);
-    // The rebuilt theme carries the override and the shape tokens.
     expect(back.theme.tokens, ShapeTokens.lantern);
     expect((back.theme.accent.r * 255).round(), 0x80);
   });

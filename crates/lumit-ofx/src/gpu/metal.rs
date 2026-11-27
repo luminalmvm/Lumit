@@ -10,7 +10,6 @@ use metal::objc::rc::autoreleasepool;
 use metal::{Buffer, CommandQueue, Device, MTLResourceOptions};
 use parking_lot::Mutex;
 
-/// One device, with a command queue of our own.
 pub(crate) struct Metal {
     device: Device,
     queue: CommandQueue,
@@ -27,12 +26,10 @@ unsafe impl Send for Metal {}
 unsafe impl Sync for Metal {}
 
 impl Metal {
-    /// Whether this Mac has a Metal device.
     pub(crate) fn present() -> bool {
         Device::system_default().is_some()
     }
 
-    /// Open the device whose name Lumit's adapter starts with, or the default.
     pub(crate) fn open(adapter: Option<&str>) -> Option<Self> {
         let device = adapter
             .and_then(|summary| {

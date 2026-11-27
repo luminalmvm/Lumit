@@ -1,6 +1,3 @@
-//! A multicam clip draws its own angle of its comp and no other, and two
-//! angles of one comp at the same moment are two pictures with two names.
-
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use lumit_core::model::{
@@ -66,6 +63,7 @@ fn comp_of(name: &str, layers: Vec<Layer>) -> Composition {
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -84,8 +82,6 @@ fn comp_of(name: &str, layers: Vec<Layer>) -> Composition {
     }
 }
 
-/// A multicam comp of two angles, red and blue, each one solid clip across
-/// the whole comp. Its id and the two angles' ids.
 fn multicam(doc: &mut Document) -> (Uuid, Uuid, Uuid) {
     let angle = |doc: &mut Document, name: &str, colour: [f32; 4]| {
         let def = Uuid::now_v7();
@@ -110,8 +106,6 @@ fn multicam(doc: &mut Document) -> (Uuid, Uuid, Uuid) {
     (id, red_id, blue_id)
 }
 
-/// A comp of one Sequence row per angle given, each with one clip of the
-/// multicam comp from 0 to 2 s showing that angle, at that opacity.
 fn cut(doc: &mut Document, mc: Uuid, rows: &[(Uuid, f64)]) -> Uuid {
     let layers = rows
         .iter()
@@ -138,7 +132,6 @@ fn a_multicam_clip_draws_its_own_angle() {
     let (mc, red, blue) = multicam(&mut doc);
     let reds = cut(&mut doc, mc, &[(red, 1.0)]);
     let blues = cut(&mut doc, mc, &[(blue, 1.0)]);
-    // Red at half over blue, the same moment of the same comp in one frame.
     let both = cut(&mut doc, mc, &[(red, 0.5), (blue, 1.0)]);
     let doc = Arc::new(doc);
     let mut centre = |comp: Uuid| {
@@ -156,12 +149,10 @@ fn a_multicam_clip_draws_its_own_angle() {
         blue_px[2] > 200 && blue_px[0] < 30,
         "angle two is blue: {blue_px:?}"
     );
-    // Had the two angles shared one picture, this would be all one colour.
     let mixed = centre(both);
     assert!(
         mixed[0] > 100 && mixed[2] > 100,
         "both angles show at one moment: {mixed:?}"
     );
-    // And an angle picked again draws its own colour, not the last one drawn.
     assert_eq!(centre(reds), red_px);
 }

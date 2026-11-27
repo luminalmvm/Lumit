@@ -1,5 +1,3 @@
-// The title bar reads 'Lumit' until the project has a home on disk, then
-// 'Lumit - <file name>' without the extension (windowTitleFor in main.dart).
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart' show windowTitleFor;

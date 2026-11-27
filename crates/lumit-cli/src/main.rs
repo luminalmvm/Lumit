@@ -8,7 +8,6 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-/// The bridge library's file name on this system.
 fn library_name() -> String {
     use std::env::consts::{DLL_PREFIX, DLL_SUFFIX};
     format!("{DLL_PREFIX}lumit_bridge{DLL_SUFFIX}")

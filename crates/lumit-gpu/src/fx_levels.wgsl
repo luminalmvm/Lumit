@@ -21,7 +21,6 @@ struct Params {
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
 
-// The unpremultiplied colour of a premultiplied pixel (== cpu::unpremult).
 fn unpremult(c: vec4<f32>) -> vec3<f32> {
     if (c.a > 0.0) {
         return c.rgb / c.a;
@@ -50,7 +49,6 @@ fn levels(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let o = textureLoad(src, xy, 0);
-    // Neutral short-circuit (== the CPU reference's early return).
     if (all(p.r[0] == vec4<f32>(0.0))
         && all(p.r[1] == vec4<f32>(1.0))
         && all(p.r[2] == vec4<f32>(1.0))

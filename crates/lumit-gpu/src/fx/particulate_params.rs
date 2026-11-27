@@ -1,6 +1,3 @@
-//! The numbers Particulate's kernels read, laid out as `Params` in
-//! `fx_particulate.wgsl` declares them.
-
 use super::particulate::{pair_max, scan_len, tile_scale, ParticulateOp};
 
 #[repr(C)]
@@ -108,7 +105,6 @@ pub(super) struct ParticulateParams {
 }
 
 impl ParticulateParams {
-    /// `op` as the kernels read it, drawn into a raster of `w` by `h`.
     pub(super) fn of(
         op: &ParticulateOp<'_>,
         (w, h): (u32, u32),

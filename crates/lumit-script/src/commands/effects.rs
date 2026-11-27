@@ -23,7 +23,6 @@ use super::layers::LayerArgs;
 use super::{bad, commit, find_comp, find_layer, present};
 use crate::{Host, ScriptError};
 
-/// The name an effect shows: its own, or its effect's.
 fn name_of(e: &EffectInstance) -> &str {
     e.custom_name
         .as_deref()
@@ -39,7 +38,6 @@ fn rows_of(e: &EffectInstance) -> Vec<&'static ParamSchema> {
     })
 }
 
-/// The label of control `id` of `e`, or the id when it has none.
 fn label_of<'a>(e: &EffectInstance, id: &'a str) -> &'a str {
     rows_of(e)
         .into_iter()
@@ -62,7 +60,6 @@ fn fill(e: &mut EffectInstance, row: &ParamSchema) {
 /// One effect as `effect.list` answers it. Key times are on the comp's
 /// clock, `offset` ahead of the layer's.
 fn effect_json(index: usize, e: &EffectInstance, offset: Rational) -> Value {
-    // Rows the source declares and nobody has written yet, at their defaults.
     let mut e = e.clone();
     for row in rows_of(&e) {
         if !e.params.iter().any(|p| p.id == row.id) {
@@ -99,13 +96,11 @@ fn effect_json(index: usize, e: &EffectInstance, offset: Rational) -> Value {
         "effect": e.effect.match_name,
         "name": name_of(e),
         "enabled": e.enabled,
-        // The After Effects effect it stands for, which names its controls.
         "after_effects": lumit_import::map::table::ae_match_name_of(&e.effect.match_name),
         "params": params,
     })
 }
 
-/// Effect `id` on layer `layer` of comp `comp`, as the store now holds it.
 fn now(store: &DocumentStore, comp: Uuid, layer: Uuid, id: Uuid) -> Result<Value, ScriptError> {
     let doc = store.snapshot();
     let layer = doc
@@ -211,19 +206,28 @@ pub(super) fn add(host: &dyn Host, a: AddArgs) -> Result<Value, ScriptError> {
     let comp = find_comp(&doc, &a.comp)?;
     let layer = find_layer(comp, &a.layer)?;
     let (mut instance, ae) = made(comp, &a.effect)?;
-    // What Lumit's own Add effect does on landing.
     fx::builtins::point_self_layer_params_at(&mut instance, layer.id);
     fx::builtins::spread_on_art(&mut instance, &layer.kind);
     instance.custom_name = a.name;
     let id = instance.id;
     let mut effects = layer.effects.clone();
     effects.push(instance);
-    commit(
-        store,
-        vec![fx::effects::particulate::rows::set_effects(
-            comp.id, layer, effects,
-        )],
-    )?;
+    // A points effect landing below a producer is wired to it in the same
+    // undo step, as Lumit's own Add effect does, so the stack works.
+    let mut graph = layer.graph.clone();
+    let mut ops = vec![fx::effects::particulate::rows::set_effects(
+        comp.id,
+        layer,
+        effects.clone(),
+    )];
+    if graph.wire_points_from_above(&effects, id) {
+        ops.push(lumit_core::ops::Op::SetLayerGraph {
+            comp: comp.id,
+            layer: layer.id,
+            graph: Box::new(graph),
+        });
+    }
+    commit(store, ops)?;
     let mut answer = now(store, comp.id, layer.id, id)?;
     if let Some(ae) = ae {
         answer["after_effects"] = json!(ae);
@@ -240,7 +244,7 @@ pub(super) enum Which {
     Key(String),
 }
 
-fn find_effect(layer: &Layer, which: &Which) -> Result<usize, ScriptError> {
+pub(super) fn find_effect(layer: &Layer, which: &Which) -> Result<usize, ScriptError> {
     let effects = &layer.effects;
     let found = match which {
         Which::Place(n) => (*n < effects.len()).then_some(*n),
@@ -281,8 +285,7 @@ pub(super) struct SetArgs {
     expression: Option<String>,
 }
 
-/// What a control is set to.
-enum Change {
+pub(super) enum Change {
     Value(Value),
     Keys(Vec<KeyArgs>),
     Expression(String),
@@ -327,7 +330,7 @@ pub(super) fn set(host: &dyn Host, a: SetArgs) -> Result<Value, ScriptError> {
     now(store, comp.id, layer.id, id)
 }
 
-fn set_param(
+pub(super) fn set_param(
     comp: &Composition,
     layer: &Layer,
     e: &mut EffectInstance,
@@ -394,6 +397,24 @@ fn set_own(
             .ok_or_else(|| bad(format!("{what} takes a list of [x, y] points.")))?;
             return Ok(());
         }
+        // Another layer of the comp, by id or name, or null for none.
+        EffectValue::Layer(picked) => {
+            *picked = match change {
+                Change::Value(Value::Null) => None,
+                Change::Value(Value::String(key)) => Some(find_layer(comp, &key)?.id),
+                _ => return Err(bad(format!("{what} takes a layer's id or name, or null."))),
+            };
+            return Ok(());
+        }
+        // A curve: `[[x, y], ...]` points in 0..1, as its editor keeps them.
+        EffectValue::Curve(points) => {
+            *points = match change {
+                Change::Value(v) => serde_json::from_value::<Vec<[f32; 2]>>(v).ok(),
+                _ => None,
+            }
+            .ok_or_else(|| bad(format!("{what} takes a list of [x, y] points.")))?;
+            return Ok(());
+        }
         _ => return Err(bad(format!("{what} cannot be set from a script."))),
     };
     // A colour may leave its alpha alone.
@@ -453,7 +474,6 @@ fn ae_side(interp: Interp, side: Option<&Side>) -> (&'static str, Value) {
     }
 }
 
-/// `value` a step away, every number one more and a switch the other way.
 fn nudged(value: &Value) -> Value {
     match value {
         Value::Number(n) => json!(n.as_f64().unwrap_or(0.0) + 1.0),
@@ -463,7 +483,6 @@ fn nudged(value: &Value) -> Value {
     }
 }
 
-/// The controls `a` and `b` set differently.
 fn differing(a: &EffectInstance, b: &EffectInstance) -> Vec<String> {
     a.params
         .iter()

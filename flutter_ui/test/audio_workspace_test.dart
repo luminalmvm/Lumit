@@ -1,5 +1,3 @@
-// The Audio workspace preset and the meter feed's own arithmetic — the plain
-// half of the Audio panels package (no engine needed).
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/audio_meters_feed.dart';
@@ -32,13 +30,11 @@ void main() {
       feed.tick();
       expect(feed.frame.value.of('a').holdLeft, 0.5);
 
-      // Quieter now: the hold stays on the loudest peak seen.
       reading = [meter('a', 0.1)];
       feed.tick();
       expect(feed.frame.value.of('a').holdLeft, 0.5,
           reason: 'the line rests above the bar rather than falling with it');
 
-      // Louder: the hold rises at once.
       reading = [meter('a', 0.8)];
       feed.tick();
       expect(feed.frame.value.of('a').holdLeft, 0.8);
@@ -76,7 +72,6 @@ void main() {
     expect(fadeOut?.first, 3);
     expect(fadeOut?.seconds, closeTo(2, 1e-9));
     expect(fadeOut?.shape, BridgeFadeShape.ease);
-    // A key at the edge that is not silence is a level, not a fade.
     expect(
         audioFadeOf(BridgeScalar.keyframed([key(0, -3, lin), key(2, 0, lin)]),
             edgeSeconds: 0, rising: true, slack: 0.01),

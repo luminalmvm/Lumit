@@ -16,7 +16,6 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use wgpu::util::DeviceExt;
 
-/// What a pass writes at each pixel.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PassLook {
     /// Which way it faces, each axis from nought to one with a half for none.
@@ -30,7 +29,6 @@ pub enum PassLook {
     Matte,
 }
 
-/// A 3D layer in a pass: its picture, whose alpha cuts it, and where it is.
 pub struct PassPlane<'a> {
     pub texture: &'a wgpu::Texture,
     /// Its unit square to comp pixels.
@@ -41,14 +39,12 @@ pub struct PassPlane<'a> {
     pub group: u32,
 }
 
-/// A Model layer in a pass.
 pub struct PassModel<'a> {
     pub scene: &'a Arc<ModelScene>,
     /// Model space to comp pixels.
     pub model_to_comp: Mat4,
     /// The layer's own id, which each part's number is made from.
     pub layer: [u8; 16],
-    /// Its materials as its layer's rows have them this frame.
     pub looks: &'a [Look],
     /// Its pose this frame, which is empty when it draws as its file has it.
     pub poses: &'a [Pose],
@@ -56,7 +52,6 @@ pub struct PassModel<'a> {
     pub group: u32,
 }
 
-/// One pass of one scene.
 pub struct PassView<'a> {
     pub comp: (u32, u32),
     pub render_scale: f32,
@@ -66,7 +61,6 @@ pub struct PassView<'a> {
     /// Comp pixels to the metres Position and Normal are read in.
     pub to_space: Mat4,
     pub look: PassLook,
-    /// The parts a matte shows.
     pub parts: &'a [u32],
     pub planes: &'a [PassPlane<'a>],
     pub models: &'a [PassModel<'a>],
@@ -89,7 +83,6 @@ struct PassScratch {
     held: Option<lumit_budget::Reservation>,
 }
 
-/// The passes' shader and layouts, made the first time a pass is asked for.
 pub(super) struct PassFx {
     shader: wgpu::ShaderModule,
     frame_layout: wgpu::BindGroupLayout,
@@ -101,7 +94,6 @@ pub(super) struct PassFx {
     scratch: Mutex<Option<PassScratch>>,
 }
 
-/// The pipeline kind that draws a 3D layer.
 const PLANE: usize = 2;
 
 impl PassFx {
@@ -221,15 +213,11 @@ impl PassFx {
     }
 }
 
-/// One draw: its uniform's place, then a 3D layer's picture, or which model
-/// and which of its parts and whether that part shows both sides.
 enum PassDraw<'a> {
     Plane(u32, &'a wgpu::Texture),
     Part(u32, usize, usize, bool),
 }
 
-/// A model on the card and its materials as its layer has them this frame, each
-/// with what it blends, whether it shows both sides and its samplers.
 type Drawn<'a> = (
     &'a PassModel<'a>,
     Arc<GpuModel>,
@@ -245,7 +233,6 @@ impl FxEngine {
         let mesh = self.mesh.get_or_init(|| super::MeshFx::new(ctx));
         let fx = mesh.passes.get_or_init(|| PassFx::new(ctx));
 
-        // Every draw's uniform in one buffer, and what each one draws.
         let size = std::mem::size_of::<DrawUniform>();
         let stride = wgpu::util::align_to(
             size as u64,
@@ -310,8 +297,6 @@ impl FxEngine {
                     f32::from(u8::from(mirrored)),
                     id,
                 );
-                // ponytail: a mirrored part is drawn from both sides, as the
-                // mesh pass does.
                 let both = mirrored || materials.get(p.material).is_some_and(|m| m.2);
                 draws.push((m.group, PassDraw::Part(offset, which, k, both)));
             }

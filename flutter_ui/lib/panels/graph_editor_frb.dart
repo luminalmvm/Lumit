@@ -63,8 +63,6 @@ import 'retime_commands.dart'
     show askToRamp, canFreezeAt, freezeAtPlayhead, retimeTargets;
 import '../shell/keyframe_dialogs_frb.dart' show showKeyframeSpeedFrb;
 
-// The pane was one file; it is now six. Everything the pane's callers and its
-// tests reached for through this library is still reachable through it.
 export 'graph_channels.dart';
 export 'graph_clipboard.dart';
 export 'graph_edits.dart';
@@ -95,10 +93,6 @@ const double _selectedKeyGlyph = 12;
 /// the box, so a key at a corner keeps every gesture it has and the edge is
 /// grabbable everywhere else along its length (P5).
 const double _boxGrab = 10;
-
-// ---------------------------------------------------------------------------
-// The pane.
-// ---------------------------------------------------------------------------
 
 class GraphEditorFrb extends StatefulWidget {
   final CompositionReference comp;
@@ -132,7 +126,6 @@ class GraphEditorFrb extends StatefulWidget {
   /// range is the user's — the wheel pans it and the value-zoom wheel zooms it.
   final bool autoFit;
 
-  /// The values were zoomed by hand while auto-fit was on, so it should go off.
   final VoidCallback? onAutoFitOff;
 
   /// Whether the Pen tool is armed on the toolbar (docs/07 §1.7).
@@ -208,7 +201,6 @@ class GraphEditorFrb extends StatefulWidget {
   /// the empty plot offers it rather than saying what to do.
   final VoidCallback? onEnableRetime;
 
-  /// What the empty plot says, where it is not the usual.
   final String? emptyHint;
 
   const GraphEditorFrb({
@@ -270,10 +262,8 @@ class GraphEditorFrb extends StatefulWidget {
 class _MiddleDrag {
   final bool zoom;
 
-  /// Where the button went down, in the pane.
   final Offset start;
 
-  /// Whether the Timeline has been told where the time zoom is anchored.
   bool anchorSent = false;
 
   /// Whether the values have started to follow, and the travel up or down
@@ -281,7 +271,6 @@ class _MiddleDrag {
   bool values = false;
   double travel = 0;
 
-  /// The value the zoom holds still: the one under [start].
   double anchorValue = 0;
 
   _MiddleDrag({required this.zoom, required this.start});
@@ -290,7 +279,6 @@ class _MiddleDrag {
 class _KeyDrag {
   final String grabbedId;
 
-  /// Everything the pointer has travelled, `Shift` or no `Shift`.
   double rawDx = 0;
   double rawDy = 0;
 
@@ -338,8 +326,6 @@ class _BoxDrag {
   /// study describes the gesture, and what keeps the anchor unambiguous.
   final bool time;
 
-  /// Whether the edge in hand is the earlier frame / the higher value, so the
-  /// other end of the axis can be the anchor.
   final bool start;
 
   /// The end that stays put and the end that was grabbed — frames on the time
@@ -379,8 +365,6 @@ class _BoxDrag {
   static bool get shiftHeld => HardwareKeyboard.instance.isShiftPressed;
 }
 
-/// A tangent-handle drag in flight (value lens), or a speed-dot/influence
-/// drag (speed lens).
 class _HandleDrag {
   final GraphChannel channel;
   final int index;
@@ -420,7 +404,6 @@ class _HandleDrag {
   final (double, double) range;
   final double height;
 
-  /// Where this side's endpoint stood on screen when the gesture began.
   final Offset startPx;
 
   /// The same side of every other selected key. Each travels as far from its
@@ -430,8 +413,6 @@ class _HandleDrag {
 
   Iterable<_HandleDrag> get all => [this, ...followers];
 
-  /// Pixels the dot has travelled sideways (speed lens dot drags only),
-  /// before the `Shift` constraint — see [dxPx].
   double rawDx = 0;
 
   /// The pointer's vertical travel in pixels, and the speed the dot sat at
@@ -454,11 +435,8 @@ class _HandleDrag {
 
   bool get _constrained => HardwareKeyboard.instance.isShiftPressed;
 
-  /// Sideways travel, held at zero while `Shift` makes this a vertical drag.
   double get dxPx => !_constrained || _horizontal ? rawDx : 0;
 
-  /// The speed to draw and to commit: the pointer's, or the one the gesture
-  /// started at while `Shift` makes this a horizontal drag.
   double get shownSpeed => _constrained && _horizontal ? startSpeed : speed;
 
   _HandleDrag({
@@ -486,11 +464,9 @@ class _HandleDrag {
 class _CentreDrag {
   final GraphChannel channel;
 
-  /// The first of the two keys.
   final int index;
   final double outSpeed, inSpeed, outFrom, inFrom;
 
-  /// How wide the span between the two keys is on screen.
   final double spanPx;
   double rawDx = 0;
 
@@ -509,7 +485,6 @@ class _CentreDrag {
   double get inInfluence =>
       (inFrom - rawDx / spanPx).clamp(minTangentReach, 1.0).toDouble();
 
-  /// [keys] with the two sides this drag shapes written in.
   List<BridgeKeyframe> applied(List<BridgeKeyframe> keys) {
     BridgeSideInterp side(double speed, double influence) =>
         BridgeSideInterp.bezier(
@@ -534,10 +509,8 @@ class _CentreDrag {
 class GraphEditorFrbState extends State<GraphEditorFrb> {
   _KeyDrag? _keyDrag;
 
-  /// A `Shift` drag on the curve, or null between them.
   _CentreDrag? _centreDrag;
 
-  /// A drag on the selection transform box, or null between them (§6.2).
   _BoxDrag? _boxDrag;
 
   /// `Escape` abandons the drag in flight and writes nothing (P3, §8's gap
@@ -556,8 +529,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   final _keyTap = DoubleTap();
   String? _keyTapId;
 
-  /// How often a drag in flight may ask the engine for a frame of the values it
-  /// is about to write (see [previewChannelEdits]).
   final PreviewThrottle _preview = PreviewThrottle();
 
   @override
@@ -579,8 +550,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     }
   }
 
-  /// Whether the framing on screen is no longer what auto-fit would choose
-  /// for what is on screen now.
   bool get _fitIsStale {
     if (!mounted || !widget.autoFit || _frozen != null) return false;
     final (lo, hi) = _fitRange();
@@ -623,12 +592,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   /// null entry is a layer already asked about.
   final Map<String, double?> _everyFrame = {};
 
-  /// Ask what rate each new Retime channel's footage runs at, the way the
-  /// Retime row does: the source rides in on the read model, and the probe is
-  /// asked for once and never from the build.
-  // ponytail: kept by layer id for as long as the pane lives, so a comp whose
-  // rate is changed, or a layer given other footage, keeps the old guide
-  // until the Timeline is opened again. Key it by rate and source if it bites.
   void _probeRates() {
     for (final channel in _channels) {
       if (!channel.retime) continue;
@@ -685,11 +648,8 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     super.dispose();
   }
 
-  /// The curve the pointer is on in the list, drawn heavier than the rest.
   String? _litCurve;
 
-  /// When and where the pane was last clicked, for spotting a double-click
-  /// (see [_tapPane]).
   final _paneTap = DoubleTap();
   _HandleDrag? _handleDrag;
 
@@ -697,11 +657,8 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   /// so the curve being dragged does not re-frame itself under the pointer.
   (double, double)? _frozen;
 
-  /// The user's own range per lens, once auto-fit is off.
   final Map<GraphLens, (double, double)> _manual = {};
 
-  /// The last range a build computed — what manual mode starts from, and what
-  /// the wheel handlers scale.
   (double, double) _lastRange = (0, 1);
   Size _paneSize = Size.zero;
 
@@ -739,7 +696,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     );
   }
 
-  /// The length a side is drawn at, from its stored ease.
   double _measuredLength(GraphChannel channel, int index, bool isOut,
       (double, double) range, double height) {
     final keys = channel.keys;
@@ -778,7 +734,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   /// range becomes the manual one; in auto mode the next build fits anyway.
   void fitNow() => setState(() => _manual.remove(widget.lens));
 
-  /// The turning points over this pane's curves ([GraphLensGuidesPainter]).
   GraphLensGuidesPainter _guidesPainter(
           LumitTheme t, (double, double) range, double paneWidth) =>
       GraphLensGuidesPainter(
@@ -817,7 +772,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       if (t < t0) t0 = t;
       if (t > t1) t1 = t;
     }
-    // One key has no span of its own, so it gets a second of air round it.
     if (one) {
       t0 -= 0.5;
       t1 += 0.5;
@@ -828,11 +782,8 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     return (t0, t1);
   }
 
-  /// Delete the selected keys — the Timeline's Delete shortcut.
   void deleteSelectedKeys() => _deleteSelection();
 
-  /// The Hand tool's drag: time moves with it, and the values do too once
-  /// auto-fit is off, as they do under the wheel.
   void panBy(Offset delta) {
     final c = widget.hScroll;
     if (c != null && c.hasClients) {
@@ -844,7 +795,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     setState(() => _manual[widget.lens] = (lo + shift, hi + shift));
   }
 
-  /// The curves on show: every channel but the ones put away in the list.
   List<GraphChannel> get _channels {
     final hidden = hiddenCurves.value;
     if (hidden.isEmpty) return widget.channels;
@@ -940,19 +890,14 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
           ? GraphLens.speed
           : widget.lens;
 
-  /// Whether [channel] draws as the Vegas speed envelope right now —
-  /// a Retime, in the speed view, with the preference on.
   bool isEnvelope(GraphChannel channel) =>
       widget.vegas && channel.retime && widget.lens == GraphLens.speed;
 
   bool get _anyEnvelope => _channels.any(isEnvelope);
 
-  /// Whether [channel] is shown without being picked, and so draws dashed.
   bool _dashed(GraphChannel channel) =>
       !(widget.picked?.contains(channel.path) ?? true);
 
-  /// The values to frame: what is on screen, or [window] when a fit names
-  /// its own stretch of time.
   (double, double) _fitRange([(double, double)? window]) {
     final keys = _channelKeysWithin(window ?? _visibleSeconds);
     // Only shapes on screen means only speeds on screen.
@@ -967,10 +912,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
         ],
       );
     }
-    // ponytail: framed on the whole curve, not the stretch on screen. The
-    // edge samples the other lenses add are straight-line keys, which would
-    // bend the acceleration they sit beside. Sample the real curve over the
-    // window if zooming in on a quiet stretch needs it.
     if (widget.lens == GraphLens.acceleration) {
       return fitAccelerationRange(_channelKeys);
     }
@@ -1063,15 +1004,12 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     return _yOf(sideSpeedAtKey(shown, index, isOut: isOut), range, height);
   }
 
-  // --- wheel ---------------------------------------------------------------
-
   void _wheel(PointerScrollEvent event) {
     final keymap = Provider.of<LumitUiState>(context, listen: false).keymap;
     final zoomValues = keymap.wheelHeld(BridgeWheelAction.zoomValues);
     if (keymap.wheelHeld(BridgeWheelAction.zoomTime) ||
         keymap.wheelHeld(BridgeWheelAction.scrollSideways)) {
       widget.onWheelTime(event, event.localPosition.dx);
-      // Time and values can share a modifier, and then it zooms both.
       if (!zoomValues) return;
     }
     if (_paneSize.height <= 0) return;
@@ -1107,9 +1045,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     setState(() => _manual[widget.lens] = _sane((lo + pan, hi + pan)));
   }
 
-  // --- middle button: Blender's View2D pan and zoom -------------------------
-
-  /// The middle-button drag in flight, or null.
   _MiddleDrag? _middle;
 
   /// Blender's drag-zoom rate: each pixel takes 1% off either end of the view
@@ -1202,8 +1137,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     return (middle - span / 2, middle + span / 2);
   }
 
-  // --- selection -----------------------------------------------------------
-
   bool get _addToSelection =>
       HardwareKeyboard.instance.isShiftPressed ||
       HardwareKeyboard.instance.isControlPressed;
@@ -1243,9 +1176,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     widget.onSelectionChanged();
   }
 
-  /// A plain click on empty pane clears the selection; `Ctrl`+click plants a
-  /// key on the curve under the pointer (docs/07 §4.3's lane gesture, read
-  /// through the graph).
   void _tapPane(Offset local, (double, double) range, double height) {
     if (HardwareKeyboard.instance.isControlPressed || widget.penArmed) {
       _addKeyAt(local, range, height);
@@ -1262,7 +1192,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       _addKeyAt(local, range, height);
       return;
     }
-    // A click on a dashed curve picks its property.
     final hit = _curveAt(local, range, height, within: 6);
     if (hit != null && _dashed(hit)) {
       widget.onPick?.call(hit.path);
@@ -1329,8 +1258,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     if (channel != null) _plantAtFrame(channel, frame);
   }
 
-  /// The key [_addKeyAt] plants, at [frame] on [channel]. Nothing when it has
-  /// one there already.
   void _plantAtFrame(GraphChannel channel, double frame) {
     final seconds = frame / (widget.fps <= 0 ? 1 : widget.fps);
     final keys = channel.keys;
@@ -1394,8 +1321,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     widget.onChanged();
   }
 
-  // --- key drags -----------------------------------------------------------
-
   void _startKeyDrag(String id) {
     if (!widget.selectedKeys.contains(id)) _selectKey(id);
     setState(() {
@@ -1424,8 +1349,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     });
   }
 
-  /// Take a drag that went down on the curve between two keys with `Shift`
-  /// held, selecting the pair so their handles show (see [_CentreDrag]).
   bool _claimCentre(Offset local, (double, double) range, double height) {
     if (!HardwareKeyboard.instance.isShiftPressed) return false;
     final channel = _curveAt(local, range, height, within: 6);
@@ -1482,7 +1405,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     });
     if (!commit || drag == null || drag.rawDx == 0) return;
     _preview.cancel();
-    // The handles are as long as the new influences draw them.
     final keys = drag.channel.keys;
     _handleLenPx
       ..remove(_handleLenKey(drag.channel, keys[drag.index], true))
@@ -1513,7 +1435,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     widget.onChanged();
   }
 
-  /// What a key drag would write, and the selection it would leave.
   (Map<GraphChannel, BridgeScalar>, Set<String>) _keyDragEdits(
           _KeyDrag drag, (double, double) range, double height) =>
       _editsFor(_keyDragMove(drag, range, height));
@@ -1646,8 +1567,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     return (edits, newSelection);
   }
 
-  /// A drag tick: render the values the release will write, without writing
-  /// them. Throttled, and coalescing — see [PreviewThrottle].
   void _previewDrag(Map<GraphChannel, BridgeScalar> edits) {
     if (edits.isEmpty) return;
     final ui = Provider.of<LumitUiState>(context, listen: false);
@@ -1659,7 +1578,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
         ));
   }
 
-  /// Where key [index] of [channel] draws, with the drag in flight applied.
   Offset _keyPoint(
       GraphChannel channel, int index, (double, double) range, double height,
       {required bool isOut}) {
@@ -1699,8 +1617,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     }
     return Offset(x, y);
   }
-
-  // --- the selection transform box (§6.2) ----------------------------------
 
   /// Where the box stands: the selected keys' extent on screen, the gesture in
   /// flight already folded in, with the frames its badge counts.
@@ -1786,8 +1702,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
         own,
         height,
       );
-      // `Shift` snaps what the scale lands on to whole numbers, which the
-      // readout pill reports live.
       if (round) v = v.roundToDouble();
       return (frame, v);
     };
@@ -1838,9 +1752,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     widget.onChanged();
   }
 
-  // --- handle drags --------------------------------------------------------
-
-  /// The neighbour a side's handle reaches toward, or null at the ends.
   BridgeKeyframe? _neighbour(
           List<BridgeKeyframe> keys, int index, bool isOut) =>
       isOut
@@ -1855,8 +1766,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       widget.selectedKeys
           .contains('${channel.id}#${isOut ? index + 1 : index - 1}');
 
-  /// Seconds ↔ pixels on the time axis, so handle geometry can be worked out
-  /// where the user actually sees it: on screen.
   double _xOfSeconds(double t) => widget.axis.xOf(t * widget.fps);
   double _secondsOfX(double x) =>
       widget.axis.frameAtExact(x) / (widget.fps <= 0 ? 1 : widget.fps);
@@ -1907,8 +1816,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     _escape.begin(_abandonDrag);
   }
 
-  /// The drag one side starts from: how it stands now, and whether its partner
-  /// follows.
   _HandleDrag _handleDragOf(GraphChannel channel, int index, bool isOut,
       bool dotOnly, (double, double) range, double height) {
     final keys = channel.keys;
@@ -1954,7 +1861,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     );
   }
 
-  /// One side put where [local] asks for it.
   void _aimHandle(
       _HandleDrag drag, Offset local, (double, double) range, double height,
       {double dx = 0, double dy = 0}) {
@@ -2001,8 +1907,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
         // put and its influence moves, as far as an influence can go. `Shift`
         // keeps the influence while the key moves in time.
         if (!drag.dotOnly) {
-          // Its influence handle: the reach sideways is the influence, as in
-          // the speed lens; the side's speed stays as it is.
           if (nb != null) {
             final dt = (rationalSeconds(nb.time) - keyTime).abs();
             if (dt > 1e-9) {
@@ -2225,7 +2129,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     if (drag.dotOnly && drag.dxPx != 0) {
       final moved = _keysWithDotTimeMove(drag, shown);
       if (moved == null) {
-        // The move collided; the easing still stands where the key already is.
         commitChannelEdits({drag.channel: BridgeScalar.keyframed(shown)});
         widget.onChanged();
         return;
@@ -2242,9 +2145,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     widget.onChanged();
   }
 
-  /// [channel]'s keys with every side [drag] carries there written in.
-  // ponytail: one list copy per carried key on every read. Write them in one
-  // pass if a big selection ever drags slowly.
   List<BridgeKeyframe> _keysWithHandleDrags(
       _HandleDrag drag, GraphChannel channel) {
     var keys = channel.keys;
@@ -2429,8 +2329,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     return moved ?? keys;
   }
 
-  /// The keys with the *other* drags' provisional geometry swapped in: a row
-  /// drag's published value, and a handle drag's shaped sides.
   List<BridgeKeyframe> _keysWithSideDrags(GraphChannel channel,
       {bool painting = false}) {
     final row = rowValueDrag.value;
@@ -2460,11 +2358,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     return _keysWithDotTimeMove(drag, shaped) ?? shaped;
   }
 
-  // --- numeric entry (docs/07 §5.3) ----------------------------------------
-
-  /// Double-clicking a key opens its exact frame, value and influences as
-  /// fields (§6.2's numeric entry; the Key readout row of §3.3 is the same
-  /// numbers, kept in the outline for the single-selection case).
   Future<void> _openKeyFields(
       GraphChannel channel, int index, Offset position) async {
     final keys = channel.keys;
@@ -2499,7 +2392,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       final box = context.findRenderObject();
       await showSpeedFieldPopover(
         context: context,
-        // Below and to the right of the point, which stays in sight beside it.
         position: box is RenderBox
             ? box.localToGlobal(_keyPoint(
                     channel, index, _range(), _paneSize.height,
@@ -2660,7 +2552,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     return null;
   }
 
-  /// What the box on the key at [index] reads from [keys].
   KeyBoxReading _keyBoxReading(List<BridgeKeyframe> keys, int index) {
     final hasOut = index + 1 < keys.length;
     final at = keyFrame(keys[index], widget.fps);
@@ -2827,8 +2718,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     }
   }
 
-  // --- keyframe speed (docs/07 §5.3) ---------------------------------------
-
   /// One key's speed and influence, typed: the key menu's *Keyframe speed…*
   /// opens the dialogue on it. In the value lens a key is one point with two
   /// sides, so both are offered. In the speed lens the menu was opened on one
@@ -2839,7 +2728,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     if (index < 0 || index >= keys.length) return;
     var ease = keyEaseOf(keys, index);
     if (side != null) ease = ease.side(isOut: side);
-    // A lone key has no span on either side, so there is no ease to set.
     if (ease.isEmpty) return;
     final asked = await showKeyframeSpeedFrb(
       context: context,
@@ -2871,8 +2759,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     final channelId = channel.id;
     showKeyEasePopover(
       context: context,
-      // Hung just under the pill, so the numbers it was opened from stay
-      // readable beside the box.
       position: position + const Offset(0, 12),
       ease: ease,
       unit: graphChannelUnit(channel),
@@ -2916,8 +2802,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     widget.onChanged();
   }
 
-  // --- build ---------------------------------------------------------------
-
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
@@ -2938,7 +2822,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
         _refitAfterFrame();
 
         return Listener(
-          // The middle button pans and, with `Ctrl`, zooms, as in Blender.
           onPointerDown: _middleDown,
           onPointerMove: _middleMove,
           onPointerUp: _middleUp,
@@ -3007,7 +2890,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                           for (final blur in const [2.0, 4.0])
                             Shadow(color: t.surface1, blurRadius: blur),
                         ]),
-                        // The point in hand has landed on its guide.
                         caughtGuide: switch (_handleDrag) {
                           final drag?
                               when drag.dotOnly &&
@@ -3021,8 +2903,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                   ),
                 ),
               ),
-              // The turning points, as hollow rings over the curves. Their own
-              // layer, repainted by the scroll as the curves are.
               if (widget.lens != GraphLens.value)
                 Positioned.fill(
                   child: IgnorePointer(
@@ -3039,7 +2919,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                     ),
                   ),
                 ),
-              // The value gutter, held to the view as it paints.
               if (_channels.isNotEmpty)
                 Positioned.fill(
                   child: IgnorePointer(
@@ -3117,10 +2996,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                 ..._tangentHandles(range, height),
                 ..._keyHandles(t, range, height),
               ],
-              // What a key drag has landed on, marked while it holds it —
-              // the same hairline the lanes and the ruler draw (docs/07 §4.5).
               ..._snapCapture(t),
-              // The live readout, beside the key in hand (§6.2).
               ..._valueHint(range, height, constraints.maxWidth),
               ..._speedHint(range, height),
               // Over the live pane rather than instead of it, so the grid and
@@ -3181,14 +3057,10 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
         left: 8,
         top: 8,
         bottom: 8,
-        // One column, so the acceleration readout and the list of curves
-        // stand one above the other instead of over each other.
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // In the acceleration graph only: every curve's acceleration at
-            // the playhead.
             if (playhead != null && widget.lens == GraphLens.acceleration) ...[
               IgnorePointer(
                 child: AnimatedBuilder(
@@ -3294,9 +3166,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
           start: false,
           range: range,
           height: height),
-      // The block's badge, in the lanes' own words: how many keys it holds and
-      // how many frames it spans. It reads the box as it stands, so a scale in
-      // flight reports the span the release will write.
       Positioned(
         key: const ValueKey<String>('graph-box-badge'),
         left: r.right + 6,
@@ -3341,7 +3210,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     ];
   }
 
-  /// One edge of the box, as a strip wide enough to aim at.
   Widget _boxHandle(
     ({Rect rect, int count, double first, double last}) box, {
     required String name,
@@ -3367,8 +3235,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       width: w,
       height: h,
       child: MouseRegion(
-        // The cursor says which way this grab pulls before the button goes
-        // down (P2).
         cursor: time
             ? SystemMouseCursors.resizeLeftRight
             : SystemMouseCursors.resizeUpDown,
@@ -3493,8 +3359,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
           key: const ValueKey<String>('graph-value-hint'),
           left: left,
           top: point.dy + 6,
-          // The speed and acceleration graphs read the frame alone: the value
-          // and the influences are the value graph's numbers.
           child: HintPill(
             text: widget.lens == GraphLens.value
                 ? l10n.graphKeyHint(
@@ -3504,9 +3368,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                     (sideInfluence(key.interpOut) * 100).round(),
                   )
                 : l10n.graphKeyFrame(keyFrame(key, widget.fps).round()),
-            // The readout is also the way in: a click on it opens the key's
-            // speed and influence as wells, writing as they are typed — in the
-            // acceleration graph, the box that types its accelerations.
             onTap: (at) => widget.lens == GraphLens.acceleration
                 ? _openKeyFields(channel, index, at)
                 : _openKeyEaseAt(channel, index, at),
@@ -3551,7 +3412,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     return out;
   }
 
-  /// The grabbable key glyphs.
   List<Widget> _keyHandles(
       LumitTheme t, (double, double) range, double height) {
     final out = <Widget>[];
@@ -3566,8 +3426,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
             // two one-sided ones, so a second dot would be a second
             // answer to a question with one.
             ? const [true]
-            // Speed lens: an in dot and an out dot, moved independently —
-            // the ends have only the side that exists.
             : [
                 if (i > 0) false,
                 if (i + 1 < keys.length || keys.length == 1) true,
@@ -3685,9 +3543,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                 height: _keyGrab,
                 child: Center(
                   child: SizedBox(
-                    // A selected key draws one size step larger — the
-                    // drawing's 7 in a 6 world — so the catch reads at a
-                    // glance without a second colour beyond `text_primary`.
                     width: chosen ? _selectedKeyGlyph : _keyGlyph,
                     height: chosen ? _selectedKeyGlyph : _keyGlyph,
                     child: CustomPaint(
@@ -3807,12 +3662,9 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     // An envelope point has no influence handle: its sides are always the
     // chord, which is what keeps the lines between points straight.
     if (isEnvelope(channel)) return null;
-    // A held span has no curve for an influence to shape.
     if (keys[isOut ? index : index - 1].interpOut is BridgeSideInterp_Hold) {
       return null;
     }
-    // Speed and acceleration lenses: the influence handle reaches
-    // horizontally from the dot, as far as the influence goes.
     final keyTime = rationalSeconds(key.time);
     final dt = (rationalSeconds(nb.time) - keyTime).abs();
     final y = widget.lens == GraphLens.acceleration
@@ -3860,14 +3712,12 @@ int? _curvesRevision;
 class _GraphPainter extends CustomPainter {
   final List<GraphChannel> channels;
 
-  /// Per channel, whether it is shown without being picked.
   final List<bool> dashed;
   final List<List<BridgeKeyframe>> shownKeys;
   final GraphLens lens;
   final TimelineAxis axis;
   final double fps;
 
-  /// The shared range — what the grid lines and the gutter's numbers say.
   final (double, double) range;
 
   final List<Color> palette;
@@ -3885,11 +3735,8 @@ class _GraphPainter extends CustomPainter {
   /// readable wherever the view is and at whatever zoom.
   final double viewportLeft;
 
-  /// How wide that viewport is, so the gutter can be pinned to its **right**
-  /// edge.
   final double viewportWidth;
 
-  /// The gutter's translucent ground.
   final Color gutterFill;
 
   /// Whether Retime channels draw as the Vegas envelope — which puts
@@ -3902,13 +3749,9 @@ class _GraphPainter extends CustomPainter {
   final Set<double> guides;
   final TextStyle? guideLabel;
 
-  /// The guide a dragged point is sitting on, drawn [caughtColour] while it
-  /// does: the snap is seen as well as felt.
   final double? caughtGuide;
   final Color? caughtColour;
 
-  /// The channel the pointer is on in the curve list, drawn heavier than the
-  /// rest, and what the axis numbers are in where they all agree.
   final String? lit;
   final String unit;
 
@@ -4038,6 +3881,26 @@ class _GraphPainter extends CustomPainter {
       }
       canvas.drawPath(path, paint);
 
+      // A Stagger's Amount: every unit's own copy of the curve, a delay
+      // later, faint, so the spread of the cascade can be seen.
+      if (chLens == GraphLens.value && channel.staggerCopies.isNotEmpty) {
+        final faint = Paint()
+          ..color = paint.color.withValues(alpha: 0.18)
+          ..strokeWidth = 1
+          ..style = PaintingStyle.stroke;
+        for (final later in channel.staggerCopies) {
+          final copy = Path();
+          var start = true;
+          for (var x = 0.0; x <= size.width; x += step) {
+            final seconds = axis.frameAtExact(x) / f - later;
+            final y = _yOf(channel.drawnValueAt(keys, seconds), range, size);
+            start ? copy.moveTo(x, y) : copy.lineTo(x, y);
+            start = false;
+          }
+          canvas.drawPath(copy, faint);
+        }
+      }
+
       // Speed and acceleration lenses: the vertical join at each key, where
       // the in and out sides step — drawn faint so a discontinuity reads as
       // one key, not two. Acceleration almost always steps at a key.
@@ -4090,7 +3953,6 @@ class _GraphPainter extends CustomPainter {
     final right =
         (viewportLeft + viewportWidth * 2).clamp(0.0, size.width).toDouble();
 
-    // Values.
     final (lo, hi) = range;
     final span = (hi - lo).abs() < 1e-12 ? 1.0 : hi - lo;
     final (vMajor, vMinor) = gridSteps(span, size.height, 10);
@@ -4105,7 +3967,6 @@ class _GraphPainter extends CustomPainter {
       canvas.drawLine(Offset(left, y), Offset(right, y), major);
     }
 
-    // Frames.
     final perFrame = axis.xOf(1) - axis.xOf(0);
     if (perFrame <= 0) return;
     final first = axis.frameAtExact(left), last = axis.frameAtExact(right);
@@ -4207,7 +4068,6 @@ class _HandlesPainter extends CustomPainter {
     }
   }
 
-  /// 2 on, 2 off, from [from] to [to].
   static void _dashed(Canvas canvas, Offset from, Offset to, Paint paint) {
     const dash = 2.0;
     const gap = 2.0;
@@ -4288,7 +4148,6 @@ class _RenderPinToViewport extends RenderProxyBox {
   double get _width =>
       (_position?.viewportDimension ?? size.width).clamp(0.0, size.width);
 
-  /// Where the viewport's left edge is on this box, kept inside it.
   double get _left {
     final room = size.width - _width;
     return (_position?.pixels ?? 0).clamp(0.0, room < 0 ? 0.0 : room);
@@ -4322,11 +4181,6 @@ class _RenderPinToViewport extends RenderProxyBox {
       transform.translateByDouble(_left, 0, 0, 1);
 }
 
-/// The value labels, in the **fixed right-hand gutter** the drawing gives
-/// them (§12A.2, §6.3): a [graphGutterWidth] strip of translucent ground at
-/// the right edge of the viewport, with each major grid line's number on it,
-/// as Blender names them. Drawn over the curves, which can be seen running
-/// under their own numbers, and pinned to the view by [_PinToViewport].
 class _GutterPainter extends CustomPainter {
   final (double, double) range;
   final TextStyle label;

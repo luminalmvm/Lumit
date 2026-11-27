@@ -74,7 +74,6 @@ final List<List<_Cap>> _rows = [
 
 const double _boardUnits = 20;
 
-/// The widest a one-unit key is drawn, however wide the window gets.
 const double _largestKey = 34;
 
 const _modifiers = {'Mod', 'Alt', 'Shift'};
@@ -99,13 +98,11 @@ String _legend(String key) {
     return spelt.endsWith('+') ? spelt.substring(0, spelt.length - 1) : spelt;
   }
   return switch (key) {
-    // A real space bar is blank.
     'Space' => '',
     // Already on the number pad here, so the star needs no saying so.
     '*' => '*',
     // On a key cap the mark is the key, where a menu spells it out.
     '`' => '`',
-    // The same reading a chord gets, with Page Up and Page Down on two lines.
     _ => chordLabel(key).replaceFirst(' ', '\n'),
   };
 }
@@ -120,10 +117,8 @@ class KeymapKeyboard extends StatefulWidget {
 }
 
 class _KeymapKeyboardState extends State<KeymapKeyboard> {
-  /// The modifiers clicked on, which pick the layer the board shows.
   final Set<String> _held = {};
 
-  /// The key under the pointer.
   String? _hover;
 
   /// The chord [key] makes with the modifiers clicked on, spelt the way the
@@ -214,7 +209,6 @@ class _KeymapKeyboardState extends State<KeymapKeyboard> {
     );
   }
 
-  /// What the key under the pointer does.
   Widget _readout(LumitTheme t) {
     final key = _hover;
     // A modifier lights under the pointer but is not a chord to read out.

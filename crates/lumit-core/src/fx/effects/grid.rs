@@ -43,8 +43,6 @@ const fn group(label: &'static str, params: &'static [&'static str]) -> ParamGro
     }
 }
 
-/// What the lattice is, what a cell looks like, and the line grid's own rows,
-/// which only show for Lines.
 pub const GRID_GROUPS: &[ParamGroup] = &[
     group(
         "Grid",
@@ -68,12 +66,27 @@ pub const GRID_GROUPS: &[ParamGroup] = &[
             "jitter_z",
         ],
     ),
-    // The rows only Rings reads.
     ParamGroup {
         label: "",
-        params: &["start_angle", "arc", "inner_radius"],
+        params: &["start_angle", "arc"],
+        collapsed: false,
+        visible_when: Some(("layout", &[2, 6])),
+        visible_when_lens_elements: None,
+    },
+    // The row only Rings reads.
+    ParamGroup {
+        label: "",
+        params: &["inner_radius"],
         collapsed: false,
         visible_when: Some(("layout", &[2])),
+        visible_when_lens_elements: None,
+    },
+    // The rows only Sphere reads.
+    ParamGroup {
+        label: "",
+        params: &["tilt", "open_top", "rim_wave", "rim_waves", "rim_phase"],
+        collapsed: false,
+        visible_when: Some(("layout", &[6])),
         visible_when_lens_elements: None,
     },
     ParamGroup {
@@ -106,7 +119,6 @@ pub const GRID_GROUPS: &[ParamGroup] = &[
     group("Point", &["size", "feather", "colour", "max_points"]),
 ];
 
-/// The rows only Points reads, which the panel leaves out for Lines.
 const POINTS_ONLY: &[&str] = &[
     "layout",
     "columns",
@@ -125,6 +137,11 @@ const POINTS_ONLY: &[&str] = &[
     "start_angle",
     "arc",
     "inner_radius",
+    "tilt",
+    "open_top",
+    "rim_wave",
+    "rim_waves",
+    "rim_phase",
     "size",
     "feather",
     "max_points",
@@ -147,14 +164,25 @@ pub const GRID_ENABLED_WHEN: &[EnabledWhen] = &[
     grey("corner_y", "size_from", EnabledCond::ChoiceIs(1)),
     grey("spacing_x", "fit", EnabledCond::BoolIs(false)),
     grey("spacing_x", "layout", EnabledCond::ChoiceIsNot(5)),
+    grey("spacing_x", "layout", EnabledCond::ChoiceIsNot(6)),
     grey("spacing_y", "fit", EnabledCond::BoolIs(false)),
     grey("spacing_y", "layout", EnabledCond::ChoiceIsNot(4)),
     grey("spacing_y", "layout", EnabledCond::ChoiceIsNot(5)),
+    grey("spacing_y", "layout", EnabledCond::ChoiceIsNot(6)),
     grey("spacing_z", "layout", EnabledCond::ChoiceIsNot(5)),
     grey("fit", "layout", EnabledCond::ChoiceIsNot(5)),
-    grey("width", "fit", EnabledCond::BoolIs(true)),
+    grey("fit", "layout", EnabledCond::ChoiceIsNot(6)),
+    grey(
+        "width",
+        "layout",
+        EnabledCond::Or("fit", &EnabledCond::ChoiceIs(6)),
+    ),
     grey("width", "layout", EnabledCond::ChoiceIsNot(5)),
-    grey("height", "fit", EnabledCond::BoolIs(true)),
+    grey(
+        "height",
+        "layout",
+        EnabledCond::Or("fit", &EnabledCond::ChoiceIs(6)),
+    ),
     grey("height", "layout", EnabledCond::ChoiceIsNot(4)),
     grey("height", "layout", EnabledCond::ChoiceIsNot(5)),
 ];
@@ -167,24 +195,21 @@ mod attr {
     pub const JITTER_Z: u32 = 2;
 }
 
-/// How the cells are laid out across the layer's plane.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum GridLayout {
-    /// Rows and columns.
     #[default]
     Rows,
-    /// Rows and columns, with every other row moved across by half a cell.
     OffsetRows,
-    /// Rows become rings about the centre, and Columns the points on each.
     Rings,
-    /// One spiral out from the centre, evenly dense, as a sunflower's seeds.
     Spiral,
     /// Offset rows packed as a honeycomb, so every point is the same distance
     /// from its six neighbours. The row gap comes from the column gap.
     Hexagons,
-    /// Every point at Position, on top of each other until a Jitter or an
-    /// effect below moves them apart.
     Point,
+    /// Rows become circles of latitude from the top of a ball to the bottom,
+    /// and Columns the points round each, so the points sit in depth. Width
+    /// and Height are the ball's size.
+    Sphere,
 }
 
 impl GridLayout {
@@ -197,6 +222,7 @@ impl GridLayout {
         "Spiral",
         "Hexagons",
         "Point",
+        "Sphere",
     ];
 
     /// The layout for a stored Choice index. Anything unknown is Rows.
@@ -208,12 +234,12 @@ impl GridLayout {
             3 => GridLayout::Spiral,
             4 => GridLayout::Hexagons,
             5 => GridLayout::Point,
+            6 => GridLayout::Sphere,
             _ => GridLayout::Rows,
         }
     }
 }
 
-/// Grid's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "grid",
@@ -246,7 +272,6 @@ pub struct Grid {
     #[choice(label = "Layout", options = *GridLayout::OPTIONS, default = 0)]
     pub layout: u32,
 
-    /// Cells across.
     #[counter(
         label = "Columns",
         min = 1,
@@ -258,7 +283,6 @@ pub struct Grid {
     )]
     pub columns: i32,
 
-    /// Cells down.
     #[counter(
         label = "Rows",
         min = 1,
@@ -421,13 +445,58 @@ pub struct Grid {
     )]
     pub inner_radius: f32,
 
+    /// Sphere: how far the ball leans its top towards the camera, degrees.
+    #[dial(label = "Tilt", default = 0.0)]
+    pub tilt: f32,
+
+    /// Sphere: how much of the ball is left open from the top, as an angle
+    /// down from the top. At 0 it is closed, at 90 a bowl, at 180 nothing.
+    #[slider(
+        label = "Open top",
+        min = 0.0,
+        max = 180.0,
+        default = 0.0,
+        hard_min = 0.0,
+        hard_max = 180.0,
+        unit = Degrees
+    )]
+    pub open_top: f32,
+
+    /// Sphere: how far the edge of the open top rises and falls round the
+    /// ball, degrees either way, so the rim waves instead of running level.
+    #[slider(
+        label = "Rim wave",
+        min = 0.0,
+        max = 90.0,
+        default = 0.0,
+        hard_min = 0.0,
+        hard_max = 180.0,
+        unit = Degrees
+    )]
+    pub rim_wave: f32,
+
+    /// Sphere: how many times the rim rises and falls on the way round.
+    #[slider(
+        label = "Rim waves",
+        min = 0.0,
+        max = 12.0,
+        default = 3.0,
+        hard_min = 0.0,
+        hard_max = 100.0,
+        unit = Raw
+    )]
+    pub rim_waves: f32,
+
+    /// Sphere: where round the ball the waves stand. Turn it to roll them.
+    #[dial(label = "Rim phase", default = 0.0)]
+    pub rim_phase: f32,
+
     /// Lines: how big a cell is. Grid size is Sapphire's way, the boxes
     /// sharing the grid's size, and Corner point is After Effects', Position
     /// and Corner the two corners of one cell and the lines filling the layer.
     #[choice(label = "Size from", options = ["Grid size", "Corner point"], default = 0)]
     pub size_from: u32,
 
-    /// Lines: cells across.
     #[counter(
         label = "Boxes x",
         min = 1,
@@ -439,7 +508,6 @@ pub struct Grid {
     )]
     pub boxes_across: i32,
 
-    /// Lines: cells down.
     #[counter(
         label = "Boxes y",
         min = 1,
@@ -619,7 +687,6 @@ pub struct Grid {
     )]
     pub max_points: i32,
 
-    /// Which jitter (§2.4). The reseed button rolls it.
     #[seed]
     pub seed: u32,
 
@@ -644,7 +711,6 @@ impl Grid {
     /// its reason.
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
 
-    /// This instance's raster factor, read back out of a resolved bag.
     #[must_use]
     pub fn px_scale_of(p: Params<'_>) -> f32 {
         p.float(Self::DERIVED_PX_SCALE, 1.0)
@@ -675,7 +741,6 @@ impl Grid {
             projection,
             ..PointsStream::default()
         };
-        // A line grid is a picture, not points.
         if self.kind == 1 {
             return out;
         }
@@ -695,15 +760,11 @@ impl Grid {
         let half = |n: i32| (n - 1) as f32 * 0.5;
         let layout = GridLayout::from_code(self.layout);
         let inner = self.inner_radius.max(0.0);
-        // Shifted rows make the lattice half a cell wider.
         let shifted = matches!(layout, GridLayout::OffsetRows | GridLayout::Hexagons);
         let lean = if shifted && rows > 1 { 0.5 } else { 0.0 };
         let over = |size: f32, gaps: f32| if gaps > 0.0 { size / gaps } else { 0.0 };
-        // The two sizes the layout reads: the spacings, or what fits Width
-        // and Height.
         let (step_x, step_y) = match (self.fit, layout) {
             (false, _) => (self.spacing_x, self.spacing_y),
-            // The rings run from Inner radius out to the edge.
             (true, GridLayout::Rings) => (0.5 * self.width - inner, 0.5 * self.height - inner),
             // The last seed lands on the edge.
             (true, GridLayout::Spiral) => {
@@ -720,9 +781,7 @@ impl Grid {
         } else {
             step_y
         };
-        // Fitted, the shifted rows are centred with the rest.
         let centre = if self.fit { 0.5 * lean } else { 0.0 };
-        // How far out ring `j` is, in steps.
         let ring = |j: i32| match (self.fit, rows) {
             (false, _) => (j + 1) as f32,
             (true, 1) => 1.0,
@@ -736,7 +795,6 @@ impl Grid {
         } else {
             (cols - 1).max(1)
         };
-        // Where cell (column, row) sits from the centre.
         let cell = |c: i32, j: i32| -> (f32, f32) {
             match layout {
                 GridLayout::Rows | GridLayout::OffsetRows | GridLayout::Hexagons => {
@@ -766,8 +824,38 @@ impl Grid {
                         k.sqrt() * turn.sin() * step_y,
                     )
                 }
-                GridLayout::Point => (0.0, 0.0),
+                GridLayout::Point | GridLayout::Sphere => (0.0, 0.0),
             }
+        };
+        // Where cell (column, row) sits on the ball, from its centre, or
+        // nothing for a repeat of a pole or a point in the open top. Row 0 is
+        // the top, column 0 faces the camera, and Tilt leans the top towards
+        // it. Depth is positive away from the camera.
+        let (rx, ry) = (0.5 * self.width.max(0.0), 0.5 * self.height.max(0.0));
+        let open = self.open_top.clamp(0.0, 180.0);
+        let (lean_sin, lean_cos) = self.tilt.to_radians().sin_cos();
+        let ball = |c: i32, j: i32| -> Option<(f32, f32, f32)> {
+            let round = c as f32 / arc_gaps as f32 * (arc / 360.0) * std::f32::consts::TAU;
+            // The rim's height on this column: level, or waving round the ball.
+            let open = (open
+                + self.rim_wave * (self.rim_waves * round + self.rim_phase.to_radians()).sin())
+            .clamp(0.0, 180.0);
+            let down = if rows > 1 {
+                j as f32 / (rows - 1) as f32
+            } else {
+                0.0
+            };
+            let polar = (open + (180.0 - open) * down).to_radians();
+            if open >= 180.0 || (c > 0 && polar.sin() < 1e-4) {
+                return None;
+            }
+            let turn = round + self.start_angle.to_radians();
+            let (x, y, z) = (
+                polar.sin() * turn.sin() * rx,
+                -polar.cos() * ry,
+                -polar.sin() * turn.cos() * rx,
+            );
+            Some((x, y * lean_cos - z * lean_sin, z * lean_cos + y * lean_sin))
         };
         let depth = if layout == GridLayout::Point {
             0.0
@@ -786,12 +874,25 @@ impl Grid {
                         i += 1;
                         continue;
                     }
+                    let (across, down, deep) = if layout == GridLayout::Sphere {
+                        match ball(c, j) {
+                            Some(p) => p,
+                            // A pole is one point, and the open top has none.
+                            None => {
+                                i += 1;
+                                continue;
+                            }
+                        }
+                    } else {
+                        let (across, down) = cell(c, j);
+                        (across, down, 0.0)
+                    };
                     let die = |attr| points::draw(self.seed, i, attr) - 0.5;
-                    let (across, down) = cell(c, j);
                     out.position.push([
                         self.position_x + across + die(attr::JITTER_X) * self.jitter_x,
                         self.position_y + down + die(attr::JITTER_Y) * self.jitter_y,
                         self.position_z
+                            + deep
                             + (k as f32 - half(planes)) * depth
                             + die(attr::JITTER_Z) * self.jitter_z,
                     ]);
@@ -812,7 +913,6 @@ impl Grid {
         out
     }
 
-    /// How the stream is drawn — a feathered disc per point, and the host Mix.
     #[must_use]
     pub fn draw_style(self) -> DrawStyle {
         DrawStyle {
@@ -838,44 +938,4 @@ impl Grid {
 /// Lines needs no camera, so it does have one: [`GridLines`].
 pub struct GridDef;
 
-impl EffectDef for GridDef {
-    fn schema(&self) -> &'static EffectSchema {
-        &<Grid as EffectMetadata>::SCHEMA
-    }
-
-    /// The picture *and* the data, exactly as Particulate declares it.
-    fn signature(&self) -> Signature {
-        Signature::Image {
-            inputs: &[],
-            extra: POINTS_OUT,
-        }
-    }
-
-    /// The raster factor, so the composition's camera reaches the pixels this
-    /// frame is drawn at.
-    fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
-        push(Grid::DERIVED_PX_SCALE, Value::Float(cx.px_scale));
-    }
-
-    /// Lines hides the Points rows rather than greying them, since a group
-    /// can only answer to one dropdown and the Rings rows already answer to
-    /// Layout.
-    fn row_state(&self, inst: &EffectInstance) -> RowState {
-        let lines = matches!(inst.param("kind"), Some(EffectValue::Choice(1)));
-        RowState {
-            hidden: if lines {
-                POINTS_ONLY.to_vec()
-            } else {
-                Vec::new()
-            },
-            ..RowState::default()
-        }
-    }
-
-    fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
-        let grid = Grid::read(p);
-        if grid.kind == 1 {
-            GridLines::of(&grid, Grid::px_scale_of(p)).draw(rgba, w, h);
-        }
-    }
-}
+mod def;

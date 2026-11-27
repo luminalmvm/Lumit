@@ -18,7 +18,7 @@ struct Params {
     offset: vec2<f32>,  // toward the light, raster pixels
     contrast: f32,      // Contrast / 100
     mix_amt: f32,       // 0..1, blended against the unprocessed input
-    matte_on: f32,      // 1 = the matte scales Relief per pixel
+    matte_on: f32,
     _pad0: f32,
     _pad1: f32,
     _pad2: f32,
