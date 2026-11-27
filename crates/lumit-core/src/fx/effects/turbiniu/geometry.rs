@@ -453,7 +453,7 @@ impl Turbiniu {
                     line,
                     shift,
                     closed: closed && spans.iter().all(|&span| span == (0.0, 1.0)),
-                    wraps: closed && spans.len() > 1,
+                    wraps: spans.len() > 1,
                     spans,
                 })
             })
