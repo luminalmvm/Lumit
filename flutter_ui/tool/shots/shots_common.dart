@@ -34,6 +34,7 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/effect_param_row_frb.dart';
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/frb_generated.dart';
+import 'package:lumit_flutter/state/faults.dart';
 import 'package:lumit_flutter/state/workspace.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
@@ -112,6 +113,9 @@ Future<(LumitState, LumitUiState)> bootLumit() async {
     exit(0);
   }
   WidgetsFlutterBinding.ensureInitialized();
+  // As `main` does, so a part that fails in a shot draws Lumit's own box and
+  // not Flutter's red one.
+  recordFaults();
   await BridgeLib.init();
   await ExpressionsMetadata.load();
   await ExpressionTextEditingController.initSyntaxHighlighting();
@@ -119,6 +123,7 @@ Future<(LumitState, LumitUiState)> bootLumit() async {
       '${Directory.systemTemp.createTempSync('lumit-shots').path}/workspace.json';
   final state = LumitState()..newProject();
   final ui = LumitUiState(state);
+  faultTheme = () => ui.workspace.theme;
   // A fresh store reads as a first run, and the first-run dialogue and the
   // tour after it would sit over every shot in the sweep.
   ui.workspace.skipFirstRun();
