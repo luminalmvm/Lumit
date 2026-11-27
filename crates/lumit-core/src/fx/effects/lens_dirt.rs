@@ -4,8 +4,8 @@
 //! The glass sits far closer than anything the lens focuses on, so its dirt is
 //! always out of focus, by an amount the f-stop sets: wide open a speck of dust
 //! is a big faint disc in the iris's shape, stopped down a small bright one.
-//! Dirt only shows where light reaches it, so it is drawn by a wide spread of
-//! the frame's highlights. Droplets also bend the picture behind them.
+//! Dirt is lit by a wide spread of the frame's highlights, and Ambient lights
+//! all of the glass. Droplets also bend the picture behind them.
 //!
 //! The pattern comes from the seed, sized against the frame's diagonal, so a
 //! preview at any resolution shows the same dirt. It sits on curved glass,
@@ -169,14 +169,14 @@ pub struct LensDirt {
     #[dial(default = 0.0, step = 15.0)]
     pub rotation: f32,
 
-    #[slider(min = 0.0, max = 4.0, default = 0.9, hard_min = 0.0, unit = Raw)]
+    #[slider(min = 0.0, max = 4.0, default = 0.5, hard_min = 0.0, unit = Raw)]
     pub threshold: f32,
 
     /// How far across the glass a light reaches, as a share of the frame.
     #[slider(min = 0.0, max = 1.0, default = 0.35, hard_min = 0.0, hard_max = 2.0, unit = Raw)]
     pub spread: f32,
 
-    #[slider(min = 0.0, max = 1.0, default = 0.0, hard_min = 0.0, unit = Raw)]
+    #[slider(min = 0.0, max = 1.0, default = 0.15, hard_min = 0.0, unit = Raw)]
     pub ambient: f32,
 
     // ---- Colour ----
