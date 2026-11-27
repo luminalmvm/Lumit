@@ -253,7 +253,7 @@ pub struct SpriteFlare {
     #[slider(
         min = 0.0,
         max = 100.0,
-        default = 0.0,
+        default = 100.0,
         hard_min = 0.0,
         hard_max = 100.0,
         unit = Percent

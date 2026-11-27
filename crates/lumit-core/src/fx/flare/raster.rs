@@ -78,7 +78,7 @@ impl Frame {
             evolution_deg: 0.0,
             time_s: 0.0,
             edge_fade: 0.0,
-            burn: 0.0,
+            burn: 1.0,
             defocus: 0.0,
         }
     }
