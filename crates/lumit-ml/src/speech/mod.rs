@@ -50,15 +50,12 @@ use crate::{
     store,
 };
 
-/// What to write down, and how.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub struct Options {
     /// The language spoken, by code, or `None` to let the model tell from
     /// the first window of speech.
     pub language: Option<String>,
-    /// Write the words in English whatever language they were spoken in.
     pub translate: bool,
-    /// Whether and how to tell voices apart.
     pub speakers: Speakers,
     /// Words and names the speakers use, as the user typed them, separated
     /// by commas or new lines. Empty for none. Shown to the model ahead of
@@ -66,19 +63,14 @@ pub struct Options {
     pub vocabulary: String,
 }
 
-/// Whether and how to tell voices apart.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub enum Speakers {
-    /// Nobody is told apart.
     #[default]
     Off,
-    /// As many speakers as the voices sound like.
     Detect,
-    /// Exactly this many.
     Count(u32),
 }
 
-/// The installed speech pack, open.
 #[derive(Debug)]
 pub struct Speech {
     whisper: whisper::Whisper,
@@ -89,14 +81,12 @@ pub struct Speech {
     translates: bool,
 }
 
-/// One transcription in progress.
 #[derive(Debug)]
 pub struct Run<'s> {
     speech: &'s mut Speech,
     state: run::State,
 }
 
-/// Everything heard in one recording.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Heard {
     /// The language spoken, by code, or empty when nothing was heard.
@@ -107,7 +97,6 @@ pub struct Heard {
     pub voices: Vec<Voice>,
 }
 
-/// One word.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HeardWord {
     /// The word as written, punctuation included, without spaces round it.
@@ -121,11 +110,9 @@ pub struct HeardWord {
     pub confidence: f32,
     /// Which of [`Heard::voices`] said it.
     pub voice: Option<usize>,
-    /// Whether it starts a paragraph.
     pub paragraph: bool,
 }
 
-/// One stretch of one voice.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Voice {
     /// Seconds into the audio fed.
@@ -169,7 +156,6 @@ impl Speech {
         Self::open_on(Prefer::Platform, translate)
     }
 
-    /// [`Speech::open`], on the provider asked for.
     fn open_on(prefer: Prefer, translate: bool) -> Result<Self, MlError> {
         if matches!(runtime::status(), runtime::RuntimeStatus::Missing) {
             return Err(MlError::RuntimeMissing);
@@ -198,19 +184,16 @@ impl Speech {
         self.identity
     }
 
-    /// Which provider took Whisper.
     #[must_use]
     pub fn provider(&self) -> &'static str {
         self.whisper.provider()
     }
 
-    /// The pack's id and version.
     #[must_use]
     pub fn model(&self) -> String {
         self.model.clone()
     }
 
-    /// Whether the pack carries a speaker model.
     #[must_use]
     pub fn tells_speakers(&self) -> bool {
         self.voices.is_some()
@@ -288,7 +271,6 @@ pub fn languages() -> &'static [(&'static str, &'static str)] {
     &languages::LANGUAGES
 }
 
-/// Whether a working speech pack and a runtime to run it are installed.
 #[must_use]
 pub fn installed() -> bool {
     matches!(
@@ -320,7 +302,6 @@ mod tests {
         panic!("{} has no samples", path.display());
     }
 
-    /// Lower case letters and apostrophes, for comparing words.
     fn plain(word: &str) -> String {
         word.to_lowercase()
             .chars()
@@ -408,7 +389,6 @@ mod tests {
             last_end = word.end;
         }
 
-        // Word error rate against the script, fillers left out.
         let wanted: Vec<String> = std::fs::read_to_string(expected)
             .unwrap()
             .split_whitespace()

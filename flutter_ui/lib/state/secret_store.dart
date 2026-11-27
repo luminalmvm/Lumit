@@ -16,8 +16,6 @@ import 'package:lumit_flutter/state/win32.dart'
 import 'package:lumit_flutter/state/platform.dart'
     if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
-/// What every entry is filed under, so they can be told from anything else
-/// the system holds.
 const String _service = 'Lumit';
 
 /// Somewhere other than the system's own store to keep secrets, set by tests
@@ -41,7 +39,6 @@ Future<bool> writeSecret(String name, String secret) async {
   }
 }
 
-/// The secret kept under [name], or null when there is none.
 Future<String?> readSecret(String name) async {
   final fake = secretStoreOverride;
   if (fake != null) return fake[name];
@@ -75,8 +72,6 @@ Future<void> deleteSecret(String name) async {
   }
 }
 
-// --- macOS: the keychain ---------------------------------------------------
-
 /// Written through `security -i`, which reads its commands from standard
 /// input. As an argument the secret would be in every process listing on the
 /// machine for as long as the command ran.
@@ -99,8 +94,6 @@ Future<String?> _macRead(String name) async {
 
 String _quoted(String text) =>
     '"${text.replaceAll(r'\', r'\\').replaceAll('"', r'\"')}"';
-
-// --- Linux: the keyring, or a file -----------------------------------------
 
 Future<bool> _linuxWrite(String name, String secret) async {
   try {

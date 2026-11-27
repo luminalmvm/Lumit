@@ -50,7 +50,6 @@ pub struct ShapeGroup {
     pub name: String,
     #[serde(deserialize_with = "read_entries")]
     pub entries: Vec<ShapeEntry>,
-    /// Switched off by its eye: nothing in the group is drawn.
     #[serde(default, skip_serializing_if = "super::is_shown")]
     pub hidden: bool,
     /// Unknown fields from newer Lumit versions, preserved on load/save.
@@ -59,7 +58,6 @@ pub struct ShapeGroup {
 }
 
 impl ShapeGroup {
-    /// A new group holding `entries`.
     #[must_use]
     pub fn new(name: impl Into<String>, entries: Vec<ShapeEntry>) -> Self {
         Self {
@@ -72,7 +70,6 @@ impl ShapeGroup {
     }
 }
 
-/// A modifier entry: what it is, and what it is called in the Timeline.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ShapeModifier {
     pub id: Uuid,
@@ -106,7 +103,6 @@ pub enum ModifierKind {
 }
 
 impl ModifierKind {
-    /// What a modifier of this kind is called when nobody has named it.
     pub fn label(&self) -> &'static str {
         match self {
             Self::Repeat(_) => "Repeater",
@@ -130,12 +126,10 @@ impl ModifierKind {
         }
     }
 
-    /// True when this modifier pushes the outline off the path at `t`.
     fn pushes(&self, t: f64) -> bool {
         matches!(self, Self::Offset(o) if o.amount.value_at(t) != 0.0)
     }
 
-    /// True when this modifier cuts the path at `t`.
     fn trims(&self, t: f64) -> bool {
         matches!(self, Self::Trim(trim) if trim.trims_at(t))
     }
@@ -372,7 +366,6 @@ impl Trim {
             || self.offset.value_at(t) != 0.0
     }
 
-    /// `points` cut to the piece between the two ends, slid by the offset.
     fn cut(&self, points: &[(f64, f64)], closed: bool, t: f64) -> Vec<(f64, f64)> {
         let (start, end) = (
             self.start.value_at(t).clamp(0.0, 100.0),
@@ -404,8 +397,6 @@ pub struct Lowered<'a> {
     pub joins: bool,
 }
 
-/// Every piece of art in `entries`, in the order it is drawn, each with the
-/// modifiers that act on it.
 #[must_use]
 pub fn lowered(entries: &[ShapeEntry]) -> Vec<Lowered<'_>> {
     let mut out = Vec::new();
@@ -415,8 +406,6 @@ pub fn lowered(entries: &[ShapeEntry]) -> Vec<Lowered<'_>> {
 
 fn lower<'a>(entries: &'a [ShapeEntry], outer: &[&'a ShapeModifier], out: &mut Vec<Lowered<'a>>) {
     for (i, entry) in entries.iter().enumerate() {
-        // The modifiers after this entry in its group, then the ones after
-        // the group outside.
         let below = || {
             acting_after(&entries[i + 1..])
                 .into_iter()
@@ -481,7 +470,6 @@ fn every_item<'a>(entries: &'a [ShapeEntry], out: &mut Vec<&'a ShapeItem>) {
     }
 }
 
-/// The piece of art `id` names, wherever it sits.
 pub fn item_mut(entries: &mut [ShapeEntry], id: Uuid) -> Option<&mut ShapeItem> {
     for entry in entries {
         match entry {
@@ -497,7 +485,6 @@ pub fn item_mut(entries: &mut [ShapeEntry], id: Uuid) -> Option<&mut ShapeItem> 
     None
 }
 
-/// `change` run over every piece of art in `entries`, groups opened.
 pub fn items_mut(entries: &mut [ShapeEntry], change: &mut impl FnMut(&mut ShapeItem)) {
     for entry in entries {
         match entry {
@@ -508,8 +495,6 @@ pub fn items_mut(entries: &mut [ShapeEntry], change: &mut impl FnMut(&mut ShapeI
     }
 }
 
-/// True when any of `mods` bends the path at `t`, so it has to be walked
-/// finely before it moves.
 pub(super) fn reshapes(mods: &[&ShapeModifier], t: f64) -> bool {
     mods.iter().any(|m| m.kind.bends(t))
 }
@@ -692,7 +677,6 @@ fn lifted_id(item: Uuid, tag: &str) -> Uuid {
     Uuid::from_u128(item.as_u128() ^ (u128::from(salt) << 64 | u128::from(salt)))
 }
 
-/// True for a property still at `value`, which an older file left out.
 fn still(p: &Property, value: f64) -> bool {
     matches!(p.animation, Animation::Static(v) if v == value) && p.extra.is_empty()
 }

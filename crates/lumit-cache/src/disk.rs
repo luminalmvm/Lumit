@@ -21,18 +21,14 @@ use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
-/// File magic + container version ("KFR1").
 const MAGIC: [u8; 4] = *b"KFR1";
 /// Pixel format tag: 8-bit RGBA, display-referred sRGB.
 const FORMAT_RGBA8: u32 = 1;
-/// Colourspace tag: sRGB display space.
 const COLOURSPACE_SRGB: u32 = 1;
 /// Header: magic + format + colourspace + width + height (5 × 4 bytes).
 const HEADER_LEN: usize = 20;
 
-/// One frame on its way to disk, with what the index needs to rank it later.
 pub struct Parked<'a> {
-    /// The frame's content hash — its name in every tier.
     pub hash: u128,
     pub width: u32,
     pub height: u32,
@@ -45,7 +41,6 @@ pub struct Parked<'a> {
     pub scale_q: u16,
 }
 
-/// One frame loaded back from disk.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DiskFrame {
     pub width: u32,
@@ -130,23 +125,18 @@ impl DiskCache {
         }
     }
 
-    /// Bytes currently stored, as the index accounts them.
     pub fn used_bytes(&self) -> u64 {
         self.index.used_bytes()
     }
 
-    /// How many frames are parked.
     pub fn len(&self) -> usize {
         self.index.len()
     }
 
-    /// Whether nothing is parked.
     pub fn is_empty(&self) -> bool {
         self.index.is_empty()
     }
 
-    /// Every hash currently present — seeds the UI's "on disk" set for the cache
-    /// bar's blue tier. Read from the index, so no folder walk.
     pub fn known_hashes(&self) -> Vec<u128> {
         self.index.hashes().collect()
     }
@@ -185,7 +175,7 @@ impl DiskCache {
             scale_q,
         } = frame;
         if rgba.len() != (width as usize) * (height as usize) * 4 {
-            return; // malformed input never reaches disk
+            return;
         }
         if self.index.contains(hash) {
             // Content-addressed: already present means identical. Count the ask
@@ -281,8 +271,6 @@ impl DiskCache {
         self.index.rebuild_from_scan(&frames);
     }
 
-    /// Change the byte cap, evicting until within it (Settings → Performance
-    /// sets the disk budget).
     pub fn set_cap(&mut self, cap_bytes: u64) {
         self.cap_bytes = cap_bytes;
         self.enforce_cap();
@@ -350,8 +338,6 @@ pub fn make_room_beside(root: &Path, own_bytes: u64, cap_bytes: u64) -> u64 {
     held
 }
 
-/// Decode one `.kfr` byte stream, or None if it is not exactly a well-formed
-/// frame of a format this build understands.
 fn parse_kfr(bytes: &[u8]) -> Option<DiskFrame> {
     if bytes.len() < HEADER_LEN || bytes[..4] != MAGIC {
         return None;
@@ -391,9 +377,6 @@ mod tests {
             .collect()
     }
 
-    /// One frame to park, at a stated cost. `cost_ms` is what the eviction order
-    /// weighs, so a test that cares about it says so; the rest pass 8, which is
-    /// what an ordinary comp frame measures.
     fn parked(hash: u128, w: u32, h: u32, rgba: &[u8], cost_ms: u32) -> Parked<'_> {
         Parked {
             hash,
@@ -425,7 +408,6 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let mut c = DiskCache::open(dir.path().to_path_buf(), u64::MAX);
         c.store(parked(7, 4, 4, &frame(4, 4, 1), 8));
-        // Truncate the file behind the cache's back.
         let hex = format!("{:032x}", 7u128);
         let path = dir
             .path()
@@ -435,21 +417,15 @@ mod tests {
         fs::write(&path, b"KFR1 garbage").unwrap();
         assert!(c.load(7).is_none());
         assert!(!path.exists(), "corrupt entry must be deleted");
-        // A future-format file is left unreadable but never a wrong frame.
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         let mut future = Vec::new();
         future.extend_from_slice(b"KFR1");
-        future.extend_from_slice(&99u32.to_le_bytes()); // unknown format
+        future.extend_from_slice(&99u32.to_le_bytes());
         future.extend_from_slice(&[0u8; 12]);
         fs::write(&path, &future).unwrap();
         assert!(c.load(7).is_none());
     }
 
-    /// **The cap now evicts by the spec's policy, not by modification time.**
-    /// Three frames of equal size, one of them far dearer to render: the cap
-    /// takes the cheap ones and keeps the dear one, which the old
-    /// oldest-modified-first walk could not do — it would have taken the dear
-    /// frame purely for being written first (docs/06 §5.3).
     #[test]
     fn the_cap_evicts_the_cheap_frame_and_keeps_the_dear_one() {
         let dir = tempfile::tempdir().unwrap();
@@ -473,9 +449,6 @@ mod tests {
         assert_eq!(c.len(), 2, "and the cap was actually enforced");
     }
 
-    /// A cache written by a build with no index — or one whose index file was
-    /// deleted — is rebuilt by walking the folder, so nothing is orphaned
-    /// (docs/06 §5.4's "rebuilt by scan if missing or corrupt").
     #[test]
     fn a_missing_index_is_rebuilt_from_the_folder() {
         let dir = tempfile::tempdir().unwrap();
@@ -493,9 +466,6 @@ mod tests {
         assert_eq!(rebuilt.load(1).map(|f| (f.width, f.height)), Some((8, 8)));
     }
 
-    /// The cap is one total for every project beside the open one: the least
-    /// recently used project goes first, one in use is kept, and a folder that
-    /// is not a cache is never touched.
     #[test]
     fn the_oldest_projects_make_room_and_nothing_else_is_touched() {
         let dir = tempfile::tempdir().unwrap();

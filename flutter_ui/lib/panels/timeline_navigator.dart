@@ -106,13 +106,11 @@ import 'timeline_extras_frb.dart' show TimelineAxis, showMenuAt;
 }) {
   final total = frames.toDouble();
   switch (grab) {
-    // The window travels; its width is the drag's to leave alone.
     case NavigatorGrab.body:
       final span = end - start < minSpan ? minSpan : end - start;
       final lo = -overhang;
       final hi = total - span + overhang;
       return (start: (frame - hold).clamp(lo, hi < lo ? lo : hi), span: span);
-    // The far end stays where it is, so what the eye was on does not move.
     case NavigatorGrab.start:
       final s = frame.clamp(0.0, end - minSpan);
       return (start: s, span: end - s);
@@ -138,7 +136,6 @@ double navigatorZoom({
   return (viewport * frames / span + pad * 2) / viewport;
 }
 
-/// Which part of the window a press landed on.
 enum NavigatorGrab { start, end, body }
 
 /// The strip itself.
@@ -218,17 +215,12 @@ class TimelineNavigator extends StatefulWidget {
 }
 
 class _TimelineNavigatorState extends State<TimelineNavigator> {
-  /// What the gesture in flight took hold of, `null` between gestures.
   NavigatorGrab? _grab;
 
-  /// What the pointer is over at rest, so the grip it would take is the one
-  /// that lights.
   NavigatorGrab? _hover;
 
   ({double start, double end}) get _window => _view().window;
 
-  /// The window as drawn, and the raw view a pan moves along with the axis
-  /// padding in frames ([navigatorDrag]'s `overhang`).
   ({
     ({double start, double end}) window,
     ({double start, double end}) raw,
@@ -336,8 +328,6 @@ class _TimelineNavigatorState extends State<TimelineNavigator> {
           Expanded(
             child: Row(
               children: [
-                // Blank over the lanes' gutter: the strip draws only where the
-                // time it is describing is drawn.
                 Expanded(
                   child: LayoutBuilder(
                     builder: (context, constraints) {
@@ -353,7 +343,6 @@ class _TimelineNavigatorState extends State<TimelineNavigator> {
               ],
             ),
           ),
-          // The hairline every band in the panel closes with.
           SizedBox(height: 1, child: ColoredBox(color: t.hairline)),
         ],
       ),
@@ -484,7 +473,6 @@ class _TimelineNavigatorState extends State<TimelineNavigator> {
         final window = _window;
         final span = window.end - window.start;
         return [
-          // Showing the whole comp already: nothing further out to go to.
           row('fit', l10n.keyZoomToFit, () => show(0, frames),
               'timeline.zoom.fit', enabled: span < frames),
           const MenuDivider(),
@@ -522,19 +510,14 @@ class _NavigatorPainter extends CustomPainter {
   final Color ground, fill, edge, handle, handleLit, accent, bar;
   final NavigatorGrab? lit;
 
-  /// The minimap's bars, or null on the plain navigator.
   final List<(int, int)>? bars;
 
-  /// The tab at each end of the window: narrow, full height, rounded — the
-  /// work-area handle's shape at this band's scale.
   static const double _tab = 3;
 
   @override
   void paint(Canvas canvas, Size size) {
     canvas.drawRect(Offset.zero & size, Paint()..color = ground);
 
-    // The whole composition's bars, one thin line each, stacked down the
-    // strip in layer order and squeezed to fit it.
     final bars = this.bars;
     if (bars != null && bars.isNotEmpty) {
       final pitch = (size.height - 2) / bars.length;

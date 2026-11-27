@@ -1,6 +1,3 @@
-// The safe hover triangle: the geometry, and the submenu behaviour it
-// exists for — crossing a sibling row on the diagonal to a flyout must not
-// take the flyout away, and settling on a sibling still must.
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
@@ -77,10 +74,8 @@ void main() {
       await tester.pump();
       expect(find.byKey(const ValueKey('flyout-row')), findsOneWidget,
           reason: 'hovering the submenu row opens its flyout');
-      // A frame so the flyout is measured and the guard armed.
       await tester.pump();
 
-      // Move diagonally: over the sibling row, but on the way to the flyout.
       final sub = tester.getCenter(find.byKey(const ValueKey('sub')));
       final flyout =
           tester.getCenter(find.byKey(const ValueKey('flyout-row')));
@@ -89,7 +84,6 @@ void main() {
       expect(find.byKey(const ValueKey('flyout-row')), findsOneWidget,
           reason: 'inside the safe triangle the flyout must stay');
 
-      // Reaching the flyout settles it.
       await gesture.moveTo(flyout);
       await tester.pump(const Duration(milliseconds: 400));
       expect(find.byKey(const ValueKey('flyout-row')), findsOneWidget,
@@ -105,8 +99,6 @@ void main() {
       expect(find.byKey(const ValueKey('flyout-row')), findsOneWidget);
       await tester.pump();
 
-      // Sit on the sibling row (inside the triangle, but unmoving) past the
-      // grace period: the sibling wins and the flyout goes.
       final sub = tester.getCenter(find.byKey(const ValueKey('sub')));
       final flyout =
           tester.getCenter(find.byKey(const ValueKey('flyout-row')));

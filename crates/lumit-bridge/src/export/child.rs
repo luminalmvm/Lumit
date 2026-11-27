@@ -17,13 +17,10 @@ use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-/// How long a child told to stop has before it is ended for it.
 const GRACE: Duration = Duration::from_secs(5);
 
-/// How long the last line of a child that has gone is looked for.
 const LAST_LINE: Duration = Duration::from_millis(500);
 
-/// What the child said.
 pub(super) enum Heard {
     Progress {
         frame: usize,
@@ -34,16 +31,12 @@ pub(super) enum Heard {
     Failed(String),
 }
 
-/// A child export, while it runs.
 pub(super) struct Child {
     process: std::process::Child,
     input: Option<ChildStdin>,
     heard: Receiver<Heard>,
-    /// When it was told to stop, so one that does not is ended.
     stopping: Option<Instant>,
-    /// When it was first seen to have gone.
     gone: Option<Instant>,
-    /// Whether it has said how it ended.
     ended: bool,
 }
 
@@ -70,7 +63,6 @@ pub(crate) fn program() -> Option<PathBuf> {
     places.into_iter().flatten().find(|place| place.is_file())
 }
 
-/// Start the export the job folder `folder` holds.
 pub(super) fn start(folder: &Path) -> Result<Child, String> {
     let program = program().ok_or("export: lumit-cli was not found beside Lumit")?;
     let log = std::fs::File::create(folder.join("log.txt"))
@@ -83,7 +75,6 @@ pub(super) fn start(folder: &Path) -> Result<Child, String> {
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    // No console window flashing up for it.
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -157,7 +148,6 @@ fn read_output(
 }
 
 impl Child {
-    /// Say `line` to the child. One that has gone hears nothing.
     fn say(&mut self, line: &str) {
         if let Some(input) = self.input.as_mut() {
             if writeln!(input, "{line}")
@@ -218,7 +208,6 @@ impl Child {
     }
 }
 
-/// Whether a child said how it ended.
 fn said_end(heard: &[Heard]) -> bool {
     heard
         .iter()
@@ -227,7 +216,6 @@ fn said_end(heard: &[Heard]) -> bool {
 
 impl Drop for Child {
     fn drop(&mut self) {
-        // A child still running when the queue lets go of it is ended.
         if !matches!(self.process.try_wait(), Ok(Some(_))) {
             let _ = self.process.kill();
             let _ = self.process.wait();

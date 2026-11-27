@@ -1,5 +1,3 @@
-// The zoom's anchored scroll (docs/07-UI-SPEC.md §4.6): the arithmetic
-// on its own, and the correction happening inside layout rather than beside it.
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,7 +5,6 @@ import 'package:lumit_flutter/widgets/zoom_anchored_scroll.dart';
 
 void main() {
   group('The anchored scroll', () {
-    /// Build a horizontal scroller of [width] over a 200-pixel viewport.
     Future<void> show(
       WidgetTester tester,
       ZoomAnchoredScrollController controller,
@@ -37,10 +34,8 @@ void main() {
       await show(tester, controller, 1000);
       controller.jumpTo(460);
       await tester.pump();
-      // Frame 50 of 100 is at x=500 in 1000 pixels, so it is showing at x=40.
       expect(controller.offset, 460);
 
-      // Zoom: the content doubles, and the frame must stay at x=40.
       controller.hold(
           const ZoomAnchor(frame: 50, viewportX: 40, frames: 100));
       await show(tester, controller, 2000);
@@ -60,8 +55,6 @@ void main() {
       await show(tester, controller, 2000);
       expect(controller.anchor, isNull, reason: 'the zoom spent it');
 
-      // An ordinary scroll afterwards stays where it is put, through as many
-      // further layouts as the panel cares to do.
       controller.jumpTo(100);
       await show(tester, controller, 1600);
       await show(tester, controller, 1600);

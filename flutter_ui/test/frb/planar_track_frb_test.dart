@@ -21,8 +21,6 @@ void main() {
   setUpAll(initEngineForTests);
 
   group('Planar track (frb)', () {
-    /// A comp with one footage layer carrying an enabled Planar track,
-    /// selected.
     ({LumitState state, LumitUiState uiState, LayerReference layer})
         withPlanarLayer() {
       final p = freshProject();
@@ -60,13 +58,9 @@ void main() {
       final cancel = find.byKey(ValueKey<String>('fx-action-$effect-cancel'));
       expect(cancel, findsOneWidget);
 
-      // The quad's four corners are the effect's own rows — each an x/y pair,
-      // folded into one point row the way every other pair is — and the
-      // layer the pin lands on is a row beside them.
       expect(find.text('Upper left'), findsOneWidget);
       expect(find.text('Lower right'), findsOneWidget);
       expect(find.text('Pin layer'), findsOneWidget);
-      // What the analysis is asked to follow.
       expect(find.text('Follow'), findsOneWidget);
 
       expect(

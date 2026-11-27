@@ -120,7 +120,6 @@ const SHARED_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 /// when the texture drops), so the exported fd stays valid for the texture's
 /// lifetime.
 pub struct SharedDmabuf {
-    /// The copy destination the render path writes the finished frame into.
     pub texture: wgpu::Texture,
     /// The exported DMA-BUF file descriptor. **This struct owns it** and closes
     /// it in `Drop`, so an exported-but-never-registered fd is not leaked. The
@@ -145,8 +144,6 @@ pub struct SharedDmabuf {
 unsafe impl Send for SharedDmabuf {}
 unsafe impl Sync for SharedDmabuf {}
 
-/// The DRM metadata one exported DMA-BUF frame carries — everything Flutter's
-/// runner needs to import it as an `EGLImage`.
 pub struct SharedDmabufInfo {
     pub fd: i32,
     pub width: u32,
@@ -223,8 +220,6 @@ impl SharedDmabuf {
         })
     }
 
-    /// The DRM metadata Flutter's runner imports (fd, dimensions, stride, offset,
-    /// fourcc, modifier), and the card it has to be imported on.
     pub fn info(&self) -> SharedDmabufInfo {
         SharedDmabufInfo {
             fd: self.fd,
@@ -281,7 +276,6 @@ impl Drop for SharedDmabuf {
     }
 }
 
-/// What [`create_exportable_image`] hands back out of the `as_hal` closure.
 struct Created {
     hal_texture: wgpu::hal::vulkan::Texture,
     fd: i32,
@@ -304,7 +298,6 @@ unsafe fn create_exportable_image(
     let instance = hal_device.shared_instance().raw_instance();
     let physical = hal_device.raw_physical_device();
 
-    // 1. The exportable image: linear tiling, DMA-BUF external handle type.
     let mut external_image = vk::ExternalMemoryImageCreateInfo::default()
         .handle_types(vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT);
     let image_info = vk::ImageCreateInfo::default()
@@ -329,7 +322,6 @@ unsafe fn create_exportable_image(
 
     // From here on, free the image on any error before returning.
     let make = || -> Result<Created, String> {
-        // 2. Dedicated, exportable memory sized to the image.
         let reqs = raw_device.get_image_memory_requirements(image);
         let mem_props = instance.get_physical_device_memory_properties(physical);
         let mem_type = pick_memory_type(&mem_props, reqs.memory_type_bits)
@@ -352,7 +344,6 @@ unsafe fn create_exportable_image(
             return Err(format!("dmabuf texture: vkBindImageMemory failed: {e}"));
         }
 
-        // 3. Export the DMA-BUF fd.
         let fd_loader = ash::khr::external_memory_fd::Device::new(instance, &raw_device);
         let get_fd = vk::MemoryGetFdInfoKHR::default()
             .memory(memory)
@@ -365,7 +356,6 @@ unsafe fn create_exportable_image(
             }
         };
 
-        // 4. Stride/offset of the single colour plane (linear tiling).
         let subresource = vk::ImageSubresource {
             aspect_mask: vk::ImageAspectFlags::COLOR,
             mip_level: 0,
@@ -520,7 +510,6 @@ pub(crate) fn open_device(
 ) -> Result<(wgpu::Device, wgpu::Queue), String> {
     let features = descriptor.required_features;
     let memory_hints = wgpu::MemoryHints::default();
-    // The extra device extensions, on top of what wgpu-hal enables for `features`.
     let extra: [&'static std::ffi::CStr; 3] = [
         vk::KHR_EXTERNAL_MEMORY_NAME,
         vk::KHR_EXTERNAL_MEMORY_FD_NAME,
@@ -583,7 +572,6 @@ pub(crate) fn open_device(
 /// diagnostics file beside the adapter line.
 static REFUSED: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
-/// The device a card without DMA-BUF export opens instead, with the reason kept.
 pub(crate) fn plain_device(
     adapter: &wgpu::Adapter,
     descriptor: &wgpu::DeviceDescriptor<'_>,
@@ -601,10 +589,8 @@ pub fn dmabuf_refused() -> Option<&'static str> {
     REFUSED.get().map(String::as_str)
 }
 
-/// Pick a memory type index satisfying `type_bits`, preferring device-local.
 fn pick_memory_type(props: &vk::PhysicalDeviceMemoryProperties, type_bits: u32) -> Option<u32> {
     let types = &props.memory_types[..props.memory_type_count as usize];
-    // Prefer a device-local type (the GPU's own memory), else any allowed type.
     types
         .iter()
         .enumerate()

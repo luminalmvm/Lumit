@@ -28,7 +28,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// The per cent Mix every one of these ends with, as the kernel's 0-1.
 fn mix_of(mix: f32) -> f32 {
     (mix / 100.0).clamp(0.0, 1.0)
 }
@@ -81,7 +80,6 @@ pub struct OcioColourSpace {
         unit = Percent
     )]
     pub mix: f32,
-    /// The Information row: what the loaded config calls itself, read-only.
     #[colour_name(role = Config, label = "OCIO configuration")]
     pub ocio_configuration: (),
 }
@@ -131,7 +129,6 @@ pub struct OcioDisplay {
         unit = Percent
     )]
     pub mix: f32,
-    /// The Information row: what the loaded config calls itself, read-only.
     #[colour_name(role = Config, label = "OCIO configuration")]
     pub ocio_configuration: (),
 }
@@ -150,8 +147,6 @@ impl EffectDef for OcioDisplayDef {
     }
 }
 
-/// OCIO look transform: one of the config's looks, applied between two of its
-/// spaces. Inverse runs the look backwards.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "ocio_look",
@@ -180,7 +175,6 @@ pub struct OcioLook {
         unit = Percent
     )]
     pub mix: f32,
-    /// The Information row: what the loaded config calls itself, read-only.
     #[colour_name(role = Config, label = "OCIO configuration")]
     pub ocio_configuration: (),
 }

@@ -37,7 +37,6 @@ use super::{cues::Cue, Captions};
 /// the stretch the caption itself shows over.
 const WINDOW: f64 = 12.0;
 
-/// What a caption layer shows at one moment.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Shown {
     /// The caption's text, its lines on lines of their own. Empty between
@@ -48,7 +47,6 @@ pub struct Shown {
     pub words: Vec<SpokenWord>,
     /// Each of `words`' place in the cue's own words.
     pub places: Vec<usize>,
-    /// Which cue it is, by its place in the list.
     pub cue: Option<usize>,
     /// How far the cue is moved from where the layer puts it, in the layer's
     /// own pixels.
@@ -137,8 +135,6 @@ pub fn moved(layer: &Layer, context: &ExpressionContext) -> (f64, f64) {
     (x, y)
 }
 
-/// What `captions` show at the moment `context` names: its comp time, on the
-/// caption layer it names, in the document it carries.
 #[must_use]
 pub fn at(captions: &Captions, context: &ExpressionContext) -> Shown {
     let t = context.comp_time;
@@ -170,8 +166,6 @@ fn own(captions: &Captions, lt: f64) -> Shown {
     compose(index, cue, |start, end| Some((start, end)))
 }
 
-/// Captions linked to `layer`, at comp time `t`, shown on a layer whose start
-/// offset is `offset`.
 fn linked(doc: &Document, captions: &Captions, layer: &Layer, t: f64, offset: f64) -> Shown {
     let covering = |item: Uuid, s: f64| {
         captions
@@ -205,11 +199,8 @@ fn linked(doc: &Document, captions: &Captions, layer: &Layer, t: f64, offset: f6
     })
 }
 
-/// How many Precomp layers deep the words are looked for.
 const DEPTH: u32 = 8;
 
-/// What a layer plays at one moment: which footage, how far into it, and how
-/// fast it runs there.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Heard {
     pub item: Uuid,
@@ -402,8 +393,6 @@ fn inverse(map: &crate::anim::Property, lo: f64, hi: f64, target: f64, near: f64
     best
 }
 
-/// [`inverse`] across one stretch in `steps` even steps, keeping in `best`
-/// the root nearest `near`.
 fn scan(
     map: &crate::anim::Property,
     (lo, hi): (f64, f64),
@@ -456,8 +445,6 @@ fn scan(
     }
 }
 
-/// The caption `cue` as shown, its words placed by `when`, which turns a
-/// word's own start and end into the caption layer's seconds or leaves it out.
 fn compose(index: usize, cue: &Cue, when: impl Fn(f64, f64) -> Option<(f64, f64)>) -> Shown {
     let kept: Vec<(usize, f64, f64)> = cue
         .words
@@ -579,7 +566,6 @@ pub fn spans(
         .collect()
 }
 
-/// One shown caption as a cue on the comp's clock.
 fn cue_in_comp_time(
     captions: &Captions,
     shown: &Shown,

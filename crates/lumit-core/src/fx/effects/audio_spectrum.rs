@@ -34,7 +34,6 @@ use crate::mask::MaskPolyline;
 use crate::model::{EffectInstance, Layer};
 use lumit_fx_macros::Effect;
 
-/// The name the render's own carriage asks for.
 pub const MATCH_NAME: &str = "audio_spectrum";
 
 /// The row whose slot beside the op holds the reading rather than a path.
@@ -92,7 +91,6 @@ pub const AUDIO_SPECTRUM_GROUPS: &[ParamGroup] = &[
     group("", &["path"], false, Some(("along", &[ALONG_MASK]))),
 ];
 
-/// Audio spectrum's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "audio_spectrum",
@@ -109,11 +107,9 @@ pub struct AudioSpectrum {
     #[choice(options = SOURCE_OPTIONS, default = 0)]
     pub source: u32,
 
-    /// The layer *Layer* and *Clip* measure.
     #[layer(label = "Audio", self_default = false)]
     pub audio: bool,
 
-    /// The clip *Clip* measures, from the clips of the layer above.
     #[clip]
     pub clip: (),
 
@@ -122,7 +118,6 @@ pub struct AudioSpectrum {
     #[choice(options = ["Bars", "Line", "Ring", "Waveform"], default = 0)]
     pub shape: u32,
 
-    /// How many bars, or points along a line.
     #[counter(
         min = 2,
         max = 256,
@@ -155,7 +150,6 @@ pub struct AudioSpectrum {
     )]
     pub end_frequency: f32,
 
-    /// What the bands are laid along: From and To, or a mask.
     #[choice(label = "Draw along", options = ["Line", "Mask"], default = 0)]
     pub along: u32,
 
@@ -202,7 +196,6 @@ pub struct AudioSpectrum {
     #[colour(label = "Inside colour", default = [0.05, 0.3, 1.0, 1.0], max = 4.0)]
     pub inside_colour: [f32; 4],
 
-    /// The colour a band at full level reaches.
     #[colour(label = "Outside colour", default = [1.0, 0.15, 0.5, 1.0], max = 4.0)]
     pub outside_colour: [f32; 4],
 
@@ -244,7 +237,6 @@ pub struct AudioSpectrum {
     #[toggle(label = "Composite on original", default = false)]
     pub composite_on_original: bool,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -285,7 +277,6 @@ pub fn stream(
     draw::tips(&s, &levels, &path, projection)
 }
 
-/// Audio spectrum's behaviour.
 pub struct AudioSpectrumDef;
 
 impl EffectDef for AudioSpectrumDef {
@@ -293,7 +284,6 @@ impl EffectDef for AudioSpectrumDef {
         &<AudioSpectrum as EffectMetadata>::SCHEMA
     }
 
-    /// The picture, and the bars' tips as points for Particulate to emit from.
     fn signature(&self) -> Signature {
         Signature::Image {
             inputs: &[],

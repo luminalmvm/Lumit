@@ -17,8 +17,6 @@
 //! shared project's threads do (docs/14 §1).
 
 pub mod commands;
-// The browser build has no JavaScript engine or local sockets yet, so the
-// script runner is a stub there and the live endpoint is left out.
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 mod include;
 #[cfg(not(target_arch = "wasm32"))]
@@ -40,13 +38,9 @@ use serde::Serialize;
 use serde_json::Value;
 use uuid::Uuid;
 
-/// What a command needs from the program it runs in. Lumit has one, and the
-/// command line has its own.
 pub trait Host {
-    /// The open project's store. Every command commits through it.
     fn store(&self) -> &DocumentStore;
 
-    /// Where the project was last saved, or `None` before its first save.
     fn path(&self) -> Option<PathBuf>;
 
     /// Save the project to `path`, or where it was last saved when that is
@@ -65,7 +59,6 @@ pub trait Host {
     /// when that is `None`. Answers a number to ask after it with.
     fn export_start(&self, comp: Uuid, out: Option<&Path>) -> Result<u64, ScriptError>;
 
-    /// How export `job` is going.
     fn export_status(&self, job: u64) -> Result<ExportStatus, ScriptError>;
 
     /// Stop export `job`. Stopping one that has finished does nothing.
@@ -87,8 +80,6 @@ pub trait Host {
         Err(ScriptError::Failed("Rows cannot be exported here.".into()))
     }
 
-    /// Every graphics template in the library, by name. A host with no
-    /// library has none.
     fn template_library(&self) -> Vec<LibraryTemplate> {
         Vec::new()
     }
@@ -135,8 +126,6 @@ pub trait Host {
         let imported = lumit_lottie::import::import(&bytes, path)
             .map_err(|e| ScriptError::Failed(e.to_string()))?;
         for (file, data) in &imported.files {
-            // The same picture from an earlier import of the same file is
-            // left as it is.
             if lumit_ingress::files::read(file).is_ok_and(|old| old == *data) {
                 continue;
             }
@@ -239,16 +228,12 @@ pub trait Host {
         None
     }
 
-    /// Footage item `item`'s file as it is read, when the host can read it.
-    /// By default it is not known.
     fn footage_info(&self, item: Uuid) -> Option<FootageInfo> {
         let _ = item;
         None
     }
 }
 
-/// A footage item's file as it is read, interpretation and all: what After
-/// Effects' `FootageItem` answers for its size, rate and length.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FootageInfo {
     /// The picture's size, nought for sound alone.
@@ -260,14 +245,12 @@ pub struct FootageInfo {
     pub duration: Option<Duration>,
 }
 
-/// One graphics template in the library, as `template.list` answers it.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct LibraryTemplate {
     pub name: String,
     /// The folder it is in under the templates folder, parted by `/`. Empty
     /// at the top.
     pub group: String,
-    /// The `.lumt` file.
     pub path: PathBuf,
     /// The same through every version of one template.
     pub id: Uuid,
@@ -275,13 +258,11 @@ pub struct LibraryTemplate {
     pub width: u32,
     pub height: u32,
     pub seconds: f64,
-    /// Its controls' names.
     pub controls: Vec<String>,
     /// The fonts it names that are neither on this machine nor in the file.
     pub missing_fonts: Vec<String>,
 }
 
-/// Where an export has got to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ExportState {
@@ -291,21 +272,15 @@ pub enum ExportState {
     Cancelled,
 }
 
-/// An export's progress, as `export.status` answers it.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct ExportStatus {
     pub state: ExportState,
-    /// Frames written so far, out of `total`.
     pub done: u64,
     pub total: u64,
-    /// The file being written.
     pub path: PathBuf,
-    /// Why it failed, when it did.
     pub message: Option<String>,
 }
 
-/// Why a command did nothing. Each has a [`code`](ScriptError::code) a
-/// caller can match on, and a message a person can read.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ScriptError {
     #[error("There is no command called {0}.")]
@@ -350,13 +325,10 @@ impl From<lumit_core::ops::OpError> for ScriptError {
     }
 }
 
-/// One entry of [`COMMANDS`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Command {
     pub name: &'static str,
-    /// One line saying what it does.
     pub summary: &'static str,
-    /// A JSON Schema for its arguments, as JSON text.
     pub schema: &'static str,
 }
 

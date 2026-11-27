@@ -24,7 +24,6 @@ struct Params {
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
 
-// == lumit_core::fx::splitmix32.
 fn splitmix32(xin: u32) -> u32 {
     var x = xin;
     x = x + 0x9e3779b9u;
@@ -36,7 +35,6 @@ fn splitmix32(xin: u32) -> u32 {
     return x;
 }
 
-// == lumit_core::fx::noise::hash01, same fold order.
 fn hash01(channel: u32, x: i32, y: i32, z: i32) -> f32 {
     var h = p.seed;
     h = splitmix32(h ^ channel);
@@ -46,7 +44,6 @@ fn hash01(channel: u32, x: i32, y: i32, z: i32) -> f32 {
     return f32(h >> 8u) / 16777216.0;
 }
 
-// The unpremultiplied colour of a premultiplied pixel (== cpu::unpremult).
 fn unpremult(c: vec4<f32>) -> vec3<f32> {
     if (c.a > 0.0) {
         return c.rgb / c.a;
@@ -76,7 +73,6 @@ fn noise(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let o = textureLoad(src, xy, 0);
-    // Neutral short-circuit (== the CPU reference's early return).
     if (p.amount == 0.0) {
         textureStore(dst, xy, o);
         return;

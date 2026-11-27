@@ -26,22 +26,17 @@ use super::profile::Framing;
 use crate::fx::audio_chain::Denormals;
 use crate::fx::effects::audio::dsp::stft::{frame_at, frame_count, Fft};
 
-/// The prediction's taps and the frames skipped before them.
 pub(super) const TAPS: usize = 20;
 pub(super) const DELAY: usize = 3;
 
-/// Frames of past spectra the prediction reaches back over.
 pub(super) const REACH: usize = DELAY + TAPS - 1;
 
-/// Rounds of reweighting.
 const ITERATIONS: usize = 2;
 
-/// About how long one stretch with its own weights is, in seconds.
 const STRETCH_S: f64 = 24.0;
 
 /// Every stretch's weights, `[stretch][channel][bin][tap]`.
 pub(super) struct Filters {
-    /// Frames in a stretch.
     size: usize,
     stretches: usize,
     channels: usize,
@@ -105,7 +100,6 @@ pub(super) fn fit(interleaved: &[f32], channels: usize, framing: &Framing) -> Fi
         let from = a.saturating_sub(REACH);
         let span = b - from;
         for c in 0..channels {
-            // The stretch's spectrogram, one column per bin.
             let mut columns = vec![Complex::new(0.0f32, 0.0); bins * span];
             for (t, j) in (from..b).enumerate() {
                 frame_at(
@@ -232,7 +226,6 @@ fn solve(
     p: &[Complex<f64>; TAPS],
     x: &mut [Complex<f64>; TAPS],
 ) -> bool {
-    // r = L L^H, L kept in the lower triangle.
     for j in 0..TAPS {
         let mut d = r[j][j].re;
         for k in 0..j {

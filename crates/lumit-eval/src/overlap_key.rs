@@ -5,7 +5,6 @@
 
 use lumit_core::sequence::Clip;
 
-/// Feed an overlap's gain and opacity, and the effect the incoming clip names.
 pub(super) fn feed_overlap(
     h: &mut blake3::Hasher,
     outgoing: &Clip,
@@ -16,7 +15,6 @@ pub(super) fn feed_overlap(
 ) {
     h.update(b"seq-dissolve/");
     super::feed_f64(h, gain);
-    // The clips' own opacity, drawn as the layer's.
     if opacity < 1.0 {
         super::feed_f64(h, opacity);
     }

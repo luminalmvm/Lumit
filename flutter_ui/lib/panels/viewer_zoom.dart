@@ -29,8 +29,6 @@ const double maxViewerZoom = 32.0;
 /// After Effects' step and the one the magnification menu's own list walks.
 const double zoomToolStep = 2.0;
 
-/// A magnification and the pan that goes with it — the pair the Viewer holds,
-/// and the answer every function here returns.
 typedef ViewerZoom = ({double scale, Offset pan});
 
 /// Where the picture's top-left would sit for magnification [scale] with no
@@ -87,27 +85,22 @@ ViewerZoom zoomToBox({
       : panel.height / height;
   if (out) factor = 1 / factor;
   final s2 = (s1 * factor).clamp(minViewerZoom, maxViewerZoom).toDouble();
-  // The comp point in the middle of the box goes to the middle of the panel.
   final u = (box.center - fitted.topLeft) / s1;
   final topLeft = Offset(panel.width / 2, panel.height / 2) - u * s2;
   return (scale: s2, pan: topLeft - _centredTopLeft(s2, compSize, panel));
 }
 
-/// The Zoom tool over the picture: the cursor, the click, and the box.
 class ViewerZoomLayer extends StatefulWidget {
   /// Whether the Zoom tool is armed. When it is not, this is inert and lets
   /// every pointer through to whatever is under it.
   final bool active;
 
-  /// A click: zoom about [at], out when [out] (the Alt modifier).
   final void Function(Offset at, {required bool out}) onZoomAt;
 
-  /// A released box: make that rectangle the view, or its inverse when [out].
   final void Function(Rect box, {required bool out}) onZoomBox;
 
   final Color accent;
 
-  /// The drawn pointer's own colours.
   final Color mark;
   final Color outline;
 
@@ -129,8 +122,6 @@ class _ViewerZoomLayerState extends State<ViewerZoomLayer> {
   Offset? _from;
   Offset? _to;
 
-  /// Where the pointer is, for the drawn magnifier. Null when it is not over
-  /// the picture, which is where a drawn pointer should draw nothing.
   Offset? _pointer;
 
   /// Whether Alt is held, tracked rather than read at the moment of the click.
@@ -158,7 +149,6 @@ class _ViewerZoomLayerState extends State<ViewerZoomLayer> {
   @override
   void didUpdateWidget(ViewerZoomLayer old) {
     super.didUpdateWidget(old);
-    // Freshly armed: the tool has seen no Alt of its own yet.
     if (widget.active && !old.active) _alt = false;
   }
 

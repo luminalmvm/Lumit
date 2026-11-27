@@ -44,13 +44,10 @@ const WIDTH_HZ: f64 = 1.0;
 const REDUCTION_DB: f64 = 40.0;
 const SLOPE_DB: f64 = 0.0;
 
-/// The most harmonics the row offers.
 const MAX_HARMONICS: usize = 24;
 
-/// The analysis transform at 48 kHz: 1.37 s, 0.73 Hz a bin.
 const FIND_AT_48K: usize = 65_536;
 
-/// Harmonics the finder weighs when it compares the two families.
 const FIND_HARMONICS: usize = 8;
 
 /// How far either side of its nominal place a harmonic is looked for, as a
@@ -68,7 +65,6 @@ pub const AUDIO_DEHUM_ENABLED_WHEN: &[crate::fx::schema::EnabledWhen] =
         cond: crate::fx::schema::EnabledCond::BoolIs(false),
     }];
 
-/// Hum removal's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "audio_dehum",
@@ -81,7 +77,6 @@ pub const AUDIO_DEHUM_ENABLED_WHEN: &[crate::fx::schema::EnabledWhen] =
     enabled_when = AUDIO_DEHUM_ENABLED_WHEN,
 )]
 pub struct AudioDehum {
-    /// Find the mains frequency and its drift from the sound itself.
     #[toggle(default = true, label = "Find frequency")]
     pub auto: bool,
     /// The fundamental when Find frequency is off, in hertz.
@@ -100,12 +95,10 @@ pub struct AudioDehum {
     /// How much shallower each harmonic up is than the one below, in dB.
     #[bounded(min = 0.0, max = 6.0, default = SLOPE_DB, unit = Raw)]
     pub slope: f32,
-    /// Play only the hum that was taken away.
     #[toggle(default = false, label = "Hum only")]
     pub hum_only: bool,
 }
 
-/// Hum removal's behaviour.
 pub struct AudioDehumDef;
 
 impl EffectDef for AudioDehumDef {
@@ -130,7 +123,6 @@ impl EffectDef for AudioDehumDef {
     }
 }
 
-/// What one family of harmonics looks like in one analysis block.
 #[derive(Clone, Copy, Debug, Default)]
 pub(super) struct Family {
     /// The fundamental the harmonics agree on, or `None` when none stood out.
@@ -139,7 +131,6 @@ pub(super) struct Family {
     pub strength: f64,
 }
 
-/// The long transform the frequency is found with, planned once.
 pub(super) struct HumFinder {
     pub n: usize,
     pub window: Vec<f32>,
@@ -218,7 +209,6 @@ impl HumFinder {
         ))
     }
 
-    /// The family of `count` harmonics on `base` in the analysed spectrum.
     pub(super) fn family(&mut self, base: f64, count: usize) -> Family {
         self.scratch.clear();
         let mut strength = 0.0;
@@ -365,7 +355,6 @@ pub(super) fn find_track(interleaved: &[f32], rate: u32) -> (Vec<f64>, usize) {
     (track, hop)
 }
 
-/// One open Hum removal.
 struct Dehum {
     state: Mutex<State>,
 }
@@ -377,7 +366,6 @@ struct State {
     table: Option<HumTable>,
 }
 
-/// The block's settings, read from its values.
 struct Rows {
     harmonics: usize,
     depth: [f64; MAX_HARMONICS],
@@ -399,7 +387,6 @@ fn rows(values: &[(ParamId, f64)]) -> Rows {
     }
 }
 
-/// The Harmonics row as a count.
 fn harmonics(values: &[(ParamId, f64)]) -> usize {
     row(values, AudioDehum::HARMONICS, HARMONICS as f64)
         .round()
@@ -478,7 +465,6 @@ impl AudioProcessor for Dehum {
         } else {
             (Vec::new(), 1)
         };
-        // Enough harmonics for the most any block asks for.
         let most = values
             .iter()
             .map(|v| harmonics(v))
@@ -510,7 +496,6 @@ mod tests {
     use super::*;
     use crate::fx::effects::audio::modulation::harness;
 
-    /// A 50 Hz series of eight harmonics drifting slowly, over a 440 Hz tone.
     fn hummed(rate: u32, seconds: f64, f0: f64) -> (Vec<f32>, Vec<f32>) {
         let frames = (seconds * f64::from(rate)) as usize / 512 * 512;
         let mut phase = 0.0f64;
@@ -549,8 +534,6 @@ mod tests {
         2.0 * re.hypot(im) / frames as f64
     }
 
-    /// **Plan 3**: a drifting 50 Hz series comes out at least 30 dB down and a
-    /// 440 Hz tone beside it is kept within a dB.
     #[test]
     fn it_takes_the_hum_out_and_keeps_the_tone() {
         let rate = 48_000;
@@ -576,7 +559,6 @@ mod tests {
         assert!(kept.abs() < 1.0, "the tone moved {kept} dB");
     }
 
-    /// A steady 50 Hz series of eight harmonics at -55 dBFS, `frames` long.
     fn steady_hum(frames: usize) -> Vec<f32> {
         (0..frames)
             .flat_map(|n| {
@@ -669,7 +651,6 @@ mod tests {
         let at = |s: f64| (s * 48_000.0) as usize;
         let frames = at(8.1);
         let hum = steady_hum(frames);
-        // The tone's amplitude for its power to stand 20 dB over the hum's.
         let amp = (2.0 * 3.05e-6 * 100.0f64).sqrt();
         let silent = |n: usize| n < at(0.1) || (at(3.1)..at(5.1)).contains(&n);
         let mut heard = hum.clone();

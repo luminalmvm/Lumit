@@ -1,4 +1,3 @@
-// What a value well makes of what was typed into it: a number, or a sum.
 
 /// What a value well makes of what was typed into it: a number, or a sum
 /// `(1920-100)*0.5` commits 910.

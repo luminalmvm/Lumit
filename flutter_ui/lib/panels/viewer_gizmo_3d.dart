@@ -105,7 +105,7 @@ List<double> turnOfAe(Vec3 deg) {
   final (sy, cy) = (math.sin(r(deg.$2)), math.cos(r(deg.$2)));
   final (sz, cz) = (math.sin(r(deg.$3)), math.cos(r(deg.$3)));
   return [
-    cy * cz, -cy * sz, sy, //
+    cy * cz, -cy * sz, sy,
     cx * sz + sx * sy * cz, cx * cz - sx * sy * sz, -sx * cy,
     sx * sz - cx * sy * cz, sx * cz + cx * sy * sz, cx * cy,
   ];
@@ -149,11 +149,9 @@ List<double> mul3(List<double> a, List<double> b) => [
               a[row * 3 + 2] * b[6 + col],
     ];
 
-/// A turn undone: its rows and columns swapped.
 List<double> transpose3(List<double> m) =>
     [m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]];
 
-/// [v] turned by [m], row by row.
 Vec3 turned3(List<double> m, Vec3 v) => _apply(m, v);
 
 /// The turn of [radians] about [axis], row by row.
@@ -161,7 +159,7 @@ List<double> turnAbout(Vec3 axis, double radians) {
   final (x, y, z) = _unit(axis);
   final s = math.sin(radians), c = math.cos(radians), k = 1 - c;
   return [
-    c + x * x * k, x * y * k - z * s, x * z * k + y * s, //
+    c + x * x * k, x * y * k - z * s, x * z * k + y * s,
     y * x * k + z * s, c + y * y * k, y * z * k - x * s,
     z * x * k - y * s, z * y * k + x * s, c + z * z * k,
   ];
@@ -207,7 +205,6 @@ List<double> rowsTurn(Vec3 deg, {bool ae = false}) =>
 /// [near], or [rows] itself.
 Vec3 rowsAbout(List<double> outside, Vec3 rows, Vec3 axis, double radians,
     {bool ae = false, Vec3? near}) {
-  // The same turn seen inside the outside turn.
   final inside = turned3(transpose3(outside), axis);
   if (!ae) return turnedAbout(rows, inside, radians, near: near);
   return eulerXyz(mul3(turnAbout(inside, radians), turnOfAe(rows)), near ?? rows);
@@ -305,8 +302,6 @@ enum GizmoKind { arrow, plane, ring, screen, scale }
 /// axis it does not move along, so plane 2 is the XY square.
 typedef GizmoPick = ({GizmoKind kind, int axis});
 
-/// One set of 3D handles: where it sits, which way its axes point, and how
-/// the picture sees it.
 class Gizmo3d {
   /// Parent space `(x, y, z, 1)` to comp pixels `(X, Y, W)`, three rows of
   /// four, and the placement of comp pixels on screen.
@@ -425,7 +420,6 @@ class Gizmo3d {
     final x = _row(rows, 0, at, 1) / w, y = _row(rows, 1, at, 1) / w;
     Vec3 row(int r) => (rows[r * 4], rows[r * 4 + 1], rows[r * 4 + 2]);
     final (r0, r1, r2) = (row(0), row(1), row(2));
-    // How the picture's x and y change as [at] moves.
     final j0 = _times(_plus(r0, _times(r2, -x)), 1 / w);
     final j1 = _times(_plus(r1, _times(r2, -y)), 1 / w);
     Vec3 signed(Vec3 v, Vec3 by) => _dot(v, by) < 0 ? _times(v, -1) : v;
@@ -626,7 +620,6 @@ class Gizmo3d {
     final c = (screen - origin) / viewScale;
     final a = (_row(rows, 0, at, 1), _row(rows, 1, at, 1), _depth);
     final b = (_row(rows, 0, d, 0), _row(rows, 1, d, 0), _row(rows, 2, d, 0));
-    // The line on screen, and the point on it nearest the pointer.
     final l = _cross(a, b);
     final den = l.$1 * l.$1 + l.$2 * l.$2;
     if (den < 1e-18) return null;
@@ -773,7 +766,6 @@ class RingTurn {
   }
 }
 
-/// The distance from [p] to the segment [a]-[b].
 double _toSegment(Offset p, Offset a, Offset b) {
   final ab = b - a;
   final len = ab.dx * ab.dx + ab.dy * ab.dy;
@@ -783,7 +775,6 @@ double _toSegment(Offset p, Offset a, Offset b) {
   return (a + ab * t - p).distance;
 }
 
-/// Whether [p] is inside the convex quad [q].
 bool _inside(Offset p, List<Offset> q) {
   var sign = 0;
   for (var i = 0; i < q.length; i++) {
@@ -800,7 +791,6 @@ bool _inside(Offset p, List<Offset> q) {
   return true;
 }
 
-/// The inverse of a three by three matrix, row by row, or null.
 List<double>? _inverse3(List<double> m) {
   final a = m[4] * m[8] - m[5] * m[7];
   final b = m[5] * m[6] - m[3] * m[8];

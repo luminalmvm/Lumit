@@ -42,18 +42,15 @@ use super::read::{num, on, text};
 use super::{keys, layers, paints, Cx, MAX_DEPTH};
 use crate::LottieError;
 
-/// A group that moves, as the layers it becomes.
 pub(super) struct Split {
     pub name: String,
     /// A transform for each group it sits in, outermost first, its own last.
     pub nulls: Vec<TransformGroup>,
     pub contents: Vec<ShapeEntry>,
     pub opacity: Property,
-    /// The groups inside it that move of their own.
     pub inner: Vec<Split>,
 }
 
-/// A path, in the layer's space, and what acts on it.
 #[derive(Clone)]
 pub(super) struct Drawn {
     pub name: String,
@@ -61,18 +58,14 @@ pub(super) struct Drawn {
     pub keys: Vec<PathKeyframe>,
     pub primitive: Option<ShapePrimitive>,
     pub mods: Vec<ModifierKind>,
-    /// The combine a merge paths after it asked for.
     pub merge: Option<u32>,
 }
 
-/// An item and the modifiers that act on it, in the order they apply.
 pub(super) struct Art {
     pub item: ShapeItem,
     pub mods: Vec<ModifierKind>,
 }
 
-/// Where the walk is: the transform to the layer's space, the groups round
-/// it, the opacity they add up to, and how deep it is.
 #[derive(Clone)]
 pub(super) struct Frame<'v> {
     pub chain: Affine,
@@ -97,7 +90,6 @@ impl Level {
     }
 }
 
-/// A shape layer's contents, and the groups that moved and became layers.
 pub(super) fn contents(
     cx: &mut Cx<'_>,
     path: &ItemPath,
@@ -188,7 +180,6 @@ fn walk<'v>(
     Ok(level)
 }
 
-/// What a shape item is called when nobody named it.
 fn label(ty: &str) -> &'static str {
     match ty {
         "gr" => "Group",
@@ -212,8 +203,6 @@ fn label(ty: &str) -> &'static str {
     }
 }
 
-/// A group: worked into its paths when it stands still, a layer of its own
-/// when it moves.
 #[allow(clippy::too_many_arguments)]
 fn group<'v>(
     cx: &mut Cx<'_>,
@@ -320,7 +309,6 @@ fn group<'v>(
     Ok(())
 }
 
-/// A path, rectangle, ellipse or polystar, carried into the layer's space.
 fn shape(
     cx: &mut Cx<'_>,
     here: &ItemPath,
@@ -459,7 +447,6 @@ fn shape(
     Ok(Some(drawn(still, keys, None)))
 }
 
-/// Trim paths, Repeater or Offset paths as Lumit's.
 fn modifier(
     cx: &mut Cx<'_>,
     here: &ItemPath,

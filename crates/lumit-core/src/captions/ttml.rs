@@ -20,7 +20,6 @@ use super::{
     CaptionsError,
 };
 
-/// `cues` as a TTML file in `language`, a code such as `en`.
 #[must_use]
 pub fn write(cues: &[Cue], language: &str) -> String {
     let mut out = String::from(
@@ -57,12 +56,6 @@ fn escape(text: &str) -> String {
         .replace('"', "&quot;")
 }
 
-/// The captions in a TTML file, in order of time.
-///
-/// # Errors
-///
-/// [`CaptionsError::Unreadable`] with the line of a paragraph whose times will
-/// not read, and [`CaptionsError::Empty`] for a file with no paragraphs.
 pub fn read(text: &str) -> Result<Vec<Cue>, CaptionsError> {
     let rate = frame_rate(text);
     let mut cues = Vec::new();
@@ -109,7 +102,6 @@ pub fn read(text: &str) -> Result<Vec<Cue>, CaptionsError> {
     Ok(cues)
 }
 
-/// Where the next `<name` element opens, with or without a namespace prefix.
 fn find_tag(text: &str, name: &str) -> Option<usize> {
     let mut from = 0;
     while let Some(at) = text[from..].find('<') {
@@ -128,7 +120,6 @@ fn find_tag(text: &str, name: &str) -> Option<usize> {
     None
 }
 
-/// The value of `name="..."` in a tag, entities written out.
 fn attribute(tag: &str, name: &str) -> Option<String> {
     let mut from = 0;
     while let Some(at) = tag[from..].find(name) {
@@ -151,8 +142,6 @@ fn attribute(tag: &str, name: &str) -> Option<String> {
     None
 }
 
-/// The paragraph's lines: split at every `<br/>`, the other tags left for
-/// [`clean`] to drop.
 fn split_breaks(body: &str) -> Vec<String> {
     let mut lines = vec![String::new()];
     let mut rest = body;
@@ -201,7 +190,6 @@ fn time(text: &str, rate: i64) -> Option<Rational> {
     }
     let parts: Vec<&str> = text.split(':').collect();
     if parts.len() == 4 {
-        // hh:mm:ss:ff
         let n: Vec<i64> = parts
             .iter()
             .map(|p| p.parse::<i64>().ok())
@@ -220,7 +208,7 @@ fn time(text: &str, rate: i64) -> Option<Rational> {
         "m" => value * 60.0,
         "s" => value,
         "ms" => value / 1000.0,
-        #[allow(clippy::cast_precision_loss)] // a frame rate
+        #[allow(clippy::cast_precision_loss)]
         "f" => value / rate as f64,
         _ => return None,
     };

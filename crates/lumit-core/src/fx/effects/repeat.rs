@@ -24,17 +24,11 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// The port each time's number leaves the start by, counted from 0.
 pub const INDEX_PORT: &str = "index";
-/// The port the number of times leaves by.
 pub const COUNT_PORT: &str = "count";
-/// The port the number as a fraction leaves by: 0 the first time, 1 the last.
 pub const NORMALISED_PORT: &str = "normalised";
-/// The port each time's own roll leaves by, 0 up to 1.
 pub const RANDOM_PORT: &str = "random";
 
-/// The numbers the start hands each time, in the order they are drawn: its
-/// own four, then its point's or path's.
 pub const PASS_PORTS: &[Port] = &[
     Port::new(INDEX_PORT, "Index", PortType::Number),
     Port::new(COUNT_PORT, "Count", PortType::Number),
@@ -47,9 +41,7 @@ pub const PASS_PORTS: &[Port] = &[
     Port::new("colour", "Colour", PortType::Colour),
 ];
 
-/// The stream Each point runs once a point of.
 pub const POINTS_PORT: &str = "points";
-/// The paths Each path runs once a path of.
 pub const SHAPES_PORT: &str = "shapes";
 
 const START_INPUTS: &[Port] = &[
@@ -83,7 +75,6 @@ impl Default for Element {
 /// The dice Random rolls, kept off the numbers Clone index uses.
 const RANDOM_ATTR: u32 = 51;
 
-/// Repeat start's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "repeat_start",
@@ -95,13 +86,11 @@ const RANDOM_ATTR: u32 = 51;
     matte = false,
 )]
 pub struct RepeatStart {
-    /// Which dice Random rolls.
     #[seed]
     pub seed: u32,
 }
 
 impl RepeatStart {
-    /// What the start hands time `index` of `count` on each of [`PASS_PORTS`].
     #[must_use]
     pub fn pass(self, index: u32, count: u32) -> [f32; 4] {
         let normalised = if count > 1 {
@@ -114,7 +103,6 @@ impl RepeatStart {
     }
 }
 
-/// Repeat start's behaviour: none of its own.
 pub struct RepeatStartDef;
 
 impl EffectDef for RepeatStartDef {
@@ -134,16 +122,11 @@ impl EffectDef for RepeatStartDef {
     }
 }
 
-/// Times of them.
 pub const FOR_TIMES: u32 = 0;
-/// One for each point on the start's Points socket.
 pub const FOR_POINTS: u32 = 1;
-/// One for each path on the start's Shapes socket.
 pub const FOR_PATHS: u32 = 2;
 
-/// Each time works on what the time before made.
 pub const MODE_FEEDBACK: u32 = 0;
-/// Each time starts from the same picture, and every time is kept.
 pub const MODE_COPIES: u32 = 1;
 
 const REPEAT_END_ENABLED_WHEN: &[EnabledWhen] = &[
@@ -159,7 +142,6 @@ const REPEAT_END_ENABLED_WHEN: &[EnabledWhen] = &[
     },
 ];
 
-/// Repeat end's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "repeat_end",
@@ -172,8 +154,6 @@ const REPEAT_END_ENABLED_WHEN: &[EnabledWhen] = &[
     enabled_when = REPEAT_END_ENABLED_WHEN,
 )]
 pub struct RepeatEnd {
-    /// What the times are: Times of them, or one for each point or path the
-    /// start is handed.
     #[choice(
         label = "For",
         options = ["Times", "Each point", "Each path"],
@@ -186,7 +166,6 @@ pub struct RepeatEnd {
     #[counter(min = 0, max = 64, default = 4, hard_min = 0, hard_max = 4096, unit = Raw)]
     pub times: i32,
 
-    /// Feedback or Copies.
     #[choice(label = "Mode", options = ["Feedback", "Copies"], default = 0)]
     pub mode: u32,
 
@@ -201,7 +180,6 @@ pub struct RepeatEnd {
     pub copies_blend: u32,
 }
 
-/// Repeat end's behaviour: none of its own.
 pub struct RepeatEndDef;
 
 impl EffectDef for RepeatEndDef {

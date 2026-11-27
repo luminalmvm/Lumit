@@ -1,6 +1,3 @@
-//! Directional blur (docs/08 §3.8): a line-integral streak along an
-//! angle.
-
 use crate::fx::{
     cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
 };
@@ -58,7 +55,6 @@ pub struct DirectionalBlur {
     #[toggle(label = "Repeat edge pixels", default = true)]
     pub repeat_edge_pixels: bool,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -87,7 +83,6 @@ impl DirectionalBlur {
     }
 }
 
-/// Directional blur's behaviour.
 pub struct DirectionalBlurDef;
 
 impl EffectDef for DirectionalBlurDef {

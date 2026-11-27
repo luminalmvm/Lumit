@@ -1,12 +1,8 @@
-//! Temperature (docs/08 §3.16): the warm/cool channel gain pair, and the
-//! green/magenta tint that goes with it.
-
 use crate::fx::{
     cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
 };
 use lumit_fx_macros::Effect;
 
-/// Temperature's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "temperature",
@@ -51,7 +47,6 @@ pub struct Temperature {
     )]
     pub tint: f32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -134,7 +129,6 @@ pub fn neutral_for(picked: [f32; 3], now: (f32, f32)) -> (f32, f32) {
     )
 }
 
-/// Temperature's behaviour.
 pub struct TemperatureDef;
 
 impl EffectDef for TemperatureDef {
@@ -152,8 +146,6 @@ impl EffectDef for TemperatureDef {
 mod tests {
     use super::*;
 
-    /// A pick has to leave the picked colour grey, however far the row had
-    /// already moved, or white balance lands on the wrong picture.
     #[test]
     fn a_pick_turns_the_picked_colour_grey() {
         let shot = [0.42_f32, 0.3, 0.18];

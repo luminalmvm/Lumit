@@ -1,5 +1,3 @@
-//! The comp's lights in its frame key.
-
 use std::sync::Arc;
 
 use lumit_core::model::{Composition, Document};

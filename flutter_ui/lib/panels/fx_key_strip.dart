@@ -67,11 +67,9 @@ import 'timeline_key_block_frb.dart' show LaneKeysPainter;
 import 'timeline_key_lane_frb.dart' show KeyLane, keyMenuRows, keyMenuWidth;
 import 'timeline_metrics_frb.dart' show keyShapeOf, laneKeyHalf;
 
-/// The narrowest the strip is let get, and what it opens at.
 const double fxKeyStripMinWidth = 120;
 const double fxKeyStripDefaultWidth = 220;
 
-/// The ruler band's height above the lanes.
 const double fxKeyStripRulerHeight = 20;
 
 /// Below this panel width the strip no longer stands beside the rows: the
@@ -80,7 +78,6 @@ const double fxKeyStripRulerHeight = 20;
 /// row.
 const double fxKeyStripMinPanelWidth = 560;
 
-/// How tall a stacked lane's line is, under its row.
 const double fxKeyStripStackedLane = 16;
 
 /// The strip's inset from the panel's right edge: the row padding every
@@ -228,7 +225,6 @@ class FxKeyStripScope extends InheritedWidget {
     );
   }
 
-  /// How far a key's own frame is moved to land on the strip's axis.
   int get shift => keyOffset - spanStart;
 
   @override
@@ -242,10 +238,7 @@ class FxKeyStripScope extends InheritedWidget {
       fps != old.fps;
 }
 
-/// The strip's host: the ground, the ruler, the playhead and the divider,
-/// around [child], which is the panel's rows.
 class FxKeyStripHost extends StatefulWidget {
-  /// The comp frames the strip covers: where it starts and how many.
   final int spanStart;
   final int spanFrames;
 
@@ -259,7 +252,6 @@ class FxKeyStripHost extends StatefulWidget {
   /// Effect controls strip.
   final double? width;
 
-  /// The panel whose Delete takes the picked keys.
   final Panel panel;
   final Widget child;
 
@@ -293,7 +285,6 @@ class _FxKeyStripHostState extends State<FxKeyStripHost>
       ValueNotifier(UnmodifiableSetView(_selection));
   final ValueNotifier<KeyStretch?> _stretch = ValueNotifier(null);
 
-  /// Tell the lanes to look at the selection again.
   void _publish() => _selected.value = UnmodifiableSetView(_selection);
 
   /// How far open the strip is, 0 to 1. Runs on the theme's reveal.
@@ -303,7 +294,6 @@ class _FxKeyStripHostState extends State<FxKeyStripHost>
   /// opening and closing it moves them rather than building them again.
   final GlobalKey _rowsKey = GlobalKey();
 
-  /// The divider's travel while it is in hand, or null at rest.
   double? _dragging;
 
   LumitUiState? _ui;
@@ -371,7 +361,6 @@ class _FxKeyStripHostState extends State<FxKeyStripHost>
     _publish();
   }
 
-  /// The picked keys by row: each row's indices.
   Map<String, Set<int>> _byRow(Iterable<String> ids) {
     final out = <String, Set<int>>{};
     for (final id in ids) {
@@ -565,7 +554,6 @@ class _FxKeyStripHostState extends State<FxKeyStripHost>
     );
   }
 
-  /// Each animated channel under the picked keys, with the indices picked on it.
   Iterable<(List<BridgeKeyframe>, Set<int>)> _pickedKeys() sync* {
     for (final row in _byRow(_selection).entries) {
       final lane = _lanes[row.key];
@@ -579,8 +567,6 @@ class _FxKeyStripHostState extends State<FxKeyStripHost>
     }
   }
 
-  /// Every channel of every row with a picked key, through [write], one undo
-  /// step.
   void _writePicked(
       List<BridgeKeyframe> Function(List<BridgeKeyframe> keys, Set<int> own)
           write) {
@@ -601,7 +587,6 @@ class _FxKeyStripHostState extends State<FxKeyStripHost>
     });
   }
 
-  /// Every picked key replaced by what [key] makes of it.
   void _rewrite(
           BridgeKeyframe Function(List<BridgeKeyframe> keys, int index) key) =>
       _writePicked((keys, own) => [
@@ -618,7 +603,6 @@ class _FxKeyStripHostState extends State<FxKeyStripHost>
     return (fps: model.fps, fpsNum: num, fpsDen: den);
   }
 
-  /// Drive the strip open or shut on the theme's reveal.
   void _aim(bool open, ThemeScope scope) {
     final target = open ? 1.0 : 0.0;
     if (_open.value == target ||
@@ -839,7 +823,6 @@ class _FxKeyStripHostState extends State<FxKeyStripHost>
             Expanded(child: rows),
           ],
         ),
-        // The playhead, through the ruler and every lane, on its own layer.
         Positioned(
           right: inset,
           top: 0,
@@ -858,7 +841,6 @@ class _FxKeyStripHostState extends State<FxKeyStripHost>
             ),
           ),
         ),
-        // The divider on the strip's left edge: drag it to set the width.
         Positioned(
           right: inset + width - _seamGrab / 2,
           top: 0,
@@ -880,11 +862,8 @@ class _FxKeyStripHostState extends State<FxKeyStripHost>
   }
 }
 
-/// How wide the divider's hit target is, centred on the hairline it moves.
 const double _seamGrab = 7;
 
-/// The divider between the rows and the strip: the resize cursor, a grip in
-/// the ruler band, and an accent line while it is in hand.
 class _Seam extends StatelessWidget {
   final bool dragging;
   final ValueChanged<double> onDrag;
@@ -961,7 +940,6 @@ class _FxRuler extends StatelessWidget {
 
   void _seek(double x) => onSeek(_frameAt(x));
 
-  /// The same menu the Timeline's ruler has.
   void _menu(BuildContext context, TapUpDetails d) {
     final ui = Provider.of<LumitUiState>(context, listen: false);
     final comp = ui.selectedComp;
@@ -1134,7 +1112,6 @@ class _FxPlayhead extends StatelessWidget {
   }
 }
 
-/// A small triangle pointing the way the playhead has gone.
 class _BeyondPainter extends CustomPainter {
   final Color colour;
   final bool left;
@@ -1178,8 +1155,6 @@ class FxKeyLane extends StatefulWidget {
     required this.onWrite,
   });
 
-  /// Whether the row has keys to show, which is what gives it a line of its
-  /// own while the strip is stacked.
   bool get animated => scalars.any((s) => s is BridgeScalar_Keyframed);
 
   @override
@@ -1190,7 +1165,6 @@ class _FxKeyLaneState extends State<FxKeyLane> {
   _LaneEntry? _entry;
   _FxKeyStripHostState? _host;
 
-  /// Where the last press landed, for telling a click from a drag.
   Offset? _down;
   int _downButtons = 0;
 
@@ -1298,9 +1272,6 @@ class _FxKeyLaneState extends State<FxKeyLane> {
                 fps: scope.fps,
                 fpsNum: scope.fpsNum,
                 fpsDen: scope.fpsDen,
-                // ponytail: whole frames only. The Timeline's lanes also
-                // land on markers and the playhead; hand snap targets in
-                // here if a strip drag needs them.
                 magnet: true,
                 barShift: scope.shift,
                 snapTargets: const [],
@@ -1350,7 +1321,6 @@ class FxKeySummaryLane extends StatelessWidget {
   }
 }
 
-/// The header's switch for the strip. Lit while it is shown.
 class FxKeyStripToggle extends StatelessWidget {
   const FxKeyStripToggle({super.key});
 

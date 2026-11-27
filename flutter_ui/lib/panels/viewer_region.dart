@@ -19,8 +19,6 @@ class ViewerRegionLayer extends StatefulWidget {
   /// existing region and lets every pointer through to what is beneath.
   final bool arming;
 
-  /// Where the picture is on screen, so a screen point can be read as a
-  /// fraction of the composition.
   final Rect fitted;
 
   /// The region in force, as `[u0, v0, u1, v1]`, or null for the whole frame.
@@ -55,8 +53,6 @@ class _ViewerRegionLayerState extends State<ViewerRegionLayer> {
     return Rect.fromPoints(from, to);
   }
 
-  /// The screen rectangle a set region occupies — what gets outlined when
-  /// nothing is being dragged.
   Rect? get _existing {
     final r = widget.region;
     if (r == null || r.length != 4) return null;
@@ -128,8 +124,6 @@ class _ViewerRegionLayerState extends State<ViewerRegionLayer> {
   }
 }
 
-/// The region's outline — the same marquee every "I am sweeping an area" mark
-/// in the Viewer uses, so the gesture reads the same whichever one it is.
 class _RegionPainter extends CustomPainter {
   final Rect? box;
   final Color accent;

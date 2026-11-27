@@ -19,16 +19,12 @@ use crate::report::ItemPath;
 use super::props::{child, from_node, starting_value};
 use super::Conv;
 
-/// What one operator does to the paths above it.
 pub(super) enum Op {
-    /// Worked into the path's points.
     Bake(Bake),
-    /// Lumit's combine, by its own numbers.
     Merge(u32),
     /// Lumit's offset, in pixels, and whether After Effects' own would look
     /// the same: Lumit's corners are always round, and it draws no copies.
     Offset(LumProperty, bool),
-    /// Lumit's deform, standing in for Wiggle Paths.
     Wiggle(lumit_core::shape::modifier::Deform),
 }
 
@@ -43,7 +39,6 @@ pub(super) enum Bake {
     Pucker(LumProperty),
 }
 
-/// The operator `node` names, or `None` for one Lumit has no place for.
 pub(super) fn read(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Op> {
     let props = node.children();
     let one = |conv: &mut Conv<'_>, name: &str, default: f64| {
@@ -119,7 +114,6 @@ pub(super) fn read(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Opt
 }
 
 impl Bake {
-    /// The numbers that, keyed, make the path move.
     pub(super) fn props(&self) -> Vec<&LumProperty> {
         match self {
             Bake::Round(r) | Bake::Pucker(r) => vec![r],
@@ -281,8 +275,6 @@ fn pucker(path: BezierPath, amount: f64) -> BezierPath {
     }
 }
 
-/// The point `u` of the way along the curve from `a` to `b`, and its
-/// direction there.
 fn cubic(a: &Vertex, b: &Vertex, u: f64) -> ((f64, f64), (f64, f64)) {
     let p0 = a.pos;
     let p1 = (a.pos.0 + a.tan_out.0, a.pos.1 + a.tan_out.1);
@@ -390,7 +382,6 @@ pub(super) fn star(s: &super::shapes::Star, t: f64) -> BezierPath {
         };
         let (sin, cos) = angle.sin_cos();
         let reach = std::f64::consts::TAU * radius / (corners * 4.0) * round;
-        // Along the edge, at right angles to the spoke.
         let (ox, oy) = (-sin, cos);
         vertices.push(Vertex {
             pos: (cx + radius * cos, cy + radius * sin),

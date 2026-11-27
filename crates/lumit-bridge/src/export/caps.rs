@@ -1,5 +1,3 @@
-//! What each export format can carry, as the dialogue reads it.
-
 use crate::api::export::BridgeFormatCaps;
 
 /// What one format can carry, as the dialogue reads it. A build with no encoder

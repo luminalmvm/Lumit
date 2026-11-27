@@ -46,16 +46,13 @@ bool laneTouch(CompositionReference comp, LiveTarget target, double value) {
   }
 }
 
-/// [target] let go after [laneTouch] took it.
 void laneRelease(CompositionReference comp, LiveTarget target) {
   try {
     comp.mixerRelease(target: _mixTarget(target));
   } catch (_) {
-    // A comp that has gone has nothing to let go of.
   }
 }
 
-/// The lane a pass line is drawn on.
 String _laneIdOf(BridgeMixTarget target) => switch (target) {
       BridgeMixTarget_Volume(:final layer) => laneVolumePath('$layer'),
       BridgeMixTarget_Pan(:final layer) => lanePanPath('$layer'),

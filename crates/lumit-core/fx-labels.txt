@@ -172,6 +172,7 @@ Bevel width (mm)
 Bezier warp
 BiRefNet
 Bias
+Billow
 Black and white
 Black balance
 Black clip
@@ -181,7 +182,9 @@ Black range
 Black saturation
 Blades
 Blend
+Blistered turbulence
 Blobs
+Block
 Block glitch
 Block size
 Blocks
@@ -244,6 +247,7 @@ Burst
 Burst count
 Burst interval
 Bursts
+Buya
 By strength
 Bypass
 CDL
@@ -274,6 +278,7 @@ Character
 Checkbox
 Checkbox control
 Checker
+Chips
 Chirp
 Chisel hard
 Chisel soft
@@ -289,6 +294,7 @@ Chroma noise
 Chromatic aberration
 Chrome
 Circle
+Circular
 Clamp
 Clean black
 Clean white
@@ -420,6 +426,7 @@ Coverage texture
 Coverage variation
 Coverage wave
 Crackle
+Cranal
 Crease height (µm)
 Crease width (µm)
 Creased
@@ -478,6 +485,7 @@ Dense paint colour
 Density
 Density colour
 Density layer
+Dents
 Depth
 Depth (nm)
 Depth Anything V3 Small
@@ -515,6 +523,8 @@ Dirt alone
 Dirt scale
 Disc
 Dispersion
+Displaced Voronoi
+Displaced turbulence
 Displacement
 Displacement map
 Display
@@ -549,6 +559,9 @@ Dry brush grain
 Dry brush profile
 Duration
 Dust
+Dynamic
+Dynamic progressive
+Dynamic twist
 Each path
 Each point
 Ease
@@ -854,6 +867,7 @@ Halation
 Half
 Half speed
 Halo
+Hama
 Hammered
 Hard
 Hard colour
@@ -1092,6 +1106,7 @@ Lower left x
 Lower left y
 Lower right x
 Lower right y
+Luka
 Lum mix
 Lum v sat
 Luma
@@ -1200,6 +1215,7 @@ Move
 Moves
 Multiply
 NTSC
+Naki
 Name
 Native
 Near blur
@@ -1240,11 +1256,13 @@ Number from
 Number of echoes
 Number range
 Number to
+Nutous
 OCIO colour space transform
 OCIO configuration
 OCIO display transform
 OCIO file transform
 OCIO look transform
+Ober
 Off
 Office
 Offset
@@ -1355,6 +1373,7 @@ Perlin
 Persistence
 Perspective
 Petals
+Pezo
 Phase
 Phase from
 Phase offset
@@ -1436,6 +1455,7 @@ Post
 Posterize
 Posterize time
 Power
+Poxo
 Pre
 Pre-delay
 Preserve luminance
@@ -1586,6 +1606,7 @@ Rings
 Ripple
 Rise
 Robust Video Matting
+Rocky
 Roll
 Roll speed
 Rolling shutter
@@ -1681,6 +1702,7 @@ Segment
 Segment length
 Segments
 Selectivity
+Sema
 Semicircle
 Sensitivity
 Sensor
@@ -1768,6 +1790,7 @@ Slope
 Slope channel
 Slow motion with blur
 Smear
+Smeary
 Smoke
 Smoke and fire
 Smoke colour
@@ -1838,6 +1861,7 @@ Spiky
 Spin
 Spin blur
 Spiral
+Spline
 Split
 Split channels
 Split colours
@@ -1897,6 +1921,7 @@ Stretch to fit
 Stretch x
 Stretch y
 Strike
+Strings
 Strip
 Stripes
 Strobe
@@ -1910,7 +1935,11 @@ Stroke variation
 Stroke width
 Strokes
 Strong
+Stucci
+Stucci wall in
+Stucci wall out
 Studio
+Stupl
 Style
 Stylise
 Sub influence
@@ -1920,6 +1949,7 @@ Sub-steps
 Subject
 Subject colour
 Subject depth (mm)
+Subscale
 Subtract
 Subtract from layer
 Sum
@@ -1932,6 +1962,7 @@ Surface
 Surroundings
 Swing
 Swirl (mm)
+Swirly
 Switch
 Symmetric
 Sync
@@ -1942,6 +1973,7 @@ Tele lens width
 Temperature
 Temporal
 Temporal strength
+Terrain
 Text
 Text layer
 Text step
@@ -2033,6 +2065,8 @@ Turbulence scale
 Turbulence speed
 Turbulent
 Turbulent displace
+Turbulent sharp
+Turbulent smooth
 Turn
 Turn points
 Turns
@@ -2078,6 +2112,7 @@ Use source colour
 Use this frame
 Utility
 V line rel width
+VL noise
 Value
 Value noise
 Variation
@@ -2155,6 +2190,7 @@ Waveform
 Wavelength
 Waves
 Waviness
+Wavy turbulence
 Weak
 Wear
 Wet
@@ -2189,6 +2225,7 @@ Window 1
 Window 2
 Window 3
 Window 4
+Windy
 Wipe
 Wipe angle
 Wipe centre x
@@ -2225,6 +2262,7 @@ Z frequency
 Z wave
 Z wave frequency
 Z wave phase
+Zada
 Zebra
 Zoom
 Zoom blur

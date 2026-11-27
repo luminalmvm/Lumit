@@ -1,8 +1,3 @@
-//! Points field's GPU passes: seed, jump, resolve. The kernel next door
-//! (`fx_pointsfield.wgsl`) says how the search works. This is the host half,
-//! which picks one seed a pixel, makes the two textures the search bounces
-//! between, and runs the passes in order.
-
 use std::collections::HashMap;
 
 use crate::GpuContext;
@@ -16,12 +11,10 @@ const SEED_WORKGROUP: u32 = 64;
 /// workgroups along an axis.
 const MAX_SEEDS: usize = 65_535 * SEED_WORKGROUP as usize;
 
-/// One point, as the field reads it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FieldPoint {
     /// Where the point is seen on the frame, raster px.
     pub at: [f32; 2],
-    /// The number the point carries.
     pub number: f32,
     /// Premultiplied scene-linear RGBA.
     pub colour: [f32; 4],
@@ -203,20 +196,11 @@ impl FxEngine {
     }
 }
 
-/// The seeds the card is sent: at most one a pixel, because the seed pass
-/// writes a pixel from one thread per seed and two writers would race.
-///
-/// The pixel is the one the point sits on, or the nearest on the frame's edge
-/// for a point off it. Where several share one, the nearest to that pixel's
-/// centre stays, and the earlier of two equally near.
-/// (ponytail: the others are dropped, so two points inside one pixel draw as
-/// one. Keep a short list a pixel if that ever shows.)
 fn one_seed_a_pixel(points: &[FieldPoint], w: u32, h: u32) -> Vec<FieldSeed> {
     if w == 0 || h == 0 {
         return Vec::new();
     }
     let points = points.get(..MAX_SEEDS).unwrap_or(points);
-    // Each pixel's best so far: how far from its centre, and which point.
     let mut best: HashMap<u64, (f32, usize)> = HashMap::with_capacity(points.len());
     for (i, pt) in points.iter().enumerate() {
         if !(pt.at[0].is_finite() && pt.at[1].is_finite()) {
@@ -227,8 +211,6 @@ fn one_seed_a_pixel(points: &[FieldPoint], w: u32, h: u32) -> Vec<FieldSeed> {
         let y = pt.at[1].floor().clamp(0.0, (h - 1) as f32);
         let (dx, dy) = (pt.at[0] - (x + 0.5), pt.at[1] - (y + 0.5));
         let d = dx * dx + dy * dy;
-        // Walked in order, so only a nearer point takes a pixel from an
-        // earlier one.
         best.entry(y as u64 * u64::from(w) + x as u64)
             .and_modify(|b| {
                 if d < b.0 {
@@ -258,7 +240,6 @@ fn one_seed_a_pixel(points: &[FieldPoint], w: u32, h: u32) -> Vec<FieldSeed> {
         .collect()
 }
 
-/// The three pipelines and their one layout, built once per device.
 pub(super) struct PointsFieldPipelines {
     layout: wgpu::BindGroupLayout,
     seed: wgpu::ComputePipeline,

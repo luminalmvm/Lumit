@@ -44,7 +44,6 @@ pub trait RackStream: Send {
     fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
-/// What a plan carries to open a rack's stream.
 pub trait RackOpener: Send + Sync {
     /// The rack's structure: which effects, in which order, which are on,
     /// and any plugin state. Not their parameter values. Equal for two
@@ -88,7 +87,6 @@ pub struct RackRing {
     gen: AtomicU64,
 }
 
-/// What a read saw when it began.
 struct Opened {
     gen: u64,
     frames: usize,
@@ -108,25 +106,21 @@ impl RackRing {
         }
     }
 
-    /// How many frames it holds.
     #[must_use]
     pub fn capacity(&self) -> usize {
         self.capacity
     }
 
-    /// The first frame still in the ring.
     #[must_use]
     pub fn valid_from(&self) -> i64 {
         self.valid_from.load(Ordering::Acquire)
     }
 
-    /// One past the last frame written.
     #[must_use]
     pub fn produced_to(&self) -> i64 {
         self.produced_to.load(Ordering::Acquire)
     }
 
-    /// The writer starts again at `frame`: everything in the ring is gone.
     pub fn restart(&self, frame: i64) {
         self.gen.fetch_add(1, Ordering::Relaxed);
         fence(Ordering::Release);
@@ -182,7 +176,6 @@ impl RackRing {
         }
     }
 
-    /// A read's first step: what is there to copy.
     fn open(&self, at: i64, frames: usize) -> Option<Opened> {
         let gen = self.gen.load(Ordering::Acquire);
         if gen % 2 == 1 {
@@ -199,7 +192,6 @@ impl RackRing {
         })
     }
 
-    /// A read's second step: the copy.
     fn copy(&self, at: i64, frames: usize, out: &mut [f32]) {
         let mask = self.capacity - 1;
         for (n, frame) in out.chunks_exact_mut(2).take(frames).enumerate() {
@@ -211,7 +203,6 @@ impl RackRing {
         }
     }
 
-    /// A read's last step: whether what was copied is still what it was.
     fn close(&self, opened: &Opened, at: i64) -> bool {
         fence(Ordering::Acquire);
         self.gen.load(Ordering::Relaxed) == opened.gen
@@ -219,13 +210,11 @@ impl RackRing {
     }
 }
 
-/// One rack as the puller runs it.
 #[derive(Default)]
 struct Pull {
     /// The ring of the plan rack it runs, which is how a stream is found
     /// again in the next plan.
     ring: Option<Arc<RackRing>>,
-    /// The identity it was opened for, None before it ever was.
     opened: Option<u64>,
     stream: Option<Box<dyn RackStream>>,
     latency: usize,
@@ -243,7 +232,6 @@ struct Pull {
 }
 
 impl Pull {
-    /// One past the last output frame.
     fn produced(&self) -> i64 {
         self.out_from + (self.out.len() / 2) as i64
     }
@@ -267,7 +255,6 @@ pub struct RackPuller {
     rate: u32,
     offline: bool,
     racks: Vec<Pull>,
-    /// The plan the streams were last matched to.
     seen: u64,
     /// Frames of some clip that were due and not in memory while working out
     /// a rack's input. Only grows.
@@ -275,7 +262,6 @@ pub struct RackPuller {
 }
 
 impl RackPuller {
-    /// A puller for sound at `rate`; `offline` for an export.
     #[must_use]
     pub fn new(rate: u32, offline: bool) -> Self {
         Self {
@@ -356,7 +342,6 @@ impl RackPuller {
         pull.dry.resize(latency * 2, 0.0);
     }
 
-    /// Run rack `r` one block further.
     fn pull_block(&mut self, plan: &MixPlan, r: usize) {
         let (Some(rack), Some(pull)) = (plan.racks.get(r), self.racks.get_mut(r)) else {
             return;
@@ -376,7 +361,6 @@ impl RackPuller {
         input.resize(block, 0.0);
         output.clear();
         output.resize(block, 0.0);
-        // Frames before the timeline starts are silence.
         let before = (-at).clamp(0, AUDIO_BLOCK_FRAMES as i64) as usize;
         if let Some(rest) = input.get_mut(before * 2..) {
             if !rest.is_empty() {
@@ -472,10 +456,6 @@ mod tests {
         vec![v; frames * 2]
     }
 
-    /// A restart while a read is under way, and the writer lapping a read
-    /// that fell behind, both make the read hand back nothing rather than
-    /// sound from another moment. The steps of the read are interleaved with
-    /// the writer's by hand.
     #[test]
     fn a_restart_mid_read_never_hands_back_another_moment() {
         let ring = RackRing::new(8_000);
@@ -488,11 +468,9 @@ mod tests {
         let mut out = level(0.0, 200);
         ring.copy(100, opened.frames, &mut out);
         assert!(!ring.close(&opened, 100), "the restart is seen");
-        // Read again after it: all of it the new moment.
         assert_eq!(ring.read(100, 200, &mut out), 200);
         assert!(out.iter().all(|v| *v == 0.9));
 
-        // A read left open while the writer goes all the way round.
         let opened = ring.open(150, 100).unwrap();
         let cap = ring.capacity() as i64;
         let mut at = 600;
@@ -504,8 +482,6 @@ mod tests {
         assert_eq!(ring.read(150, 100, &mut out), 0);
     }
 
-    /// Written and read a block at a time well past the ring's length: every
-    /// frame comes back as it went in, across every wrap.
     #[test]
     fn a_ring_reads_back_exactly_across_the_wrap() {
         let ring = RackRing::new(8_000);
@@ -524,7 +500,6 @@ mod tests {
         }
     }
 
-    /// A rack that delays its input by exactly its own latency.
     struct Delay {
         latency: u32,
         line: VecDeque<f32>,
@@ -563,10 +538,6 @@ mod tests {
         }
     }
 
-    /// An impulse through a rack 300 frames late comes out of the mix on its
-    /// own frame, and through two in series (300 and 700) the same: the
-    /// puller feeds each rack its delay ahead. Only the limiter's look ahead,
-    /// which the clock takes off, is between the two.
     #[test]
     fn racks_with_latency_come_out_on_their_own_frame() {
         let rate = 48_000;

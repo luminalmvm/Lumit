@@ -48,8 +48,6 @@ const String themeFileFormat = 'lumit-theme';
 /// fall back to the base.
 const int themeFileVersion = 1;
 
-/// The theme as the text of a file. Indented, and with a trailing newline, so
-/// it reads well in an editor and diffs a line at a time.
 String encodeThemeFile(CustomTheme theme) {
   final base = theme.baseScheme.build();
   final out = StringBuffer()
@@ -67,7 +65,6 @@ String encodeThemeFile(CustomTheme theme) {
   return out.toString();
 }
 
-/// `textPrimary` as `text-primary`, the way CSS names things.
 String _kebab(String key) => key.replaceAllMapped(
     RegExp('[A-Z]'), (m) => '-${m[0]!.toLowerCase()}');
 
@@ -83,7 +80,6 @@ String _hex(Color c) {
 class ThemeFileRead {
   final CustomTheme? theme;
 
-  /// Why the file was refused, in the voice the settings page shows it in.
   final String? refusal;
 
   const ThemeFileRead.loaded(CustomTheme this.theme) : refusal = null;
@@ -127,8 +123,6 @@ ThemeFileRead readThemeFile(String text, {String name = ''}) {
   return ThemeFileRead.loaded(theme);
 }
 
-/// The file name to suggest for [themeName]: its own name, lower case, with
-/// anything a filesystem would rather not carry turned into a hyphen.
 String themeFileName(String themeName) {
   final slug = themeName
       .trim()
@@ -153,7 +147,6 @@ File writeThemeFileInto(String folder, CustomTheme theme) {
   return file;
 }
 
-/// The CSS form: `@name`, `@base` and `:root` colours.
 ThemeFileRead _readCss(String text, String name) {
   final sheet = StyleSheet.parse(text, name: name);
   final scheme = sheet.baseName == null ? null : schemeNamed(sheet.baseName!);

@@ -37,14 +37,12 @@ class ZoomAnchor {
     this.pad = 0,
   });
 
-  /// The frame to keep under [viewportX].
   final double frame;
 
   /// Where on screen — measured from the viewport's left edge — that frame
   /// should stay.
   final double viewportX;
 
-  /// How many frames the content spans end to end.
   final int frames;
 
   /// The pixels of padding at each end of the content that the frames do
@@ -75,14 +73,10 @@ class ZoomAnchor {
 class ZoomAnchoredScrollController extends ScrollController {
   ZoomAnchor? _anchor;
 
-  /// Hold [anchor] through the next layout.
   void hold(ZoomAnchor anchor) => _anchor = anchor;
 
-  /// The anchor waiting to be applied, if any. Visible for tests and for a
-  /// caller that wants to know whether a zoom is in hand.
   ZoomAnchor? get anchor => _anchor;
 
-  /// Forget the anchor without applying it.
   void release() => _anchor = null;
 
   @override

@@ -8,7 +8,6 @@ use crate::GpuContext;
 use super::lens_blur::{bind_layout, scratch, Slot};
 use super::{work_texture, FxEngine};
 
-/// One frame's settings, already resolved.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LensDirtOp {
     pub seed: u32,
@@ -23,9 +22,7 @@ pub struct LensDirtOp {
     pub scratches: f32,
     pub droplets: f32,
     pub refraction: f32,
-    /// Fine sharp specks.
     pub grit: f32,
-    /// Curling fibres.
     pub hairs: f32,
     /// Light on all of the glass, whatever the picture.
     pub ambient: f32,

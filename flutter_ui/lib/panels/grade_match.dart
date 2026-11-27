@@ -1,21 +1,14 @@
-// The Grade panel's Match and Look pages.
-//
-// Match sets the node from the picture: a balance, a match to another shot or
-// a still, or a colour chart. Look is the LUT node, the saved looks, and the
-// grade written out as a LUT for another application.
 
 part of 'grade_panel_frb.dart';
 
 const List<int> _lutSizes = [17, 33, 65];
 
 mixin _GradeMatch on _GradeModel, _GradePrimaries {
-  /// What Match to matches the shot to, when not the Viewer's reference.
   GradeReference? _matchTo;
 
   /// A solver in hand, so its buttons stand down until it answers.
   bool _solving = false;
 
-  /// What Match chart found last, before and after, for the shot it ran on.
   (String, double, double)? _chartError;
 
   int _lutSize = 33;
@@ -25,8 +18,6 @@ mixin _GradeMatch on _GradeModel, _GradePrimaries {
   /// isn't kept in the document, so this lasts until the grade is touched or
   /// its effects change.
   final Map<String, (String, List<UuidValue>)> _worn = {};
-
-  // --- Match -------------------------------------------------------------------
 
   /// The comp's shots, read once per document revision.
   (int?, List<BridgeShot>)? _shotsRead;
@@ -177,7 +168,6 @@ mixin _GradeMatch on _GradeModel, _GradePrimaries {
   static bool _sameReference(GradeReference a, GradeReference b) =>
       a.still != null ? a.still == b.still : a.shot?.same(b.shot) ?? false;
 
-  /// The chart's rows, written as one step, and the error it leaves.
   Future<void> _matchChart(List<Offset> corners) async {
     final shot = _shot;
     GradeChartResult? found;
@@ -221,11 +211,8 @@ mixin _GradeMatch on _GradeModel, _GradePrimaries {
         ),
       );
 
-  /// A control in an [_actionRow] that names something of any length.
   static Widget _capped(Widget child) =>
       ConstrainedBox(constraints: const BoxConstraints(maxWidth: 180), child: child);
-
-  // --- Look --------------------------------------------------------------------
 
   Widget _lookPage(LumitTheme t, bool enabled) {
     final shot = _shot;
@@ -376,7 +363,6 @@ mixin _GradeMatch on _GradeModel, _GradePrimaries {
     return same ? worn.$1 : null;
   }
 
-  /// A look takes the place of the grade on every picked shot.
   Future<void> _pickLook(BridgePresetInfo look) async {
     final String text;
     try {
@@ -397,7 +383,6 @@ mixin _GradeMatch on _GradeModel, _GradePrimaries {
     });
   }
 
-  /// Write the shot's grade as a look, and show it as the look it wears.
   Future<void> _saveLook() async {
     final shot = _shot;
     if (shot == null) return;

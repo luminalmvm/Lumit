@@ -117,7 +117,6 @@ const fn group(
     }
 }
 
-/// The field, the rows only some fields read, and the walk.
 pub const FLOW_GROUPS: &[ParamGroup] = &[
     group("Field", &["field", "speed"], None),
     group(
@@ -143,7 +142,6 @@ pub const FLOW_GROUPS: &[ParamGroup] = &[
 
 pub const FLOW_ENABLED_WHEN: &[EnabledWhen] = &[APPLY_GROUP_WHEN, APPLY_THRESHOLD_WHEN];
 
-/// Flow points' controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "flow_points",
@@ -208,7 +206,6 @@ pub struct FlowPoints {
     )]
     pub curl: f32,
 
-    /// Per cent, for the Vortex. See [`curl`](Self::curl).
     #[slider(
         label = "Vortex",
         min = -200.0,
@@ -218,7 +215,6 @@ pub struct FlowPoints {
     )]
     pub vortex: f32,
 
-    /// Per cent, for the Pull. See [`curl`](Self::curl).
     #[slider(
         label = "Pull",
         min = -200.0,
@@ -228,7 +224,6 @@ pub struct FlowPoints {
     )]
     pub pull: f32,
 
-    /// Per cent, for the Wind. See [`curl`](Self::curl).
     #[slider(
         label = "Wind",
         min = -200.0,
@@ -307,7 +302,6 @@ pub struct FlowPoints {
     )]
     pub steps: i32,
 
-    /// How soft the disc a point is drawn as is, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -318,7 +312,6 @@ pub struct FlowPoints {
     )]
     pub feather: f32,
 
-    /// Which noise.
     #[seed]
     pub seed: u32,
 
@@ -382,7 +375,6 @@ impl FlowPoints {
         dt: f32,
         falloff: &[f32; cpu::CURVE_TABLE],
     ) -> [f32; 2] {
-        // Out from Centre: how far, and which way.
         let out = [at[0] - self.centre_x, at[1] - self.centre_y];
         let far = out[0].hypot(out[1]);
         let fade = || cpu::curve_at((far / self.radius.max(1e-3)).min(1.0), falloff);
@@ -449,7 +441,6 @@ impl FlowPoints {
         for &i in moved {
             let id = in_stream.id.get(i).copied().unwrap_or(0);
             let p = in_stream.position.get(i).copied().unwrap_or([0.0; 3]);
-            // The id in two halves.
             key.extend([id as u32, (id >> 32) as u32, p[0].to_bits(), p[1].to_bits()]);
         }
         key
@@ -484,16 +475,6 @@ impl FlowPoints {
         // outwards, and more Steps per second is the cure.
         let most = (MAX_STEPS / moved.len()).max(1);
         let now = t as f32;
-        // On the layer's clock every point walks the same steps, and all but
-        // the last two are whole steps that do not depend on the time asked
-        // for. `keep` is how many of those there are, and where the walk
-        // stood after them is what another frame can carry on from.
-        // ponytail: three walks still start from the beginning every frame.
-        // One past the step cap, since its steps are a length of their own.
-        // One on Point age, since each point has its own length of walk and
-        // its own starting time. And one whose input moves, since it starts
-        // from somewhere new each frame. Keeping a walk per point id would
-        // cover the last two, if they come to matter.
         let whole = (now * rate).floor();
         let shared = self.clock != 1 && now.is_finite() && now > 0.0 && whole < most as f32;
         let keep = if shared {
@@ -575,7 +556,6 @@ impl FlowPoints {
     }
 }
 
-/// Flow points' behaviour, the same shape as Vary points'.
 pub struct FlowPointsDef;
 
 impl EffectDef for FlowPointsDef {
@@ -583,7 +563,6 @@ impl EffectDef for FlowPointsDef {
         &<FlowPoints as EffectMetadata>::SCHEMA
     }
 
-    /// A stream in and a stream out, beside the picture.
     fn signature(&self) -> Signature {
         Signature::Image {
             inputs: POINTS_IN,
@@ -627,7 +606,6 @@ mod tests {
             stream.colour.push([1.0; 4]);
             stream.id.push(n);
         }
-        // Every field at once, with a noise that changes over time.
         let flow = FlowPoints {
             field: COMBINED,
             speed: 130.0,
@@ -666,11 +644,9 @@ mod tests {
         let first = flow.walked(&stream, early, true);
         assert_eq!(bits(&first), bits(&flow.walked(&stream, early, false)));
         assert_eq!(furthest(usize::MAX), Some(27));
-        // Carried on from the early walk.
         let carried = flow.walked(&stream, late, true);
         assert_eq!(furthest(usize::MAX), Some(100));
         assert_eq!(bits(&carried), bits(&whole));
-        // And the same frame again, from the walk it has just kept.
         assert_eq!(bits(&flow.walked(&stream, late, true)), bits(&whole));
     }
 }

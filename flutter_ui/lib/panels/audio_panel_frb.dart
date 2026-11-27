@@ -57,8 +57,6 @@ import 'timeline_outline_row_frb.dart' show RowRenameField;
 /// (`lumit_audio::mix::VOLUME_FLOOR_DB`).
 const double _fadeFloorDb = -100;
 
-/// A fade the fade commands wrote at one end of a layer: the index of its
-/// first key, how long it runs, its shape, and the level it rises to.
 typedef AudioFade = ({
   int first,
   double seconds,
@@ -107,12 +105,9 @@ AudioFade? audioFadeOf(
   return null;
 }
 
-/// The panel's two columns: the words, then the well each row edits.
 const double audioLabelWidth = 74;
 const double audioValueWidth = 72;
 
-/// What the Range dropdown offers (docs/09 §5): the whole comp, or only the
-/// work area.
 enum BeatRange { wholeComp, workArea }
 
 class AudioPanelFrb extends StatefulWidget {
@@ -141,7 +136,6 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
   /// well when no override stands.
   double _bpmOverride = 0;
 
-  /// What the last detection reported, for the well to read back.
   double _lastBpm = 0;
   double _phaseMs = 0;
 
@@ -157,7 +151,6 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
   bool _hasBeats = false;
   int? _beatsAskedAt;
 
-  /// The picked layer's name while it is being renamed from the panel.
   TextEditingController? _rename;
 
   void _endRename(BridgeLayerEntry entry, {required bool commit}) {
@@ -172,7 +165,6 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
     }
   }
 
-  /// Which layers can make a sound, probed once and remembered.
   final Map<String, bool> _hasAudio = {};
 
   /// Whether the panel has been on screen a frame. The selected layer's rows
@@ -275,9 +267,6 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
         child: Align(alignment: Alignment.centerLeft, child: dropdown),
       );
 
-  // --- Beats -------------------------------------------------------------
-
-  /// Beats' heading: the twirl, the word and the one press most visits want.
   Widget _beatsHeading(BuildContext context, LumitTheme t, LumitUiState ui,
           CompositionReference comp) =>
       GestureDetector(
@@ -348,7 +337,6 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
         ),
       );
 
-  /// A picker's row that answers a right-click with the picker's choices.
   Widget _withOptions<T>(
     BuildContext context, {
     required List<T> options,
@@ -377,7 +365,6 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
         child: child,
       );
 
-  /// Sensitivity's menu: the value's own rows, as a number well has them.
   void _sensitivityMenu(BuildContext context, Offset at) => showMenuAt<void>(
         context: context,
         position: at,
@@ -671,8 +658,6 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
     );
   }
 
-  // --- Selected layer -----------------------------------------------------
-
   Widget _selectedLayer(
     BuildContext context,
     LumitTheme t,
@@ -892,7 +877,6 @@ class _LevelsBlock extends StatelessWidget {
 /// The two horizontal bars with their dB numbers and the scale under them,
 /// painted as one so a tick repaints one boundary and rebuilds nothing.
 class LevelBarsPainter extends CustomPainter {
-  /// How tall the block paints: the two bars and the scale.
   static const double height = 36;
   static const double _barHeight = 6;
   static const double _rowStep = 12;
@@ -995,8 +979,6 @@ class LevelBarsPainter extends CustomPainter {
       old.frame != frame || old.body != body || old.text != text;
 }
 
-/// The selection's sound: Volume and Pan with their stopwatches, the fades,
-/// and the two template buttons.
 class _SelectedLayerBlock extends StatefulWidget {
   final CompositionReference comp;
   final BridgeLayerEntry entry;
@@ -1006,8 +988,6 @@ class _SelectedLayerBlock extends StatefulWidget {
   /// that switch nothing — and the template buttons stay.
   final bool canSound;
 
-  /// What the layer can be lowered behind: the comp's other layers that make
-  /// a sound, and its buses.
   final List<BridgeLayerEntry> sources;
   final VoidCallback onChanged;
 
@@ -1025,14 +1005,12 @@ class _SelectedLayerBlock extends StatefulWidget {
 }
 
 class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
-  /// How long a fade is made by a curve button, at an end that has none yet.
   static const double _newFadeSeconds = 0.5;
 
   /// The pot's live reading while it is being turned, or null at rest — the
   /// Mixer strip's own shape: the drag shows here and commits once on release.
   double? _dragPan;
 
-  /// Volume's well, held the same way while it is dragged.
   double? _dragVolume;
 
   @override
@@ -1163,11 +1141,8 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
                   ),
                 ),
                 const SizedBox(width: 6),
-                // The stopwatch first, so it stands under Volume's.
                 panKeys,
                 const SizedBox(width: 6),
-                // The board's own dial beside the value well — the Mixer
-                // strip's pot, turning the same way.
                 PanPot(
                   key: const ValueKey('audio-pan-pot'),
                   value: panValue,
@@ -1307,7 +1282,6 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
           ),
         ),
         const SizedBox(width: 6),
-        // One group, with the hairline round all three.
         Container(
           decoration: BoxDecoration(
             border: Border.all(color: t.hairline),
@@ -1375,11 +1349,6 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
     widget.onChanged();
   }
 
-  // --- The two graph templates -------------------------------------------
-
-  /// *Drive with audio…*: pick an unwired Number parameter of this layer's
-  /// stack, then stage Audio level → Remap → Smooth wired onto it — visible
-  /// boxes on the Graph panel, one commit, one undo step.
   void _pickDriveTarget(BuildContext context) {
     final layer = widget.entry.layer;
     final BridgeLayerGraph graph;
@@ -1410,7 +1379,6 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
     );
   }
 
-  /// *Lower behind…*: the popover, under [anchor].
   void _lowerBehind(BuildContext anchor) => showLowerBehind(
         anchor: anchor,
         entry: widget.entry,
@@ -1418,8 +1386,6 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
         onChanged: widget.onChanged,
       );
 
-  /// What the layer is lowered behind and by how much, or null without a
-  /// duck. Off the read model, as the rest of the block is.
   String? _duckLine(LumitUiState ui) {
     final duck = widget.entry.info.duck;
     if (duck == null) return null;

@@ -24,11 +24,6 @@
 /// block that can still be written on any row, whatever the magnet says.
 const double minBlockSpan = 1.0;
 
-/// A block of selected keyframes, measured.
-///
-/// [first] and [last] are the earliest and latest frames the selection reaches;
-/// [count] is how many keys it holds. The badge reads these two numbers, and
-/// so does the box: the box spans [first] to [last], and a handle sits at each.
 class KeyBlock {
   final double first;
   final double last;
@@ -68,10 +63,8 @@ class KeyStretch {
   /// underneath the drag.
   final Set<String> keys;
 
-  /// The end that stays put, in frames.
   final double anchor;
 
-  /// Where the dragged end started, and where it is now.
   final double from;
   final double to;
 
@@ -93,8 +86,6 @@ class KeyStretch {
   })  : shift = 0,
         fan = null;
 
-  /// A **move** of the whole selection [by] frames (6.24): no anchor, no
-  /// scale, every held key the same distance along.
   const KeyStretch.shift({required this.keys, required double by})
       : anchor = 0,
         from = 0,
@@ -102,7 +93,6 @@ class KeyStretch {
         shift = by,
         fan = null;
 
-  /// A stagger drag: every held key on a row moves by that row's share.
   const KeyStretch.fan({required this.keys, required Map<String, double> byRow})
       : anchor = 0,
         from = 0,
@@ -188,7 +178,6 @@ double clampStretch({
   required double from,
   required double to,
 }) {
-  // Which side the dragged end was on decides which side it stays on.
   if (from >= anchor) {
     return to < anchor + minBlockSpan ? anchor + minBlockSpan : to;
   }
@@ -215,7 +204,6 @@ List<double> reversedFrames(List<double> frames) {
   return [for (final f in frames) sum - f];
 }
 
-/// Which way a stagger fans a block out (the Ease popover's own control).
 enum StaggerOrder {
   /// The first row's keys stay put and each row below is pushed later.
   topDown,

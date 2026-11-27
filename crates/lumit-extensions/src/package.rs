@@ -16,7 +16,6 @@ use crate::{
     MANIFEST_FILE, MAX_BYTES, MAX_DEPTH, MAX_FILES, MAX_MANIFEST, SLOT,
 };
 
-/// A package's file extension.
 pub const PACKAGE_EXTENSION: &str = "lfx";
 
 /// The folder in an OFX bundle that holds this computer's binary, as the
@@ -58,7 +57,6 @@ pub(crate) fn plain(name: &str) -> Option<String> {
     (parts.len() <= MAX_DEPTH + 1 && parts.iter().all(part)).then(|| parts.join("/"))
 }
 
-/// A path inside an extension as a package names it.
 fn slashed(path: &Path) -> String {
     let parts: Vec<_> = path
         .components()
@@ -67,8 +65,6 @@ fn slashed(path: &Path) -> String {
     parts.join("/")
 }
 
-/// A package opened and judged: its files by name, as (index, size), and
-/// its manifest.
 struct Package {
     zip: ZipArchive<File>,
     files: BTreeMap<String, (usize, u64)>,
@@ -290,10 +286,6 @@ mod tests {
         zip.finish().unwrap();
     }
 
-    /// A package someone else made is untrusted: a file that would land
-    /// outside its folder or on another file, one Windows can't write, or
-    /// more files than any extension holds, is refused before anything is
-    /// written. Guards untrusted input.
     #[test]
     fn a_hostile_package_is_refused() {
         let root = std::env::temp_dir().join(format!("lumit-lfx-test-{}", std::process::id()));

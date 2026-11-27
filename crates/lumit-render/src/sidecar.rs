@@ -16,10 +16,8 @@
 
 use std::path::Path;
 
-/// The length of the header [`frame`] writes and [`unframe`] strips.
 const HEAD: usize = 9;
 
-/// Magic, version, then the body.
 pub(crate) fn frame(magic: &[u8; 7], version: u16, body: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(body.len() + HEAD);
     out.extend_from_slice(magic);
@@ -28,8 +26,6 @@ pub(crate) fn frame(magic: &[u8; 7], version: u16, body: &[u8]) -> Vec<u8> {
     out
 }
 
-/// The inverse: the body, or `None` for a file too short to hold a header, one
-/// whose magic is not ours, or one written by a newer build.
 pub(crate) fn unframe<'a>(bytes: &'a [u8], magic: &[u8; 7], max_version: u16) -> Option<&'a [u8]> {
     let (head, body) = bytes.split_at_checked(HEAD)?;
     if head.get(..7)? != magic {

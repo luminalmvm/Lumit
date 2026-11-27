@@ -24,7 +24,6 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
     let r = vec2<f32>(d.x * cos(a) - d.y * sin(a), d.x * sin(a) + d.y * cos(a));
     let cell = max(vec2<f32>(p.cell_width, p.cell_height), vec2<f32>(1.0));
     let q = r / cell;
-    // A square wave per axis, each edge smoothed over about one pixel.
     let aa = 1.0 / (cell * max(lumit.comp_scale, 1e-3));
     let w = clamp((abs(fract(q * 0.5) - 0.5) * 2.0 - 0.5) / max(aa, vec2<f32>(1e-4)) + 0.5, vec2<f32>(0.0), vec2<f32>(1.0));
     let k = w.x + w.y - 2.0 * w.x * w.y;

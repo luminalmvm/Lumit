@@ -1,5 +1,3 @@
-//! The scalers a decoder keeps from one frame to the next.
-
 use rsmpeg::avutil::AVFrame;
 use rsmpeg::ffi;
 use rsmpeg::swscale::SwsContext;
@@ -41,7 +39,6 @@ pub(super) struct Scalers {
 }
 
 impl Scalers {
-    /// A frame as RGBA at exactly this size, eight-bit or float as it arrived.
     pub(super) fn rgba(
         &mut self,
         frame: &AVFrame,
@@ -66,7 +63,6 @@ impl Scalers {
         let out = self.out.insert(out);
         sws.scale_frame(frame, 0, frame.height, out)?;
 
-        // Copy out of the AVFrame's padded rows into a tight RGBA buffer.
         let stride = usize::try_from(out.linesize[0]).unwrap_or(0);
         let width = u32::try_from(dst_w).unwrap_or(0);
         let height = u32::try_from(dst_h).unwrap_or(0);

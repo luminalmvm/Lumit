@@ -1,10 +1,6 @@
-//! Opening the graphics device, and in the browser build, showing a picture.
-
 #[cfg(target_arch = "wasm32")]
 use crate::GpuError;
 
-/// What every device is opened with: the card's own format features and
-/// float filtering where it has them, and its widest texture.
 pub(crate) fn descriptor(adapter: &wgpu::Adapter) -> wgpu::DeviceDescriptor<'static> {
     wgpu::DeviceDescriptor {
         required_features: adapter.features()
@@ -172,7 +168,6 @@ pub fn read_stand_ins() -> u64 {
 #[cfg(target_arch = "wasm32")]
 pub mod read;
 
-/// The browser's card, once [`prepare_web`] has it.
 #[cfg(target_arch = "wasm32")]
 struct WebDevice {
     instance: wgpu::Instance,
@@ -217,14 +212,12 @@ pub async fn prepare_web() -> Result<(), GpuError> {
     Ok(())
 }
 
-/// The adapter, device and queue [`prepare_web`] opened.
 #[cfg(target_arch = "wasm32")]
 pub(crate) fn web_device() -> Result<(wgpu::Adapter, wgpu::Device, wgpu::Queue), GpuError> {
     let web = WEB_DEVICE.get().ok_or(GpuError::NoAdapter)?;
     Ok((web.adapter.clone(), web.device.clone(), web.queue.clone()))
 }
 
-/// One Viewer view's canvas, sized to the last picture shown on it.
 #[cfg(target_arch = "wasm32")]
 struct Canvas {
     canvas: web_sys::OffscreenCanvas,

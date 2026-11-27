@@ -20,15 +20,11 @@ use crate::mix::live::RackBakes;
 use crate::mix::mixdown::audio_samples_through;
 use crate::mix::render::{aim, render};
 
-/// The stretch of the composition an export writes, and the rate it writes it at.
 pub(super) struct Span {
-    /// The composition's own rate.
     pub fps: f64,
-    /// The file's rate.
     pub out_fps: f64,
     pub first: usize,
     pub end: usize,
-    /// How many frames the file holds, at `out_fps`.
     pub total: usize,
 }
 
@@ -110,7 +106,6 @@ pub(super) fn sound(
     Some(cut(spec, span, &full))
 }
 
-/// Whether the file carries sound at all.
 pub(super) fn carries_sound(spec: &ExportSpec) -> bool {
     let caps = spec.format.caps();
     caps.audio && (spec.include_audio || !caps.video)
@@ -193,7 +188,6 @@ pub(super) struct Pack {
 }
 
 impl Pack {
-    /// For a file whose frames are `size`.
     pub(super) fn new(spec: &ExportSpec, comp: &Composition, size: (u32, u32)) -> Self {
         Self {
             crop: spec.crop,
@@ -216,7 +210,6 @@ impl Pack {
         }
     }
 
-    /// The composite at eight or sixteen bits a channel, as the file's bytes.
     pub(super) fn frame<C: Channel>(&self, px: Vec<C>) -> Vec<u8> {
         let px = self.crop.apply(px, self.comp.0, self.comp.1, 4);
         let px = if self.size == self.cropped {

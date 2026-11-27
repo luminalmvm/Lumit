@@ -1,7 +1,3 @@
-//! Transform (docs/08 §3.5): an anchor, a position, a scale, a skew, a rotation
-//! and an opacity applied inside the effect stack, rather than to the layer as a
-//! whole.
-
 use crate::fx::{
     cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
 };
@@ -32,7 +28,6 @@ pub struct Transform {
     #[slider(min = -1000.0, max = 1000.0, default = 0.0, unit = Px)]
     pub anchor_x: f32,
 
-    /// See [`anchor_x`](Self::anchor_x).
     #[slider(min = -1000.0, max = 1000.0, default = 0.0, unit = Px)]
     pub anchor_y: f32,
 
@@ -41,7 +36,6 @@ pub struct Transform {
     #[slider(min = -1000.0, max = 1000.0, default = 0.0, unit = Px)]
     pub position_x: f32,
 
-    /// See [`position_x`](Self::position_x).
     #[slider(min = -1000.0, max = 1000.0, default = 0.0, unit = Px)]
     pub position_y: f32,
 
@@ -50,7 +44,6 @@ pub struct Transform {
     #[slider(label = "Scale x %", min = 0.0, max = 400.0, default = 100.0, unit = Percent)]
     pub scale_x: f32,
 
-    /// See [`scale_x`](Self::scale_x).
     #[slider(label = "Scale y %", min = 0.0, max = 400.0, default = 100.0, unit = Percent)]
     pub scale_y: f32,
 
@@ -81,7 +74,6 @@ pub struct Transform {
     #[dial(default = 0.0, step = 15.0)]
     pub rotation: f32,
 
-    /// Per cent.
     #[slider(
         label = "Opacity %",
         min = 0.0,
@@ -93,7 +85,6 @@ pub struct Transform {
     )]
     pub opacity: f32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -129,7 +120,6 @@ impl Transform {
     }
 }
 
-/// Transform's behaviour.
 pub struct TransformDef;
 
 impl EffectDef for TransformDef {

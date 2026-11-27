@@ -23,7 +23,6 @@ import '../state/dropper.dart';
 import '../theme/theme.dart';
 import 'controls.dart';
 
-/// One magnified pixel's side, and the padding round the grid.
 const double _cell = 13;
 const double _pad = 6;
 const double _barHeight = 20;
@@ -51,8 +50,6 @@ const Size dropperViewfinderSize = Size(
 /// which number a part goes by. A fixed width, so it doesn't jump between names.
 const Size dropperPartTagSize = Size(200, 30);
 
-/// How far below and right of the pointer the viewfinder sits, like the egui
-/// build, so the hand does not cover what is being read.
 const Offset dropperViewfinderOffset = Offset(18, 18);
 
 /// Where the viewfinder goes for a pointer at [cursor], within [bounds].
@@ -82,10 +79,8 @@ const Offset dropperViewfinderOffset = Offset(18, 18);
 Offset dropperViewfinderOrigin(Offset cursor, Rect bounds,
     {Size size = dropperViewfinderSize}) {
   double place(double at, double offset, double size, double low, double high) {
-    // Below / to the right of the pointer, which is where it belongs.
     final after = at + offset;
     if (after + size <= high) return after;
-    // It would run off the end: the same distance the other side instead.
     final before = at - offset - size;
     if (before >= low) return before;
     // Neither side fits — a window barely bigger than the viewfinder itself.
@@ -101,9 +96,7 @@ Offset dropperViewfinderOrigin(Offset cursor, Rect bounds,
   );
 }
 
-/// The viewfinder itself: the grid, the region border, and the info strip.
 class DropperViewfinder extends StatelessWidget {
-  /// What is armed — which decides what the strip below the grid says.
   final DropperArm arm;
 
   /// The window last read back, or null while the first read is in flight. The
@@ -114,7 +107,6 @@ class DropperViewfinder extends StatelessWidget {
   /// The pixel under the pointer, in the picture's own grid.
   final (int, int) centre;
 
-  /// How many pixels a side are being averaged.
   final int region;
 
   const DropperViewfinder({
@@ -145,8 +137,6 @@ class DropperViewfinder extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // The pixels sit behind the panel's own rounded edge rather than
-          // spilling over it, so the corner reads as one shape.
           ClipRRect(
             borderRadius: BorderRadius.circular(
               (t.tokens.cardRadius - _pad).clamp(0.0, _cell),
@@ -191,8 +181,6 @@ class DropperViewfinder extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: t.surface2,
-        // The capsule this used to spell out by hand under Round is what the
-        // control radius now *is* there, so one read covers both.
         borderRadius: BorderRadius.circular(t.tokens.controlRadius),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -279,7 +267,6 @@ class _PartTag extends StatefulWidget {
 }
 
 class _PartTagState extends State<_PartTag> {
-  /// Whether a window has been read yet, and the name it gave.
   bool _read = false;
   String? _name;
 
@@ -312,13 +299,9 @@ class _PartTagState extends State<_PartTag> {
   }
 }
 
-/// The nine-by-nine block, its dashed rules, and the border round the region
-/// that will be averaged.
 class _GridPainter extends CustomPainter {
   final BridgeSampledPixels? window;
 
-  /// The pixel under the pointer: the grid's centre cell, and what the window
-  /// is indexed around.
   final (int, int) centre;
   final int region;
   final Color hairline;
@@ -351,8 +334,6 @@ class _GridPainter extends CustomPainter {
       }
     }
 
-    // Dashed rules between every pair of pixels, so the grid reads as pixels
-    // rather than as a blurry picture.
     final dash = Paint()
       ..color = hairline
       ..strokeWidth = 1;
@@ -361,9 +342,6 @@ class _GridPainter extends CustomPainter {
       _dashed(canvas, Offset(0, k * cell), Offset(size.width, k * cell), dash);
     }
 
-    // The region that will be averaged: solid, so it is unmistakably not one of
-    // the dashed rules. Its corners are barely rounded and the same under both
-    // shapes — see [_regionRadius].
     final n = region.clamp(1, dropperGrid);
     final from = (dropperGrid - n) / 2 * cell;
     final box = Rect.fromLTWH(from, from, n * cell, n * cell).deflate(0.8);

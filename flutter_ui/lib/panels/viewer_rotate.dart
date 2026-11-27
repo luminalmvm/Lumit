@@ -58,8 +58,8 @@ import 'viewer_tool_cursor.dart';
 /// *pivot*, where both axes are turning at once, so the arc closes up. After
 /// Effects draws the same distinction, and it is what tells you where you are on
 /// the layer without looking away from the picture.
-const double rotateCursorEdgeSweep = 1.1; // ~63°
-const double rotateCursorCornerSweep = 2.1; // ~120°
+const double rotateCursorEdgeSweep = 1.1;
+const double rotateCursorCornerSweep = 2.1;
 
 /// How many positions the pointer takes: the four edges and the four corners,
 /// and nothing between.
@@ -110,12 +110,9 @@ const double rotateCursorRadius = 9;
   final b = (p.dy / h - 0.5) * 2;
   if (a.abs() < 1e-9 && b.abs() < 1e-9) return up;
 
-  // The nearest of the eight, as a number of eighths of a turn.
   final step =
       (math.atan2(b, a) / (2 * math.pi / rotateCursorPositions)).round();
   final settled = step * 2 * math.pi / rotateCursorPositions;
-  // An odd eighth is a diagonal, which is a corner; an even one is square out
-  // from an edge.
   final sweep = step.isOdd ? rotateCursorCornerSweep : rotateCursorEdgeSweep;
 
   // Back out to a screen direction through the box's own map, so the settled
@@ -130,7 +127,6 @@ const double rotateCursorRadius = 9;
   return (angle: math.atan2(radial.dy, radial.dx), sweep: sweep);
 }
 
-/// The Rotation tool over the picture.
 class ViewerRotateLayer extends StatefulWidget {
   /// Whether the tool is armed. Inert otherwise — no pointer taken, no cursor
   /// hidden.
@@ -143,8 +139,6 @@ class ViewerRotateLayer extends StatefulWidget {
   /// the anchors the turn happens about.
   final List<LayerBox> boxes;
 
-  /// The pointer's own colours: the mark and the outline that keeps it legible
-  /// over any picture.
   final Color mark;
   final Color outline;
 
@@ -195,10 +189,8 @@ class _ViewerRotateLayerState extends State<ViewerRotateLayer> {
   /// values to so they never jump part way through.
   final Map<UuidValue, _Turn> _last3d = {};
 
-  /// The ring under the pointer, drawn stronger.
   int? _hotRing;
 
-  /// The pointer is on rings an expression drives.
   bool _drivenRing = false;
 
   final PreviewThrottle _throttle = PreviewThrottle();
@@ -213,7 +205,6 @@ class _ViewerRotateLayerState extends State<ViewerRotateLayer> {
     super.dispose();
   }
 
-  /// The selected layers' boxes, in stacking order.
   List<LayerBox> get _selected {
     final ids = widget.uiState.selectedLayerIds;
     return [for (final box in widget.boxes) if (ids.contains(box.id)) box];
@@ -228,7 +219,6 @@ class _ViewerRotateLayerState extends State<ViewerRotateLayer> {
     return layerAtPoint(widget.boxes, at);
   }
 
-  /// Whether an expression drives [box]'s turn, so its rings can't be held.
   bool _turnDriven(LayerBox box) {
     final tf = box.transform;
     final depth = tf?.depth;
@@ -266,12 +256,10 @@ class _ViewerRotateLayerState extends State<ViewerRotateLayer> {
         mode: widget.uiState.tools.axes);
   }
 
-  /// The selected 3D layer picked first, which the rings on screen are on.
   LayerBox? get _primary => primary3d(
       _selected, widget.uiState.selectedLayer.value?.internallayerId);
 
   Gizmo3d? get _shownRings {
-    // A picked part's rings stand in for its layer's.
     if (widget.uiState.pickedPart.value != null) return null;
     final first = _primary;
     return first == null ? null : _ringsOf(first);
@@ -367,8 +355,6 @@ class _ViewerRotateLayerState extends State<ViewerRotateLayer> {
     // A layer whose parent turns too turns with it, and only once.
     final riders = ridingAlong(
         widget.uiState.selectedLayerIds, widget.uiState.model.heldLayers);
-    // A 3D layer first in the selection turns in 3D: about the ring the
-    // press is on, or freely off them, as After Effects does.
     final rings = _shownDriven ? null : _shownRings;
     if (rings != null) {
       final first = primary3d(
@@ -489,8 +475,6 @@ class _ViewerRotateLayerState extends State<ViewerRotateLayer> {
     return out;
   }
 
-  // --- In 3D ----------------------------------------------------------------
-
   /// X, Y and Z Rotation and Orientation for each selected 3D layer, for the
   /// drag as it stands. The layer is turned about an axis in space and the
   /// Orientation, or the rotations, follow; set to Rotation, a Local ring
@@ -575,8 +559,6 @@ class _ViewerRotateLayerState extends State<ViewerRotateLayer> {
     return out;
   }
 
-  /// The boxes turn with the drag, rebuilt from the provisional transform,
-  /// and one layer's picture is previewed.
   void _preview3d() {
     final turned = _turns3d();
     _last3d.addAll(turned);
@@ -662,7 +644,6 @@ class _ViewerRotateLayerState extends State<ViewerRotateLayer> {
     if (landed) widget.onChanged();
   }
 
-  /// What the turn has changed on the first layer, for the readout.
   List<String> _readout() {
     if (_start3d.isEmpty) return const [];
     final MapEntry(key: id, value: (_, start, was)) = _start3d.entries.first;
@@ -717,8 +698,6 @@ class _RotateCursorPainter extends CustomPainter {
   final Color mark;
   final Color outline;
 
-  /// A 3D layer's rings, the one under the pointer and the one in hand, and
-  /// what a turn of it has changed so far.
   final Gizmo3d? rings;
   final Color? ringTint;
   final int? hotRing;
@@ -774,14 +753,11 @@ class _RotateCursorPainter extends CustomPainter {
     final rect = Rect.fromCircle(center: Offset.zero, radius: rotateCursorRadius);
     canvas.drawArc(rect, -sweep / 2, sweep, false, paint);
 
-    // An arrowhead at each end, tangent to the arc, so the mark says the turn
-    // goes either way — which it does.
     for (final end in [-sweep / 2, sweep / 2]) {
       final point = Offset(
         math.cos(end) * rotateCursorRadius,
         math.sin(end) * rotateCursorRadius,
       );
-      // The tangent at this end, pointing away from the arc's middle.
       final direction = end < 0 ? -1.0 : 1.0;
       final tangent =
           Offset(-math.sin(end), math.cos(end)) * direction;

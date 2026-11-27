@@ -1,7 +1,3 @@
-//! The pictures an effect that shows its own input at other moments reads
-//! (`lumit_core::fx::moments`): the layer built again at each moment, as the
-//! effects above it leave it, or on an adjustment layer the composite below.
-
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -12,8 +8,6 @@ use super::{below_draws_cloned, comp_walk, Probe, Walk};
 use crate::decode::CompLayerPixels;
 use crate::draw::{DofInputDraw, LayerInputDraw, NestedInputDraw};
 
-/// The composite below layer `idx` of `comp` at comp time `t` (with `frame_t`
-/// the frame's own), as a comp-sized picture.
 pub(super) fn below_picture(
     doc: &Arc<Document>,
     comp: &Composition,
@@ -39,7 +33,6 @@ pub(super) fn below_picture(
     picture_of(comp, draws, camera, t)
 }
 
-/// `draws` as a comp-sized picture.
 pub(super) fn picture_of(
     comp: &Composition,
     draws: Vec<crate::draw::CompLayerDraw>,
@@ -120,7 +113,6 @@ pub(super) fn picture_at(
     }
 }
 
-/// A layer's own pixels as an input slot, with nothing done to them.
 pub(super) fn plain_input(
     doc: &Document,
     layer: &lumit_core::model::Layer,

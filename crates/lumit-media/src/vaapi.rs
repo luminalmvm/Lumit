@@ -7,7 +7,6 @@ use rsmpeg::avcodec::AVCodecContext;
 use rsmpeg::avutil::{AVDictionary, AVFrame, AVHWDeviceContext};
 use rsmpeg::ffi;
 
-/// Give a VAAPI encoder a pool of NV12 frames on the system's first card.
 pub(crate) fn attach(ctx: &mut AVCodecContext, width: i32, height: i32) -> Result<(), MediaError> {
     libva_loads()?;
     // Only the render node, so FFmpeg never falls back to libva's X11 half.
@@ -32,8 +31,6 @@ pub(crate) fn attach(ctx: &mut AVCodecContext, width: i32, height: i32) -> Resul
     Ok(())
 }
 
-/// The frame as the encoder wants it: copied onto the card for VAAPI, handed
-/// straight back for everything else.
 pub(crate) fn to_device(ctx: &mut AVCodecContext, frame: AVFrame) -> Result<AVFrame, MediaError> {
     let Some(mut frames) = ctx.hw_frames_ctx_mut() else {
         return Ok(frame);
@@ -52,7 +49,6 @@ pub(crate) fn libva_loads() -> Result<(), MediaError> {
         .map_err(|e| MediaError::Ffmpeg(format!("no VAAPI: {e}")))
 }
 
-/// Whether each of these libraries is installed.
 #[cfg(target_os = "linux")]
 pub(crate) fn loads(names: &[&str]) -> Result<(), String> {
     for name in names {

@@ -24,7 +24,6 @@ use crate::index::{FrameIndex, IndexEntry};
 use crate::probe::MediaProbe;
 use crate::{no_ffmpeg, Fingerprint, MediaError};
 
-/// What the page found when it opened a file.
 pub struct Opened {
     pub probe: MediaProbe,
     pub size: u64,
@@ -39,7 +38,6 @@ pub struct Opened {
     pub frames: Vec<(i64, bool)>,
 }
 
-/// One file the page holds.
 struct Held {
     probe: MediaProbe,
     fingerprint: Fingerprint,
@@ -52,8 +50,6 @@ thread_local! {
     static HELD: RefCell<HashMap<PathBuf, Held>> = RefCell::new(HashMap::new());
 }
 
-/// File what the page found in `path`, so every question about it is
-/// answered from here.
 pub fn register(path: PathBuf, opened: Opened) {
     let fingerprint = Fingerprint {
         size: opened.size,
@@ -69,9 +65,6 @@ pub fn register(path: PathBuf, opened: Opened) {
     entries.dedup_by_key(|e| e.pts);
     let mut deltas: Vec<i64> = entries.windows(2).map(|w| w[1].pts - w[0].pts).collect();
     deltas.sort_unstable();
-    // ponytail: an uneven recording is read frame by frame and not conformed
-    // to its average rate as the desktop does, so it can drift against its
-    // sound. Share the desktop's conform step if phone footage shows it.
     let index = FrameIndex {
         timebase_num: 1,
         timebase_den: i32::try_from(opened.ticks.max(1)).unwrap_or(i32::MAX),
@@ -116,7 +109,6 @@ pub(crate) fn fingerprint(path: &Path) -> Option<Fingerprint> {
     with(path, |held| held.fingerprint.clone())
 }
 
-/// The frame index, for a file with a picture.
 pub(crate) fn index(path: &Path) -> Option<FrameIndex> {
     with(path, |held| {
         held.probe.video.is_some().then(|| held.index.clone())
@@ -255,10 +247,8 @@ pub(crate) fn reads_still(path: &Path) -> bool {
         .any(|known| extension.eq_ignore_ascii_case(known))
 }
 
-/// The longest still file the page reads.
 const STILL_MAX: u64 = 1 << 30;
 
-/// The picture of a still that [`reads_still`], at its own size.
 pub(crate) fn read_still(path: &Path) -> Result<DecodedFrame, MediaError> {
     if crate::exr::is_exr(path) {
         return crate::exr::read_pass(path, None);

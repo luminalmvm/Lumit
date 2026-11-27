@@ -1,12 +1,7 @@
-//! Where Particulate's particles are born: the emitter's shapes and the
-//! point in one a particle starts from.
-
 use crate::mask::MaskPolyline;
 
-/// Where a particle is born.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EmitterShape {
-    /// Every particle from one point.
     Point,
     /// Uniformly along a segment of `width`, centred on the position.
     Line,
@@ -72,9 +67,6 @@ impl EmitterShape {
         }
     }
 
-    /// Whether this shape emits along an **outline** the host flattens for it:
-    /// the two shapes that walk a polyline of their own rather than filling an
-    /// interior.
     #[must_use]
     pub const fn is_outline(self) -> bool {
         matches!(
@@ -146,7 +138,6 @@ pub fn outline_polyline(e: &Emitter) -> MaskPolyline {
     }
 }
 
-/// How particles are born: where, how often, and which way they leave.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Emitter {
     pub shape: EmitterShape,
@@ -154,7 +145,6 @@ pub struct Emitter {
     /// Three coordinates: `z` is towards the camera, positive away
     /// from it, and zero is the layer's own plane.
     pub position: [f32; 3],
-    /// The extents Line, Ellipse and Rectangle are drawn to.
     pub width: f32,
     pub height: f32,
     /// The extent **through** the layer's plane: Point becomes a
@@ -172,7 +162,6 @@ pub struct Emitter {
     /// plane itself, which is what every project saved before the axis existed
     /// reads as.
     pub direction_z_deg: f32,
-    /// The cone about `direction_deg`, degrees.
     pub spread_deg: f32,
     /// The cone about `direction_z_deg`, degrees — the elevation's own spread,
     /// separate so that a full 360° in-plane spread stays a disc of directions

@@ -1,10 +1,3 @@
-// The top line as the shell mounts it, under each shape and both toolbar
-// positions.
-//
-// Under Left the strip above the dock is not mounted at all: the rail adds
-// its column, and the menu bar's line takes the tool options and the
-// workspace strip, so nothing still takes the strip's row. Under Top the
-// shell is what it was, the strip under a 26 line for Studio.
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -21,8 +14,6 @@ void main() {
   setUpAll(initEngineForTests);
 
   group('The top line (frb)', () {
-    /// The whole shell view, at a real window size, dressed in [shape] with
-    /// the density that shape draws at.
     Future<({LumitState state, LumitUiState uiState})> mount(
       WidgetTester tester, {
       required ThemeShape shape,
@@ -69,8 +60,6 @@ void main() {
               reason: 'the Selection tool has no options, so there is no'
                   ' pill on the line');
         }
-        // A tool with options puts them on the line, keyed as they always
-        // were on the strip.
         p.uiState.tools.select(ToolMode.brush);
         await tester.pumpAndSettle();
         expect(inTopLine('tool-brush-shape'), findsOneWidget,

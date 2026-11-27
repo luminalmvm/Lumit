@@ -1,5 +1,3 @@
-//! Vignette (docs/08 §3.14): darkening toward black away from the frame centre.
-
 use crate::fx::{
     cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
 };
@@ -53,7 +51,6 @@ pub struct Vignette {
     #[slider(min = 0.2, max = 4.0, default = 1.0, hard_min = 0.05, unit = Raw)]
     pub ramp: f32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -84,7 +81,6 @@ impl Vignette {
     }
 }
 
-/// Vignette's behaviour.
 pub struct VignetteDef;
 
 impl EffectDef for VignetteDef {

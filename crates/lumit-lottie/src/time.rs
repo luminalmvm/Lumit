@@ -14,21 +14,17 @@ use lumit_core::time::FrameRate;
 
 use crate::settings::{Settings, Span};
 
-/// The output's clock: its rate, and the comp span written.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Timebase {
-    /// Output frames per second.
     pub fps: f64,
     /// The rate as a fraction, for anything that has to name it exactly.
     pub rate: FrameRate,
-    /// The first comp second written.
     pub start: f64,
     /// The comp second the file stops before.
     pub end: f64,
 }
 
 impl Timebase {
-    /// The clock `settings` ask of `comp`.
     #[must_use]
     pub fn of(comp: &Composition, settings: &Settings) -> Self {
         let rate = settings.frame_rate.unwrap_or(comp.frame_rate);
@@ -51,13 +47,11 @@ impl Timebase {
         }
     }
 
-    /// Seconds as output frames.
     #[must_use]
     pub fn frame(&self, seconds: f64) -> f64 {
         seconds * self.fps
     }
 
-    /// Output frames as seconds.
     #[must_use]
     pub fn seconds(&self, frame: f64) -> f64 {
         if self.fps > 0.0 {
@@ -117,5 +111,4 @@ impl Timebase {
     }
 }
 
-/// The most samples one baked property takes: about an hour at 60 fps.
 pub const MAX_SAMPLES: usize = 216_000;

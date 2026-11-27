@@ -1,5 +1,3 @@
-// What the Captions panel's bar opens: the style grid, the limits, the
-// subtitle files and the rest of what a caption layer can be asked.
 
 import 'dart:async';
 
@@ -23,8 +21,6 @@ import 'caption_styles.dart';
 import 'layer_fold_frb.dart' show asOneUndoStep;
 import 'timeline_extras_frb.dart' show showMenuAt;
 
-/// The window point just under the control [context] belongs to, where a
-/// popover hangs from it.
 Offset popupBelow(BuildContext context) {
   final box = context.findRenderObject() as RenderBox?;
   if (box == null || !box.hasSize) return Offset.zero;
@@ -49,9 +45,6 @@ void setCaptionLimits(LumitState app, LayerReference layer,
   }, name: 'Edit captions');
 }
 
-/// The style grid: every look as a tile, the one the layer wears outlined.
-/// A pick restyles the layer at once and the grid stays up, so looks can be
-/// tried one after another.
 Future<void> showCaptionStylePopover(
   BuildContext context, {
   required LumitState app,
@@ -417,8 +410,6 @@ List<MenuEntry> captionExportRows(
   ];
 }
 
-/// The bar's "…": import, the captions' language, how speakers show, and
-/// cutting the captions again.
 List<MenuEntry> captionMoreRows(BuildContext context, LumitState app,
     LayerReference layer, BridgeCaptions captions, VoidCallback onEdited) {
   void edit(void Function() run) {

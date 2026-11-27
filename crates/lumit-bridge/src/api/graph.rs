@@ -506,9 +506,6 @@ pub(crate) fn read_layer_graph(layer: &Layer) -> BridgeLayerGraph {
             // disconnection with no flag of its own to lower to, so the graph
             // carries it.
             BridgePort::of(graph::IMAGE_PORT, !g.out_unwired),
-            // Drawn, unfilled, honest: audio comes only from a footage layer's
-            // own stream, so nothing may be wired here in this phase.
-            BridgePort::of(graph::AUDIO_PORT, false),
             // The layer's Volume — the one property socket a wire may land on
             // (the Audio panel's *Duck under* writes it). Driven, it overrides
             // the Volume keyframes in the mix exactly as a wired parameter

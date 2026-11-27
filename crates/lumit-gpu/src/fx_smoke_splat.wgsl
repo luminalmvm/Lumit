@@ -5,7 +5,6 @@
 struct Splat {
     // A particle's pixels to cells, by rows.
     to_cells: array<vec4<f32>, 3>,
-    // The grid's cells each way.
     cells: vec4<u32>,
 };
 

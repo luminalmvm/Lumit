@@ -66,7 +66,6 @@ use web_time::{Duration, Instant};
 /// Raised whenever a frame, or what is sealed in one, changes shape.
 const PROTOCOL: u32 = 1;
 
-/// What the first line said to the door starts with.
 const CALL: &str = "LUMIT-ONLINE";
 
 // What is asked of the door, and what it answers. Anything it says that is
@@ -121,12 +120,8 @@ const BATCH_PLAIN: usize = BATCH_LIMIT - NONCE - TAG;
 /// 100 MiB.
 const SNAPSHOT_LIMIT: usize = 95_000_000;
 
-/// The most one frame of a snapshot carries, and what a file is sealed in
-/// pieces of.
 const PIECE: usize = 1 << 20;
 
-/// The most anything else comes to: presence, a note, the list of people.
-/// One message of the server's socket.
 const MESSAGE_LIMIT: usize = 512 << 10;
 
 /// How long the door has to answer, and how long a write to it may hang.
@@ -134,21 +129,8 @@ const MESSAGE_LIMIT: usize = 512 << 10;
 /// a server that never answered is heard.
 const ANSWER: Duration = Duration::from_secs(45);
 
-/// How long an append too big for the socket may go unanswered before the
-/// line is taken for dead. The door stores it by another way first, which is
-/// as slow as the person's line. Any other append has [`ANSWER`].
-// ponytail: one length whatever the size. A batch too big to cross the
-// person's line in this time is sent again and again. By its size, if that
-// is ever seen.
 const PATIENCE: Duration = Duration::from_secs(120);
 
-/// How often a writer looks for something to send, and how long a machine
-/// rests after an append of its own went in. The rest is what lets someone
-/// else's in: a machine told its append was stale sends again at once, and
-/// one that never stops editing would otherwise always be first.
-// ponytail: a fixed rest. A machine whose line is slower than another's by
-// more than this can still be shut out for as long as the other edits
-// without a break. A rest that grows with each append in a row, if seen.
 const BEAT: Duration = Duration::from_millis(50);
 
 /// How long what someone is changing is held for them after they last said
@@ -161,8 +143,6 @@ const SAID_AGAIN: Duration = Duration::from_secs(1);
 /// depends on is queued: an edit waits in the store, not here.
 const OUTBOX: usize = 64;
 
-/// How far past the stored snapshot the head runs before a machine stores a
-/// new one: in edits, and in sealed bytes.
 const COMPACT_EDITS: u64 = 2000;
 const COMPACT_BYTES: u64 = 8 << 20;
 
@@ -182,15 +162,10 @@ const LINE_GONE: Duration = Duration::from_secs(60);
 /// head they already have.
 const TURN_REST: Duration = Duration::from_millis(250);
 
-/// How long a machine that can only look has to go without an edit being
-/// taken back before the next one is said again.
 const TRYING: Duration = Duration::from_secs(2);
 
-/// How many times moving a project forward starts again because an edit
-/// went in under it.
 const FORWARD_TRIES: usize = 4;
 
-/// What a sealed file starts with.
 const SEALED: &[u8] = b"LUMIT-SEALED 1\n";
 
 type Key = [u8; 32];
@@ -206,8 +181,6 @@ fn too_large(size: usize, limit: usize) -> ShareError {
     ShareError::TooLarge { size, limit }
 }
 
-/// What is said of something sealed that does not open: cut short, changed,
-/// or sealed with another key.
 fn spoiled() -> ShareError {
     std::io::Error::from(ErrorKind::InvalidData).into()
 }
@@ -231,7 +204,6 @@ fn seal(key: &Key, data: &[u8], plain: &[u8]) -> Result<Vec<u8>, ShareError> {
     Ok([&nonce[..], &sealed[..]].concat())
 }
 
-/// What [`seal`] sealed, or `None` for anything else.
 fn open(key: &Key, data: &[u8], sealed: &[u8]) -> Option<Vec<u8>> {
     let (nonce, sealed) = sealed.split_at_checked(NONCE)?;
     let piece = Payload {
@@ -241,7 +213,6 @@ fn open(key: &Key, data: &[u8], sealed: &[u8]) -> Option<Vec<u8>> {
     cipher(key).decrypt(Nonce::from_slice(nonce), piece).ok()
 }
 
-/// What a batch is sealed with besides its key: where it goes in the order.
 fn batch_data(base: u64, count: u32) -> Vec<u8> {
     [&b"batch"[..], &base.to_le_bytes(), &count.to_le_bytes()].concat()
 }
@@ -267,9 +238,7 @@ fn snapshot_data(seq: u64) -> Vec<u8> {
 /// only look turned on. While it is off the server keeps nothing `read`
 /// opens.
 struct Keys {
-    /// What everything that reads the project is worked out from.
     read: Key,
-    /// Names the project.
     id: String,
     /// Shown to the server on every call, which is how it knows a member
     /// and whether that member may store anything.
@@ -292,9 +261,6 @@ struct Keys {
     told: Option<Key>,
 }
 
-/// `link` is the invite's own secret and `channel` the key its channel is
-/// opened with. `look` is whether it is an invite that can only look, whose
-/// one key is `read` itself.
 fn keys(channel: &Key, link: &Key, look: bool) -> Keys {
     let derive = |what: &str, from: &Key| {
         let context = format!("lumit-share 2026 online {what}");
@@ -488,12 +454,10 @@ fn frame(kind: u8, parts: &[&[u8]]) -> Vec<u8> {
     bytes
 }
 
-/// Take a number off the front of `bytes`, as its bytes.
 fn number<const N: usize>(bytes: &mut &[u8]) -> Option<[u8; N]> {
     take(bytes, N)?.try_into().ok()
 }
 
-/// What the door said went wrong, as the error to hand on.
 fn failed(bytes: &[u8]) -> ShareError {
     #[derive(Deserialize)]
     struct Said {
@@ -511,7 +475,6 @@ fn failed(bytes: &[u8]) -> ShareError {
     }
 }
 
-/// A connection to the door.
 struct Door {
     reader: BufReader<TcpStream>,
     socket: TcpStream,
@@ -548,7 +511,6 @@ impl Door {
         Ok((kind, bytes))
     }
 
-    /// Ask the door for something and wait for `answer`.
     fn ask(&mut self, kind: u8, parts: &[&[u8]], answer: u8) -> Result<Vec<u8>, ShareError> {
         self.send(kind, parts)?;
         match self.recv()? {
@@ -559,7 +521,6 @@ impl Door {
     }
 }
 
-/// What a member connects with.
 struct Seat {
     /// The invite as it is handed out. Replaced when the host makes a new
     /// one, and when the person is given one for a project that has moved.
@@ -577,7 +538,6 @@ struct Seat {
     /// and opened again under a new one and has not been seated since. Only
     /// what became of the copy is asked by it.
     was: Option<u64>,
-    /// The folder this machine keeps the project's footage under.
     root: Option<PathBuf>,
     names: Names,
     /// The Lumit this machine runs. Always this one: it is here, and not
@@ -606,8 +566,6 @@ impl Seat {
         }
     }
 
-    /// The key everything about the project at the server is worked out
-    /// from.
     fn channel(&self) -> Key {
         let invite = self.invite.lock();
         match self.lock {
@@ -616,12 +574,10 @@ impl Seat {
         }
     }
 
-    /// Whether this machine holds the invite that can only look.
     fn look(&self) -> bool {
         self.invite.lock().look
     }
 
-    /// What this seat's invite comes to at the server.
     fn keys(&self) -> Keys {
         let (link, look) = {
             let invite = self.invite.lock();
@@ -637,7 +593,6 @@ fn dial(seat: &Seat) -> Result<Door, ShareError> {
     dial_as(seat, seat.token)
 }
 
-/// [`dial`], as the machine the server knows by `token`.
 fn dial_as(seat: &Seat, token: u64) -> Result<Door, ShareError> {
     let port = match ONLINE_DOOR.load(Ordering::Relaxed) {
         0 => return Err(ShareError::Unreachable),
@@ -657,7 +612,6 @@ fn dial_as(seat: &Seat, token: u64) -> Result<Door, ShareError> {
     Ok(Door { reader, socket })
 }
 
-/// What the server says of a project before anything of it is fetched.
 #[derive(Deserialize)]
 struct Meta {
     protocol: u32,
@@ -668,10 +622,8 @@ struct Meta {
     host: bool,
     /// Missing is yes.
     writable: Option<bool>,
-    /// Whether the invite that can only look is on.
     #[serde(default)]
     looks: bool,
-    /// The last sequence the server has.
     #[serde(default)]
     head: Option<u64>,
     /// The sequence its snapshot was taken at.
@@ -679,7 +631,6 @@ struct Meta {
     snapshot: Option<u64>,
 }
 
-/// A door that has said the project is there.
 struct Met {
     door: Door,
     seal: Key,
@@ -838,7 +789,6 @@ fn put_snapshot(
     door.ask(END, &[], OK).map(drop)
 }
 
-/// The server's first words on a live connection.
 struct Hello {
     me: u32,
     colour: u8,
@@ -847,7 +797,6 @@ struct Hello {
     writable: bool,
 }
 
-/// Go live from `after`, the last sequence this machine has.
 fn live(door: &mut Door, after: u64) -> Result<Hello, ShareError> {
     door.send(LIVE, &[&after.to_le_bytes()])?;
     let (kind, bytes) = door.recv()?;
@@ -869,7 +818,6 @@ fn live(door: &mut Door, after: u64) -> Result<Hello, ShareError> {
     }
 }
 
-/// One entry of the order, opened.
 struct Entry {
     /// The sequence it ends at.
     last: u64,
@@ -878,7 +826,6 @@ struct Entry {
     /// The edits in it. None when the machine has had it already.
     ops: Vec<Op>,
     by: By,
-    /// The notes it carries.
     notes: Vec<Note>,
 }
 
@@ -933,7 +880,6 @@ fn entry(seal: &Key, seat: &Seat, mut bytes: &[u8], head: u64) -> Result<Entry, 
     })
 }
 
-/// A connection that is live and has caught up with the server.
 struct Connected {
     door: Door,
     seal: Key,
@@ -944,7 +890,6 @@ struct Connected {
     /// bytes of entries follow it.
     snapshot: u64,
     bytes: u64,
-    /// Who is here, as the server last said, if it has.
     people: Option<Vec<u8>>,
     /// Who changed what, as the snapshot and the entries after it make it,
     /// and the notes people have left.
@@ -956,7 +901,6 @@ struct Connected {
 /// there, and the lists as they stood. The stored snapshot is one, and so is
 /// what a machine that was in the project still holds when it comes back.
 struct Had {
-    /// The sequence it stands at.
     head: u64,
     document: Document,
     activity: Vec<Sitting>,
@@ -1047,7 +991,6 @@ fn fetch(
                     (PEOPLE, seats) => people = Some(seats),
                     (LOOKS, on) => looks = on == [1],
                     (PRESENT | NOTED, _) => {}
-                    // The door, saying the server's socket has gone.
                     (LOST, _) => return Err(ShareError::Unreachable),
                     _ => return Err(ShareError::OutOfTurn),
                 }
@@ -1164,11 +1107,6 @@ fn fetch_snapshot(
 /// machine may: anyone else gets [`ShareError::Versions`], or `forbidden`
 /// from the server.
 fn carry_forward(seat: &Seat, stop: &AtomicBool) -> Result<(), ShareError> {
-    // ponytail: an edit that goes in while the head is being built makes
-    // the server call the snapshot stale, and it is all done again. A few
-    // times and no more, so people still at work on the older Lumit can
-    // hold a move off. A way to stop the server taking edits meanwhile,
-    // when that happens to anyone.
     for _ in 0..FORWARD_TRIES {
         let met = find(seat)?;
         match &met.apart {
@@ -1226,7 +1164,6 @@ pub fn join(
     join_as(Seat::new(invite, None, name, token(), root))
 }
 
-/// [`join`], from the seat this machine takes.
 fn join_as(seat: Seat) -> Result<(Document, Joining), ShareError> {
     let met = meet(&seat)?;
     let project = project_of(&met.seal);
@@ -1258,7 +1195,6 @@ impl Joining {
     }
 }
 
-/// A member's own copy, opened again.
 pub struct Resuming {
     seat: Seat,
     project: Uuid,
@@ -1372,7 +1308,6 @@ pub fn share(
     share_as(store, Seat::new(invite, lock, name, token(), root), events)
 }
 
-/// [`share`], from the seat this machine takes.
 fn share_as(store: Arc<DocumentStore>, seat: Seat, events: Events) -> Result<Member, ShareError> {
     let seal_key: Key = random()?;
     let inner = Inner::new(store, events, seat, project_of(&seal_key));
@@ -1394,7 +1329,6 @@ fn share_as(store: Arc<DocumentStore>, seat: Seat, events: Events) -> Result<Mem
             door,
             seal: seal_key,
             host: true,
-            // Off until the host turns it on.
             looks: false,
             hello,
             snapshot: 0,
@@ -1416,7 +1350,6 @@ fn share_as(store: Arc<DocumentStore>, seat: Seat, events: Events) -> Result<Mem
     }
 }
 
-/// A batch on its way to the server.
 struct Flight {
     /// The head it was made on.
     base: u64,
@@ -1443,7 +1376,6 @@ impl Flight {
         self.bytes + NONCE + TAG + 21 > MESSAGE_LIMIT
     }
 
-    /// Unanswered for longer than the server takes to answer.
     fn lost(&self) -> bool {
         let patience = if self.slow() { PATIENCE } else { ANSWER };
         self.since.elapsed() > patience
@@ -1457,7 +1389,6 @@ struct Line {
     /// Which connection this is about, to tell its writer from the last
     /// one's.
     link: u64,
-    /// The last sequence applied here.
     head: u64,
     /// The last sequence the server is known to have. Nothing is sent until
     /// `head` is there: an append made on less would be stale.
@@ -1468,7 +1399,6 @@ struct Line {
     flight: Option<Flight>,
     /// Nothing is sent before this.
     rest: Instant,
-    /// Whether the server is taking edits, as far as this machine knows.
     writable: bool,
     /// The most a batch may come to, halved when the server found one too
     /// large.
@@ -1487,10 +1417,8 @@ struct Line {
     full: bool,
 }
 
-/// What waits for a connection's writer.
 enum Out {
     Frame(Vec<u8>),
-    /// There may be edits to send.
     Wake,
 }
 
@@ -1510,7 +1438,6 @@ struct Inner {
     hurry: AtomicBool,
     me: AtomicU32,
     host: AtomicBool,
-    /// The way to the server while there is one.
     link: Mutex<Option<(SyncSender<Out>, TcpStream)>>,
     line: Mutex<Line>,
     /// The numbers of the edits that were on their way when the server was
@@ -1525,16 +1452,13 @@ struct Inner {
     /// When each of the others last said they are changing something.
     changing: Mutex<Vec<(u32, Instant)>>,
     people: Mutex<Vec<Person>>,
-    /// Edits held back by a merge, until the person chooses.
     conflicts: Mutex<Vec<Conflict>>,
     /// The edits made since the server was lost, on disk. Taken before the
     /// store's lock, never under it.
     kept: Mutex<Option<Kept>>,
     /// The person has left, or it is over, so nothing more is kept.
     left: AtomicBool,
-    /// The person is closing the copy without saving it.
     discard: AtomicBool,
-    /// A new snapshot is being stored.
     packing: AtomicBool,
     /// The server turned an append away, and has not gone. There is no hurry
     /// back to it.
@@ -1547,8 +1471,6 @@ struct Inner {
     /// When an edit made on a machine that can only look was last taken
     /// back.
     tried: Mutex<Option<Instant>>,
-    /// Whether the invite that can only look is on, as the server last
-    /// said.
     looks: AtomicBool,
     /// A snapshot of the project was too large for this machine to store,
     /// and none has fitted since.
@@ -1569,7 +1491,6 @@ pub struct Member {
 }
 
 impl Member {
-    /// Everyone here just now, this person included.
     #[must_use]
     pub fn people(&self) -> Vec<Person> {
         self.inner.people.lock().clone()
@@ -1597,13 +1518,11 @@ impl Member {
         }
     }
 
-    /// The edits a merge held back, each waiting on [`Self::resolve`].
     #[must_use]
     pub fn conflicts(&self) -> Vec<Conflict> {
         self.inner.conflicts.lock().clone()
     }
 
-    /// Settle the conflict at `index`, as [`crate::guest::Guest::resolve`] does.
     pub fn resolve(&self, index: usize, mine: bool) -> usize {
         let inner = &self.inner;
         resolve(&inner.store, &inner.conflicts, &inner.kept, index, mine)
@@ -1618,7 +1537,6 @@ impl Member {
         }
     }
 
-    /// Whether this machine is without the server just now.
     #[must_use]
     pub fn away(&self) -> bool {
         self.inner.link.lock().is_none()
@@ -1631,7 +1549,6 @@ impl Member {
         self.inner.host.load(Ordering::Relaxed)
     }
 
-    /// Whether the server is taking edits. See [`Event::Writable`].
     #[must_use]
     pub fn writable(&self) -> bool {
         self.inner.line.lock().writable
@@ -1662,8 +1579,6 @@ impl Member {
         self.inner.looks.load(Ordering::Relaxed)
     }
 
-    /// Whether the project has grown too large for this machine to store a
-    /// snapshot of. See [`Event::TooLarge`].
     #[must_use]
     pub fn too_large(&self) -> bool {
         self.inner.too_large.load(Ordering::Relaxed)
@@ -1697,7 +1612,6 @@ impl Member {
         Ok(body.to_string())
     }
 
-    /// The invite to hand out.
     #[must_use]
     pub fn invite(&self) -> Invite {
         self.inner.seat.invite.lock().clone()
@@ -1719,8 +1633,6 @@ impl Member {
         self.inner.seal.get().map(|key| Seal { key: *key })
     }
 
-    /// What a save writes while the server is away, as
-    /// [`crate::guest::Guest::saving`] answers it.
     #[must_use]
     pub fn saving(&self) -> Option<(Arc<Document>, u64, usize)> {
         self.inner.store.saving_apart()
@@ -1734,8 +1646,6 @@ impl Member {
         }
     }
 
-    /// The person chose not to save the copy they are closing. See
-    /// [`crate::guest::Guest::discard`].
     pub fn discard(&self) {
         self.inner.discard.store(true, Ordering::Relaxed);
     }
@@ -1826,7 +1736,6 @@ impl Member {
         let inner = self.inner.clone();
         move || {
             carry_forward(&inner.seat, &inner.stop)?;
-            // No waiting out the time to the next look.
             inner.hurry.store(true, Ordering::Relaxed);
             Ok(())
         }
@@ -1943,7 +1852,6 @@ impl Member {
         if !inner.activity.lock().write(note) {
             return false;
         }
-        // Written down with what else is kept, for a copy that is away.
         if let Some(kept) = inner.kept.lock().as_mut() {
             kept.stale = true;
         }
@@ -2144,7 +2052,6 @@ impl Inner {
         kept::unkeep(self.store.snapshot().id);
     }
 
-    /// How this copy finds its project again, to keep.
     fn finding(&self) -> Finding {
         let invite = self.seat.invite.lock().to_string();
         let (name, root) = (self.seat.name.clone(), self.seat.root.clone());
@@ -2172,7 +2079,6 @@ impl Inner {
         finding
     }
 
-    /// [`keep`], for this member.
     fn keep(&self, discard: bool) {
         let (store, conflicts) = (&self.store, &self.conflicts);
         keep(store, &self.kept, &self.left, conflicts, discard, || {
@@ -2389,7 +2295,6 @@ impl Inner {
         let fresh = self.presence.lock().take();
         let presence = match fresh {
             Some(presence) => presence,
-            // What this end is changing is said again while it is.
             None => {
                 let (presence, at) = said.as_ref()?;
                 (at.elapsed() >= SAID_AGAIN).then(|| presence.clone())?
@@ -2817,23 +2722,18 @@ impl Inner {
         matches!(asked, Err(ShareError::Server(code)) if code == "removed")
     }
 
-    /// Whether a snapshot of the project is too large to store, as this
-    /// machine last found. Said when it is news.
     fn outgrown(&self, too_large: bool) {
         if self.too_large.swap(too_large, Ordering::Relaxed) != too_large {
             (self.events)(Event::TooLarge(too_large));
         }
     }
 
-    /// Whether the invite that can only look is on, by the server's word.
-    /// Said when it is news.
     fn looked(&self, on: bool) {
         if self.looks.swap(on, Ordering::Relaxed) != on {
             (self.events)(Event::LookInvite(on));
         }
     }
 
-    /// The server is taking no edits. Said once, when it is news.
     fn unwritable(&self) {
         let told = std::mem::replace(&mut self.line.lock().writable, false);
         if told {
@@ -3161,7 +3061,6 @@ impl Inner {
         None
     }
 
-    /// Someone is looking at something else.
     fn seen(&self, key: &Key, mut bytes: &[u8]) -> Option<()> {
         let peer = u32::from_le_bytes(number(&mut bytes)?);
         let presence = open(key, b"presence", bytes);
@@ -3249,7 +3148,6 @@ impl Inner {
                     });
                     let (room, large) = match &stored {
                         Some(Ok(())) => (true, false),
-                        // Over this machine's limit, or the server's.
                         Some(Err(ShareError::TooLarge { .. })) => (false, true),
                         Some(Err(ShareError::Server(code))) => {
                             (code == "stale", code == "too_large")
@@ -3303,10 +3201,8 @@ mod tests {
     /// the server closes one with when its project moves to another Lumit.
     const MOVED_ON: u16 = 4426;
 
-    /// A Lumit from before this one, for a machine to run.
     const OLD: &str = "0.0.1";
 
-    /// Someone at the stand-in's socket.
     struct Seated {
         seat: u32,
         colour: u8,
@@ -3366,12 +3262,10 @@ mod tests {
             }
         }
 
-        /// Whether `access` is what the invite that can only look shows.
         fn looks(&self, access: &str) -> bool {
             self.made["look"] == access
         }
 
-        /// Say something to everyone but the seat `but`.
         fn tell(&self, but: u32, kind: u8, parts: &[&[u8]]) {
             let bytes = frame(kind, parts);
             for seated in self.seats.iter().filter(|seated| seated.seat != but) {
@@ -3436,8 +3330,6 @@ mod tests {
         }
     }
 
-    /// What a test has the stand-in do to one machine, which it knows by
-    /// its token.
     #[derive(Default)]
     struct Tricks {
         /// There is no way to the server: its connection is dropped and
@@ -3456,7 +3348,6 @@ mod tests {
         /// On a slow line: how long each kilobyte of an append takes to
         /// arrive from it. Whatever the others append meanwhile is in first.
         slow: HashMap<u64, Duration>,
-        /// How many times it has fetched the snapshot.
         fetched: HashMap<u64, u32>,
         /// Far from the server: how long each of its appends is in coming.
         far: HashMap<u64, Duration>,
@@ -3512,7 +3403,6 @@ mod tests {
     }
 
     impl Stand {
-        /// Do something with the project `id`, for whoever shows its access.
         fn with<T>(&self, id: &str, access: &str, f: impl FnOnce(&mut Stored) -> T) -> Option<T> {
             let mut projects = self.projects.lock();
             let stored = projects.get_mut(id);
@@ -3520,7 +3410,6 @@ mod tests {
             stored.filter(opens).map(f)
         }
 
-        /// One connection from the engine, until it goes.
         fn serve(&self, socket: &TcpStream) -> Option<()> {
             let mut reader = BufReader::new(socket.try_clone().ok()?);
             let mut line = String::new();
@@ -3681,7 +3570,6 @@ mod tests {
             }
         }
 
-        /// A machine that is live, until it goes or is no longer seated.
         fn live(&self, id: &str, seat: u32, token: u64, reader: &mut impl Read) -> Option<()> {
             while let Some((kind, bytes)) = read(reader) {
                 let slow = self.tricks.lock().slow.get(&token).copied();
@@ -3706,7 +3594,6 @@ mod tests {
                 let mine = |seated: &&Seated| seated.seat == seat;
                 let looking = stored.seats.iter().filter(mine).any(|s| s.mark & 2 != 0);
                 match kind {
-                    // Nothing is taken from someone who can only look.
                     APPEND if looking => {
                         for seated in stored.seats.iter().filter(mine) {
                             let _ = (&seated.socket).write_all(&frame(REFUSED, &[&[4]]));
@@ -3947,7 +3834,6 @@ mod tests {
         id
     }
 
-    /// An edit inside the composition `comp`.
     fn mix(store: &DocumentStore, comp: Uuid, on: bool) {
         store.commit(Op::SetSoundMix { comp, on }).unwrap();
     }
@@ -3981,17 +3867,14 @@ mod tests {
         Arc::new(|_| {})
     }
 
-    /// Somewhere for a machine's events to go, and what has come.
     fn hearing() -> (Events, Arc<Mutex<Vec<Event>>>) {
         let heard = Arc::new(Mutex::new(Vec::new()));
         let sink = heard.clone();
         (Arc::new(move |event| sink.lock().push(event)), heard)
     }
 
-    /// One machine in a project: its member, and the store it edits.
     type Machine = (Member, Arc<DocumentStore>);
 
-    /// Put a new project online, with `items` solids in it to edit.
     fn host(items: usize, events: Events) -> (Machine, Vec<Uuid>) {
         stand();
         let store = Arc::new(DocumentStore::new(Document::new()));
@@ -4005,7 +3888,6 @@ mod tests {
         joined_as(seat(invite, name, VERSION, false), events)
     }
 
-    /// Open a copy again as its file, `file`, holds it.
     fn reopened(file: &Document) -> (Document, Resuming) {
         resume(&mut file.clone(), Path::new("")).expect("the copy is still a member")
     }
@@ -4096,12 +3978,6 @@ mod tests {
         edits
     }
 
-    /// Two machines and then three edit the same things and different ones
-    /// at once, each from a thread of its own. They all end on one document,
-    /// which is the server's snapshot with every entry applied in order, and
-    /// every edit is in it once. Names, presence and a note cross, sealed.
-    /// Then the host takes one of them out and makes a new invite: the two
-    /// still there carry on by it, and the old one finds nothing.
     #[test]
     #[cfg_attr(windows, ignore = "stalls after the move on Windows runners")]
     fn machines_editing_at_once_end_on_one_document() {
@@ -4212,13 +4088,6 @@ mod tests {
         assert!(join(old, "C", None).is_err());
     }
 
-    /// The server drops a machine, which edits on, and so do the others.
-    /// When it is back, what it did that touches nothing of theirs is in
-    /// everyone's document, and what touches something of theirs comes back
-    /// as conflicts with theirs standing. Keeping mine puts its edit on
-    /// every machine, and keeping theirs leaves things as they are. A
-    /// machine whose edits the server will not take for now is away in the
-    /// same way, and loses nothing by it.
     #[test]
     fn a_machine_that_was_away_merges_on_the_way_back() {
         let (a, items) = host(3, quiet());
@@ -4233,8 +4102,6 @@ mod tests {
         until("B misses the server", || {
             heard.lock().contains(&Event::Away)
         });
-        // An edit inside a composition that A deletes meanwhile has nowhere
-        // to go. It is dropped, and B is told what it was to.
         mix(&b.1, gone, true);
         a.1.commit(Op::RemoveItem { id: gone }).unwrap();
         rename(&b.1, x, "b's x");
@@ -4247,7 +4114,6 @@ mod tests {
         until("the server has what A did", || a.1.unanswered() == 0);
 
         stand().shut(token, false);
-        // The same invite again, which only cuts the wait short.
         b.0.reinvite(b.0.invite());
         let back = Event::Back {
             held: 2,
@@ -4264,12 +4130,9 @@ mod tests {
         until("B is back with two edits held and one dropped", || {
             heard.lock().contains(&back)
         });
-        // Its own document from just before is kept, as a project of its
-        // own with everything it had made in it and nothing of A's.
         let copy = b.1.snapshot().id;
         let before = crate::kept::before_returns(copy);
         assert_eq!(before.len(), 1, "B has a way back");
-        // And beside it, what that return dropped, by name.
         assert!(before[0].refused == 1 && before[0].dropped == *dropped);
         assert!(before[0].at > 0);
         let (mine, _) = lumit_project::open(&before[0].path).unwrap();
@@ -4298,10 +4161,6 @@ mod tests {
             assert_eq!(name_of(store, y).as_deref(), Some("a's y"), "theirs kept");
         }
 
-        // The server stops taking edits, as it does when the host's Lumit
-        // Pro ends. A machine that makes one is told, and gives the line up
-        // so that the edit is kept on disk. It goes in when edits are taken
-        // again.
         let id = a.0.access().0;
         let freeze = |frozen: bool| {
             stand().projects.lock().get_mut(&id).unwrap().frozen = frozen;
@@ -4323,14 +4182,9 @@ mod tests {
             name_of(&a.1, z).as_deref(),
             Some("made while nothing was taken")
         );
-        // That return dropped nothing, so the copy is the one from before.
         assert!(crate::kept::before_returns(copy) == before);
         assert!(lumit_project::open(&before[0].path).unwrap().0 == mine);
 
-        // B goes away again and comes back to another edit dropped, before
-        // its person has dealt with the first. Both copies are kept: the
-        // first as it was, since it alone holds what that return dropped,
-        // and the one from just now. Then the person lets go of them.
         let again = comp(&a.1, "Credits");
         settled(&[&a, &b]);
         heard.lock().clear();
@@ -4351,7 +4205,6 @@ mod tests {
         assert_eq!(both.len(), 2);
         assert!(both[1] == before[0], "newest first");
         assert!(lumit_project::open(&both[1].path).unwrap().0 == mine);
-        // Each names what its own return dropped, and not the other's.
         let named = |kept: &crate::kept::BeforeReturn| {
             let items = kept.dropped.iter();
             items
@@ -4408,7 +4261,6 @@ mod tests {
         );
         assert!(b.1.snapshot().item(before).is_some());
 
-        // The server takes an edit and its answer never comes.
         let token = b.0.inner.seat.token;
         let taken = renamed(y, "taken and never answered");
         stand().tricks.lock().deaf.insert(token);
@@ -4439,7 +4291,6 @@ mod tests {
         assert!(a.1.snapshot().item(after).is_some());
         assert_eq!(name_of(&b.1, y).as_deref(), Some("renamed after it"));
 
-        // An edit is sent and never reaches the server.
         let lost = renamed(y, "never arrived");
         stand().tricks.lock().mute.insert(token, 0);
         b.1.commit(lost.clone()).unwrap();
@@ -4497,12 +4348,6 @@ mod tests {
         assert!(told[0].new && told[0].who == a.0.who());
     }
 
-    /// What is sealed opens only as what it was sealed as, whole, in its
-    /// place, with its key. A piece with a bit flipped is refused, and so
-    /// is a batch moved along the order, and so is a file that was cut
-    /// short, had its pieces swapped, or is another project's. A file
-    /// bigger than one piece comes back as it went in, and so does an empty
-    /// one. Sealing can be stopped, and then leaves nothing behind.
     #[test]
     fn what_was_changed_cut_short_or_moved_does_not_open() {
         let key: Key = random().unwrap();
@@ -4585,13 +4430,6 @@ mod tests {
         let _ = fs::remove_dir_all(&folder);
     }
 
-    /// Two machines edit, each watching the other, and neither is told any
-    /// of it is new. A third joins later and is told all of it is, with who
-    /// made how many edits in which compositions. Once its person has seen
-    /// that, what they then watch happen is not new. Then one machine goes
-    /// away while another edits. Back, it is told that what that one did
-    /// meanwhile is new, and nothing else is: not what it had seen of the
-    /// third, and not its own, though its edits made away only went in then.
     #[test]
     fn a_machine_is_told_who_changed_what_while_it_was_not_there() {
         let (events, heard) = hearing();
@@ -4615,8 +4453,6 @@ mod tests {
             (name, sitting.edits, comps, sitting.new)
         };
         let told: Vec<_> = c.0.activity().iter().map(told).collect();
-        // A made two compositions, which names neither, and two edits in
-        // one. B made two edits in the two and one that names none.
         let expected = [
             ("A".to_owned(), 4, vec![main], true),
             ("B".to_owned(), 3, vec![main, titles], true),
@@ -4718,7 +4554,6 @@ mod tests {
         let theirs: Vec<u32> = theirs.map(|sitting| sitting.edits).collect();
         assert_eq!(theirs, [1, 1, 2]);
 
-        // And then a crowd, each of them someone new.
         for _ in 0..250 {
             forge(one(Uuid::now_v7(), 0), 1);
         }
@@ -4741,8 +4576,6 @@ mod tests {
         assert_eq!(last.comps, comps[..32]);
         assert_eq!(told.len(), 200);
 
-        // And a machine that reads all of that back from the server comes
-        // to the same list.
         let c = joined(&a.0.invite(), "C", quiet());
         settled(&[&a, &b, &c]);
         assert_eq!(changes(&c), changes(&a));
@@ -4798,9 +4631,6 @@ mod tests {
         );
     }
 
-    /// A seat at the project `invite` names, for a machine that runs the
-    /// Lumit `version`. `host` is whether the server knows it for a machine
-    /// of the account that keeps the project.
     fn seat(invite: &Invite, name: &str, version: &'static str, host: bool) -> Seat {
         let seat = Seat {
             version,
@@ -4812,8 +4642,6 @@ mod tests {
         seat
     }
 
-    /// Put a new project online from a machine on an older Lumit, with one
-    /// solid in it.
     fn old_host() -> (Machine, Uuid) {
         stand();
         let store = Arc::new(DocumentStore::new(Document::new()));
@@ -4830,7 +4658,6 @@ mod tests {
         (joining.start(store.clone(), events).unwrap(), store)
     }
 
-    /// The Lumit the server has the project `id` down as kept by.
     fn kept_by(id: &str) -> String {
         let projects = stand().projects.lock();
         projects[id].made["version"].as_str().unwrap().to_owned()
@@ -4869,14 +4696,6 @@ mod tests {
         assert_eq!(stands("0.9.0", "0.9.0", true), None);
     }
 
-    /// An older Lumit keeps a project, and its people update one at a time.
-    /// A guest who updates first is told the host has to open it first, and
-    /// stays a member, away. The host's machine is told it may move the
-    /// project forward, and once its person agrees the project is this
-    /// Lumit's: an edit made on the older one is in it, and the guest who
-    /// was waiting joins by itself. A machine still at work on the older
-    /// Lumit is cut off and told to update. The edit it had not had
-    /// answered is kept, and goes in once that machine has updated too.
     #[test]
     fn a_newer_host_moves_an_older_project_forward() {
         let (a, item) = old_host();
@@ -4890,7 +4709,6 @@ mod tests {
         let file_c = Document::clone(&c.1.snapshot());
         drop((a, c));
 
-        // C's person updates first.
         let (events, heard_c) = hearing();
         let (document, resuming) = reopened(&file_c);
         stand().tricks.lock().guests.insert(resuming.seat.token);
@@ -4907,8 +4725,6 @@ mod tests {
         assert!(matches!(moved, Err(ShareError::Versions(apart)) if apart == first));
         assert_eq!(kept_by(&id), OLD);
 
-        // B works on, on the older Lumit, and has an edit the server has
-        // not answered when the project moves.
         let token = b.0.inner.seat.token;
         stand().tricks.lock().mute.insert(token, 0);
         let late = solid(&b.1, "made on the older Lumit");
@@ -4916,7 +4732,6 @@ mod tests {
             stand().tricks.lock().mute.get(&token) > Some(&0)
         });
 
-        // The host's person updates, opens the copy, and agrees.
         let (events, heard_a) = hearing();
         let (document, resuming) = reopened(&file_a);
         let a = started(document, resuming, events);
@@ -4958,11 +4773,6 @@ mod tests {
         assert!(a.1.snapshot().item(late).is_some());
     }
 
-    /// Only the host's machine moves a project forward. A guest on a newer
-    /// Lumit is told the host has to open it first, when it asks to join
-    /// and when it asks to move the project, and the server would not take
-    /// the snapshot from it either. The project is left the older Lumit's,
-    /// with the machine on that still at work in it.
     #[test]
     fn a_newer_guest_alone_cannot_move_a_project_forward() {
         let (a, item) = old_host();
@@ -4989,10 +4799,6 @@ mod tests {
         settled(&[&a]);
     }
 
-    /// The edits an older Lumit stored are applied by this one to move its
-    /// project forward. If one of them will not apply, the move stops and
-    /// says so, and nothing at the server has changed: the project is the
-    /// older Lumit's, as it was.
     #[test]
     fn a_project_this_lumit_cannot_read_is_not_moved() {
         let (a, _) = old_host();
@@ -5066,15 +4872,6 @@ mod tests {
         assert_eq!(aim[2].value_at(0.0), 0.0);
     }
 
-    /// The invite that can only look is off until the host turns it on,
-    /// and off it opens nothing, whoever holds it. On, whoever joins by it
-    /// sees the project and the people, and is seen, marked as looking.
-    /// What they make is taken back and reaches nobody, and the server
-    /// takes nothing from them. The invite gives nothing of the one that
-    /// edits. When the host makes a new invite they carry on by the new one
-    /// of their own kind, and the old one finds nothing. Turned off, they
-    /// are put out. A password guards editing only, and holding both
-    /// invites gives nothing to try one against.
     #[test]
     #[cfg_attr(windows, ignore = "stalls after the move on Windows runners")]
     fn the_invite_that_can_only_look_changes_nothing() {
@@ -5083,16 +4880,12 @@ mod tests {
         let x = items[0];
         let look = a.0.look_invite();
         assert!(look.look && look.to_string().parse::<Invite>().unwrap() == look);
-        // What it comes to finds the same project, opens the key by a wrap
-        // of its own, and shows the server something else, with nothing of
-        // what an editor shows.
         let (edits, looks) = (a.0.inner.seat.keys(), keys(&look.key, &look.link, true));
         assert!(edits.id == looks.id && edits.name == looks.name);
         assert!(edits.look_wrap == looks.wrap && edits.wrap != looks.wrap);
         assert!(edits.look == looks.access && edits.access != looks.access);
         assert!(looks.told.is_none());
 
-        // It is off until the host turns it on, and then it opens nothing.
         assert!(!a.0.looks() && join(look.clone(), "C", None).is_err());
         let turn = |on: bool| {
             let body = a.0.look_body(on).unwrap();
@@ -5126,8 +4919,6 @@ mod tests {
             [&a, &b, &c].iter().all(looking)
         });
 
-        // What it makes is taken back, and is in nobody's document. Its
-        // person is told, once for a run of them.
         rename(&c.1, x, "by someone who can only look");
         until("it is taken back", || c.1.unanswered() == 0);
         let made = solid(&c.1, "made by someone who can only look");
@@ -5139,7 +4930,6 @@ mod tests {
         assert_eq!(edits, [renamed(x, "by the host")]);
         assert!(c.1.snapshot().item(made).is_none());
 
-        // And the server takes nothing from it, were it to send.
         let stop = AtomicBool::new(false);
         let (key, head) = (*c.0.inner.seal.get().unwrap(), c.0.inner.line.lock().head);
         let sealed =
@@ -5148,9 +4938,6 @@ mod tests {
         let put = put_snapshot(door, head, &sealed, None, &stop);
         assert!(matches!(put, Err(ShareError::Server(code)) if code == "look_only"));
 
-        // A new invite replaces both and leaves this one on. Each machine
-        // carries on by the new one of its own kind, and the old one that
-        // looks finds nothing.
         let (invite, body) = a.0.move_to(None).unwrap();
         stand().moved(&a.0.access().0, &body);
         a.0.moved(invite);
@@ -5165,8 +4952,6 @@ mod tests {
         assert!(matches!(c.0.move_to(None), Err(ShareError::Unreachable)));
         assert!(join(look, "D", None).is_err());
 
-        // Turned off, whoever is looking is put out, and the invite opens
-        // nothing again. Those who can edit are told and carry on.
         turn(false);
         until("C is put out", || {
             heard.lock().contains(&Event::Ended(Ending::Removed))
@@ -5176,8 +4961,6 @@ mod tests {
         assert!(join(look.clone(), "D", None).is_err());
         rename(&a.1, x, "with nobody looking");
         settled(&[&a, &b]);
-        // A new invite made now leaves it off, and gives the server nothing
-        // of it.
         let (invite, body) = a.0.move_to(None).unwrap();
         assert!(!body.contains("look"));
         stand().moved(&a.0.access().0, &body);
@@ -5187,7 +4970,6 @@ mod tests {
         });
         settled(&[&a, &b]);
         assert!(join(a.0.look_invite(), "D", None).is_err());
-        // On again, it opens the project again.
         turn(true);
         assert!(join(a.0.look_invite(), "D", None).is_ok());
 
@@ -5213,8 +4995,6 @@ mod tests {
         assert!(right.access != guess.access && right.wrap != guess.wrap);
         assert!(right.told != guess.told);
 
-        // With that invite off, the locked link without its password
-        // reaches nothing, taken for either kind of invite.
         let guesses = || {
             [
                 Invite::online(invite.link, None),
@@ -5228,8 +5008,6 @@ mod tests {
         assert!(guesses()
             .into_iter()
             .all(|guess| join(guess, "C", None).is_err()));
-        // With it on, the link reads by that invite, which is the choice
-        // made, and still edits by nothing but the password.
         let body = locked.look_body(true).unwrap();
         stand().looked(&locked.access().0, &body);
         let (_, looker) = join(look.clone(), "C", None).unwrap();
@@ -5240,12 +5018,6 @@ mod tests {
         }
     }
 
-    /// A note someone leaves reaches everyone once, in the project's own
-    /// order, and is nobody's edit. A machine that was away finds what was
-    /// said meanwhile new on the way back, and a note written while away
-    /// waits, is kept with a copy that closes, and goes in when the server
-    /// is found. Notes are kept through a new snapshot. A machine that can
-    /// only look reads them and leaves none.
     #[test]
     fn a_note_reaches_everyone_once() {
         let (a, _) = host(1, quiet());
@@ -5265,8 +5037,6 @@ mod tests {
         assert!(note.comp == comp && note.name == "A" && note.last > 0 && !note.new);
         assert!(a.0.activity().is_empty() && b.0.activity().is_empty());
 
-        // B is away and writes one, and A writes one meanwhile. B's copy
-        // closes before the server is back.
         let token = b.0.inner.seat.token;
         stand().shut(token, true);
         until("B misses the server", || b.0.away());
@@ -5298,8 +5068,6 @@ mod tests {
         b.0.seen();
         assert!(b.0.notes().iter().all(|note| !note.new));
 
-        // A new snapshot carries them, so a machine that joins after it has
-        // them, and all of it is new there.
         let (id, head) = (a.0.access().0, a.0.inner.line.lock().head);
         a.0.inner.compact(head);
         until("the snapshot is stored", || {
@@ -5311,7 +5079,6 @@ mod tests {
         assert_eq!(words(&c), said);
         assert!(c.0.notes().iter().all(|note| note.new));
 
-        // Someone who can only look reads them and leaves none.
         stand().looked(&id, &a.0.look_body(true).unwrap());
         let d = joined_as(seat(&a.0.look_invite(), "D", VERSION, false), quiet());
         assert_eq!(words(&d), said);
@@ -5319,12 +5086,6 @@ mod tests {
         assert_eq!(words(&d), said);
     }
 
-    /// Lumit's server keeps only so much of the order past its snapshot,
-    /// and turns an edit away once it has that much. The machine it turns
-    /// away stores a new snapshot, with its own edit still waiting to go
-    /// in, and sends the edit again. Nothing anyone made is lost, with two
-    /// machines at it at once and a third in the project that can only
-    /// look, and so can store nothing.
     #[test]
     fn an_edit_turned_away_for_room_goes_in_after_a_new_snapshot() {
         let (a, _) = host(1, quiet());
@@ -5352,7 +5113,6 @@ mod tests {
         };
         assert!(turned > 0, "the server did turn some away");
         assert!(snapshot > Some(0), "and a new snapshot was stored for it");
-        // Whoever comes now starts from a snapshot stored that way.
         let c = joined(&a.0.invite(), "C", quiet());
         for machine in [&a, &b, &d, &c] {
             let document = machine.1.snapshot();
@@ -5361,12 +5121,6 @@ mod tests {
         }
     }
 
-    /// A project that has grown too large to store a snapshot of meets the
-    /// server's ceiling for good: its edits are turned away for room, and
-    /// no snapshot can make any. A machine that meets it says why, stays
-    /// away with what it made kept on disk, and does not come back for
-    /// nothing. Once someone has stored a snapshot it comes back, its edit
-    /// goes in, and it says the project fits again.
     #[test]
     fn a_project_too_large_to_store_keeps_its_edits_and_says_why() {
         let (events, heard) = hearing();
@@ -5380,8 +5134,6 @@ mod tests {
             (stored.room, stored.tight) = (Some(0), tight);
         };
         tight(true);
-        // There is room for one batch. The next is turned away, and the
-        // snapshot that would make room for it does not fit.
         solid(&a.1, "goes in");
         until("the server has that", || a.1.unanswered() == 0);
         let mine = solid(&a.1, "turned away");
@@ -5393,24 +5145,19 @@ mod tests {
         assert!(a.0.too_large() && !a.0.writable());
         assert_eq!(a.1.unanswered(), 1, "the edit is kept, not taken back");
         assert!(a.1.snapshot().item(mine).is_some());
-        // B meets the same with an edit of its own, and its copy closes.
         let theirs = solid(&b.1, "B's, turned away");
         until("B is told too", || b.0.too_large() && b.0.away());
         let file = Document::clone(&b.1.snapshot());
         drop(b);
-        // Asked to look again, A finds nothing has moved and stays away.
         a.0.reinvite(a.0.invite());
         thread::sleep(Duration::from_millis(500));
         let back = |event: &Event| matches!(event, Event::Back { .. });
         assert!(a.0.away() && !heard.lock().iter().any(back));
 
-        // A snapshot fits again. B's copy, opened by a Lumit that has not
-        // met the wall, has its edit from disk, stores one and gets it in.
         tight(false);
         let (document, resuming) = reopened(&file);
         let b = started(document, resuming, quiet());
         until("B's edit is in", || !b.0.away() && b.1.unanswered() == 0);
-        // The head has moved, so A comes back and says the project fits.
         a.0.reinvite(a.0.invite());
         until("A says it fits again", || {
             heard.lock().contains(&Event::TooLarge(false))
@@ -5469,11 +5216,6 @@ mod tests {
         assert!(made.iter().all(|id| document.item(*id).is_some()));
     }
 
-    /// A note its writer or the host takes down is gone from every list
-    /// where that stands in the order. A machine that was away loses it on
-    /// the way back, a copy of it that machine still had waiting is not put
-    /// back, and no snapshot brings it back. Nobody else can take it down,
-    /// and a machine that can only look can take down none.
     #[test]
     fn a_note_taken_down_stays_down() {
         let (a, _) = host(1, quiet());
@@ -5495,7 +5237,6 @@ mod tests {
             [&a, &b, &c].iter().all(|machine| words(machine).len() == 3)
         });
         settled(&[&a, &b, &c]);
-        // Its writer, and the host. Nobody else, and nobody twice.
         let own = id(&b, "B's own").unwrap();
         assert!(!c.0.take_note_down(own), "it is not C's");
         assert!(!b.0.take_note_down(id(&b, "the host's").unwrap()));
@@ -5509,9 +5250,6 @@ mod tests {
         });
         settled(&[&a, &b, &c]);
 
-        // B writes one that the server takes and never answers, and loses
-        // its line: the note is in the order, and B still has it waiting to
-        // be sent. The host takes it down meanwhile.
         let token = b.0.inner.seat.token;
         stand().tricks.lock().deaf.insert(token);
         assert!(b.0.write_note("in doubt", None, None, None));
@@ -5524,8 +5262,6 @@ mod tests {
         assert!(a.0.take_note_down(id(&a, "in doubt").unwrap()));
         until("C loses it", || words(&c) == ["the host's"]);
         assert_eq!(words(&b).len(), 2, "B has not heard yet");
-        // B comes back, loses it with everyone else, and does not put its
-        // own copy back.
         stand().shut(token, false);
         b.0.reinvite(b.0.invite());
         until("B is back without it", || {
@@ -5538,7 +5274,6 @@ mod tests {
         let waits = b.0.inner.activity.lock().waiting.clone();
         assert!(waits.is_empty(), "still to send: {waits:?}");
 
-        // No snapshot brings one back, for a machine that joins after it.
         let (project, head) = (a.0.access().0, a.0.inner.line.lock().head);
         a.0.inner.compact(head);
         until("the snapshot is stored", || {
@@ -5549,18 +5284,12 @@ mod tests {
         let d = joined(&a.0.invite(), "D", quiet());
         assert_eq!(words(&d), ["the host's"]);
 
-        // Someone who can only look takes down nothing.
         stand().looked(&project, &a.0.look_body(true).unwrap());
         let e = joined_as(seat(&a.0.look_invite(), "E", VERSION, false), quiet());
         assert!(!e.0.take_note_down(id(&e, "the host's").unwrap()));
         assert_eq!(words(&e), ["the host's"]);
     }
 
-    /// A machine that comes back carries on from what it has: it is sent the
-    /// entries after its own head, and does not fetch the snapshot again.
-    /// Only when the server's snapshot has passed it does it fetch
-    /// everything, as a machine that is new does. Either way it ends on the
-    /// order's document, with what it made while away in it.
     #[test]
     fn a_machine_that_comes_back_fetches_only_what_it_has_not_got() {
         let (a, items) = host(2, quiet());
@@ -5594,7 +5323,6 @@ mod tests {
         back("B's, away", "A's, meanwhile");
         assert_eq!(fetched(), 1, "only what came after what it had");
 
-        // Again, and this time a new snapshot is stored past where B stands.
         away("B's, away again", "A's, under a new snapshot");
         let (id, head) = (a.0.access().0, a.0.inner.line.lock().head);
         a.0.inner.compact(head);
@@ -5607,10 +5335,6 @@ mod tests {
         assert_eq!(fetched(), 2, "the snapshot had passed it");
     }
 
-    /// A machine far from the server gets its edits in while a nearer one
-    /// never stops. Told its batch was stale, it is given the next turn, and
-    /// the other waits for it. Each of its edits is in within a bound, and
-    /// none waits for the other to pause.
     #[test]
     fn a_far_machine_gets_its_turn_while_a_near_one_never_stops() {
         let (a, items) = host(2, quiet());
@@ -5646,12 +5370,6 @@ mod tests {
         settled(&[&a, &b]);
     }
 
-    /// A machine that was away when its way in was shut is told why when it
-    /// comes back, as it would have been had it been there, and does not go
-    /// on looking for what is not coming back: the project no longer kept
-    /// online, this machine removed, the invite that can only look turned
-    /// off. One whose invite was replaced under it is told that once and
-    /// stays a member: given the new invite, it is back with what it made.
     #[test]
     fn a_machine_away_when_its_way_in_was_shut_is_told_why() {
         let away = |events: Events| {
@@ -5738,9 +5456,6 @@ mod tests {
         assert!(b.1.snapshot().item(items[0]).is_some());
     }
 
-    /// The line goes between the snapshot and going live. A machine that has
-    /// just fetched the whole snapshot keeps it and asks to go live again:
-    /// it does not fetch the project a second time.
     #[test]
     fn a_snapshot_fetched_is_kept_when_the_line_goes_before_it_is_live() {
         let (a, items) = host(1, quiet());
@@ -5774,8 +5489,6 @@ mod tests {
             tricks.gone.insert(access, "moved");
             tricks.removed.insert(was);
         }
-        // Opened again with no way to the server, and closed before it had
-        // found one.
         let (document, resuming) = reopened(&file);
         let again = resuming.seat.token;
         assert_ne!(again, was, "it goes by a new token");

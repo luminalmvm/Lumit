@@ -1,6 +1,3 @@
-// Sharing a theme, and the shelf of verbs around one: the file a theme
-// is written to and read from, duplicating, importing under a free name, and
-// renaming.
 
 import 'dart:io' hide Platform;
 
@@ -19,8 +16,6 @@ String _scratchStore(String name) =>
     '${Directory.systemTemp.path}${Platform.pathSeparator}'
     'lumit-test-$name${Platform.pathSeparator}workspace.json';
 
-/// A workspace writing somewhere harmless, emptied first, as each theme is a
-/// file there, and torn down after the test.
 Workspace _workspace(String name) {
   final dir = File(_scratchStore(name)).parent;
   if (dir.existsSync()) dir.deleteSync(recursive: true);
@@ -31,8 +26,6 @@ Workspace _workspace(String name) {
 
 void main() {
   group('the theme file', () {
-    /// The whole point: a theme written out on one machine is the same theme
-    /// when it is read back on another.
     test('a theme survives being written and read', () {
       final made = CustomTheme.from('Mine', LumitTheme.catppuccinMocha());
       final read = readThemeFile(encodeThemeFile(made));
@@ -56,7 +49,6 @@ void main() {
         expect(read.theme, isNull, reason: text);
         expect(read.refusal, isNotNull, reason: text);
       }
-      // JSON, an object, and honest about not being a theme.
       expect(
           readThemeFile('{"format": "lumit-keymap", "bindings": []}').refusal,
           'That file is not a Lumit theme.');

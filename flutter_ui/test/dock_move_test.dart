@@ -1,14 +1,9 @@
-// The re-dock model ops (dock.dart movePanel/simplify): stacking, same-axis
-// and cross-axis splits, unwrapping, joining, the every-panel-once invariant
-// across the main window and the floating ones, self-drop no-ops, and the
-// root staying a DockSplit.
 
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/state/dock.dart';
 
-/// A simple three-pane layout: a horizontal split of Viewer, Timeline, Scopes.
 DockSplit threeAcross() => DockSplit(
       DockAxis.horizontal,
       [
@@ -31,7 +26,6 @@ void checkInvariants(DockSplit root) {
       case DockTabs():
         expect(node.children, isNotEmpty);
         expect(node.active, inInclusiveRange(0, node.children.length - 1));
-        // A tab group never has a single child — it would be unwrapped.
         expect(node.children.length, greaterThanOrEqualTo(2));
       case DockSplit():
         expect(node.children.length, node.shares.length,
@@ -62,14 +56,11 @@ void main() {
     expect(
         [for (final c in tabs.children) c.panel], [Panel.viewer, Panel.scopes]);
     expect(tabs.active, 1, reason: 'the dragged tab is fronted');
-    // Scopes left its old slot; the split is now Viewer-group + Timeline.
     expect(root.children.length, 2);
     checkInvariants(root);
   });
 
   test('same-axis split inserts adjacent with halved shares', () {
-    // Scopes sits outside the horizontal split, so dragging it in leaves the
-    // target's neighbours untouched and the halving is exact.
     final root = DockSplit(
       DockAxis.vertical,
       [
@@ -82,10 +73,8 @@ void main() {
       ],
       [0.75, 0.25],
     );
-    // Timeline holds 0.4; splitting Scopes off its right halves it.
     movePanel(root, Panel.scopes.pane(), Panel.timeline.pane(), DropPosition.right);
 
-    // The vertical root collapses to a single horizontal child.
     expect(root.children.length, 1);
     final row = root.children.single as DockSplit;
     expect(row.axis, DockAxis.horizontal);
@@ -111,8 +100,6 @@ void main() {
     final rng = Random(20260721);
     const positions = DropPosition.values;
 
-    // Moves within and between windows, panels and groups taken out into
-    // windows of their own, and put back.
     for (var i = 0; i < 400; i++) {
       final panels = panesIn(root);
       final dragged = panels[rng.nextInt(panels.length)];

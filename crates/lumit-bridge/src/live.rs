@@ -8,7 +8,6 @@
 //! ([`crate::script::hold`]), so it never lands inside a script's undo step,
 //! and Stop on the busy card reaches a `script_run`.
 
-// Nothing here runs in the browser build, which keeps only its shape.
 #![cfg_attr(target_arch = "wasm32", allow(unused))]
 
 use std::path::PathBuf;
@@ -33,23 +32,15 @@ pub(crate) const SCRIPT_RUNNING: &str =
 pub(crate) const BUSY: &str = "Lumit is busy with another change. Try again in a moment.";
 const NOT_SHOWN: &str = "Lumit did not answer in time. Try again.";
 
-/// How long an edit waits for a change being made in the window, such as a
-/// drag, to finish.
 const DRAG_WAIT: Duration = Duration::from_secs(2);
-/// How long a script waits for the window to put its busy card up.
 const CARD_WAIT: Duration = Duration::from_secs(5);
 
-/// Where the interface says the busy card for a program's script is up.
 static SHOWN: Mutex<Option<SyncSender<()>>> = Mutex::new(None);
 
-/// The endpoint while it is on. Never on in the browser build, which has no
-/// other programs to talk to.
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 struct Live {
     stop: Arc<AtomicBool>,
-    /// Lets go of the program that is connected.
     leave: Arc<AtomicBool>,
-    /// Stops a script the program is running.
     run: Arc<AtomicBool>,
     file: PathBuf,
     secret: lumit_peer::Secret,
@@ -67,9 +58,6 @@ impl Live {
 
 static LIVE: Mutex<Option<Live>> = Mutex::new(None);
 
-/// Start listening, in place of any endpoint already on. `tell` hears who
-/// connects and what they do, and answers false when nobody is listening.
-/// False when it could not start.
 #[cfg(target_arch = "wasm32")]
 pub(crate) fn start(_tell: impl Fn(BridgeLiveEvent) -> bool + Send + 'static) -> bool {
     false
@@ -112,7 +100,6 @@ pub(crate) fn start(tell: impl Fn(BridgeLiveEvent) -> bool + Send + 'static) -> 
     true
 }
 
-/// Stop listening and let go of the program connected. Harmless when off.
 pub(crate) fn stop() {
     let live = LIVE.lock().ok().and_then(|mut on| on.take());
     if let Some(live) = live {
@@ -120,14 +107,12 @@ pub(crate) fn stop() {
     }
 }
 
-/// The busy card for a program's script is up, so the script may start.
 pub(crate) fn shown() {
     if let Some(shown) = SHOWN.lock().ok().and_then(|mut s| s.take()) {
         let _ = shown.try_send(());
     }
 }
 
-/// Let go of the program connected, and stop its script.
 pub(crate) fn disconnect() {
     if let Ok(on) = LIVE.lock() {
         if let Some(live) = on.as_ref() {
@@ -178,7 +163,6 @@ fn serve(
     );
 }
 
-/// The reply to one line from the program.
 #[cfg(not(target_arch = "wasm32"))]
 fn answer<'a>(
     line: &str,
@@ -195,14 +179,12 @@ fn answer<'a>(
             tell(BridgeLiveEvent::Attached { name: name.into() });
         }
     }
-    // Only a tool call touches the project.
     if method != Some("tools/call") {
         return lumit_script::mcp::answer_without(line, NO_PROJECT);
     }
     let Some(project) = open_project() else {
         return lumit_script::mcp::answer_without(line, NO_PROJECT);
     };
-    // Made again when another project is opened.
     if host.as_ref().is_none_or(|h| h.project.id != project.id) {
         let store = project
             .state()

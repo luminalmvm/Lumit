@@ -21,8 +21,6 @@ void main() {
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);
   });
 
-  /// An installation at `<tmp>/Lumit`, with [version] written into every file
-  /// so a test can say which one is standing.
   InstallSite install(String version) {
     final root = Directory('${tmp.path}/Lumit')..createSync(recursive: true);
     File('${root.path}/lumit_flutter').writeAsStringSync(version);
@@ -36,7 +34,6 @@ void main() {
     );
   }
 
-  /// A complete staged update at `<tmp>/Lumit.new`.
   void stage(InstallSite site, String version, {bool complete = true}) {
     final staging = site.staging..createSync(recursive: true);
     File('${staging.path}/lumit_flutter').writeAsStringSync(version);
@@ -115,8 +112,6 @@ void main() {
   group('tidying up at start-up', () {
     test('a swap cut in half is put back', () {
       final site = install('0.1.0');
-      // What a power cut between the two renames leaves: the old version under
-      // its safety name, and nothing at all where Lumit should be.
       site.root.renameSync(site.previous.path);
       expect(site.root.existsSync(), isFalse);
 

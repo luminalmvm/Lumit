@@ -24,11 +24,6 @@ import 'icon_style.dart';
 import 'lumit_icon.dart' as glyph;
 import 'lumit_icons.dart';
 
-/// One icon.
-///
-/// The first 44 variants are the Rust `Icon` enum's, name for name. The tool
-/// marks after them are this frontend's own: the archived egui shell has
-/// no toolbar to draw them, so there is no Rust counterpart to keep in step.
 enum LumitIcon {
   pointer,
   move,
@@ -109,7 +104,6 @@ enum LumitIcon {
   flow,
   cube3d,
 
-  /// The Timeline's snap magnet: a horseshoe.
   magnet,
   eyedropper,
   reset,
@@ -121,14 +115,11 @@ enum LumitIcon {
   /// button that adds one, which is a different call and not this member.
   fx,
 
-  /// The label-colour column's tag (docs/07 §4.2).
   label,
 
   /// Shy: hide-from-the-layer-list, and the master filter that honours it.
   shy,
 
-  /// The shy mark's hidden state — this layer is (or these layers are) hidden
-  /// from the list.
   shyHidden,
 
   /// The solo switch's on state; [ellipse] is its off.
@@ -156,7 +147,6 @@ enum LumitIcon {
   /// size the bar has room for.
   zoomExtent,
 
-  // --- The toolbar's tools (docs/07 §1.7). ---
   zoomIn,
 
   /// The rotate tool: a box with a turn over it. Deliberately not a bare
@@ -197,11 +187,8 @@ enum LumitIcon {
   /// so it drops the frame.
   maskFeather,
 
-  /// Vertical type: [text]'s T on its side, crossbar to the left.
   textVertical,
 
-  /// The Text and Paragraph panels' own marks: which side the lines line up
-  /// on, and the six ways a letter is restyled without changing font.
   textAlignLeft,
   textAlignCentre,
   textAlignRight,
@@ -225,8 +212,6 @@ enum LumitIcon {
   rotoBrush,
   refineEdge,
 
-  /// The puppet tools: a pin, a braced region, one shape passing in front of
-  /// another, and a line bent off the dashed one it would have followed.
   puppetPin,
   puppetStarch,
   puppetOverlap,
@@ -239,8 +224,6 @@ enum LumitIcon {
   cameraPan,
   cameraDolly,
 
-  /// The three ways the 3D handles can point: the layer's own axes, the
-  /// comp's, and the screen's.
   localAxes,
   worldAxes,
   viewAxes,
@@ -255,7 +238,6 @@ enum LumitIcon {
   /// read as a grid.
   wireframe,
 
-  /// The Viewer bar's exposure box.
   aperture,
 
   /// The Viewer bar's tone-map switch: the transfer curve against the
@@ -263,8 +245,6 @@ enum LumitIcon {
   /// the switch is for — the values above 1 an ordinary display cannot show.
   toneMap,
 
-  /// The Viewer bar's transparency-grid switch: the checkerboard
-  /// itself, at icon size.
   checkerboard,
 
   /// The Viewer bar's grid-and-guides menu: a wire lattice. It is
@@ -274,19 +254,12 @@ enum LumitIcon {
   /// the same switch twice.
   grid,
 
-  /// The Viewer bar's channel picker: three overlapping circles, the
-  /// mark for a picture separated into its channels. Tinted by whichever one
-  /// is being shown.
   channels,
 
   /// A matte: a shape cut out of a square. The channel picker's alpha face —
   /// alpha is not a colour, so it gets a mark rather than a tint.
   matte,
 
-  /// The transport's four steps beside [play] and [pause]. They had
-  /// been the characters `|◀ ◀ ▶ ▶|`, drawn in the body face at whatever size
-  /// the font happened to give them; the approved drawing puts a glyph on each
-  /// one and the set has carried all four since the icon pass.
   toStart,
   previousFrame,
   nextFrame,
@@ -333,15 +306,9 @@ const double iconSizeTransport = 20;
 const double _iconGridUnits = 24;
 const double _iconStrokeUnits = 1.5;
 
-/// Build `icon` at `size` in `color`.
-///
-/// Two ways down: Lumit's own glyph, which is every member but four, and the
-/// painter-drawn mark for the four that are Lumit's own artwork and say above
-/// why a glyph would be the worse drawing.
 Widget lumitIcon(LumitIcon icon, {required double size, required Color color}) {
   final own = _ownGlyph(icon);
   if (own != null) return glyph.LumitIcon(own, size: size, colour: color);
-  // A painted mark the person has drawn their own of.
   if (IconStyle.own(icon.name) case final svg?) {
     return glyph.LumitIcon(svg, size: size, colour: color);
   }
@@ -360,14 +327,9 @@ Widget lumitIcon(LumitIcon icon, {required double size, required Color color}) {
   );
 }
 
-/// The glyph from Lumit's own set that this icon means, or null for the
-/// painted marks.
 String? glyphOf(LumitIcon icon) => _ownGlyph(icon);
 
-/// The glyph from Lumit's own set that this icon means, or null where the set
-/// has no word for it yet (docs/15 §5's table is the mapping).
 String? _ownGlyph(LumitIcon icon) => switch (icon) {
-      // Tools.
       LumitIcon.pointer => LumitIcons.select,
       LumitIcon.move => LumitIcons.pan,
       LumitIcon.zoomIn => LumitIcons.zoom,
@@ -387,7 +349,6 @@ String? _ownGlyph(LumitIcon icon) => switch (icon) {
       LumitIcon.camera => LumitIcons.camera,
       LumitIcon.brush => LumitIcons.paint,
       LumitIcon.eyedropper => LumitIcons.eyedropper,
-      // Layer switches.
       LumitIcon.eye => LumitIcons.visible,
       LumitIcon.eyeClosed => LumitIcons.hidden,
       LumitIcon.audio => LumitIcons.audio,
@@ -404,7 +365,6 @@ String? _ownGlyph(LumitIcon icon) => switch (icon) {
       // The twirl: shut points the way it will open, open points down.
       LumitIcon.twirlClosed => LumitIcons.expand,
       LumitIcon.twirlOpen => LumitIcons.collapse,
-      // Transport.
       LumitIcon.play => LumitIcons.play,
       LumitIcon.pause => LumitIcons.pause,
       LumitIcon.toStart => LumitIcons.toStart,
@@ -412,10 +372,8 @@ String? _ownGlyph(LumitIcon icon) => switch (icon) {
       LumitIcon.nextFrame => LumitIcons.nextFrame,
       LumitIcon.toEnd => LumitIcons.toEnd,
       LumitIcon.loop => LumitIcons.loop,
-      // Timeline and graph.
       LumitIcon.timelineBars => LumitIcons.layers,
       LumitIcon.graphCurve => LumitIcons.scopes,
-      // Keyframes and values.
       LumitIcon.stopwatch => LumitIcons.stopwatch,
       LumitIcon.renderTime => LumitIcons.renderTime,
       LumitIcon.fx => LumitIcons.effectsSwitch,
@@ -426,13 +384,11 @@ String? _ownGlyph(LumitIcon icon) => switch (icon) {
       LumitIcon.reset => LumitIcons.reset,
       LumitIcon.link => LumitIcons.link,
       LumitIcon.unlink => LumitIcons.unlink,
-      // The Viewer bar.
       LumitIcon.checkerboard => LumitIcons.transparency,
       LumitIcon.grid => LumitIcons.grid,
       LumitIcon.channels => LumitIcons.channels,
       LumitIcon.aperture => LumitIcons.exposure,
       LumitIcon.snapshot => LumitIcons.snapshot,
-      // The Project panel.
       LumitIcon.folder => LumitIcons.folder,
       LumitIcon.comp => LumitIcons.composition,
       LumitIcon.audioFile => LumitIcons.audioFile,
@@ -443,7 +399,6 @@ String? _ownGlyph(LumitIcon icon) => switch (icon) {
       LumitIcon.adjustment => LumitIcons.adjustment,
       LumitIcon.solid => LumitIcons.solid,
       LumitIcon.nodes => LumitIcons.nodes,
-      // The toolbar's remaining tools.
       LumitIcon.star => LumitIcons.star,
       LumitIcon.rotate => LumitIcons.rotate,
       LumitIcon.textVertical => LumitIcons.verticalType,
@@ -478,7 +433,6 @@ String? _ownGlyph(LumitIcon icon) => switch (icon) {
       LumitIcon.localAxes => LumitIcons.localAxes,
       LumitIcon.worldAxes => LumitIcons.worldAxes,
       LumitIcon.viewAxes => LumitIcons.viewAxes,
-      // Switches and columns.
       LumitIcon.collapse => LumitIcons.collapseTransformations,
       LumitIcon.label => LumitIcons.label,
       LumitIcon.magnet => LumitIcons.snap,
@@ -544,9 +498,6 @@ void _drawZoomExtent(Canvas canvas, Size size, double s, Color color) {
   );
 }
 
-/// The landscape's named type, kept: the Timeline panel's test tells the
-/// slider's two ends apart from every other mark by
-/// `painter is ZoomExtentPainter`.
 class ZoomExtentPainter extends _GridIconPainter {
   const ZoomExtentPainter(Color color) : super(color, _drawZoomExtent);
 }

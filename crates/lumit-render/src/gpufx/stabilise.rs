@@ -1,7 +1,3 @@
-//! Stabilise's GPU op: the frame's warp, worked out by the effect from the
-//! resolved rows, handed to the warp kernel. A Fill lays the decoded
-//! neighbours under it, each through the map the effect worked out for it.
-
 use lumit_core::fx::effects::stabilise::{frame_offset, warp_params, Stabilise as Rows};
 use lumit_core::fx::params::Params;
 use lumit_core::stabilise::fill::fill_params;

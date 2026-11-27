@@ -1,7 +1,5 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-//! The Correction's passes against its CPU oracle, across every group of rows.
-
 use lumit_core::fx::effects::correction::{packed::HUE_FLAT, Correction};
 use lumit_core::fx::params::{CurvePoints, Params};
 use lumit_core::fx::registry::EffectMetadata;
@@ -9,8 +7,6 @@ use lumit_core::fx::shape_points::ShapePoints;
 use lumit_gpu::fx::common::{f16_bits, f16_to_f32, readback_linear_f32, upload_linear_f32};
 use lumit_gpu::fx::correction::CorrectionOp;
 
-/// Colour across, light down, a half-clear band, a clear corner and an HDR
-/// spike, already fp16 as the card holds it.
 fn picture(w: u32, h: u32) -> Vec<f32> {
     let mut img = vec![0.0f32; (w * h * 4) as usize];
     for y in 0..h {
@@ -38,7 +34,6 @@ fn picture(w: u32, h: u32) -> Vec<f32> {
     img.iter().map(|v| f16_to_f32(f16_bits(*v))).collect()
 }
 
-/// A prepared matte: a grey ramp down the picture.
 fn matte(w: u32, h: u32) -> Vec<f32> {
     let mut m = Vec::new();
     for y in 0..h {
@@ -50,7 +45,6 @@ fn matte(w: u32, h: u32) -> Vec<f32> {
     m
 }
 
-/// A Correction with every row at rest.
 fn rest() -> Correction {
     let mut c = Correction::read(Params::EMPTY);
     let flat = CurvePoints::sanitised(&HUE_FLAT);
@@ -197,8 +191,6 @@ fn cases(w: u32, h: u32) -> Vec<(&'static str, Correction, bool)> {
     hdr.hdr_specular_range = 2.0;
     hdr.hdr_specular_exposure = -2.0;
 
-    // Kept round an orange and a teal, dropped round a dark red; Y, Cb, Cr
-    // as the video space reads them.
     let mut d3 = wheels(0);
     d3.qual_mode = 4;
     d3.qual_3d_keep = ShapePoints::sanitised(&[[-0.4, 0.3], [0.2, -0.3]]);
@@ -291,8 +283,6 @@ fn wgsl_correction_matches_the_cpu_oracle() {
     }
 }
 
-/// CDL and the colour warper against their CPU twins: a graded case each,
-/// and at rest the picture untouched.
 #[test]
 fn wgsl_cdl_and_warper_match_the_cpu_oracle() {
     use lumit_core::fx::effects::{cdl::Cdl, colour_warper::ColourWarper};

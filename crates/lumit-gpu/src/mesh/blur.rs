@@ -1,6 +1,3 @@
-//! A model's motion blur: each shutter sample drawn on its own picture and
-//! added to the frame's at its share.
-
 use super::{MeshFx, COLOUR};
 use crate::GpuContext;
 
@@ -45,7 +42,6 @@ pub(super) fn add_pipeline(
     })
 }
 
-/// One sample's picture, and how much of the frame it makes.
 pub(super) struct Shutter {
     pub(super) view: wgpu::TextureView,
     group: wgpu::BindGroup,

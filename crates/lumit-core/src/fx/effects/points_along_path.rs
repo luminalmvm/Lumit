@@ -23,7 +23,6 @@ use crate::fx::{
 use crate::mask::MaskPolyline;
 use lumit_fx_macros::Effect;
 
-/// The same Points output every producer declares.
 const POINTS_OUT: &[Port] = &[Port::new("points", "Points", PortType::Points)];
 
 const fn group(
@@ -40,8 +39,6 @@ const fn group(
     }
 }
 
-/// Where the points go, the dice only Random rolls, and what a point looks
-/// like.
 pub const ALONG_GROUPS: &[ParamGroup] = &[
     group(
         "Path",
@@ -70,7 +67,6 @@ pub const ALONG_GROUPS: &[ParamGroup] = &[
         None,
     ),
     group("Point", &["size", "feather", "colour"], None),
-    // Random placement and Value noise both read it.
     group("", &["seed"], None),
 ];
 
@@ -82,8 +78,6 @@ const fn grey(param: &'static str) -> EnabledWhen {
     }
 }
 
-/// Corners takes its points from the path, so it has no Count and nothing to
-/// slide. Following the shape leaves no mask to choose.
 pub const ALONG_ENABLED_WHEN: &[EnabledWhen] = &[
     grey("count"),
     grey("offset"),
@@ -103,8 +97,6 @@ pub const ALONG_ENABLED_WHEN: &[EnabledWhen] = &[
     },
 ];
 
-/// Which dice a Random placement rolls for where a point sits.
-/// Greys a Deform row while Deform is Off.
 const fn deforms(param: &'static str) -> EnabledWhen {
     EnabledWhen {
         param,
@@ -118,15 +110,12 @@ const DEFORM_ATTR: u32 = 7;
 
 const ALONG_ATTR: u32 = 0;
 
-/// Where along the path the points are put.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Placement {
-    /// Evenly spaced by distance.
     #[default]
     Even,
     /// At random places, from the seed, the same on every frame.
     Random,
-    /// One on each of the mask's own vertices.
     Corners,
 }
 
@@ -146,7 +135,6 @@ impl Placement {
     }
 }
 
-/// Points along path's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "points_along_path",
@@ -154,11 +142,8 @@ impl Placement {
     version = 1,
     category = Points,
     cost = Moderate,
-    // A mask may be drawn anywhere, and the discs are drawn over the whole
-    // picture.
     roi = FullFrame,
     premultiplied = true,
-    // Not seeded, as Grid is not: there is no clock in it.
     seeded = false,
     groups = ALONG_GROUPS,
     enabled_when = ALONG_ENABLED_WHEN,
@@ -170,7 +155,6 @@ pub struct PointsAlongPath {
     #[choice(label = "Follow", options = ["Mask", "Shape"], default = 0)]
     pub path_from: u32,
 
-    /// Which of the layer's masks the points sit along.
     #[mask_path(label = "Mask path")]
     pub mask_path: bool,
 
@@ -179,7 +163,6 @@ pub struct PointsAlongPath {
     #[choice(label = "Placement", options = *Placement::OPTIONS, default = 0)]
     pub placement: u32,
 
-    /// How many points.
     #[counter(
         label = "Count",
         min = 1,
@@ -191,7 +174,6 @@ pub struct PointsAlongPath {
     )]
     pub count: i32,
 
-    /// Where along the path the first point sits, per cent of its length.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -202,7 +184,6 @@ pub struct PointsAlongPath {
     )]
     pub start: f32,
 
-    /// Where along the path the last point sits, per cent of its length.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -223,7 +204,6 @@ pub struct PointsAlongPath {
     #[toggle(label = "Wrap", default = false)]
     pub wrap: bool,
 
-    /// Turn each point to face the way the path runs.
     #[toggle(label = "Align to path", default = true)]
     pub align: bool,
 
@@ -233,7 +213,6 @@ pub struct PointsAlongPath {
     #[choice(label = "Deform", options = ["Off", "Oscillator", "Value noise"], default = 0)]
     pub deform: u32,
 
-    /// The Oscillator's shape.
     #[choice(
         label = "Wave",
         options = ["Sine", "Triangle", "Square", "Sawtooth"],
@@ -266,7 +245,6 @@ pub struct PointsAlongPath {
     #[slider(min = 0.0, max = 200.0, default = 8.0, hard_min = 0.0, unit = Px)]
     pub size: f32,
 
-    /// How soft that disc's edge is, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -282,7 +260,6 @@ pub struct PointsAlongPath {
     #[colour(default = [1.0, 1.0, 1.0, 1.0], max = 4.0)]
     pub colour: [f32; 4],
 
-    /// Which random places. The reseed button rolls it.
     #[seed]
     pub seed: u32,
 
@@ -303,7 +280,6 @@ impl PointsAlongPath {
     /// The raster factor, since the mask path and the camera arrive in px@comp.
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
 
-    /// This instance's raster factor, read back out of a resolved bag.
     #[must_use]
     pub fn px_scale_of(p: Params<'_>) -> f32 {
         p.float(Self::DERIVED_PX_SCALE, 1.0)
@@ -334,7 +310,6 @@ impl PointsAlongPath {
         // so the gaps are counted rather than the points.
         let gaps = if wraps && to - from >= 1.0 { n } else { n - 1 };
         let size = self.size.max(0.0);
-        // Premultiplied, as every colour in the working space is.
         let a = self.colour[3];
         let colour = [
             self.colour[0] * a,
@@ -342,7 +317,6 @@ impl PointsAlongPath {
             self.colour[2] * a,
             a,
         ];
-        // One point at `at`, `far` px along the path.
         let mut put = |at: [f32; 2], facing: [f32; 2], far: f32, id: u64| {
             let (at, facing) = self.deformed(at, facing, far, length);
             out.position.push([at[0], at[1], 0.0]);
@@ -360,7 +334,6 @@ impl PointsAlongPath {
             out.id.push(id);
             out.index
                 .push(if length > 0.0 { far / length } else { 0.0 });
-            // The same under a name, for the effects below to read by it.
             let along = out.index.last().copied().unwrap_or(0.0);
             if let Some(last) = out.named_mut("progress", 1).and_then(|c| c.last_mut()) {
                 last[0] = along;
@@ -435,8 +408,6 @@ impl PointsAlongPath {
         self.deform_amplitude * wave
     }
 
-    /// A point Deform has moved: off the path along the normal at `at`, and
-    /// facing the way the bent path runs there.
     fn deformed(
         self,
         at: [f32; 2],
@@ -464,7 +435,6 @@ impl PointsAlongPath {
         )
     }
 
-    /// How the stream is drawn: a feathered disc per point, and the Mix.
     #[must_use]
     pub fn draw_style(self) -> DrawStyle {
         DrawStyle {
@@ -485,7 +455,6 @@ impl EffectDef for PointsAlongPathDef {
         &<PointsAlongPath as EffectMetadata>::SCHEMA
     }
 
-    /// The picture and the data, as every producer declares it.
     fn signature(&self) -> Signature {
         Signature::Image {
             inputs: &[],

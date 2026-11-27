@@ -46,51 +46,32 @@ use lumit_ofx::status::{OfxStatus, Status};
 pub mod gpu;
 mod probes;
 
-/// How many times `setHost` has been called, across every plugin here.
 static SET_HOST_CALLS: AtomicU32 = AtomicU32::new(0);
-/// How many times `kOfxActionLoad` has been dispatched.
 static LOAD_CALLS: AtomicU32 = AtomicU32::new(0);
-/// Whether a host was already in hand at the first load.
 static HOST_SEEN_BEFORE_LOAD: AtomicU32 = AtomicU32::new(0);
-/// Which suites the host gave us, as a bit per suite (see [`SUITE_PROPERTY`]).
 static SUITE_MASK: AtomicU32 = AtomicU32::new(0);
 /// The host, as an address; the plugin never dereferences it except through
 /// [`with_host`].
 static HOST: AtomicUsize = AtomicUsize::new(0);
 
-/// Bit for `OfxPropertySuiteV1` in [`SUITE_MASK`].
 pub const SUITE_PROPERTY: u32 = 1;
-/// Bit for `OfxMemorySuiteV1`.
 pub const SUITE_MEMORY: u32 = 2;
-/// Bit for `OfxMessageSuiteV1`.
 pub const SUITE_MESSAGE: u32 = 4;
 /// Bit for `OfxInteractSuiteV1`, which an honest host does not hand out yet.
 pub const SUITE_INTERACT: u32 = 8;
-/// Bit for `OfxImageEffectSuiteV1`.
 pub const SUITE_IMAGE_EFFECT: u32 = 16;
-/// Bit for `OfxParameterSuiteV1`.
 pub const SUITE_PARAMETER: u32 = 32;
 
-/// The message this plugin sends at load, so a test can see the message suite
-/// carry something end to end.
 pub const LOAD_MESSAGE: &CStr = c"lumit-ofx-testplug loaded";
 
-/// How many plugins the bundle declares.
 pub const PLUGIN_COUNT: c_int = 8;
 
-/// Every action the host has dispatched since the log was last reset, comma
-/// separated. Read through [`LumitTestPlugActionLog`].
 static ACTION_LOG: Mutex<String> = Mutex::new(String::new());
 
-/// Renders in flight at this moment, and the most there have ever been.
 static RENDERS_IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);
-/// See [`RENDERS_IN_FLIGHT`].
 static MAX_RENDERS_IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);
-/// How many renders must be in flight before any of them may finish. Nought
-/// turns the rendezvous off; see [`LumitTestPlugSetRenderRendezvous`].
 static RENDER_RENDEZVOUS: AtomicUsize = AtomicUsize::new(0);
 
-/// Non-zero makes every render answer `kOfxStatFailed`.
 static RENDER_FAILS: AtomicUsize = AtomicUsize::new(0);
 
 /// What the plugin found when it asked the host how big its Source clip was,
@@ -132,45 +113,26 @@ fn flag(name: &str) -> Option<f64> {
     std::env::var(name).ok()?.trim().parse::<f64>().ok()
 }
 
-/// What each of the eight plugins is for.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Variant {
-    /// `com.lumitlab.testplug` v1: one parameter of every standard kind, a
-    /// group, a page, and both drivable contexts.
     Full,
-    /// `com.lumitlab.testplug` v2: the same identifier at another version, with
-    /// a different parameter list, so two versions cannot come out the same.
     Slim,
-    /// Declares only the generator context.
     GeneratorOnly,
-    /// Answers `kOfxStatFailed` to describe.
     Broken,
     /// Defines `centre` as a 2-D double **and** `centre_x` as a double, which
     /// collide once the 2-D one is spread across two rows.
     Duplicate,
-    /// Hands its input back untouched, at fp32, and declares
-    /// `kOfxImageEffectRenderFullySafe`. The plugin a host's pixel path is
-    /// proved against: anything but the picture it was given is the host's
-    /// fault.
     Passthrough,
-    /// Answers `isIdentity` with its Source clip, so the host never renders it
-    /// at all.
     Identity,
-    /// Renders like the passthrough but declares
-    /// `kOfxImageEffectRenderUnsafe`, so two of its renders must never overlap.
     ThreadUnsafe,
 }
 
-// ------------------------------------------------------------ the plugins --
-
-/// A wrapper that lets an `OfxPlugin` full of raw pointers be a `static`.
 struct PluginStatic(OfxPlugin);
 
 // SAFETY: the struct is built at compile time from string literals and
 // function pointers and is never written to. Sharing it is sharing constants.
 unsafe impl Sync for PluginStatic {}
 
-/// Declare one plugin: its own `mainEntry`, and the static that names it.
 macro_rules! plugin {
     ($static_name:ident, $entry:ident, $id:expr, $major:expr, $variant:expr) => {
         unsafe extern "C" fn $entry(
@@ -241,13 +203,11 @@ plugin!(
     Variant::ThreadUnsafe
 );
 
-/// `OfxGetNumberOfPlugins`.
 #[no_mangle]
 pub extern "C" fn OfxGetNumberOfPlugins() -> c_int {
     PLUGIN_COUNT
 }
 
-/// `OfxGetPlugin`.
 #[no_mangle]
 pub extern "C" fn OfxGetPlugin(index: c_int) -> *const OfxPlugin {
     match index {
@@ -268,7 +228,6 @@ unsafe extern "C" fn set_host(host: *const OfxHost) {
     HOST.store(host as usize, Ordering::SeqCst);
 }
 
-/// Do something with the host, if there is one.
 fn with_host<R>(body: impl FnOnce(&OfxHost) -> R) -> Option<R> {
     let host = HOST.load(Ordering::SeqCst) as *const OfxHost;
     if host.is_null() {
@@ -279,7 +238,6 @@ fn with_host<R>(body: impl FnOnce(&OfxHost) -> R) -> Option<R> {
     Some(body(unsafe { &*host }))
 }
 
-/// Ask the host for a suite by name.
 fn fetch(host: &OfxHost, name: &CStr) -> *const c_void {
     let Some(fetch_suite) = host.fetch_suite else {
         return std::ptr::null();
@@ -338,12 +296,10 @@ unsafe fn dispatch(
         actions::GET_FRAMES_NEEDED => frames_needed(in_args, out_args),
         actions::INSTANCE_CHANGED => instance_changed(handle.cast_mut(), in_args),
         actions::RENDER => render(variant, handle.cast_mut(), in_args),
-        // An action a plugin does not implement is not an error.
         _ => Status::ReplyDefault.code(),
     }
 }
 
-/// Note an action in the log the test reads back.
 fn record_action(action: &str) {
     let mut log = ACTION_LOG.lock().unwrap_or_else(PoisonError::into_inner);
     if !log.is_empty() {
@@ -352,8 +308,6 @@ fn record_action(action: &str) {
     log.push_str(action);
 }
 
-/// `kOfxActionLoad`: note the order, fetch the suites, and say hello through
-/// the message suite so the whole path is exercised.
 fn on_load() -> OfxStatus {
     if LOAD_CALLS.fetch_add(1, Ordering::SeqCst) == 0 && HOST.load(Ordering::SeqCst) != 0 {
         HOST_SEEN_BEFORE_LOAD.store(1, Ordering::SeqCst);
@@ -401,16 +355,12 @@ fn on_load() -> OfxStatus {
         return Status::ErrMissingHostFeature.code();
     };
     SUITE_MASK.store(mask, Ordering::SeqCst);
-    // The property suite is the one suite no plugin can work without.
     if mask & SUITE_PROPERTY == 0 {
         return Status::ErrMissingHostFeature.code();
     }
     Status::Ok.code()
 }
 
-// ------------------------------------------------ writing into a prop set --
-
-/// The property suite, or a failure the caller passes on.
 fn properties<'a>() -> Option<&'a OfxPropertySuiteV1> {
     // SAFETY: `OfxPropertySuiteV1` is what the host declares for this name.
     unsafe { suite(c"OfxPropertySuite") }
@@ -448,8 +398,6 @@ fn set_int(
     // SAFETY: as above.
     unsafe { (props_suite.prop_set_int)(props, key.as_ptr(), index, value) };
 }
-
-// ---------------------------------------------------------------- describe --
 
 fn describe(variant: Variant, handle: *mut c_void) -> OfxStatus {
     if variant == Variant::Broken {
@@ -556,7 +504,6 @@ fn label_of(variant: Variant) -> &'static CStr {
     }
 }
 
-/// What each variant declares about running two renders at once.
 fn thread_safety_of(variant: Variant) -> &'static CStr {
     match variant {
         Variant::ThreadUnsafe => c"OfxImageEffectRenderUnsafe",
@@ -604,7 +551,6 @@ fn describe_in_context(variant: Variant, handle: *mut c_void) -> OfxStatus {
         return Status::ErrMissingHostFeature.code();
     };
 
-    // Every effect has a source and an output; a filter is exactly those two.
     for name in [c"Source", c"Output"] {
         let mut clip: OfxPropertySetHandle = std::ptr::null_mut();
         // SAFETY: the host's own function, given a valid out-parameter.
@@ -657,8 +603,6 @@ fn describe_in_context(variant: Variant, handle: *mut c_void) -> OfxStatus {
     Status::Ok.code()
 }
 
-/// The full plugin's controls: one of every standard kind, a group with two
-/// members, and a page with two more.
 fn describe_full(
     props_suite: &OfxPropertySuiteV1,
     param_suite: &OfxParameterSuiteV1,
@@ -673,7 +617,6 @@ fn describe_full(
     let double_type = c"OfxParamPropDoubleType";
     let parent = c"OfxParamPropParent";
 
-    // A plain number with both a slider range and a hard range.
     let gain = define(param_suite, params, c"OfxParamTypeDouble", c"gain");
     set_string(props_suite, gain, label, 0, c"Gain");
     set_double(props_suite, gain, default, 0, 0.5);
@@ -682,7 +625,6 @@ fn describe_full(
     set_double(props_suite, gain, display_min, 0, 0.0);
     set_double(props_suite, gain, display_max, 0, 2.0);
 
-    // An angle, which is degrees by definition.
     let rotation = define(param_suite, params, c"OfxParamTypeDouble", c"rotation");
     set_string(props_suite, rotation, label, 0, c"Rotation");
     set_string(
@@ -710,7 +652,6 @@ fn describe_full(
         set_double(props_suite, centre, display_max, axis, 100.0);
     }
 
-    // A group, and the two rows that live inside it.
     let advanced = define(param_suite, params, c"OfxParamTypeGroup", c"advanced");
     set_string(props_suite, advanced, label, 0, c"Advanced");
     set_int(props_suite, advanced, c"OfxParamPropGroupOpen", 0, 0);
@@ -769,7 +710,6 @@ fn describe_full(
     let caption = define(param_suite, params, c"OfxParamTypeString", c"caption");
     set_string(props_suite, caption, label, 0, c"Caption");
 
-    // A path, which Lumit does have a row for.
     let lut = define(param_suite, params, c"OfxParamTypeString", c"lutPath");
     set_string(props_suite, lut, label, 0, c"LUT file");
     set_string(
@@ -787,7 +727,6 @@ fn describe_full(
     let trigger = define(param_suite, params, c"OfxParamTypePushButton", c"trigger");
     set_string(props_suite, trigger, label, 0, c"Trigger");
 
-    // A page listing the two rows that are not in the group.
     let page = define(param_suite, params, c"OfxParamTypePage", c"filesPage");
     set_string(props_suite, page, label, 0, c"Files");
     for (index, child) in [c"lutPath", c"trigger"].into_iter().enumerate() {
@@ -800,8 +739,6 @@ fn describe_full(
         );
     }
 }
-
-// ----------------------------------------------------------------- render --
 
 /// `kOfxImageEffectActionGetRegionOfDefinition`: ask the host how big the input
 /// is, note what it said, and leave the answer to the host.
@@ -840,13 +777,9 @@ fn region_of_definition(handle: *mut c_void) -> OfxStatus {
         }
     };
     ROD_SAW_SOURCE.store(seen, Ordering::SeqCst);
-    // The host's own answer is the right one; this action exists here only to
-    // ask a question on the way past.
     Status::ReplyDefault.code()
 }
 
-/// `kOfxImageEffectActionIsIdentity`. Only one variant ever says yes, and it
-/// says it by naming the clip its output would have been.
 fn is_identity(variant: Variant, out_args: *mut c_void) -> OfxStatus {
     if variant != Variant::Identity {
         return Status::ReplyDefault.code();
@@ -892,14 +825,9 @@ fn frames_needed(in_args: *mut c_void, out_args: *mut c_void) -> OfxStatus {
     Status::Ok.code()
 }
 
-/// What the Trigger button writes into `gain`.
 pub const TRIGGERED_GAIN: f64 = 0.75;
-/// What the Trigger button writes into `vendorBlob`.
 pub const TRIGGERED_BLOB: &CStr = c"pressed";
 
-/// `kOfxActionInstanceChanged`: the Trigger button writes two of the plugin's
-/// own parameters, the way a plugin with an editor keeps what was done in it.
-/// Any other control changing is none of this plugin's business.
 fn instance_changed(effect: *mut c_void, in_args: *mut c_void) -> OfxStatus {
     let (Some(props_suite), Some(param_suite), Some(effect_suite)) =
         (properties(), parameter_suite(), image_effect_suite())
@@ -945,7 +873,6 @@ fn instance_changed(effect: *mut c_void, in_args: *mut c_void) -> OfxStatus {
     Status::Ok.code()
 }
 
-/// One image, as the four numbers that describe it.
 struct ImageView {
     /// The pixel at the bottom-left, which for a top-down image is inside the
     /// block rather than at its start.
@@ -955,7 +882,6 @@ struct ImageView {
     /// **Signed.** Negative means the rows run backwards through memory, and
     /// this plugin honours it rather than assuming.
     row_bytes: c_int,
-    /// The property set to release when the render is done.
     handle: OfxPropertySetHandle,
 }
 
@@ -982,7 +908,6 @@ impl ImageView {
     }
 }
 
-/// Fetch one clip's image and read its description out of the property set.
 fn fetch_image(
     effect_suite: &OfxImageEffectSuiteV1,
     props_suite: &OfxPropertySuiteV1,
@@ -1041,7 +966,6 @@ fn fetch_image(
     })
 }
 
-/// One clip handle, or null.
 fn clip_handle(
     effect_suite: &OfxImageEffectSuiteV1,
     effect: *mut c_void,
@@ -1061,8 +985,6 @@ fn clip_handle(
     }
 }
 
-/// One double control's value at a time, or `fallback` if the plugin has no
-/// such control.
 fn param_double(
     param_suite: &OfxParameterSuiteV1,
     props_suite: &OfxPropertySuiteV1,
@@ -1107,7 +1029,6 @@ fn param_double(
     }
 }
 
-/// `kOfxImageEffectActionRender` — the whole point.
 fn render(variant: Variant, effect: *mut c_void, in_args: *mut c_void) -> OfxStatus {
     let in_flight = RENDERS_IN_FLIGHT.fetch_add(1, Ordering::SeqCst) + 1;
     MAX_RENDERS_IN_FLIGHT.fetch_max(in_flight, Ordering::SeqCst);
@@ -1190,8 +1111,6 @@ fn render_body(variant: Variant, effect: *mut c_void, in_args: *mut c_void) -> O
         (props_suite.prop_get_double)(in_args, c"OfxPropTime".as_ptr(), 0, &raw mut time);
     }
 
-    // The three ways a plugin goes wrong, on purpose. None of them can happen
-    // unless a test asked for it in this process's environment.
     misbehave(props_suite, effect, time);
 
     let output = clip_handle(effect_suite, effect, c"Output");
@@ -1231,7 +1150,6 @@ fn render_body(variant: Variant, effect: *mut c_void, in_args: *mut c_void) -> O
         None => 1.0,
     };
 
-    // A passthrough scales by one, whatever anybody's control says.
     let gain = if variant == Variant::Full || variant == Variant::Slim {
         param_double(
             param_suite,

@@ -1,5 +1,3 @@
-//! The bytes that name a [`TextBlock`]'s picture.
-
 use crate::TextBlock;
 
 impl TextBlock<'_> {

@@ -52,11 +52,9 @@ import 'package:cryptography/cryptography.dart';
 const List<String> updateSigningKeys = [
   'chUP7yrHcxVoMNJvvrS2OI4Yp7ykKnirZtjtdL6OP5I=',
   '1tL5V8lkZIrdhr7+vItvC8M0gakZfsA/d3i5QXbm38k=',
-  // The key from 2026-10-25, which was a GitHub secret. Drop it in 0.13.0.
   'wdKj5QBAiMqg4MrywhedvTYx9zChP8UCebYHvtyvwxY=',
 ];
 
-/// What one attachment is, as the signed manifest says it.
 class SignedAsset {
   const SignedAsset({
     required this.name,
@@ -67,7 +65,6 @@ class SignedAsset {
   /// The attachment's file name, exactly as it is on the release.
   final String name;
 
-  /// How many bytes it is.
   final int size;
 
   /// Its SHA-256, lower-case hex, no prefix.
@@ -98,7 +95,6 @@ enum ReleaseTrust {
   /// release without one is a release made by somebody else.
   unsigned,
 
-  /// A manifest is there and the signature over it is not this key's.
   badSignature,
 
   /// The signature checks out and the manifest does not name the attachment
@@ -109,17 +105,13 @@ enum ReleaseTrust {
   malformed,
 }
 
-/// The signed manifest, once it has been believed.
 class VerifiedManifest {
   const VerifiedManifest({required this.version, required this.assets});
 
-  /// The version the manifest is for, as the release spells it.
   final String version;
 
-  /// Every attachment it names.
   final List<SignedAsset> assets;
 
-  /// What it says about [name], or null if it says nothing.
   SignedAsset? assetNamed(String name) {
     for (final asset in assets) {
       if (asset.name == name) return asset;

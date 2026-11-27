@@ -18,20 +18,15 @@ use std::sync::Arc;
 
 use realfft::{RealFftPlanner, RealToComplex};
 
-/// Samples a second.
 pub const RATE: usize = 16_000;
-/// Samples in one window: thirty seconds.
 pub const WINDOW: usize = 30 * RATE;
 /// Samples between two frames: 10 ms.
 pub const HOP: usize = 160;
-/// Frames in one window.
 pub const FRAMES: usize = WINDOW / HOP;
 /// The FFT's length: 25 ms.
 const FFT: usize = 400;
-/// Frequency bins the FFT hands back.
 const BINS: usize = FFT / 2 + 1;
 
-/// A spectrogram maker for one band count.
 pub struct Mel {
     bands: usize,
     /// `bands` rows of [`BINS`] weights.
@@ -152,7 +147,6 @@ fn mel_of(hz: f64) -> f64 {
     }
 }
 
-/// Slaney mels back to hertz.
 fn hz_of(mel: f64) -> f64 {
     if mel < 15.0 {
         mel * 200.0 / 3.0

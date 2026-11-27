@@ -19,7 +19,6 @@ import 'frb_test_support.dart';
 
 void main() {
   setUpAll(initEngineForTests);
-  // The rows these tests reach live inside the Export window's folds.
   setUp(() => exportOpenSections.addAll(ExportSection.values));
 
   group('Export metrics (frb)', () {

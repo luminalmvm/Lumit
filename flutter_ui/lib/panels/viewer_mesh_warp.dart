@@ -39,10 +39,8 @@ String meshVertexId(int rows, int columns, int r, int c, String axis) =>
 /// The six rows of a crossing, as the engine's `mesh_warp::AXES` names them.
 const meshAxes = ['x', 'y', 'hx', 'hy', 'vx', 'vy'];
 
-/// What a press holds: the crossing itself, or one end of one of its handles.
 enum _Grip { point, rowAfter, rowBefore, columnAfter, columnBefore }
 
-/// One selected Mesh warp on one layer, as the overlay reads it.
 class _Mesh {
   final LayerBox box;
   final BridgeEffectInstanceInfo fx;
@@ -92,7 +90,6 @@ class ViewerMeshWarp extends StatefulWidget {
   /// The armed tool. Only Selection drags a point.
   final ToolMode tool;
 
-  /// Told once a drag has been written.
   final VoidCallback onChanged;
 
   const ViewerMeshWarp({
@@ -170,7 +167,6 @@ class _ViewerMeshWarpState extends State<ViewerMeshWarp> {
         ),
       );
 
-  /// The lines, points and shown handles of one mesh on the screen.
   _Drawn _drawn(_Mesh m) {
     final cols = m.columns + 1;
     final curves = <List<Offset>>[];
@@ -275,7 +271,6 @@ class _ViewerMeshWarpState extends State<ViewerMeshWarp> {
     if (m == null) return;
     _travel += delta;
     var d = _travel;
-    // Shift keeps it to one axis, as it does for a layer's move.
     if (HardwareKeyboard.instance.isShiftPressed) d = constrainToAxis(d);
     final to = m.toPercent(m.toScreen(_from) + d);
     _to = to;
@@ -344,8 +339,6 @@ class _ViewerMeshWarpState extends State<ViewerMeshWarp> {
     });
   }
 
-  /// Every Mesh warp picked in the Effect controls, on a layer the Viewer
-  /// places.
   List<_Mesh> _meshes() {
     final picked = _ui.selectedEffects.value;
     if (picked.isEmpty) return const [];
@@ -404,7 +397,6 @@ class _ViewerMeshWarpState extends State<ViewerMeshWarp> {
   }
 }
 
-/// One mesh as it is painted.
 class _Drawn {
   /// Each edge of each cell as a cubic: start, two controls, end.
   final List<List<Offset>> curves;

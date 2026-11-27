@@ -92,7 +92,6 @@ fn index(c: vec3<i32>) -> u32 {
     return u32(c.x + c.y * n.x + c.z * n.x * n.y);
 }
 
-// A cell's speed from its words.
 fn speed_of(w: vec4<u32>) -> vec4<f32> {
     return vec4<f32>(unpack2x16float(w.x), unpack2x16float(w.y));
 }
@@ -129,7 +128,6 @@ fn first_at(q: vec3<f32>) -> Cell {
     return cell;
 }
 
-// The same from the second.
 fn second_at(q: vec3<f32>) -> Cell {
     let m = q - vec3<f32>(0.5);
     let low = vec3<i32>(floor(m));
@@ -150,7 +148,6 @@ fn solid_here(i: u32) -> bool {
     return s.extra.z > 0.5 && unpack2x16float(solid[i].y).y > 0.5;
 }
 
-// Which cells a solid is in this frame, and how fast it is going there.
 @compute @workgroup_size(4, 4, 4)
 fn smoke_solids(@builtin(global_invocation_id) gid: vec3<u32>) {
     let c = vec3<i32>(gid);

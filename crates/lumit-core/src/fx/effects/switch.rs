@@ -17,7 +17,6 @@
 use crate::fx::{registry::EffectDef, registry::EffectMetadata, schema::EffectSchema};
 use lumit_fx_macros::Effect;
 
-/// The Switch's one control.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "switch",
@@ -39,7 +38,6 @@ pub struct Switch {
     pub index: i32,
 }
 
-/// The Switch's behaviour: none of its own, for the Merge's reason.
 pub struct SwitchDef;
 
 impl EffectDef for SwitchDef {

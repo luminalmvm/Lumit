@@ -13,7 +13,6 @@ import '../state/app_state.dart';
 import 'cut_timeline_tracks.dart';
 import 'waveform_frb.dart' show WaveformRequest;
 
-/// The mix [bus] carries over a stretch of comp seconds.
 Future<BridgeAudioPeaks> busMixPeaks(CompositionReference comp, UuidValue bus,
         {required double startSeconds,
         required double endSeconds,
@@ -24,14 +23,11 @@ Future<BridgeAudioPeaks> busMixPeaks(CompositionReference comp, UuidValue bus,
         buckets: buckets,
         bus: bus);
 
-/// Whether [layer] is a bus track's, which takes no clips.
 bool cutIsBusLayer(List<CutTrack> tracks, LayerReference layer) => tracks.any(
     (t) => t.bus && t.entry.layer.internallayerId == layer.internallayerId);
 
-/// What is let go or pasted on a bus track is refused, and said so.
 void cutRefuseOnBus(LumitState app) => app.postNotice(l10n.cutRefusedBusTrack);
 
-/// Whether the point [at] on the lanes is over a bus track.
 bool cutOverBus(List<CutTrack> tracks, List<double> tops, Offset? at) {
   final index = at == null ? null : cutTrackAt(tracks, at.dy, tops);
   return index != null && tracks[index].bus;
@@ -89,7 +85,6 @@ class CutBusPeaks {
     }, onError: (Object _) {});
   }
 
-  /// Forget every track not in [live], which has left the view.
   void keep(Set<String> live) {
     _keys.removeWhere((id, _) => !live.contains(id));
     _asks.removeWhere((id, _) => !live.contains(id));

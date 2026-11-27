@@ -1,0 +1,64 @@
+---
+title: Pixel flow
+description: "Square pixels streaming along lanes."
+---
+
+Pixel flow is a **Textures** effect.
+
+## What it does
+
+Draws lanes of square pixels moving in one direction, each lane at its own speed. Pixels are
+lit at random, and each lit pixel takes a colour from the ramp at random.
+
+It moves with the layer's time.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Pixel size** | Slider | 1 to 200; any value by typing | 12 | Pixels at composition size |
+| **Speed** | Slider | 0 to 100; any value by typing | 10 | - |
+| **Speed variation** | Slider | 0 to 100 | 35 | - |
+| **Density** | Slider | 0 to 100 | 30 | - |
+| **Gap** | Slider | 0 to 100 | 10 | - |
+| **Direction** | Dial | Any angle | 0° | Degrees |
+| **Background colour** | Colour | Each channel 0 to 1 | Black | - |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Paint** | Dropdown | Inside layer · Whole frame | Inside layer | - |
+| **Interpolation** | Dropdown | Linear · Smooth · Constant | Linear | - |
+| **Progression** | Dropdown | Linear · Quadratic · Easing | Linear | - |
+| **Stops** | Slider, whole numbers | 2 to 5 | 3 | - |
+| **Colour 1** to **Colour 5** | Colour | Each channel 0 to 1 | White, amber, blue, magenta, black | - |
+| **Position 1** to **Position 5** | Slider | 0 to 100 | 0, 50, 100, 100, 100 | - |
+
+## What each control does
+
+- **Pixel size**: how big each pixel is.
+- **Speed**: how fast the pixels move, in pixels of the pattern a second. At 0 nothing
+  moves.
+- **Speed variation**: how much the lanes differ in speed.
+- **Density**: how many of the pixels are lit.
+- **Gap**: the unlit border of each pixel, as a per cent of its size.
+- **Direction**: the way the lanes run.
+- **Background colour**: the colour of the unlit pixels and the gaps.
+- **Seed**: which pixels are lit, and each lane's speed.
+- **Paint**: **Inside layer** paints only where the layer draws, and **Whole frame** fills
+  the whole of the layer's picture.
+- **Interpolation**: how one stop meets the next. **Smooth** eases between them, and
+  **Constant** holds each colour until the next stop.
+- **Progression**: how the ramp is read from end to end. **Quadratic** stretches the start
+  of the ramp, and **Easing** stretches both ends.
+- **Stops**: how many colours are used, from Colour 1.
+- **Colour 1** to **Colour 5** and **Position 1** to **Position 5**: each stop's colour, and
+  where it sits on the ramp. Stops are sorted by Position.
+- **Mix**: how much of the result replaces the original.
+- **Blend**: the blend mode the result is laid over the original with.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
+
+## Related
+
+- [Matrix effect](/effects/generate/matrix-effect/)
+- [Mosaic](/effects/stylise/mosaic/)
+- [Textures](/effects/#textures)
+- [Effects](/use/effects/)

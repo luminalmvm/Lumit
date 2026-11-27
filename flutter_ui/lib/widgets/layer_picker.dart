@@ -1,5 +1,3 @@
-// The layer picker: a dropdown over a composition's layers, each one led by
-// its number in the stack.
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -8,12 +6,9 @@ import 'package:uuid/uuid.dart';
 import '../theme/theme.dart';
 import 'controls.dart';
 
-/// A layer's number as it's written beside a name: mono like the Timeline's
-/// own number column, and muted so it never reads as part of the name.
 TextStyle layerNumberStyle(LumitTheme t, double? size) =>
     t.mono.copyWith(fontSize: size, color: t.textMuted);
 
-/// A layer and its number as one plain line, for a tooltip.
 String numberedLayer(int number, String name) => '$number. $name';
 
 /// Where [layer] stands in [layers], counted from 1, or null when it isn't
@@ -35,20 +30,16 @@ class LayerPicker extends StatelessWidget {
   /// only the rows on screen.
   final List<BridgeLayerEntry> layers;
 
-  /// The layer picked, or null for none.
   final UuidValue? value;
 
-  /// What the empty choice is called.
   final String empty;
 
-  /// What the face reads when [value] names a layer that has gone.
   final String missing;
 
   /// Whether a layer is on offer. Asked when the list opens and never while
   /// drawing, so it may cross the bridge.
   final bool Function(BridgeLayerEntry) offered;
 
-  /// What a layer is called here, when that's more than its own name.
   final String Function(BridgeLayerEntry)? name;
   final ValueChanged<UuidValue?> onChanged;
 
@@ -89,8 +80,6 @@ class LayerPicker extends StatelessWidget {
         face: number == null
             ? null
             : Flexible(
-                // One line of text, so a narrow cell cuts the name short and
-                // keeps the number.
                 child: Builder(
                   builder: (context) => Text.rich(
                     TextSpan(children: [
@@ -117,7 +106,6 @@ class LayerPicker extends StatelessWidget {
       for (var i = 0; i < layers.length; i++)
         if (offered(layers[i])) i,
     ];
-    // Padded to the longest number, so the names start in one column.
     final digits = rows.isEmpty ? 0 : '${rows.last + 1}'.length;
     final current = GlobalKey();
     // Boxed in a record, so picking the empty choice isn't read as the list
@@ -162,7 +150,6 @@ class LayerPicker extends StatelessWidget {
         }),
       ),
     );
-    // A long list opens on the layer picked and not at its top.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final row = current.currentContext;
       if (row != null) Scrollable.ensureVisible(row, alignment: 0.5);

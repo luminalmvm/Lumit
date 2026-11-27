@@ -229,7 +229,6 @@ fn eval_dynamic(
 
 const MAXIMUM_DEPTH: u32 = 100;
 
-/// A JavaScript text read into a program, or why it does not read.
 type Read = Result<Rc<script::parse::Program>, Rc<str>>;
 
 thread_local! {
@@ -264,7 +263,6 @@ fn program_for(expression: &str) -> Read {
     program
 }
 
-/// Run a JavaScript expression, or say why it did not run.
 fn run_javascript(
     expression: &str,
     context: Option<&ExpressionContext>,
@@ -450,7 +448,6 @@ pub fn note_point(property: &mut crate::anim::Property, point: &[f64], axis: usi
         .write(&mut property.extra);
 }
 
-/// [`note_point`] for the row `prop` of `layer`, given that row's new state.
 pub fn note_transform_point(
     layer: &crate::model::Layer,
     prop: crate::model::TransformProp,
@@ -471,8 +468,6 @@ pub fn note_transform_point(
     note_point(next, &point, axis);
 }
 
-/// [`note_point`] for the parameter `param` of `inst`, when it is half of a
-/// pair and its expression was only just put on.
 pub fn note_effect_point(inst: &mut crate::model::EffectInstance, param: &str) {
     use crate::model::EffectValue;
     let Some(pair) = crate::fx::builtins::schema(&inst.effect.match_name)
@@ -586,9 +581,6 @@ pub fn evaluate(expression: &str, context: Option<Arc<ExpressionContext>>) -> f6
     convert_result(eval_dynamic(expression, context, &[]))
 }
 
-/// [`evaluate`] in the language named, for the callers that hold an
-/// expression's text and its language but not the property it came off: the
-/// panels, sampling a row to show its number.
 pub fn evaluate_in(
     language: Language,
     expression: &str,
@@ -642,10 +634,6 @@ pub fn evaluate_with_keys(
     })
 }
 
-/// [`evaluate`] for a property that is in hand, whose `extra` says which
-/// language its expression is in and what the expression may know about the
-/// property: its value before the expression, and which number of a point it
-/// is ([`Slot`]).
 pub fn evaluate_property(
     expression: &str,
     context: Option<Arc<ExpressionContext>>,
@@ -791,7 +779,6 @@ pub fn evaluate_range(
 pub enum ExprValue {
     /// One number: a float, a whole number, or a boolean read as 1 and 0.
     Number(f64),
-    /// Two numbers - a position, a scale, an anchor.
     Point(f64, f64),
     /// Three or four - a colour, alpha defaulting to opaque.
     Colour([f32; 4]),
@@ -814,7 +801,6 @@ pub fn evaluate_value(
     evaluate_value_in(Language::Rhai, expression, context, vars)
 }
 
-/// [`evaluate_value`] in the language named.
 pub fn evaluate_value_in(
     language: Language,
     expression: &str,

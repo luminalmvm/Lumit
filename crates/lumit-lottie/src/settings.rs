@@ -7,20 +7,16 @@ use lumit_core::time::FrameRate;
 
 use crate::check::Players;
 
-/// The file a vector export writes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Format {
-    /// A Lottie `.json`.
     #[default]
     Lottie,
     /// A `.lottie`: the same animation zipped with its pictures (dotLottie v2).
     DotLottie,
-    /// An `.svg` that animates by itself in a browser.
     Svg,
 }
 
 impl Format {
-    /// The extension the file takes, without the dot.
     #[must_use]
     pub fn extension(self) -> &'static str {
         match self {
@@ -41,7 +37,6 @@ impl Format {
         }
     }
 
-    /// The key [`Self::from_key`] reads.
     #[must_use]
     pub fn key(self) -> &'static str {
         match self {
@@ -52,7 +47,6 @@ impl Format {
     }
 }
 
-/// How a Text layer goes out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TextMode {
     /// The letters' outlines, drawn the same by every player. An SVG is always
@@ -64,27 +58,22 @@ pub enum TextMode {
     Text,
 }
 
-/// Where the pictures of still footage go.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ImageMode {
     /// Inside the file, as data. A `.lottie` always carries them in its zip.
     #[default]
     Embed,
-    /// Written beside the file and named from it.
     Beside,
 }
 
-/// Which stretch of the comp goes out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Span {
     /// The work area when the comp has one, else the whole comp.
     #[default]
     WorkArea,
-    /// The whole comp.
     Whole,
 }
 
-/// Everything a vector export is asked for.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Settings {
     pub format: Format,

@@ -1,6 +1,3 @@
-// The library of saved graphics templates, as the panels share it: the
-// templates in the project that the library has a newer version of, and which
-// of the two timelines a template placed at the playhead goes into.
 
 import 'dart:async';
 
@@ -14,8 +11,6 @@ import 'package:uuid/uuid.dart';
 import '../l10n/strings.dart';
 import 'dock.dart';
 
-/// A template's key in the workspace's favourites, beside the effects' and
-/// the presets'.
 String templateFavouriteKey(BridgeLibraryTemplate template) =>
     'template:${template.id}';
 
@@ -28,7 +23,6 @@ class TemplateUpdates extends ChangeNotifier {
 
   static final TemplateUpdates _instance = TemplateUpdates._();
 
-  /// The one list, following [app] and [ui].
   static TemplateUpdates of(LumitState app, LumitUiState ui) =>
       _instance.._bind(app, ui);
 
@@ -48,7 +42,6 @@ class TemplateUpdates extends ChangeNotifier {
       _ui?.presetsChanged.removeListener(read);
       _ui?.activePane.removeListener(_paneChanged);
     } catch (_) {
-      // The state followed before has been let go.
     }
     _app = app;
     _ui = ui;
@@ -75,7 +68,6 @@ class TemplateUpdates extends ChangeNotifier {
     scheduleMicrotask(read);
   }
 
-  /// Read the list again now.
   void read() {
     _soon = false;
     final project = _app?.project;
@@ -91,11 +83,8 @@ class TemplateUpdates extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Every template the library has a newer version of.
   List<BridgeTemplateUpdate> get all => _all;
 
-  /// The newer version of the template whose composition is [comp], if the
-  /// library has one.
   BridgeTemplateUpdate? forComp(UuidValue comp) {
     for (final update in _all) {
       if (update.comp == comp) return update;

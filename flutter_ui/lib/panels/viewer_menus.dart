@@ -87,7 +87,6 @@ Widget viewerRow(
           action: action, ticked: ticked, enabled: pick != null),
     );
 
-/// A row that opens a flyout, its name on the same edge as its neighbours.
 Widget viewerSub(
   String text,
   VoidCallback close,
@@ -109,7 +108,6 @@ Widget viewerSub(
       child: MenuLabel(text, ticked: false),
     );
 
-/// A right click on [child] opens [rows] at the pointer.
 class ViewerRightClick extends StatelessWidget {
   final Widget child;
   final List<Widget> Function(VoidCallback close) rows;
@@ -128,9 +126,6 @@ class ViewerRightClick extends StatelessWidget {
       );
 }
 
-// --- Rows that more than one menu shares -------------------------------------
-
-/// The magnification, as the header's picker and the View menu offer it.
 List<Widget> viewerZoomRows(
   LumitUiState ui,
   ViewerMenuHost host,
@@ -179,14 +174,12 @@ String viewerChannelName(ViewerChannel c) => switch (c) {
       ViewerChannel.alpha => l10n.channelAlpha,
     };
 
-/// The channel on view, ticked.
 List<Widget> viewerChannelRows(ViewerMenuHost host, VoidCallback close) => [
       for (final c in ViewerChannel.values)
         viewerRow(viewerChannelName(c), () => host.onChannel(c), close,
             id: 'viewer-channel-${c.name}', ticked: c == host.channel),
     ];
 
-/// Taking a snapshot, showing it, and letting it go.
 List<Widget> viewerSnapshotRows(ViewerMenuHost host, VoidCallback close) => [
       viewerRow(l10n.tipViewerSnapshotTake, host.takeSnapshot, close,
           id: 'viewer-menu-snapshot-take'),
@@ -201,7 +194,6 @@ List<Widget> viewerSnapshotRows(ViewerMenuHost host, VoidCallback close) => [
           id: 'viewer-menu-snapshot-clear'),
     ];
 
-/// How the views in this panel are laid out, and the two put together.
 List<Widget> viewerLayoutRows(LumitUiState ui, VoidCallback close) => [
       viewerRow(l10n.menuOneView, () => ui.setViewerLayout(ViewLayout.one),
           close,
@@ -220,8 +212,6 @@ List<Widget> viewerLayoutRows(LumitUiState ui, VoidCallback close) => [
           ticked: ui.currentViewerLayout == ViewLayout.four),
     ];
 
-/// How a compare puts things together, then what the second side is: the
-/// view's own snapshot, or another composition.
 List<Widget> viewerCompareRows(LumitUiState ui, VoidCallback close) {
   final comps = ui.compareChoices;
   final sideB = ui.compareSideB;
@@ -264,7 +254,6 @@ List<Widget> viewerCompareRows(LumitUiState ui, VoidCallback close) {
   ];
 }
 
-/// What playback does at the end of the work area, ticked.
 List<Widget> viewerLoopRows(LumitUiState ui, VoidCallback close) => [
       for (final (mode, text) in [
         (LoopMode.workArea, l10n.tipTransportLoopWorkArea),
@@ -276,7 +265,6 @@ List<Widget> viewerLoopRows(LumitUiState ui, VoidCallback close) => [
             ticked: ui.workspace.performance.loop == mode),
     ];
 
-/// How fast the Viewer plays, ticked.
 List<Widget> viewerSpeedRows(LumitUiState ui, VoidCallback close) => [
       for (final slow in playbackSlows)
         viewerRow(l10n.viewerSpeedTimes(1 / slow),
@@ -284,7 +272,6 @@ List<Widget> viewerSpeedRows(LumitUiState ui, VoidCallback close) => [
             ticked: ui.playbackSlow == slow),
     ];
 
-/// An empty stretch of the Viewer's bars: how they're arranged.
 List<Widget> viewerBarRows(LumitUiState ui, VoidCallback close) => [
       for (final (bars, text) in [
         (ViewerBars.auto, l10n.styleChoice),
@@ -301,8 +288,6 @@ List<Widget> viewerBarRows(LumitUiState ui, VoidCallback close) => [
             ticked: ui.workspace.interface.viewerBars == bars),
     ];
 
-/// The transport's menu: the moves its marks make, the places they don't reach,
-/// and what playback does.
 List<Widget> viewerTransportRows(
   LumitUiState ui,
   BridgeCompSettings settings,
@@ -350,7 +335,6 @@ List<Widget> viewerTransportRows(
   ];
 }
 
-/// The clock's menu: the time as words, and the transport's own rows.
 List<Widget> viewerClockRows(
   LumitUiState ui,
   BridgeCompSettings settings,
@@ -374,8 +358,6 @@ List<Widget> viewerClockRows(
     ...viewerTransportRows(ui, settings, comp, onSeek, close),
   ];
 }
-
-// --- The frame as a file -----------------------------------------------------
 
 /// The composition's frame at the playhead, at its own full size, as the export
 /// would make it. Null where there's no graphics adapter to draw it.
@@ -474,7 +456,6 @@ Future<bool> _pictureToClipboard(String path) async {
   return done.exitCode == 0;
 }
 
-/// Save the frame at the playhead as a PNG.
 Future<void> saveViewerFrame(
   BuildContext context,
   LumitUiState ui,
@@ -499,9 +480,6 @@ Future<void> saveViewerFrame(
   }
 }
 
-// --- The picture's menu ------------------------------------------------------
-
-/// The marks over the picture and what's behind it, ticked.
 List<Widget> viewerShowRows(
   LumitUiState ui,
   ViewerMenuHost host,
@@ -599,8 +577,6 @@ List<Widget> viewerGuideRows(
   ];
 }
 
-/// A ruler's menu: a guide from this strip where the pointer is, the units, the
-/// guides' own rows and the rulers' tick.
 void showViewerRulerMenu(
   BuildContext context,
   LumitUiState ui,
@@ -675,7 +651,6 @@ void showViewerRulerMenu(
   );
 }
 
-/// One guide's menu: where it is, and taking it away.
 void showViewerGuideMenu(
   BuildContext context,
   LumitUiState ui,
@@ -734,7 +709,6 @@ void showViewerGuideMenu(
   );
 }
 
-/// The region of interest: sweeping one out, or letting go of the one in force.
 Widget viewerRegionRow(LumitUiState ui, VoidCallback close) {
   final region = ui.regionOfInterest != null;
   return viewerRow(
@@ -747,7 +721,6 @@ Widget viewerRegionRow(LumitUiState ui, VoidCallback close) {
       ticked: region || ui.armingRegion);
 }
 
-/// The composition's own two rows.
 List<Widget> viewerCompositionRows(
   BuildContext context,
   LumitUiState ui,
@@ -792,7 +765,6 @@ void showViewerPictureMenu({
       final app = Provider.of<LumitState>(context, listen: false);
       return [
         if (top.isNotEmpty) ...[...top, const MenuDivider()],
-        // A new layer, from the Layer menu's own rows, and the clipboard.
         SubmenuRow(
           key: const ValueKey('viewer-menu-new'),
           closeParent: close,
@@ -888,7 +860,6 @@ Widget viewerLayerFlyout(
   );
 }
 
-/// Whether the source side's Replace has a clip picked in the Cut timeline.
 bool canReplace(LumitUiState ui) =>
     ui.selectedComp != null && ui.cutClip.value != null;
 
@@ -896,8 +867,6 @@ bool canReplace(LumitUiState ui) =>
 /// read on a press or once a revision, never on every build.
 bool canFit(LumitUiState ui) => ui.selectedComp?.getWorkArea() != null;
 
-/// The source view's menu: the marks, placing what they hold, finding the
-/// footage in the Project panel, and letting it go.
 List<Widget> viewerSourceRows(
   LumitUiState ui,
   ViewerSurface view,

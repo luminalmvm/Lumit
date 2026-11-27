@@ -17,7 +17,6 @@ use lumit_gpu::GpuContext;
 
 use crate::gpufx::{AuxData, AuxKind, AuxSlot, GpuEffect};
 
-/// The kernels' copy of the resolved numbers.
 fn op_of(p: &DenoiseParams) -> DenoiseOp {
     DenoiseOp {
         view: p.view,

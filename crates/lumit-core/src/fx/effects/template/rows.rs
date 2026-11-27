@@ -13,7 +13,6 @@ use crate::fx::shader::hash64;
 use crate::model::{EffectInstance, EffectValue};
 use crate::template::{ControlKind, PLAY_INTRO, PLAY_OUTRO};
 
-/// Every control list this process has derived rows from, by its hash.
 type RowCache = RwLock<HashMap<u64, &'static [ParamSchema]>>;
 
 fn cache() -> &'static RowCache {

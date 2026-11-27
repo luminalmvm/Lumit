@@ -10,7 +10,6 @@ class MiddleEllipsis extends StatelessWidget {
   final String text;
   final TextStyle style;
 
-  /// What the tooltip says when the text is cut. The text itself by default.
   final String? tip;
 
   const MiddleEllipsis(this.text, {super.key, required this.style, this.tip});
@@ -40,7 +39,6 @@ class MiddleEllipsis extends StatelessWidget {
         if (!box.hasBoundedWidth || fits(text)) {
           return Text(text, style: style, maxLines: 1, softWrap: false);
         }
-        // The most letters that fit, found by halving.
         var low = 0;
         var high = letters.length - 1;
         while (low < high) {

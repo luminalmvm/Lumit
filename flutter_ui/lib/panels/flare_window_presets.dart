@@ -1,5 +1,3 @@
-// The Flare window's presets strip under the preview: Built in and Yours
-// tabs, the group chips, and a row of thumbnails drawn by the preview call.
 
 part of 'flare_window.dart';
 
@@ -90,8 +88,6 @@ extension _Presets on _FlareWindowState {
           ],
         ),
         const SizedBox(height: gap),
-        // A grid that scrolls down: as many tiles across as the width takes,
-        // each grown to fill its share.
         Expanded(
           child: LayoutBuilder(builder: (context, c) {
             final across = math.max(
@@ -192,7 +188,6 @@ extension _Presets on _FlareWindowState {
     );
   }
 
-  /// A click replaces the elements with the preset's, and takes its name.
   void _usePreset(BridgeFlarePreset p) {
     final design = jsonDecode(p.json) as Json;
     _edit(() {

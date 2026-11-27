@@ -26,7 +26,6 @@ const Set<String> _pictureExtensions = {
   'webp', 'ppm', 'pgm', 'pnm', 'pbm', 'hdr', 'gif',
 };
 
-/// The paths of [paths] that are pictures that exist, in the order given.
 List<String> pictureFiles(Iterable<String> paths) => [
       for (final path in paths)
         if (_pictureExtensions.contains(_extensionOf(path)) &&
@@ -40,7 +39,6 @@ String _extensionOf(String path) {
   return dot <= slash ? '' : path.substring(dot + 1).toLowerCase();
 }
 
-/// The picture files copied in a file manager, or none.
 Future<List<String>> clipboardPictureFiles() async {
   try {
     return pictureFiles(await Pasteboard.files());

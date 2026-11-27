@@ -42,7 +42,6 @@ Future<Color?> readWindowPixel(Offset global, double pixelRatio) async {
   if (layer is! OffsetLayer) return null;
   final local = boundary.globalToLocal(global);
   if (!(Offset.zero & boundary.size).contains(local)) return null;
-  // One device pixel: a logical pixel is several of them on a scaled display.
   final side = 1 / pixelRatio;
   ui.Image? image;
   try {
@@ -56,15 +55,12 @@ Future<Color?> readWindowPixel(Offset global, double pixelRatio) async {
     return documentColour(un(bytes.getUint8(0)), un(bytes.getUint8(1)),
         un(bytes.getUint8(2)), 0xff);
   } catch (_) {
-    // A boundary not painted yet, or a driver that will not read back.
     return null;
   } finally {
     image?.dispose();
   }
 }
 
-/// Arm the eyedropper over the whole window, and complete with the colour
-/// clicked, or null when it was put away.
 Future<Color?> pickColourOnScreen(BuildContext context) {
   final overlay = Overlay.of(context);
   final completer = Completer<Color?>();
@@ -91,13 +87,10 @@ class _ScreenDropper extends StatefulWidget {
 }
 
 class _ScreenDropperState extends State<_ScreenDropper> {
-  /// Where the pointer is, in this overlay's own coordinates, for the tag.
   Offset? _at;
 
-  /// The colour under the pointer, as last read.
   Color? _under;
 
-  /// A read is in flight; [_next] is where the pointer went meanwhile.
   bool _reading = false;
   Offset? _next;
 

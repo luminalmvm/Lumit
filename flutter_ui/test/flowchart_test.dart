@@ -1,5 +1,3 @@
-// The flowchart popover: what it draws round a composition, where the arrow
-// keys take the cursor, and what opens and shuts it.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -18,8 +16,6 @@ CompositionReference _comp(int n) => CompositionReference(
     );
 
 void main() {
-  // Film and Reel place Shot, Shot places Plate and Titles, Plate places
-  // Grain. Solo is in nothing and holds nothing.
   final film = _comp(1), reel = _comp(2), shot = _comp(3);
   final plate = _comp(4), titles = _comp(5), grain = _comp(6), solo = _comp(7);
   BridgeCompFlowLink link(CompositionReference comp, String name,

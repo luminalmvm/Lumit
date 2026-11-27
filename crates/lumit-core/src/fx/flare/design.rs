@@ -11,7 +11,6 @@ use serde::{Deserialize, Serialize};
 use super::controls::controls;
 use crate::model::EffectInstance;
 
-/// Where a design lives in the instance's `extra`.
 pub const EXTRA_KEY: &str = "flare";
 
 /// The file format's version, written as `lumit_flare` in every design.
@@ -49,7 +48,6 @@ impl Kind {
         Kind::Picture,
     ];
 
-    /// The kind's name as the window shows it.
     pub fn label(self) -> &'static str {
         match self {
             Kind::Glow => "Glow",
@@ -66,7 +64,6 @@ impl Kind {
         }
     }
 
-    /// Which part of the Add menu and the element list it sits in.
     pub fn place(self) -> Place {
         match self {
             Kind::Glow | Kind::Rays | Kind::Star | Kind::Streak | Kind::Ring | Kind::Halo => {
@@ -79,7 +76,6 @@ impl Kind {
     }
 }
 
-/// The groups of the Add menu.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Place {
     OnTheLight,
@@ -99,20 +95,15 @@ impl Place {
     }
 }
 
-/// How an element is coloured.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ColourMode {
     /// The light's own colour, times the effect's Colour row.
     #[default]
     Light,
-    /// The first colour.
     Solid,
-    /// Each copy picks one of the colours by its seed.
     Mixed,
-    /// From the first colour at the middle to the second at the edge.
     Gradient,
-    /// A spectrum across the element.
     Rainbow,
 }
 
@@ -136,7 +127,6 @@ impl ColourMode {
     }
 }
 
-/// An element's colour: the mode and the scene-linear colours it uses.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Colour {
     #[serde(default)]
@@ -162,7 +152,6 @@ fn yes() -> bool {
     true
 }
 
-/// One element of a design.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Element {
     pub kind: Kind,
@@ -179,8 +168,6 @@ pub struct Element {
 }
 
 impl Element {
-    /// A fresh element of `kind` with every value at its default, named after
-    /// its kind.
     pub fn new(kind: Kind) -> Self {
         Self {
             kind,
@@ -203,12 +190,10 @@ impl Element {
         }
     }
 
-    /// [`Self::num`] as a whole number, for counts and choices.
     pub fn int(&self, key: &str) -> u32 {
         self.num(key).round().max(0.0) as u32
     }
 
-    /// [`Self::num`] as a switch.
     pub fn on(&self, key: &str) -> bool {
         self.num(key) >= 0.5
     }
@@ -244,7 +229,6 @@ fn format() -> u32 {
 }
 
 impl Design {
-    /// Read a design from its JSON, or `None` when it isn't one.
     pub fn parse(text: &str) -> Option<Self> {
         serde_json::from_str(text).ok()
     }
@@ -254,7 +238,6 @@ impl Design {
     }
 }
 
-/// The design an instance keeps, or `None` when it keeps none.
 pub fn embedded(e: &EffectInstance) -> Option<Design> {
     serde_json::from_value(e.extra.get(EXTRA_KEY)?.clone()).ok()
 }
@@ -265,7 +248,6 @@ pub fn embedded_text(e: &EffectInstance) -> Option<String> {
     e.extra.get(EXTRA_KEY).map(|v| v.to_string())
 }
 
-/// Keep `design` in the instance, or forget it with `None`.
 pub fn set_embedded(e: &mut EffectInstance, design: Option<&Design>) {
     match design.and_then(|d| serde_json::to_value(d).ok()) {
         Some(v) => {

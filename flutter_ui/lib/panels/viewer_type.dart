@@ -158,13 +158,11 @@ int characterIndexOf(String text, int utf16) {
   var characters = 0;
   for (var i = 0; i < end; i++) {
     final unit = text.codeUnitAt(i);
-    // The second half of a pair counts nothing; the first counts the whole.
     if (unit < 0xDC00 || unit > 0xDFFF) characters++;
   }
   return characters;
 }
 
-/// The inverse of [characterIndexOf].
 int utf16OffsetOf(String text, int characters) {
   var offset = 0;
   var seen = 0;
@@ -189,8 +187,6 @@ TextSelection wordAround(String text, int at) {
     return 2;
   }
 
-  // The character the click is on: the one after the caret, or the last one
-  // when the click was past the end of the line.
   final i = at.clamp(0, text.length - 1);
   final kind = classOf(i);
   if (kind == 2) {
@@ -222,9 +218,7 @@ TextSelection wordAround(String text, int at) {
 /// whichever view takes it, and no place picks the words whole.
 ({int? view, LayerReference layer, Offset? at})? viewerTypeEditRequest;
 
-/// The Type tool over the picture.
 class ViewerTypeLayer extends StatefulWidget {
-  /// Whether a type tool is armed. Inert otherwise.
   final bool active;
 
   /// The engine's id for the view this is drawn over, so a request made in one
@@ -236,14 +230,10 @@ class ViewerTypeLayer extends StatefulWidget {
   final LumitState state;
   final LumitUiState uiState;
 
-  /// Every layer with its box, top first — for finding the text layer under a
-  /// click and for placing the caret over it.
   final List<LayerBox> boxes;
 
-  /// Where the picture sits on screen.
   final Rect fitted;
 
-  /// The composition's size in its own pixels.
   final Size compSize;
 
   final Color accent;
@@ -270,23 +260,17 @@ class ViewerTypeLayer extends StatefulWidget {
 }
 
 class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
-  /// The layer being typed into, if any.
   LayerReference? _editing;
 
-  /// Whether this tool made that layer, so an edit that ends with nothing typed
-  /// can take it away again.
   bool _created = false;
 
-  /// Whether the Viewer's boxes are being shown a moved anchor for this edit.
   bool _movedLive = false;
 
   /// The document the edit opened on, for the moment the layer can't be read.
   BridgeTextDocument? _held;
 
-  /// The words as the picture was last asked to show them.
   String _typed = '';
 
-  /// Where the pointer is, for the drawn beam vertical type wears.
   Offset? _pointer;
 
   /// Whether the press under way belongs to the words: it landed on a text
@@ -297,11 +281,8 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
   /// selection that stays put while the other follows the pointer.
   int _dragBase = 0;
 
-  /// What a double- or triple-click selected, so dragging on from it grows by
-  /// whole words, or keeps the whole line.
   TextSelection? _dragUnit;
 
-  /// Consecutive clicks in one place: two selects a word, three the line.
   int _clicks = 0;
   Offset? _lastClickPos;
   Timer? _clickRun;
@@ -325,11 +306,9 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
   bool _dragAllowed(int buttons) =>
       buttons == kPrimaryButton && widget.tool != ToolMode.typeVertical;
 
-  /// The two corners of a text box being dragged out on empty picture.
   Offset? _boxFrom;
   Offset? _boxTo;
 
-  /// A box narrower than this on screen was a click with a shaky hand.
   static const double _smallestBox = 8;
 
   void _dragStart(Offset at) {
@@ -364,7 +343,6 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
     _escapeRelease = EscapeLadder.register(EscapeRung.gesture, _escape);
   }
 
-  /// How to stand down from the ladder.
   VoidCallback? _escapeRelease;
 
   /// Escape ends the edit, which the tool always promised and never did — the
@@ -543,15 +521,12 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
     }
   }
 
-  /// The words being typed, laid out as the engine lays them out.
   BridgeTextBlock? get _block {
     final document = _document;
     if (document == null) return null;
     return measuredText(document, text: _controller.text);
   }
 
-  /// The UTF-16 offset of the gap nearest [at] on screen, in the words being
-  /// typed.
   int _offsetAt(LayerBox box, Offset at) {
     final block = _block;
     if (block == null) return _controller.text.length;
@@ -586,7 +561,6 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
     final vertical = widget.tool == ToolMode.typeVertical;
     final t = ThemeScope.of(context).theme;
     final box = _editingNow ? _editingBox : null;
-    // The layer's document, read across the bridge once for this build.
     final document = _document;
     final block = document == null
         ? null
@@ -725,8 +699,6 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
     );
   }
 
-  // --- The gesture ----------------------------------------------------------
-
   /// A press on the picture, read before any recogniser decides what it is.
   ///
   /// On the words being typed it puts the caret down where it landed. A second
@@ -765,8 +737,6 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
       return;
     }
 
-    // Whatever was being typed is finished first: a click elsewhere is what
-    // ends an edit, exactly as it does in After Effects.
     _finish();
     final existing = _textLayerAt(at);
     if (existing == null) return;
@@ -797,8 +767,6 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
     return _clicks;
   }
 
-  /// A drag from the words: the far end of the selection follows the pointer,
-  /// letter by letter, or word by word after a double-click.
   void _dragTo(Offset at) {
     final box = _editingBox;
     if (!_editingNow || box == null) return;
@@ -806,7 +774,7 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
     final hit = _offsetAt(box, at);
     final unit = _dragUnit;
     if (unit != null && !unit.isCollapsed) {
-      if (unit.end - unit.start == text.length) return; // the whole line
+      if (unit.end - unit.start == text.length) return;
       final word = wordAround(text, hit);
       _controller.selection = hit < unit.start
           ? TextSelection(baseOffset: unit.end, extentOffset: word.start)
@@ -820,7 +788,6 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
         TextSelection(baseOffset: _dragBase, extentOffset: hit);
   }
 
-  /// A click that came to nothing else: on empty picture it makes a layer.
   void _onTapUp(TapUpDetails details) {
     if (widget.tool == ToolMode.typeVertical) {
       widget.state.postNotice(
@@ -880,8 +847,6 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
   /// rather than standing on the point.
   void _create(Offset at, {double? boxScreenWidth}) {
     final options = widget.uiState.tools;
-    // The composition's own placement — the same conversion the shape tools
-    // build a new layer's art with.
     final space =
         ShapeSpace.ofComp(fitted: widget.fitted, compSize: widget.compSize);
     var (cx, cy) = space.ofScreen(at);
@@ -941,9 +906,6 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
     }
   }
 
-  /// Open an edit on [layer]. A click on its words ([at], over [box]) puts the
-  /// caret in the gap nearest the click; otherwise it goes after the last
-  /// letter.
   void _begin(
     LayerReference layer, {
     required bool created,
@@ -1005,7 +967,6 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
       try {
         tf = layer.getTransform();
       } catch (_) {
-        // The layer was deleted while it was being typed into.
       }
     }
     final x = tf == null ? null : _shifted(tf.anchorX, shift.dx);
@@ -1066,15 +1027,12 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
     });
   }
 
-  /// End the edit: write the document once, or take the layer away if nothing
-  /// was ever typed into a layer this tool made.
   void _finish() {
     final layer = _editing;
     if (layer == null) return;
     final text = _controller.text;
     // Read before the edit is closed, since it is the open edit's document.
     final document = _typedDocument(text);
-    // Opened and left as it was, which is no change to undo.
     final unchanged = !_created && text == _held?.text;
     _throttle.cancel();
     _clearLive();
@@ -1103,7 +1061,6 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
       if (document != null && !unchanged) _write(layer, document);
       widget.onChanged();
     } catch (_) {
-      // The layer was deleted while it was being typed into.
     }
   }
 
@@ -1136,7 +1093,6 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
           positionY: placed.position.dy,
         );
       }
-      // The engine's own name for a new text layer.
       if (words.isNotEmpty && layer.getName() == 'Text') {
         layer.rename(name: words);
       }
@@ -1157,7 +1113,6 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
   ({Offset anchor, Offset position}) _recentredAnchor(
       LayerReference layer, BridgeTextDocument document) {
     final transform = layer.getTransform();
-    // From the anchor the preview showed the line at.
     final written = layer.getText();
     final old = Offset(
           staticValueOf(transform.anchorX) ?? 0,
@@ -1244,7 +1199,6 @@ class _SelectionPainter extends CustomPainter {
       );
       return;
     }
-    // One band per line the selection reaches.
     final paint = Paint()..color = accent.withValues(alpha: 0.35);
     for (final line in block.lines) {
       final last = line.start + line.carets.length - 1;

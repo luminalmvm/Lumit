@@ -1,6 +1,3 @@
-//! The followed points as the Viewer draws them: where the stabilised picture
-//! shows each one, and whether it moved with the picture.
-
 use std::sync::Arc;
 
 use super::motion::{apply, invert, within};
@@ -11,7 +8,6 @@ use super::shown::{nearest, shown};
 use crate::fx::effects::stabilise::{planned_held, Held, Planned};
 use crate::model::{Composition, Document, EffectInstance, Layer};
 
-/// One followed point as the Viewer draws it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ShownPoint {
     /// The tracker's id: what a pick names and a drop takes.

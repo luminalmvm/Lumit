@@ -1,6 +1,3 @@
-//! Where a layer sits: its own placement and its parents', as the compositor
-//! places it.
-
 use std::sync::Arc;
 
 use lumit_core::expression::ExpressionContext;
@@ -22,7 +19,6 @@ pub fn parent_world_placement(
     context: Arc<ExpressionContext>,
 ) -> Option<[[f32; 4]; 4]> {
     let mut world: Option<[[f32; 4]; 4]> = None;
-    // Outermost first, so concat_place(outer, inner) = outer × inner.
     let read = lumit_core::model::context_reader(&context, t_comp);
     let solves = crate::track::solves_for(&context.document);
     for (_, p) in lumit_core::model::parent_placements(comp, layer, t_comp, &read, solves) {
@@ -35,8 +31,6 @@ pub fn parent_world_placement(
     world
 }
 
-/// Where `layer` sits in `comp` at comp time `t_comp`, parents and all: its
-/// own pixels to comp pixels, as the compositor places it.
 pub(crate) fn world_placement(
     comp: &lumit_core::model::Composition,
     layer: &lumit_core::model::Layer,
@@ -50,7 +44,6 @@ pub(crate) fn world_placement(
     }
 }
 
-/// `layer`'s own placement at comp time `t_comp`, before any parent's.
 pub(crate) fn own_placement(
     layer: &lumit_core::model::Layer,
     t_comp: f64,
@@ -65,8 +58,6 @@ pub(crate) fn own_placement(
     })
 }
 
-/// What the compositor draws `layer` with at layer time `lt`, each property
-/// read under `context`, with its Orient in it.
 pub(crate) fn drawn_placement(
     layer: &lumit_core::model::Layer,
     lt: f64,
@@ -184,8 +175,6 @@ mod tests {
         drawn
     }
 
-    /// Along path is the tangent plus the layer's own Rotation, and a layer
-    /// with Orient off draws exactly what it draws without any of this.
     #[test]
     fn a_layer_is_drawn_along_its_path() {
         let moving = |l: &mut Layer| {
@@ -204,8 +193,6 @@ mod tests {
         close(along.rotation_deg.2, 55.0);
     }
 
-    /// A 3D layer off to one side of the camera turns to face it, with its z
-    /// axis pointing away from the eye.
     #[test]
     fn a_layer_is_drawn_towards_the_camera() {
         let off_side = |l: &mut Layer| {

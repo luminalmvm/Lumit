@@ -1,6 +1,3 @@
-// The DragValueField right-click menu (egui's built-in drag-value menu):
-// Reset (only when a default is known) / Copy / Paste over the system clipboard,
-// with the field's own clamp on paste.
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
@@ -26,7 +23,6 @@ Widget _harness(Widget child) => Directionality(
 void main() {
   testWidgets('right-click offers Reset / Copy / Paste; Reset uses the default',
       (tester) async {
-    // The menu reads the clipboard before it opens, so Paste can grey.
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         SystemChannels.platform, (call) async => null);
     addTearDown(() => tester.binding.defaultBinaryMessenger
@@ -58,7 +54,7 @@ void main() {
       SystemChannels.platform,
       (call) async {
         if (call.method == 'Clipboard.getData') {
-          return <String, Object?>{'text': '250'}; // above max, will clamp
+          return <String, Object?>{'text': '250'};
         }
         return null;
       },

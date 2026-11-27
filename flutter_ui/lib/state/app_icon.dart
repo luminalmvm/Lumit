@@ -28,7 +28,6 @@ import 'package:lumit_flutter/state/platform.dart'
 
 const MethodChannel _channel = MethodChannel('lumit/app_icon');
 
-/// Whether this platform's icon can be changed while Lumit runs.
 bool get appIconCanChange => Platform.isMacOS || Platform.isWindows;
 
 /// Show the regular icon, or go back to the one this build came with.

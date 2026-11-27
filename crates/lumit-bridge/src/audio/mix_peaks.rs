@@ -1,5 +1,3 @@
-//! The loaded mix's waveform, for the Sound mix row and a bus's lane.
-
 use super::lock;
 use uuid::Uuid;
 

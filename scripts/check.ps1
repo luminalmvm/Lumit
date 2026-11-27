@@ -59,6 +59,7 @@ $repo = Split-Path $PSScriptRoot -Parent
 
 Push-Location $repo
 try {
+    Run 'python scripts/comments.py check'
     if ($Fix) { Run 'cargo fmt --all' } else { Run 'cargo fmt --all --check' }
     Run 'cargo clippy --workspace --all-targets -- -D warnings'
 

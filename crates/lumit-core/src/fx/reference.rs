@@ -24,10 +24,8 @@ use super::colour_name::ColourNameRole;
 use super::params::Unit;
 use super::schema::{EffectSchema, EnabledCond, FxCategory, ParamKind};
 
-/// The whole catalogue, ready to serialise.
 #[derive(Debug, Serialize)]
 pub struct Reference {
-    /// A note for anyone who opens the fixture wondering what wrote it.
     pub generated_by: &'static str,
     /// Every category, in menu order.
     pub categories: Vec<Category>,
@@ -35,7 +33,6 @@ pub struct Reference {
     pub effects: Vec<Effect>,
 }
 
-/// One Add-effect menu category.
 #[derive(Debug, Serialize)]
 pub struct Category {
     /// URL-safe form of `label`, and the page's directory name.
@@ -43,7 +40,6 @@ pub struct Category {
     pub label: &'static str,
 }
 
-/// One built-in effect.
 #[derive(Debug, Serialize)]
 pub struct Effect {
     /// URL-safe form of `label`, and the page's file name.
@@ -72,7 +68,6 @@ pub struct Effect {
     pub matte_role: &'static str,
 }
 
-/// What one effect's Matte row means, when it is not simply strength.
 #[derive(Debug, Serialize)]
 pub struct Matte {
     /// The parameter the layer reference is stored under — `matte` for most,
@@ -131,7 +126,6 @@ pub struct Param {
     pub colour_role: Option<&'static str>,
 }
 
-/// One collapsible parameter group.
 #[derive(Debug, Serialize)]
 pub struct Group {
     /// Empty renders headerless — the rows appear in place with no twirl.
@@ -146,19 +140,15 @@ pub struct Group {
     pub visible_when_lens_elements: Option<u32>,
 }
 
-/// The condition on a [`Group`].
 #[derive(Debug, Serialize)]
 pub struct VisibleWhen {
     pub param: &'static str,
     pub values: Vec<u32>,
 }
 
-/// One "this row greys out while that control says so" rule.
 #[derive(Debug, Serialize)]
 pub struct EnabledWhen {
-    /// The parameter that greys out.
     pub param: &'static str,
-    /// The parameter whose value decides it.
     pub on: &'static str,
     /// `bool_is`, `choice_is`, `choice_is_not`, `layer_set`.
     pub cond: &'static str,
@@ -346,8 +336,6 @@ fn param(schema: &'static super::schema::ParamSchema) -> Param {
         ParamKind::Shape => p.kind = "shape",
         // Stops start empty too.
         ParamKind::Gradient { .. } => p.kind = "gradient",
-        // A button: no default, no range, no options — the label and
-        // the kind are the whole of what the manual's table can say about it.
         ParamKind::Action => p.kind = "action",
     }
     p

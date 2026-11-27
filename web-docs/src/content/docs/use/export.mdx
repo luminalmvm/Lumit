@@ -280,7 +280,8 @@ names the encoder, and pointing at a failure shows the whole of it. The footer c
 
 A frame the graphics card had no room to draw is drawn again, up to twice more, and the
 export carries on more slowly. If it still cannot be drawn the export fails, naming the
-frame. It is never written black.
+frame. Where the frame needs more video memory than Lumit may use, the failure gives both
+sizes. It is never written black.
 
 - **Start** sets the waiting rows running.
 - **Add compositions…** queues several compositions at once. See

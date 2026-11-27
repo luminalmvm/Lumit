@@ -56,8 +56,6 @@ import 'package:lumit_flutter/state/platform.dart'
 
 const double projectHistoryWidth = 800;
 
-/// The room a backup window gives its list, and the little it takes when
-/// all it has is a line to say.
 const double backupBodyHeight = 440;
 const double _lineHeight = 132;
 
@@ -65,32 +63,19 @@ const double _listWidth = 340;
 const double _rowHeight = 52;
 const double _dayHeight = 28;
 
-/// An autosave nobody has named gets a row this tall, and no picture.
 const double _quietRowHeight = 28;
 
-/// The strip over the list that says which versions it shows.
 const double _listHeadHeight = 34;
 
-/// The air round the chosen version's picture and words: the inset every
-/// other edge of the window takes.
 const double _detailInset = dialogPadding;
 
-/// The line under the chosen version's picture that says what it shows.
 const double _captionHeight = 24;
 
-/// A version larger than this is not read to say what changed in it.
-// ponytail: both versions are fetched whole to be compared, which is too
-// much to do on a click for a packed project. Keep a summary beside each
-// version when it is sent if those want the line too.
 const int _mostCompared = 32 * 1024 * 1024;
 
-/// Where the rail runs down the list, and how big a version's dot on it is.
 const double _railAt = 18;
 const double _dot = 7;
 
-// --- Words ----------------------------------------------------------------
-
-/// What a refusal is called in the person's own language.
 String backupErrorText(CloudError e) => switch (e.code) {
       'pro_required' => l10n.backupNeedsPro,
       'storage_full' => l10n.backupErrorStorageFull,
@@ -110,7 +95,6 @@ String backupTime(DateTime at) {
   try {
     return DateFormat.Hm(l10n.localeName).format(at);
   } catch (_) {
-    // A language whose times are not loaded gets the plain form.
     return DateFormat.Hm().format(at);
   }
 }
@@ -132,7 +116,6 @@ String backupDay(DateTime at) {
 String backupWhen(DateTime at) =>
     l10n.backupDayTime(backupDay(at), backupTime(at));
 
-/// The same with the date always written out, for the middle of a sentence.
 String backupWhenWritten(DateTime at) =>
     l10n.backupDayTime(writtenDate(at), backupTime(at));
 
@@ -235,8 +218,6 @@ List<(int, String)> backupChangeLines(ProjectChanges changes) {
       .toList();
 }
 
-// --- Shared pieces --------------------------------------------------------
-
 /// The state of a backup as a small mark, one to a state: a tick in the
 /// sweep when it is backed up, a ring while a save is going, a loop while
 /// one waits to go, a warning when one was refused, and an arrow down when
@@ -283,10 +264,8 @@ class BackupGlyph extends StatelessWidget {
 /// saved. Nothing at all without Pro, or for a project with no history.
 /// A press opens the Project history window.
 class BackupMark extends StatefulWidget {
-  /// Dresses the mark the way the strip dresses its other readouts.
   final Widget Function(Widget child) wrap;
 
-  /// Whether the project has unsaved changes, which the strip knows.
   final bool unsaved;
   const BackupMark({super.key, required this.wrap, this.unsaved = false});
 
@@ -344,7 +323,6 @@ class _BackupMarkState extends State<BackupMark> {
       );
 }
 
-/// A version's picture, or a quiet well where it has none.
 class BackupStill extends StatefulWidget {
   final BackupState backup;
   final String id;
@@ -466,8 +444,6 @@ class _BackupStillState extends State<BackupStill> {
   }
 }
 
-/// One line in the middle of a backup window, with the one thing to press
-/// about it when there is one.
 Widget backupLine(LumitTheme t, String words,
         {String? action, VoidCallback? onAction}) =>
     SizedBox(
@@ -492,22 +468,16 @@ Widget backupLine(LumitTheme t, String words,
       ),
     );
 
-/// The ring a backup window shows while it waits for its list, in the room
-/// the list will take.
 const Widget backupWaiting = SizedBox(
   height: backupBodyHeight,
   child: Center(child: SizedBox(width: 20, height: 20, child: SyncRing())),
 );
 
-/// The same ring in the room one line takes, for a window that is more
-/// likely to have a line to say than a list.
 const Widget backupWaitingLine = SizedBox(
   height: _lineHeight,
   child: Center(child: SizedBox(width: 20, height: 20, child: SyncRing())),
 );
 
-/// The strip under a backup window's title: the badge, a line, and whatever
-/// control the window has for it.
 Widget backupStrip(LumitTheme t,
         {required bool preview,
         bool badge = true,
@@ -523,7 +493,6 @@ Widget backupStrip(LumitTheme t,
       ),
       child: Row(
         children: [
-          // No badge for an account that has not got Pro.
           if (badge) ...[
             ProBadge(preview: preview),
             const SizedBox(width: 12),
@@ -548,10 +517,6 @@ Widget backupStrip(LumitTheme t,
       ),
     );
 
-/// The strip for an account whose Lumit Pro has ended and which still has
-/// what it backed up: it says that saves are no longer backed up, in the
-/// place every other reason backup has stopped is said, and offers the way
-/// back to Pro. [trailing] comes after that button.
 Widget backupEndedStrip(BuildContext context, LumitTheme t,
         {List<Widget> trailing = const []}) =>
     backupStrip(
@@ -576,8 +541,6 @@ Widget backupEndedStrip(BuildContext context, LumitTheme t,
         ...trailing,
       ],
     );
-
-// --- Putting a version back -----------------------------------------------
 
 /// Make [version] the open project again. True when it was.
 ///
@@ -621,8 +584,6 @@ Future<bool> putBackVersion(
   return true;
 }
 
-// --- Footage that is not there ----------------------------------------------
-
 /// Say how much of the open project's footage is missing, after it has come
 /// out of backup. A backup is the project file, so on a machine that has not
 /// got the footage this is the first thing to know. A press on the notice
@@ -665,8 +626,6 @@ Future<void> noticeMissingFootage(LumitState app, LumitUiState ui) async {
       });
 }
 
-// --- Saving a version with a name -------------------------------------------
-
 /// File ▸ Save a version: ask for a name, save the project, and give the
 /// version that save made the name. A named version is kept for good.
 ///
@@ -685,8 +644,6 @@ Future<void> saveVersionFrb(
   await saveNamedVersion(app, ui, name, picker: picker);
 }
 
-/// The save and the naming, without the question. True when the version has
-/// its name.
 Future<bool> saveNamedVersion(LumitState app, LumitUiState ui, String name,
     {Future<String?> Function()? picker}) async {
   await saveProjectFrb(app, ui, picker: picker);
@@ -712,10 +669,6 @@ Future<bool> saveNamedVersion(LumitState app, LumitUiState ui, String name,
   }
 }
 
-// --- The window -----------------------------------------------------------
-
-/// Open the Project history window, for the open project or for [of], a
-/// backed-up project that is not the one open.
 Future<void> showProjectHistory(BuildContext context, {BackupProject? of}) {
   final app = context.read<LumitState>();
   final ui = context.read<LumitUiState>();
@@ -780,12 +733,8 @@ class _HistoryState extends State<_History> {
   /// is none of them.
   String? _onDisk;
 
-  /// Only versions somebody has named are listed.
   bool _namedOnly = false;
 
-  /// Something asked for from here is under way, the word for it when it
-  /// is a wait worth naming, and what the last thing asked for came back
-  /// with when it failed.
   bool _busy = false;
   String _doing = '';
   String? _said;
@@ -794,7 +743,6 @@ class _HistoryState extends State<_History> {
   bool _fresh = true;
   bool _asking = false;
 
-  /// How many versions had been sent when the list was last asked for.
   int _sent = 0;
 
   /// What each project file holds, by its hash, and what changed in each
@@ -803,13 +751,10 @@ class _HistoryState extends State<_History> {
   final Map<String, Future<ProjectShape?>> _shapes = {};
   final Map<int, List<(int, String)>> _whatChanged = {};
 
-  /// The keys' way in, and the scrolling of the list and of the words under
-  /// the picture.
   final _focus = FocusNode(debugLabel: 'project history');
   final _scroll = ScrollController();
   final _detailScroll = ScrollController();
 
-  /// Whether the words under the picture run on below what is shown.
   final _moreWords = ValueNotifier(false);
 
   /// Where each row sits in the list and how tall it is, by version number,
@@ -830,13 +775,11 @@ class _HistoryState extends State<_History> {
   final Set<int> _unfolded = {};
   int? _foldAt;
 
-  /// Runs out a moment after the keys stop stepping through the list.
   Timer? _settle;
 
   BackupState get _backup => widget.ui.backup;
   AccountState get _account => widget.ui.account;
 
-  /// Whether this is the open project's history.
   bool get _open => widget.other == null;
   String? get _id => widget.other?.id ?? _backup.id;
 
@@ -849,7 +792,6 @@ class _HistoryState extends State<_History> {
           ? widget.app.project?.path()
           : _backup.localPath(widget.other!.id);
     } catch (_) {
-      // Closed already.
     }
     _path = path;
     _name = widget.other?.name ??
@@ -916,7 +858,6 @@ class _HistoryState extends State<_History> {
     }
   }
 
-  /// The versions the list shows.
   List<BackupVersion> _listed(List<BackupVersion> versions) => _namedOnly
       ? [
           for (final v in versions)
@@ -1046,7 +987,6 @@ class _HistoryState extends State<_History> {
     return KeyEventResult.ignored;
   }
 
-  /// The row a screenful above or below row [at] of [shown].
   int _paged(List<BackupVersion> shown, int at, int step) {
     if (at < 0 || !_scroll.hasClients) return math.max(0, at);
     final page = _scroll.position.viewportDimension - _dayHeight;
@@ -1142,7 +1082,6 @@ class _HistoryState extends State<_History> {
           ? dated(backupWhenWithin(version.created))
           : named(version.note);
 
-  /// The keys go back to the list once a question asked over it has gone.
   void _answered() {
     if (mounted) _focus.requestFocus();
   }
@@ -1284,8 +1223,6 @@ class _HistoryState extends State<_History> {
     _answered();
   }
 
-  /// Fold the run of autosaves [run] belongs to, as Left does on one of its
-  /// rows.
   void _fold(int run) {
     final newest = _versions?.where((v) => v.n == run).firstOrNull;
     if (newest == null) return;
@@ -1298,9 +1235,6 @@ class _HistoryState extends State<_History> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _reveal(run));
   }
 
-  /// Everything there is to do with [version], for its row's own menu and
-  /// for a right click: what the foot of the window offers, live when that
-  /// is, its name, and deleting.
   List<Widget> _menu(BackupVersion version, VoidCallback close) {
     Widget row(String id, String label, VoidCallback? then) {
       final live = then != null && !_busy;
@@ -1372,7 +1306,6 @@ class _HistoryState extends State<_History> {
     return (l10n.backupNoVersions, null, null);
   }
 
-  /// Save the project, which gives it a history to show.
   Future<void> _saveHere() async {
     await saveProjectFrb(widget.app, widget.ui);
     if (!mounted) return;
@@ -1422,13 +1355,9 @@ class _HistoryState extends State<_History> {
       autofocus: true,
       onKeyEvent: _key,
       child: DialogFrame(
-        // A window with one line to say is as wide as the line wants, and
-        // not as wide as the list it has not got.
         width: line == null ? projectHistoryWidth : proWindowWidth,
         children: [
           title,
-          // The strip is there when it has something to say: how the open
-          // project stands, or what came of the last thing asked.
           if ((_account.pro && _open && _path != null) ||
               _ended ||
               _busy ||
@@ -1463,7 +1392,6 @@ class _HistoryState extends State<_History> {
     );
   }
 
-  /// How many versions there are, and what they come to.
   String _count(List<BackupVersion> versions) => [
         _namedOnly
             ? l10n.backupVersionsShown(
@@ -1480,7 +1408,6 @@ class _HistoryState extends State<_History> {
         onPressed: _busy ? null : onPressed,
       );
 
-  /// Put back, the window's one filled button.
   Widget _putBackButton(LumitTheme t, BackupVersion? chosen) {
     final version =
         chosen != null && _canPutBack(chosen) && !_busy ? chosen : null;
@@ -1492,11 +1419,8 @@ class _HistoryState extends State<_History> {
     );
   }
 
-  /// Whether Lumit Pro has ended under a history that is still there.
   bool get _ended => !_account.pro && (_versions?.isNotEmpty ?? false);
 
-  /// How the backup stands, the one press that helps when there is one,
-  /// and the switch that keeps this project in backup.
   Widget _strip(LumitTheme t) {
     if (_ended && !_busy && _said == null) return backupEndedStrip(context, t);
     final mine = _account.pro && _open && _path != null;
@@ -1599,7 +1523,6 @@ class _HistoryState extends State<_History> {
     );
   }
 
-  /// The list on the left and the chosen version on the right.
   Widget _panes(
       LumitTheme t, List<BackupVersion> versions, BackupVersion? chosen) {
     final lastSave = _lastSave(versions);
@@ -1625,8 +1548,6 @@ class _HistoryState extends State<_History> {
     );
   }
 
-  /// The versions, newest first, under the day each was saved on, with the
-  /// choice of all of them or only the named ones over them.
   Widget _list(LumitTheme t, List<BackupVersion> all, int? lastSave) {
     final versions = _listed(all);
     final rows = <Widget>[];
@@ -1719,7 +1640,6 @@ class _HistoryState extends State<_History> {
         version: version,
         index: index,
         whole: whole,
-        // Said only when it was another machine.
         machine: version.device == AccountState.deviceLabel
             ? ''
             : version.device,
@@ -1746,8 +1666,6 @@ class _HistoryState extends State<_History> {
           decoration: BoxDecoration(
             border: Border(bottom: BorderSide(color: t.hairline)),
           ),
-          // Two chips side by side with the one in force outlined, as
-          // Settings draws a choice of two.
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1772,7 +1690,6 @@ class _HistoryState extends State<_History> {
             ],
           ),
         ),
-        // Where the project is, when that is ahead of everything listed.
         if (_ahead(all))
           Container(
             key: const ValueKey('history-ahead'),
@@ -1807,9 +1724,6 @@ class _HistoryState extends State<_History> {
                   _fresh = false;
                   return false;
                 },
-                // The scrollbar Settings has: a long history is travelled
-                // by taking hold of it. It starts under the day held at
-                // the top.
                 child: dialogGutter(
                   context,
                   t,
@@ -1869,7 +1783,6 @@ class _HistoryState extends State<_History> {
               alignment: AlignmentDirectional.centerStart,
               decoration: BoxDecoration(
                 color: t.surface1,
-                // Ruled off once rows are passing under it.
                 border: Border(
                   bottom: BorderSide(
                       color: t.hairline.withValues(alpha: at > 0 ? null : 0)),
@@ -1882,8 +1795,6 @@ class _HistoryState extends State<_History> {
         },
       );
 
-  /// The chosen version: its picture, which stays put, over what is known
-  /// about it and what changed in it, which scroll when they are long.
   Widget _detail(LumitTheme t, BackupVersion version, bool lastSave) {
     final changed = _whatChanged[version.n] ?? const [];
     return Padding(
@@ -1909,8 +1820,6 @@ class _HistoryState extends State<_History> {
             ),
           ),
           Expanded(
-            // Where there are more words than fit, the last of them fade
-            // out and are not cut through by the foot.
             child: Stack(
               fit: StackFit.expand,
               children: [
@@ -1948,15 +1857,12 @@ class _HistoryState extends State<_History> {
     );
   }
 
-  /// What is known about the chosen version and what changed in it.
   Widget _detailWords(LumitTheme t, BackupVersion version, bool lastSave,
       List<(int, String)> changed) {
     final most = changed.fold(0, (most, c) => math.max(most, c.$1));
     final countWidth = math.max(
         20.0, monoSlotWidth(t.mono.copyWith(fontSize: 11), '$most'.length));
     return NotificationListener<Notification>(
-      // Whether there are words out of sight below, as the list of what
-      // changed arrives and as it is scrolled.
       onNotification: (said) {
         final metrics = switch (said) {
           ScrollMetricsNotification(:final metrics) => metrics,
@@ -2023,8 +1929,6 @@ class _HistoryState extends State<_History> {
                 const SizedBox(height: 12),
                 Text(t.kickerCase(l10n.backupChanged), style: t.kicker),
                 const SizedBox(height: 2),
-                // One change to a line: how many, then what. The counts
-                // share one column, as wide as the biggest of them.
                 Column(
                   key: const ValueKey('history-changes'),
                   children: [
@@ -2060,7 +1964,6 @@ class _HistoryState extends State<_History> {
   }
 }
 
-/// The words that mark the version the open project's file is.
 class _LastSaveTag extends StatelessWidget {
   const _LastSaveTag();
 
@@ -2151,7 +2054,6 @@ class _FoldRow extends StatefulWidget {
   final int count;
   final DateTime newest;
 
-  /// The keys are on it.
   final bool chosen;
   final bool above, below;
   final VoidCallback onOpen;
@@ -2226,7 +2128,6 @@ class _FoldRowState extends State<_FoldRow> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              // The mark a closed group has everywhere else in Lumit.
               SizedBox(
                 width: 30,
                 child: glyph.LumitIcon(LumitIcons.expand,
@@ -2253,7 +2154,6 @@ class _DayHeading extends StatelessWidget {
       height: _dayHeight,
       child: Row(
         children: [
-          // Nothing comes before the newest day, so the rail starts under it.
           first
               ? const SizedBox(width: _railAt * 2)
               : const _Rail(height: _dayHeight),
@@ -2273,7 +2173,6 @@ class _VersionRow extends StatefulWidget {
   final BackupVersion version;
   final int index;
 
-  /// Whether it gets a whole row, with its picture.
   final bool whole;
 
   /// The machine it was saved on when that was not this one, and empty when
@@ -2282,7 +2181,6 @@ class _VersionRow extends StatefulWidget {
   final bool lastSave, chosen, last, reveal;
   final VoidCallback onChoose;
 
-  /// Asks for the row's menu, at a place on the screen.
   final void Function(Offset at) onMenu;
 
   const _VersionRow({
@@ -2317,7 +2215,6 @@ class _VersionRowState extends State<_VersionRow> {
     final whole = widget.whole;
     final height = whole ? _rowHeight : _quietRowHeight;
     final what = version.auto ? l10n.backupAutosave : l10n.backupSaveRow;
-    // Under its name or what it is, only what that does not say already.
     final under = [
       if (named && version.auto) l10n.backupAutosave,
       if (widget.machine.isNotEmpty) widget.machine,
@@ -2330,7 +2227,6 @@ class _VersionRowState extends State<_VersionRow> {
         key: ValueKey<String>('history-version-${version.n}'),
         behavior: HitTestBehavior.opaque,
         onTap: widget.onChoose,
-        // A right click is about the row it lands on.
         onSecondaryTapDown: (press) {
           widget.onChoose();
           widget.onMenu(press.globalPosition);
@@ -2434,8 +2330,6 @@ class _VersionRowState extends State<_VersionRow> {
                             widget.onMenu(
                                 box.localToGlobal(Offset(0, box.size.height)));
                           },
-                          // The chosen row's is the way to everything the
-                          // foot of the window does not offer.
                           child: glyph.LumitIcon(LumitIcons.more,
                               size: 14,
                               colour: widget.chosen
@@ -2452,12 +2346,9 @@ class _VersionRowState extends State<_VersionRow> {
       ),
     );
     final motion = scope.motion;
-    // A shape whose reveals don't rise has nothing to stagger.
     if (!widget.reveal || !motion.carries || motion.revealRise == 0) {
       return row;
     }
-    // Held back a beat for each row above it, then up and in, the way the
-    // Lumit Pro window brings in what Pro does.
     final wait = widget.index * 45;
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),

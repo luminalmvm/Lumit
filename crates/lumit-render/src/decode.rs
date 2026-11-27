@@ -1,5 +1,3 @@
-//! Frame decoding: the decode pool, its caches and the comp decode jobs.
-
 use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -30,7 +28,6 @@ pub struct Request {
     pub channels: Option<[Option<String>; 4]>,
 }
 
-/// One layer's decode job inside a comp render request.
 pub struct CompJob {
     pub layer: Uuid,
     /// The time of the walk of its comp that asked for this. A comp shown at
@@ -38,8 +35,6 @@ pub struct CompJob {
     /// in [`Self::source_key`], which names the pixels and not who asked.
     pub at: f64,
     pub item: Uuid,
-    /// One media file, or the numbered run of stills this item is —
-    /// whichever it is, the decode worker opens it the same way.
     pub source: lumit_media::sequence::MediaSource,
     pub source_frame: usize,
     pub target_width: Option<u32>,
@@ -116,18 +111,6 @@ pub struct CompJob {
 /// as a job of its own, one whole frame of it. Or at this time, inside a fade
 /// or a dissolve: the clip under this one.
 pub enum Cut {
-    /// This job's picture at this gain, crossfaded with the other clip's at
-    /// one less that or faded over nothing: a dissolve, where this job is
-    /// the incoming clip, or a fade at an end no clip overlaps
-    /// (`lumit_core::sequence::shown_at`). The two are mixed where they are
-    /// decoded (`lumit_core::pixels::dissolve_rgba`) and the result is the
-    /// layer's source, so everything downstream treats it as one clip.
-    ///
-    /// ponytail: mixed on this job's raster. A clip under it that was
-    /// decoded at another size is fitted into that raster, and a float one
-    /// of another size is left out. The upgrade is to mix every dissolve on
-    /// the card, each clip a source of its own, as one with a composition
-    /// clip in it already is (`build`'s Sequence arm).
     Under(f64, Option<CompJob>),
     /// A neighbour of the layer's own temporal stack, by [`CompJob::temporal`]'s
     /// offset. Joins the decoded neighbours when it is the same size.
@@ -146,7 +129,6 @@ pub enum Cut {
 pub struct ShutterSample {
     pub offset: f64,
     pub source_frame: usize,
-    /// `Some((ceil, weight))` when the moment falls between two frames.
     pub blend: Option<(usize, f32)>,
 }
 
@@ -158,7 +140,6 @@ pub type FlowFieldData = Arc<lumit_flow::chain::Leg>;
 
 pub struct CompLayerPixels {
     pub layer: Uuid,
-    /// [`CompJob::at`].
     pub at: f64,
     /// This layer for other walks of its comp in this frame, each at its own
     /// [`Self::at`]. Empty unless a comp is shown at two times (`crate::placed`).
@@ -173,7 +154,6 @@ pub struct CompLayerPixels {
     /// `temporal` beside it — they come from the one decoder, so they agree.
     /// Float here is a source (OpenEXR) that kept its range and precision.
     pub format: lumit_media::decode::PixelFormat,
-    /// Native source size (see [`CompJob::natural_w`]); drives geometry.
     pub natural_w: u32,
     pub natural_h: u32,
     /// Decoded neighbour frames for a temporal effect, shared with the frame
@@ -321,16 +301,6 @@ impl lumit_cache::ByteSized for CachedFrame {
     }
 }
 
-/// The most decoders one decoding thread keeps open when it has a choice.
-///
-/// Sized for a cut. Three picture rows are playing, the next clip on each is
-/// opened ahead of its edit point, and the clip each row has just left is kept
-/// so a step back across the cut costs nothing: nine. Twelve leaves room for a
-/// fourth row or a nested comp before anything is closed and opened again.
-///
-/// ponytail: a count, the same for every file, and what a decoder holds is not
-/// weighed. The upgrade is to charge each to the governor and close by its
-/// pressure, if a project of very large files ever shows twelve to be too many.
 pub const MAX_OPEN_DECODERS: usize = 12;
 
 /// The open decoders one decoding thread keeps, one per footage item.
@@ -349,20 +319,16 @@ pub const MAX_OPEN_DECODERS: usize = 12;
 /// a decoder opened afresh hands back the same frame.
 #[derive(Default)]
 pub struct OpenDecoders {
-    /// Each decoder beside the frame it was last used for.
     open: HashMap<Uuid, (u64, lumit_media::decode::VideoDecoder)>,
-    /// The frame being decoded for, counted by [`Self::next_frame`].
     frame: u64,
 }
 
 impl OpenDecoders {
-    /// How many decoders are open.
     #[must_use]
     pub fn len(&self) -> usize {
         self.open.len()
     }
 
-    /// Whether none is open.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.open.is_empty()
@@ -382,7 +348,6 @@ impl OpenDecoders {
         idle.for_each(|(_, dec)| dec.let_go_of_rgba());
     }
 
-    /// The decoder for `item`, opened from `source` if it is not open already.
     pub fn open(
         &mut self,
         item: Uuid,
@@ -409,9 +374,6 @@ impl OpenDecoders {
         Ok(&mut slot.1)
     }
 
-    /// Close the decoders that have gone longest unused until there is room
-    /// under the cap, stopping at the first that was used for this frame or
-    /// the last.
     fn make_room(&mut self) {
         while self.open.len() >= MAX_OPEN_DECODERS {
             // By id where two were last used together, so which one closes
@@ -485,10 +447,7 @@ pub struct DecodePool {
     /// stands the built-in engine in and says so on the row while an export
     /// abandons the run (docs/08 §3.1, docs/impl/addons.md §6.3).
     refuse_substitution: bool,
-    /// Whether frames decoded ahead are handed to the render that wants them
-    /// rather than copied out of the cache ([`Self::hand_over_prefetched`]).
     hand_over: bool,
-    /// The renderer's GPU, when the owner shared it.
     gpu: Option<lumit_gpu::GpuContext>,
     /// Measured flow pairs, so a scrub does not remeasure and the two
     /// consumers of a layer's motion share one measurement.
@@ -504,8 +463,6 @@ pub struct DecodePool {
     ledger: Option<std::sync::Arc<lumit_budget::Ledger>>,
 }
 
-/// The decoded-frame cache's default share of RAM; Settings → Performance
-/// moves it.
 pub const DEFAULT_DECODE_CACHE_BYTES: usize = 512 * 1024 * 1024;
 
 /// The measured-flow cache's share of RAM.
@@ -544,7 +501,6 @@ impl lumit_cache::ByteSized for CachedFlow {
 /// steadied for synthesis (see [`flow_for`]).
 type FlowKey = (Uuid, usize, usize, u64, bool);
 
-/// A stable hash of the settings that shape a measurement.
 fn flow_settings_key(s: &lumit_flow::FlowSettings) -> u64 {
     // Only the fields that change the *field* — the synthesis-side knobs
     // (occlusion, fallback, the guard) consume it and do not alter it, so
@@ -653,8 +609,6 @@ impl DecodePool {
             .try_reserve(lumit_budget::Tier::Ram, weigh(&made.layers))
     }
 
-    /// How close host memory is to its ceiling, as the governor sees it —
-    /// every store that has registered with it, not just this pool's two.
     #[must_use]
     pub fn ram_pressure(&self) -> lumit_budget::Pressure {
         self.frame_cache
@@ -689,7 +643,6 @@ impl DecodePool {
         }
     }
 
-    /// How many comp frames this pool has decoded since it was made.
     #[must_use]
     pub fn comp_decodes(&self) -> u64 {
         self.comp_decodes
@@ -706,15 +659,12 @@ impl DecodePool {
         (self.frame_cache.used_bytes(), self.decoders.len())
     }
 
-    /// Whether a plain decode of `item`'s `frame` at this width is held, so
-    /// rendering it would decode nothing.
     #[must_use]
     pub fn holds(&self, item: Uuid, frame: usize, target_width: Option<u32>) -> bool {
         self.frame_cache
             .contains_key(&(item, frame, target_width, None))
     }
 
-    /// Resize the decoded-frame cache (its slice of the one RAM budget).
     pub fn set_budget(&mut self, bytes: usize) {
         self.frame_cache.set_budget(bytes);
     }
@@ -747,7 +697,6 @@ impl DecodePool {
         }
     }
 
-    /// [`Self::settle`] for a job and the jobs across its edit points.
     fn settle_job(&mut self, job: &CompJob) {
         self.settle(job.item, &job.source, job.slate);
         for cut in &job.cuts {
@@ -760,7 +709,6 @@ impl DecodePool {
         }
     }
 
-    /// Decode one source frame (or synthesise the missing-footage slate).
     pub fn decode_footage(&mut self, req: &Request) -> Result<FramePixels, String> {
         self.decoders.next_frame();
         self.settle(req.item, &req.source, req.slate.is_some());
@@ -856,7 +804,6 @@ fn decode(
             width: w,
             height: h,
             rgba: Arc::new(lumit_media::slate::colour_bars(w, h)),
-            // Drawn here, in bytes, whatever the missing file would have been.
             format: lumit_media::decode::PixelFormat::Srgb8,
             frame: req.frame,
             item: req.item,
@@ -1062,12 +1009,8 @@ fn flow_for(
 /// writing the substitution to a file.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SynthesisRefusal {
-    /// No model runtime is installed, so no pack can be opened at all.
     RuntimeMissing,
-    /// The runtime is there and nothing installed does synthesis.
     PackMissing,
-    /// The pack is installed and would not open or would not run. Carries the
-    /// library's own sentence for the detail slot.
     Failed(String),
     /// The source is scene-linear float, whose values go above one, and the
     /// model was trained on nought to one. Clamping an EXR to paint a frame
@@ -1089,8 +1032,6 @@ static SYNTHESIS_REFUSAL: std::sync::OnceLock<
     std::sync::Mutex<Option<(u64, Uuid, SynthesisRefusal)>>,
 > = std::sync::OnceLock::new();
 
-/// Whether a refusal is one every layer on the model engine shares, rather
-/// than one about a single layer's own source.
 fn machine_wide(why: &SynthesisRefusal) -> bool {
     !matches!(why, SynthesisRefusal::FloatSource)
 }
@@ -1109,8 +1050,6 @@ fn refusal_held() -> Option<(Uuid, SynthesisRefusal)> {
     (*at == lumit_ml::store::generation()).then(|| (*layer, why.clone()))
 }
 
-/// What the engine row on `layer` says about the model: the machine's own
-/// refusal, or this layer's.
 #[must_use]
 pub fn synthesis_refusal(layer: Uuid) -> Option<SynthesisRefusal> {
     let (about, why) = refusal_held()?;
@@ -1124,8 +1063,6 @@ fn machine_refusal() -> Option<SynthesisRefusal> {
     machine_wide(&why).then_some(why)
 }
 
-/// Record what happened to the last frame of `layer` that asked for a model: a
-/// refusal, or `None` when it painted.
 pub(crate) fn note_synthesis(layer: Uuid, what: Option<SynthesisRefusal>) {
     let Ok(mut held) = SYNTHESIS_REFUSAL.get_or_init(Default::default).lock() else {
         return;
@@ -1146,15 +1083,10 @@ pub(crate) fn note_synthesis(layer: Uuid, what: Option<SynthesisRefusal>) {
     }
 }
 
-/// One layer or clip that asks for an addon this machine has not got.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Need {
-    /// The composition it sits in.
     pub comp: Uuid,
-    /// The layer that asks.
     pub layer: Uuid,
-    /// The clip inside a Sequence layer, when it is a clip that asks rather
-    /// than the layer itself.
     pub clip: Option<Uuid>,
 }
 
@@ -1247,7 +1179,6 @@ pub(crate) fn refusal_sentence(why: &SynthesisRefusal) -> String {
     }
 }
 
-/// A model's own refusal as the row's.
 fn synthesis_refusal_of(why: &lumit_ml::error::MlError) -> SynthesisRefusal {
     match why {
         lumit_ml::error::MlError::RuntimeMissing => SynthesisRefusal::RuntimeMissing,
@@ -1385,7 +1316,6 @@ fn combine_pair(
                 *refused = Some(why);
                 return Err(sentence);
             }
-            // Preview substitutes and says so on the layer's own engine row.
             Err(why) => note_synthesis(job.layer, Some(why)),
         }
     }
@@ -1446,7 +1376,6 @@ pub(crate) fn synthesised(
         .map_err(|why| synthesis_refusal_of(&why))
 }
 
-/// The model, opened now if it is not open yet, or why it will not open.
 pub(crate) fn opened(
     synthesis: &mut Option<(
         u64,
@@ -1634,7 +1563,6 @@ fn decode_comp(
                 .and_then(|decoded| decoded.layers.into_iter().next())
             };
             match cut {
-                // The stack reads its neighbours at the frame's own size.
                 Cut::Neighbour(offset, clip) => {
                     if let Some(p) = other(clip)
                         .filter(|p| (p.width, p.height, p.format) == (px.width, px.height, format))
@@ -1653,7 +1581,6 @@ fn decode_comp(
                 }
             }
         }
-        // Blend / Flow policy: combine with the next source frame.
         let (width, height) = (px.width, px.height);
         let mut rgba = combine_pair(
             decoders,
@@ -1744,8 +1671,6 @@ mod float_flow_tests;
 mod tests {
     use super::*;
 
-    /// A layer's decoded pixels, made rather than decoded, so what a frame
-    /// weighs can be asked without a file or a codec.
     fn pixels(bytes: usize) -> CompLayerPixels {
         CompLayerPixels {
             layer: Uuid::nil(),
@@ -1784,7 +1709,6 @@ mod tests {
             "and its neighbours"
         );
 
-        // Four f32 channels a pixel, as the texture holds them.
         let field = Arc::new(lumit_flow::chain::Leg::from_planes(&[], &[], &[], 10, 1));
         layer.flow_fields = vec![(1, field)];
         assert_eq!(
@@ -1801,15 +1725,10 @@ mod tests {
             "and every moment the shutter asked for"
         );
 
-        // Two such layers weigh twice as much, which is the whole point: it is
-        // the sum nobody was taking.
         let both = [pixels(100), layer];
         assert_eq!(weigh(&both), 100 + 660);
     }
 
-    /// The frame in flight holds its reservation for as long as it lives and
-    /// gives it back when it goes — including when it goes because a newer
-    /// frame superseded it, which is the case no scope could have covered.
     #[test]
     fn a_decoded_frame_holds_its_memory_until_it_is_dropped() {
         let ledger = lumit_budget::Ledger::with_budgets(1 << 30, 1 << 30);
@@ -1858,7 +1777,6 @@ mod tests {
     #[test]
     fn an_export_refuses_the_frame_a_model_would_not_paint() {
         let _serial = serially();
-        // A folder of its own with nothing in it: this machine has no pack.
         let empty = tempfile::tempdir().unwrap();
         lumit_ml::store::with_dir(Some(empty.path().to_path_buf()));
 
@@ -1878,8 +1796,6 @@ mod tests {
             target_width: None,
             natural_w: 4,
             natural_h: 4,
-            // Half way between two frames, which is where an engine is asked
-            // for a picture neither frame has.
             blend: Some((1, 0.5)),
             flow: Some(lumit_core::retime::FlowParams {
                 engine: lumit_core::retime::FlowEngineChoice::Rife,
@@ -1896,8 +1812,6 @@ mod tests {
 
         let mut pool = DecodePool::new();
         pool.refuse_substitution();
-        // Both ends of the pair handed over rather than decoded, so the test
-        // needs no media and the file in the job never has to exist.
         let read = lumit_media::sequence::MediaSource::file("clip.mov");
         pool.preload(item, &read, 0, None, frame(10));
         pool.preload(item, &read, 1, None, frame(200));
@@ -1914,10 +1828,6 @@ mod tests {
         lumit_ml::store::with_dir(None);
     }
 
-    /// The other half of the bargain: a sidecar written for different content
-    /// is never replayed. The file is re-encoded in place — same path, same
-    /// name, different bytes and a different length — and the decoder must
-    /// rebuild rather than trust the index it finds.
     #[test]
     fn a_changed_file_is_not_decoded_from_its_old_index() {
         let dir = tempfile::tempdir().unwrap();
@@ -1930,8 +1840,6 @@ mod tests {
         index.entries.truncate(10);
         index.save_to(&cache).unwrap();
 
-        // The clip is replaced by a longer one at the same path: the stale
-        // ten-frame index would clamp frame 40 to 9 if it were reused.
         let Some(replacement) = lumit_media::index::tests_support::vfr_fixture(dir.path()) else {
             eprintln!("skipping: no ffmpeg CLI available for fixture generation");
             return;
@@ -1965,9 +1873,6 @@ mod tests {
         );
     }
 
-    /// Closing a decoder to make room is only allowed to cost time. One file
-    /// under more item ids than the cap holds: the first is closed along the
-    /// way, and opened again it hands back the very frame it gave before.
     #[test]
     fn a_decoder_closed_to_make_room_reopens_on_the_same_frame() {
         let dir = tempfile::tempdir().unwrap();
@@ -1987,7 +1892,6 @@ mod tests {
             let first = Uuid::now_v7();
             let before = decoders.decode_want(&want(first, 7)).expect("frame 7");
 
-            // A cut's worth of other files, a frame apart.
             for _ in 0..MAX_OPEN_DECODERS + 3 {
                 decoders.next_frame();
                 decoders
@@ -2007,8 +1911,6 @@ mod tests {
                 "a reopened decoder showed another frame"
             );
 
-            // One frame that needs more files than the cap keeps them all:
-            // none of them is closed to open the next.
             let mut wide = OpenDecoders::default();
             wide.next_frame();
             for _ in 0..MAX_OPEN_DECODERS + 4 {

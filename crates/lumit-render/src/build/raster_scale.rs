@@ -1,6 +1,3 @@
-//! How much a shape or text layer is magnified where it is seen, for its
-//! raster size.
-
 use lumit_core::model::{CameraPose, Composition};
 use lumit_gpu::composite::concat_place;
 

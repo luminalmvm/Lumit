@@ -226,7 +226,6 @@ pub fn look_at_orientation(from: (f64, f64, f64), to: (f64, f64, f64)) -> (f64, 
     // Rx · Ry turns z to (sin y, -sin x cos y, cos x cos y).
     let x = (-d.1).atan2(d.2);
     let y = (d.0 / len).clamp(-1.0, 1.0).asin();
-    // The roll that brings the x axis back down to y = 0.
     let z = (-x.sin() * y.sin()).atan2(x.cos());
     (x.to_degrees(), y.to_degrees(), z.to_degrees())
 }
@@ -240,7 +239,6 @@ pub fn turn_between_deg(a: (f64, f64, f64), b: (f64, f64, f64)) -> f64 {
     2.0 * dot.abs().min(1.0).acos().to_degrees()
 }
 
-/// A turn as a unit quaternion `(w, x, y, z)`.
 fn quaternion(m: &Mat3) -> [f64; 4] {
     let trace = m[0][0] + m[1][1] + m[2][2];
     let q = if trace > 0.0 {
@@ -395,7 +393,6 @@ pub fn axes(deg: (f64, f64, f64)) -> [(f64, f64, f64); 3] {
     ]
 }
 
-/// The forward axis alone.
 #[must_use]
 pub fn forward(deg: (f64, f64, f64)) -> (f64, f64, f64) {
     axes(deg)[2]
@@ -540,7 +537,6 @@ impl Place {
     }
 }
 
-/// The After Effects focal lengths the settings dialog offers, millimetres.
 pub const PRESETS_MM: [f64; 9] = [15.0, 20.0, 24.0, 28.0, 35.0, 50.0, 80.0, 135.0, 200.0];
 
 /// The default sensor width, millimetres: 35 mm film's frame.
@@ -659,7 +655,6 @@ pub enum View {
     Right,
     Top,
     Bottom,
-    /// The three-quarter view a custom view starts from.
     Custom,
 }
 
@@ -903,7 +898,6 @@ pub fn place(
 pub fn projection(pose: &CameraPose, width: f64, height: f64) -> [[f64; 4]; 3] {
     let m = rotation(pose.rotation_deg);
     let e = pose.position;
-    // One axis of the camera's own frame: `Rᵀ · (p - eye)`, as in `project`.
     let axis = |k: usize| {
         [
             m[0][k],
@@ -944,11 +938,8 @@ mod tests {
         let d = (poi.0 - eye.0, poi.1 - eye.1, poi.2 - eye.2);
         let len = (d.0 * d.0 + d.1 * d.1 + d.2 * d.2).sqrt();
         assert!(close3(f, (d.0 / len, d.1 / len, d.2 / len)));
-        // The eye-behind inverse lands the eye back where it was.
         assert!(close3(eye_behind(poi, deg, len), eye));
 
-        // Looking straight up or down, y and z are one turn, and the roll on
-        // top still has to come out the right way round.
         for (poi, pitch) in [((0.0, -100.0, 0.0), 90.0), ((0.0, 100.0, 0.0), -90.0)] {
             let roll = (0.0, 0.0, 30.0);
             let deg = look_at((0.0, 0.0, 0.0), poi, roll).unwrap();
@@ -959,9 +950,6 @@ mod tests {
         }
     }
 
-    /// A 200 by 100 card on its centre, Orientation X 40 outside a Y Rotation
-    /// of 30: After Effects turns it by Rx(40) · Ry(30), which Lumit's own rows
-    /// can't write as X 40 and Y 30. The corners are worked out by hand.
     #[test]
     fn orientation_turns_outside_the_rotations_as_after_effects_does() {
         use crate::anim::Property;
@@ -981,8 +969,6 @@ mod tests {
             ((200.0, 100.0), (1_046.602_54, 610.441_60, -6.162_84)),
             ((0.0, 100.0), (873.397_46, 546.162_84, 70.441_60)),
         ];
-        // The same turn on the rotations alone, X 40 and Y 30 in After
-        // Effects' order, as an imported layer has them.
         let mut imported = tr.clone();
         imported.orientation[0] = Property::zero();
         imported.rotation_x = Property::fixed(40.0);
@@ -997,7 +983,6 @@ mod tests {
                 assert!(near < 1e-3, "corner {x}, {y} at {got:?}");
             }
         }
-        // Anchor Z pushes the card back along its own z, by Scale Z.
         tr.anchor_z = Property::fixed(20.0);
         tr.scale_z = Property::fixed(50.0);
         let pushed = tr.placement_at(0.0, false, &|p| p.value_at(0.0));
@@ -1005,7 +990,6 @@ mod tests {
         let back = forward(pushed.rotation_deg);
         let want = (960.0 - back.0 * 10.0, 540.0 - back.1 * 10.0, -back.2 * 10.0);
         assert!(close3(at, want), "{at:?}");
-        // Switching a layer's rotation order keeps its pose.
         let mut lumit = tr.clone();
         lumit.rotation_x = Property::fixed(25.0);
         lumit.rotation = Property::fixed(-40.0);
@@ -1021,12 +1005,10 @@ mod tests {
         for (x, y) in [(0.0, 0.0), (200.0, 100.0)] {
             assert!(close3(before.point((x, y, 0.0)), after.point((x, y, 0.0))));
         }
-        // With no Orientation the rotations come back exactly as they were.
         assert_eq!(
             oriented((0.0, 0.0, 0.0), (10.0, 20.0, 30.0), false),
             (10.0, 20.0, 30.0)
         );
-        // lookAt's Orientation points the layer's z from one point to the other.
         let m = rotation_ae(look_at_orientation(
             (10.0, 20.0, 30.0),
             (-290.0, 420.0, -170.0),
@@ -1034,7 +1016,6 @@ mod tests {
         let z = (m[0][2], m[1][2], m[2][2]);
         let d: (f64, f64, f64) = (-300.0 / 538.516_48, 400.0 / 538.516_48, -200.0 / 538.516_48);
         assert!(close3(z, d), "{z:?}");
-        // And it gives After Effects' own numbers, roll and all.
         for (from, to, want) in [
             (
                 (10.0, 20.0, 30.0),
@@ -1052,8 +1033,6 @@ mod tests {
             let off = (got.0 - want.0).abs() + (got.1 - want.1).abs() + (got.2 - want.2).abs();
             assert!(off < 1e-3, "{got:?}");
         }
-        // Looking back down z, where the roll's quarter matters, the x axis
-        // still comes out level and z still points the right way.
         for d in [(300.0, -100.0, -400.0), (-50.0, 200.0, -10.0)] {
             let m = rotation_ae(look_at_orientation((0.0, 0.0, 0.0), d));
             let len = (d.0 * d.0 + d.1 * d.1 + d.2 * d.2).sqrt();
@@ -1063,9 +1042,6 @@ mod tests {
         }
     }
 
-    /// After Effects keys an Orientation as one turn, so a key written on one
-    /// angle gives the other two a key there, holding the turn as it was, and
-    /// the picture only moves by the angle that was written.
     #[test]
     fn a_key_on_one_orientation_angle_keys_all_three() {
         use crate::anim::{Animation, Keyframe, Property, SideInterp};
@@ -1164,9 +1140,6 @@ mod tests {
         };
         let card = |d: f64| coc_px(&twice, 1500.0, d);
         assert!(card(3000.0) == 0.0 && card(1415.48) > 0.0);
-        // Only the scale along the view counts: stretched on y, a camera
-        // looking down the null's y focuses twice as far, one looking down
-        // its z as far as it says.
         let stretched = ae((100.0, 200.0, 100.0));
         assert!(close(seen(stretched, (90.0, 0.0, 0.0)).0, 3000.0));
         assert!(close(seen(stretched, (0.0, -5.0, 0.0)).0, 1500.0));
@@ -1181,7 +1154,6 @@ mod tests {
         let top = view_pose(View::Top, 1920.0, 1080.0);
         assert!(close3(forward(top.rotation_deg), (0.0, 1.0, 0.0)));
         assert!(close3(top.position, (960.0, 540.0 - 192_000.0, 0.0)));
-        // Every fixed view looks at the comp centre.
         for view in [
             View::Back,
             View::Left,
@@ -1216,7 +1188,6 @@ mod tests {
         let (_, front) = project(&pose, 1920.0, 1080.0, (0.0, 0.0, -2000.0));
         assert!(!front);
 
-        // The matrix form lands every point where `project` does.
         let turned = CameraPose {
             zoom: 1500.0,
             position: (300.0, -200.0, -900.0),

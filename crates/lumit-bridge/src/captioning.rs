@@ -45,10 +45,7 @@ pub(crate) mod edit;
 pub(crate) mod files;
 pub(crate) mod make;
 
-/// How long a caption typed in by hand stays up, in seconds.
 const TYPED_SECONDS: i64 = 2;
-
-// ---- Limits ----------------------------------------------------------------
 
 fn seconds_of_frames(comp: &Composition, frames: u32) -> Rational {
     let (num, den) = (comp.frame_rate.num(), comp.frame_rate.den());
@@ -109,14 +106,10 @@ pub(crate) fn limits_out(comp: &Composition, limits: &Limits) -> BridgeCaptionLi
     }
 }
 
-/// The usual limits for `language`, for a dialog to start from.
 pub(crate) fn default_limits(comp: &Composition, language: &str) -> BridgeCaptionLimits {
     limits_out(comp, &Limits::for_language(language))
 }
 
-// ---- Reading a caption layer -----------------------------------------------
-
-/// The layer, its composition and its captions, out of one snapshot.
 struct Held {
     doc: Arc<Document>,
     comp: Composition,
@@ -259,8 +252,6 @@ pub(crate) fn caption_layers(
         .map(|l| LayerReference::new(comp.project, comp.id, l.id))
         .collect())
 }
-
-// ---- Turning panel moments into the caption's clock ------------------------
 
 /// Where comp time `t` falls on a cue's own clock, and how fast that clock
 /// runs against the comp's: its footage's source time for a linked cue, the

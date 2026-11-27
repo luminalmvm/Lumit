@@ -40,13 +40,11 @@ pub(crate) struct Scratch {
     pre: Vec<[f64; 3]>,
 }
 
-/// Resize to `n` zeroes, keeping the capacity already paid for.
 fn fit(v: &mut Vec<f32>, n: usize) {
     v.clear();
     v.resize(n, 0.0);
 }
 
-/// Resize to `n` zeroed triples, keeping the capacity already paid for.
 fn fit3(v: &mut Vec<[f64; 3]>, n: usize) {
     v.clear();
     v.resize(n, [0.0; 3]);
@@ -122,7 +120,6 @@ pub(crate) fn response_map_into(s: &mut Scratch, p: &Plane, radius: usize) {
         for x in 0..w {
             let lo = x.saturating_sub(radius);
             let hi = (x + radius).min(w - 1);
-            // The edge columns, the same folding as the rows.
             let left = (radius - (x - lo)) as f64;
             let right = (radius - (hi - x)) as f64;
             let (a, b) = (pre[lo], pre[hi + 1]);
@@ -148,8 +145,6 @@ pub(crate) fn response_map_into(s: &mut Scratch, p: &Plane, radius: usize) {
     }
 }
 
-/// The detection grid: the frame cut into `gx × gy` buckets
-/// (docs/impl/tracking.md §2's 16×16).
 #[derive(Clone, Copy)]
 pub(crate) struct BucketGrid {
     pub(crate) gx: usize,

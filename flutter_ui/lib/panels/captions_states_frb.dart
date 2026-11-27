@@ -1,5 +1,3 @@
-// The Captions panel when it has no captions to list: nothing made yet, or
-// the speech still being heard. And the line over the list while it is.
 
 import 'dart:async';
 
@@ -18,8 +16,6 @@ import '../widgets/controls.dart';
 import 'expressions_panel_frb.dart' show panelBar;
 import 'placeholder.dart';
 
-/// No caption layer yet: make one from the selected layer's speech, when it
-/// has some, or from a file.
 Widget captionsEmpty(BuildContext context, LumitUiState ui,
         {required bool canCreate}) =>
     PlaceholderPanel(
@@ -55,8 +51,6 @@ Widget captionsEmpty(BuildContext context, LumitUiState ui,
       ),
     );
 
-/// What a transcription is doing, in the words the status line uses, then
-/// how fast and how much longer.
 (String, String) _says(LumitState app, BridgeTranscribeEvent event) {
   final step =
       transcriptionStep(event, footageItemName(app.project, event.item));
@@ -67,7 +61,6 @@ Widget captionsEmpty(BuildContext context, LumitUiState ui,
   return (step, rest);
 }
 
-/// The speech being heard, with nothing to list yet.
 Widget captionsRunning(LumitState app, BridgeTranscribeEvent event) {
   final (step, rest) = _says(app, event);
   return PlaceholderPanel(
@@ -99,7 +92,6 @@ Widget captionsRunning(LumitState app, BridgeTranscribeEvent event) {
   );
 }
 
-/// The speech being heard while captions are listed: one line over them.
 Widget captionsStrip(
     LumitTheme t, LumitState app, BridgeTranscribeEvent event) {
   final (step, rest) = _says(app, event);
@@ -158,8 +150,6 @@ Widget captionsMark(LumitTheme t, String key, String tip, String icon,
       ),
     );
 
-/// The row under the find field that replaces what it found: in the caption
-/// stepped to, or in every caption.
 Widget captionsReplaceBar(
   LumitTheme t, {
   required TextEditingController replaceWith,

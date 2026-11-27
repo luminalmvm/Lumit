@@ -56,7 +56,6 @@ class SpeedEnvelope extends StatefulWidget {
   /// clip underneath.
   final bool onClip;
 
-  /// Which clips draw a line, where not every one does.
   final bool Function(BridgeClip clip)? shows;
 
   /// Places on a clip that keep their press, a clip's own buttons say, in
@@ -131,11 +130,6 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
           '${c.id}#${keysOf(c.retime).length}'
       ].join(',');
 
-  /// Ask what rate each new clip's footage runs at. Never from the build, and
-  /// once per clip: a clip already asked about costs a map lookup.
-  // ponytail: one crossing per clip as the view opens, and the answer is kept
-  // by clip id while it stays open. Carry the footage's rate on the clip's
-  // read model if a long row opens slowly or a replaced file keeps its guide.
   void _probeRates() {
     final comp = widget.comp;
     if (comp == null) return;
@@ -146,7 +140,6 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
       _everyFrame[id] = null;
       final FootageReference? footage;
       try {
-        // The clip showing at its own first frame is the clip itself.
         footage = comp
             .cutMatchFrame(frame: clip.startFrame, layer: widget.entry.layer)
             ?.footage;
@@ -192,18 +185,14 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
   Rect? _box;
   final Set<String> _selected = {};
 
-  /// How near a clip's own line counts as grabbing it rather than starting a
-  /// selection box.
   static const double _lineGrab = 10;
 
-  /// The point under the pointer at rest, as `clipId#index`.
   String? _hover;
 
   /// The drag holds a span of the line, [_drag]'s point and the next, and
   /// moves both ends by the same amount.
   bool _segment = false;
 
-  /// A preview frame is asked for, to be sent with the next frame.
   bool _previewDue = false;
 
   List<BridgeClip>? _clipList;
@@ -279,8 +268,6 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
         // meant for the clip under it.
         if (widget.onClip && height < 30) return const SizedBox.shrink();
         final dragged = _drag;
-        // The dragged clip's keys, worked out once for the line and the
-        // readout.
         final draggedKeys = dragged == null ? null : _shown(dragged.clip);
         // **Every child keyed.** Flutter matches a Stack's children by
         // position when they are not, so the readout appearing mid-drag took
@@ -314,7 +301,6 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
                       y: (s) => _y(s, height),
                       chosen: t.accent,
                       selected: _selected,
-                      // The point in hand is ringed as the typed one is.
                       typing: _typing ??
                           (dragged == null
                               ? null
@@ -329,7 +315,6 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
                       guideLabel: (speed) => l10n.speedGuideEveryFrame(
                           '${guideSpeedText(speed)}${l10n.unitSymbolPercent}'),
                       guide: t.textMuted,
-                      // The point in hand has landed on its guide.
                       caught: switch (_drag) {
                         final held?
                             when held.speed ==
@@ -397,7 +382,6 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
                         !(widget.blocked?.call(local) ?? false) &&
                         (_pointAt(local, height) != null ||
                             _onALine(local, height))),
-                // Over a clip, the line is found by the cursor changing.
                 child: MouseRegion(
                   cursor: _hover != null
                       ? SystemMouseCursors.move
@@ -466,7 +450,6 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
                                 asked,
                                 _everyFrame[held.clip.id.toString()],
                                 envelopeSnapReach * perPixel),
-                        // A span moves up and down only.
                         dx: fine || _segment ? held.dx : held.dx + e.delta.dx,
                         fine: fine,
                       );
@@ -498,8 +481,6 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
                           if (_moving) _catch(box, height);
                         });
                       } else if (!_moving) {
-                        // A press that never moved is a click: plant a point, lift
-                        // one, or nothing at all.
                         setState(() => _drag = null);
                         _tap(_downAt ?? e.localPosition, height);
                       } else {
@@ -525,7 +506,6 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
     );
   }
 
-  /// The speed the drag is asking for, floating beside the point.
   Widget _readout(
       ({BridgeClip clip, int index, double speed, double dx, bool fine}) held,
       List<BridgeKeyframe> keys,
@@ -543,8 +523,6 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
     );
   }
 
-  /// A clip's keys with the drag in flight applied, so the line follows the
-  /// pointer rather than jumping on release.
   List<BridgeKeyframe> _shown(BridgeClip clip) {
     final keys = _keysOf(clip);
     final held = _drag;
@@ -585,7 +563,6 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
         keys, index, timeOfSubframe(at * fps, widget.fpsNum, widget.fpsDen));
   }
 
-  /// The point in hand is one of a caught set, which moves with it.
   bool get _shifting {
     final held = _drag;
     return held != null &&
@@ -605,14 +582,11 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
       BridgeClip clip, List<BridgeKeyframe> keys, int index, double speed) {
     final held = _drag;
     if (!clip.retimed) {
-      // In a caught set it shifts by what the dragged point moved, as the
-      // rest of the set does.
       final by = _shifting ? speed - _grabbedAt : null;
       return envelopeToKeys(keys, [
         for (final s in envelopeSpeeds(keys)) by == null ? speed : s + by
       ]);
     }
-    // A span of the line: both its ends by the same amount.
     if (_segment && held != null && clip.id == held.clip.id) {
       final by = speed - _grabbedAt;
       final speeds = envelopeSpeeds(keys);
@@ -669,8 +643,6 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
     return false;
   }
 
-  /// Whether [x] is within reach of a clip's edge, which over the clips is
-  /// the clip's to trim rather than the line's to take.
   bool _nearClipEdge(double x) {
     for (final c in _clips) {
       if ((widget.axis.xOf(c.startFrame.toInt()) - x).abs() < 8 ||
@@ -706,7 +678,6 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
     ({BridgeClip clip, int index})? best;
     var bestD = 14.0;
     for (final clip in _clips) {
-      // Only the clips within reach of the pointer.
       if (widget.axis.xOf(clip.startFrame.toInt()) - bestD > local.dx ||
           widget.axis.xOf(clip.endFrame.toInt()) + bestD < local.dx) {
         continue;
@@ -739,7 +710,6 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
     return (clip: over, index: nearest);
   }
 
-  /// The clip whose span covers [x] pixels.
   BridgeClip? _clipAt(double x) {
     for (final c in _clips) {
       final left = widget.axis.xOf(c.startFrame.toInt());
@@ -789,8 +759,6 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
     return (at - local).distance < 14 ? found : null;
   }
 
-  /// Right-click a point for what can be done to it, or the line between two
-  /// for the curve it takes, as Vegas's envelope menu has them.
   Future<void> _pointMenu(Offset local, Offset global, double height) async {
     final found = _pointAt(local, height);
     if (found == null) {
@@ -952,7 +920,6 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
     setState(() => _typing = '$id#$index');
     await showSpeedFieldPopover(
       context: context,
-      // Below and to the right, so the point stays in sight beside its box.
       position: box.localToGlobal(
               Offset(_xOfKey(clip, keys[index]), _y(speed, height))) +
           const Offset(10, 8),
@@ -1003,7 +970,6 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
     _plant(local);
   }
 
-  /// Plant a point on the line at [local], on the curve it is following.
   void _plant(Offset local) {
     final clip = _clipAt(local.dx);
     if (clip == null) return;
@@ -1017,7 +983,7 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
         break;
       }
     }
-    if (index == 0 || index == all.length) return; // only between the ends
+    if (index == 0 || index == all.length) return;
     // Never on a neighbour's frame: two keys at one time read as 0%.
     final half = 0.5 / widget.fps;
     if (at - rationalSeconds(all[index - 1].time) < half ||
@@ -1025,7 +991,6 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
       return;
     }
     final planted = evaluateKeysSpeed(all, at) * 100;
-    // Both halves keep the curve the span had.
     final grown = [...all]..insert(
         index,
         BridgeKeyframe(
@@ -1104,9 +1069,6 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
   }
 }
 
-/// The envelope's furniture and its lines: the 100% reference every clip is
-/// measured against, the zero line that says where backwards begins, and each
-/// clip's own straight run of points.
 class _SpeedEnvelopePainter extends CustomPainter {
   final List<({BridgeClip clip, List<BridgeKeyframe> keys})> lanes;
   final double Function(BridgeClip, BridgeKeyframe) xOfKey;
@@ -1115,37 +1077,26 @@ class _SpeedEnvelopePainter extends CustomPainter {
   final Color line;
   final Color curve;
 
-  /// The accent a caught point takes, and which points are caught.
   final Color chosen;
   final Set<String> selected;
 
-  /// The point whose speed is being typed, as `clipId#index`, and the colour
-  /// it is lit and ringed in while its box is open.
   final String? typing;
   final Color lit;
 
-  /// The point under the pointer, drawn a little larger and [lit].
   final String? hover;
 
-  /// The speed at which a clip shows every frame of its footage once, by clip
-  /// id, with what the guide drawn there is called and its colour.
   final Map<String, double> guides;
   final String Function(double speed) guideLabel;
   final Color guide;
 
-  /// The clip whose dragged point is sitting on its guide, which is drawn
-  /// [lit] while it does: the snap is seen as well as felt.
   final String? caught;
   final TextStyle label;
 
   /// Where the viewport's left edge sits in the canvas's own coordinates.
   final double viewportLeft;
 
-  /// The lane's scroll, so only the clips in view are drawn, and drawn again
-  /// as it moves.
   final ScrollController? scroll;
 
-  /// Drawn over clips, with only the lines and their points.
   final bool bare;
 
   const _SpeedEnvelopePainter({
@@ -1225,8 +1176,6 @@ class _SpeedEnvelopePainter extends CustomPainter {
       for (var i = 0; i < points.length; i++) {
         final id = '${lane.clip.id}#$i';
         if (id == typing) {
-          // Brighter than anything else on the line, with a ring round it:
-          // the box beside it is about this point and no other.
           canvas.drawCircle(points[i], 4.5, Paint()..color = lit);
           canvas.drawCircle(
               points[i],
@@ -1297,7 +1246,6 @@ class _SpeedEnvelopePainter extends CustomPainter {
       if (speed == null || lane.keys.length < 2) continue;
       final at = y(speed);
       if (at < 0 || at > size.height) continue;
-      // A clip's first and last keys are its own two edges.
       final from = xOfKey(lane.clip, lane.keys.first).clamp(0.0, size.width);
       final to = xOfKey(lane.clip, lane.keys.last).clamp(0.0, size.width);
       paint.color = lane.clip.id.toString() == caught
@@ -1330,8 +1278,6 @@ class _SpeedEnvelopePainter extends CustomPainter {
       old.bare != bare;
 }
 
-/// Takes the pointer only where [test] says, so a line drawn over clips can be
-/// grabbed without covering them.
 class _HitWhere extends SingleChildRenderObjectWidget {
   final bool Function(Offset local) test;
 

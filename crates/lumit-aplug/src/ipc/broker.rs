@@ -59,8 +59,6 @@ use crate::ipc::ring::{Ring, RingError};
 use crate::process::ParamEvent;
 use crate::quirks::Quirks;
 
-/// How many consecutive failures a plugin gets before it is put away for the
-/// session (docs/12 §2.3).
 pub const STRIKES_BEFORE_DISABLED: u32 = 3;
 
 /// How long the host waits for a freshly spawned broker to connect and say
@@ -84,8 +82,6 @@ pub(crate) fn describe_deadline(quirks: &crate::quirks::Quirks) -> Duration {
     HANDSHAKE_TIMEOUT.max(quirks.control_timeout)
 }
 
-/// The environment variable that overrides where the broker executable is, for
-/// a test or for a developer running from a build tree.
 pub const BROKER_EXE_ENV: &str = "LUMIT_APLUG_BROKER";
 
 /// The plugins the user has switched off, shared with whoever edits the list.
@@ -99,7 +95,6 @@ pub const BROKER_EXE_ENV: &str = "LUMIT_APLUG_BROKER";
 /// on the project format.
 pub type DisableList = Arc<Mutex<BTreeSet<String>>>;
 
-/// An empty list — nothing switched off.
 #[must_use]
 pub fn nothing_disabled() -> DisableList {
     Arc::new(Mutex::new(BTreeSet::new()))
@@ -115,7 +110,6 @@ pub fn nothing_disabled() -> DisableList {
 /// into it ([`set_disabled`]) as it does for the OFX host.
 static SESSION_DISABLED: std::sync::OnceLock<DisableList> = std::sync::OnceLock::new();
 
-/// The session's switched-off list, empty until somebody writes to it.
 #[must_use]
 pub fn session_disabled() -> DisableList {
     Arc::clone(SESSION_DISABLED.get_or_init(nothing_disabled))
@@ -131,7 +125,6 @@ pub fn set_disabled(identifiers: &BTreeSet<String>) {
     }
 }
 
-/// Switch one plugin on or off in the session's list.
 pub fn set_enabled(identifier: &str, enabled: bool) {
     if let Ok(mut list) = session_disabled().lock() {
         if enabled {
@@ -142,28 +135,9 @@ pub fn set_enabled(identifier: &str, enabled: bool) {
     }
 }
 
-/// The brokers this session has started, one per `.clap` module.
-///
-/// Strong handles, so a module's process lives as long as the session once
-/// anything in it has played: a chain is opened and dropped every time a mix is
-/// rebuilt, and spawning a process per rebuild would be the cost the whole
-/// broker design exists to avoid paying per block.
-///
-/// ponytail: nothing ever evicts one. A user who scans a folder of forty
-/// vendors and plays one layer from each ends the session holding forty idle
-/// processes; close the least-recently-used when that is a machine somebody
-/// actually has, rather than guessing at a ceiling now.
 static BROKERS: std::sync::OnceLock<Mutex<BTreeMap<PathBuf, Arc<Mutex<Broker>>>>> =
     std::sync::OnceLock::new();
 
-/// The broker hosting `module`, started and described if this is the first
-/// plugin from it.
-///
-/// # Errors
-///
-/// [`BrokerError`] — the executable would not start, or the module would not
-/// describe. Either way the caller leaves that link out of the chain and the
-/// sound goes through dry.
 pub fn module_broker(module: &std::path::Path) -> Result<Arc<Mutex<Broker>>, BrokerError> {
     let key = module.to_path_buf();
     let table = BROKERS.get_or_init(|| Mutex::new(BTreeMap::new()));
@@ -182,7 +156,6 @@ pub fn module_broker(module: &std::path::Path) -> Result<Arc<Mutex<Broker>>, Bro
     Ok(broker)
 }
 
-/// The broker executable's file name.
 #[must_use]
 pub fn broker_exe_name() -> &'static str {
     if cfg!(windows) {
@@ -192,8 +165,6 @@ pub fn broker_exe_name() -> &'static str {
     }
 }
 
-/// Where the broker executable is: beside Lumit's own, which is where every
-/// packaging step puts it.
 #[must_use]
 pub fn broker_exe() -> PathBuf {
     if let Some(override_path) = std::env::var_os(BROKER_EXE_ENV) {
@@ -218,7 +189,6 @@ fn no_console(command: &mut Command) {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        /// `CREATE_NO_WINDOW`, from winbase.h.
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         command.creation_flags(CREATE_NO_WINDOW);
     }
@@ -226,61 +196,38 @@ fn no_console(command: &mut Command) {
     let _ = command;
 }
 
-/// What can go wrong before there is a broker to blame.
 #[derive(Debug, Error)]
 pub enum BrokerError {
-    /// The executable would not start.
     #[error("the plugin broker would not start: {0}")]
     Spawn(std::io::Error),
-    /// The pipe.
     #[error(transparent)]
     Pipe(#[from] PipeError),
-    /// The ring.
     #[error(transparent)]
     Ring(#[from] RingError),
-    /// The broker never connected, or never said hello.
     #[error("the plugin broker did not answer when it started")]
     NoHandshake,
-    /// The broker speaks another version of the protocol. Refused here, with a
-    /// sentence, rather than deserialised into whatever it happens to mean.
     #[error("the plugin broker speaks protocol {theirs}, this host speaks {ours}")]
-    ProtocolMismatch {
-        /// What the broker said.
-        theirs: u32,
-        /// What this host speaks.
-        ours: u32,
-    },
-    /// The plugin has used up its three strikes.
+    ProtocolMismatch { theirs: u32, ours: u32 },
     #[error("the plugin is disabled for this session")]
     Disabled,
-    /// A message arrived that made no sense where it arrived.
     #[error("the plugin broker answered {0} out of turn")]
     Unexpected(&'static str),
-    /// The broker refused, in its own words.
     #[error("{0}")]
     Refused(String),
-    /// The peer on the pipe could not prove it is the broker this host started,
-    /// or the credential could not be minted or handed over at all.
     #[error(transparent)]
     Peer(lumit_peer::PeerError),
-    /// More instances than a handle can name.
     #[error("this session has made every instance a handle can name")]
     NoMoreHandles,
 }
 
-/// One failure of one action: the three things that count as a strike.
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Fault {
-    /// The deadline passed.
     Timeout,
-    /// The process went away.
     Gone,
-    /// The plugin answered with a failure, or the broker could not do it.
     Refused(String),
 }
 
 impl Fault {
-    /// The sentence a failed block carries, which is what badges the layer.
     fn sentence(&self) -> String {
         match self {
             Self::Timeout => "the plugin missed its deadline".to_owned(),
@@ -290,24 +237,18 @@ impl Fault {
     }
 }
 
-/// How a module should be hosted.
 pub struct BrokerConfig {
-    /// The `.clap` file.
     pub module: PathBuf,
-    /// The deadlines and workarounds for it.
     pub quirks: Quirks,
-    /// Where the broker executable is, if not beside Lumit's own.
     pub exe: Option<PathBuf>,
     /// Extra environment for the child. Lumit sets none of its own; the tests
     /// use it to tell a plugin to misbehave on purpose, which is the only way
     /// to reach a plugin that is not in the test's own process.
     pub env: Vec<(String, String)>,
-    /// The switched-off list, read before describe and per block batch.
     pub disabled: DisableList,
 }
 
 impl BrokerConfig {
-    /// The common case: a module and the shipped defaults.
     #[must_use]
     pub fn new(module: impl Into<PathBuf>) -> Self {
         Self {
@@ -320,41 +261,29 @@ impl BrokerConfig {
     }
 }
 
-/// What the host remembers about one instance, which is everything needed to
-/// make it again.
 #[derive(Clone)]
 struct InstanceRecord {
     bring: Bring,
 }
 
-/// One instance, as it came up.
 pub struct Created {
-    /// The handle to name it by from now on.
     pub instance: InstanceId,
-    /// What it reports now that it is active.
     pub latency: u32,
-    /// What went wrong bringing it up that did not stop it coming up.
     pub warning: Option<String>,
 }
 
-/// The live connection to one broker process.
 struct Link {
     child: Child,
     sender: SendHalf,
     incoming: Receiver<Incoming>,
 }
 
-/// What the reading thread hands back.
 enum Incoming {
-    /// The broker connected; here is the half to write to.
     Connected(SendHalf),
-    /// A message.
     Message(Box<BrokerMessage>),
-    /// The pipe closed — which, for a child process, means it died.
     Gone,
 }
 
-/// One `.clap` module, hosted in a process of its own.
 pub struct Broker {
     config: BrokerConfig,
     ring: Ring,
@@ -370,12 +299,6 @@ pub struct Broker {
 }
 
 impl Broker {
-    /// Start a broker for one module.
-    ///
-    /// # Errors
-    ///
-    /// [`BrokerError`] — the executable, the pipe, the ring, or a broker that
-    /// speaks another protocol.
     pub fn spawn(config: BrokerConfig) -> Result<Self, BrokerError> {
         let identifier = next_identifier()?;
         let mut ring_path = std::env::temp_dir();
@@ -399,7 +322,6 @@ impl Broker {
         Ok(broker)
     }
 
-    /// Bring a broker process up and hand it the ring.
     fn start(&mut self, identifier: &str) -> Result<(), BrokerError> {
         let name = pipe::pipe_name(identifier);
         let listener = pipe::listen(&name)?;
@@ -517,7 +439,6 @@ impl Broker {
         Ok(())
     }
 
-    /// The switched-off list, as it stands right now.
     fn disabled_now(&self) -> BTreeSet<String> {
         self.config
             .disabled
@@ -562,23 +483,16 @@ impl Broker {
         }
     }
 
-    /// What the module holds, as last described.
     #[must_use]
     pub fn descriptors(&self) -> &[PluginDescriptor] {
         &self.descriptors
     }
 
-    /// One calm line per plugin in the module that cannot be hosted.
     #[must_use]
     pub fn rejected(&self) -> &[Refusal] {
         &self.rejected
     }
 
-    /// Make an instance of one of the plugins.
-    ///
-    /// # Errors
-    ///
-    /// [`BrokerError`].
     pub fn create_instance(&mut self, bring: Bring) -> Result<Created, BrokerError> {
         let handle =
             Handle::encode(KIND_INSTANCE, self.next_index).ok_or(BrokerError::NoMoreHandles)?;
@@ -654,11 +568,6 @@ impl Broker {
         }
     }
 
-    /// The blob to write into the `.lum`, and the one a restart replays.
-    ///
-    /// # Errors
-    ///
-    /// [`BrokerError`].
     pub fn save(&mut self, instance: InstanceId) -> Result<Vec<u8>, BrokerError> {
         let control = self.config.quirks.control_timeout;
         match self.action(&HostMessage::Save { instance }, control) {
@@ -676,7 +585,6 @@ impl Broker {
         }
     }
 
-    /// Destroy an instance and forget it.
     pub fn destroy(&mut self, instance: InstanceId) {
         if self.instances.remove(&instance).is_none() {
             return;
@@ -685,25 +593,20 @@ impl Broker {
         let _ = self.action(&HostMessage::Destroy { instance }, control);
     }
 
-    /// Whether the module has used up its three strikes.
     #[must_use]
     pub const fn is_disabled(&self) -> bool {
         self.disabled
     }
 
-    /// How many consecutive failures stand against it right now.
     #[must_use]
     pub const fn strikes(&self) -> u32 {
         self.strikes
     }
 
-    /// How many times a broker has been started again after one died.
     #[must_use]
     pub const fn restarts(&self) -> usize {
         self.restarts
     }
-
-    // ------------------------------------------------------------ the wire --
 
     /// A failure the caller of a control action sees: the plugin being put away
     /// outranks whatever the last fault was.
@@ -751,7 +654,6 @@ impl Broker {
         }
     }
 
-    /// Send, then wait for the answer or the deadline.
     fn exchange(
         &mut self,
         message: &HostMessage,
@@ -763,14 +665,12 @@ impl Broker {
         self.wait_for(left)
     }
 
-    /// Write one message to the broker.
     fn send(&mut self, message: &HostMessage) -> Result<(), BrokerError> {
         let link = self.link.as_mut().ok_or(BrokerError::NoHandshake)?;
         pipe::send(&mut link.sender, message)?;
         Ok(())
     }
 
-    /// Wait for one message, or for the deadline, or for the process to die.
     fn wait_for(&mut self, left: Duration) -> Result<BrokerMessage, Fault> {
         let Some(link) = self.link.as_ref() else {
             return Err(Fault::Gone);
@@ -792,9 +692,6 @@ impl Broker {
         slot
     }
 
-    // ------------------------------------------------------- the watchdog --
-
-    /// Count a failure, and either start again or stop trying.
     fn strike(&mut self, process_is_suspect: bool) {
         self.strikes = self.strikes.saturating_add(1);
         if self.strikes >= STRIKES_BEFORE_DISABLED {
@@ -807,8 +704,6 @@ impl Broker {
         }
     }
 
-    /// Start a broker again and put it back where the last one was: describe the
-    /// module, make every instance, with the values and the blob the host holds.
     fn restart(&mut self) -> Result<(), BrokerError> {
         self.kill();
         self.restarts = self.restarts.saturating_add(1);
@@ -849,7 +744,6 @@ impl Broker {
         Ok(())
     }
 
-    /// End the broker process, however it feels about that.
     fn kill(&mut self) {
         if let Some(mut link) = self.link.take() {
             let _ = pipe::send(&mut link.sender, &HostMessage::Shutdown);
@@ -914,8 +808,6 @@ mod describe_deadline_tests {
     use super::{describe_deadline, HANDSHAKE_TIMEOUT};
     use crate::quirks::Quirks;
 
-    /// The shipped two-second control deadline is not what describe waits
-    /// under: the first describe opens the module, which is a program starting.
     #[test]
     fn describe_takes_the_handshake_ceiling_by_default() {
         let quirks = Quirks::default();

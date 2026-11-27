@@ -42,7 +42,6 @@ mod text;
 
 use anim::{Clock, Span, Value};
 
-/// `comp` as an animated SVG.
 pub fn export(
     doc: &Arc<Document>,
     comp: &Composition,
@@ -118,17 +117,14 @@ pub fn export(
     })
 }
 
-/// The export as it goes: what it reads and what it has written so far.
 pub(crate) struct Svg<'a> {
     pub doc: &'a Arc<Document>,
     pub settings: &'a Settings,
     pub host: &'a dyn Host,
     pub span: Span,
     pub report: Report,
-    /// Masks, clips, gradients, filters and pictures, referenced by id.
     pub defs: String,
     next_id: u32,
-    /// Each footage item's picture, written once and used by id.
     pub images: Vec<(Uuid, Option<Image>)>,
     pub beside: Vec<(String, Vec<u8>)>,
     /// True once any layer blends, so the root keeps blends to itself.
@@ -137,11 +133,8 @@ pub(crate) struct Svg<'a> {
     pub depth: u32,
 }
 
-/// A picture in the defs: its id, width and height.
 pub(crate) type Image = (String, u32, u32);
 
-/// One comp as the walk draws it: which comp, how the file's clock reads on
-/// it, and where it is for the check.
 #[derive(Debug, Clone)]
 pub(crate) struct Scope<'c> {
     pub comp: &'c Composition,
@@ -149,7 +142,6 @@ pub(crate) struct Scope<'c> {
     pub place: Place,
 }
 
-/// The most precomps inside each other the export follows.
 const MAX_DEPTH: u32 = 32;
 
 impl<'a> Svg<'a> {
@@ -159,24 +151,20 @@ impl<'a> Svg<'a> {
         format!("{prefix}{}", self.next_id)
     }
 
-    /// A line break between elements, unless minified.
     pub fn nl(&self, out: &mut String) {
         if !self.settings.minify {
             out.push('\n');
         }
     }
 
-    /// A coordinate, to the precision the file keeps.
     pub fn px(&self, v: f64) -> String {
         anim::num(v, if self.settings.minify { 2 } else { 3 })
     }
 
-    /// A number from 0 to 1, or a factor.
     pub fn unit(&self, v: f64) -> String {
         anim::num(v, 4)
     }
 
-    /// Stops when the export is no longer wanted.
     pub fn check_cancelled(&self) -> Result<(), LottieError> {
         if self.host.cancelled() {
             Err(LottieError::Cancelled)
@@ -185,7 +173,6 @@ impl<'a> Svg<'a> {
         }
     }
 
-    /// The comp seconds of `scope` at each grid frame.
     pub fn comp_times(&self, scope: &Scope<'_>) -> Vec<f64> {
         self.span
             .grid
@@ -195,12 +182,10 @@ impl<'a> Svg<'a> {
             .collect()
     }
 
-    /// `layer`'s own clock in `scope`.
     pub fn layer_clock(scope: &Scope<'_>, layer: &Layer) -> Clock {
         scope.clock.shifted(layer.start_offset.0.to_f64())
     }
 
-    /// What an expression on `layer` reads at comp second `t`.
     pub fn context(&self, scope: &Scope<'_>, layer: &Layer, t: f64) -> Arc<ExpressionContext> {
         Arc::new(ExpressionContext {
             document: self.doc.clone(),
@@ -297,8 +282,6 @@ impl<'a> Svg<'a> {
         }
     }
 
-    /// Values worked out frame by frame by `f(layer seconds)`, on `layer`'s
-    /// clock, thinned to `tol`.
     pub fn sampled(
         &self,
         scope: &Scope<'_>,
@@ -317,8 +300,6 @@ impl<'a> Svg<'a> {
         Value::sampled(&self.span.grid, samples, tol)
     }
 
-    /// Writes `attr="base"` for `value` into an open tag. The animation goes
-    /// in afterwards, with [`Self::animate`].
     pub fn attr(
         &self,
         out: &mut String,
@@ -329,7 +310,6 @@ impl<'a> Svg<'a> {
         let _ = write!(out, " {attr}=\"{}\"", fmt(&value.at(self.span.start)));
     }
 
-    /// The `<animate>` for `value`, when it moves inside the span.
     pub fn animate(
         &self,
         out: &mut String,
@@ -367,8 +347,6 @@ impl<'a> Svg<'a> {
         Ok(())
     }
 
-    /// The span written, read on `scope`'s comp clock: what the walk asks a
-    /// layer to overlap.
     fn scope_timebase(&self, scope: &Scope<'_>) -> Timebase {
         let times = self.comp_times(scope);
         let (lo, hi) = times
@@ -388,7 +366,6 @@ impl<'a> Svg<'a> {
     }
 }
 
-/// A property's keys as a curve: its spans, or its still value.
 fn curve(p: &Property) -> keys::Curve {
     match &p.animation {
         Animation::Keyframed(k) if !k.is_empty() => keys::curve(k),
@@ -403,7 +380,6 @@ fn curve(p: &Property) -> keys::Curve {
     }
 }
 
-/// XML text and attribute values with the five special characters escaped.
 fn escape(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {

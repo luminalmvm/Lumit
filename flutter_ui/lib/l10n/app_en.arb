@@ -556,6 +556,34 @@
   "@settingsOwnTitleBar": {
     "description": "Settings window, Linux only: the switch that replaces the system's title bar with Lumit's menu bar carrying the minimise, maximise and close buttons."
   },
+  "settingsGroupPrivacy": "Privacy",
+  "@settingsGroupPrivacy": {
+    "description": "Settings window: heading over a group of rows."
+  },
+  "usageNotice": "Lumit now collects anonymous telemetry to help improve your experience. This can be disabled in settings.",
+  "@usageNotice": {
+    "description": "Popup shown once after an update, telling the person that anonymous telemetry is collected and where to turn it off."
+  },
+  "usageOk": "OK",
+  "@usageOk": {
+    "description": "Popup button: dismiss the telemetry notice."
+  },
+  "usageSentNever": "Never your projects, files, names or paths.",
+  "@usageSentNever": {
+    "description": "Telemetry window: one line under the data, saying what is never sent."
+  },
+  "usageSentTitle": "Telemetry",
+  "@usageSentTitle": {
+    "description": "Title of the window that shows the telemetry exactly as it would be sent, of the notice popup, and the name of the Settings row that opens the window."
+  },
+  "usageShare": "Share anonymous telemetry",
+  "@usageShare": {
+    "description": "Name of the switch and the first-run tick that turn anonymous telemetry on or off."
+  },
+  "usageWhatIsSent": "What is sent",
+  "@usageWhatIsSent": {
+    "description": "Button or link that opens the window showing exactly what telemetry is sent."
+  },
   "windowMinimise": "Minimise",
   "@windowMinimise": {
     "description": "Screen reader name of the button at the top right of Lumit's window that minimises the window. Use the operating system's own word for it."
@@ -6323,7 +6351,7 @@
   },
   "fxCloudy": "Cloudy",
   "@fxCloudy": {
-    "description": "Effect controls — a Sprite shape option on Particulate: a soft, billowing puff."
+    "description": "Effect controls — a Sprite shape option on Particulate: a soft, billowing puff. Also effect controls — a Fractal type option on Fractal noise."
   },
   "fxStarburstIntensity": "Starburst intensity",
   "@fxStarburstIntensity": {
@@ -6492,6 +6520,158 @@
   "fxTurbulent": "Turbulent",
   "@fxTurbulent": {
     "description": "Effect controls — a Fractal type option on Fractal noise."
+  },
+  "fxBlock": "Block",
+  "@fxBlock": {
+    "description": "Effect controls — a Noise type option on Fractal noise."
+  },
+  "fxSpline": "Spline",
+  "@fxSpline": {
+    "description": "Effect controls — a Noise type option on Fractal noise."
+  },
+  "fxTurbulentSmooth": "Turbulent smooth",
+  "@fxTurbulentSmooth": {
+    "description": "Effect controls — a Fractal type option on Fractal noise."
+  },
+  "fxTurbulentSharp": "Turbulent sharp",
+  "@fxTurbulentSharp": {
+    "description": "Effect controls — a Fractal type option on Fractal noise."
+  },
+  "fxDynamic": "Dynamic",
+  "@fxDynamic": {
+    "description": "Effect controls — a Fractal type option on Fractal noise."
+  },
+  "fxDynamicProgressive": "Dynamic progressive",
+  "@fxDynamicProgressive": {
+    "description": "Effect controls — a Fractal type option on Fractal noise."
+  },
+  "fxDynamicTwist": "Dynamic twist",
+  "@fxDynamicTwist": {
+    "description": "Effect controls — a Fractal type option on Fractal noise."
+  },
+  "fxSmeary": "Smeary",
+  "@fxSmeary": {
+    "description": "Effect controls — a Fractal type option on Fractal noise."
+  },
+  "fxSwirly": "Swirly",
+  "@fxSwirly": {
+    "description": "Effect controls — a Fractal type option on Fractal noise."
+  },
+  "fxRocky": "Rocky",
+  "@fxRocky": {
+    "description": "Effect controls — a Fractal type option on Fractal noise."
+  },
+  "fxTerrain": "Terrain",
+  "@fxTerrain": {
+    "description": "Effect controls — a Fractal type option on Fractal noise."
+  },
+  "fxSubscale": "Subscale",
+  "@fxSubscale": {
+    "description": "Effect controls — a Fractal type option on Fractal noise."
+  },
+  "fxStrings": "Strings",
+  "@fxStrings": {
+    "description": "Effect controls — a Fractal type option on Fractal noise."
+  },
+  "fxChips": "Chips",
+  "@fxChips": {
+    "description": "Effect controls — a Noise type option on Fractal noise: one flat grey per cell."
+  },
+  "fxCircular": "Circular",
+  "@fxCircular": {
+    "description": "Effect controls — a Noise type option on Fractal noise: a soft round dot per cell."
+  },
+  "fxBuya": "Buya",
+  "@fxBuya": {
+    "description": "Effect controls — a Noise type option on Fractal noise, after Cinema 4D's noise of that name; a proper name, not translated."
+  },
+  "fxCranal": "Cranal",
+  "@fxCranal": {
+    "description": "Effect controls — a Noise type option on Fractal noise, after Cinema 4D's noise of that name; a proper name, not translated."
+  },
+  "fxDents": "Dents",
+  "@fxDents": {
+    "description": "Effect controls — a Noise type option on Fractal noise, after Cinema 4D's Dents noise: bright lumps parted by creases."
+  },
+  "fxHama": "Hama",
+  "@fxHama": {
+    "description": "Effect controls — a Noise type option on Fractal noise, after Cinema 4D's noise of that name; a proper name, not translated."
+  },
+  "fxLuka": "Luka",
+  "@fxLuka": {
+    "description": "Effect controls — a Noise type option on Fractal noise, after Cinema 4D's noise of that name; a proper name, not translated."
+  },
+  "fxNaki": "Naki",
+  "@fxNaki": {
+    "description": "Effect controls — a Noise type option on Fractal noise, after Cinema 4D's noise of that name; a proper name, not translated."
+  },
+  "fxNutous": "Nutous",
+  "@fxNutous": {
+    "description": "Effect controls — a Noise type option on Fractal noise, after Cinema 4D's noise of that name; a proper name, not translated."
+  },
+  "fxOber": "Ober",
+  "@fxOber": {
+    "description": "Effect controls — a Noise type option on Fractal noise, after Cinema 4D's noise of that name; a proper name, not translated."
+  },
+  "fxPezo": "Pezo",
+  "@fxPezo": {
+    "description": "Effect controls — a Noise type option on Fractal noise, after Cinema 4D's noise of that name; a proper name, not translated."
+  },
+  "fxPoxo": "Poxo",
+  "@fxPoxo": {
+    "description": "Effect controls — a Noise type option on Fractal noise, after Cinema 4D's noise of that name; a proper name, not translated."
+  },
+  "fxSema": "Sema",
+  "@fxSema": {
+    "description": "Effect controls — a Noise type option on Fractal noise, after Cinema 4D's noise of that name; a proper name, not translated."
+  },
+  "fxStupl": "Stupl",
+  "@fxStupl": {
+    "description": "Effect controls — a Noise type option on Fractal noise, after Cinema 4D's noise of that name; a proper name, not translated."
+  },
+  "fxZada": "Zada",
+  "@fxZada": {
+    "description": "Effect controls — a Noise type option on Fractal noise, after Cinema 4D's noise of that name; a proper name, not translated."
+  },
+  "fxBlisteredTurbulence": "Blistered turbulence",
+  "@fxBlisteredTurbulence": {
+    "description": "Effect controls — a Noise type option on Fractal noise, after Cinema 4D's noise of that name."
+  },
+  "fxDisplacedTurbulence": "Displaced turbulence",
+  "@fxDisplacedTurbulence": {
+    "description": "Effect controls — a Noise type option on Fractal noise, after Cinema 4D's noise of that name."
+  },
+  "fxWavyTurbulence": "Wavy turbulence",
+  "@fxWavyTurbulence": {
+    "description": "Effect controls — a Noise type option on Fractal noise, after Cinema 4D's noise of that name."
+  },
+  "fxDisplacedVoronoi": "Displaced Voronoi",
+  "@fxDisplacedVoronoi": {
+    "description": "Effect controls — a Noise type option on Fractal noise, after Cinema 4D's noise of that name."
+  },
+  "fxVlNoise": "VL noise",
+  "@fxVlNoise": {
+    "description": "Effect controls — a Noise type option on Fractal noise: Musgrave's variable-lacunarity noise, after Cinema 4D's VL noise."
+  },
+  "fxStucci": "Stucci",
+  "@fxStucci": {
+    "description": "Effect controls — a Noise type option on Fractal noise: soft plaster blobs in relief, after Blender's Stucci (Plastic). Stucci is the Italian word for plasterwork; keep it as a name."
+  },
+  "fxStucciWallIn": "Stucci wall in",
+  "@fxStucciWallIn": {
+    "description": "Effect controls — a Noise type option on Fractal noise: plaster with grooves cut into it, after Blender's Stucci Wall In."
+  },
+  "fxStucciWallOut": "Stucci wall out",
+  "@fxStucciWallOut": {
+    "description": "Effect controls — a Noise type option on Fractal noise: plaster with walls standing out of it, after Blender's Stucci Wall Out."
+  },
+  "fxWindy": "Windy",
+  "@fxWindy": {
+    "description": "Effect controls — a Noise type option on Fractal noise: fine waves whose height a broad wind field sets, after LuxCore's Windy texture."
+  },
+  "fxBillow": "Billow",
+  "@fxBillow": {
+    "description": "Effect controls — a Noise type option on Fractal noise: heaped round puffs, after Maya's Billow noise."
   },
   "fxTurbulentDisplace": "Turbulent displace",
   "@fxTurbulentDisplace": {
@@ -6892,6 +7072,28 @@
   "graphicsDeviceReset": "The graphics device was reset",
   "@graphicsDeviceReset": {
     "description": "Status line notice, shown once when the graphics card has been reset under Lumit (a driver update, a watchdog reset, a laptop switching GPUs) and the engine has already rebuilt its renderer. Nothing is lost and there is nothing for the user to do."
+  },
+  "frameOverBudgetTitle": "Memory budget exceeded",
+  "@frameOverBudgetTitle": {
+    "description": "Title of the window shown when the frame the Viewer asked for needs more video memory than Lumit is allowed to use, so it was not drawn. Usually follows an edit that made the frame too heavy."
+  },
+  "frameOverBudgetFacts": "This frame needs {needed} of video memory. Lumit may use {allowed}.",
+  "@frameOverBudgetFacts": {
+    "description": "Body of the memory budget window: how much video memory the frame needs and how much Lumit is allowed to use, each a size with its unit.",
+    "placeholders": {
+      "needed": {
+        "type": "String",
+        "example": "14.2 GB"
+      },
+      "allowed": {
+        "type": "String",
+        "example": "11.4 GB"
+      }
+    }
+  },
+  "frameOverBudgetUndo": "Undo",
+  "@frameOverBudgetUndo": {
+    "description": "The only button in the memory budget window when an edit caused the frame to be too heavy. It undoes that edit, as Edit > Undo does, and closes the window."
   },
   "importFootage": "Import footage",
   "@importFootage": {
@@ -16404,7 +16606,7 @@
   },
   "settingsStyle": "Style",
   "@settingsStyle": {
-    "description": "Settings window, Appearance: the name of the row choosing how an audio waveform is drawn."
+    "description": "Settings window, Appearance: the heading over the interface style rows, and the name of the Waveforms row choosing how an audio waveform is drawn."
   },
   "settingsSurround": "Surround",
   "@settingsSurround": {
@@ -29155,6 +29357,570 @@
   "@fxCheckerboard": {
     "description": "Effect name: the Checkerboard effect, one of the effects that come with Lumit."
   },
+  "fxProgression": "Progression",
+  "@fxProgression": {
+    "description": "Effect controls: a control on Conical gradient, Sweep gradient, Gradient map, Voronoi, Wave pattern, Gabor and Pixel flow."
+  },
+  "fxQuadratic": "Quadratic",
+  "@fxQuadratic": {
+    "description": "Effect controls: an option of Progression on Conical gradient, Sweep gradient, Gradient map, Voronoi, Wave pattern, Gabor and Pixel flow."
+  },
+  "fxEasing": "Easing",
+  "@fxEasing": {
+    "description": "Effect controls: an option of Progression on Conical gradient, Sweep gradient, Gradient map, Voronoi, Wave pattern, Gabor and Pixel flow."
+  },
+  "fxF2": "F2",
+  "@fxF2": {
+    "description": "Effect controls: an option of Mode on Voronoi."
+  },
+  "fxSmoothF1": "Smooth F1",
+  "@fxSmoothF1": {
+    "description": "Effect controls: an option of Mode on Voronoi."
+  },
+  "fxDistanceToEdge": "Distance to edge",
+  "@fxDistanceToEdge": {
+    "description": "Effect controls: an option of Mode on Voronoi."
+  },
+  "fxNSphereRadius": "N-sphere radius",
+  "@fxNSphereRadius": {
+    "description": "Effect controls: an option of Mode on Voronoi."
+  },
+  "fxFlagstone": "Flagstone",
+  "@fxFlagstone": {
+    "description": "Effect controls: an option of Mode on Voronoi."
+  },
+  "fxChessCells": "Chess cells",
+  "@fxChessCells": {
+    "description": "Effect controls: an option of Mode on Voronoi."
+  },
+  "fxLineColour": "Line colour",
+  "@fxLineColour": {
+    "description": "Effect controls: a control on Voronoi and Tile patterns."
+  },
+  "fxDistanceMetric": "Distance metric",
+  "@fxDistanceMetric": {
+    "description": "Effect controls: a control on Voronoi."
+  },
+  "fxEuclidean": "Euclidean",
+  "@fxEuclidean": {
+    "description": "Effect controls: an option of Distance metric on Voronoi."
+  },
+  "fxManhattan": "Manhattan",
+  "@fxManhattan": {
+    "description": "Effect controls: an option of Distance metric on Voronoi."
+  },
+  "fxChebychev": "Chebychev",
+  "@fxChebychev": {
+    "description": "Effect controls: an option of Distance metric on Voronoi."
+  },
+  "fxMinkowski": "Minkowski",
+  "@fxMinkowski": {
+    "description": "Effect controls: an option of Distance metric on Voronoi."
+  },
+  "fxExponent": "Exponent",
+  "@fxExponent": {
+    "description": "Effect controls: a control on Voronoi."
+  },
+  "fxLacunarity": "Lacunarity",
+  "@fxLacunarity": {
+    "description": "Effect controls: a control on Voronoi."
+  },
+  "fxWavePattern": "Wave pattern",
+  "@fxWavePattern": {
+    "description": "Effect name: the Wave pattern effect, one of the effects that come with Lumit."
+  },
+  "fxProfile": "Profile",
+  "@fxProfile": {
+    "description": "Effect controls: a control on Wave pattern. Also effect controls: on Holographic foil, the shape of the bevel's wall."
+  },
+  "fxSaw": "Saw",
+  "@fxSaw": {
+    "description": "Effect controls: an option of Profile on Wave pattern."
+  },
+  "fxDetailScale": "Detail scale",
+  "@fxDetailScale": {
+    "description": "Effect controls: a control on Wave pattern."
+  },
+  "fxTilePatterns": "Tile patterns",
+  "@fxTilePatterns": {
+    "description": "Effect name: the Tile patterns effect, one of the effects that come with Lumit."
+  },
+  "fxBricks": "Bricks",
+  "@fxBricks": {
+    "description": "Effect controls: an option of Type on Tile patterns."
+  },
+  "fxFancyTiles": "Fancy tiles",
+  "@fxFancyTiles": {
+    "description": "Effect controls: an option of Type on Tile patterns."
+  },
+  "fxScales": "Scales",
+  "@fxScales": {
+    "description": "Effect controls: an option of Type on Tile patterns."
+  },
+  "fxFlemishBond": "Flemish bond",
+  "@fxFlemishBond": {
+    "description": "Effect controls: an option of Type on Tile patterns."
+  },
+  "fxEnglishBond": "English bond",
+  "@fxEnglishBond": {
+    "description": "Effect controls: an option of Type on Tile patterns."
+  },
+  "fxChainLink": "Chain link",
+  "@fxChainLink": {
+    "description": "Effect controls: an option of Type on Tile patterns."
+  },
+  "fxHerringbone": "Herringbone",
+  "@fxHerringbone": {
+    "description": "Effect controls: an option of Type on Tile patterns."
+  },
+  "fxBasketWeave": "Basket weave",
+  "@fxBasketWeave": {
+    "description": "Effect controls: an option of Type on Tile patterns."
+  },
+  "fxRowHeight": "Row height",
+  "@fxRowHeight": {
+    "description": "Effect controls: a control on Tile patterns."
+  },
+  "fxRowOffset": "Row offset",
+  "@fxRowOffset": {
+    "description": "Effect controls: a control on Tile patterns."
+  },
+  "fxOffsetFrequency": "Offset frequency",
+  "@fxOffsetFrequency": {
+    "description": "Effect controls: a control on Tile patterns."
+  },
+  "fxSquash": "Squash",
+  "@fxSquash": {
+    "description": "Effect controls: a control on Tile patterns."
+  },
+  "fxSquashFrequency": "Squash frequency",
+  "@fxSquashFrequency": {
+    "description": "Effect controls: a control on Tile patterns."
+  },
+  "fxLineSoftness": "Line softness",
+  "@fxLineSoftness": {
+    "description": "Effect controls: a control on Tile patterns."
+  },
+  "fxHoles": "Holes",
+  "@fxHoles": {
+    "description": "Effect controls: a control on Tile patterns."
+  },
+  "fxEdgeRoughness": "Edge roughness",
+  "@fxEdgeRoughness": {
+    "description": "Effect controls: a control on Tile patterns, how frayed each tile's edge is, and on Turbiniu, how much the strokes' sides are torn."
+  },
+  "fxTileColour1": "Tile colour 1",
+  "@fxTileColour1": {
+    "description": "Effect controls: a control on Tile patterns."
+  },
+  "fxTileColour2": "Tile colour 2",
+  "@fxTileColour2": {
+    "description": "Effect controls: a control on Tile patterns."
+  },
+  "fxChainmail": "Chainmail",
+  "@fxChainmail": {
+    "description": "Effect name: the Chainmail effect, one of the effects that come with Lumit."
+  },
+  "fxRingRadius": "Ring radius",
+  "@fxRingRadius": {
+    "description": "Effect controls: a control on Chainmail."
+  },
+  "fxRingWidth": "Ring width",
+  "@fxRingWidth": {
+    "description": "Effect controls: a control on Chainmail."
+  },
+  "fxMetalColour": "Metal colour",
+  "@fxMetalColour": {
+    "description": "Effect controls: a control on Chainmail."
+  },
+  "fxBackgroundColour": "Background colour",
+  "@fxBackgroundColour": {
+    "description": "Effect controls: a control on Chainmail, Scratches, Matrix effect, Pixel flow and Sine wave fan."
+  },
+  "fxShading": "Shading",
+  "@fxShading": {
+    "description": "Effect controls: a control on Chainmail."
+  },
+  "fxWoodgrain": "Woodgrain",
+  "@fxWoodgrain": {
+    "description": "Effect name: the Woodgrain effect, one of the effects that come with Lumit."
+  },
+  "fxLightWood": "Light wood",
+  "@fxLightWood": {
+    "description": "Effect controls: a control on Woodgrain."
+  },
+  "fxDarkWood": "Dark wood",
+  "@fxDarkWood": {
+    "description": "Effect controls: a control on Woodgrain."
+  },
+  "fxRingSpacing": "Ring spacing",
+  "@fxRingSpacing": {
+    "description": "Effect controls: a control on Woodgrain."
+  },
+  "fxRingSharpness": "Ring sharpness",
+  "@fxRingSharpness": {
+    "description": "Effect controls: a control on Woodgrain."
+  },
+  "fxRingIntensity": "Ring intensity",
+  "@fxRingIntensity": {
+    "description": "Effect controls: a control on Woodgrain."
+  },
+  "fxRingUnevenness": "Ring unevenness",
+  "@fxRingUnevenness": {
+    "description": "Effect controls: a control on Woodgrain."
+  },
+  "fxRingNoise": "Ring noise",
+  "@fxRingNoise": {
+    "description": "Effect controls: a control on Woodgrain."
+  },
+  "fxRingNoiseSize": "Ring noise size",
+  "@fxRingNoiseSize": {
+    "description": "Effect controls: a control on Woodgrain."
+  },
+  "fxGraininess": "Graininess",
+  "@fxGraininess": {
+    "description": "Effect controls: a control on Woodgrain."
+  },
+  "fxGrainSize": "Grain size",
+  "@fxGrainSize": {
+    "description": "Effect controls: a control on Woodgrain."
+  },
+  "fxPlankDepth": "Plank depth",
+  "@fxPlankDepth": {
+    "description": "Effect controls: a control on Woodgrain."
+  },
+  "fxTrunkWobble": "Trunk wobble",
+  "@fxTrunkWobble": {
+    "description": "Effect controls: a control on Woodgrain."
+  },
+  "fxTrunkWobbleLength": "Trunk wobble length",
+  "@fxTrunkWobbleLength": {
+    "description": "Effect controls: a control on Woodgrain."
+  },
+  "fxAngularWobble": "Angular wobble",
+  "@fxAngularWobble": {
+    "description": "Effect controls: a control on Woodgrain."
+  },
+  "fxTrunkCentre": "Trunk centre",
+  "@fxTrunkCentre": {
+    "description": "Effect controls: a control on Woodgrain."
+  },
+  "fxLayers": "Layers",
+  "@fxLayers": {
+    "description": "Effect controls: a control on Scratches. Also effect controls: a control on Holographic foil, how many layers of glitter flakes lie over each other."
+  },
+  "fxSteps": "Steps",
+  "@fxSteps": {
+    "description": "Effect controls: a control on Scratches."
+  },
+  "fxCurl": "Curl",
+  "@fxCurl": {
+    "description": "Effect controls: a control on Scratches."
+  },
+  "fxScratchColour": "Scratch colour",
+  "@fxScratchColour": {
+    "description": "Effect controls: a control on Scratches."
+  },
+  "fxFlakes": "Flakes",
+  "@fxFlakes": {
+    "description": "Effect name: the Flakes effect, one of the effects that come with Lumit."
+  },
+  "fxFlakeColour": "Flake colour",
+  "@fxFlakeColour": {
+    "description": "Effect controls: a control on Flakes."
+  },
+  "fxFlakeSize": "Flake size",
+  "@fxFlakeSize": {
+    "description": "Effect controls: a control on Flakes."
+  },
+  "fxFlakeSizeVariance": "Flake size variance",
+  "@fxFlakeSizeVariance": {
+    "description": "Effect controls: a control on Flakes."
+  },
+  "fxSparkle": "Sparkle",
+  "@fxSparkle": {
+    "description": "Effect controls: a control on Flakes. Also effect controls: a choice on Holographic foil, Material: embossed dots that all share one grating, so they light up together."
+  },
+  "fxBlendFactor": "Blend factor",
+  "@fxBlendFactor": {
+    "description": "Effect controls: a control on Flakes."
+  },
+  "fxGabor": "Gabor",
+  "@fxGabor": {
+    "description": "Effect name: the Gabor effect, one of the effects that come with Lumit."
+  },
+  "fxPacketSize": "Packet size",
+  "@fxPacketSize": {
+    "description": "Effect controls: a control on Gabor."
+  },
+  "fxAnisotropy": "Anisotropy",
+  "@fxAnisotropy": {
+    "description": "Effect controls: a control on Gabor."
+  },
+  "fxMagic": "Magic",
+  "@fxMagic": {
+    "description": "Effect name: the Magic effect, one of the effects that come with Lumit."
+  },
+  "fxMatrixEffect": "Matrix effect",
+  "@fxMatrixEffect": {
+    "description": "Effect name: Matrix effect, one of the effects that come with Lumit."
+  },
+  "fxGlyphSize": "Glyph size",
+  "@fxGlyphSize": {
+    "description": "Effect controls: a control on Matrix effect."
+  },
+  "fxTrailLength": "Trail length",
+  "@fxTrailLength": {
+    "description": "Effect controls: a control on Matrix effect."
+  },
+  "fxGlyphChanges": "Glyph changes",
+  "@fxGlyphChanges": {
+    "description": "Effect controls: a control on Matrix effect."
+  },
+  "fxTextColour": "Text colour",
+  "@fxTextColour": {
+    "description": "Effect controls: a control on Matrix effect."
+  },
+  "fxHeadColour": "Head colour",
+  "@fxHeadColour": {
+    "description": "Effect controls: a control on Matrix effect."
+  },
+  "fxPixelFlow": "Pixel flow",
+  "@fxPixelFlow": {
+    "description": "Effect name: the Pixel flow effect, one of the effects that come with Lumit."
+  },
+  "fxSpeedVariation": "Speed variation",
+  "@fxSpeedVariation": {
+    "description": "Effect controls: a control on Pixel flow."
+  },
+  "fxGap": "Gap",
+  "@fxGap": {
+    "description": "Effect controls: a control on Pixel flow."
+  },
+  "fxSineWaveFan": "Sine wave fan",
+  "@fxSineWaveFan": {
+    "description": "Effect name: the Sine wave fan effect, one of the effects that come with Lumit."
+  },
+  "fxWaveAmount": "Wave amount",
+  "@fxWaveAmount": {
+    "description": "Effect controls: a control on Sine wave fan."
+  },
+  "fxWaveLength": "Wave length",
+  "@fxWaveLength": {
+    "description": "Effect controls: a control on Sine wave fan."
+  },
+  "fxMovement": "Movement",
+  "@fxMovement": {
+    "description": "Effect controls: a control on Sine wave fan."
+  },
+  "fxBombing": "Bombing",
+  "@fxBombing": {
+    "description": "Effect name: the Bombing effect, one of the effects that come with Lumit."
+  },
+  "fxBulletSize": "Bullet size",
+  "@fxBulletSize": {
+    "description": "Effect controls: a control on Bombing."
+  },
+  "fxJitter": "Jitter",
+  "@fxJitter": {
+    "description": "Effect controls: a control on Bombing."
+  },
+  "fxScaleVariation": "Scale variation",
+  "@fxScaleVariation": {
+    "description": "Effect controls: a control on Bombing."
+  },
+  "fxRandomRotation": "Random rotation",
+  "@fxRandomRotation": {
+    "description": "Effect controls: a control on Bombing."
+  },
+  "fxSourceCentre": "Source centre",
+  "@fxSourceCentre": {
+    "description": "Effect controls: a control on Bombing."
+  },
+  "fxSourceSize": "Source size",
+  "@fxSourceSize": {
+    "description": "Effect controls: a control on Bombing."
+  },
+  "fxDotColour": "Dot colour",
+  "@fxDotColour": {
+    "description": "Effect controls: a control on Bombing."
+  },
+  "fxOverLayer": "Over layer",
+  "@fxOverLayer": {
+    "description": "Effect controls: an option of Composite on Bombing."
+  },
+  "fxBulletsOnly": "Bullets only",
+  "@fxBulletsOnly": {
+    "description": "Effect controls: an option of Composite on Bombing."
+  },
+  "fxWeave": "Weave",
+  "@fxWeave": {
+    "description": "Effect name: the Weave effect, one of the effects that come with Lumit."
+  },
+  "fxThreadSpacing": "Thread spacing",
+  "@fxThreadSpacing": {
+    "description": "Effect controls: a control on Weave."
+  },
+  "fxWarpWidth": "Warp width",
+  "@fxWarpWidth": {
+    "description": "Effect controls: a control on Weave."
+  },
+  "fxWeftWidth": "Weft width",
+  "@fxWeftWidth": {
+    "description": "Effect controls: a control on Weave."
+  },
+  "fxWarpColour": "Warp colour",
+  "@fxWarpColour": {
+    "description": "Effect controls: a control on Weave."
+  },
+  "fxWeftColour": "Weft colour",
+  "@fxWeftColour": {
+    "description": "Effect controls: a control on Weave."
+  },
+  "fxGapColour": "Gap colour",
+  "@fxGapColour": {
+    "description": "Effect controls: a control on Weave."
+  },
+  "fxThreadShading": "Thread shading",
+  "@fxThreadShading": {
+    "description": "Effect controls: a control on Weave."
+  },
+  "fxWidthVariation": "Width variation",
+  "@fxWidthVariation": {
+    "description": "Effect controls: a control on Weave."
+  },
+  "fxWaterDrop": "Water drop",
+  "@fxWaterDrop": {
+    "description": "Effect name: the Water drop effect, one of the effects that come with Lumit."
+  },
+  "fxStartTime": "Start time",
+  "@fxStartTime": {
+    "description": "Effect controls: a control on Water drop."
+  },
+  "fxCalmColour": "Calm colour",
+  "@fxCalmColour": {
+    "description": "Effect controls: a control on Water drop."
+  },
+  "fxCrestColour": "Crest colour",
+  "@fxCrestColour": {
+    "description": "Effect controls: a control on Water drop."
+  },
+  "fxTroughColour": "Trough colour",
+  "@fxTroughColour": {
+    "description": "Effect controls: a control on Water drop."
+  },
+  "fxSoftbox": "Softbox",
+  "@fxSoftbox": {
+    "description": "Effect name: the Softbox effect, one of the effects that come with Lumit. Also effect controls: a choice on Holographic foil, Lighting: one large soft square light."
+  },
+  "fxFrameWidth": "Frame width",
+  "@fxFrameWidth": {
+    "description": "Effect controls: a control on Softbox."
+  },
+  "fxFrameSoftness": "Frame softness",
+  "@fxFrameSoftness": {
+    "description": "Effect controls: a control on Softbox."
+  },
+  "fxFrameColour": "Frame colour",
+  "@fxFrameColour": {
+    "description": "Effect controls: a control on Softbox."
+  },
+  "fxSpot": "Spot",
+  "@fxSpot": {
+    "description": "Effect controls: a control on Softbox. Also effect controls: a choice on Holographic foil, Lighting: one small bright spot in a dark room."
+  },
+  "fxHotSpot": "Hot spot",
+  "@fxHotSpot": {
+    "description": "Effect controls: an option of Spot on Softbox."
+  },
+  "fxDarkSpot": "Dark spot",
+  "@fxDarkSpot": {
+    "description": "Effect controls: an option of Spot on Softbox."
+  },
+  "fxSpotCentre": "Spot centre",
+  "@fxSpotCentre": {
+    "description": "Effect controls: a control on Softbox."
+  },
+  "fxSpotInnerRadius": "Spot inner radius",
+  "@fxSpotInnerRadius": {
+    "description": "Effect controls: a control on Softbox."
+  },
+  "fxSpotOuterRadius": "Spot outer radius",
+  "@fxSpotOuterRadius": {
+    "description": "Effect controls: a control on Softbox."
+  },
+  "fxSpotStrength": "Spot strength",
+  "@fxSpotStrength": {
+    "description": "Effect controls: a control on Softbox."
+  },
+  "fxSpotFalloff": "Spot falloff",
+  "@fxSpotFalloff": {
+    "description": "Effect controls: a control on Softbox."
+  },
+  "fxCylinderRotationX": "Rotation X",
+  "@fxCylinderRotationX": {
+    "description": "Effect controls: a control on Cylinder."
+  },
+  "fxCylinderRotationY": "Rotation Y",
+  "@fxCylinderRotationY": {
+    "description": "Effect controls: a control on Cylinder."
+  },
+  "fxCylinderRotationZ": "Rotation Z",
+  "@fxCylinderRotationZ": {
+    "description": "Effect controls: a control on Cylinder."
+  },
+  "fxRotationOrder": "Rotation order",
+  "@fxRotationOrder": {
+    "description": "Effect controls: a control on Cylinder."
+  },
+  "fxXyz": "XYZ",
+  "@fxXyz": {
+    "description": "Effect controls: an option of Rotation order on Cylinder."
+  },
+  "fxXzy": "XZY",
+  "@fxXzy": {
+    "description": "Effect controls: an option of Rotation order on Cylinder."
+  },
+  "fxYxz": "YXZ",
+  "@fxYxz": {
+    "description": "Effect controls: an option of Rotation order on Cylinder."
+  },
+  "fxYzx": "YZX",
+  "@fxYzx": {
+    "description": "Effect controls: an option of Rotation order on Cylinder."
+  },
+  "fxZxy": "ZXY",
+  "@fxZxy": {
+    "description": "Effect controls: an option of Rotation order on Cylinder."
+  },
+  "fxZyx": "ZYX",
+  "@fxZyx": {
+    "description": "Effect controls: an option of Rotation order on Cylinder."
+  },
+  "fxOffsetXPercent": "Offset X (%)",
+  "@fxOffsetXPercent": {
+    "description": "Effect controls: a control on Cylinder."
+  },
+  "fxOffsetYPercent": "Offset Y (%)",
+  "@fxOffsetYPercent": {
+    "description": "Effect controls: a control on Cylinder."
+  },
+  "fxFull": "Full",
+  "@fxFull": {
+    "description": "Effect controls: an option of Render on Cylinder."
+  },
+  "fxLightHeight": "Light height",
+  "@fxLightHeight": {
+    "description": "Effect controls: a control on Cylinder."
+  },
+  "fxSpecular": "Specular",
+  "@fxSpecular": {
+    "description": "Effect controls: a control on Cylinder."
+  },
+  "fxTransparencyFalloff": "Transparency falloff",
+  "@fxTransparencyFalloff": {
+    "description": "Effect controls: a control on Cylinder."
+  },
   "fxHalftone": "Halftone",
   "@fxHalftone": {
     "description": "Effect name: the Halftone effect, one of the effects that come with Lumit."
@@ -33176,21 +33942,9 @@
   "@fxShortWaves": {
     "description": "Effect controls: a choice on Holographic foil, Passes: a custom dye that lets the short, cool wavelengths through."
   },
-  "fxSoftbox": "Softbox",
-  "@fxSoftbox": {
-    "description": "Effect controls: a choice on Holographic foil, Lighting: one large soft square light."
-  },
-  "fxSparkle": "Sparkle",
-  "@fxSparkle": {
-    "description": "Effect controls: a choice on Holographic foil, Material: embossed dots that all share one grating, so they light up together."
-  },
   "fxSpectrum": "Spectrum",
   "@fxSpectrum": {
     "description": "Effect controls: a control on Holographic foil, the colour of a light, as the kind of lamp it is."
-  },
-  "fxSpot": "Spot",
-  "@fxSpot": {
-    "description": "Effect controls: a choice on Holographic foil, Lighting: one small bright spot in a dark room."
   },
   "fxSpotA": "Spot A",
   "@fxSpotA": {
@@ -33460,10 +34214,6 @@
   "@fxHex": {
     "description": "Effect controls: a choice on Holographic foil, glitter flakes with six sides."
   },
-  "fxLayers": "Layers",
-  "@fxLayers": {
-    "description": "Effect controls: a control on Holographic foil, how many layers of glitter flakes lie over each other."
-  },
   "fxNebulaGlitter": "Nebula glitter",
   "@fxNebulaGlitter": {
     "description": "Effect presets: a Holographic foil look, fine flakes under a blue binder over indigo ink."
@@ -33704,13 +34454,108 @@
   "@fxPressedLogo": {
     "description": "Effect presets: a Holographic foil look, the layer's outline pressed into rainbow foil as a bevel."
   },
-  "fxProfile": "Profile",
-  "@fxProfile": {
-    "description": "Effect controls: on Holographic foil, the shape of the bevel's wall."
-  },
   "fxSoftPastelSatin": "Soft pastel satin",
   "@fxSoftPastelSatin": {
     "description": "Effect presets: a Holographic foil look, pale wide bands on soft satin metal."
+  },
+  "resolveImportRunning": "Another Resolve import is running.",
+  "@resolveImportRunning": {
+    "description": "Error sent back to DaVinci Resolve when a second Resolve selection import is asked for while one is still running."
+  },
+  "resolveBusy": "Lumit is busy. Finish the current operation first.",
+  "@resolveBusy": {
+    "description": "Error when a Resolve selection import arrives while Lumit is opening a project or doing other work."
+  },
+  "resolveOneComp": "The selection must contain one composition.",
+  "@resolveOneComp": {
+    "description": "Error when the clips sent from DaVinci Resolve did not become exactly one composition."
+  },
+  "resolveProjectTitle": "Lumit project for Resolve",
+  "@resolveProjectTitle": {
+    "description": "Title of the window asking which Lumit project a DaVinci Resolve project links to, shown the first time clips are sent from it."
+  },
+  "resolveProjectBody": "Choose a project for {name}. All linked compositions will use it.",
+  "@resolveProjectBody": {
+    "description": "Body of the window asking which Lumit project a DaVinci Resolve project links to. {name} is the Resolve project's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "resolveProjectExisting": "Choose existing",
+  "@resolveProjectExisting": {
+    "description": "Button in the Lumit project for Resolve window: pick a Lumit project that already exists."
+  },
+  "resolveProjectNew": "Create new",
+  "@resolveProjectNew": {
+    "description": "Button in the Lumit project for Resolve window: save a new Lumit project for the link."
+  },
+  "resolveProjectDefaultName": "Resolve project",
+  "@resolveProjectDefaultName": {
+    "description": "File name suggested for a new Lumit project linked to DaVinci Resolve, when the Resolve project has no name."
+  },
+  "resolveImportClipsFailed": "Could not import the selected clips.",
+  "@resolveImportClipsFailed": {
+    "description": "Error when the clips sent from DaVinci Resolve could not be brought into the Lumit project."
+  },
+  "resolveImportFailed": "Resolve import: {error}",
+  "@resolveImportFailed": {
+    "description": "Status-line error when importing clips sent from DaVinci Resolve failed. {error} is the reason.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "resolveNotAProject": "Not a Lumit project",
+  "@resolveNotAProject": {
+    "description": "Error when a file named by a DaVinci Resolve link is not a Lumit project."
+  },
+  "resolveNoIdentity": "Missing Lumit project identity",
+  "@resolveNoIdentity": {
+    "description": "Error when a Lumit project named by a DaVinci Resolve link has no identity to link by."
+  },
+  "resolveInvalidIdentity": "Invalid linked Lumit project identity",
+  "@resolveInvalidIdentity": {
+    "description": "Error when a DaVinci Resolve link carries a Lumit project identity that is not well formed."
+  },
+  "resolvePathAmbiguous": "This path belongs to multiple linked projects. Choose its current path.",
+  "@resolvePathAmbiguous": {
+    "description": "Error when the project path in a DaVinci Resolve link was used by more than one linked Lumit project."
+  },
+  "resolveMissingTitle": "Linked project not found",
+  "@resolveMissingTitle": {
+    "description": "Title of the window shown when the Lumit project a DaVinci Resolve link names cannot be found."
+  },
+  "resolveMissingBody": "The linked Lumit project may have been moved or renamed. Locate it once to reconnect all its linked compositions in Resolve.",
+  "@resolveMissingBody": {
+    "description": "Body of the Linked project not found window."
+  },
+  "resolveMissingLocate": "Locate project",
+  "@resolveMissingLocate": {
+    "description": "Button in the Linked project not found window: pick the project's file."
+  },
+  "resolveDifferentProject": "That file is a different Lumit project. Choose the original project.",
+  "@resolveDifferentProject": {
+    "description": "Notice when the file picked to reconnect a DaVinci Resolve link is another Lumit project."
+  },
+  "resolveInvalidProject": "That file is not a valid Lumit project.",
+  "@resolveInvalidProject": {
+    "description": "Notice when the file picked to reconnect a DaVinci Resolve link is not a Lumit project."
+  },
+  "resolveCompNotFound": "The linked composition was not found. Choose it again in Resolve.",
+  "@resolveCompNotFound": {
+    "description": "Notice when a DaVinci Resolve link opens its Lumit project but the composition it names is not in it."
+  },
+  "resolveLinkFailed": "Resolve link: {error}",
+  "@resolveLinkFailed": {
+    "description": "Status-line error when opening a DaVinci Resolve link in Lumit failed. {error} is the reason.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
   },
   "fxTurbiniu": "Turbiniu",
   "@fxTurbiniu": {
@@ -33915,10 +34760,6 @@
   "fxDryBrushGrain": "Dry brush grain",
   "@fxDryBrushGrain": {
     "description": "Effect controls: a control on Turbiniu, how long the dry gaps are, in pixels along the stroke."
-  },
-  "fxEdgeRoughness": "Edge roughness",
-  "@fxEdgeRoughness": {
-    "description": "Effect controls: a control on Turbiniu, how much the strokes' sides are torn."
   },
   "fxRoughEdgeDepth": "Rough edge depth",
   "@fxRoughEdgeDepth": {

@@ -1,7 +1,3 @@
-// The small arithmetic the Timeline's rows and chrome are built from — the
-// twirl's reach across a selection to begin with. Pure, so it is checked here
-// rather than by clicking in a widget tree, exactly as timeline_drag_test.dart
-// checks the row-height maths.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/layer_fold_frb.dart';
@@ -38,8 +34,6 @@ void main() {
   });
 
   group('The Animated filter keeps what is keyed, and its way in (6.43)', () {
-    /// A row that carries one keyframe, at [frame] seconds' worth of nothing —
-    /// the time never matters here, only that the row has a key at all.
     FoldRetimeRow keyed(int depth) => FoldRetimeRow(
           BridgeScalar.keyframed([
             const BridgeKeyframe(
@@ -52,7 +46,6 @@ void main() {
           depth: depth,
         );
 
-    /// A row that can never be keyed, for the depth it stands at.
     FoldVolumeRow still(int depth) => FoldVolumeRow(depth: depth);
 
     FoldGroupRow heading(String path, int depth) =>
@@ -79,7 +72,6 @@ void main() {
     const centre = 960.0, middle = 540.0;
     BridgeScalar st(double v) => BridgeScalar.static_(v);
 
-    /// A transform nobody has touched, in a 1920×1080 comp.
     BridgeTransform fresh({
       BridgeScalar? opacity,
       BridgeScalar? rotation,
@@ -118,15 +110,11 @@ void main() {
     // Position, untouched: the one row that is neither animated nor changed,
     // and the one that needs the comp's size to know it.
     final still_ = row('Position', BridgeTransformProp.positionX, fresh());
-    // Opacity, keyframed.
     final keyed_ =
         row('Opacity', BridgeTransformProp.opacity, fresh(opacity: oneKey));
-    // Rotation, driven by an expression: no diamonds, and a different number
-    // at every frame all the same.
     final expressed = row('Rotation', BridgeTransformProp.rotation,
         fresh(rotation: const BridgeScalar.expression(
             'time * 10', BridgeExpressionLanguage.rhai)));
-    // Scale, typed to something else and left there.
     final changed = row('Scale', BridgeTransformProp.scaleX, fresh(scale: st(50)));
 
     const layerId = 'layer-a';
@@ -152,9 +140,6 @@ void main() {
         disabledRows: const [],
         rowOptions: const [],
         rowLabels: const []);
-    // A parameter at its default, with a wire from the node graph on it:
-    // nothing has been typed into it and it is not the same at every
-    // frame either.
     final driven = FoldEffectParamRow(
         info, param, const BridgeEffectValue.float(BridgeScalar.static_(1)),
         depth: 3,

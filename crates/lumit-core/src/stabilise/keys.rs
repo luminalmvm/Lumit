@@ -30,7 +30,6 @@ use crate::model::{Document, TransformProp};
 use crate::ops::Op;
 use crate::time::Rational;
 
-/// The three parts of a layer transform a stabilisation is written onto.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Moved {
     /// Layer pixels.
@@ -189,7 +188,6 @@ pub fn bake(doc: &Arc<Document>, comp: Uuid, layer: Uuid, effect: Uuid) -> Optio
         if !(0.0..=span).contains(&at) {
             continue;
         }
-        // The map exactly as the frame is drawn with.
         let Some(drawn) = resolve(&reader, lt) else {
             continue;
         };
@@ -288,7 +286,6 @@ mod tests {
     #[test]
     fn baked_transform_draws_the_picture_where_the_effect_did() {
         let size = [1920.0, 1080.0];
-        // The picture moved by a turn of 7 degrees, grown by a tenth and slid.
         let (s, th) = (1.1f64, 7f64.to_radians());
         let a = from_similarity([s * th.cos(), s * th.sin(), 12.0, -5.0]);
         let w = invert(&a).expect("invertible");

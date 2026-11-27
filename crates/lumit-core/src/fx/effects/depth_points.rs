@@ -34,7 +34,6 @@ const ENABLED_WHEN: &[EnabledWhen] = &[
     },
 ];
 
-/// Depth points' controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "depth_points",
@@ -50,20 +49,17 @@ const ENABLED_WHEN: &[EnabledWhen] = &[
     enabled_when = ENABLED_WHEN,
 )]
 pub struct DepthPoints {
-    /// Read the shot and file its depth. A button, not a value.
     #[action(label = "Analyse")]
     pub analyse: (),
     /// Stop a running analysis. The frames already read are kept.
     #[action(label = "Cancel")]
     pub cancel: (),
-    /// Which frames Analyse reads - see [`crate::planes::FRAMES_OPTIONS`].
     #[choice(options = *crate::planes::FRAMES_OPTIONS, default = 0, label = "Frames")]
     pub frames: u32,
     /// A picture to read depth from instead, nearer being brighter. Unset, the
     /// points read this effect's own analysis.
     #[layer(label = "Depth layer", self_default = false)]
     pub depth_layer: bool,
-    /// Read the depth the other way up, far being bright.
     #[toggle(default = false, label = "Invert")]
     pub invert: bool,
     /// The Camera layer the points line up from. Setting it carries the layer
@@ -140,7 +136,6 @@ impl EffectDef for DepthPointsDef {
     }
 }
 
-/// Where a layer's points come from at one moment.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Source {
     /// The source camera's eye, comp pixels.
@@ -150,7 +145,6 @@ pub struct Source {
     pub slide: (f64, f64, f64),
 }
 
-/// A Camera layer's pose at comp time `t`, however it gets there.
 fn pose_of(
     doc: &Arc<Document>,
     comp: &Composition,

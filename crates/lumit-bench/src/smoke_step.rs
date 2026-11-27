@@ -14,11 +14,9 @@ use lumit_core::time::{Duration, FrameRate};
 use std::sync::Arc;
 use uuid::Uuid;
 
-/// Frames for the gas to fill the box.
 const WARM: i64 = 90;
 const RUNS: i64 = 30;
 
-/// Measure B40. `Err` when there is no graphics adapter.
 pub fn budgets(progress: &mut dyn FnMut(Measurement)) -> Result<Vec<Measurement>, String> {
     let mut doc = Document::new();
     let span = rat(10, 1);

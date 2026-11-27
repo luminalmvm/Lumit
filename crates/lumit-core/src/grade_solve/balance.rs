@@ -15,8 +15,6 @@ use crate::fx::effects::temperature::neutral_for;
 /// brightest detail keeps some room.
 pub const WHITE: f32 = 0.95;
 
-/// The rows that neutralise `rgba`, the picture coming into `node`. Sets
-/// Temperature, Tint, Lift and Gain and leaves everything else alone.
 pub fn auto_balance(rgba: &[f32], node: &Correction) -> Result<Rows, SolveError> {
     let picture: Vec<[f32; 3]> = colours(rgba).collect();
     if picture.is_empty() {
@@ -53,7 +51,6 @@ pub fn auto_balance(rgba: &[f32], node: &Correction) -> Result<Rows, SolveError>
     // Temperature is on it yet.
     let (temperature, tint) = neutral_for(grey, (0.0, 0.0));
 
-    // The new gains, with the node's own Exposure kept.
     let expo = node.exposure.clamp(-20.0, 20.0).exp2();
     let (gain_r, gain_b) = cpu::temperature_gains((temperature / 100.0).clamp(-2.0, 2.0));
     let gain_g = cpu::tint_gain((tint / 100.0).clamp(-2.0, 2.0));
@@ -97,7 +94,6 @@ fn black_and_white(black: f32, white: f32, e: f32) -> (f32, f32) {
     if black >= 1.0 - 1e-4 || white <= black + 1e-4 {
         return (0.0, 1.0);
     }
-    // `x + L·(1 − x) = 0` at black.
     let lift = (-black / (1.0 - black)).clamp(-1.0, 1.0);
     let top = white + lift * (1.0 - white);
     if top <= 1e-4 {
@@ -112,8 +108,6 @@ mod tests {
     use super::*;
     use crate::grade_solve::test_support::{declared, graded, with_rows};
 
-    /// A grey ramp with a few quiet colours in it, under a warm, green cast,
-    /// comes back neutral with its black at 0 and its white near 0.95.
     #[test]
     fn a_cast_picture_comes_back_neutral() {
         let (w, h) = (64u32, 16u32);
@@ -123,8 +117,6 @@ mod tests {
             for x in 0..w {
                 let t = (x as f32 + 0.5) / w as f32;
                 let level = 0.02 + 0.85 * t * t;
-                // Colours in the middle of two rows in four, so the picture
-                // is not all grey and the grey-world pool has to pick.
                 let tint = match (y % 4, (0.25..0.75).contains(&t)) {
                     (1, true) => [1.3, 0.9, 0.8],
                     (3, true) => [0.8, 1.2, 0.9],
@@ -141,7 +133,6 @@ mod tests {
         assert!(declared(&rows));
         let out = graded(&rgba, w, h, &with_rows(&[], &rows));
 
-        // A grey pixel of the ramp (row 0) in the middle.
         let at = |x: u32| {
             let i = (x * 4) as usize;
             [0, 1, 2].map(|c| maths::encode(out[i + c], 0))

@@ -73,8 +73,6 @@ pub fn stack_posterize(
         .map(|e| {
             let rate = e.float_at("rate", lt).unwrap_or(12.0);
             let phase = e.float_at("phase", lt).unwrap_or(0.0);
-            // A stored `scope` from an older project is simply unread: the
-            // reach is implied by the carrier now.
             PosterizeParams { rate, phase }
         })
 }
@@ -103,19 +101,12 @@ pub fn stack_posterize(
 /// grid above dominates. Pure and deterministic, and shared by the preview
 /// decode planner and export so the two hold the identical frame.
 pub fn posterize_sample_times(layers: &[Layer], t_comp: f64) -> Vec<f64> {
-    // The time imposed on the current layer by every Everything-below Posterize
-    // adjustment seen above it, composed. Starts at the true playhead.
     let mut below_hold = t_comp;
     let mut out = Vec::with_capacity(layers.len());
     for layer in layers {
-        // Start from the time the adjustments above hold this layer at.
         let mut sample_t = below_hold;
         let lt = crate::time::layer_time(below_hold, layer.start_offset.0);
         let here = stack_posterize(&layer.effects, layer.switches.fx, lt);
-        // A Posterize on this layer holds its own source sampling at the reduced
-        // rate, whatever the scope — so applying Posterize to a footage layer
-        // steps that footage (T12; before, nothing held unless the Posterize sat
-        // on an adjustment layer above).
         if let Some(p) = &here {
             sample_t = posterize_held_time(below_hold, p.rate, p.phase);
         }
@@ -133,13 +124,8 @@ pub fn posterize_sample_times(layers: &[Layer], t_comp: f64) -> Vec<f64> {
     out
 }
 
-/// An accumulation motion blur effect resolved at a layer time (docs/08 §3.26,
-/// docs/impl/temporal-rerender.md §3): the sub-frame shutter it samples the
-/// below-stack across, and the Mix blending the averaged result against the
-/// frame-time composite.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct AccumulationMbParams {
-    /// Sub-frame renders of the scene below across the open shutter.
     pub samples: u32,
     /// Shutter angle in degrees (the open fraction is `shutter_angle / 360`).
     pub shutter_angle: f64,
@@ -160,7 +146,6 @@ pub struct AccumulationMbParams {
     /// its own, so nothing prepares its matte at the dispatch seam — the
     /// combine does it itself, once, before reading.
     pub matte_channel: u32,
-    /// See [`matte_channel`](Self::matte_channel).
     pub matte_invert: bool,
 }
 
@@ -253,8 +238,6 @@ pub fn stack_accumulation_mb(
             let shutter_angle = e.float_at("shutter_angle", lt).unwrap_or(180.0);
             let shutter_phase = e.float_at("shutter_phase", lt).unwrap_or(-90.0);
             let mix = (e.float_at("mix", lt).unwrap_or(100.0) / 100.0).clamp(0.0, 1.0);
-            // Static bool (v1); an older project saved before the parameter
-            // existed reads as the default (false).
             let force_all = e.bool_of("force_all").unwrap_or(false);
             AccumulationMbParams {
                 samples,
@@ -323,8 +306,6 @@ pub fn accumulation_shutter_offsets(layers: &[Layer], t_comp: f64) -> Vec<Vec<f6
             into.sort_by(f64::total_cmp);
         };
         if layer.is_adjustment() {
-            // The adjustment has no clip of its own; everything beneath it
-            // gets its moments.
             out.push(above.clone());
             merge(&mut above);
         } else {
@@ -443,7 +424,6 @@ pub fn input_times(inst: &EffectInstance, t: f64, dt: f64) -> Vec<f64> {
     out
 }
 
-/// The match name of the Time offset box (§5.2).
 const TIME_OFFSET: &str = "time_offset";
 
 /// The source-relative frame offsets a **layer** needs at layer time `lt`, the
@@ -480,9 +460,6 @@ pub fn layer_temporal_window(
     offsets
 }
 
-/// The whole-frame offsets one Node graph instance demands of the picture it is
-/// handed: the times its graph asks its **first picture Input** at, other than
-/// the graph's own.
 fn graph_demands_on_provided(
     doc: &crate::model::Document,
     inst: &EffectInstance,
@@ -707,7 +684,6 @@ pub fn stack_flow_sides(
         .collect()
 }
 
-/// [`stack_flow_sides`] with how each offset is wanted.
 pub fn stack_flow_sides_wanted(
     effects: &[EffectInstance],
     fx_on: bool,
@@ -811,8 +787,6 @@ mod extracted_channel_tests {
         inst
     }
 
-    /// The plan reads the selection off the stack, which is the whole way the
-    /// decode ever hears about it.
     #[test]
     fn the_stack_hands_over_the_channels_it_asks_for() {
         let stack = vec![extractor(&["R", "Z"], 0, 2)];

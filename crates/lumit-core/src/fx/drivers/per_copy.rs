@@ -1,7 +1,3 @@
-//! **Values per copy**: drivers resolved once for each point of a points
-//! stream, so a driver that reads the copy gives every stamp or label its own
-//! value.
-
 use crate::fx::drivers::clone_index;
 use crate::fx::params::{ParamId, Value};
 use crate::fx::points::{self, PointsStream};
@@ -16,11 +12,8 @@ pub const COPY_SCALE_Y: &str = "copy:scale_y";
 pub const COPY_OFFSET_X: &str = "copy:offset_x";
 pub const COPY_OFFSET_Y: &str = "copy:offset_y";
 pub const COPY_TINT: &str = "copy:tint";
-/// Clone to points' Layer index per stamp.
 pub const COPY_LAYER_INDEX: &str = "copy:layer_index";
 
-/// The rows a driver can give each stamp its own value for, with the column
-/// each is written into.
 pub const COPY_ROWS: &[(&str, &str)] = &[
     ("scale", COPY_SCALE),
     ("rotation", COPY_ROTATION),
@@ -95,9 +88,6 @@ pub fn drive_rows(
     }
     let n = stream.len().min(COPY_DRIVE_MAX);
     let count = u32::try_from(stream.len()).unwrap_or(u32::MAX);
-    // Each point resolves the whole graph on its own, so the points are
-    // shared out over the cores.
-    // Where every point is, for a driver that keeps away from them.
     let cloud = points::Cloud::new(stream.position.iter().map(|p| [p[0], p[1]]));
     use rayon::prelude::*;
     let per_point: Vec<Vec<Option<f32>>> = (0..n)

@@ -14,10 +14,8 @@ use uuid::Uuid;
 use super::{colliders, frame_on, hand_over, start_from, walk_name, Live, Source, KEEP_EVERY};
 use crate::track::{AnalysisError, Progress, Requested};
 
-/// The folder under a cache root that bakes live in.
 const FOLDER: &str = "sim";
 
-/// The first bytes of a baked state, and how its header is laid out.
 const MAGIC: &[u8; 8] = b"LUMSIM01";
 const HEAD: usize = 8 + 8 + 8 + 8 + 8;
 
@@ -28,15 +26,11 @@ const MOST: usize = 16 * 256 * 256 * 256;
 /// The most one bake writes, in bytes. Past it the bake stops where it got to.
 const MOST_ON_DISK: u64 = 64 << 30;
 
-/// The open project's cache folder, where its bakes are.
 static ROOT: Mutex<Option<PathBuf>> = Mutex::new(None);
 
-/// How many states have been read back from a bake.
 #[cfg(feature = "test-fixtures")]
 pub static READS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-/// Bakes go in and come from `cache_root` from now on, the folder the project's
-/// frames are cached in by its own settings.
 pub fn set_root(cache_root: Option<PathBuf>) {
     if let Ok(mut root) = ROOT.lock() {
         *root = cache_root.map(|r| r.join(FOLDER));
@@ -58,7 +52,6 @@ fn walk_dir(root: &Path, effect: Uuid, name: &[u8; 32]) -> PathBuf {
     root.join(effect.to_string()).join(hex(name))
 }
 
-/// The frames baked for this walk, and their folder.
 fn baked_frames(effect: Uuid, name: &[u8; 32]) -> Option<(PathBuf, Vec<i64>)> {
     let dir = walk_dir(&root()?, effect, name);
     let listed = lumit_ingress::files::list(&dir).ok()?;
@@ -70,7 +63,6 @@ fn baked_frames(effect: Uuid, name: &[u8; 32]) -> Option<(PathBuf, Vec<i64>)> {
     (!frames.is_empty()).then_some((dir, frames))
 }
 
-/// A state read back from disk.
 pub(super) struct Baked {
     pub ledger: Ledger,
     pub bytes: Vec<u8>,
@@ -110,7 +102,6 @@ fn unpack(file: &[u8]) -> Option<Baked> {
     })
 }
 
-/// The furthest state baked of `name` past `after` and up to `frame`.
 pub(super) fn nearest(
     effect: Uuid,
     name: &[u8; 32],
@@ -143,7 +134,6 @@ pub(super) fn frames_shown(src: &Source<'_>) -> (i64, i64) {
     };
     let (mut first, mut end) = (f64::INFINITY, f64::NEG_INFINITY);
     let span = to.saturating_sub(from).max(0);
-    // Without a Retime the two ends say it all.
     let every = if src.layer.retime.is_some() {
         1
     } else {
@@ -162,8 +152,6 @@ pub(super) fn frames_shown(src: &Source<'_>) -> (i64, i64) {
     (first.floor().max(0.0) as i64, (end.ceil() as i64).max(0))
 }
 
-/// What `effect` on `layer` is baked to, as frames from its in point and the
-/// frames its span holds. `None` when nothing matches its rows as they stand.
 #[must_use]
 pub fn status(doc: &Arc<Document>, comp: Uuid, layer: Uuid, effect: Uuid) -> Option<(u32, u32)> {
     let c = doc.comp(comp)?;
@@ -184,7 +172,6 @@ pub fn status(doc: &Arc<Document>, comp: Uuid, layer: Uuid, effect: Uuid) -> Opt
     let (_, frames) = baked_frames(effect, &name)?;
     let src = Source::find(doc, comp, layer, effect, lumit_core::fx::drivers::NO_CLONE)?;
     let (first, end) = frames_shown(&src);
-    // A state every so often covers the frames up to the next.
     let reached = (*frames.last()? + KEEP_EVERY).min(end);
     Some((
         u32::try_from((reached - first).max(0)).unwrap_or(u32::MAX),
@@ -192,7 +179,6 @@ pub fn status(doc: &Arc<Document>, comp: Uuid, layer: Uuid, effect: Uuid) -> Opt
     ))
 }
 
-/// Bake on `effect`: its simulation if it has one, otherwise a Bake points bake.
 pub fn press(doc: Arc<Document>, comp: Uuid, layer: Uuid, effect: Uuid) -> Requested {
     let named = |doc: &Document, wants: &dyn Fn(&lumit_core::model::EffectInstance) -> bool| {
         doc.comp(comp).is_some_and(|c| {
@@ -235,7 +221,6 @@ pub(super) fn start_dir(effect: Uuid, name: &[u8; 32]) -> Option<PathBuf> {
     Some(dir)
 }
 
-/// Writes a bake's states and counts them against what one may hold.
 #[derive(Default)]
 pub(super) struct Writer {
     written: u64,
@@ -288,8 +273,6 @@ pub(super) fn fresh(
     }
 }
 
-/// The whole of one bake: the frames the layer shows, walked from the start of
-/// the walk, with a state written every so often.
 fn walk(
     doc: &Arc<Document>,
     comp: Uuid,
@@ -326,7 +309,6 @@ fn walk(
     let mut now = start;
     let mut writer = Writer::default();
     let mut work = 0u64;
-    // A bake stopped part of the way is the frames it got to.
     while live.ledger.frame < end {
         if cancel.load(Ordering::Relaxed) {
             return Err(AnalysisError::Cancelled);
@@ -341,7 +323,6 @@ fn walk(
             &mut work,
             u64::from(cap) * u64::from(physics(&now.rows).steps),
         );
-        // Nothing before the in point but the one state the first frame walks from.
         let frame = live.ledger.frame;
         if frame % KEEP_EVERY == 0 && frame + KEEP_EVERY > first {
             let bytes = fx
@@ -361,8 +342,6 @@ fn walk(
 mod tests {
     use super::*;
 
-    /// What a bake writes reads back whole, and a file saying more than a bake
-    /// can hold is no bake.
     #[test]
     fn a_baked_state_reads_back() {
         let ledger = Ledger {

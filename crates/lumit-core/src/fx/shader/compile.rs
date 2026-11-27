@@ -31,14 +31,11 @@ use super::graph::{ports_of, spec_of, GraphTy, ShaderEdge, ShaderGraph, ShaderNo
 /// exactly as a text that will not parse does (§2.2).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GraphError {
-    /// No Result box, or more than one — a graph makes exactly one picture.
     NoResult,
     ManyResults,
     UnknownKind(String),
     DuplicateNode(u32),
-    /// An edge names a node or a port that is not there.
     Dangling,
-    /// Two wires land on one input.
     DoubleInput,
     Cycle,
     /// A wire carries a value its destination cannot take: two vectors of
@@ -47,8 +44,6 @@ pub enum GraphError {
         node: u32,
         port: String,
     },
-    /// A Parameter box (or a swizzle's pattern) with settings the grammar
-    /// cannot carry.
     BadParameter(String),
 }
 
@@ -89,7 +84,6 @@ enum Val {
 /// # Errors
 /// The [`GraphError`] taxonomy; every one is a sentence for the badge.
 pub fn compile(graph: &ShaderGraph) -> Result<String, GraphError> {
-    // -- The shape ----------------------------------------------------------
     let mut nodes: BTreeMap<u32, &ShaderNode> = BTreeMap::new();
     for n in &graph.nodes {
         if spec_of(&n.kind).is_none() {
@@ -111,7 +105,6 @@ pub fn compile(graph: &ShaderGraph) -> Result<String, GraphError> {
         _ => return Err(GraphError::ManyResults),
     };
 
-    // -- The wires ----------------------------------------------------------
     let mut into: BTreeMap<(u32, u32), &ShaderEdge> = BTreeMap::new();
     for e in &graph.edges {
         let (Some(from), Some(to)) = (nodes.get(&e.from), nodes.get(&e.to)) else {
@@ -127,15 +120,12 @@ pub fn compile(graph: &ShaderGraph) -> Result<String, GraphError> {
         }
     }
 
-    // -- Topological order, ties by node id (§4.4) --------------------------
     let mut indegree: BTreeMap<u32, u32> = nodes.keys().map(|id| (*id, 0)).collect();
     for e in into.values() {
         if let Some(d) = indegree.get_mut(&e.to) {
             *d += 1;
         }
     }
-    // ponytail: an O(n²) ready-scan; a graph is tens of boxes. A heap earns
-    // its place when someone wires hundreds.
     let mut order: Vec<u32> = Vec::with_capacity(nodes.len());
     let mut done: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
     while order.len() < nodes.len() {
@@ -159,7 +149,7 @@ pub fn compile(graph: &ShaderGraph) -> Result<String, GraphError> {
 
     // -- Parameters (node id order — the struct is part of the contract) ----
     let params: Vec<&ShaderNode> = graph.nodes.iter().filter(|n| n.kind == "param").collect();
-    let mut fields: Vec<(String, String)> = Vec::new(); // (id, struct lines)
+    let mut fields: Vec<(String, String)> = Vec::new();
     {
         let mut sorted = params.clone();
         sorted.sort_by_key(|n| n.id);
@@ -174,7 +164,6 @@ pub fn compile(graph: &ShaderGraph) -> Result<String, GraphError> {
         }
     }
 
-    // -- Emission -----------------------------------------------------------
     let mut vals: BTreeMap<(u32, u32), Val> = BTreeMap::new();
     let mut lets: Vec<String> = Vec::new();
     let mut ret = String::from("vec4<f32>(0.0)");
@@ -212,7 +201,6 @@ pub fn compile(graph: &ShaderGraph) -> Result<String, GraphError> {
     }
     debug_assert!(done.contains(&result_id));
 
-    // -- The text -----------------------------------------------------------
     let mut out = String::new();
     if !fields.is_empty() {
         out.push_str("struct Params {\n");
@@ -250,7 +238,6 @@ fn default_input(kind: &str, port: u32) -> Val {
     }
 }
 
-/// A numeric value, or the mismatch a picture wired into a number is.
 fn num(v: Val, node: u32, port: &str) -> Result<(String, GraphTy), GraphError> {
     match v {
         Val::Num(e, t) => Ok((e, t)),
@@ -261,7 +248,6 @@ fn num(v: Val, node: u32, port: &str) -> Result<(String, GraphTy), GraphError> {
     }
 }
 
-/// Splat a scalar up to `to`'s width; a value already that width passes.
 fn widen(expr: String, from: GraphTy, to: GraphTy) -> String {
     if from == to || to.width() <= 1 {
         expr
@@ -312,7 +298,6 @@ fn view4(v: Val, node: u32) -> Result<String, GraphError> {
 
 type Outs = Vec<(u32, Val)>;
 
-/// One box's `let` right-hand side and the values its output ports carry.
 #[allow(clippy::too_many_lines)]
 fn emit(
     node: &ShaderNode,
@@ -321,8 +306,6 @@ fn emit(
 ) -> Result<(String, Outs), GraphError> {
     let id = node.id;
     let one = |ty: GraphTy| vec![(0, Val::Num(name.to_owned(), ty))];
-    // A two-input op over the broadcast rule, spelt either as an operator or
-    // as a call.
     let binary = |op: &str, call: bool| -> Result<(String, Outs), GraphError> {
         let (a, at) = num(input(0, "a")?, id, "a")?;
         let (b, bt) = num(input(1, "b")?, id, "b")?;
@@ -341,7 +324,6 @@ fn emit(
     };
 
     match node.kind.as_str() {
-        // -- Input ----------------------------------------------------------
         "picture" => Ok((
             "lumit_sample(uv)".into(),
             vec![
@@ -364,7 +346,6 @@ fn emit(
             let (field, _) = param_field(node)?;
             Ok((format!("p.{field}"), one(super::graph::param_ty(node))))
         }
-        // -- Maths ----------------------------------------------------------
         "add" => binary("+", false),
         "subtract" => binary("-", false),
         "multiply" => binary("*", false),
@@ -462,7 +443,6 @@ fn emit(
         "fract" => unary("fract"),
         "sin" => unary("sin"),
         "cos" => unary("cos"),
-        // -- Vector ---------------------------------------------------------
         "split" => {
             let (v, t) = num(input(0, "vector")?, id, "vector")?;
             if t.width() < 2 {
@@ -525,7 +505,6 @@ fn emit(
                 one(GraphTy::of_width(pattern.len() as u32)),
             ))
         }
-        // -- Texture --------------------------------------------------------
         "sample" => {
             let helper = match input(0, "picture")? {
                 Val::Pic(h) => h,
@@ -545,7 +524,6 @@ fn emit(
             }
             Ok((format!("{helper}({uvx})"), one(GraphTy::Vec4)))
         }
-        // -- Colour ---------------------------------------------------------
         "luminance" => {
             let c = coerce4(input(0, "colour")?, id, "colour")?;
             Ok((
@@ -581,9 +559,6 @@ fn emit(
             }
             let a = format!("{base}.rgb");
             let b = format!("{over}.rgb");
-            // ponytail: a linear-light subset of BlendMode::ALL, formulas
-            // inlined per chosen mode. The upgrade path is the fx_blend_mix
-            // table, when the node claims parity with the layer modes.
             let mode = node
                 .settings
                 .get("mode")
@@ -615,8 +590,6 @@ fn emit(
         other => Err(GraphError::UnknownKind(other.to_owned())),
     }
 }
-
-// ------------------------------------------------------------ the parameters
 
 /// A Parameter box's field id and its annotated struct lines — the box's five
 /// facts (kind, range, default, unit, label) spelt in the §1.4 grammar, so the
@@ -729,8 +702,6 @@ fn param_field(node: &ShaderNode) -> Result<(String, String), GraphError> {
     ))
 }
 
-// ------------------------------------------------- the session compile cache
-
 /// FNV-1a folded over whatever serde writes, so a graph is hashed without ever
 /// being turned into a string on the render path.
 struct HashWriter(u64);
@@ -834,9 +805,6 @@ mod tests {
         }
     }
 
-    /// The §8 item 22 fixture: a uv gradient through maths to the output, with
-    /// one Parameter box — every family except texture and colour, which have
-    /// their own cases below.
     fn gradient() -> ShaderGraph {
         let mut gain = node(6, "param");
         gain.settings = serde_json::json!({
@@ -885,8 +853,6 @@ mod tests {
         );
     }
 
-    /// §8 item 22 — the determinism gate for the whole of §4: the same graph,
-    /// twice, on two threads, and against a golden string.
     #[test]
     fn a_graph_compiles_to_byte_identical_wgsl() {
         let golden = "struct Params {\n\
@@ -912,7 +878,6 @@ mod tests {
         }
     }
 
-    /// §8 item 24, first half.
     #[test]
     fn a_cycle_is_refused_at_the_edit() {
         let graph = ShaderGraph {
@@ -923,8 +888,6 @@ mod tests {
         assert_eq!(compile(&graph), Err(GraphError::Cycle));
     }
 
-    /// §8 item 26: with a graph present the render compiles from the graph
-    /// even when the cached `source` has been tampered with in the file.
     #[test]
     fn the_graph_is_master() {
         let mut inst =

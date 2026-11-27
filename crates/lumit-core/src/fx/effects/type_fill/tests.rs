@@ -2,12 +2,6 @@ use super::{Piece, TypeFill};
 use crate::fx::params::Params;
 use crate::fx::registry::EffectMetadata;
 
-/// Type fill: rows split the height, columns are as wide as
-/// their words, a shape in the middle of a row leaves each column only
-/// the parts outside it (inset by Word gap), a part narrower than Min
-/// width stays empty, Invert region swaps inside and out, and the orders
-/// move or shuffle the words. Guards words drawn over the shape, or
-/// boxes that do not fill the room.
 #[test]
 fn words_fill_the_room_the_region_leaves() {
     let mut t = TypeFill::read(Params::EMPTY);
@@ -19,13 +13,11 @@ fn words_fill_the_room_the_region_leaves() {
     let bands = t.row_bands(110.0, 1.0);
     assert_eq!(bands, vec![[0.0, 50.0], [60.0, 110.0]]);
 
-    // A row 400 px wide with the region everywhere but 150..250.
     let samples: Vec<f32> = (0..400)
         .map(|x| if (150..250).contains(&x) { 0.0 } else { 1.0 })
         .collect();
     let free = t.free_spans(&samples);
     assert_eq!(free, vec![[0.0, 150.0], [250.0, 400.0]]);
-    // Words 2, 1 and 1 wide: columns 0..190, 200..295, 305..400.
     let natural = [2.0, 1.0, 1.0];
     let pieces = t.pieces(
         &bands[..1],
@@ -54,15 +46,11 @@ fn words_fill_the_room_the_region_leaves() {
             },
         ]
     );
-    // A free stretch of 15 px is too narrow for a word.
     let narrow = vec![vec![[0.0, 15.0]]];
     assert!(t
         .pieces(&bands[..1], &narrow, &natural, 400.0, 1.0)
         .is_empty());
 
-    // A shape at 230..250 cuts "the" (200..295) in two: one "the" across
-    // the whole column, its left slice on one side, its right on the
-    // other, never a second "the".
     let cut: Vec<f32> = (0..400)
         .map(|x| if (230..250).contains(&x) { 0.0 } else { 1.0 })
         .collect();
@@ -87,9 +75,6 @@ fn words_fill_the_room_the_region_leaves() {
     inverted.invert = true;
     assert_eq!(inverted.free_spans(&samples), vec![[150.0, 250.0]]);
 
-    // Cut words: every word whole at its column's width, wherever the
-    // region is; the region then cuts it pixel by pixel, and a Type fill
-    // and its inverted twin share each edge pixel exactly.
     let mut cut_out = t;
     cut_out.cut_words = true;
     let mut cut_in = inverted;
@@ -117,8 +102,6 @@ fn words_fill_the_room_the_region_leaves() {
     assert_eq!(a, random.row_order(4, 3), "the same every frame");
 }
 
-/// Grid height stands the rows together in a band of that height in the
-/// middle of the frame, so one row keyed into forty grows into a grid.
 #[test]
 fn grid_height_centres_the_rows() {
     let mut t = TypeFill::read(Params::EMPTY);
@@ -130,10 +113,6 @@ fn grid_height_centres_the_rows() {
     assert_eq!(t.row_bands(100.0, 1.0), vec![[0.0, 50.0], [50.0, 100.0]]);
 }
 
-/// Fit piece: a shape that cuts a column in two leaves two pieces, each
-/// with the whole word, fitted to its own box across and down at Piece
-/// scale; a piece the region reaches only part of the way down gets a
-/// short word. Guards a word cut by the shape, or stretched over it.
 #[test]
 fn fit_piece_gives_each_piece_its_own_whole_word() {
     let mut t = TypeFill::read(Params::EMPTY);
@@ -141,8 +120,6 @@ fn fit_piece_gives_each_piece_its_own_whole_word() {
     t.word_gap = 0.0;
     t.min_width = 1.0;
     t.piece_scale = 50.0;
-    // One row 0..20 across 10 px: free at 0..4 all the way down, held
-    // at 4..6, free at 6..10 only from 10 to 20.
     let mut row = vec![Some([0.0, 20.0]); 4];
     row.extend([None, None]);
     row.extend(vec![Some([10.0, 20.0]); 4]);
@@ -164,8 +141,6 @@ fn fit_piece_gives_each_piece_its_own_whole_word() {
     );
 }
 
-/// Column widths sets each column's share of the width; a list that is
-/// not one positive number for each word is left out.
 #[test]
 fn column_widths_set_the_columns() {
     let mut t = TypeFill::read(Params::EMPTY);
@@ -174,20 +149,16 @@ fn column_widths_set_the_columns() {
     assert_eq!(t.shares(&[2.0, 1.0, 2.0]), vec![46.0, 8.0, 40.0]);
     t.column_widths = crate::fx::params::ShortText::new("46-8 40");
     assert_eq!(t.shares(&[2.0, 1.0, 2.0]), vec![46.0, 8.0, 40.0]);
-    // A shorter list goes round again.
     t.column_widths = crate::fx::params::ShortText::new("46|8");
     assert_eq!(t.shares(&[2.0, 1.0, 2.0]), vec![46.0, 8.0, 46.0]);
     t.column_widths = crate::fx::params::ShortText::new("1");
     assert_eq!(t.shares(&[2.0, 1.0, 2.0]), vec![1.0, 1.0, 1.0]);
-    // A number that is not above 0 leaves the list out.
     t.column_widths = crate::fx::params::ShortText::new("46|x");
     assert_eq!(t.shares(&[2.0, 1.0, 2.0]), vec![2.0, 1.0, 2.0]);
     t.column_widths = crate::fx::params::ShortText::new("46|0");
     assert_eq!(t.shares(&[2.0, 1.0, 2.0]), vec![2.0, 1.0, 2.0]);
 }
 
-/// Direction: Columns renames the rows that then work down the columns,
-/// and Rows keeps their own names.
 #[test]
 fn columns_rename_the_rows() {
     use crate::fx::registry::EffectDef;
@@ -205,7 +176,6 @@ fn columns_rename_the_rows() {
     assert!(labels.contains(&("grid_height", "Grid width")));
 }
 
-/// Repeat words sets the list one after another that many times.
 #[test]
 fn repeat_words_sets_the_list_again() {
     let mut t = TypeFill::read(Params::EMPTY);
@@ -215,8 +185,6 @@ fn repeat_words_sets_the_list_again() {
     assert_eq!(t.word_list(), vec!["a", "b", "a", "b", "a", "b"]);
 }
 
-/// Column mix goes from the words' own widths (0 %) to Column widths
-/// (100 %) through shares of one. Guards a jump when it is keyed.
 #[test]
 fn column_mix_slides_between_the_widths() {
     let mut t = TypeFill::read(Params::EMPTY);
@@ -230,8 +198,6 @@ fn column_mix_slides_between_the_widths() {
     assert_eq!(t.shares(&natural), vec![1.0, 1.0]);
 }
 
-/// Row open grows every row out of a flat line through its middle; with
-/// Row stagger the middle row opens first and the outer rows last.
 #[test]
 fn row_open_and_stagger_open_the_rows_from_the_middle() {
     let mut t = TypeFill::read(Params::EMPTY);
@@ -243,7 +209,6 @@ fn row_open_and_stagger_open_the_rows_from_the_middle() {
         vec![[7.5, 22.5], [37.5, 52.5], [67.5, 82.5]]
     );
     t.row_stagger = 50.0;
-    // The middle row is open, the outer ones still flat.
     assert_eq!(
         t.row_bands(90.0, 1.0),
         vec![[15.0, 15.0], [30.0, 60.0], [75.0, 75.0]]
@@ -255,9 +220,6 @@ fn row_open_and_stagger_open_the_rows_from_the_middle() {
     assert_eq!(t.row_bands(90.0, 1.0)[0], [0.0, 30.0], "all open at 100 %");
 }
 
-/// Row shift slides a row's columns and wraps them round every width
-/// plus one Word gap; Alternate rows slides the odd rows the other way.
-/// Guards a gap opening at the edge as the row scrolls.
 #[test]
 fn row_shift_scrolls_the_rows_round() {
     let mut t = TypeFill::read(Params::EMPTY);
@@ -275,7 +237,6 @@ fn row_shift_scrolls_the_rows_round() {
     };
     t.piece_scale = 100.0;
     t.row_shift = 20.0;
-    // "b" wraps in from the left: 0..20, then "a" 20..70, "b" 70..100.
     let first: Vec<_> = full(&t, 0);
     assert_eq!(
         first,

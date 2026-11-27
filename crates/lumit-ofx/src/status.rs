@@ -11,7 +11,6 @@
 use std::ffi::c_int;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-/// A status code as the OFX C API spells it: a plain `int`.
 pub type OfxStatus = c_int;
 
 /// The status codes from `ofxCore.h`, in their defined order (the numbers are
@@ -19,34 +18,24 @@ pub type OfxStatus = c_int;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(i32)]
 pub enum Status {
-    /// `kOfxStatOK`
     Ok = 0,
     /// `kOfxStatFailed` — the action was understood and did not work.
     Failed = 1,
     /// `kOfxStatErrFatal` — the plugin or host is unusable from here on.
     ErrFatal = 2,
-    /// `kOfxStatErrUnknown`
     ErrUnknown = 3,
-    /// `kOfxStatErrMissingHostFeature`
     ErrMissingHostFeature = 4,
-    /// `kOfxStatErrUnsupported`
     ErrUnsupported = 5,
-    /// `kOfxStatErrExists`
     ErrExists = 6,
-    /// `kOfxStatErrFormat`
     ErrFormat = 7,
-    /// `kOfxStatErrMemory`
     ErrMemory = 8,
     /// `kOfxStatErrBadHandle` — the handle we were given is not one of ours,
     /// is of the wrong kind, or names something that has been destroyed.
     ErrBadHandle = 9,
-    /// `kOfxStatErrBadIndex`
     ErrBadIndex = 10,
     /// `kOfxStatErrValue` — including a property read at the wrong type.
     ErrValue = 11,
-    /// `kOfxStatReplyYes`
     ReplyYes = 12,
-    /// `kOfxStatReplyNo`
     ReplyNo = 13,
     /// `kOfxStatReplyDefault` — "you decide", which is what a host with no
     /// dialogue to show says to a question.
@@ -54,7 +43,6 @@ pub enum Status {
 }
 
 impl Status {
-    /// The code as the C API carries it.
     #[must_use]
     pub const fn code(self) -> OfxStatus {
         self as OfxStatus
@@ -85,11 +73,8 @@ impl Status {
     }
 }
 
-/// What every suite entry point works in internally: the unit answer or a
-/// status. [`finish`] turns it into the number the plugin gets.
 pub type StatusResult = Result<(), Status>;
 
-/// Collapse an internal result into the C answer.
 #[must_use]
 pub fn finish(result: StatusResult) -> OfxStatus {
     match result {
@@ -98,7 +83,6 @@ pub fn finish(result: StatusResult) -> OfxStatus {
     }
 }
 
-/// How many statuses there are, which is how many counters the tally keeps.
 const STATUS_COUNT: usize = 15;
 
 /// One counter per status, bumped as the host answers
@@ -120,7 +104,6 @@ static ANSWERED: [AtomicU64; STATUS_COUNT] = [const { AtomicU64::new(0) }; STATU
 /// Answers that were the plugin's doing rather than the host's: see [`uncount`].
 static FORGIVEN: [AtomicU64; STATUS_COUNT] = [const { AtomicU64::new(0) }; STATUS_COUNT];
 
-/// Tally one answer. Called by the suites' guards and by nothing else.
 pub(crate) fn record(code: OfxStatus) {
     let index = usize::try_from(code).unwrap_or(usize::MAX);
     if let Some(slot) = ANSWERED.get(index) {
@@ -146,7 +129,6 @@ pub(crate) fn uncount(code: OfxStatus) {
     }
 }
 
-/// How many times the host has answered `status` since the last [`forget`].
 #[must_use]
 pub fn answered(status: Status) -> u64 {
     let index = usize::try_from(status.code()).unwrap_or(usize::MAX);
@@ -158,8 +140,6 @@ pub fn answered(status: Status) -> u64 {
     count(&ANSWERED).saturating_sub(count(&FORGIVEN))
 }
 
-/// Start the tally again from nought — what a harness does before the pass it
-/// wants the count for.
 pub fn forget() {
     for slot in ANSWERED.iter().chain(&FORGIVEN) {
         slot.store(0, Ordering::Relaxed);

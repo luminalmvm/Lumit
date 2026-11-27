@@ -25,8 +25,6 @@ use super::solve::{
 use super::*;
 use lumit_core::mask::Mask;
 
-// --- The synthetic world ---------------------------------------------------
-
 /// A deterministic integer hash in 0..1. Splitmix-style finaliser over the two
 /// lattice coordinates: no state, no seed, identical everywhere.
 fn hash2(ix: i64, iy: i64) -> f64 {
@@ -40,7 +38,6 @@ fn hash2(ix: i64, iy: i64) -> f64 {
     ((h >> 11) as f64) / ((1u64 << 53) as f64)
 }
 
-/// Smooth value noise on a unit lattice.
 fn noise(x: f64, y: f64) -> f64 {
     let (x0, y0) = (x.floor(), y.floor());
     let (fx, fy) = (x - x0, y - y0);
@@ -170,7 +167,6 @@ fn render(motion: &Motion, occluder: Option<(f64, f64, f64, f64)>) -> Vec<f32> {
     out
 }
 
-/// Run a whole sequence of motions and hand back the track set.
 fn run(motions: &[Motion], settings: TrackSettings, masks: Vec<ExclusionMask>) -> TrackSet {
     let mut tracker = Tracker::new(settings).with_masks(masks);
     for (i, m) in motions.iter().enumerate() {
@@ -228,8 +224,6 @@ fn rect_mask(x0: f64, y0: f64, x1: f64, y1: f64, inverted: bool) -> ExclusionMas
     ExclusionMask::from_mask(&mask, 0.0, 1.0)
 }
 
-// --- Detection and the track substrate -------------------------------------
-
 #[test]
 fn a_sheared_quad_is_tracked_to_the_true_displacement() {
     // The affine case proper: shear plus a slight squash plus a translation, so
@@ -253,8 +247,6 @@ fn a_sheared_quad_is_tracked_to_the_true_displacement() {
     assert!(spanned > 40, "{spanned} tracks spanned the sequence");
 }
 
-// --- The zoom detector's food ----------------------------------------------
-
 #[test]
 fn a_zoom_pair_reads_its_log_scale_out_of_the_affine_matrices() {
     // The phase-2 zoom-burst detector's whole input: a pair of frames differing
@@ -274,10 +266,6 @@ fn a_zoom_pair_reads_its_log_scale_out_of_the_affine_matrices() {
     }
 }
 
-// --- Verification ----------------------------------------------------------
-
-/// A sequence where an occluder sweeps left to right across the quad while the
-/// picture underneath translates gently.
 fn occluder_sequence(frames: usize) -> (Vec<Motion>, Vec<Vec<f32>>) {
     let motions: Vec<Motion> = (0..frames)
         .map(|i| Motion::translate(centre(), 0.9 * i as f64, 0.0))
@@ -307,8 +295,6 @@ fn run_planes(planes: &[Vec<f32>], settings: TrackSettings) -> TrackSet {
 fn forward_backward_and_ncc_end_a_track_under_an_occluder() {
     let (_, planes) = occluder_sequence(9);
     let set = run_planes(&planes, TrackSettings::default());
-    // Tracks born on frame 0 in the band the occluder crosses must die, not
-    // follow the occluder or drift.
     let mut crossed = 0usize;
     let mut ended = 0usize;
     for t in set.tracks() {
@@ -329,8 +315,6 @@ fn forward_backward_and_ncc_end_a_track_under_an_occluder() {
         ended * 10 >= crossed * 9,
         "{ended} of {crossed} occluded tracks ended; the rest carried a wrong point"
     );
-    // And nothing survived by teleporting: every ended track stopped before the
-    // occluder had passed it.
     for t in set.tracks() {
         if t.state == TrackState::Ended {
             assert!(
@@ -357,8 +341,6 @@ fn a_starved_bucket_is_detected_into_again() {
         "re-detection produced only {} new tracks behind the occluder",
         reborn.len()
     );
-    // Re-detected tracks are real tracks: they carry ids after the originals and
-    // go on to be followed.
     let born_first = set.tracks().iter().filter(|t| t.first_frame() == 0).count();
     for t in &reborn {
         assert!(t.id as usize >= born_first, "ids stay monotonic");
@@ -369,12 +351,8 @@ fn a_starved_bucket_is_detected_into_again() {
     );
 }
 
-// --- Masks -----------------------------------------------------------------
-
 #[test]
 fn a_track_wandering_into_a_mask_ends() {
-    // A rightward pan with a mask on the right: tracks march into it and must
-    // stop at its edge rather than cross it.
     let motions: Vec<Motion> = (0..12)
         .map(|i| Motion::translate(centre(), 6.0 * i as f64, 0.0))
         .collect();
@@ -401,8 +379,6 @@ fn a_track_wandering_into_a_mask_ends() {
         "only {entered} tracks were stopped at the mask edge"
     );
 }
-
-// --- Seeding ---------------------------------------------------------------
 
 #[test]
 fn the_pyramid_carries_a_jump_a_single_level_would_miss() {
@@ -481,8 +457,6 @@ fn a_flow_seed_carries_a_jump_a_single_level_would_miss() {
     );
 }
 
-// --- Determinism and the store ---------------------------------------------
-
 #[test]
 fn two_identical_runs_produce_the_identical_track_set() {
     let motions: Vec<Motion> = (0..6)
@@ -492,8 +466,6 @@ fn two_identical_runs_produce_the_identical_track_set() {
     let b = run(&motions, TrackSettings::default(), vec![]);
     assert_eq!(a, b, "two runs over the same frames must agree bit for bit");
 }
-
-// --- Boundary errors -------------------------------------------------------
 
 #[test]
 fn the_boundary_refuses_what_it_cannot_use() {
@@ -531,10 +503,6 @@ fn the_boundary_refuses_what_it_cannot_use() {
         Err(TrackError::SeedSize { .. })
     ));
 }
-
-// --- The response map (docs/impl/tracking.md §2) ---------------------------
-
-// --- Perf sanity (a number in the output, not a gate) ----------------------
 
 // ===========================================================================
 // Phase 2 — two-view geometry (docs/impl/tracking.md §3, test plan §5)
@@ -653,14 +621,6 @@ fn pair_correspondences(
     }
     out
 }
-
-// --- The fundamental matrix -------------------------------------------------
-
-// --- The GRIC gate ----------------------------------------------------------
-
-// --- LO-RANSAC against a planted second motion ------------------------------
-
-// --- A synthetic shot, as a TrackSet ----------------------------------------
 
 /// `frames` views of one cloud, the camera dollying sideways while it pans a
 /// little, written straight into a [`TrackSet`].
@@ -814,12 +774,9 @@ fn a_track_that_stops_agreeing_is_split_at_the_change() {
         assert_eq!(parent.parent, None);
         assert_eq!(parent.last_frame(), s.at_frame);
         assert_eq!(child.first_frame(), s.at_frame + 1);
-        // Both halves are whole tracks, not fragments with a broken invariant.
         assert_eq!(parent.steps.len() + 1, parent.points.len());
         assert_eq!(child.steps.len() + 1, child.points.len());
 
-        // The points survive the cut: prefix then suffix is exactly what the
-        // track had before, in order.
         let original = before.get(s.parent).expect("the original");
         let rejoined: Vec<TrackPoint> = parent
             .points
@@ -864,8 +821,6 @@ fn the_carried_count_falls_where_the_live_count_recovers() {
             .push(i as i64, FramePlane::new(&f, W, H).unwrap(), None)
             .unwrap();
     }
-    // Nothing carries into the first frame by definition; after that the shot
-    // is being followed properly.
     let following = tracker.carried_count();
     assert!(
         following > 50,
@@ -887,8 +842,6 @@ fn the_carried_count_falls_where_the_live_count_recovers() {
         "something crossed a frame with nothing in it"
     );
 
-    // And back to the picture: the chain is severed, so what follows is a new
-    // set of tracks that nothing before the blank frame can be related to.
     let after = render(&motions[2], None);
     tracker
         .push(4, FramePlane::new(&after, W, H).unwrap(), None)
@@ -904,10 +857,6 @@ fn the_carried_count_falls_where_the_live_count_recovers() {
         "a track survived a frame it could not have been followed through"
     );
 }
-
-// --- The zoom-burst detector ------------------------------------------------
-
-// --- Determinism ------------------------------------------------------------
 
 #[test]
 fn the_two_view_boundary_refuses_what_it_cannot_use() {
@@ -933,7 +882,6 @@ fn the_two_view_boundary_refuses_what_it_cannot_use() {
     fundamental_seven_point(&corr[..6], &mut out);
     assert!(out.is_empty(), "the seven-point needs seven");
 
-    // A set of identical points has no geometry, and saying so is not a panic.
     let flat: Vec<Correspondence> = (0..12)
         .map(|i| Correspondence {
             id: i,
@@ -961,7 +909,6 @@ fn the_two_view_boundary_refuses_what_it_cannot_use() {
 use crate::bundle::{bundle_adjust, BundleCamera, BundleObs, FocalRef};
 use crate::solve::closest_rotation;
 
-/// A cloud spread about the world origin — what an orbiting camera circles.
 fn orbit_cloud(n: usize) -> Vec<[f64; 3]> {
     (0..n)
         .map(|i| {
@@ -1176,8 +1123,6 @@ fn ate(solved: &[[f64; 3]], truth: &[[f64; 3]]) -> (f64, f64) {
     ((sum / n).sqrt(), extent)
 }
 
-/// Run the whole pipeline — phase 2's keyframes, segmentation and zoom
-/// boundaries, then phase 3 — the way a caller would.
 fn run_solve(
     set: &mut TrackSet,
 ) -> (
@@ -1188,7 +1133,6 @@ fn run_solve(
     run_solve_with(set, &SolveSettings::default())
 }
 
-/// [`run_solve`] with the solve's knobs chosen by the test.
 fn run_solve_with(
     set: &mut TrackSet,
     settings: &SolveSettings,
@@ -1207,8 +1151,6 @@ fn run_solve_with(
 fn truth_positions(cams: &[Camera]) -> Vec<[f64; 3]> {
     cams.iter().map(|c| c.c).collect()
 }
-
-// --- The orbit ---------------------------------------------------------------
 
 #[test]
 fn a_synthetic_orbit_solves_to_its_ground_truth() {
@@ -1267,8 +1209,6 @@ fn a_synthetic_orbit_solves_to_its_ground_truth() {
         "nothing had to be interpolated on a shot this clean"
     );
 }
-
-// --- The dolly with a scope-in ------------------------------------------------
 
 #[test]
 fn a_dolly_through_a_zoom_cut_recovers_both_focals() {
@@ -1508,8 +1448,6 @@ fn a_forward_travelling_shot_that_zooms_solves_to_a_focal_curve() {
     );
 }
 
-// --- Moving objects ------------------------------------------------------------
-
 #[test]
 fn planted_movers_stay_out_of_the_solve() {
     let cams = orbit_cameras(25, 2.0, 6.0, 300.0);
@@ -1552,12 +1490,8 @@ fn planted_movers_stay_out_of_the_solve() {
     );
 }
 
-// --- Refusals ------------------------------------------------------------------
-
 #[test]
 fn a_rotation_only_sequence_refuses_a_translation_solve() {
-    // One camera centre, a slow pan. There is no baseline anywhere in this
-    // shot, so there is no position to solve and no depth to recover.
     let cams: Vec<Camera> = (0..14)
         .map(|i| {
             let mut c = Camera::new([0.0, 0.0, 0.0], -0.006 * i as f64, 0.0);
@@ -1608,7 +1542,6 @@ fn a_cancelled_solve_refuses_and_a_lowered_flag_changes_nothing() {
     let zooms = detect_zoom(&set, &ZoomSettings::default());
     let s = SolveSettings::default();
 
-    // Raised before the first pass: refused outright.
     assert_eq!(
         solve_camera_cancellable(&set, &pairs, &zooms, &s, &|| true),
         Err(SolveError::Cancelled)
@@ -1628,14 +1561,11 @@ fn a_cancelled_solve_refuses_and_a_lowered_flag_changes_nothing() {
     );
     assert!(seen.get() > 3, "the flag was actually consulted");
 
-    // Never raised: the same bits the plain entry point produces.
     assert_eq!(
         solve_camera_cancellable(&set, &pairs, &zooms, &s, &|| false),
         solve_camera(&set, &pairs, &zooms, &s)
     );
 }
-
-// --- Determinism ----------------------------------------------------------------
 
 #[test]
 fn two_solves_of_the_same_shot_agree_bit_for_bit() {
@@ -1657,7 +1587,6 @@ fn two_solves_of_the_same_shot_agree_bit_for_bit() {
 // the measured cut ratios carry it to the later segments the way they carry a
 // searched focal.
 
-/// Default settings, with the lens typed in.
 fn hinted(focal_px: f64) -> SolveSettings {
     SolveSettings {
         focal_px: Some(focal_px),
@@ -1726,11 +1655,8 @@ fn a_bad_focal_hint_is_refused() {
             "a hint of {bad} is nonsense, and refused as such"
         );
     }
-    // The refusal is about the hint and nothing else: the same shot solves.
     assert!(solve_camera(&set, &pairs, &zooms, &hinted(300.0)).is_ok());
 }
-
-// --- The bundle itself ------------------------------------------------------------
 
 #[test]
 fn the_bundle_converges_from_a_perturbed_start() {
@@ -1878,7 +1804,6 @@ impl Warp {
     }
 }
 
-/// [`render`], under a projective motion rather than an affine one.
 fn render_warp(w: &Warp, occluder: Option<(f64, f64, f64, f64)>) -> Vec<f32> {
     let mut out = vec![0.35f32; W * H];
     for y in 0..H {
@@ -1903,9 +1828,6 @@ fn render_warp(w: &Warp, occluder: Option<(f64, f64, f64, f64)>) -> Vec<f32> {
 /// Corner pin's order — upper left, upper right, lower left, lower right.
 const PLANE: Quad = [[72.0, 48.0], [244.0, 48.0], [72.0, 140.0], [244.0, 140.0]];
 
-/// Render `warps` frame by frame, follow features inside `quad` only, and solve
-/// the plane. `extra` is any further exclusion region — the occluder's, in the
-/// one test that has one.
 fn run_planar(
     warps: &[Warp],
     quad: Quad,
@@ -1927,8 +1849,6 @@ fn run_planar(
     solve_planar(&set, 0, quad, (W, H), &PlanarSettings::default())
 }
 
-/// Every corner's error, over every frame, against the warp that frame was
-/// rendered under.
 fn corner_errors(track: &PlanarTrack, warps: &[Warp]) -> Vec<f64> {
     let mut out = Vec::new();
     for f in &track.frames {
@@ -2039,8 +1959,6 @@ fn an_occluder_inside_the_quad_is_masked_out_and_the_plane_still_solves() {
 #[test]
 fn a_featureless_patch_is_refused_calmly() {
     let warps = translation_warps(6);
-    // A tall sliver of the flat surround, where the picture is one constant
-    // value and there is nothing whatsoever to follow.
     let blank: Quad = [[4.0, 6.0], [28.0, 6.0], [4.0, 174.0], [28.0, 174.0]];
     let outcome = run_planar(&warps, blank, None, Vec::new());
     assert_eq!(
@@ -2078,15 +1996,9 @@ fn a_planar_track_stops_between_frames_when_cancelled() {
     });
     assert_eq!(outcome, Err(PlanarError::Cancelled));
     assert!(asked.get() > 3, "the flag has to be consulted per frame");
-    // Never raised is bit-identical to the plain entry point, so the seam costs
-    // the ordinary path nothing.
     let never = solve_planar_cancellable(&set, 0, PLANE, (W, H), &settings, &|| false);
     assert_eq!(never, solve_planar(&set, 0, PLANE, (W, H), &settings));
 }
-
-// ---------------------------------------------------------------------------
-// Point tracking
-// ---------------------------------------------------------------------------
 
 /// Two textured patches on a flat background, each moved by its **own**
 /// translation — which is the whole claim of point tracking against planar
@@ -2123,7 +2035,6 @@ fn render_patches(centres: &[[f64; 2]], reference: &[[f64; 2]]) -> Vec<f32> {
     out
 }
 
-/// Follow `centres[frame]` through a rendered sequence and solve the points.
 fn run_points(paths: &[Vec<[f64; 2]>], radius: f64) -> Result<PlanarTrack, PlanarError> {
     let reference = paths[0].clone();
     // One region of several contours, exactly as the job builds it: two
@@ -2174,8 +2085,6 @@ fn two_independent_points_give_a_turn_and_a_growth() {
     let track = run_points(&paths, 40.0).expect("two textured patches are followable");
     assert_eq!(track.frames.len(), paths.len(), "every frame was followed");
 
-    // The truth is the similarity taking the two reference points to where the
-    // render actually put them — an exact formula, not a measurement.
     for f in &track.frames {
         let now = &paths[f.frame as usize];
         let (ax, ay) = (P2[0] - P1[0], P2[1] - P1[1]);
@@ -2205,13 +2114,9 @@ fn two_independent_points_give_a_turn_and_a_growth() {
     );
 }
 
-/// A box over the flat background has nothing in it, and no arithmetic invents
-/// it. And two runs of the same footage are the same answer.
 #[test]
 fn a_point_on_nothing_is_refused_and_a_run_is_repeatable() {
     let blank: Vec<Vec<[f64; 2]>> = (0..6).map(|_| vec![[16.0, 16.0]]).collect();
-    // The patches are rendered round P1 and P2; a box in the corner sees only
-    // the flat background.
     let masks = vec![ExclusionMask::from_contours(
         point_outlines(&blank[0], 20.0),
         true,
@@ -2244,8 +2149,6 @@ fn a_point_on_nothing_is_refused_and_a_run_is_repeatable() {
     assert_eq!(run_points(&paths, 40.0), run_points(&paths, 40.0));
 }
 
-/// The cancellation seam: refused part-way, with the flag consulted per frame,
-/// and bit-identical to the uncancelled run when it is never raised.
 #[test]
 fn a_cancelled_point_track_returns_nothing_partial() {
     let paths: Vec<Vec<[f64; 2]>> = (0..10)
@@ -2286,21 +2189,12 @@ fn a_cancelled_point_track_returns_nothing_partial() {
     assert_eq!(never, solve_points(&set, 0, &reference, quad, &settings));
 }
 
-// ---------------------------------------------------------------------------
-// Blob tracking
-// ---------------------------------------------------------------------------
-
-/// Two bright squares moving apart keep the ids they were given on the first
-/// frame, their centres land where the squares were drawn, and a speck under
-/// the area floor is never a blob.
 #[test]
 fn two_moving_blobs_keep_their_ids() {
     const BW: usize = 96;
     const BH: usize = 64;
     let draw = |n: usize| -> Vec<f32> {
         let mut frame = vec![0.0f32; BW * BH];
-        // A 6x6 square walking right, an 8x8 one walking down, and one
-        // lit pixel that should be ignored.
         for (x0, y0, side) in [(10 + 3 * n, 8, 6), (60, 6 + 2 * n, 8)] {
             for y in y0..y0 + side {
                 for x in x0..x0 + side {

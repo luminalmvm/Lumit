@@ -25,7 +25,6 @@ class TimelineZoomDial extends StatefulWidget {
   static const double disc = 14;
   static const double size = 20;
 
-  /// How many marks the ring carries, and the turn they cover.
   static const int marks = 12;
   static const double sweep = math.pi * 1.5;
   static const double startAngle = math.pi * 0.75;
@@ -48,7 +47,6 @@ class TimelineZoomDial extends StatefulWidget {
       angle += math.pi * 2;
     }
     if (angle <= sweep) return angle / sweep;
-    // In the gap: the nearer end wins.
     return angle - sweep < (math.pi * 2 - angle) ? 1 : 0;
   }
 
@@ -127,7 +125,6 @@ class _DialPainter extends CustomPainter {
           ..color = rim
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1);
-    // The engraved ring: marks just outside the rim, along the sweep.
     final marks = Paint()
       ..color = mark
       ..strokeWidth = 1;
@@ -138,7 +135,6 @@ class _DialPainter extends CustomPainter {
       canvas.drawLine(
           centre + dir * (r + 1.5), centre + dir * (r + 3), marks);
     }
-    // The index: one 2px accent line from near the centre to the rim.
     final a = TimelineZoomDial.startAngle +
         TimelineZoomDial.sweep * value.clamp(0.0, 1.0);
     final dir = Offset(math.cos(a), math.sin(a));

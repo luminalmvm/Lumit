@@ -2,7 +2,6 @@
 // put where a pose has it and written to a buffer the mesh pass, the shadow
 // maps and the lines all draw from, so they all see the same shape.
 
-// One part's run of vertices.
 struct Job {
     rest_first: u32,
     count: u32,
@@ -15,7 +14,6 @@ struct Job {
     skinned: u32,
 };
 
-// The joints a vertex hangs from, and its share of each.
 struct Influence {
     joints: vec4<u32>,
     weights: vec4<f32>,

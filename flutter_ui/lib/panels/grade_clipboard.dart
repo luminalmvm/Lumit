@@ -18,10 +18,8 @@ import '../state/clipboard.dart';
 import '../state/grade_target.dart';
 import 'layer_fold_frb.dart' show asOneUndoStep;
 
-/// The group of the preset library that looks live in, made on the first save.
 const String looksGroup = 'Looks';
 
-/// The layers a grade can sit on: the ones that draw a picture.
 bool gradeable(BridgeLayerKind kind) => switch (kind) {
       BridgeLayerKind.camera ||
       BridgeLayerKind.light ||
@@ -32,7 +30,6 @@ bool gradeable(BridgeLayerKind kind) => switch (kind) {
       _ => true,
     };
 
-/// The grade on a layer, in stack order.
 List<UuidValue> gradeEffectIds(BridgeLayerInfo info) =>
     [for (final e in gradeNodesOf(info.effects)) e.id];
 
@@ -51,7 +48,6 @@ List<BridgeEffectInstanceInfo>? shotStackOf(
   return null;
 }
 
-/// The grade on [shot], in stack order.
 List<UuidValue> shotGradeIds(LumitUiState ui, GradeShot shot) =>
     [for (final e in gradeNodesOf(shotStackOf(ui, shot) ?? const [])) e.id];
 
@@ -75,14 +71,11 @@ List<GradeShot> gradeTargets(LumitUiState ui) {
   ];
 }
 
-/// Whether the current shot has a grade to copy.
 bool canCopyGrade(LumitUiState ui) {
   final shot = ui.gradeShot.value;
   return shot != null && shotGradeIds(ui, shot).isNotEmpty;
 }
 
-/// Put the current shot's grade on the effect clipboard. False when it has
-/// none.
 bool copyGrade(LumitUiState ui) {
   if (!canCopyGrade(ui)) return false;
   final shot = ui.gradeShot.value!;

@@ -1,6 +1,3 @@
-//! RGB split (docs/08 §3.6): three tinted taps displaced along one angle, or —
-//! with Wavelength on — a smooth spectral dispersion along the same offset.
-
 use crate::fx::{
     cpu, maths::normalise_tint_columns, params::Params, registry::EffectDef,
     registry::EffectMetadata, schema::EffectSchema,
@@ -108,11 +105,9 @@ pub struct RgbSplit {
     #[slider(label = "Red", min = -200.0, max = 200.0, default = 100.0, unit = Percent)]
     pub red_amount: f32,
 
-    /// See [`red_amount`](Self::red_amount).
     #[slider(label = "Green", min = -200.0, max = 200.0, default = 0.0, unit = Percent)]
     pub green_amount: f32,
 
-    /// See [`red_amount`](Self::red_amount).
     #[slider(label = "Blue", min = -200.0, max = 200.0, default = 100.0, unit = Percent)]
     pub blue_amount: f32,
 
@@ -124,11 +119,9 @@ pub struct RgbSplit {
     #[colour(label = "Colour 1", default = [1.0, 0.0, 0.0, 1.0])]
     pub channel_colour_1: [f32; 4],
 
-    /// See [`channel_colour_1`](Self::channel_colour_1).
     #[colour(label = "Colour 2", default = [0.0, 1.0, 0.0, 1.0])]
     pub channel_colour_2: [f32; 4],
 
-    /// See [`channel_colour_1`](Self::channel_colour_1).
     #[colour(label = "Colour 3", default = [0.0, 0.0, 1.0, 1.0])]
     pub channel_colour_3: [f32; 4],
 
@@ -144,7 +137,6 @@ pub struct RgbSplit {
     #[slider(min = 3.0, max = 64.0, default = 16.0, hard_min = 3.0, hard_max = 64.0, unit = Raw)]
     pub samples: f32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -211,7 +203,6 @@ impl RgbSplit {
     }
 }
 
-/// RGB split's behaviour.
 pub struct RgbSplitDef;
 
 impl EffectDef for RgbSplitDef {

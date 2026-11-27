@@ -44,8 +44,6 @@ use crate::{builtin, file};
 /// display showing me, by its own name". OCIO's own spelling, verbatim.
 const USE_DISPLAY_NAME: &str = "<USE_DISPLAY_NAME>";
 
-/// Wrap a curve in its stated behaviour below zero, or leave it as it is when
-/// the config asked for the curve's own (`crate::op::Negatives`).
 fn with_negatives(style: Option<crate::op::Negatives>, curve: Op) -> Op {
     match style {
         Some(style) => Op::Negatives {
@@ -56,16 +54,11 @@ fn with_negatives(style: Option<crate::op::Negatives>, curve: Op) -> Op {
     }
 }
 
-/// How this config's reference space is joined to Lumit's working space.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Bridge {
-    /// `aces_interchange`: the named space is ACES2065-1. Exact.
     Aces { space: String },
-    /// `cie_xyz_d65_interchange`: the named space is CIE XYZ under D65. Exact.
     CieXyzD65 { space: String },
-    /// Legacy: the named `scene_linear` space is taken as the working space.
     ComposeThrough { space: String },
-    /// Nothing to go on: the config's reference space is taken as the working space.
     ReferenceIsWorking,
 }
 
@@ -81,24 +74,15 @@ const MAX_DEPTH: usize = 32;
 pub struct LoadedConfig {
     pub config: Config,
     bridge: Bridge,
-    /// The project composites in the config's `scene_linear` role.
     from_config: bool,
-    /// Look-up table files already parsed, by path. A config names each file
-    /// from many spaces and views, and some of those files are megabytes.
-    /// Held only while a map entry is read or written, never across a
-    /// parse. ponytail: grows to the config's own file list and no further,
-    /// which is the bound; drop entries by size if a config ever outgrows it.
     lut_cache: Arc<Mutex<BTreeMap<PathBuf, Chain>>>,
 }
 
 impl LoadedConfig {
-    /// Read and resolve a `config.ocio`.
     pub fn load(path: &Path) -> Result<Self> {
         Ok(Self::new(Config::load(path)?))
     }
 
-    /// Wrap an already-parsed config, compositing in Lumit's own linear
-    /// Rec.709 with the config at the edges.
     #[must_use]
     pub fn new(config: Config) -> Self {
         Self::with_working(config, false)
@@ -243,9 +227,6 @@ impl LoadedConfig {
         out
     }
 
-    // -- the reference space, and the bridge across it ----------------------
-
-    /// The config's reference space → Lumit's working space.
     pub fn reference_to_working(&self) -> Result<Chain> {
         Ok(match &self.bridge {
             Bridge::Aces { space } => self
@@ -259,7 +240,6 @@ impl LoadedConfig {
         })
     }
 
-    /// Lumit's working space → the config's reference space.
     pub fn working_to_reference(&self) -> Result<Chain> {
         Ok(match &self.bridge {
             Bridge::Aces { space } => {
@@ -275,14 +255,10 @@ impl LoadedConfig {
         })
     }
 
-    // -- space to space -----------------------------------------------------
-
-    /// A named space → the config's reference space.
     pub fn to_reference(&self, name: &str) -> Result<Chain> {
         self.to_reference_at(name, 0)
     }
 
-    /// The config's reference space → a named space.
     pub fn from_reference(&self, name: &str) -> Result<Chain> {
         self.from_reference_at(name, 0)
     }
@@ -303,7 +279,6 @@ impl LoadedConfig {
 
     fn to_reference_at(&self, name: &str, depth: usize) -> Result<Chain> {
         let space = self.space(name)?;
-        // A data space carries no colour, so nothing is done to it.
         if space.is_data {
             return Ok(Chain::identity());
         }
@@ -338,7 +313,6 @@ impl LoadedConfig {
         Ok(Chain::identity())
     }
 
-    /// "This space to that space", the chain a `ColorSpaceTransform` means.
     pub fn space_to_space(&self, from: &str, to: &str) -> Result<Chain> {
         self.space_to_space_at(from, to, 0)
     }
@@ -363,13 +337,10 @@ impl LoadedConfig {
             .then(self.from_reference_at(to, depth)?))
     }
 
-    /// A named space → Lumit's working space: the input transform for a piece
-    /// of footage tagged with that name.
     pub fn from_space(&self, name: &str) -> Result<Chain> {
         self.convert(Some(name), None)
     }
 
-    /// Lumit's working space → a named space: the export's output transform.
     pub fn to_space(&self, name: &str) -> Result<Chain> {
         self.convert(None, Some(name))
     }
@@ -405,7 +376,6 @@ impl LoadedConfig {
         name.is_some_and(|n| self.is_data(n))
     }
 
-    /// A named space, or the working space for `None`, → the reference.
     fn reference_from(&self, name: Option<&str>) -> Result<Chain> {
         match name {
             Some(n) => self.to_reference(n),
@@ -413,15 +383,12 @@ impl LoadedConfig {
         }
     }
 
-    /// The reference → a named space, or the working space for `None`.
     fn reference_to(&self, name: Option<&str>) -> Result<Chain> {
         match name {
             Some(n) => self.from_reference(n),
             None => self.reference_to_working(),
         }
     }
-
-    // -- displays and views -------------------------------------------------
 
     /// Scene reference → display reference for one view transform.
     ///
@@ -460,9 +427,6 @@ impl LoadedConfig {
         self.display_view_from(None, display, view)
     }
 
-    /// A named space (`None`: the working space) → what a display shows
-    /// through a view. The chain the OCIO display transform effect bakes; the
-    /// Viewer's is the `None` case.
     pub fn display_view_from(
         &self,
         input: Option<&str>,
@@ -498,8 +462,6 @@ impl LoadedConfig {
         chain = chain.then(self.looks(&view.looks)?);
 
         if let Some(name) = &view.view_transform {
-            // The v2 shape: scene reference → display reference → the display's
-            // own colour space.
             let transform = self.config.view_transforms.get(name).ok_or_else(|| {
                 ColourError::UnknownColourSpace {
                     name: name.to_string(),
@@ -546,7 +508,6 @@ impl LoadedConfig {
             return Ok(chain.then(self.from_reference(display_space)?));
         }
 
-        // The v1 shape: the view names its display colour space directly.
         let space = view
             .colour_space
             .as_deref()
@@ -591,8 +552,6 @@ impl LoadedConfig {
             if step.is_identity() {
                 continue;
             }
-            // A look is defined in its own process space, so the picture is
-            // taken there and brought back.
             if look.process_space.is_empty() {
                 chain = chain.then(step);
             } else {
@@ -605,7 +564,6 @@ impl LoadedConfig {
         Ok(chain)
     }
 
-    /// The names a picker should list for one display, in the config's order.
     #[must_use]
     pub fn view_names(&self, display: &str) -> Vec<&str> {
         self.config
@@ -614,9 +572,6 @@ impl LoadedConfig {
             .unwrap_or_default()
     }
 
-    /// The shaper a bake should use when this space is the domain: the config
-    /// author's own `allocation` where it states one, Lumit's default otherwise
-    /// (docs/impl/ocio.md §5.1).
     #[must_use]
     pub fn shaper_for(&self, name: &str) -> Shaper {
         let allocation = self.space(name).ok().and_then(|s| s.allocation);
@@ -630,8 +585,6 @@ impl LoadedConfig {
             None => Shaper::DEFAULT,
         }
     }
-
-    // -- the recursion ------------------------------------------------------
 
     fn resolve_spec(&self, what: &str, spec: &TransformSpec, depth: usize) -> Result<Chain> {
         if depth > MAX_DEPTH {
@@ -758,7 +711,6 @@ impl LoadedConfig {
     }
 }
 
-/// The `src` of every `FileTransform` in one spec, groups walked through.
 fn collect_files(spec: &TransformSpec, out: &mut Vec<String>) {
     match spec {
         TransformSpec::Group(children, _) => {
@@ -771,8 +723,6 @@ fn collect_files(spec: &TransformSpec, out: &mut Vec<String>) {
     }
 }
 
-/// Every view a config offers, flattened: `(display, view)` pairs in the
-/// config's own order. The picker's menu is this list, sectioned by display.
 #[must_use]
 pub fn all_views(config: &Config) -> Vec<(&str, &View)> {
     let mut out = Vec::new();
@@ -784,10 +734,6 @@ pub fn all_views(config: &Config) -> Vec<(&str, &View)> {
     out
 }
 
-/// Names this crate cannot resolve, gathered rather than found one at a time:
-/// every colour space a config declares, walked to the reference. The refusal
-/// taxonomy test reads it; the renderer walks its own list, per name and in
-/// both directions, so a picker can grey out exactly the rows that refuse.
 pub fn unresolvable(loaded: &LoadedConfig) -> Vec<(String, ColourError)> {
     let mut out = Vec::new();
     let mut seen = BTreeSet::new();
@@ -815,8 +761,6 @@ mod tests {
         LoadedConfig::new(Config::parse(Path::new("."), text).expect("parses"))
     }
 
-    /// A legacy-shaped config: no interchange roles, a `scene_linear` role, and
-    /// a display whose view names a colour space directly.
     const LEGACY: &str = r#"
 ocio_profile_version: 1
 roles:
@@ -841,8 +785,6 @@ colorspaces:
 
     #[test]
     fn composing_through_is_still_exact_end_to_end() {
-        // The point of §2.1: the assumption cancels on an input → working →
-        // display trip, so the picture is exactly what the config describes.
         let loaded = load(LEGACY);
         let through = loaded
             .from_space("srgb_texture")
@@ -913,10 +855,8 @@ colorspaces:
     from_scene_reference: !<ColorSpaceTransform> {src: Linear CIE-XYZ I-E, dst: plain}
 "#,
         );
-        // Asked for by alias, and reached by alias from another space.
         let by_alias = loaded.from_reference("xyz_e").expect("resolves");
         assert!(close(by_alias.eval([1.0, 1.0, 1.0]), [2.0, 2.0, 2.0], 1e-6));
-        // And in the wrong case, which the reference library also allows.
         let by_case = loaded
             .from_reference("linear CIE-xyz I-E")
             .expect("resolves");
@@ -955,13 +895,10 @@ colorspaces:
                 space: "ACES2065-1".to_string()
             }
         );
-        // ACES white through the exact bridge is Rec.709 white.
         let chain = loaded.from_space("ACES2065-1").expect("resolves");
         assert!(close(chain.eval([1.0; 3]), [1.0; 3], 1e-3));
     }
 
-    /// The shape every ACES v2 config's display half is written in, and three
-    /// separate faults the reference fixture caught in it.
     const SHARED_VIEWS: &str = r#"
 ocio_profile_version: 2
 roles:
@@ -1076,9 +1013,6 @@ colorspaces:
         assert_eq!(loaded.shaper_for("plain"), Shaper::DEFAULT);
     }
 
-    /// The OCIO effects' edges (docs/impl/ocio.md §6.6): `None` is the working
-    /// space, so one name is an input or output transform and none at all is
-    /// nothing to do.
     #[test]
     fn convert_treats_no_name_as_the_working_space() {
         let text = r#"
@@ -1097,15 +1031,12 @@ colorspaces:
 "#;
         let loaded = load(text);
         assert!(loaded.convert(None, None).expect("resolves").is_identity());
-        // One name is the edge the footage and export paths already take.
         let a = loaded.convert(Some("half"), None).expect("resolves");
         let b = loaded.from_space("half").expect("resolves");
         assert!(close(a.eval([1.0; 3]), b.eval([1.0; 3]), 1e-6));
         assert!(close(a.eval([1.0; 3]), [0.5; 3], 1e-6));
         let out = loaded.convert(None, Some("half")).expect("resolves");
         assert!(close(out.eval([0.5; 3]), [1.0; 3], 1e-6));
-        // Two names go through the reference, and a data space on either
-        // side is left alone.
         let round = loaded
             .convert(Some("half"), Some("half"))
             .expect("resolves");
@@ -1139,7 +1070,6 @@ colorspaces:
         assert!(close(forward.eval([0.5; 3]), [0.55, 0.5, 0.45], 1e-4));
         let back = loaded.look_between(None, "-warm", None).expect("resolves");
         assert!(close(back.eval(forward.eval([0.5; 3])), [0.5; 3], 1e-4));
-        // Between two spaces: half in, the look in lin, back out to half.
         let via = loaded
             .look_between(Some("half"), "warm", Some("half"))
             .expect("resolves");
@@ -1151,8 +1081,6 @@ colorspaces:
         assert_eq!(loaded.config.look_names(), vec!["warm"]);
     }
 
-    /// An ACES-shaped config: AP0 reference, the interchange role on it, and
-    /// ACEScg as `scene_linear`, a matrix away.
     fn aces_shaped() -> String {
         let m = matrix::rgb_to_rgb(&matrix::AP1, &matrix::AP0).expect("matrix");
         let row = |r: usize| format!("{}, {}, {}, 0", m[r * 4], m[r * 4 + 1], m[r * 4 + 2]);
@@ -1175,8 +1103,6 @@ colorspaces:
         )
     }
 
-    /// A project that composites in the config's `scene_linear` takes it as
-    /// the working space outright, and says how Rec.709 reaches it.
     #[test]
     fn the_config_working_space_is_scene_linear_and_a_matrix_from_rec709() {
         let text = aces_shaped();
@@ -1197,8 +1123,6 @@ colorspaces:
         for (a, b) in m.iter().zip(want.iter()) {
             assert!((a - b).abs() < 1e-6, "{m:?} vs {want:?}");
         }
-        // Footage tagged acescg is then the identity: it already is the
-        // working space.
         assert!(theirs.from_space("acescg").expect("resolves").is_identity());
     }
 }

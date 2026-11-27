@@ -1,8 +1,3 @@
-//! The Custom shader's engine-side tests (docs/impl/custom-shader.md §8,
-//! items 1–10 and the §7 padding trap). No graphics card is involved in any of
-//! them: the grammar, the refusals and the uniform arithmetic are all decided in
-//! this crate, which is the whole point of deciding them here.
-
 use std::sync::Arc;
 
 use super::*;
@@ -12,7 +7,6 @@ use crate::fx::effects::custom_shader::{source_of, EXTRA_KEY};
 use crate::fx::{builtins::instantiate, markers::MarkerContext, params::ParamId, params::Value};
 use crate::model::{EffectParam, EffectValue};
 
-/// The §1.4 declaration block, all nine forms, exactly as the note pins it.
 const NINE: &str = r#"
 struct Params {
     /// @slider(0, 200) @default(25) @unit(px) Radius
@@ -53,10 +47,6 @@ fn row<'a>(p: &'a ShaderProgram, id: &str) -> &'a ParamSchema {
         .find(|r| r.id == id)
         .unwrap_or_else(|| panic!("no row `{id}` in {:?}", p.params))
 }
-
-// ------------------------------------------------------------------ §8 item 1
-
-// ------------------------------------------------------------------ §8 item 2
 
 #[test]
 fn the_annotation_reader_derives_every_kind() {
@@ -136,18 +126,8 @@ fn the_annotation_reader_derives_every_kind() {
     assert!(p.notes.is_empty(), "nothing was skipped: {:?}", p.notes);
 }
 
-// ------------------------------------------------------------------ §8 item 3
-
-// ------------------------------------------------------------------ §8 item 4
-
-// ------------------------------------------------------------------ §8 item 5
-
-// ------------------------------------------------------------------ §8 item 6
-
 #[test]
 fn the_reader_never_panics() {
-    // Truncated, unbalanced, non-ASCII and plain nonsense. This reads user text,
-    // so it is a parser at a trust boundary (docs/14 §4).
     let mut cases: Vec<String> = vec![
         String::new(),
         "struct".to_owned(),
@@ -165,8 +145,6 @@ fn the_reader_never_panics() {
         "fn shade(uv: vec2<f32>) -> vec4<f32> { return vec4<f32>(0.0); } // 🎛".to_owned(),
         "var<uniform> \u{0}: f32;".to_owned(),
     ];
-    // Every prefix of the nine-form block, which is every way a person can be
-    // part-way through typing it.
     for i in 0..NINE.len() {
         if NINE.is_char_boundary(i) {
             cases.push(NINE[..i].to_owned());
@@ -179,8 +157,6 @@ fn the_reader_never_panics() {
     }
 }
 
-// ------------------------------------------------------------------ §8 item 9
-
 #[test]
 fn a_shader_that_declares_its_own_binding_is_refused_at_the_edit() {
     let err = build(
@@ -191,10 +167,6 @@ fn a_shader_that_declares_its_own_binding_is_refused_at_the_edit() {
     assert_eq!(err, ShaderRefusal::OwnBinding);
     assert!(err.to_string().contains("the host declares the bindings"));
 }
-
-// ----------------------------------------------------------------- §8 item 10
-
-// -------------------------------------------------------- §7, the padding trap
 
 #[test]
 fn the_packed_bytes_land_where_the_struct_says() {
@@ -214,7 +186,6 @@ fn the_packed_bytes_land_where_the_struct_says() {
     let u32_at = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
     let i32_at = |o: usize| i32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
     assert_eq!(f32_at(0), 12.5);
-    // Untouched rows fall back to their declared default, never to a fault.
     assert_eq!(f32_at(4), 0.5, "blend_point's declared default");
     assert_eq!(i32_at(12), 7);
     assert_eq!(u32_at(16), 1);
@@ -223,12 +194,8 @@ fn the_packed_bytes_land_where_the_struct_says() {
     assert_eq!(f32_at(44), 1.0);
     assert_eq!(f32_at(48), 960.0);
     assert_eq!(f32_at(52), 540.0);
-    // The bytes between the last u32 and the block's end are the padding, and
-    // they are nought rather than whatever was in the buffer.
     assert_eq!(&bytes[60..64], &[0, 0, 0, 0]);
 }
-
-// -------------------------------------------------- §8 items 7 and 8, resolve
 
 fn key(t: i64, v: f64) -> Keyframe {
     Keyframe {
@@ -239,7 +206,6 @@ fn key(t: i64, v: f64) -> Keyframe {
     }
 }
 
-/// A Custom shader instance holding `NINE`, with `radius` keyframed.
 fn instance_with_shader() -> crate::model::EffectInstance {
     let mut inst = instantiate("custom_shader").unwrap();
     let mut block = serde_json::Map::new();
@@ -282,7 +248,6 @@ fn a_derived_parameter_animates_and_serialises_like_a_declared_one() {
     // `@unit(px)` means px@comp, so the preview factor moves it exactly as it
     // moves a declared pixel count.
     assert_eq!(resolved_radius(&inst, 1.0, 0.5), Some(10.0));
-    // And it survives a round trip through the document, `extra` and all.
     let json = serde_json::to_string(&inst).unwrap();
     let back: crate::model::EffectInstance = serde_json::from_str(&json).unwrap();
     assert_eq!(source_of(&back), Some(NINE));
@@ -292,7 +257,6 @@ fn a_derived_parameter_animates_and_serialises_like_a_declared_one() {
 #[test]
 fn removing_a_shader_uniform_leaves_its_parameter_and_its_expression_alive() {
     let mut inst = instance_with_shader();
-    // The source stops mentioning `radius`; nothing is removed automatically.
     let shorter = "struct Params {\n  /// Steps\n  steps: i32,\n}\n\
                    fn shade(uv: vec2<f32>) -> vec4<f32> { return vec4<f32>(0.0); }";
     let mut block = serde_json::Map::new();
@@ -311,8 +275,6 @@ fn removing_a_shader_uniform_leaves_its_parameter_and_its_expression_alive() {
         vec!["steps"],
         "and the offered set is the source's, not the document's"
     );
-    // A row with no uniform behind it simply is not in the bag, which is the
-    // rule: a missing parameter is a default, never a fault.
     assert_eq!(resolved_radius(&inst, 1.0, 1.0), None);
 }
 
@@ -331,14 +293,10 @@ fn the_starter_shader_compiles_and_changes_nothing() {
         "the starter must pass every refusal the host makes"
     );
 
-    // Its two rows are the point of the example: a slider and a colour, read
-    // off the text exactly as a user's own fields are.
     let program = crate::fx::shader::program_for(source).expect("compiled");
     let ids: Vec<String> = program.params.iter().map(|p| p.id.to_string()).collect();
     assert_eq!(ids, vec!["gain", "tint"], "the example declares both kinds");
 
-    // Neutral: gain 1, white tint, so dropping the effect on changes no pixel
-    // until the user writes something.
     assert_eq!(
         crate::fx::builtins::instantiate("custom_shader")
             .map(|plain| crate::fx::effects::custom_shader::source_of(&plain).is_none()),
@@ -361,7 +319,6 @@ fn a_session_may_not_read_shaders_without_end() {
     use crate::fx::shader::{program_in, ProgramCache, ShaderRefusal};
 
     let cache = ProgramCache::default();
-    // One valid shader per iteration, each distinct by a comment nobody reads.
     let source = |n: usize| {
         format!(
             "// {n}\nfn shade(uv: vec2<f32>) -> vec4<f32> {{ return vec4<f32>(uv, 0.0, 1.0); }}\n"
@@ -375,7 +332,6 @@ fn a_session_may_not_read_shaders_without_end() {
         );
     }
 
-    // The fourth distinct source meets it, by name and with the number in it.
     let refused = program_in(&cache, &source(3), 3);
     assert!(
         matches!(refused, Err(ShaderRefusal::TooManyPrograms { limit: 3 })),
@@ -384,9 +340,6 @@ fn a_session_may_not_read_shaders_without_end() {
     let words = ShaderRefusal::TooManyPrograms { limit: 3 }.to_string();
     assert!(words.contains('3'), "{words}");
 
-    // A source already read is still served: a project whose shaders are all in
-    // the cache keeps drawing rather than going dark because somebody once
-    // typed too much.
     assert!(
         program_in(&cache, &source(0), 3).is_ok(),
         "a source already read must still be served after the ceiling"

@@ -1,8 +1,3 @@
-// Several Viewers, and several views inside one (docs/impl/multi-viewer.md).
-//
-// The dock half — a panel that can be in the arrangement more than once — and
-// the view model half: what each view shows, its lock, where an opened item
-// lands, and how both halves persist.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart' show BridgeRational;
@@ -17,7 +12,6 @@ import 'package:lumit_flutter/state/viewer_views.dart';
 void main() {
   group('the dock holds more than one Viewer', () {
     test('an arrangement written before panes had numbers reads unchanged', () {
-      // Exactly the bytes an older build wrote: no `n` anywhere.
       final old = {
         'kind': 'split',
         'axis': 'horizontal',
@@ -113,7 +107,6 @@ void main() {
       views.alwaysPreviewId = pair[0].id;
       views.setCompare(Panel.viewer.pane(), CompareMode.wipe);
       views.setDivider(Panel.viewer.pane(), 0.3);
-      // A 3D viewport keeps where its free view of each comp was left.
       views.viewportPanes.add(Panel.viewer.pane());
       const free = BridgeCameraPose(
         zoom: 2000,
@@ -161,8 +154,6 @@ void main() {
       expect(shared.views, isEmpty,
           reason: 'a view the project does not describe is not restored');
 
-      // And a project half nothing lays out is dropped rather than kept
-      // invisible.
       final orphaned = ViewerViews()..restore(project, null);
       expect(orphaned.views, isEmpty);
     });
@@ -214,7 +205,6 @@ void main() {
     test('a length at a rate is that many frames', () {
       expect(
           LumitUiState.framesOf(facts(fpsNum: 25, fpsDen: 1, seconds: 4)), 100);
-      // 24000/1001 over five seconds: the rate that is not a whole number.
       expect(
           LumitUiState.framesOf(
               facts(fpsNum: 24000, fpsDen: 1001, seconds: 5)),

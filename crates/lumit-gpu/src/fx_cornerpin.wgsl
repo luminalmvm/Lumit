@@ -13,12 +13,12 @@
 
 struct Params {
     n0: vec4<f32>,    // inverse homography row 0 in xyz; w unused
-    n1: vec4<f32>,    // row 1
-    n2: vec4<f32>,    // row 2
+    n1: vec4<f32>,
+    n2: vec4<f32>,
     mix_amt: f32,     // 0..1, blended against the unprocessed input
     edge: u32,        // 0 transparent, 1 repeat, 2 mirror
     enabled: u32,     // 0 = a degenerate quad = the exact identity
-    matte_on: f32,    // 1 = the matte scales the pull from the corners
+    matte_on: f32,
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;

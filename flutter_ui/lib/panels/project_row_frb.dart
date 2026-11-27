@@ -42,8 +42,6 @@ const double _badgeTextSize = 9;
 /// resolves to that colour at 28% over the panel, on both badges.
 const double _badgeBorderAlpha = 0.28;
 
-/// The dot for each other person who has a composition open in a shared
-/// project, the Timeline's label dot's own size.
 const double _personDotSize = personDiscSize;
 
 /// How many people a composition's row marks before the last is a count,
@@ -76,15 +74,11 @@ int projectDefaultLabel(ItemReference item, {required bool audio}) =>
       ItemReference_Folder() || ItemReference_Composition() => 0,
     };
 
-/// What a click on a row does to the selection.
 enum SelectMode {
-  /// Plain click: this row, and only this row.
   replace,
 
-  /// `Ctrl` (or `Cmd`): add this row, or drop it if it was already in.
   toggle,
 
-  /// `Shift`: every row between the anchor and this one.
   range,
 }
 
@@ -114,7 +108,6 @@ class ProjectBadge extends StatelessWidget {
 
   const ProjectBadge({super.key, required this.label, required this.colour});
 
-  /// How wide a badge saying [label] is drawn, edge to edge.
   static double widthOf(LumitTheme t, String label, TextScaler scale) =>
       _lineWidth(label, t.mono.copyWith(fontSize: _badgeTextSize), scale) +
       2 * (_badgePad + 1);
@@ -189,8 +182,6 @@ class _BreathingState extends State<_Breathing>
 /// every build and a panel holds few different names and fewer badges.
 double _lineWidth(String text, TextStyle style, TextScaler scale) {
   final key = '$text|${style.fontFamily}|${scale.scale(style.fontSize ?? 0)}';
-  // ponytail: emptied when it has grown, not trimmed. A project with more
-  // than a few hundred names on screen at once would want the oldest out.
   if (_lineWidths.length > 512) _lineWidths.clear();
   return _lineWidths[key] ??= () {
     final words = TextPainter(
@@ -220,7 +211,6 @@ Future<bool> relinkFootage(FootageReference footage,
   return true;
 }
 
-/// One Project panel row.
 class ProjectRowFrb extends StatefulWidget {
   final ItemReference item;
 
@@ -231,7 +221,6 @@ class ProjectRowFrb extends StatefulWidget {
   final int depth;
   final bool missing;
 
-  /// On disk, but the engine cannot decode it.
   final bool undecodable;
 
   /// The pictures a 3D model names that are missing, shown in its badge's
@@ -242,7 +231,6 @@ class ProjectRowFrb extends StatefulWidget {
   /// needs none or is done.
   final BridgeBlenderState? blender;
 
-  /// A press on its converting badge and on its stopped one.
   final VoidCallback? onStopBlender;
   final VoidCallback? onConvertAgain;
 
@@ -271,7 +259,6 @@ class ProjectRowFrb extends StatefulWidget {
   /// in place of the comp glyph. Handed in from the panel's cache too.
   final bool multicam;
 
-  /// A 3D model rather than footage that plays, which wears the cube.
   final bool model;
 
   /// Whether any composition places this item. A file or solid nothing uses
@@ -282,7 +269,6 @@ class ProjectRowFrb extends StatefulWidget {
   /// but footage — nothing else has a media reference to stand in for.
   final BridgeProxy? proxy;
 
-  /// This footage is read from a stand-in another person sent.
   final bool standIn;
 
   /// The other people in a shared project who have this composition open,
@@ -298,13 +284,9 @@ class ProjectRowFrb extends StatefulWidget {
   final List<int> holders;
   final bool selected;
 
-  /// Whether this is one of the alternate rows, which stand on a slightly
-  /// different ground so the eye can follow a line across the columns.
   final bool shaded;
   final bool renaming;
 
-  /// Which optional columns this width carries, and the finished strings to put
-  /// in them — both worked out by the panel, for the same reason the name is.
   final ProjectColumns columns;
   final ProjectCells cells;
 
@@ -351,8 +333,6 @@ class ProjectRowFrb extends StatefulWidget {
   /// than waiting for the engine's change stream to come back around.
   final VoidCallback onLocalEdit;
 
-  /// Tag this row — and the rest of the selection, when this row is part of
-  /// one — from the context menu's chip strip.
   final ValueChanged<int> onSetLabel;
 
   /// File these items into this row's folder — the drop gesture. Null on every
@@ -437,7 +417,6 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
     }
   }
 
-  /// Escape: shut the editor, rename nothing.
   void _cancelRename() {
     _rename?.dispose();
     _rename = null;
@@ -459,8 +438,6 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
   /// decides, at mouse-up, between renaming and collapsing the selection.
   bool _wasSelectedAtDown = false;
 
-  /// The click in flight: where it started, whether it wandered past the
-  /// touch slop (a drag, not a click), and whether it was the primary button.
   Offset _downAt = Offset.zero;
   bool _dragged = false;
   bool _primaryDown = false;
@@ -522,13 +499,10 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
     if (widget.renaming) return;
     if (item case ItemReference_Composition(:final field0)) {
       final ui = Provider.of<LumitUiState>(context, listen: false);
-      // With a source side on screen, a multicam comp shows its angles there
-      // to be picked and placed, as footage loads into it.
       var multicam = false;
       try {
         multicam = field0.isMulticam();
       } catch (_) {
-        // A comp that has gone opens as nothing below.
       }
       if (multicam && ui.hasSourceView) {
         ui.showAngles(field0);
@@ -542,8 +516,6 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
     // already the size, rate and length of the media, because that dialogue
     // reads the selection (the longest item wins when there are several).
     if (item case ItemReference_Footage(:final field0)) {
-      // With a source side on screen, as the Cut workspace has, the clip
-      // loads into it to be marked and placed.
       final ui = Provider.of<LumitUiState>(context, listen: false);
       if (ui.hasSourceView) {
         ui.openFootageView(field0);
@@ -554,8 +526,6 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
       return;
     }
     if (item is ItemReference_Folder) widget.onToggleFolder();
-    // Nothing for the other kinds. Renaming is `Enter` on the selection, with
-    // the row menu's Rename as the mouse path.
   }
 
   Future<void> _doRelink(FootageReference footage) async {
@@ -782,8 +752,6 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
     final (icon, tint) = _iconFor(item, t);
     final tag = widget.label != 0 ? widget.label : widget.inherited;
     final thumb = widget.thumbnails && !widget.missing ? widget.thumb : null;
-    // The glyph is also the colour control: it already wears the label
-    // colour, so pressing it is where a person looks to change it.
     return KeyedSubtree(
       key: ValueKey<String>('project-glyph-${projectItemId(item)}'),
       child: LumitTooltip(
@@ -820,8 +788,6 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                       ),
                     )
                   : Center(
-                      // The tint says what the item is, so it is lifted and
-                      // not replaced.
                       child: Builder(builder: (_) {
                         final colour = Color.lerp(
                             widget.missing
@@ -881,7 +847,6 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
           ],
         null => const <(String, String, Color)>[],
       },
-      // The library has a newer version of this graphics template.
       if (widget.onUpdate != null)
         ('update-$id', l10n.templateUpdate, t.accent),
       // Reading from its proxy. **Quiet on purpose**: a proxy is a fact
@@ -905,8 +870,6 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
     ];
     final name = _nameOrEditor(t);
     if (badges.isEmpty && widget.people.isEmpty) return name;
-    // Who else has this composition open, a dot each in their colour. The
-    // name is the tooltip.
     final scale = MediaQuery.textScalerOf(context);
     return LayoutBuilder(
       builder: (context, box) {
@@ -992,7 +955,6 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                   ),
                 )
               else if (key.startsWith('no-blender-'))
-                // Straight to the row that fixes it.
                 LumitTooltip(
                   message: l10n.tipProjectNoBlender,
                   child: GestureDetector(
@@ -1005,7 +967,6 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                 )
               else if (key.startsWith('converting-') ||
                   key.startsWith('stopped-'))
-                // A press on it stops the conversion, or starts it again.
                 LumitTooltip(
                   message: key.startsWith('stopped-')
                       ? l10n.tipProjectConvertAgain
@@ -1174,7 +1135,6 @@ class _MulticamGlyph extends CustomPainter {
   bool shouldRepaint(_MulticamGlyph old) => old.colour != colour;
 }
 
-/// The floating label shown under the pointer while a row is dragged.
 class _DragFeedbackFrb extends StatefulWidget {
   final String name;
   final LumitIcon icon;

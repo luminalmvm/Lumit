@@ -268,7 +268,6 @@ class _LightSettingsBody extends StatefulWidget {
   /// follows its type until it is typed over.
   final String? name;
 
-  /// The comp's layers, which an environment's picture is picked from.
   final List<BridgeLayerEntry> layers;
   final void Function((_LightValues, String)?) onDone;
 
@@ -413,8 +412,6 @@ class _LightSettingsBodyState extends State<_LightSettingsBody> {
                         _v.settings = lightSettingsWith(_s, twoNode: on)),
                   ),
                 )),
-          // An ambient or environment light comes from nowhere, so it casts
-          // nothing.
           if (lightCasts(kind)) ...[
             _row(
                 t,
@@ -467,8 +464,6 @@ class _LightSettingsBodyState extends State<_LightSettingsBody> {
       ],
     );
   }
-
-  // ---- the rows ------------------------------------------------------------
 
   Widget _typeRow(LumitTheme t) => dialogDropdown<BridgeLightKind>(
         t,
@@ -528,7 +523,6 @@ class _LightSettingsBodyState extends State<_LightSettingsBody> {
         ],
       );
 
-  /// One number with its unit after it, or the word for an animated one.
   Widget _well(LumitTheme t, String id, double? value, ValueChanged<double> set,
           {required String unit,
           double min = 0,
@@ -568,7 +562,6 @@ class _LightSettingsBodyState extends State<_LightSettingsBody> {
               ),
       );
 
-  /// What an animated channel shows where its well would be.
   Widget _animated(LumitTheme t, String id) => Align(
         alignment: AlignmentDirectional.centerStart,
         child: Text(
@@ -577,8 +570,6 @@ class _LightSettingsBodyState extends State<_LightSettingsBody> {
           style: t.small.copyWith(color: t.textMuted),
         ),
       );
-
-  // ---- the pieces ----------------------------------------------------------
 
   Widget _row(LumitTheme t, String label, Widget control) => dialogRow(
         t,

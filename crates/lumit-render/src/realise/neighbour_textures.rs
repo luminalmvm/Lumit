@@ -71,8 +71,6 @@ impl super::Realiser<'_> {
         }
     }
 
-    /// Under memory pressure: every kept neighbour picture and Denoise's
-    /// spare pictures go back, to be made again when next wanted.
     pub(super) fn let_go_of_kept(&self) {
         if let Some(Ok(mut flow)) = self.flow.map(|f| f.try_borrow_mut()) {
             flow.neighbours = NeighbourTextures::default();
@@ -81,7 +79,6 @@ impl super::Realiser<'_> {
     }
 }
 
-/// One kept picture and what it was made from.
 struct Kept {
     /// The decoded frame. Held weakly, so keeping a picture never keeps a
     /// frame the cache has let go; while the handle lives, no other frame can
@@ -89,15 +86,10 @@ struct Kept {
     pixels: Weak<Vec<u8>>,
     read: Read,
     picture: wgpu::Texture,
-    /// What it holds on the card, charged to the governor for as long as it
-    /// is kept.
     _held: lumit_budget::Reservation,
-    /// The frame it was last used in.
     used: u64,
 }
 
-/// How a picture was read: the size, the sample width, the colour space, and
-/// whether it is the eight-bit upload that goes straight to the composite.
 type Read = (
     u32,
     u32,
@@ -112,7 +104,6 @@ type Read = (
 #[derive(Default)]
 pub struct NeighbourTextures {
     kept: Vec<Kept>,
-    /// The frame being drawn, counted by [`Self::next_frame`].
     frame: u64,
     /// The colour config and the working format the pictures were made under.
     /// When either changes, nothing kept is the picture it would make now.
@@ -120,7 +111,6 @@ pub struct NeighbourTextures {
 }
 
 impl super::CompositeFlow {
-    /// A new frame is being drawn: what was not used in the last one goes.
     pub fn next_frame(&mut self) {
         self.neighbours.next_frame();
     }
@@ -131,15 +121,12 @@ impl super::CompositeFlow {
         self.refuse = true;
     }
 
-    /// Why the last frame was failed, once.
     pub fn take_refusal(&mut self) -> Option<String> {
         self.refused.take()
     }
 }
 
 impl NeighbourTextures {
-    /// A new frame is being drawn. A picture not used in the last one goes,
-    /// and so does one whose frame nobody holds any more.
     fn next_frame(&mut self) {
         self.frame += 1;
         let frame = self.frame;
@@ -147,9 +134,6 @@ impl NeighbourTextures {
             .retain(|k| k.used + 1 >= frame && k.pixels.strong_count() > 0);
     }
 
-    /// The picture of each of `frames` (`(offset, pixels, width, height)`),
-    /// read as `format` in `colour_space`, as [`Self::picture`] finds or
-    /// makes it.
     pub(super) fn pictures(
         &mut self,
         ctx: &lumit_gpu::GpuContext,

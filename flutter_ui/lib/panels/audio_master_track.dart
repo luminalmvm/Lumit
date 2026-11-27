@@ -47,8 +47,6 @@ import 'waveform_frb.dart';
 /// height is kept by.
 const String masterLaneId = 'master/volume';
 
-/// What the panel holds for the master: its twirl, its Volume and mode, and
-/// the mix's picture.
 class MasterTrack {
   bool open = false;
 
@@ -57,12 +55,10 @@ class MasterTrack {
   BridgeScalar scalar = const BridgeScalar.static_(0);
   BridgeAutomationMode mode = BridgeAutomationMode.read;
 
-  /// The comp's loudness target, for the menu's tick.
   BridgeLoudnessTarget? loudness;
   int? _revision;
   CompositionReference? _comp;
 
-  /// The mix summarised over the lanes' window.
   final MixPeaks mix = MixPeaks();
 
   BridgeAudioPeaks? get peaks => mix.peaks;
@@ -85,7 +81,6 @@ class MasterTrack {
     }
   }
 
-  /// The mix's peaks over the lanes' window ([MixPeaks.refresh]).
   void refreshPeaks({
     required CompositionReference comp,
     required double viewStart,
@@ -104,10 +99,8 @@ class MasterTrack {
           onPeaks: onPeaks,
           retry: retry);
 
-  /// The panel is going: no fetch may land on it.
   void dispose() => mix.dispose();
 
-  /// The Volume lane, [rows] holding how tall it has been dragged by its id.
   AutomationLane lane(double rowHeight, Map<String, int> rows) =>
       AutomationLane(
         kind: LaneKind.volume,
@@ -188,12 +181,9 @@ class MasterTrack {
         ),
       );
 
-  /// The master's Volume written whole.
   void writeLevel(CompositionReference comp, BridgeScalar next) =>
       comp.setMasterVolume(value: next);
 
-  /// The master's right-click: its automation mode, Volume back to unity at
-  /// the playhead, the loudness target and Normalise mix.
   void showMenu(BuildContext context, CompositionReference comp, Offset at,
       {required int frame, required VoidCallback onChanged}) {
     final changed = keyed || scalar != const BridgeScalar.static_(0);
@@ -256,9 +246,6 @@ class MixPeaks {
 
   MixPeaks({this.bus});
 
-  /// The mix summarised, or null while nothing has come back yet; what it
-  /// was fetched for; and the retries an empty answer earns while the engine
-  /// is still preparing the mix.
   BridgeAudioPeaks? peaks;
   String? _peakKey;
   String? _askKey;
@@ -316,7 +303,6 @@ class MixPeaks {
     });
   }
 
-  /// Nothing more may land.
   void dispose() {
     _retry?.cancel();
     _peakKey = 'closed';
@@ -358,19 +344,14 @@ void refreshBusMixes(
   });
 }
 
-/// The outline's end of the master: the mode chip, the twirl and the name,
-/// over the row the Sound mix wears.
 class MasterOutlineRow extends StatelessWidget {
   final bool open;
   final VoidCallback onToggleOpen;
 
-  /// The master's automation mode, whether its Volume is keyed, and the
-  /// write a pick from the chip makes.
   final BridgeAutomationMode mode;
   final bool keyed;
   final ValueChanged<BridgeAutomationMode> onMode;
 
-  /// A right click on the row, at the global position of the press.
   final void Function(Offset) onMenu;
 
   const MasterOutlineRow({
@@ -396,8 +377,6 @@ class MasterOutlineRow extends StatelessWidget {
       padding: const EdgeInsets.only(left: outlineGap, right: 6),
       child: Row(
         children: [
-          // The chip stands under the track heads' own, the twirl under
-          // theirs.
           const SizedBox(width: switchCellWidth * 3),
           AutomationModeChip(
               id: 'master', mode: mode, keyed: keyed, onPick: onMode),

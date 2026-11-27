@@ -90,7 +90,6 @@ impl From<Stage> for BridgeRemoteStage {
     }
 }
 
-/// Where the file ends up.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub(super) enum Lands {
@@ -108,14 +107,12 @@ impl From<BridgeRemoteLands> for Lands {
     }
 }
 
-/// A file named by its hash, and its size.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(super) struct Piece {
     pub hash: String,
     pub size: u64,
 }
 
-/// One remote export, on either computer.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub(super) struct Job {
@@ -130,12 +127,10 @@ pub(super) struct Job {
     pub preset: String,
     pub codec: String,
     pub file: String,
-    /// Where the file is, or goes, on this computer.
     pub path: String,
     /// The file comes back over one already at `path`. Set when one was
     /// there as it was sent or brought, which is asked about first.
     pub overwrite: bool,
-    /// Where it is on the other computer, once it has said.
     pub there: String,
     pub lands: Lands,
     pub stage: Stage,
@@ -154,37 +149,28 @@ pub(super) struct Job {
     pub item: u32,
     /// The link's key, in hex.
     pub key: String,
-    /// The export's settings as the engine has them.
     pub spec: Value,
     /// The sender's own *when done* ticks, honoured when the file lands.
     pub noise: bool,
     pub reveal: bool,
-    /// The project's file set and the document, once worked out.
     pub manifest: Piece,
     pub document: Piece,
-    /// What the project needs ([`super::needs::Needs`]), as JSON.
     pub needs: Value,
-    /// All the bytes the sender holds for it.
     pub all: u64,
     /// The project's folder on the sender, which a snapshot's relative paths
     /// are read against.
     pub project_dir: String,
-    /// Where its project's simulations are baked, on the sender.
     pub bakes: String,
-    /// The schema and the version of the Lumit that sent it.
     pub schema: String,
     pub version: String,
-    /// The two computers reach the server from one address.
     pub near: bool,
     /// The worker said yes, and where it listens.
     pub accepted: bool,
     pub addresses: Vec<String>,
-    /// The sender is bringing back a file the worker kept.
     pub fetching: bool,
     /// The files of the finished export as they land here: the item each is
     /// sent as, where it goes, and its size.
     pub landing: Vec<(Uuid, String, u64)>,
-    /// Where those that landed went.
     pub landed: Vec<String>,
 }
 
@@ -227,7 +213,6 @@ impl Job {
         }
     }
 
-    /// Its stage as it is shown: held, or the step it has reached.
     pub(super) fn shown(&self) -> Stage {
         if self.paused && !self.stage.ended() {
             Stage::Paused
@@ -252,7 +237,6 @@ impl Job {
         })
     }
 
-    /// End it here, as `stage`, with `error`.
     pub(super) fn end(&mut self, stage: Stage, error: &str) {
         self.stage = stage;
         self.error = error.to_owned();
@@ -275,7 +259,6 @@ pub(super) fn now() -> i64 {
     since.map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX))
 }
 
-/// The folder a job keeps its things in, on either computer.
 pub(super) fn folder(root: &Path, job: Uuid) -> PathBuf {
     root.join("jobs").join(job.to_string())
 }
@@ -295,7 +278,6 @@ pub(super) fn save(root: &Path, job: &Job) {
     }
 }
 
-/// Every job kept under `root`.
 pub(super) fn load(root: &Path) -> Vec<Job> {
     let Ok(folders) = std::fs::read_dir(root.join("jobs")) else {
         return Vec::new();

@@ -9,15 +9,11 @@ fn chord(s: &str) -> Chord {
 
 #[test]
 fn chords_parse_case_and_order_insensitively_and_round_trip() {
-    // Order and case do not matter on the way in.
     assert_eq!(chord("mod+shift+d"), chord("Shift+Mod+D"));
-    // Ctrl / Cmd / Mod are the same primary modifier.
     assert_eq!(chord("Ctrl+D"), chord("Cmd+D"));
     assert_eq!(chord("Ctrl+D"), chord("Mod+D"));
-    // The last token is always the key, even when it is a modifier word.
     let shift_key = chord("Shift");
     assert!(!shift_key.mods.shift && shift_key.key == "Shift");
-    // Display is canonical and re-parses to the same chord.
     for s in [
         "Space",
         "Mod+D",
@@ -31,7 +27,6 @@ fn chords_parse_case_and_order_insensitively_and_round_trip() {
         let c = chord(s);
         assert_eq!(chord(&c.to_string()), c, "round-trip failed for {s}");
     }
-    // Empty / modifier-only inputs error rather than panic.
     assert_eq!("".parse::<Chord>(), Err(ChordError::Empty));
     assert!(matches!(
         "Hyper+A".parse::<Chord>(),
@@ -55,7 +50,6 @@ fn tab_opens_the_flowchart_from_any_panel() {
 
 #[test]
 fn conflicts_flag_same_context_and_global_overlap_but_not_disjoint_contexts() {
-    // Same context, two actions on one chord → conflict.
     let mut km = Keymap::default();
     km.bind(KeyContext::Timeline, chord("Mod+E"), "a".into());
     // bind() replaces the exact (context, chord), so push a second directly.
@@ -66,11 +60,6 @@ fn conflicts_flag_same_context_and_global_overlap_but_not_disjoint_contexts() {
     });
     assert_eq!(km.conflicts().len(), 1);
 
-    // Global under a scoped binding on the same chord → NOT a conflict:
-    // the panel gets first refusal and Global is the fallback, so the
-    // chord runs one action and which one is never in doubt. It is
-    // reported as a *shadow* instead, because the app-wide meaning does
-    // stop working in that one panel.
     let mut km = Keymap::default();
     km.bind(KeyContext::Global, chord("G"), "global".into());
     km.bind(KeyContext::Timeline, chord("G"), "timeline".into());
@@ -89,14 +78,11 @@ fn conflicts_flag_same_context_and_global_overlap_but_not_disjoint_contexts() {
         Some(&ActionId::from("global"))
     );
 
-    // Two *different* scoped contexts on the same chord → NOT a conflict
-    // (the chord means different things in different panels).
     let mut km = Keymap::default();
     km.bind(KeyContext::Timeline, chord("H"), "timeline".into());
     km.bind(KeyContext::Viewer, chord("H"), "viewer".into());
     assert!(km.conflicts().is_empty());
 
-    // The same action bound twice is neither a conflict nor a shadow.
     let mut km = Keymap::default();
     km.bind(KeyContext::Global, chord("Mod+S"), "file.save".into());
     km.bind(KeyContext::Timeline, chord("Mod+S"), "file.save".into());
@@ -121,7 +107,6 @@ fn the_default_gives_the_timeline_l_and_leaves_the_shuttle_elsewhere() {
         km.lookup(KeyContext::Viewer, &chord("L")),
         Some(&ActionId::from("playback.shuttle.forward"))
     );
-    // The After Effects habit reaches the same cycle.
     assert_eq!(
         km.lookup(KeyContext::Timeline, &chord("Shift+L")),
         Some(&ActionId::from("reveal.audio"))
@@ -151,8 +136,6 @@ fn the_default_gives_the_timeline_l_and_leaves_the_shuttle_elsewhere() {
     ]
     .map(String::from)
     .to_vec();
-    // Each digit goes to its marker everywhere else, and in Cut and in the
-    // Viewer where no multicam clip is under the playhead.
     for d in 1..=9 {
         expected.extend([d.to_string(), d.to_string()]);
     }
@@ -169,7 +152,6 @@ fn the_default_gives_the_timeline_l_and_leaves_the_shuttle_elsewhere() {
 #[test]
 fn the_default_keymap_covers_the_contexts_and_resolves() {
     let km = default_keymap();
-    // A representative binding from each context resolves as expected.
     assert_eq!(
         km.lookup(KeyContext::Global, &chord("Space")),
         Some(&"playback.toggle".into())
@@ -194,7 +176,6 @@ fn the_default_keymap_covers_the_contexts_and_resolves() {
         km.lookup(KeyContext::Panels, &chord("Mod+F")),
         Some(&"panel.search.focus".into())
     );
-    // All nine workspace switches are present.
     for d in 1..=9u8 {
         assert!(km
             .search(&format!("workspace.switch.{d}"))
@@ -210,8 +191,6 @@ fn the_default_keymap_covers_the_contexts_and_resolves() {
 /// the file had no chord at all.
 #[test]
 fn a_stored_keymap_keeps_the_defaults_for_actions_it_never_heard_of() {
-    // Their file, in miniature: today's map with the copy family removed,
-    // and one chord moved so the file's own opinions can be checked too.
     let mut older = default_keymap();
     older
         .bindings
@@ -224,7 +203,6 @@ fn a_stored_keymap_keeps_the_defaults_for_actions_it_never_heard_of() {
         &"edit.undo".into(),
         "Mod+Alt+Z".parse().unwrap(),
     );
-    // And one they deliberately took away.
     older.unbind_action(KeyContext::Global, &"marker.add".into());
     // Written when Ctrl+D added the default transition in Cut, before Duplicate.
     let old_d: Chord = "Mod+D".parse().unwrap();
@@ -296,8 +274,6 @@ fn the_presets_survive_the_stored_file() {
     );
     assert_eq!(restored, after_effects_preset());
 
-    // The Vegas preset moves keys about and takes none away, so nothing
-    // of the default's comes back beside it.
     let restored = with_new_defaults(vegas_preset());
     assert!(restored.conflicts().is_empty());
     assert_eq!(restored, vegas_preset());
@@ -335,7 +311,6 @@ fn the_wheel_modifiers_ship_as_the_spec_says_and_travel_in_the_file() {
         WheelModifier::Alt
     );
 
-    // A file from before the wheel was remappable still reads.
     let mut value: serde_json::Value = serde_json::from_str(&json).unwrap();
     value.as_object_mut().unwrap().remove("wheel");
     let older: Keymap = serde_json::from_value(value).unwrap();
@@ -352,7 +327,6 @@ fn the_handle_modifier_ships_as_alt_and_travels_in_the_file() {
     let back: Keymap = serde_json::from_str(&json).unwrap();
     assert_eq!(back.break_handles, HandleModifier::Ctrl);
 
-    // A file from before the modifier could be chosen still reads.
     let mut value: serde_json::Value = serde_json::from_str(&json).unwrap();
     value.as_object_mut().unwrap().remove("break_handles");
     let older: Keymap = serde_json::from_value(value).unwrap();
@@ -380,13 +354,10 @@ fn every_shipped_action_has_a_written_description() {
             );
         }
     }
-    // The fallback still answers for an action this build does not know,
-    // rather than showing nothing.
     assert_eq!(
         ActionId::from("some.future.action").description(),
         "some.future.action"
     );
-    // Workspaces are generated, not listed, so they are described by rule.
     assert_eq!(
         ActionId::from("workspace.switch.4").description(),
         "Switch to workspace 4"
@@ -434,7 +405,6 @@ fn search_matches_the_words_the_table_shows() {
     let hits = km.search("command palette");
     assert_eq!(hits.len(), 1);
     assert_eq!(hits[0].action.0, "palette.open");
-    // And still matches ids and chord text (the original contract).
     assert!(km
         .search("Shift+F3")
         .iter()

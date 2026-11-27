@@ -49,21 +49,13 @@ const WARM_HOLD_MS: u64 = 2_000;
 /// four thousand columns over a long comp stay a short walk.
 pub const PEAK_SAMPLES_PER_BUCKET: usize = 256;
 
-/// One placed clip in a live [`MixPlan`]: a shared source, where it lands on
-/// the comp strip, which stretch of it plays, its gain and the node it sums
-/// into. The same placement triple [`crate::mix::place_on_timeline`]
-/// produces.
 #[derive(Clone)]
 pub struct PlacedClip {
-    /// The sound: a file read in blocks, or a buffer already in memory
-    /// ([`crate::stream`]).
     pub source: Arc<Source>,
     /// Output frame where the source's frame `src_start` lands (may be
     /// negative).
     pub start_frame: i64,
-    /// The first frame of the source that plays.
     pub src_start: usize,
-    /// How many frames of it play.
     pub len: usize,
     /// `[left, right]` linear gain: the clip's own gain and everything folded
     /// into it below its strip. Used when `envelope` is None; an animated one
@@ -80,7 +72,6 @@ pub struct PlacedClip {
     pub silent: bool,
 }
 
-/// A fader: a node's Volume and Pan, the master, or a send's level.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Fader {
     /// `[left, right]` linear gain, used when `envelope` is None.
@@ -99,7 +90,6 @@ impl Default for Fader {
 }
 
 impl Fader {
-    /// A fader that stays at `gain`.
     #[must_use]
     pub fn constant(gain: [f32; 2]) -> Self {
         Self {
@@ -120,34 +110,25 @@ impl Fader {
     }
 }
 
-/// A send from a node to a later one.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MixSend {
-    /// The node sent to.
     pub to: u16,
     /// The send's level, the same on both sides.
     pub level: Fader,
-    /// Taken before the node's fader rather than after it.
     pub pre: bool,
-    /// False for a send that is switched off: it adds nothing.
     pub on: bool,
 }
 
-/// One strip of the desk: a layer that makes sound, or a bus.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MixNode {
-    /// Volume and Pan.
     pub fader: Fader,
     /// The node fed after the fader, or None for the master.
     pub out: Option<u16>,
     /// False when the strip is muted or silenced by a solo: its output adds
     /// nothing (its sends still do).
     pub out_on: bool,
-    /// Its sends, pre and post fader.
     pub sends: Vec<MixSend>,
-    /// Its rack, an index into [`MixPlan::racks`].
     pub rack: Option<u16>,
-    /// Lowered while another node plays.
     pub duck: Option<Duck>,
 }
 
@@ -164,20 +145,15 @@ impl Default for MixNode {
     }
 }
 
-/// A racked node: what opens its rack, and the ring the rack thread fills
-/// for the callback.
 #[derive(Clone)]
 pub struct PlanRack {
-    /// The node it runs on.
     pub node: u16,
-    /// What opens the rack's stream.
     pub opener: Arc<dyn RackOpener>,
     /// Where its output waits for the callback. Handed from plan to plan
     /// while the rack stays the same, so an edit does not cut a tail.
     pub ring: Arc<RackRing>,
 }
 
-/// What [`MixPlan::finish`] refuses.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum PlanError {
     #[error("node {node} feeds or listens to a node that is not after it")]
@@ -199,31 +175,25 @@ pub enum PlanError {
 /// kilobytes whatever it plays.
 #[derive(Clone)]
 pub struct MixPlan {
-    /// Every clip, each summing into its node.
     pub clips: Vec<PlacedClip>,
     /// The desk's strips, each feeding only later ones.
     pub nodes: Vec<MixNode>,
-    /// How long the mix is.
     pub total_frames: usize,
     /// The master fader, ahead of the limiter.
     pub master: Fader,
     /// The limiter's ceiling as a linear true peak.
     pub ceiling: f32,
-    /// The racked nodes' racks.
     pub racks: Vec<PlanRack>,
-    /// Overrides while a control is held.
     pub live: Arc<LiveBank>,
     /// Each node's index in the plan before this one, or [`NONE`], so a held
     /// fader, a duck and a glide carry over an edit.
     pub carry: Vec<u16>,
-    /// Per rack, the nodes its input needs. Worked out by [`Self::finish`].
     pub(crate) ancestors: Vec<Vec<u16>>,
     /// Which plan this is, so a mix can tell a new one from the one it was
     /// mixing. Not the plan's address: a freed plan's address comes back.
     pub(crate) id: u64,
 }
 
-/// A number no plan has had before.
 fn next_id() -> u64 {
     static NEXT: AtomicU64 = AtomicU64::new(1);
     NEXT.fetch_add(1, Ordering::Relaxed)
@@ -247,8 +217,6 @@ impl Default for MixPlan {
 }
 
 impl MixPlan {
-    /// The simplest desk: every clip into one node at unity, and that node to
-    /// the master. A buffer played on its own, a preview.
     #[must_use]
     pub fn single(mut clips: Vec<PlacedClip>, total_frames: usize) -> Self {
         for clip in &mut clips {
@@ -314,8 +282,6 @@ impl MixPlan {
         Ok(self)
     }
 
-    /// The nodes whose sound reaches node `n`'s input: those that feed it,
-    /// those that feed them, and the keys of their ducks.
     fn ancestors_of(&self, n: usize) -> Vec<u16> {
         let feeds = |from: &MixNode, to: usize| {
             from.out.map(usize::from) == Some(to)
@@ -469,7 +435,6 @@ impl MixPlan {
         }
         let rate_f = f64::from(rate);
         let step_s = (end_s - start_s) / buckets as f64;
-        // Each bucket's low, high and mean square, summed over its clips.
         let mut sums = vec![(0.0f32, 0.0f32, 0.0f64); buckets];
         for clip in self.clips.iter().filter(|c| !c.silent) {
             let c0 = clip.start_frame as f64 / rate_f;
@@ -490,7 +455,6 @@ impl MixPlan {
                 if z <= a {
                     continue;
                 }
-                // The clip's frames under this bucket, and its gain half way.
                 let at = ((a - c0) * rate_f) as usize;
                 let count = (((z - a) * rate_f) as usize).max(1);
                 let own = clip
@@ -530,7 +494,6 @@ impl MixPlan {
                 };
                 sum.0 += lo;
                 sum.1 += hi;
-                // Weighted by how much of the bucket the clip covers.
                 sum.2 += f64::from(rms * rms) * ((z - a) / step_s);
             }
         }
@@ -586,17 +549,16 @@ impl MixPlan {
         self.frame_of(i, self.clips.iter())
     }
 
-    /// [`Self::frame_at`] over the clips the caller has already narrowed to.
     fn frame_of<'a>(&self, i: usize, clips: impl Iterator<Item = &'a PlacedClip>) -> (f32, f32) {
         let count = self.nodes.len().min(MAX_NODES);
         let mut acc = [[0.0f32; 2]; MAX_NODES];
         let mut master = [0.0f32; 2];
         for clip in clips.filter(|c| !c.silent) {
             let Ok(idx) = usize::try_from(i as i64 - clip.start_frame) else {
-                continue; // this clip starts later
+                continue;
             };
             if idx >= clip.len {
-                continue; // this clip has ended
+                continue;
             }
             let dst = if clip.node == NONE {
                 &mut master
@@ -816,7 +778,6 @@ mod tests {
             }],
             4,
         );
-        // Placed frames 0..4 fade 0 → 1: gains 0, 0.25, 0.5, 0.75.
         for (i, want) in [0.0f32, 0.2, 0.4, 0.6].iter().enumerate() {
             assert!(
                 (baked[i * 2] - want).abs() < 1e-6,
@@ -840,10 +801,6 @@ mod tests {
         }
     }
 
-    /// The Sound mix row's peaks are the mix itself, bucketed: a half-scale
-    /// tone over the first half of a plan reads 0.5 in the first bucket and
-    /// silence in the second, and a bucket long enough to be strided still
-    /// finds the level it holds.
     #[test]
     fn plan_peaks_bucket_the_mixed_output() {
         let rate = 100;
@@ -859,8 +816,6 @@ mod tests {
         assert!((peaks[2] - 0.5).abs() < 1e-6, "and so is its rms");
         assert_eq!(&peaks[3..], &[0.0, 0.0, 0.0], "the second bucket is silent");
 
-        // A plan thirty thousand frames long is strided, and the tone still
-        // reads through the stride.
         let wide = MixPlan::single(
             vec![clip(whole(vec![0.5f32; 60_000]), 0, 0, 30_000)],
             30_000,
@@ -868,18 +823,13 @@ mod tests {
         let peaks = wide.peaks(rate, 0.0, 300.0, 1);
         assert!((peaks[1] - 0.5).abs() < 1e-6);
 
-        // Nothing to bucket comes back as silence, never a panic.
         assert!(plan.peaks(rate, 1.0, 0.5, 4).iter().all(|v| *v == 0.0));
         assert!(plan.peaks(rate, 0.0, 1.0, 0).is_empty());
     }
 
-    /// The live plan must sound exactly like the baked mix: same placements,
-    /// same overlap summing, same ceiling, sample for sample.
     #[test]
     fn a_mix_plan_matches_the_baked_mix_sample_for_sample() {
         let (a, b) = (tone(6, 0.6), tone(4, 0.7));
-        // a: frames 0..6 at 0.6; b: frames 4..8 at 0.7, so the overlap sums
-        // and clamps to the master ceiling; head and tail come from one each.
         let baked = mix_stereo(
             &[
                 PlacedAudio {
@@ -907,7 +857,6 @@ mod tests {
                 baked[i * 2 + 1]
             );
         }
-        // Trimmed clips read the right slice: src_start offsets into the source.
         let c = whole(
             (0..8)
                 .flat_map(|n| [n as f32 * 0.1, n as f32 * 0.1])
@@ -917,7 +866,6 @@ mod tests {
         assert!((trimmed.frame_at(0).0 - 0.3).abs() < 1e-6);
         assert!((trimmed.frame_at(1).0 - 0.4).abs() < 1e-6);
         assert_eq!(trimmed.frame_at(2), (0.0, 0.0), "past the trim: silence");
-        // And the waveform straight off the plan matches the buckets' extremes.
         let peaks = trimmed.waveform_peaks(2);
         assert_eq!(peaks.len(), 2);
         assert!((peaks[0].1 - 0.4).abs() < 1e-6);

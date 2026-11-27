@@ -1,7 +1,3 @@
-// The Timeline's shape rows: one piece of a shape layer's art, its strokes,
-// its paints, and the value rows under them.
-//
-// Split out of timeline_panel_frb.dart.
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/l10n/engine_labels.dart';
@@ -42,14 +38,11 @@ class ShapeItemRow extends StatelessWidget {
   final ValueColumn valueColumn;
   final VoidCallback onChanged;
 
-  /// The composition, for the live preview a drag shows.
   final CompositionReference comp;
 
-  /// The item's own twirl: whether its rows show, and what turns it.
   final bool open;
   final VoidCallback? onToggle;
 
-  /// A tap on the name: the item picked, so the Viewer shows its points.
   final VoidCallback? onLabelTap;
 
   const ShapeItemRow({super.key, 
@@ -63,7 +56,6 @@ class ShapeItemRow extends StatelessWidget {
     this.onLabelTap,
   });
 
-  /// Write the contents back with this item changed, or dropped.
   void _write(
       {String? name,
       bool delete = false,
@@ -146,7 +138,6 @@ class ShapeItemRow extends StatelessWidget {
     ];
   }
 
-  /// The parametric shape as a drawn path, the shape it shows at the playhead.
   void _convertToPath(BuildContext context) {
     final ui = Provider.of<LumitUiState>(context, listen: false);
     try {
@@ -154,7 +145,6 @@ class ShapeItemRow extends StatelessWidget {
           id: item.id, time: comp.timeOfFrame(frame: ui.playheadFrame.value));
       onChanged();
     } catch (_) {
-      // The item or its layer went away between the draw and the click.
     }
   }
 
@@ -192,12 +182,9 @@ void writeShapeEntries(LayerReference layer, VoidCallback onChanged,
         contents: change(layer.getShapeContents()), at: null);
     onChanged();
   } catch (_) {
-    // The entry or its layer went away between the draw and the click.
   }
 }
 
-/// [adds] as menu rows, each running [pick] after [dismiss]: the body of
-/// the Add submenu, and the whole menu an entry's own Add button opens.
 List<Widget> shapeAddRows(VoidCallback dismiss, UuidValue id,
         List<ShapeAdd> adds, void Function(ShapeAdd) pick,
         {bool remove = false}) =>
@@ -214,7 +201,6 @@ List<Widget> shapeAddRows(VoidCallback dismiss, UuidValue id,
         ),
     ];
 
-/// The Add (or Remove) submenu on a shape row: [adds], each a row.
 Widget shapeAddSubmenu(VoidCallback close, UuidValue id, List<ShapeAdd> adds,
         void Function(ShapeAdd) pick,
         {bool remove = false}) =>
@@ -255,7 +241,6 @@ List<Widget> shapeMoveRows(VoidCallback close, LayerReference layer, UuidValue i
     ];
 }
 
-/// Which kind of entry a modifier is, in the Add menu's terms.
 ShapeAdd shapeAddOf(BridgeShapeModifier modifier) => switch (modifier.kind) {
       BridgeShapeModifierKind_Repeat() => ShapeAdd.repeater,
       BridgeShapeModifierKind_Trim() => ShapeAdd.trim,
@@ -343,9 +328,6 @@ List<BridgeShapeEntry> addedGlobally(
           kind: newShapeModifier(entries, add, shapeContentsRect(entries))),
     ];
 
-/// A new modifier entry of kind [add], set to show it has done something
-/// to the art in [box], named for its kind and numbered after any already
-/// in [entries].
 BridgeShapeEntryKind newShapeModifier(
     List<BridgeShapeEntry> entries, ShapeAdd add, Rect? box,
     {bool own = false}) {
@@ -458,7 +440,6 @@ class ShapeModifierRow extends StatelessWidget {
       deleteLabel: l10n.deleteShapeModifier,
       removeButton: true,
       menuRows: (close) => [
-        // Added under this one, so the two stack.
         shapeAddSubmenu(close, modifier.id, adds,
             (add) => _write((e) =>
                 addedToShape(e, modifier.id, add, own: modifier.own))),
@@ -487,11 +468,9 @@ void expandShapeCopies(LumitUiState ui, LayerReference layer,
     );
     onChanged();
   } catch (_) {
-    // The repeater or its layer went away between the draw and the click.
   }
 }
 
-/// Expand copies ▸ Into this layer, Into layers.
 Widget shapeExpandSubmenu(VoidCallback close, String key, String label,
         void Function(bool intoLayers) pick) =>
     SubmenuRow(
@@ -571,7 +550,6 @@ class ShapeGroupRow extends StatelessWidget {
       addRows: (close) => shapeAddRows(close, group.id, adds,
           (add) => _write((e) => addedToShape(e, group.id, add))),
       menuRows: (close) => [
-        // Added at the end of the group, inside it.
         shapeAddSubmenu(close, group.id, adds,
             (add) => _write((e) => addedToShape(e, group.id, add))),
         MenuRow(
@@ -598,7 +576,6 @@ class StrokeRow extends StatelessWidget {
   final ValueColumn valueColumn;
   final VoidCallback onChanged;
 
-  /// The composition, for the live preview a drag shows.
   final CompositionReference comp;
 
   const StrokeRow({super.key, 
@@ -627,8 +604,6 @@ class StrokeRow extends StatelessWidget {
         cloneOffsetY: s.cloneOffsetY,
       );
 
-  /// The icon says which of the three tools made it, so a list of marks can
-  /// be read at a glance.
   LumitIcon get _icon => switch (stroke.mode) {
         BridgePaintMode.erase => LumitIcon.eraser,
         BridgePaintMode.clone => LumitIcon.cloneStamp,
@@ -669,8 +644,6 @@ class StrokeRow extends StatelessWidget {
           layer.setStroke(stroke: _with(stroke, opacity: opacity));
           onChanged();
         } catch (_) {
-          // The stroke or its layer went away between the draw and the
-          // click.
         }
       },
       onDelete: () {
@@ -725,7 +698,6 @@ class _StrokeBlendPicker extends StatelessWidget {
             layer.setStroke(stroke: StrokeRow._with(stroke, blend: i));
             onChanged();
           } catch (_) {
-            // The stroke or its layer went away between the draw and the click.
           }
         },
       ),
@@ -810,7 +782,6 @@ class _StrokeValueRowState extends State<StrokeValueRow> {
           .setStroke(stroke: strokeWithScalar(widget.stroke, widget.value, v));
       widget.onChanged();
     } catch (_) {
-      // The stroke or its layer went away mid-drag.
     }
   }
 
@@ -877,8 +848,6 @@ class _StrokeValueRowState extends State<StrokeValueRow> {
         },
       );
     }
-    // Animated: the field shows what the curve reads at the playhead, and an
-    // edit writes the key there.
     return PlayheadKeyedField(
       fieldKey: key,
       scalar: scalar,
@@ -913,7 +882,6 @@ class AnimatorValueRow extends StatefulWidget {
   final ValueChanged<int> onSeek;
   final VoidCallback onChanged;
 
-  /// Picks the row, so Delete can take its property off the animator.
   final VoidCallback? onLabelTap;
 
   const AnimatorValueRow({super.key, 
@@ -961,7 +929,6 @@ class _AnimatorValueRowState extends State<AnimatorValueRow> {
       );
       widget.onChanged();
     } catch (_) {
-      // The animator or its layer went away mid-drag.
     }
   }
 
@@ -1011,8 +978,6 @@ class _AnimatorValueRowState extends State<AnimatorValueRow> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   SizedBox(width: 72, child: _field()),
-                  // A font axis comes off the animator here, as beside it in
-                  // the Effect controls panel.
                   if (textAnimatorAxisIndex(widget.value) != null)
                     HouseButton(
                       key: ValueKey<String>('$_rowKey-remove'),
@@ -1056,8 +1021,6 @@ class _AnimatorValueRowState extends State<AnimatorValueRow> {
         onDragCancel: () => setState(() => _staged = null),
       );
     }
-    // Animated: the field shows what the curve reads at the playhead, and an
-    // edit writes the key there.
     return PlayheadKeyedField(
       fieldKey: key,
       scalar: scalar,
@@ -1080,12 +1043,10 @@ class ShapeValueRow extends StatefulWidget {
   final CompositionReference comp;
   final LayerReference layer;
 
-  /// The item the number belongs to, or null for a modifier's.
   final BridgeShapeItem? item;
   final BridgeShapeModifier? modifier;
   final ShapeValue value;
 
-  /// Which gradient stop the row is for, on the values a stop has.
   final int stop;
   final ValueColumn valueColumn;
   final int playheadFrame;
@@ -1130,7 +1091,6 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
         ]
       : [_scalar];
 
-  /// [i] with the row's values replaced by [to], in [_scalars]' order.
   BridgeShapeItem _with(BridgeShapeItem i, List<BridgeScalar> to) {
     if (!_isColour) {
       return shapeWithScalar(i, widget.value, to.first, stop: widget.stop);
@@ -1147,8 +1107,6 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
       'tl-shape-${widget.value.name}-${widget.modifier?.id ?? widget.item!.id}'
       '${isGradientStopValue(widget.value) ? '-${widget.stop}' : ''}';
 
-  /// The whole list with this row's values replaced by [to]: on the item, or
-  /// on the modifier entry.
   List<BridgeShapeEntry> _entriesWith(
           List<BridgeShapeEntry> entries, List<BridgeScalar> to) =>
       switch (widget.modifier) {
@@ -1195,8 +1153,6 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
   bool get _isPath => widget.value == ShapeValue.path;
 
   (double, double, String) get _units => switch (widget.value) {
-        // The shape has no number to drag, so no range and no unit: its row is
-        // the stopwatch and its diamonds.
         ShapeValue.path ||
         ShapeValue.fillColour ||
         ShapeValue.gradientColour ||
@@ -1235,7 +1191,6 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
         ShapeValue.strokeGradientEndX ||
         ShapeValue.strokeGradientEndY =>
           (-10000, 10000, ' px'),
-        // How opaque each end of the ramp is.
         ShapeValue.gradientStartOpacity ||
         ShapeValue.gradientEndOpacity ||
         ShapeValue.gradientStopPosition ||
@@ -1308,7 +1263,6 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
     super.dispose();
   }
 
-  /// Show the value the drag is passing through without writing it.
   void _preview(BridgeScalar v) => _previewAll([v]);
 
   void _previewAll(List<BridgeScalar> v) {
@@ -1340,7 +1294,6 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
       );
       widget.onChanged();
     } catch (_) {
-      // The item or its layer went away mid-drag.
     }
   }
 
@@ -1372,8 +1325,6 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
             navigatorApart: true,
           );
     final RowKeys lead = pathKeys ?? keys;
-    // An item's paint, and a parametric shape's size, corners and turn, can
-    // be controls. A modifier's rows and the rest cannot.
     final control = switch (widget.item) {
       final item? when widget.modifier == null => shapeControlRow(
           widget.layer.internallayerId, item.id, widget.value),
@@ -1399,8 +1350,6 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
           width: widget.valueColumn.width,
           child: Align(
             alignment: Alignment.centerLeft,
-            // A shape is not a number, so its row has no value field — the
-            // drawing tools are where it is edited.
             child: _isPath
                 ? const SizedBox.shrink()
                 : _isColour
@@ -1446,8 +1395,6 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
         },
       );
     }
-    // Animated: the field shows what the curve reads at the playhead, and an
-    // edit writes the key there.
     return PlayheadKeyedField(
       fieldKey: key,
       scalar: scalar,
@@ -1467,7 +1414,6 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
 class ShapePaintRow extends StatelessWidget {
   final LayerReference layer;
 
-  /// The item the choice belongs to, or null for a modifier's.
   final BridgeShapeItem? _item;
   final BridgeShapeModifier? modifier;
   final ShapePaint which;
@@ -1538,8 +1484,6 @@ class ShapePaintRow extends StatelessWidget {
     );
   }
 
-  /// One of the gradient's numbers as it stands: its own value, or what it
-  /// reads at the playhead when it is keyed.
   double _now(BridgeScalar scalar, LumitUiState ui) {
     if (scalar is BridgeScalar_Static) return scalar.field0;
     final comp = ui.selectedComp;
@@ -1554,8 +1498,6 @@ class ShapePaintRow extends StatelessWidget {
         null => _defaultEnd,
       };
 
-  /// The gradient as its editor holds it, each stop named by where it is in
-  /// the item's list.
   GradientRamp _rampOf(BridgeShapeItem i, LumitUiState ui) => GradientRamp(
         startColour: _nowColour(i.fill, ui),
         startOpacity: _now(i.gradientStartOpacity, ui),
@@ -1684,7 +1626,6 @@ class ShapePaintRow extends StatelessWidget {
         try {
           final written = contents(ramp);
           layer.setShapeContents(contents: written, at: null);
-          // What each stop is now, for the next edit to start from.
           final stops =
               _view(written.items.firstWhere((i) => i.id == item.id))
                   .gradientStops;
@@ -1694,7 +1635,6 @@ class ShapePaintRow extends StatelessWidget {
           }
           onChanged();
         } catch (_) {
-          // The item or its layer went away while the editor was open.
         }
       },
     ).whenComplete(throttle.cancel);
@@ -1718,7 +1658,6 @@ class ShapePaintRow extends StatelessWidget {
           child: Align(
             alignment: Alignment.centerLeft,
             child: switch (which) {
-              // Apart, or one of the four ways two paths combine.
               ShapePaint.combine => SizedBox(
                   width: 96,
                   child: BareDropdown<int>(
@@ -1779,7 +1718,6 @@ class ShapePaintRow extends StatelessWidget {
               ShapePaint.gradientStops ||
               ShapePaint.strokeGradientStops =>
                 _rampChip(context, key),
-              // Displace or Scale, on the deform entry.
               ShapePaint.deformMode => SizedBox(
                   width: 96,
                   child: BareDropdown<int>(
@@ -1801,7 +1739,6 @@ class ShapePaintRow extends StatelessWidget {
                             (m) => modifierWith(m, deformMode: k))),
                   ),
                 ),
-              // Each path, or the whole shape as one.
               ShapePaint.taperScope => SizedBox(
                   width: 96,
                   child: BareDropdown<int>(
@@ -1824,8 +1761,6 @@ class ShapePaintRow extends StatelessWidget {
   }
 }
 
-/// The Contents heading's Global add menu: every modifier, each put at the
-/// end of the layer's contents to act on all its shapes.
 List<Widget> globalAddRows(
         VoidCallback dismiss, LayerReference layer, VoidCallback onChanged) =>
     [
@@ -1856,7 +1791,6 @@ class AnimatorSettingRow extends StatelessWidget {
   final ValueColumn valueColumn;
   final VoidCallback onChanged;
 
-  /// Picks the row.
   final VoidCallback? onLabelTap;
 
   const AnimatorSettingRow({
@@ -1877,7 +1811,6 @@ class AnimatorSettingRow extends StatelessWidget {
           layer, index, animatorWithSelectorAt(animator, selector, next));
       onChanged();
     } catch (_) {
-      // The animator or its layer went away between the draw and the click.
     }
   }
 
@@ -1994,7 +1927,6 @@ class AnimatorLinkRow extends StatelessWidget {
           );
     return Row(
       children: [
-        // Where a keyed row's stopwatch stands, so the names line up.
         const SizedBox(width: iconSize + 8),
         Expanded(
           child: GestureDetector(

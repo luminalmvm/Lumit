@@ -1,6 +1,3 @@
-// The Grade panel's Qualifier page: which part of the picture the node
-// grades, picked by hue, saturation and luma, by channel, or by luma alone,
-// then cleaned up.
 
 part of 'grade_panel_frb.dart';
 
@@ -105,7 +102,6 @@ mixin _GradeQualifier on _GradeModel, _GradePrimaries {
           ),
         ),
         if (mode != 0)
-          // The ranges and the finesse side by side once both have room.
           LayoutBuilder(builder: (context, box) {
             if (box.maxWidth < 1000) {
               return Column(
@@ -138,8 +134,6 @@ mixin _GradeQualifier on _GradeModel, _GradePrimaries {
     );
   }
 
-  /// The 3D key's kept samples, or its dropped ones: how many, each one's
-  /// colour, and Clear.
   Widget _samplesRow(LumitTheme t, bool enabled, {required bool drop}) {
     final id = drop ? 'qual_3d_drop' : 'qual_3d_keep';
     final luma = '${id}_luma';
@@ -239,8 +233,6 @@ mixin _GradeQualifier on _GradeModel, _GradePrimaries {
     if (node != null) ui.grade.clearStrokes(node.id, drop: drop);
   }
 
-  /// A pick tool: arms the picture, where a drag takes the samples it reads.
-  /// The solver turns them into ranges.
   Widget _pickButton(GradePick pick, bool enabled) {
     final ready = enabled && _GradeModel._engine.solversReady;
     final armed = ui.grade.pick.value == pick;
@@ -261,12 +253,8 @@ mixin _GradeQualifier on _GradeModel, _GradePrimaries {
     );
   }
 
-  /// The tool on the picture, or none. A drag on the Viewer draws the
-  /// circle it reads.
   void _armPick(GradePick? pick) => setState(() => ui.grade.pick.value = pick);
 
-  /// Highlight: the Viewer shows where the node's key is, grey elsewhere. A
-  /// right-click offers the key in black and white.
   Widget _highlightButton(bool enabled) {
     final ready = enabled && _GradeModel._engine.matteReady;
     final mode = ui.grade.matte.value;
@@ -302,8 +290,6 @@ mixin _GradeQualifier on _GradeModel, _GradePrimaries {
   /// The Viewer keeps the engine's matte view in step with this.
   void _setMatte(GradeMatte mode) => ui.grade.matte.value = mode;
 
-  /// A bar's name, with its on and off tick where the qualifier can leave it
-  /// out.
   Widget _barLabel(LumitTheme t, String label, bool enabled, String? use,
       List<String> rows) {
     final changed = _anyChanged(rows);
@@ -437,15 +423,11 @@ mixin _GradeQualifier on _GradeModel, _GradePrimaries {
     );
   }
 
-  /// A bar with its name beside it and its numbers after it, or under it
-  /// when the bar would be left too short.
   Widget _barRow(LumitTheme t, bool enabled,
       {required String name,
       required Widget label,
       required List<String> rows,
       required Widget bar}) {
-    // The bar already says what it ranges over: under Saturation, the
-    // field for Saturation low reads Low.
     String short(String id) {
       final full = _label(id);
       if (!full.startsWith('$name ')) return full;

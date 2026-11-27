@@ -1,4 +1,4 @@
-use rhai::plugin::*; // a "prelude" import for macros
+use rhai::plugin::*;
 
 fn hash(x: i64) -> f64 {
     let mut n = x;

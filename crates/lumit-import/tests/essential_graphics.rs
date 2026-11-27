@@ -1,11 +1,3 @@
-//! A project saved by After Effects 2026 with Essential Graphics in it, read
-//! both ways in: straight from the `.aep`, and from the bundle the script
-//! wrote of the same project in the same sitting.
-//!
-//! "Lower third" has a controller of each kind. "Main" places it twice, and
-//! each layer sets some of them, one with keyframes.
-//! `tools/ae-bridge/make-essential-fixture.jsx` builds both files.
-
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::path::Path;
@@ -17,7 +9,6 @@ use lumit_core::model::{Composition, Document, Layer, LayerKind, ProjectItem};
 use lumit_core::template::{ControlKind, Target, Template, Value};
 use lumit_import::report::{ImportReport, Reason};
 
-/// The project by each way in that carries Essential Graphics.
 fn imported() -> Vec<(&'static str, Document, ImportReport)> {
     let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
     ["essential-graphics.aep", "essential-graphics.lum-bundle"]
@@ -47,7 +38,6 @@ fn layer<'a>(comp: &'a Composition, name: &str) -> &'a Layer {
         .expect("the layer is there")
 }
 
-/// What a copy holds for the control labelled `label` at its own time `t`.
 fn held(template: &Template, copy: &Layer, label: &str, t: f64) -> Option<Value> {
     let control = template
         .controls
@@ -89,7 +79,6 @@ fn controllers_become_the_templates_controls() {
             "{route}"
         );
 
-        // Every control names a row that is there to read.
         for control in &template.controls {
             let row = lumit_core::template::rows::read(&doc, lower, &control.target);
             assert!(row.is_some(), "{route}: {} reads nothing", control.label);
@@ -152,7 +141,6 @@ fn each_copy_keeps_what_its_layer_set() {
             held(&template, a, "Bar colour", 0.0),
             Some(Value::Colour(_))
         ));
-        // Keyed a second apart, on the copy's own clock.
         for (t, opacity) in [(0.0, 0.0), (0.5, 50.0), (1.0, 100.0)] {
             assert_eq!(
                 held(&template, a, "Bar opacity", t),
@@ -160,7 +148,6 @@ fn each_copy_keeps_what_its_layer_set() {
                 "{route} at {t}"
             );
         }
-        // What copy A left alone follows the template.
         assert_eq!(held(&template, a, "Bar angle", 0.0), None, "{route}");
 
         assert_eq!(
@@ -201,8 +188,6 @@ fn each_copy_keeps_what_its_layer_set() {
                 "{route}: {label}"
             );
         }
-        // The picture copy B put in is the composition After Effects made
-        // for it.
         let Some(Value::Picture(picture)) = held(&template, b, "Logo", 0.0) else {
             panic!("{route}: copy B's picture");
         };
@@ -233,8 +218,6 @@ fn an_expression_reads_a_copys_control() {
             current_depth: 0,
             inputs: None,
         });
-        // `thisLayer.essentialProperty("Amount") * 2`, and copy A follows the
-        // template's 25.
         let turned = a.transform.rotation.value_at_with_context(0.0, context);
         assert_eq!(turned, 50.0, "{route}");
     }

@@ -79,9 +79,6 @@ struct Params {
 const RG_TAPS: i32 = 24;
 const RG_RING: i32 = 12;
 
-// ---------------------------------------------------------------------------
-// Shared helpers
-
 // The frame in raster pixels: every length below is measured in these.
 fn rg_frame() -> vec2<f32> {
     return lumit_size();
@@ -91,12 +88,10 @@ fn rg_scale() -> f32 {
     return max(p.effect_scale, 0.01);
 }
 
-// How far the glass reaches inwards.
 fn rg_depth() -> f32 {
     return max(p.depth * rg_scale(), 0.5);
 }
 
-// The wide blur that finds which way the middle of a shape is.
 fn rg_wide() -> f32 {
     let f = rg_frame();
     return max(rg_depth() * 3.0, 0.12 * min(f.x, f.y));
@@ -120,7 +115,6 @@ fn rg_luma(c: vec3<f32>) -> f32 {
     return dot(c, vec3<f32>(0.2126, 0.7152, 0.0722));
 }
 
-// The picked layer's coverage at uv, through the chosen channel.
 fn rg_layer_alpha(uv: vec2<f32>) -> f32 {
     let c = lumit_sample2(uv);
     var a = c.a;
@@ -184,7 +178,6 @@ fn rg_blur1(t: texture_2d<f32>, uv: vec2<f32>, dir: vec2<f32>, radius: f32, chan
     return sum / weight;
 }
 
-// The picture below, Gaussian-blurred along `dir`, for Frost.
 fn rg_blur_below(uv: vec2<f32>, dir: vec2<f32>, radius: f32, horizontal: bool) -> vec4<f32> {
     let sigma = max(radius * 0.5, 0.5);
     let spacing = 3.0 * sigma / f32(RG_TAPS);
@@ -217,9 +210,6 @@ fn rg_layer_band(uv: vec2<f32>, rim: f32) -> f32 {
     }
     return clamp(2.0 * (1.0 - inside / f32(RG_RING)), 0.0, 1.0);
 }
-
-// ---------------------------------------------------------------------------
-// Passes
 
 fn down(uv: vec2<f32>) -> vec4<f32> {
     if (!rg_uses_layer()) {
@@ -268,7 +258,6 @@ fn frost_v(uv: vec2<f32>) -> vec4<f32> {
     return rg_blur_below(uv, vec2<f32>(0.0, 1.0), rg_frost_radius(), false);
 }
 
-// The picture below at a raster position, frosted as asked.
 fn rg_below(px: vec2<f32>) -> vec4<f32> {
     let uv = px / rg_frame();
     if (p.frost <= 0.0) {
@@ -283,8 +272,6 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
     let rim = rg_rim();
     let px = uv * rg_frame();
 
-    // Coverage, height (0 on the edge, 1 at Depth inside), the height's
-    // gradient per pixel, which way the middle is, and the rim band.
     var alpha = 0.0;
     var t = 0.0;
     var grad = vec2<f32>(0.0);
@@ -296,7 +283,6 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
         if (alpha <= 0.0) {
             return here;
         }
-        // One quarter-size texel either side.
         let e = 4.0 / rg_frame();
         let h = lumit_read(pass_blur_v, uv);
         let hx1 = lumit_read(pass_blur_v, uv + vec2<f32>(e.x, 0.0));

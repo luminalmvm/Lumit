@@ -52,7 +52,6 @@ use crate::fx::{
     schema::EffectSchema,
 };
 
-/// The top of the Drive row, in dB.
 const MAX_DRIVE_DB: f64 = 48.0;
 
 /// Where the tilt turns over, in Hz. Low enough that Tone leans the whole of
@@ -74,21 +73,14 @@ const MIN_BITS: f64 = 2.0;
 /// samples so that a bake at 96 kHz sounds like a bake at 48 kHz.
 const MIN_REDUCED_HZ: f64 = 3_000.0;
 
-/// How long a moved row takes to arrive.
 const SMOOTH_MS: f64 = 20.0;
 
-/// Shape 0: the peaks rounded over.
 const SOFT_CLIP: u8 = 0;
-/// Shape 1: the peaks taken straight off.
 const HARD_CLIP: u8 = 1;
-/// Shape 2: the peaks turned back down again.
 const FOLDBACK: u8 = 2;
-/// Shape 3: the resolution dropped.
 const BIT_CRUSH: u8 = 3;
-/// Shape 4: each sample held for several.
 const RATE_REDUCE: u8 = 4;
 
-/// The Distortion effect's rows.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "audio_distortion",
@@ -97,8 +89,6 @@ const RATE_REDUCE: u8 = 4;
     category = Audio,
     cost = Trivial,
     roi = Exact,
-    // Sound in, sound out: no picture to dissolve, and so no matte row
-    // (docs/impl/audio-effects.md §2).
     matte = false,
 )]
 pub struct AudioDistortion {
@@ -120,13 +110,10 @@ pub struct AudioDistortion {
     /// back.
     #[bounded(min = -24.0, max = 24.0, default = 0.0, unit = Raw)]
     pub output: f32,
-    /// The share of the output that is the shaped sound rather than the sound
-    /// itself.
     #[bounded(min = 0.0, max = 100.0, default = 100.0, unit = Percent)]
     pub wet: f32,
 }
 
-/// The Distortion effect's behaviour: sound, and no picture at all.
 pub struct AudioDistortionDef;
 
 impl EffectDef for AudioDistortionDef {
@@ -157,14 +144,10 @@ impl EffectDef for AudioDistortionDef {
     }
 }
 
-/// One channel's whole path: up, shaped, down, tilted, and the dry held back
-/// to meet it.
 struct Channel {
     over: Oversample4x,
     tilt: Cascade<2>,
     dry: DelayLine,
-    /// What Rate reduce is holding, and how many of the four-times samples it
-    /// has held it for.
     held: f32,
     counted: u32,
 }
@@ -212,27 +195,22 @@ impl Channel {
     }
 }
 
-/// The live distortion.
 struct DistortionState {
     channel: [Channel; 2],
     /// The gain into the shaper. One for the two shapes Drive does not gain.
     drive: Smoother,
     output: Smoother,
     wet: Smoother,
-    /// What the tilt was last set for, so the shelves are worked out only when
-    /// the row has actually moved.
     tone_db: f64,
     primed: bool,
 }
 
-/// One open distortion.
 pub struct AudioDistortionProcessor {
     rate: f64,
     state: Mutex<DistortionState>,
 }
 
 impl AudioDistortionProcessor {
-    /// Open one from the values the chain's first block holds.
     fn new(values: &[(ParamId, f64)], rate: f64) -> Self {
         Self {
             rate,
@@ -250,7 +228,6 @@ impl AudioDistortionProcessor {
     }
 }
 
-/// The Shape row as one of the five.
 fn shape_of(values: &[(ParamId, f64)]) -> u8 {
     held(value_of(values, AudioDistortion::SHAPE, 0.0), 0.0, 4.0).round() as u8
 }
@@ -286,7 +263,6 @@ impl AudioProcessor for AudioDistortionProcessor {
         };
         let state = &mut *guard;
 
-        // This block's numbers, worked out once at its start.
         let shape = shape_of(values);
         let amount = drive_amount(values);
         let tone = held(value_of(values, AudioDistortion::TONE, 0.0), -12.0, 12.0);
@@ -368,7 +344,6 @@ mod tests {
     const RATE: u32 = 48_000;
     const RATE_F: f64 = 48_000.0;
 
-    /// A full set of rows, so a test says only what it cares about.
     fn rows(drive: f64, shape: u8, tilt: f64, out: f64, wet: f64) -> Vec<(ParamId, f64)> {
         vec![
             (AudioDistortion::DRIVE, drive),
@@ -400,8 +375,6 @@ mod tests {
         }
     }
 
-    /// Plan 3, the distortion's own: driving the shaper adds harmonics that
-    /// were not in the sound before.
     #[test]
     fn driving_the_shaper_adds_harmonics() {
         // A kilohertz at 48 kHz is 48 frames a cycle, so the window measured

@@ -1,6 +1,3 @@
-//! The batches behind the two commands that reshape a whole comp: trim to
-//! the work area, and crop to a region.
-
 use super::{Op, OpError};
 use crate::anim::Animation;
 use crate::model::{Document, Layer, TransformProp};

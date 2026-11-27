@@ -65,7 +65,7 @@ struct Params {
     depth_invert: u32,   // 1 = d' = 1 - d before the CoC
     display: u32,        // 0 = Rendered, 1 = Depth map, 2 = Focus map
     blade_count: u32,    // 3..=MAX_BLADES; Roundness 1 is the circle
-    depth_bound: u32,    // 0 = no depth layer: defocus uniformly
+    depth_bound: u32,
     depth_channel: u32,  // index into lumit_core::fx::CHANNEL_OPTIONS
     use_focus_point: u32,// 1 = focus is the depth under (focus_x, focus_y)
     repeat_edge: u32,    // 1 = clamp the gather to the frame edge
@@ -92,8 +92,6 @@ struct Params {
 @group(0) @binding(3) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(4) var<uniform> p: Params;
 
-// One channel of the depth picture, by the shared CHANNEL_OPTIONS index.
-// Mirrors `lumit_core::fx::cpu::channel_of` operation for operation.
 fn channel_of(c: vec4<f32>) -> f32 {
     switch (p.depth_channel) {
         case 1u: { return c.a; }
@@ -128,7 +126,7 @@ fn coc_falloff(d: f32, focus: f32) -> f32 {
     let dist = abs(d - focus);
     let denom = max(1.0 - p.range, 1e-4);
     let e = min(max(((dist - p.range) / denom) * p.gamma, 0.0), 1.0);
-    return e * e * (3.0 - 2.0 * e); // smoothstep ramp
+    return e * e * (3.0 - 2.0 * e);
 }
 
 // The Depth-map view's grey: the depth axis as the ramp reads it — the
@@ -257,7 +255,6 @@ fn dof(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     if (p.display == 2u) {
-        // Focus map: 1 - s, white where sharp, darkening out of focus.
         let m = 1.0 - coc_falloff(d, focus);
         textureStore(dst, xy, zebra(xy, vec4<f32>(m, m, m, 1.0), coc));
         return;
@@ -325,7 +322,6 @@ fn dof(@builtin(global_invocation_id) gid: vec3<u32>) {
         }
     }
 
-    // Pass two: the gather proper.
     var acc_lo = vec4<f32>(0.0);
     var acc_hi = vec4<f32>(0.0);
     var n = 0.0;

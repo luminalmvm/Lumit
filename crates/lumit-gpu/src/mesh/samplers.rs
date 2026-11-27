@@ -9,10 +9,8 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-/// How one picture is read: its wrap each way and its filter.
 pub(super) type Reading = (wgpu::AddressMode, wgpu::AddressMode, wgpu::FilterMode);
 
-/// The reading of a slot with no picture of its own.
 pub(super) const PLAIN: Reading = (
     wgpu::AddressMode::Repeat,
     wgpu::AddressMode::Repeat,
@@ -29,7 +27,6 @@ pub(super) const PLATE: Reading = (
 /// One sampler for each reading, one group for each set of five.
 pub(super) struct Samplers {
     pub(super) layout: wgpu::BindGroupLayout,
-    /// Read the picture behind glass.
     behind: wgpu::Sampler,
     each: Mutex<HashMap<Reading, wgpu::Sampler>>,
     groups: Mutex<HashMap<[Reading; 5], wgpu::BindGroup>>,
@@ -80,8 +77,6 @@ impl Samplers {
         }
     }
 
-    /// The group that reads a material's five pictures as `readings` say,
-    /// made the first time it's asked for.
     pub(super) fn group(&self, device: &wgpu::Device, readings: [Reading; 5]) -> wgpu::BindGroup {
         let make = || {
             let samplers = readings.map(|r| match self.each.lock() {

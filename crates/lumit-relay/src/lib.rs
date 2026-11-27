@@ -31,36 +31,28 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
 
-/// The port a relay listens on unless told otherwise.
 pub const DEFAULT_PORT: u16 = 47857;
 
 /// Raised whenever a line changes shape.
 const PROTOCOL: u32 = 2;
 
-/// What every first line starts with.
 const CALL: &str = "LUMIT-RELAY";
 
-/// The longest line either end reads.
 const LINE_LIMIT: usize = 128;
 
-/// How long a connection has to say which it is, and how long a host or a
-/// guest waits for its answer.
 pub const PATIENCE: Duration = Duration::from_secs(10);
 
-/// How often a host says it is still there.
 pub const PING: Duration = Duration::from_secs(5);
 
 /// How long a host that has said nothing is believed. Three missed pings.
 const QUIET: Duration = Duration::from_secs(20);
 
-/// How long a guest waits to be taken before it is let go.
 const WAITING: Duration = Duration::from_secs(15);
 
 /// How long two ends being passed on may both say nothing. A shared project
 /// pings every few seconds, so this is a connection that has died.
 const IDLE: Duration = Duration::from_secs(60);
 
-/// How often the accepting thread looks for a caller.
 const BEAT: Duration = Duration::from_millis(50);
 
 /// Whether `room` is a name a room may have. What a host and its guests
@@ -111,7 +103,6 @@ fn say(mut socket: &TcpStream, line: &str) -> io::Result<()> {
     socket.write_all(format!("{line}\n").as_bytes())
 }
 
-/// Connect to the first address `relay` names that answers.
 fn dial(relay: impl ToSocketAddrs) -> io::Result<TcpStream> {
     let mut last = io::Error::from(ErrorKind::NotFound);
     for at in relay.to_socket_addrs()? {
@@ -141,12 +132,10 @@ fn call(relay: impl ToSocketAddrs, line: &str) -> io::Result<(TcpStream, String)
     }
 }
 
-/// A host's room at a relay, held open for as long as this is.
 pub struct Room {
     control: TcpStream,
     line: Vec<u8>,
     said: Instant,
-    /// What the relay said to this host alone when the room opened.
     token: String,
 }
 
@@ -163,8 +152,6 @@ impl Room {
         })
     }
 
-    /// The word that shows a connection is this room's host, to [`take`] a
-    /// guest with.
     #[must_use]
     pub fn token(&self) -> &str {
         &self.token
@@ -188,9 +175,6 @@ impl Room {
     }
 }
 
-/// As the host of `room`, take the guest the relay numbered `guest`. `token`
-/// is the room's own ([`Room::token`]). What comes back is a connection to
-/// that guest.
 pub fn take(
     relay: impl ToSocketAddrs,
     room: &str,
@@ -200,8 +184,6 @@ pub fn take(
     call(relay, &format!("TAKE {room} {token} {guest}")).map(|(socket, _)| socket)
 }
 
-/// As a guest, ask for the host of `room`. What comes back is a connection
-/// to that host, once it has taken this guest.
 pub fn join(relay: impl ToSocketAddrs, room: &str) -> io::Result<TcpStream> {
     call(relay, &format!("JOIN {room}")).map(|(socket, _)| socket)
 }
@@ -210,11 +192,8 @@ pub fn join(relay: impl ToSocketAddrs, room: &str) -> io::Result<TcpStream> {
 /// cost.
 #[derive(Debug, Clone, Copy)]
 pub struct Limits {
-    /// The most hosts at once.
     pub rooms: usize,
-    /// The most guests waiting on one host to take them.
     pub waiting: usize,
-    /// The most connections being greeted or passed on at once.
     pub connections: usize,
     /// How many bytes a second a host and a guest may pass each way once
     /// they have used up [`BURST`], or 0 for as many as the line carries.
@@ -244,7 +223,6 @@ struct Hosted {
     /// Which connection opened the room, so that one closing does not take
     /// away a room opened again since.
     opening: u64,
-    /// Where its host called from, and the word only that host was told.
     from: IpAddr,
     token: String,
     control: TcpStream,
@@ -281,7 +259,6 @@ impl Relay {
         self.rooms.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    /// A connection has said its first line. Do what it asked.
     fn greet(&self, socket: TcpStream, from: IpAddr) -> io::Result<()> {
         socket.set_nodelay(true)?;
         socket.set_write_timeout(Some(PATIENCE))?;
@@ -311,7 +288,6 @@ impl Relay {
         }
     }
 
-    /// Keep a room for a host until it goes quiet or goes.
     fn host(&self, socket: TcpStream, room: &str, from: IpAddr) -> io::Result<()> {
         let opening = self.openings.fetch_add(1, Ordering::Relaxed) as u64;
         let token = secret();
@@ -357,7 +333,6 @@ impl Relay {
         kept
     }
 
-    /// Hold a guest until the host of its room takes it, and tell that host.
     fn park(&self, socket: TcpStream, room: &str) -> io::Result<()> {
         let told = {
             let mut rooms = self.rooms();
@@ -386,8 +361,6 @@ impl Relay {
         }
     }
 
-    /// Join a host's second connection to the guest it asked for, and copy
-    /// between them until either goes.
     fn pass(&self, host: TcpStream, room: &str, token: &str, guest: u64) -> io::Result<()> {
         let waiting = {
             let mut rooms = self.rooms();
@@ -432,7 +405,6 @@ pub const BURST: u64 = 16 << 20;
 /// second once [`BURST`] has gone, with nought for no limit.
 fn copy(mut from: &TcpStream, mut to: &TcpStream, rate: u64) {
     let mut bytes = [0u8; 16 << 10];
-    // What may still pass at once, topped up at the rate as time goes by.
     let (mut allowance, mut topped) = (BURST as f64, Instant::now());
     while let Ok(n @ 1..) = from.read(&mut bytes) {
         if to.write_all(&bytes[..n]).is_err() {
@@ -466,7 +438,6 @@ pub fn serve(listeners: &[TcpListener], limits: Limits, stop: &AtomicBool) -> io
         connections: AtomicUsize::new(0),
         callers: Mutex::new(HashMap::new()),
     });
-    // One caller fewer from `from`.
     let gone = |relay: &Relay, from: IpAddr| {
         relay.connections.fetch_sub(1, Ordering::Relaxed);
         let mut callers = relay.callers.lock().unwrap_or_else(PoisonError::into_inner);

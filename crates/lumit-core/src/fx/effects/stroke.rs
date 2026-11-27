@@ -23,7 +23,6 @@ use crate::fx::{
 use crate::mask::MaskPolyline;
 use lumit_fx_macros::Effect;
 
-/// Stroke's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "stroke",
@@ -93,8 +92,6 @@ pub struct Stroke {
     )]
     pub start: f32,
 
-    /// Where it stops; see [`start`](Self::start). Keyframe it from 0 and the
-    /// line draws itself on.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -127,7 +124,6 @@ pub struct Stroke {
     )]
     pub opacity: f32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -145,7 +141,6 @@ impl Stroke {
     /// a panel row.
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
 
-    /// This instance's raster factor, read back out of a resolved bag.
     #[must_use]
     pub fn px_scale_of(p: Params<'_>) -> f32 {
         p.float(Self::DERIVED_PX_SCALE, 1.0)

@@ -44,13 +44,9 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
-/// Snapshot magic and version.
 const SNAPSHOT_MAGIC: [u8; 4] = *b"KIX1";
-/// One entry as stored in the snapshot: hash, bytes, cost, quality, last use.
 const ENTRY_LEN: usize = 16 + 8 + 4 + 2 + 8;
-/// One log record: a kind byte, then an entry.
 const RECORD_LEN: usize = 1 + ENTRY_LEN;
-/// Log record kinds.
 const KIND_PUT: u8 = 1;
 const KIND_REMOVE: u8 = 2;
 const KIND_TOUCH: u8 = 3;
@@ -60,7 +56,6 @@ const KIND_TOUCH: u8 = 3;
 /// kilobytes, and bounds replay at open to a few thousand records.
 const LOG_COMPACT_AFTER: u64 = 8192;
 
-/// What the index knows about one parked frame.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct IndexEntry {
     /// The file's size on disk (compressed, header included).
@@ -90,7 +85,6 @@ pub fn now_secs() -> u64 {
 pub struct FrameIndex {
     root: PathBuf,
     entries: HashMap<u128, IndexEntry>,
-    /// Records appended since the last snapshot.
     logged: u64,
     /// Total bytes across [`Self::entries`], maintained rather than summed.
     used_bytes: u64,
@@ -169,7 +163,6 @@ impl FrameIndex {
         }
     }
 
-    /// Insert into the map, keeping the byte total straight.
     fn admit(&mut self, hash: u128, entry: IndexEntry) {
         if let Some(old) = self.entries.insert(hash, entry) {
             self.used_bytes = self.used_bytes.saturating_sub(old.bytes);
@@ -203,13 +196,11 @@ impl FrameIndex {
         }
     }
 
-    /// Record a newly parked frame.
     pub fn put(&mut self, hash: u128, entry: IndexEntry) {
         self.admit(hash, entry);
         self.log(KIND_PUT, hash, entry);
     }
 
-    /// Record that a frame is gone.
     pub fn remove(&mut self, hash: u128) {
         let entry = self.entries.get(&hash).copied();
         self.forget(hash);
@@ -241,8 +232,6 @@ impl FrameIndex {
         self.entries.contains_key(&hash)
     }
 
-    /// Test inspection hook; production code goes through [`Self::contains`]
-    /// and the eviction paths.
     #[cfg(test)]
     fn get(&self, hash: u128) -> Option<IndexEntry> {
         self.entries.get(&hash).copied()
@@ -263,7 +252,6 @@ impl FrameIndex {
         self.entries.is_empty()
     }
 
-    /// Every parked hash — what the cache bar's "on disk" answer is built from.
     pub fn hashes(&self) -> impl Iterator<Item = u128> + '_ {
         self.entries.keys().copied()
     }
@@ -379,7 +367,6 @@ impl FrameIndex {
             .and_then(|()| fs::rename(&tmp, &path));
         match written {
             Ok(()) => {
-                // The log's records are all in the snapshot now.
                 let _ = fs::remove_file(self.log_path());
                 self.logged = 0;
             }
@@ -450,8 +437,6 @@ mod tests {
         }
     }
 
-    /// The index survives being closed and opened again, which is the whole
-    /// reason it exists: the alternative is walking the folder at every start-up.
     #[test]
     fn a_snapshot_round_trips() {
         let dir = tempfile::tempdir().unwrap();
@@ -471,20 +456,15 @@ mod tests {
         assert_eq!(hashes, vec![7, 9]);
     }
 
-    /// **The crash case, which is the only interesting one.** Frames parked
-    /// since the last snapshot are recorded in the log, so a session that ends
-    /// without a clean close does not leave files on disk that nothing knows
-    /// about — space nothing would ever reclaim.
     #[test]
     fn the_log_carries_what_the_snapshot_missed() {
         let dir = tempfile::tempdir().unwrap();
         {
             let mut index = FrameIndex::open(dir.path().to_path_buf());
             index.put(1, entry(100, 8, 10));
-            index.write_snapshot(); // a clean point
+            index.write_snapshot();
             index.put(2, entry(200, 8, 20));
             index.remove(1);
-            // and now the process stops: no second snapshot.
         }
 
         let recovered = FrameIndex::open(dir.path().to_path_buf());
@@ -493,9 +473,6 @@ mod tests {
         assert_eq!(recovered.used_bytes(), 200);
     }
 
-    /// A record half-written when the power went is a partial trailing record.
-    /// Fixed-size records make that detectable by length alone, so the whole
-    /// ones before it still count.
     #[test]
     fn a_torn_final_record_is_discarded_not_believed() {
         let dir = tempfile::tempdir().unwrap();
@@ -504,7 +481,6 @@ mod tests {
             index.put(1, entry(100, 8, 10));
             index.put(2, entry(200, 8, 20));
         }
-        // Chop the last record in half, as a torn write would.
         let log = dir.path().join("index.log");
         let bytes = fs::read(&log).unwrap();
         fs::write(&log, &bytes[..bytes.len() - RECORD_LEN / 2]).unwrap();
@@ -518,15 +494,12 @@ mod tests {
         assert_eq!(recovered.used_bytes(), 100);
     }
 
-    /// An unreadable or foreign snapshot leaves the index empty rather than
-    /// wrong, so the cache rebuilds it by scan (docs/06 §5.4).
     #[test]
     fn a_corrupt_snapshot_reads_as_empty() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("index.bin"), b"not an index at all").unwrap();
         assert!(FrameIndex::open(dir.path().to_path_buf()).is_empty());
 
-        // A future version's magic is not ours to read either.
         fs::write(dir.path().join("index.bin"), b"KIX9\0\0\0\0\0\0\0\0").unwrap();
         assert!(FrameIndex::open(dir.path().to_path_buf()).is_empty());
     }

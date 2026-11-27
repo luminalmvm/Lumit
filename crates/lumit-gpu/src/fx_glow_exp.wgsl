@@ -19,7 +19,6 @@ struct Params {
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
 
-// One axis of the tent onto the grid.
 @compute @workgroup_size(8, 8)
 fn glow_exp_down(@builtin(global_invocation_id) gid: vec3<u32>) {
     let size = vec2<i32>(textureDimensions(dst));

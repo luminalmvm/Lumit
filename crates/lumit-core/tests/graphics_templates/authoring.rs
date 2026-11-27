@@ -1,8 +1,3 @@
-//! Making a template: a control from each kind of row, the template set and
-//! undone through its op, a write to the template's rows as the ops a hand
-//! would make, a menu's looks recorded, and every kind of row read and
-//! written.
-
 use lumit_core::edits::base_layer;
 use lumit_core::fx::params::Unit;
 use lumit_core::model::{Folder, LayerKind, ProjectItem, TransformGroup, TransformProp};
@@ -106,7 +101,6 @@ fn a_control_takes_its_kind_range_and_options_from_the_row_it_names() {
         (text_row(&kit, TextRow::Tracking), Some(K::Number)),
         (text_row(&kit, TextRow::Background), Some(K::Colour)),
         (shape_row(&kit, ShapeRow::Fill), Some(K::Colour)),
-        // The rectangle has no outline, so there is no row to set.
         (shape_row(&kit, ShapeRow::Stroke), None),
         (shape_row(&kit, ShapeRow::StrokeWidth), Some(K::Number)),
         (shape_row(&kit, ShapeRow::Opacity), Some(K::Number)),
@@ -126,7 +120,6 @@ fn a_control_takes_its_kind_range_and_options_from_the_row_it_names() {
             },
             Some(K::Footage),
         ),
-        // Rows a layer of that kind does not have, or a layer that has gone.
         (Target::Text { layer: kit.plate }, None),
         (
             Target::Copy {
@@ -194,7 +187,6 @@ fn a_template_is_set_and_undone_through_its_op() {
             "radius"
         ]
     );
-    // An id is never one a control or a copy's further rows already use.
     assert_eq!(template.free_id("Title"), "title_2");
     assert_eq!(template.free_id("Title size"), "title_size_2");
     assert_eq!(template.free_id("Play intro"), "play_intro_2");
@@ -218,7 +210,6 @@ fn a_template_is_set_and_undone_through_its_op() {
         })
     );
 
-    // The library's own marks are not part of the design; what it places is.
     let stamp = template::design_stamp(&kit.doc, kit.tpl).unwrap();
     let mut saved = template.clone();
     saved.library = Some(Uuid::now_v7());
@@ -253,7 +244,6 @@ fn a_template_is_set_and_undone_through_its_op() {
     };
     assert!(ops::apply(&mut kit.doc, &nowhere).is_err());
 
-    // Only an intro: the outro is the template's end.
     let mut intro_only = template.clone();
     intro_only.outro = None;
     kit::install(&mut kit, &intro_only);
@@ -268,7 +258,6 @@ fn a_template_is_set_and_undone_through_its_op() {
     }
     assert_eq!(Fit::from_choice(9), Fit::Fill);
 
-    // The library's folder, found by name, and a name nothing has yet.
     assert_eq!(author::library_folder(&kit.doc, "Templates"), None);
     let folder = Uuid::now_v7();
     kit.doc.items.push(ProjectItem::Folder(Folder {
@@ -383,8 +372,6 @@ fn a_write_to_the_template_is_the_ops_a_hand_would_make() {
         let read = rows::read(&kit.doc, kit.comp(), &setting.target);
         assert_eq!(read, Some(setting.value.clone()), "{:?}", setting.target);
     }
-    // The logo now shows a composition the size of the old picture, holding
-    // the badge scaled to cover it.
     let Some(Value::Picture(shown)) = rows::read(&kit.doc, kit.comp(), &logo.target) else {
         panic!("the logo still shows a picture");
     };
@@ -493,7 +480,6 @@ fn a_menu_option_records_the_rows_a_hand_changed() {
     };
     assert_eq!(held(looks, 1, &opacity(&kit)), Some(Value::Number(30.0)));
     assert_eq!(held(looks, 1, &title), Some(Value::Text("Night".into())));
-    // The other option puts back what the rows held before.
     assert_eq!(held(looks, 0, &opacity(&kit)), Some(Value::Number(100.0)));
     assert_eq!(held(looks, 0, &title), Some(Value::Text("Hello".into())));
     assert!(
@@ -501,7 +487,6 @@ fn a_menu_option_records_the_rows_a_hand_changed() {
         "the menu's own row is choosing, not a look"
     );
 
-    // Recording the first option over it keeps the second's own rows.
     let mut doc = kit.doc.clone();
     rows::write(&mut doc, kit.tpl, &spin, &Value::Number(45.0));
     let turned = doc.comp(kit.tpl).unwrap().clone();
@@ -599,8 +584,6 @@ fn every_kind_of_row_reads_back_what_was_written() {
             Some(value)
         );
     }
-    // Every row written is a change found. An effect's point is found as its
-    // two rows, as the Timeline shows them.
     let changed = rows::changed(&kit.doc, &before, kit.comp());
     for (target, value) in &written {
         if matches!(target, Target::ParamPoint { .. }) {
@@ -678,7 +661,6 @@ fn every_kind_of_row_reads_back_what_was_written() {
     ));
     assert_eq!(kit.doc, kept, "a write that does not fit changes nothing");
 
-    // What recording compares: every row a layer has, by kind.
     let c = kit.comp();
     let rows_of = |layer| rows::of_layer(&kit.doc, c, kit::layer_named(c, layer));
     let title = rows_of("Title");

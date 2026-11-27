@@ -6,7 +6,6 @@
 //! wrappers: a `.cc` is one block, a `.ccc` a collection, a `.cdl` a decision
 //! list. A missing node reads as the identity, as the list says.
 
-/// One `ColorCorrection`'s numbers.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct CdlValues {
     pub id: Option<String>,
@@ -96,7 +95,6 @@ pub(crate) fn ids(text: &str) -> Option<Vec<String>> {
     )
 }
 
-/// `s` safe inside an XML attribute.
 fn escaped(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
@@ -104,7 +102,6 @@ fn escaped(s: &str) -> String {
         .replace('"', "&quot;")
 }
 
-/// `v` as a `.cc` (`decision_list` false) or a `.cdl`.
 pub(crate) fn write(v: &CdlValues, decision_list: bool) -> String {
     let three = |a: [f32; 3]| format!("{:.6} {:.6} {:.6}", a[0], a[1], a[2]);
     let id =
@@ -145,8 +142,6 @@ pub(crate) fn write(v: &CdlValues, decision_list: bool) -> String {
 mod tests {
     use super::*;
 
-    /// A grade written out reads back as it went, from either wrapper, and a
-    /// collection gives up the block named.
     #[test]
     fn a_cdl_reads_back_as_written() {
         let v = CdlValues {

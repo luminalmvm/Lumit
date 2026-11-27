@@ -20,7 +20,6 @@ struct Params {
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
 
-// == cpu::bilinear_edge with the Transparent policy (edge == 0).
 fn tap(x: i32, y: i32, size: vec2<i32>) -> vec4<f32> {
     let inside = x >= 0 && x < size.x && y >= 0 && y < size.y;
     let c = clamp(vec2<i32>(x, y), vec2<i32>(0, 0), size - vec2<i32>(1, 1));

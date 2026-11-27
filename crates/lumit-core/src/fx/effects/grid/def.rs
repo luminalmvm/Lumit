@@ -7,7 +7,6 @@ impl EffectDef for GridDef {
         &<Grid as EffectMetadata>::SCHEMA
     }
 
-    /// The picture *and* the data, exactly as Particulate declares it.
     fn signature(&self) -> Signature {
         Signature::Image {
             inputs: &[],
@@ -15,8 +14,6 @@ impl EffectDef for GridDef {
         }
     }
 
-    /// The raster factor, so the composition's camera reaches the pixels this
-    /// frame is drawn at.
     fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
         push(Grid::DERIVED_PX_SCALE, Value::Float(cx.px_scale));
     }

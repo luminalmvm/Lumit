@@ -1,6 +1,3 @@
-// The foot of the Graphics template panel: the poster frame, where the intro
-// ends and where the outro starts, and the doors to the Data window and the
-// Save dialogue. Also the small box that sets a number control's range.
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/template.dart';
@@ -13,12 +10,8 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/time_readout.dart';
 
-/// One of the three frames a template marks.
 enum TemplateMark { poster, intro, outro }
 
-/// The three marks, each with its frame as the Timeline writes time, a
-/// button that sets it at the playhead and a mark that clears it. Under
-/// them the two buttons.
 class TemplateFoot extends StatelessWidget {
   final BridgeTemplate template;
 
@@ -28,10 +21,8 @@ class TemplateFoot extends StatelessWidget {
   final int startFrame;
   final int lastFrame;
 
-  /// A mark set to a frame, or cleared with null.
   final void Function(TemplateMark mark, int? frame) onMark;
 
-  /// A mark set where the playhead is.
   final void Function(TemplateMark mark) onMarkAtPlayhead;
   final VoidCallback onData;
   final VoidCallback onSave;
@@ -105,8 +96,6 @@ class TemplateFoot extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           if (frame == null)
-            // The readout's own width, so the buttons stand where they do
-            // beside a frame.
             SizedBox(
               width: monoSlotWidth(style, chars) + readoutPadding.horizontal,
               child: Text('—',
@@ -139,7 +128,6 @@ class TemplateFoot extends StatelessWidget {
             child: Text(l10n.templateAtPlayhead,
                 style: t.small.copyWith(color: t.textMuted)),
           ),
-          // Kept in the row with nothing to clear, so the three line up.
           SizedBox(
             width: 18,
             child: frame == null

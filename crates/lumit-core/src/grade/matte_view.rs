@@ -9,22 +9,15 @@ use uuid::Uuid;
 use super::Shot;
 use crate::model::{Document, EffectInstance, EffectParam, EffectValue, Layer, LayerKind};
 
-/// How the key is shown.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MatteMode {
-    /// The picture where the key is, flat grey elsewhere.
     Highlight = 1,
-    /// The key itself, black and white.
     Key = 2,
-    /// Highlight over black.
     HighlightBlack = 3,
-    /// Highlight over white.
     HighlightWhite = 4,
-    /// Highlight over the picture in black and white.
     HighlightMono = 5,
 }
 
-/// Which node's key the Viewer shows, and how.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MatteView {
     pub shot: Shot,
@@ -95,7 +88,6 @@ fn stack_mut(layer: &mut Layer, clip: Option<Uuid>) -> Option<&mut Vec<EffectIns
     }
 }
 
-/// `effects` cut after the view's node, and the node set to show its key.
 fn mark(effects: &mut Vec<EffectInstance>, view: MatteView) -> Option<()> {
     let at = effects
         .iter()

@@ -8,12 +8,6 @@ use uuid::Uuid;
 use super::Value;
 use crate::model::{Document, LayerKind};
 
-/// Every font the Text layers of `comp` and of the compositions it places
-/// name, and every font a menu's option sets: (family, face), each once, in
-/// the order met. An empty family is the bundled default and is left out.
-// ponytail: an effect that draws words names its font in a parameter, and
-// those are not listed. Walk the effect stacks for font values when one of
-// them is used in a template that travels.
 #[must_use]
 pub fn used(doc: &Document, comp: Uuid) -> Vec<(String, String)> {
     let mut found: Vec<(String, String)> = Vec::new();

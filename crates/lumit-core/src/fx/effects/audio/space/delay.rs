@@ -1,34 +1,3 @@
-//! Delay (docs/impl/audio-effects.md §4): the repeat, and how long it takes to
-//! give up.
-//!
-//! # In plain terms
-//!
-//! Sound goes into a ring and comes back out a set time later. Some of what
-//! comes out goes round again, quieter, until it falls under the silence
-//! floor, which is where the repeats stop and the effect's tail ends. On the
-//! way round it passes a low pass, so each repeat is duller than the one
-//! before, the way a real reflection is. Ping-pong is one line's return fed
-//! into the other, so the repeats walk across the stereo picture.
-//!
-//! The tail is worked out once, at the bake, from the time and the feedback
-//! the effect opens with: the chain runs that many extra frames of silence so
-//! the last repeat actually comes out, and the mix places the whole of what
-//! came back, so an echo simply rings on past the clip's out point.
-//!
-//! # Sync does nothing yet, and this is why
-//!
-//! The note asks the repeat to lock to the comp's confirmed beat grid. There
-//! is no road for it: `chain_bake` hands a processor its state, its baked row
-//! values, the rate and the offline flag, and nothing else, and the plugin
-//! host says the same thing about transport in its own words
-//! (`lumit-aplug`'s `process` passes a null transport, "no transport in v1").
-//! So the grid reaches neither a plugin nor a built-in today. The Sync and
-//! Note rows are declared because the note's table names them and because the
-//! saved value should survive being written now, but Time is what the repeat
-//! reads whatever Sync says. When the grid arrives with the mix seam, the
-//! whole of the change is here: read the tempo, turn the Note division into
-//! milliseconds, and use it instead of Time.
-
 use std::sync::{Arc, Mutex};
 
 use super::super::dsp::biquad::{Biquad, Coeffs};
@@ -47,23 +16,14 @@ use lumit_fx_macros::Effect;
 /// row up mid-bake and a line cannot grow in `process`.
 const MAX_TIME_MS: f64 = 2_000.0;
 
-/// How long the whole of a delay's tail may be, in seconds.
-///
-/// ponytail: a flat ceiling rather than a measured decay. Two seconds of
-/// repeats at 95 per cent feedback take seven minutes to reach the silence
-/// floor, and rendering seven minutes of tail past a clip is a worse answer
-/// than stopping at half a minute. Measure the real decay if anyone ever
-/// wants the whole of one.
 const TAIL_CEILING_S: f64 = 30.0;
 
 /// How fast the repeat time follows the row. Slow enough that dragging Time
 /// glides rather than jumps, which is what a delay is expected to do.
 const TIME_GLIDE_MS: f64 = 60.0;
 
-/// How fast the plain gains follow their rows.
 const GAIN_GLIDE_MS: f64 = 20.0;
 
-/// A delay: one line a channel, fed back through a low pass.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "audio_delay",
@@ -72,16 +32,12 @@ const GAIN_GLIDE_MS: f64 = 20.0;
     category = Audio,
     cost = Trivial,
     roi = Exact,
-    // Sound in, sound out: no picture to dissolve, and so no matte row
-    // (docs/impl/audio-effects.md §2).
     matte = false,
 )]
 pub struct AudioDelay {
     /// How far behind the sound the first repeat lands, in milliseconds.
     #[bounded(min = 1.0, max = 2_000.0, default = 250.0, unit = Raw)]
     pub time: f32,
-    /// Which division of the beat the repeat would land on, once the grid
-    /// reaches the bake. Inert today, as the module's own words say.
     #[counter(
         min = 0,
         max = 6,
@@ -91,7 +47,6 @@ pub struct AudioDelay {
         unit = Raw
     )]
     pub note: i32,
-    /// Whether the repeat follows the beat grid instead of Time. Inert today.
     #[counter(
         min = 0,
         max = 1,
@@ -105,8 +60,6 @@ pub struct AudioDelay {
     /// the repeats would never stop and there would be no tail to report.
     #[bounded(min = 0.0, max = 95.0, default = 35.0, unit = Percent)]
     pub feedback: f32,
-    /// Where the low pass in the feedback sits, so each repeat is duller than
-    /// the one before.
     #[bounded(
         min = 200.0,
         max = 20_000.0,
@@ -124,7 +77,6 @@ pub struct AudioDelay {
     pub wet: f32,
 }
 
-/// The delay's behaviour: sound, and no picture at all.
 pub struct AudioDelayDef;
 
 impl EffectDef for AudioDelayDef {
@@ -152,8 +104,6 @@ impl EffectDef for AudioDelayDef {
     }
 }
 
-/// The live delay: two lines, the filters in their feedback, and the ramps
-/// that stop a knob clicking.
 struct DelayState {
     line: [DelayLine; 2],
     damping: [Biquad; 2],
@@ -163,14 +113,10 @@ struct DelayState {
     /// How much of the return crosses channels, 0 to 1.
     cross: Smoother,
     wet: Smoother,
-    /// What the damping filter was last set for, so the coefficients are
-    /// worked out only when the row has actually moved.
     damping_hz: f64,
-    /// Whether a block has been through yet.
     primed: bool,
 }
 
-/// One open delay.
 pub struct AudioDelayProcessor {
     rate: f64,
     tail: u32,
@@ -178,7 +124,6 @@ pub struct AudioDelayProcessor {
 }
 
 impl AudioDelayProcessor {
-    /// Open one from the values the chain's first block holds.
     fn new(values: &[(ParamId, f64)], rate: f64) -> Self {
         let time = held(value_of(values, AudioDelay::TIME, 250.0), 1.0, MAX_TIME_MS);
         let feedback = held(value_of(values, AudioDelay::FEEDBACK, 35.0), 0.0, 95.0) / 100.0;
@@ -209,8 +154,6 @@ fn frames_of_ms(ms: f64, rate: f64) -> f64 {
     (ms * 0.001 * rate).max(2.0)
 }
 
-/// Frames between the input stopping and the last repeat falling under the
-/// silence floor.
 fn tail_frames(delay: f64, feedback: f64, rate: f64) -> u32 {
     // Every pass round the loop is `feedback` of the one before, so the
     // repeats fall by a fixed number of decibels every `delay` frames and the
@@ -237,7 +180,6 @@ impl AudioProcessor for AudioDelayProcessor {
         };
         let state = &mut *guard;
 
-        // This block's numbers, worked out once at its start.
         let time = held(value_of(values, AudioDelay::TIME, 250.0), 1.0, MAX_TIME_MS);
         let feedback = held(value_of(values, AudioDelay::FEEDBACK, 35.0), 0.0, 95.0) / 100.0;
         let damping = held(
@@ -323,7 +265,6 @@ mod tests {
 
     const RATE: u32 = 48_000;
 
-    /// A full set of rows, so a test says only what it cares about.
     fn rows(time: f64, feedback: f64, cross: f64, wet: f64) -> Vec<(ParamId, f64)> {
         vec![
             (AudioDelay::TIME, time),
@@ -355,11 +296,8 @@ mod tests {
         assert_eq!(whole, split);
     }
 
-    /// Plan 3: the first repeat arrives at the time asked.
     #[test]
     fn the_first_repeat_lands_at_the_time_asked() {
-        // A hundred milliseconds at 48 kHz is 4,800 frames exactly, and no
-        // feedback means one repeat to look at.
         let values = rows(100.0, 0.0, 0.0, 100.0);
         let mut input = vec![0.0f32; AUDIO_BLOCK_SAMPLES * 12];
         if let Some(frame) = input.get_mut(0..2) {

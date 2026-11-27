@@ -32,7 +32,6 @@ import 'dialog_frame.dart';
 import 'settings_rows.dart';
 import 'theme_name_dialog.dart';
 
-/// Open the editor over [ui]'s current theme. Returns when it closes.
 Future<void> showThemeEditorFrb(BuildContext context, LumitUiState ui) =>
     showLumitModal<void>(
       context: context,
@@ -53,8 +52,6 @@ class _ThemeEditor extends StatefulWidget {
 }
 
 class _ThemeEditorState extends State<_ThemeEditor> {
-  /// The colours as edited. Seeded from the theme on screen when the editor
-  /// opened, which is what "the colours displayed are the ones you use" means.
   late Map<String, Color> _colours;
 
   /// What to put back on discard: the whole appearance selection, not just the
@@ -73,8 +70,6 @@ class _ThemeEditorState extends State<_ThemeEditor> {
     _colours = Map.of(tokensOf(widget.ui.theme));
   }
 
-  /// The theme the rows describe: the base this is built over, with the edits
-  /// on top. Also what the app is showing while the editor is open.
   LumitTheme get _edited => applyTokens(_baseTheme(), _colours);
 
   LumitTheme _baseTheme() {
@@ -84,13 +79,11 @@ class _ThemeEditorState extends State<_ThemeEditor> {
     return LumitTheme.forScheme(scheme, workspace.themeShape);
   }
 
-  /// Show the edit in the running app, so a colour is judged where it is used.
   void _preview() {
     widget.ui.workspace.previewTheme(_edited);
     setState(() => _dirty = true);
   }
 
-  /// Put the appearance back the way it was found.
   void _revert() {
     final workspace = widget.ui.workspace;
     workspace.customThemeName = _wasCustom;
@@ -177,7 +170,6 @@ class _ThemeEditorState extends State<_ThemeEditor> {
     );
   }
 
-  /// One colour's menu: move it between rows, or back to the theme underneath.
   Future<void> _tokenMenu(ThemeToken token, Color colour, Offset at) async {
     final pasted = parseHex(
         (await Clipboard.getData(Clipboard.kTextPlain))?.text?.trim() ?? '');
@@ -223,7 +215,6 @@ class _ThemeEditorState extends State<_ThemeEditor> {
     );
   }
 
-  /// Save: name it if it has none yet, otherwise update the theme in place.
   Future<void> _save() async {
     final workspace = widget.ui.workspace;
     var name = workspace.customThemeName;
@@ -281,7 +272,7 @@ class _ThemeEditorState extends State<_ThemeEditor> {
       question: l10n.themeSaveChanges,
       answers: [(l10n.discard, false), (l10n.save, true)],
     );
-    if (!mounted || keep == null) return; // Dismissed: stay in the editor.
+    if (!mounted || keep == null) return;
     if (keep) {
       await _save();
       if (!mounted) return;
@@ -292,7 +283,6 @@ class _ThemeEditorState extends State<_ThemeEditor> {
   }
 }
 
-/// The colour cell: the colour, and a click that opens the picker on it.
 class _Swatch extends StatelessWidget {
   final Color colour;
   final ValueChanged<Color> onPicked;

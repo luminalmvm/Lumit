@@ -14,7 +14,6 @@ void main() {
     expect(sealed, matches(RegExp(r'^[\w-]+$')));
     expect(await openInvite(sealed, mine), text);
     expect(await openInvite(sealed, other), isNull);
-    // One changed character and it opens for nobody.
     final spoilt = sealed.replaceRange(60, 61, sealed[60] == 'A' ? 'B' : 'A');
     expect(await openInvite(spoilt, mine), isNull);
     expect(await openInvite('not an invite', mine), isNull);

@@ -35,7 +35,6 @@ import 'settings_rows.dart';
 import 'share_dialog_frb.dart' show askStopKeeping;
 import 'sign_in_window.dart';
 
-/// What a kind of setting is called on the page.
 String profileGroupLabel(ProfileGroup group) => switch (group) {
       ProfileGroup.appearance => l10n.syncGroupAppearance,
       ProfileGroup.shortcuts => l10n.syncGroupShortcuts,
@@ -68,7 +67,6 @@ List<String> accountSettingsRows() => [
 class AccountSettings extends StatelessWidget {
   final LumitUiState ui;
 
-  /// Whether the search in force lets a row called this be shown.
   final bool Function(String title) matches;
 
   const AccountSettings({super.key, required this.ui, required this.matches});
@@ -120,7 +118,6 @@ class AccountSettings extends StatelessWidget {
         section(l10n.backupSettingsGroup, [
           if (matches(l10n.backupSettingsOn)) _BackupRow(ui: ui),
         ]);
-        // Under what the account's storage holds, what it keeps online.
         if (matches(l10n.settingsOnlineGroup)) {
           sections.add(_KeptOnline(ui: ui, first: sections.isEmpty));
         }
@@ -141,7 +138,6 @@ class AccountSettings extends StatelessWidget {
           ? settingsRow(t, title, description, control, actions: actions)
           : null;
 
-  /// What a row says of itself, beside its buttons.
   Widget _value(LumitTheme t, String words, {bool muted = false}) => Text(
       words,
       style: t.small.copyWith(color: muted ? t.textMuted : t.textSecondary));
@@ -362,7 +358,6 @@ class AccountSettings extends StatelessWidget {
     try {
       await ui.account.setReviewMail(on);
     } on CloudError catch (e) {
-      // The switch stays where the server has it, and says why.
       if (context.mounted) {
         context.read<LumitState>().postNotice(cloudErrorText(e), error: true);
       }
@@ -382,8 +377,6 @@ class AccountSettings extends StatelessWidget {
       _row(
         t,
         l10n.settingsSyncOn,
-        // Without Pro there is nothing for it or the rows under it to do, and
-        // the tip says why.
         pro
             ? toggle('on', current.sync, profiles.setSync)
             : LumitTooltip(
@@ -444,9 +437,6 @@ class AccountSettings extends StatelessWidget {
   }
 }
 
-/// How much of the account's storage is used: what backups and the footage
-/// of projects kept online both fill. It asks the server as it is shown,
-/// and is drawn again when the answer comes.
 class _StorageRow extends StatefulWidget {
   final LumitUiState ui;
   const _StorageRow({required this.ui});
@@ -484,7 +474,6 @@ class _StorageRowState extends State<_StorageRow> {
   }
 }
 
-/// The switch for backing projects up when they are saved.
 class _BackupRow extends StatelessWidget {
   final LumitUiState ui;
   const _BackupRow({required this.ui});
@@ -533,7 +522,6 @@ class _BackupRow extends StatelessWidget {
 class _KeptOnline extends StatefulWidget {
   final LumitUiState ui;
 
-  /// Whether this is the page's first section, which has no rule above it.
   final bool first;
   const _KeptOnline({required this.ui, required this.first});
 
@@ -544,7 +532,6 @@ class _KeptOnline extends StatefulWidget {
 class _KeptOnlineState extends State<_KeptOnline> {
   List<OnlineKept> _kept = const [];
 
-  /// Whose list is held, and which project is being stopped just now.
   String? _who, _stopping;
 
   @override
@@ -651,8 +638,6 @@ class _KeptOnlineState extends State<_KeptOnline> {
     );
   }
 
-  /// One project: its file's name, or that it has none in a quieter colour
-  /// with the day it was put online under it.
   Widget _keptRow(LumitTheme t, OnlineKept kept, Widget control) {
     final size = backupSize(kept.bytes);
     return switch (kept.name) {
@@ -696,13 +681,9 @@ class _KeptOnlineState extends State<_KeptOnline> {
   }
 }
 
-/// The account's friends: the way to add one by username, whoever asked
-/// and whoever was asked, waiting for an answer, then the friends, folded
-/// away until opened. Free for everyone. It asks the server as it is shown.
 class _Friends extends StatefulWidget {
   final LumitUiState ui;
 
-  /// Whether this is the page's first section, which has no rule above it.
   final bool first;
   const _Friends({super.key, required this.ui, required this.first});
 
@@ -713,7 +694,6 @@ class _Friends extends StatefulWidget {
 class _FriendsState extends State<_Friends> {
   final _name = TextEditingController();
 
-  /// Whether an answer is awaited, so a second press waits for it.
   bool _busy = false;
 
   /// Whether the friends are unfolded. Shut each time the page is drawn.
@@ -733,7 +713,6 @@ class _FriendsState extends State<_Friends> {
     super.dispose();
   }
 
-  /// [call], saying as a notice what went wrong.
   Future<void> _run(Future<void> Function() call) async {
     setState(() => _busy = true);
     try {
@@ -790,7 +769,6 @@ class _FriendsState extends State<_Friends> {
         settingsRow(
           t,
           l10n.friendsAdd,
-          // Friends find each other by username, so one comes first.
           named ? '' : l10n.friendsNeedUsername,
           SizedBox(
             width: 160,
@@ -862,7 +840,6 @@ class _FriendsState extends State<_Friends> {
     );
   }
 
-  /// The bar the friends are folded under: how many, and the twirl.
   Widget _fold(LumitTheme t, int count) => Padding(
         // The button's own inset and edge taken back, so its words start
         // where every row's title does.
@@ -895,7 +872,6 @@ class _FriendsState extends State<_Friends> {
         ),
       );
 
-  /// [friends] two to a line, each with the way to stop being friends.
   Widget _grid(LumitTheme t, List<Friend> friends) {
     Widget one(Friend friend) => SizedBox(
           key: ValueKey<String>('settings-friend-${friend.username}'),
@@ -960,13 +936,9 @@ class _FriendsState extends State<_Friends> {
   }
 }
 
-/// This computer and the phones paired with the account, each with the way
-/// to rename it, the phones with the way to remove one, and the way to add
-/// one. It asks the server as it is shown.
 class _Phones extends StatefulWidget {
   final LumitUiState ui;
 
-  /// Whether this is the page's first section, which has no rule above it.
   final bool first;
   const _Phones({super.key, required this.ui, required this.first});
 
@@ -1001,7 +973,6 @@ class _PhonesState extends State<_Phones> {
     await _run(() => widget.ui.phones.rename(device.id, name));
   }
 
-  /// [call], then the list read again. What went wrong is said as a notice.
   Future<void> _run(Future<void> Function() call) async {
     try {
       await call();
@@ -1081,13 +1052,9 @@ class _PhonesState extends State<_Phones> {
   }
 }
 
-/// This computer's part in exports between the account's computers: whether
-/// it takes them, the folders it finds footage it already has in, and the
-/// room the files it keeps for them take.
 class _Computers extends StatefulWidget {
   final LumitUiState ui;
 
-  /// Whether this is the page's first section, which has no rule above it.
   final bool first;
   const _Computers({super.key, required this.ui, required this.first});
 
@@ -1184,9 +1151,6 @@ class _ComputersState extends State<_Computers> {
     );
   }
 
-  /// One folder looked in, as Settings writes a path under its row and cut
-  /// in the middle, and the way to take it off the list when the row is
-  /// pointed at.
   Widget _folder(LumitTheme t, String folder) => Padding(
         key: ValueKey<String>('settings-remote-folder-$folder'),
         padding: const EdgeInsets.symmetric(horizontal: settingsRowPadding),

@@ -40,8 +40,6 @@ const fn group(
     }
 }
 
-/// The anchor, where the stream is placed, then what that does to each
-/// point. Each way of placing shows only the rows it reads.
 pub const TRANSFORM_POINTS_GROUPS: &[ParamGroup] = &[
     group("Anchor", &["anchor_to_points", "anchor_in"], None),
     group("", &["anchor_x", "anchor_y"], Some(("anchor_in", &[0]))),
@@ -69,8 +67,6 @@ const fn while_anchor_to_points(param: &'static str, on: bool) -> EnabledWhen {
     }
 }
 
-/// The rows that place the anchor in the frame do nothing while it follows
-/// the points, and the Anchor on points pair nothing until it does.
 pub const TRANSFORM_POINTS_ENABLED_WHEN: &[EnabledWhen] = &[
     APPLY_GROUP_WHEN,
     APPLY_THRESHOLD_WHEN,
@@ -83,7 +79,6 @@ pub const TRANSFORM_POINTS_ENABLED_WHEN: &[EnabledWhen] = &[
     while_anchor_to_points("anchor_points_y", true),
 ];
 
-/// Transform points' controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "transform_points",
@@ -91,14 +86,12 @@ pub const TRANSFORM_POINTS_ENABLED_WHEN: &[EnabledWhen] = &[
     version = 1,
     category = Points,
     cost = Moderate,
-    // A point may be moved anywhere.
     roi = FullFrame,
     premultiplied = true,
     groups = TRANSFORM_POINTS_GROUPS,
     enabled_when = TRANSFORM_POINTS_ENABLED_WHEN,
 )]
 pub struct TransformPoints {
-    /// Which points are moved. The rest pass through as they came.
     #[choice(
         label = "Apply to",
         options = ["All points", "Picked", "Not picked"],
@@ -260,15 +253,12 @@ pub struct TransformPoints {
     #[dial(default = 0.0, step = 15.0)]
     pub rotation: f32,
 
-    /// The points grow and shrink with the stream.
     #[toggle(label = "Scale sizes", default = false)]
     pub scale_sizes: bool,
 
-    /// The points turn with the stream.
     #[toggle(label = "Turn points", default = false)]
     pub turn_points: bool,
 
-    /// How soft the disc a point is drawn as is, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -377,7 +367,6 @@ impl TransformPoints {
                 p[1] = anchor[1] + y + shift[1];
                 p[2] += self.position_z;
             }
-            // The way it is travelling turns with it.
             if let Some(s) = out.speed.get_mut(i) {
                 let [x, y] = turned(s[0], s[1]);
                 (s[0], s[1]) = (x, y);
@@ -397,7 +386,6 @@ impl TransformPoints {
     }
 }
 
-/// Transform points' behaviour, the same shape as Vary points'.
 pub struct TransformPointsDef;
 
 impl EffectDef for TransformPointsDef {
@@ -405,7 +393,6 @@ impl EffectDef for TransformPointsDef {
         &<TransformPoints as EffectMetadata>::SCHEMA
     }
 
-    /// A stream in and a stream out, beside the picture.
     fn signature(&self) -> Signature {
         Signature::Image {
             inputs: POINTS_IN,
@@ -415,10 +402,6 @@ impl EffectDef for TransformPointsDef {
 
     fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
         push(TransformPoints::DERIVED_PX_SCALE, Value::Float(cx.px_scale));
-        // ponytail: the composition's size, not the layer's own, so a share
-        // or a pin names a place in the frame only on a layer that fills it
-        // and has not been moved. Hand the layer's size in here if that ever
-        // matters.
         let context = &cx.context;
         let comp = context.comp.and_then(|id| context.document.comp(id));
         let [w, h] = comp.map_or([0.0; 2], |c| [c.width as f32, c.height as f32]);

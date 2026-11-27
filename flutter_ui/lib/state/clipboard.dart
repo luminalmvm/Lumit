@@ -25,12 +25,10 @@ import 'dart:ui' show Offset;
 /// text rather than guessing from its shape.
 enum ClipboardKind { layer, effects, masks }
 
-/// The one tray. Held by the shell state, read by the Edit menu.
 class LumitClipboard {
   ClipboardKind? _kind;
   String? _text;
 
-  /// What is on it, or null when nothing has been copied this session.
   ClipboardKind? get kind => _kind;
 
   bool get isEmpty => _text == null;
@@ -39,7 +37,6 @@ class LumitClipboard {
   /// neither, which is why they are not two fields to keep in step by hand.
   String? get text => _text;
 
-  /// Put a layer document down (from `LayerReference.copyLayer`).
   void putLayer(String text) {
     _kind = ClipboardKind.layer;
     _text = text;
@@ -53,7 +50,6 @@ class LumitClipboard {
     _text = text;
   }
 
-  /// Put masks down (from `LayerReference.copyMasks`).
   void putMasks(String text) {
     _kind = ClipboardKind.masks;
     _text = text;
@@ -118,7 +114,6 @@ ClipboardKind? lumitDocumentKind(String text) {
     if (decoded['effects'] is List) return ClipboardKind.effects;
     return null;
   } catch (_) {
-    // Not JSON at all: ordinary text somebody copied somewhere else.
     return null;
   }
 }

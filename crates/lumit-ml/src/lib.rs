@@ -55,8 +55,6 @@ mod tarball;
 pub mod tensor;
 pub mod voice;
 
-/// Where the tests find a real runtime and real packs, on the one machine
-/// that has them.
 #[cfg(test)]
 mod test_support {
     use std::path::PathBuf;
@@ -69,17 +67,14 @@ mod test_support {
         SERIAL.lock().unwrap_or_else(|held| held.into_inner())
     }
 
-    /// The folder holding the shared library, from `LUMIT_ML_RUNTIME_DIR`.
     pub fn runtime_dir() -> Option<PathBuf> {
         named("LUMIT_ML_RUNTIME_DIR")
     }
 
-    /// The folder holding the `.onnx` files, from `LUMIT_ML_PACKS_DIR`.
     pub fn packs_dir() -> Option<PathBuf> {
         named("LUMIT_ML_PACKS_DIR")
     }
 
-    /// A folder an environment variable names, if it is one.
     fn named(variable: &str) -> Option<PathBuf> {
         let dir = PathBuf::from(std::env::var_os(variable)?);
         dir.is_dir().then_some(dir)

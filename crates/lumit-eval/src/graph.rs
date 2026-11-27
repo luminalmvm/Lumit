@@ -17,7 +17,6 @@ use uuid::Uuid;
 /// An index into an [`EvalGraph`]'s node list. Stable only within one graph.
 pub type NodeId = usize;
 
-/// What a [`NodeKind::Source`] fetches or rasterises (docs/06 §1.2 step 1).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SourceRef {
     Footage(Uuid),
@@ -71,8 +70,6 @@ pub struct Node {
     pub inputs: Vec<NodeId>,
 }
 
-/// The immutable evaluation graph for one composition. Node ids are indices;
-/// `output` is the [`NodeKind::CompOutput`] the pixel pass pulls from.
 #[derive(Debug, Clone, PartialEq)]
 pub struct EvalGraph {
     pub nodes: Vec<Node>,
@@ -94,7 +91,6 @@ impl EvalGraph {
         self.nodes.get(id)
     }
 
-    /// Number of nodes in the graph.
     pub fn len(&self) -> usize {
         self.nodes.len()
     }
@@ -105,7 +101,6 @@ impl EvalGraph {
         self.nodes.is_empty()
     }
 
-    /// Iterate every node's kind — handy for tests and metadata queries.
     pub fn kinds(&self) -> impl Iterator<Item = &NodeKind> {
         self.nodes.iter().map(|n| &n.kind)
     }
@@ -147,7 +142,7 @@ pub fn compile(comp: &Composition) -> EvalGraph {
             continue;
         }
         let Some(source) = source_ref(&layer.kind) else {
-            continue; // a Camera or a Null contributes no pixels
+            continue;
         };
         let mut top = if let Some(&id) = sources.get(&source) {
             id
@@ -166,7 +161,6 @@ pub fn compile(comp: &Composition) -> EvalGraph {
         if layer.retime.is_some() {
             top = g.push(NodeKind::Retime, vec![top]);
         }
-        // Masks fold away when the layer has none.
         if !layer.masks.is_empty() {
             top = g.push(
                 NodeKind::Masks {
@@ -201,7 +195,6 @@ pub fn compile(comp: &Composition) -> EvalGraph {
     g
 }
 
-/// The source a layer kind fetches, or None for the kinds with no pixels.
 fn source_ref(kind: &LayerKind) -> Option<SourceRef> {
     Some(match kind {
         LayerKind::Footage { item, .. } => SourceRef::Footage(*item),
@@ -277,9 +270,6 @@ mod tests {
         }
     }
 
-    /// A footage layer, retimed or not. `retime` is the layer's own Retime
-    /// property — the only map there is — so "is this layer retimed"
-    /// is now a question about the layer rather than about its kind.
     fn footage(
         retime: Option<lumit_core::anim::Property>,
         masks: Vec<Mask>,
@@ -331,7 +321,6 @@ mod tests {
             Some(ident_retime()),
             vec![Mask::rectangle(0.0, 0.0, 10.0, 10.0)],
         )]));
-        // Source → Retime → Masks → Transform → Composite → CompOutput.
         let kinds: Vec<_> = g.kinds().collect();
         assert_eq!(kinds.len(), 6);
         assert!(matches!(kinds[0], NodeKind::Source { .. }));
@@ -344,12 +333,9 @@ mod tests {
 
     #[test]
     fn layers_composite_bottom_first_and_chain_through_the_accumulator() {
-        // Two footage layers; index 0 is the top of the stack.
         let (top, bottom) = (footage(None, Vec::new()), footage(None, Vec::new()));
         let (top_id, bottom_id) = (top.id, bottom.id);
         let g = compile(&comp_with(vec![top, bottom]));
-        // The bottom layer composites first (single input), the top composites
-        // over it (two inputs), and CompOutput pulls from the top composite.
         let composites: Vec<_> = g
             .nodes
             .iter()
@@ -361,7 +347,6 @@ mod tests {
         assert_eq!(composites, vec![(bottom_id, 1), (top_id, 2)]);
         let out = g.node(g.output).unwrap();
         assert_eq!(out.inputs.len(), 1);
-        // The output's input is the last (top) composite.
         assert!(matches!(
             g.node(out.inputs[0]).unwrap().kind,
             NodeKind::Composite { layer, .. } if layer == top_id
@@ -370,7 +355,6 @@ mod tests {
 
     #[test]
     fn an_adjustment_layer_wraps_the_composite_beneath_it() {
-        // A footage layer with an adjustment layer above it (index 0 = top).
         let adj = layer(LayerKind::Adjustment, Vec::new());
         let g = compile(&comp_with(vec![adj, footage(None, Vec::new())]));
         let adjust = g
@@ -378,8 +362,6 @@ mod tests {
             .iter()
             .find(|n| matches!(n.kind, NodeKind::Adjust { .. }))
             .expect("an adjustment over content emits an Adjust node");
-        // It takes the layer-below's composite as its single input, and the comp
-        // output now pulls from the Adjust (it replaced the accumulator).
         assert_eq!(adjust.inputs.len(), 1);
         assert!(matches!(
             g.node(adjust.inputs[0]).unwrap().kind,

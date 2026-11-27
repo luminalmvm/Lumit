@@ -75,20 +75,6 @@ pub mod wiggle;
 
 mod arena_pool;
 
-/// How many driver nodes one frame's evaluation may visit.
-///
-/// ponytail: a flat budget instead of memoising each `(node, port, time)`. A
-/// graph shaped like a diamond re-evaluates its shared upstream once per path,
-/// and a Smooth multiplies its subtree by its nine taps — so cost is
-/// exponential in stacked Smooths, and four of them over a shared subtree
-/// (9⁴ = 6561 visits) spends this budget before the walk finishes. That is the
-/// ceiling, and it is a visible one, not a slow one: the walk returns `None`
-/// the moment the budget runs out, so the driven parameter drops back to its
-/// own keyframes mid-frame — a value that snaps as the graph grows. The
-/// trigger is that snap on a graph a user could plausibly build, which in
-/// practice means three or more Smooths in series; a driver graph that big
-/// wants the `(node, port, time)` memo, and the memo makes the diamond free
-/// as well.
 const EVAL_BUDGET: u32 = 4096;
 
 /// How deep the walk may recurse, so a very long chain cannot overflow the
@@ -110,21 +96,16 @@ pub struct ResolvedDrivers {
 }
 
 impl ResolvedDrivers {
-    /// No drivers at all — what every layer without a graph resolves through,
-    /// and what the resolve path takes when nothing is wired.
     pub const NONE: &'static ResolvedDrivers = &ResolvedDrivers {
         subs: Vec::new(),
         source_matte: Vec::new(),
     };
 
-    /// Whether anything is driven at all.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.subs.is_empty() && self.source_matte.is_empty()
     }
 
-    /// The value driving `id` on `node`, or `None` for a parameter that is
-    /// reading its own keyframes as usual.
     #[must_use]
     pub fn param(&self, node: NodeRef, id: ParamId) -> Option<Value> {
         self.subs
@@ -133,13 +114,11 @@ impl ResolvedDrivers {
             .map(|(_, _, v)| *v)
     }
 
-    /// Whether `effect`'s matte is the layer's own source alpha (§1.4).
     #[must_use]
     pub fn source_matte(&self, effect: Uuid) -> bool {
         self.source_matte.contains(&effect)
     }
 
-    /// Every substitution, in sorted order — for the frame key and the tests.
     pub fn iter(&self) -> impl Iterator<Item = (NodeRef, ParamId, Value)> + '_ {
         self.subs.iter().copied()
     }
@@ -259,11 +238,8 @@ pub fn resolve_drivers_at_point(
     )
 }
 
-/// What a Clone index driver reads outside a per-clone render: the first copy
-/// of one.
 pub const NO_CLONE: (u32, u32) = (0, 1);
 
-/// The one body behind [`resolve_drivers`] and its twins.
 #[must_use]
 #[allow(clippy::too_many_arguments)]
 fn resolved(
@@ -652,7 +628,6 @@ pub fn temporal_window(graph: &LayerGraph, lt: f64, context: Arc<ExpressionConte
     widest
 }
 
-/// The demand-driven walk.
 #[derive(Default)]
 struct ArenaPool {
     arenas: Vec<ResolvedStack>,
@@ -737,8 +712,6 @@ impl Eval<'_> {
         result
     }
 
-    /// What the wires into `effect`'s rows carry at time `t` — the same shape
-    /// `resolve_drivers` uses for the whole stack, scoped to one effect.
     fn wires_into(&self, effect: Uuid, t: f64, depth: u32) -> ResolvedDrivers {
         let mut subs = Vec::new();
         for edge in &self.graph.edges {
@@ -770,7 +743,6 @@ impl Eval<'_> {
         }
     }
 
-    /// What driver `node` puts out of `port` at time `t`.
     fn output(&self, node: Uuid, port: &str, t: f64, depth: u32) -> Option<Value> {
         if depth >= MAX_DEPTH || self.budget.get() == 0 {
             return None;
@@ -815,15 +787,6 @@ impl Eval<'_> {
             source_matte: Vec::new(),
         };
 
-        // ponytail: one small arena per node evaluation. It is the same shape
-        // the effect stack resolves through, so the substitution and unit rules
-        // stay in one place. The ceiling is one allocation per visit, so a
-        // layer's drivers can cost up to `EVAL_BUDGET` — 4096 — small
-        // allocations in a single frame, all on the UI-facing evaluation path.
-        // The trigger is docs/13 B1: an animated comp whose layers carry
-        // drivers missing the 8 ms UI frame with the allocator, not the
-        // arithmetic, on top of the profile. Pool the arenas on `Eval` then —
-        // they are the same size every time and die in visit order.
         self.with_arena(|bag| {
             resolve_into_arena(
                 def,
@@ -864,8 +827,6 @@ impl Eval<'_> {
         })
     }
 
-    /// What is feeding driver `node`'s `port` at time `t`, or `None` when the
-    /// socket is unwired.
     fn input(&self, node: Uuid, port: &str, t: f64, depth: u32) -> Option<Value> {
         let from = self.graph.wire_into(&InputRef::Param {
             node: NodeRef::Driver(node),
@@ -890,13 +851,6 @@ impl Eval<'_> {
         }
     }
 
-    /// A number a picture effect hands out, such as Depth of field pro's focus
-    /// distance: what its `eval_driver` pushes from its own rows at `t`. A
-    /// points port answers `None` here and is read as a stream instead.
-    ///
-    /// ponytail: wires into the effect's own rows are not followed, so a driven
-    /// row hands out its keyframed value. Follow them as `output` does if a
-    /// chain of effect numbers ever needs it.
     fn effect_number(&self, effect: Uuid, port: &str, t: f64) -> Option<Value> {
         let inst = match self.stack {
             Some(boxes) => boxes.iter().find(|e| e.id == effect)?,
@@ -972,7 +926,6 @@ impl Eval<'_> {
             // by one. Anything else on a driver's output is a number, which is
             // not a stream and was refused at commit by the type check.
             OutputRef::Driver { node, .. } => self.tap_stream(*node, t, depth),
-            // A texture is not a stream either.
             OutputRef::SourceMatte
             | OutputRef::EffectOutput { .. }
             | OutputRef::EffectKey { .. } => None,
@@ -1005,8 +958,6 @@ impl Eval<'_> {
         }
         self.budget.set(self.budget.get() - 1);
         let inst = self.graph.node(node)?;
-        // Bypass (the `B` badge, §1.4): a bypassed tap carries nothing, exactly
-        // as a bypassed driver carries no number.
         if !inst.enabled || inst.effect.match_name != layer_points::MATCH_NAME {
             return None;
         }
@@ -1138,8 +1089,6 @@ impl Eval<'_> {
             return None;
         }
 
-        // **Particulate with a collider, a flock or sparks walks** instead,
-        // each step reading its rows and wires at its own time.
         if let Some(layer) = layer.filter(|_| points::stepped::wanted(comp, inst)) {
             let target = points::stepped::target(comp, inst);
             let mut stream = self.stepped(effect, inst, def, layer, target, t, depth)?;
@@ -1149,7 +1098,6 @@ impl Eval<'_> {
             return Some(stream);
         }
 
-        // The producer's own incoming wires, evaluated first.
         let wired = self.wires_into(effect, t, depth);
 
         // A Bake points reading its bake hands that out and asks nothing of
@@ -1463,8 +1411,6 @@ mod tests {
         }
     }
 
-    /// One driver's output at `lt`, with nothing wired into it — the shape most
-    /// of the per-driver tests want.
     fn output_of(node: &EffectInstance, port: &str, lt: f64) -> f32 {
         let target = inst("blur");
         let graph = LayerGraph {
@@ -1478,8 +1424,6 @@ mod tests {
             .as_f32()
     }
 
-    /// **A driver moves a text animator's number** through the Source box: the
-    /// wire validates as a number socket, and its value comes back by port.
     #[test]
     fn a_wire_onto_a_text_animator_socket_hands_its_number() {
         let mut remap = inst("remap");
@@ -1502,10 +1446,6 @@ mod tests {
         );
     }
 
-    /// The *Duck under* road: a wire onto the Layer out's Volume socket is
-    /// read as decibels, a bypassed or absent chain hands the keyframes back
-    /// (`None`), and a runaway chain is clamped to the Volume property's own
-    /// hard range.
     #[test]
     fn a_wire_onto_the_volume_socket_answers_in_decibels() {
         let constant = |db: f64| {
@@ -1567,7 +1507,6 @@ mod tests {
             .collect();
         assert_eq!(first, second, "two evaluations must agree bit for bit");
 
-        // It is a wobble, not a constant, and it stays inside Amount.
         assert!(
             first.iter().any(|v| (v - first[0]).abs() > 1e-3),
             "a wiggle that never moves is not a wiggle: {first:?}"
@@ -1577,7 +1516,6 @@ mod tests {
             "the wobble must stay within Amount: {first:?}"
         );
 
-        // A second node, same parameters, different id: a different path.
         let mut other = inst("wiggle");
         other.params = w.params.clone();
         let theirs: Vec<f32> = (0..20)
@@ -1585,17 +1523,13 @@ mod tests {
             .collect();
         assert_ne!(first, theirs, "two nodes must not wobble in sync");
 
-        // Amount nought is silence, whatever the frequency.
         let mut still = inst("wiggle");
         set(&mut still, "amount", 0.0);
         assert_eq!(output_of(&still, "value", 0.37), 0.0);
     }
 
-    /// A synthesised tone: a sine of amplitude A has RMS A/√2, and a tone well
-    /// above the low band is most of the way gone from the Low output.
     #[test]
     fn audio_level_measures_a_synthesised_tone() {
-        /// A sine at `hz` and amplitude `amp`, sampled at 48 kHz.
         struct Tone {
             hz: f64,
             amp: f32,
@@ -1611,9 +1545,6 @@ mod tests {
                 Some(rate)
             }
 
-            /// A fixture with one sound in it and no mixer: every filter the
-            /// Source row can ask for is the same tone, so the window is the
-            /// only thing that answers here.
             fn strip(
                 &self,
                 _layer: Option<Uuid>,
@@ -1643,7 +1574,6 @@ mod tests {
                 .as_f32()
         };
 
-        // 100 Hz at amplitude 0.5 — inside the low band, so both outputs read it.
         let low_tone = Tone {
             hz: 100.0,
             amp: 0.5,
@@ -1659,8 +1589,6 @@ mod tests {
             "a 100 Hz tone must survive the low band"
         );
 
-        // 4 kHz at the same amplitude: the whole level is unchanged, the low
-        // band is all but gone.
         let high_tone = Tone {
             hz: 4000.0,
             amp: 0.5,
@@ -1671,8 +1599,6 @@ mod tests {
             "4 kHz must be attenuated far below 100 Hz"
         );
 
-        // Peak is the loudest single sample, so a sine reads its own
-        // amplitude there whatever its pitch - the half the RMS smooths away.
         for tone in [&low_tone, &high_tone] {
             assert!(
                 (measure(tone, "peak") - 0.5).abs() < 0.01,
@@ -1681,8 +1607,6 @@ mod tests {
             );
         }
 
-        // And High is the other end of the same split: the 4 kHz tone lives in
-        // it, the 100 Hz one is all but gone.
         assert!(
             measure(&high_tone, "high") > measure(&low_tone, "high") * 4.0,
             "4 kHz must survive the top band far better than 100 Hz: {} against {}",
@@ -1690,7 +1614,6 @@ mod tests {
             measure(&low_tone, "high")
         );
 
-        // No tap at all is silence, not a fault.
         let mut node = inst("audio_level");
         set(&mut node, "window", 0.1);
         for port in ["amplitude", "low", "peak", "high"] {
@@ -1698,16 +1621,12 @@ mod tests {
         }
     }
 
-    /// A tap whose every reading is a different constant, so the number the
-    /// driver pushes says which reading it asked for. A window of the constant
-    /// `v` has RMS `v` and peak `v`, which is what makes the assertions exact.
     struct Strips {
         layer: Uuid,
         head: Uuid,
         tail: Uuid,
     }
 
-    /// What each of the tap's readings sounds like.
     const MIX: f32 = 0.1;
     const ROW: f32 = 0.2;
     const HEAD: f32 = 0.3;
@@ -1723,8 +1642,6 @@ mod tests {
     }
 
     impl AudioTap for Strips {
-        /// The pre-fader read, which is the one an instance older than the
-        /// Source row keeps.
         fn samples(&self, layer: Uuid, from: f64, to: f64, out: &mut Vec<f32>) -> Option<f64> {
             if layer != self.layer {
                 return None;
@@ -1744,14 +1661,12 @@ mod tests {
                 (Some(l), None) if l == self.layer => ROW,
                 (Some(l), Some(c)) if l == self.layer && c == self.head => HEAD,
                 (Some(l), Some(c)) if l == self.layer && c == self.tail => TAIL,
-                // A layer or a clip nobody has: the documented silence.
                 _ => return None,
             };
             Self::dc(v, half, out)
         }
     }
 
-    /// One driver's amplitude against a tap that can tell its readings apart.
     fn heard(node: &EffectInstance, tap: &Strips) -> f32 {
         let target = inst("blur");
         let graph = LayerGraph {
@@ -1783,7 +1698,6 @@ mod tests {
             head: Uuid::now_v7(),
             tail: Uuid::now_v7(),
         };
-        // A saved instance: no Source row, no Clip row, version 1.
         let saved = |layer: Option<Uuid>| {
             let mut old = inst("audio_level");
             set(&mut old, "window", 0.1);
@@ -1819,7 +1733,6 @@ mod tests {
             "an unset row read the mix before the row existed and reads it still"
         );
 
-        // The same instance written today reads through the Source row.
         let mut fresh = list[0].clone();
         fresh.effect.version = 2;
         assert!((heard(&fresh, &tap) - ROW).abs() < 1e-4);
@@ -1841,8 +1754,6 @@ mod tests {
         );
     }
 
-    /// Colour cycle turns through the wheel and comes back, and Rate nought
-    /// holds it still.
     #[test]
     fn colour_cycle_turns_once_a_cycle() {
         let mut c = inst("colour_cycle");
@@ -1866,7 +1777,6 @@ mod tests {
             }
         };
 
-        // Phase 0 is red; a third of a turn later, green; a whole turn is back.
         assert_eq!(colour_at(&c, 0.0), [1.0, 0.0, 0.0, 1.0]);
         let third = colour_at(&c, 1.0 / 3.0);
         assert!(
@@ -1875,21 +1785,17 @@ mod tests {
         );
         assert_eq!(colour_at(&c, 1.0), colour_at(&c, 0.0));
 
-        // Rate nought holds.
         let mut still = c.clone();
         set(&mut still, "rate", 0.0);
         set(&mut still, "phase", 0.5);
         assert_eq!(colour_at(&still, 0.0), colour_at(&still, 7.5));
 
-        // Saturation nought is grey at the brightness asked for.
         let mut grey = c.clone();
         set(&mut grey, "saturation", 0.0);
         set(&mut grey, "brightness", 50.0);
         assert_eq!(colour_at(&grey, 2.3), [0.5, 0.5, 0.5, 1.0]);
     }
 
-    /// Every operation against its closed form, including the two that would
-    /// otherwise divide by nought.
     #[test]
     fn math_matches_its_closed_form() {
         let cases: [(u32, f32, f32, f32); 10] = [
@@ -1912,8 +1818,6 @@ mod tests {
             set(&mut node, "b", f64::from(b));
             assert_eq!(output_of(&node, "value", 0.0), want);
         }
-        // An option index this build does not know renders as the default
-        // rather than faulting.
         assert_eq!(math::apply(99, 2.0, 3.0), 6.0);
     }
 
@@ -1923,8 +1827,6 @@ mod tests {
     /// range. Split's four numbers are the channels themselves.
     #[test]
     fn a_colour_survives_split_and_combine_unchanged() {
-        // Scene-linear, deliberately awkward: over one on red, exact zero on
-        // blue, a fraction that is not representable in eight bits on alpha.
         let want = [1.5f32, 0.25, 0.0, 0.7];
         let mut s = inst("split");
         for p in &mut s.params {
@@ -1934,7 +1836,6 @@ mod tests {
             }
         }
 
-        // Each channel out of Split, on its own, is that channel's number.
         for (port, channel) in ["red", "green", "blue", "alpha"].iter().zip(want) {
             let fill = inst("fill");
             // Through a Combine socket rather than an effect's, so the hard
@@ -1956,7 +1857,6 @@ mod tests {
             }
         }
 
-        // And all four together are the colour again.
         let c = inst("combine");
         let fill = inst("fill");
         let graph = LayerGraph {
@@ -1977,8 +1877,6 @@ mod tests {
             other => panic!("a colour port must carry a colour, not {other:?}"),
         }
 
-        // A Combine with nothing wired into Alpha makes an opaque colour, which
-        // is the three-wire shape the node is usually built in.
         let mut three = inst("combine");
         set(&mut three, "red", 0.2);
         set(&mut three, "green", 0.4);
@@ -1995,18 +1893,13 @@ mod tests {
         );
     }
 
-    /// The straight line, its clamp, and the two ends the wrong way round.
     #[test]
     fn remap_matches_its_closed_form() {
-        // 0..1 onto 0..40: a half is twenty.
         assert_eq!(remap::map(0.5, 0.0, 1.0, 0.0, 40.0, true), 20.0);
-        // Past the end, clamped and unclamped.
         assert_eq!(remap::map(2.0, 0.0, 1.0, 0.0, 40.0, true), 40.0);
         assert_eq!(remap::map(2.0, 0.0, 1.0, 0.0, 40.0, false), 80.0);
-        // An inverting map clamps to the range it actually spans.
         assert_eq!(remap::map(0.5, 0.0, 1.0, 100.0, 0.0, true), 50.0);
         assert_eq!(remap::map(-1.0, 0.0, 1.0, 100.0, 0.0, true), 100.0);
-        // A zero-width input range has no line through it.
         assert_eq!(remap::map(0.5, 1.0, 1.0, 7.0, 40.0, true), 7.0);
 
         let mut node = inst("remap");
@@ -2018,9 +1911,6 @@ mod tests {
         assert_eq!(output_of(&node, "value", 0.0), 10.0);
     }
 
-    /// Centred smoothing of a straight line gives the line back — the closed
-    /// form that says it is not running late. A constant comes back a constant,
-    /// and a wobble comes back calmer than it went in.
     #[test]
     fn smooth_of_a_ramp_is_the_ramp() {
         // Colour cycle is the only driver whose output moves with time on its
@@ -2030,13 +1920,11 @@ mod tests {
         let mut ramp = inst("colour_cycle");
         set(&mut ramp, "rate", 0.0);
 
-        // A static input has nothing to smooth: it comes straight out.
         let mut s = inst("smooth");
         set(&mut s, "value", 7.5);
         set(&mut s, "time", 0.5);
         assert_eq!(output_of(&s, "value", 3.0), 7.5);
 
-        // Time nought is a pass-through even with a wire on it.
         let mut w = inst("wiggle");
         // Wiggle seeds its noise from the node's id, and a fresh instance gets
         // a new id every run — so an unpinned node makes this a different
@@ -2071,8 +1959,6 @@ mod tests {
             .collect();
         assert_eq!(raw, passed, "Time nought must change nothing at all");
 
-        // And with a window, the same signal comes out calmer: less total
-        // movement frame to frame.
         let mut s1 = inst("smooth");
         set(&mut s1, "time", 0.25);
         set(&mut s1, "value", 0.0);
@@ -2088,14 +1974,10 @@ mod tests {
             travel(&smoothed),
             travel(&raw)
         );
-        // Centred, so it does not lag: the smoothed and raw signals rise and
-        // fall about the same place rather than one trailing the other.
         let mean = |v: &[f32]| v.iter().sum::<f32>() / v.len() as f32;
         assert!((mean(&smoothed) - mean(&raw)).abs() < 2.0);
     }
 
-    /// §2.1: a wire wins over the keyframes, and every other parameter is left
-    /// exactly as it was.
     #[test]
     fn a_driven_parameter_ignores_its_keyframes() {
         let mut blur = inst("blur");
@@ -2135,7 +2017,6 @@ mod tests {
         };
         assert_eq!(radius(&plain), 40.0, "the stored keyframe, undriven");
         assert_eq!(radius(&driven), 0.0, "the wire, not the keyframe");
-        // Its neighbours are untouched.
         assert_eq!(
             plain
                 .get(0)
@@ -2164,15 +2045,11 @@ mod tests {
             nodes: vec![a],
             ..LayerGraph::default()
         };
-        // The only promise is that it returns at all, and returns the same
-        // answer twice.
         let first = resolve_drivers(&graph, 0.0, ctx(), None);
         let second = resolve_drivers(&graph, 0.0, ctx(), None);
         assert_eq!(first, second);
     }
 
-    /// §2.3: the two temporal drivers declare how far they reach, and the
-    /// pointwise ones declare nothing.
     #[test]
     fn only_the_temporal_drivers_declare_a_window() {
         let mut s = inst("smooth");
@@ -2195,9 +2072,6 @@ mod tests {
         near(temporal_window(&graph(vec![w, a, s]), 0.0, ctx()), 0.2);
     }
 
-    /// Determinism, from the outside: the same graph resolved twice gives the
-    /// identical substitution list, in the identical order, whatever order the
-    /// wires were drawn in.
     #[test]
     fn the_same_graph_resolves_to_the_same_list_every_time() {
         let blur = inst("blur");
@@ -2215,7 +2089,6 @@ mod tests {
             nodes: vec![w.clone(), c.clone()],
             ..LayerGraph::default()
         };
-        // The same graph with both lists written the other way round.
         let other = LayerGraph {
             edges: one.edges.iter().rev().cloned().collect(),
             nodes: vec![c, w],
@@ -2226,10 +2099,6 @@ mod tests {
         assert_eq!(a, b, "the order the wires were drawn in decides nothing");
         assert_eq!(a, resolve_drivers(&one, 0.7, ctx(), None));
     }
-
-    // -----------------------------------------------------------------------
-    // Points sample (points-stream.md §2.2, §3.3).
-    // -----------------------------------------------------------------------
 
     /// The comp every points test is staged in: 1920×1080 at 60 fps, one solid
     /// layer carrying `effects` and `graph`.
@@ -2361,7 +2230,6 @@ mod tests {
         )
     }
 
-    /// A points wire from `producer`'s stream into `driver`'s data input.
     fn stream_edge(producer: &EffectInstance, driver: &EffectInstance) -> Edge {
         Edge {
             from: OutputRef::EffectData {
@@ -2432,7 +2300,6 @@ mod tests {
             let resolved = resolve_drivers(&wired, t, context.clone(), None);
             let drawn = drawn_stream(&producer, &resolved, context.clone(), t);
 
-            // The driver's own Position, resolved the same way the walk does.
             let at = [960.0f32, 540.0f32];
             let (want_count, want_near) = points_sample::sample(Some(&drawn), at);
             let count = resolved
@@ -2457,8 +2324,6 @@ mod tests {
             );
         }
 
-        // And the driving is doing something: with the Position wire cut, the
-        // same frame measures a different distance.
         let mut cut = wired.clone();
         cut.edges.remove(1);
         let context_cut = staged(vec![producer.clone(), target.clone()], cut.clone());
@@ -2475,9 +2340,6 @@ mod tests {
         );
     }
 
-    /// **A node graph's boxes** (node-graph-comp.md §5.1): the producer is
-    /// found in the slice handed to the walk, with no layer in the context at
-    /// all, and it is evaluated once however many wires read it.
     #[test]
     fn a_stream_in_a_graph_is_found_in_the_stack_and_evaluated_once() {
         let mut producer = inst("grid");
@@ -2509,8 +2371,6 @@ mod tests {
             ],
             ..LayerGraph::default()
         };
-        // A graph's context names its comp and no layer, which is the state
-        // the walk could not read a producer out of before.
         let context = Arc::new(ExpressionContext {
             layer: None,
             ..(*staged(Vec::new(), LayerGraph::default())).clone()
@@ -2527,7 +2387,6 @@ mod tests {
         assert_eq!(read("radius"), 15.0, "five columns of three rows");
         assert_eq!(read("mix"), 15.0, "the second wire reads the same lattice");
 
-        // One evaluation per producer per frame: the second ask is the memo.
         let ev = Eval {
             graph: &wired,
             context,
@@ -2553,8 +2412,6 @@ mod tests {
         );
     }
 
-    /// Nearest distance against a hand-placed field: the closed form is a
-    /// minimum over a linear scan, so the number is checkable by eye.
     #[test]
     fn nearest_distance_is_the_nearest_particle() {
         use crate::fx::points::PointsStream;
@@ -2572,15 +2429,11 @@ mod tests {
             s.position.push(p);
             s.id.push(i as u64);
         }
-        // From the origin: the 3-4-5 triangle is the nearest, at five.
         assert_eq!(points_sample::sample(Some(&s), [0.0, 0.0]), (4.0, 0.0));
         assert_eq!(points_sample::sample(Some(&s), [6.0, 8.0]), (4.0, 5.0));
-        // A query point on top of a particle reads nought, not the empty value.
         assert_eq!(points_sample::sample(Some(&s), [30.0, 40.0]).1, 0.0);
     }
 
-    /// P-001: scalar resolutions return a cleared arena, including the normal
-    /// repeated-output and early-`None` paths.
     #[test]
     fn scalar_arena_pool_reuses_cleared_arenas_and_bounds_retention() {
         let remap = inst("remap");
@@ -2645,15 +2498,12 @@ mod tests {
             "the document can never carry this, which is what makes the walk \
              well-founded"
         );
-        // One leg is a line, not a loop, and must still commit.
         let open = LayerGraph {
             edges: vec![looped.edges[0].clone()],
             ..looped.clone()
         };
         open.validate(&stack).expect("a line is not a loop");
 
-        // Hand-edited past the refusal: the promise is that it returns, returns
-        // the same answer twice, and stops rather than spinning.
         let context = staged(stack, looped.clone());
         let ev = Eval {
             graph: &looped,
@@ -2680,10 +2530,6 @@ mod tests {
         );
     }
 
-    // -----------------------------------------------------------------
-    // The clamp (PS7)
-    // -----------------------------------------------------------------
-
     /// What `target`'s `socket` actually resolves to once `graph`'s wires have
     /// been substituted — the number the kernel sees, not the number the driver
     /// said. The clamp lives in the resolve walk, so a test that read
@@ -2709,13 +2555,10 @@ mod tests {
             .as_f32()
     }
 
-    /// A Math driver pinned to one constant, for wiring an arbitrary number
-    /// into a socket.
     fn constant(v: f64) -> EffectInstance {
         let mut m = inst("math");
         set(&mut m, "a", v);
         set(&mut m, "b", 0.0);
-        // Add: a + 0 is a, whatever a is.
         set_choice(&mut m, "operation", 0);
         m
     }
@@ -2741,10 +2584,6 @@ mod tests {
         // a second opinion about what a driver means.
         assert_eq!(at(37.5), 37.5);
     }
-
-    // -----------------------------------------------------------------------
-    // The cross-layer points tap (points-stream.md §1.2, §2.3).
-    // -----------------------------------------------------------------------
 
     /// A comp of **two** layers: a reader whose graph `reader_graph` builds
     /// from the source layer's id, and a source carrying `source_effects` and
@@ -2846,8 +2685,6 @@ mod tests {
         )
     }
 
-    /// A Layer points node naming `layer` — or naming nothing, when `layer` is
-    /// `None`.
     fn tap(layer: Option<Uuid>) -> EffectInstance {
         let mut node = inst("layer_points");
         for p in &mut node.params {
@@ -2858,7 +2695,6 @@ mod tests {
         node
     }
 
-    /// A 5 × 3 Grid, whose lattice a test can count without measuring it.
     fn lattice() -> EffectInstance {
         let mut producer = inst("grid");
         set(&mut producer, "columns", 5.0);
@@ -2867,8 +2703,6 @@ mod tests {
         producer
     }
 
-    /// The stream a tap named `node` hands out, on the reader layer `context`
-    /// points at.
     fn tapped(
         context: &Arc<ExpressionContext>,
         graph: &LayerGraph,
@@ -2884,8 +2718,6 @@ mod tests {
         )
     }
 
-    /// One reader layer carrying a single tap, and the source layer it names:
-    /// the graph, the tap's node id, and a context pointed at the reader.
     fn one_tap(
         row: Option<Uuid>,
         source_effects: Vec<EffectInstance>,
@@ -2896,9 +2728,6 @@ mod tests {
         let mut built = LayerGraph::default();
         let (context, _) = staged_pair(
             |source| {
-                // `row` overrides which layer is named: `Some` for the tests
-                // about a dangling or absent reference, and the real source
-                // layer otherwise.
                 let mut node = tap(if row.is_some() { row } else { Some(source) });
                 node.enabled = enabled;
                 node_id = node.id;
@@ -2914,11 +2743,6 @@ mod tests {
         (context, built, node_id)
     }
 
-    /// **A tap reaches one layer, never two** — the recursion argument,
-    /// asserted rather than reasoned about. The source layer's own graph
-    /// carries a tap of its own and no producer; the far tap answers nothing,
-    /// so the near one does, and two layers naming each other terminate at the
-    /// second hop.
     #[test]
     fn a_tap_does_not_follow_a_second_tap() {
         let far = tap(Some(Uuid::now_v7()));
@@ -2934,9 +2758,6 @@ mod tests {
         assert!(tapped(&context, &graph, node).is_none());
     }
 
-    /// **A driver reads a tap the same way it reads a producer**:
-    /// Points sample counts another layer's points, which is the wire the
-    /// family's whole cross-layer story is for.
     #[test]
     fn points_sample_counts_another_layers_points_through_a_tap() {
         let sample = inst("points_sample");
@@ -2975,17 +2796,12 @@ mod tests {
         assert_eq!(count, Value::Float(15.0), "not the far lattice's count");
     }
 
-    // ---- Expression -------------------------------------------------------
-
-    /// An Expression box holding `source`, for the tests below.
     fn expression(source: &str) -> EffectInstance {
         let mut e = inst("expression");
         expression::set_source(&mut e, source);
         e
     }
 
-    /// What `node`'s `port` carries at `lt` under `context`, or `None` when
-    /// the socket it feeds keeps its keyframes.
     fn carried(
         node: &EffectInstance,
         port: &str,
@@ -3002,8 +2818,6 @@ mod tests {
             .param(NodeRef::Effect(target.id), ParamId::new("radius"))
     }
 
-    /// Which of the four sockets carry a value: the result's own kind fills
-    /// its sockets and the others hand the keyframes back.
     fn sockets_of(node: &EffectInstance) -> Vec<(&'static str, Option<Value>)> {
         [
             expression::VALUE_PORT,
@@ -3016,16 +2830,12 @@ mod tests {
         .collect()
     }
 
-    /// An input is a number the text reads by name: what its wire carries
-    /// where it has one, its own row's value where it does not. Removing one
-    /// takes its stored value with it.
     #[test]
     fn an_expression_reads_its_inputs_by_name() {
         let mut e = expression("(input_1 + input_2) * input_3");
         for _ in 0..3 {
             expression::add_input(&mut e);
         }
-        // `input_1` and `input_3` hold typed values; `input_2` follows a wire.
         for (id, value) in [("input_1", 2.0), ("input_3", 4.0)] {
             e.params.push(crate::model::EffectParam {
                 id: id.to_owned(),
@@ -3033,7 +2843,6 @@ mod tests {
                 extra: serde_json::Map::new(),
             });
         }
-        // Math multiplies by default, so this box hands out 3.
         let mut three = inst("math");
         set(&mut three, "a", 3.0);
         set(&mut three, "b", 1.0);
@@ -3059,7 +2868,6 @@ mod tests {
         assert!(e.params.iter().all(|p| p.id != "input_3"));
     }
 
-    /// A number fills Value and nothing else (node-graph.md §1.3).
     #[test]
     fn an_expression_returning_a_number_carries_only_its_value_port() {
         assert_eq!(
@@ -3073,8 +2881,6 @@ mod tests {
         );
     }
 
-    /// A box runs its text in the language it was given, Rhai until told
-    /// otherwise, and the choice sits beside the text without disturbing it.
     #[test]
     fn an_expression_box_runs_in_the_language_it_was_given() {
         use crate::expression::script::Language;
@@ -3095,8 +2901,6 @@ mod tests {
         );
     }
 
-    /// The expression reads the frame's `time`: two times, two numbers; the
-    /// same time twice, the same number. Nothing else moves it.
     #[test]
     fn an_expression_reads_the_layer_time() {
         let at = |t: f64| {
@@ -3113,9 +2917,6 @@ mod tests {
         assert_ne!(value(0.25), value(1.5));
     }
 
-    /// The source is stored on the instance under `extra["expression"]
-    /// ["source"]`, and it survives the document being written out and read
-    /// back — the shape the Custom shader's text takes.
     #[test]
     fn the_expression_source_round_trips_through_the_document() {
         use crate::model::Document;
@@ -3151,7 +2952,6 @@ mod tests {
         let node = layer.graph.node(e.id).expect("the box came back");
         assert_eq!(expression::source_of(node), "sin(time) * 50");
 
-        // Rewriting the text keeps whatever else sits under the block.
         let mut e = e;
         if let Some(block) = e
             .extra
@@ -3200,9 +3000,6 @@ mod tests {
             .as_f32()
     }
 
-    /// Measure reads a precomp's frame in its own pixels, and through its
-    /// transform in the comp's, with the padding round both. Footage reads
-    /// the file's own size once the renderer has opened it.
     #[test]
     fn measure_reads_the_frame_where_it_is_drawn() {
         use crate::anim::Property;
@@ -3268,8 +3065,6 @@ mod tests {
         assert_eq!([read("width"), read("height")], [660.0, 370.0]);
     }
 
-    /// Beat trigger's four outputs from the comp's beat markers, and a level
-    /// crossing held off for long enough to swallow the one after it.
     #[test]
     fn beat_trigger_fires_on_markers_and_crossings() {
         use crate::markers::Marker;
@@ -3305,7 +3100,6 @@ mod tests {
         assert!((read("envelope", 2.5) - (-1.0f32).exp()).abs() < 1e-6);
         assert_eq!([read("count", 0.5), read("envelope", 0.5)], [0.0, 0.0]);
 
-        /// Loud, quiet and loud again, a step every tenth of a second.
         struct Steps;
         impl AudioTap for Steps {
             fn samples(&self, _: Uuid, _: f64, _: f64, _: &mut Vec<f32>) -> Option<f64> {
@@ -3328,7 +3122,6 @@ mod tests {
         }
         let mut node = inst("beat_trigger");
         set_choice(&mut node, "events", beat_trigger::EVENTS_LEVEL);
-        // Half a second at 60 frames a second: the crossing at 0.4 is held off.
         set(&mut node, "hold_off", 30.0);
         let count = |lt| driver_out(&node, "count", lt, context.clone(), Some(&Steps));
         assert_eq!([count(0.1), count(0.5), count(0.7)], [1.0, 1.0, 2.0]);

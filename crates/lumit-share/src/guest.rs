@@ -28,10 +28,8 @@ use std::thread;
 use std::time::Duration;
 use uuid::Uuid;
 
-/// The longest a guest waits between tries at finding its host again.
 pub(crate) const LONGEST_WAIT: u64 = 15;
 
-/// A connection that has been welcomed.
 struct Connected {
     sender: Sender,
     receiver: Receiver,
@@ -42,13 +40,11 @@ struct Connected {
     people: Vec<Person>,
 }
 
-/// A connection the store's edits are being queued for and sent down.
 struct Live {
     receiver: Receiver,
     people: Vec<Person>,
 }
 
-/// What a guest reconnects with.
 struct Seat {
     /// Where the host is and the secret that lets this guest in. Replaced
     /// when the person is given a new invite for a host that has moved.
@@ -57,7 +53,6 @@ struct Seat {
     /// What the host knows this guest's edits by from one connection to the
     /// next. Made up afresh for each store, as its edits are numbered afresh.
     token: u64,
-    /// The folder this machine keeps the project's footage under.
     root: Option<PathBuf>,
     names: Names,
 }
@@ -70,16 +65,12 @@ pub(crate) fn token() -> u64 {
     u64::from_le_bytes(bytes)
 }
 
-/// A guest that has the host's document and has not started editing it.
 pub struct Joining {
     connected: Connected,
     seat: Seat,
-    /// The host's own id for the project.
     project: Uuid,
 }
 
-/// A guest's own copy, opened again with edits in it that were made while
-/// the host was away and never merged, or a conflict never answered.
 pub struct Resuming {
     seat: Seat,
     project: Uuid,
@@ -114,7 +105,6 @@ pub fn resume(file: &mut Document, folder: &Path) -> Option<(Document, Resuming)
     Some((document, resuming))
 }
 
-/// What a copy was left with when it closed, read back.
 pub(crate) struct Left {
     pub(crate) base: Arc<Document>,
     pub(crate) since: Vec<Pair>,
@@ -181,11 +171,8 @@ pub(crate) fn left(
 /// How long a relay is left untried, for the host to answer by itself.
 pub(crate) const HEAD_START: Duration = Duration::from_millis(400);
 
-/// A connection that has proved both ends hold the invite's secret.
 type Opened = (TcpStream, Sender, Receiver);
 
-/// `relay` is for an address that is a relay's, where the host is asked for
-/// by the room it keeps there.
 fn open(
     at: SocketAddr,
     relay: bool,
@@ -248,7 +235,6 @@ fn reach(invite: &Invite) -> Result<Opened, ShareError> {
     answers.recv().map_err(|_| ShareError::Unreachable)
 }
 
-/// Reach the host an invite names, and say hello.
 fn connect(seat: &Seat) -> Result<(Connected, Document), ShareError> {
     let invite = seat.invite.lock().clone();
     let (socket, mut sender, mut receiver) = reach(&invite)?;
@@ -328,12 +314,9 @@ struct Inner {
     /// with.
     project: Uuid,
     stop: AtomicBool,
-    /// A new invite has come, so the wait before the next try is cut short.
     hurry: AtomicBool,
     me: AtomicU32,
-    /// The way to the host while there is one.
     link: Mutex<Option<(SyncSender<Out>, TcpStream)>>,
-    /// What this end is looking at, if the host has not been told yet.
     presence: Mutex<Option<Presence>>,
     people: Mutex<Vec<Person>>,
     /// Edits held back by a merge, until the person chooses. Each is removed
@@ -343,20 +326,14 @@ struct Inner {
     /// The edits made since the host was lost, on disk. There while the host
     /// is away. Taken before the store's lock, never under it.
     kept: Mutex<Option<Kept>>,
-    /// The person has left, so nothing more is kept.
     left: AtomicBool,
-    /// The person is closing the copy without saving it.
     discard: AtomicBool,
-    /// The footage this guest sends and takes, once it has been given some
-    /// to carry.
     bulk: Mutex<Option<Arc<bulk::Hub>>>,
     /// Which footage this machine has the original of, as last said, to
     /// say again to a host that has been found again.
     holds: Mutex<Option<Vec<Held>>>,
 }
 
-/// A project shared from someone else's machine. Leaving it is [`Self::stop`]
-/// or a drop.
 pub struct Guest {
     inner: Arc<Inner>,
 }
@@ -394,7 +371,6 @@ impl Inner {
         })
     }
 
-    /// Start the guest's thread, with a connection or looking for one.
     fn begin(self: &Arc<Self>, live: Option<Live>) -> Result<Guest, ShareError> {
         let running = self.clone();
         let spawned = thread::Builder::new()
@@ -423,8 +399,6 @@ impl Joining {
 }
 
 impl Resuming {
-    /// Carry on editing, and looking for the host. `store` holds the
-    /// document [`resume`] answered.
     pub fn start(self, store: Arc<DocumentStore>, events: Events) -> Result<Guest, ShareError> {
         let inner = Inner::new(store, events, self.seat, self.project);
         *inner.kept.lock() = Some(self.kept);
@@ -450,7 +424,6 @@ impl Guest {
         *self.inner.presence.lock() = Some(presence.tidied());
     }
 
-    /// Send and take footage. See [`crate::Sharing::carry_footage`].
     pub fn carry_footage(&self, footage: Arc<dyn Footage>, limits: Arc<Limits>) {
         let mut bulk = self.inner.bulk.lock();
         if bulk.is_some() || self.inner.stop.load(Ordering::Relaxed) {
@@ -474,14 +447,12 @@ impl Guest {
         true
     }
 
-    /// Who has the original of `item`, as the host last said.
     #[must_use]
     pub fn holders(&self, item: Uuid) -> Vec<(u32, u64)> {
         let bulk = self.inner.bulk.lock().clone();
         bulk.map_or_else(Vec::new, |bulk| bulk.holders(item))
     }
 
-    /// Ask the host for `wanted`.
     pub fn want(&self, wanted: Wanted) {
         let bulk = self.inner.bulk.lock().clone();
         if let Some(bulk) = bulk {
@@ -489,7 +460,6 @@ impl Guest {
         }
     }
 
-    /// Stop taking `wanted`, and tell the host.
     pub fn unwant(&self, wanted: &Wanted) {
         let bulk = self.inner.bulk.lock().clone();
         if let Some(bulk) = bulk {
@@ -497,13 +467,11 @@ impl Guest {
         }
     }
 
-    /// Say `body` to the person numbered `to`, by way of the host.
     pub fn note(&self, to: u32, body: serde_json::Value) {
         let from = self.me();
         self.inner.say(&Message::Note { to, from, body });
     }
 
-    /// The edits a merge held back, each waiting on [`Self::resolve`].
     #[must_use]
     pub fn conflicts(&self) -> Vec<Conflict> {
         self.inner.conflicts.lock().clone()
@@ -530,13 +498,11 @@ impl Guest {
         resolve(&inner.store, &inner.conflicts, &inner.kept, index, mine)
     }
 
-    /// Lose the connection, as a network would.
     #[cfg(test)]
     pub(crate) fn cut(&self) {
         self.inner.hang_up();
     }
 
-    /// The secret this guest finds its host by.
     #[cfg(test)]
     pub(crate) fn key(&self) -> ([u8; 32], [u8; 32]) {
         let invite = self.inner.seat.invite.lock();
@@ -551,7 +517,6 @@ impl Guest {
         invite.relays.iter().any(|relay| relay == CLOUD_RELAY)
     }
 
-    /// Whether this guest is without its host just now.
     #[must_use]
     pub fn away(&self) -> bool {
         self.inner.link.lock().is_none()
@@ -569,9 +534,6 @@ impl Guest {
     /// They stay kept, and are what [`Self::discard`] goes back to.
     pub fn saved(&self, mark: usize) {
         self.inner.keep(false);
-        // ponytail: a host found and lost again during the write leaves the
-        // mark counting from the wrong document, which keeps too much and
-        // never too little. Compare the base as `keep` does if it matters.
         if let Some(kept) = self.inner.kept.lock().as_mut() {
             kept.saved = mark;
         }
@@ -595,7 +557,6 @@ impl Guest {
     }
 }
 
-/// [`Guest::resolve`], for either kind of guest.
 pub(crate) fn resolve(
     store: &DocumentStore,
     conflicts: &Mutex<Vec<Conflict>>,
@@ -740,8 +701,6 @@ impl Inner {
         }
     }
 
-    /// The footage thread: keep a second connection to the host for as long
-    /// as there is a host, and run it.
     fn carry(&self, hub: &Arc<bulk::Hub>) {
         while !self.stop.load(Ordering::Relaxed) && !hub.stopped() {
             if self.link.lock().is_some() {
@@ -814,14 +773,12 @@ impl Inner {
         self.store.unshare();
     }
 
-    /// Sharing is over and this thread is the one that found out.
     fn finish(&self) {
         if !self.stop.load(Ordering::Relaxed) {
             self.store.unshare();
         }
     }
 
-    /// [`keep`], for this guest.
     fn keep(&self, discard: bool) {
         let (store, conflicts) = (&self.store, &self.conflicts);
         keep(store, &self.kept, &self.left, conflicts, discard, || {
@@ -861,8 +818,6 @@ impl Inner {
         })
     }
 
-    /// The guest's thread: read from the host until it is lost, then look for
-    /// it again and merge, for as long as the project is shared.
     fn run(self: Arc<Self>, mut live: Option<Live>) {
         loop {
             if let Some(mut live) = live.take() {
@@ -884,7 +839,6 @@ impl Inner {
             self.keep(false);
 
             let mut wait = 1;
-            // The invite the person has been told leads somewhere else.
             let mut elsewhere = None;
             live = loop {
                 if self.stop.load(Ordering::Relaxed) {

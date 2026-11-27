@@ -52,8 +52,6 @@ mod tests {
     use lumit_core::fx::params::Params;
     use lumit_core::fx::registry::EffectMetadata;
 
-    /// The kernel lands the lines where the CPU reference draws them, tipped,
-    /// turned and rolled, for both ways of sizing a cell.
     #[test]
     fn lines_match_the_cpu_reference() {
         let Some(ctx) = lumit_gpu::test_support::lease() else {

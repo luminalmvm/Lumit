@@ -46,10 +46,8 @@ Future<void> installFiles() async {
   IOOverrides.global = _WebOverrides();
 }
 
-/// How much this browser keeps for Lumit on this computer, in bytes.
 Future<int?> storageUsed() async => (await _used().toDart)?.toDartDouble.round();
 
-/// Forget the files opened here that none of [projects] uses, and the caches.
 Future<void> forgetUnused(List<String> projects) =>
     _forget([for (final p in projects) p.toJS].toJS).toDart;
 
@@ -64,11 +62,9 @@ Future<int> reopenFootage(String project) async {
   }
 }
 
-/// Ask for those files, on a click. The paths that came back.
 Future<List<String>> allowFootage() async =>
     [for (final path in (await _allow().toDart).toDart) path.toDart];
 
-/// Have the browser ask before the page goes, while [unsaved] says so.
 void warnBeforeLeaving(bool Function() unsaved) {
   web.window.addEventListener(
       'beforeunload',
@@ -80,7 +76,6 @@ void warnBeforeLeaving(bool Function() unsaved) {
 /// How many files the page has been handed, which keeps their folders apart.
 int _picked = 0;
 
-/// A folder of its own for the next file the page is handed.
 String _newFolder() =>
     '/web/${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}${_picked++}';
 
@@ -121,7 +116,6 @@ Future<List<String>?> pickFilesHere(
   return paths;
 }
 
-/// The files the person chose to save into, by where they are kept here.
 final Map<String, web.FileSystemFileHandle> _chosen = {};
 
 @JS('showSaveFilePicker')
@@ -144,8 +138,6 @@ Future<String?> pickSaveTarget(String suggestedName) async {
   }
 }
 
-/// Hand a saved file to the person: into the file they chose for it, or as a
-/// download.
 Future<void> handOver(String path) async {
   final bytes = _bytesOf(path);
   final chosen = _chosen[_clean(path)];
@@ -168,9 +160,8 @@ void _download(Uint8List bytes, String name) {
   Timer(const Duration(minutes: 1), () => web.URL.revokeObjectURL(url));
 }
 
-/// What goes to the browser's own decoders rather than into the files here.
 const Set<String> _media = {
-  'mp4', 'mov', 'mkv', 'avi', 'webm', 'm4v', 'mpg', 'mpeg', 'ts', 'mts', //
+  'mp4', 'mov', 'mkv', 'avi', 'webm', 'm4v', 'mpg', 'mpeg', 'ts', 'mts',
   'm2ts', 'wmv', 'flv', '3gp', 'ogv', 'mxf', 'wav', 'mp3', 'flac', 'aac',
   'm4a', 'ogg', 'opus', 'aiff', 'aif', 'wma',
 };
@@ -228,7 +219,6 @@ Uint8List _bytesOf(String path) {
   return bytes;
 }
 
-/// Every file and folder inside [dir], at any depth when [recursive].
 List<FileSystemEntity> _inside(String dir, bool recursive) {
   final out = <FileSystemEntity>[];
   for (final name in webFileList(path: dir)) {
@@ -309,7 +299,6 @@ abstract class _WebEntity implements FileSystemEntity {
   @override
   String toString() => "$runtimeType: '$path'";
 
-  // Anything else a page has no answer for.
   @override
   dynamic noSuchMethod(Invocation invocation) =>
       throw UnsupportedError('Not in the browser: ${invocation.memberName}');

@@ -73,14 +73,12 @@ impl ShapePrimitive {
         ]
     }
 
-    /// Whether any of its numbers moves, by keys or by an expression.
     pub fn is_animated(&self) -> bool {
         self.numbers()
             .iter()
             .any(|p| !matches!(p.animation, Animation::Static(_)))
     }
 
-    /// The path these numbers make at `t`, on the layer's clock.
     pub fn path_at(&self, t: f64) -> BezierPath {
         let at = |p: &Property| {
             let v = p.value_at(t);

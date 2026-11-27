@@ -39,7 +39,7 @@ use lumit_fx_macros::Effect;
     category = Stylise,
     cost = Trivial,
     roi = Exact,
-    beat_input = true, // binds to comp beat markers per §1.4
+    beat_input = true,
 )]
 pub struct Flash {
     /// Manual = keyframed hits on Trigger (the original form); Trigger = the
@@ -78,7 +78,6 @@ pub struct Flash {
     #[slider(label = "Phase offset", min = -8.0, max = 8.0, default = 0.0, unit = Frames)]
     pub phase: f32,
 
-    /// Per cent scale on the trigger envelope.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -105,7 +104,6 @@ pub struct Flash {
     )]
     pub decay: f32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -133,14 +131,11 @@ impl Flash {
         (strength, self.colour, (self.mix / 100.0).clamp(0.0, 1.0))
     }
 
-    /// This instance's strength read back out of a resolved bag: `packed`'s
-    /// missing argument, so no caller has to know the id.
     pub fn strength_of(p: Params<'_>) -> f32 {
         p.float(Self::DERIVED_STRENGTH, 0.0)
     }
 }
 
-/// Flash's behaviour.
 pub struct FlashDef;
 
 impl EffectDef for FlashDef {
@@ -174,8 +169,6 @@ impl EffectDef for FlashDef {
             _ => 0,
         };
         let envelope = match mode {
-            // Trigger (1) and Strobe (2): the §3.7 beat envelope from the §1.4
-            // context; Strobe thins the beat list to every Nth.
             1 | 2 => {
                 let duration = fl("duration").unwrap_or(2.0).max(0.0);
                 let fade = matches!(e.param("shape"), Some(EffectValue::Choice(1)));
@@ -183,8 +176,6 @@ impl EffectDef for FlashDef {
                 let phase = fl("phase").unwrap_or(0.0);
                 flash_beat_envelope(cx.markers, lt, duration, fade, nth, phase)
             }
-            // Manual: keyframed hits on Trigger, decaying over Decay — the
-            // original form, untouched.
             _ => {
                 let decay_s = (fl("decay").unwrap_or(120.0) / 1000.0).max(0.0);
                 match e.param("trigger") {

@@ -45,7 +45,6 @@ const double stripGap = 4;
 const double _faderRowWidth = 26 + 3 + 14;
 const double _lampInset = 3;
 
-/// How the desk has its strips' racks stand: rows each, or a count.
 class RackLayout {
   final bool expanded;
   final int insertRows;
@@ -59,8 +58,6 @@ class RackLayout {
       required this.sendRows});
 }
 
-/// An automation mode's colour: Read is quiet unless the strip has keys to
-/// read, Touch, Latch and Trim warn, Write is the error colour.
 Color automationInk(LumitTheme t, BridgeAutomationMode mode, bool keyed) =>
     switch (mode) {
       BridgeAutomationMode.read => keyed ? t.accent : t.textMuted,
@@ -68,7 +65,6 @@ Color automationInk(LumitTheme t, BridgeAutomationMode mode, bool keyed) =>
       _ => t.warning,
     };
 
-/// The automation modes as menu rows, [current] ticked.
 List<Widget> automationRows(BridgeAutomationMode? current,
         void Function(BridgeAutomationMode mode) pick,
         {List<BridgeAutomationMode> modes = BridgeAutomationMode.values}) =>
@@ -85,14 +81,12 @@ class MixerStrip extends StatefulWidget {
   final CompositionReference comp;
   final BridgeLayerEntry entry;
 
-  /// Every strip on the desk, which a menu on a picked strip acts across.
   final List<BridgeLayerEntry> desk;
   final double width;
   final RackLayout rack;
   final RackScope scope;
   final AudioMeterFeed feed;
 
-  /// Whether another strip's solo silences this one, which dims its body.
   final bool silenced;
 
   const MixerStrip({
@@ -116,11 +110,8 @@ class _MixerStripState extends State<MixerStrip> {
   /// gesture is one undo step.
   double? _dragDb, _dragPan, _dragGain;
 
-  /// Where the fader and the pot stood when they were taken hold of, for
-  /// Escape to put them back.
   double _fromDb = 0, _fromPan = 0;
 
-  /// The name's field while the strip is being renamed.
   TextEditingController? _rename;
 
   late final LumitUiState _ui =
@@ -137,8 +128,6 @@ class _MixerStripState extends State<MixerStrip> {
   }
 
   void _changed() => widget.scope.onChanged();
-
-  // ------------------------------------------------------------ the gestures
 
   void _volumeLive(double db) {
     if (_dragDb == null) _fromDb = _shownDb(_frame);
@@ -221,8 +210,6 @@ class _MixerStripState extends State<MixerStrip> {
       _changed();
     }
   }
-
-  // ------------------------------------------------------------- the menus
 
   List<BridgeLayerEntry> get _targets =>
       audioMenuTargets(_entry, widget.desk, _ui.selectedLayerIds);
@@ -339,7 +326,6 @@ class _MixerStripState extends State<MixerStrip> {
     );
   }
 
-  /// Output: the master, a bus, or a new bus this strip goes to.
   void _outputMenu(BuildContext chip) {
     final box = chip.findRenderObject();
     if (box is! RenderBox) return;
@@ -407,8 +393,6 @@ class _MixerStripState extends State<MixerStrip> {
     );
   }
 
-  // ------------------------------------------------------------ the drawing
-
   double _sampled(BridgeScalar scalar, int frame) =>
       scalar is BridgeScalar_Static
           ? scalar.field0
@@ -425,7 +409,6 @@ class _MixerStripState extends State<MixerStrip> {
   double _shownPan(int frame) =>
       _dragPan ?? _placed?.pan ?? _sampled(_entry.info.pan, frame);
 
-  /// Whether an automation pass is writing this strip's fader now.
   bool get _recording =>
       widget.feed.recording.value.contains(volumeOf(_entry));
 
@@ -494,15 +477,12 @@ class _MixerStripState extends State<MixerStrip> {
     );
   }
 
-  /// Dims what the solo silences: everything but the name and the switches.
   Widget _dim(Widget child) => AnimatedOpacity(
         opacity: widget.silenced ? 0.45 : 1,
         duration: ThemeScope.of(context).motion.mark.duration,
         child: child,
       );
 
-  /// Rebuilt as the faders move with the automation, and as a pass starts
-  /// and stops writing them.
   Widget _following(Widget Function() build) => ListenableBuilder(
         listenable:
             Listenable.merge([widget.feed.positions, widget.feed.recording]),
@@ -534,8 +514,6 @@ class _MixerStripState extends State<MixerStrip> {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // A bus has no Gain of its own, and its Pan stands where every
-              // strip's does.
               _pot(
                 t,
                 isBus ? null : l10n.audioGain,
@@ -590,8 +568,6 @@ class _MixerStripState extends State<MixerStrip> {
             width: widget.width,
           )),
         const SizedBox(height: stripGap),
-        // The mode sits over the scale and the clip lamp over the meter, so
-        // the two share a row.
         _dim(SizedBox(
           height: stripChipRow,
           child: Row(
@@ -671,7 +647,6 @@ class _MixerStripState extends State<MixerStrip> {
                 safe: info.soloSafe,
                 onTap: _soloTap,
               ),
-              // A strip with plugins in its sound can bypass them from here.
               if (chain > 0) ...[
                 const SizedBox(width: 5),
                 SwitchGlyph(
@@ -708,8 +683,6 @@ class _MixerStripState extends State<MixerStrip> {
   static String _signedDb(double db) =>
       '${db > 0 ? '+' : ''}${db.toStringAsFixed(1)}';
 
-  /// One pot over its caption, which reads the value while it turns. A null
-  /// [pot] keeps the place empty, as a bus's Gain.
   Widget _pot(LumitTheme t, String? caption, String? turning, Widget? pot) =>
       SizedBox(
         width: 26,
@@ -729,8 +702,6 @@ class _MixerStripState extends State<MixerStrip> {
         ),
       );
 
-  /// The strip's name, with its label colour under it and the bus glyph
-  /// before a bus's, or the field it turns into. A double-click renames.
   Widget _name(LumitTheme t, BridgeLayerInfo info) => SizedBox(
         height: stripNameRow,
         child: _rename != null
@@ -762,7 +733,6 @@ class _MixerStripState extends State<MixerStrip> {
                             size: 10, color: t.textMuted),
                         const SizedBox(width: 3),
                       ],
-                      // A name cut short says the whole of itself on hover.
                       Flexible(
                         child: FittedText(
                             info.name, t.small.copyWith(color: t.textPrimary)),

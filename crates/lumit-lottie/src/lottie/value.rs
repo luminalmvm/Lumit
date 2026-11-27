@@ -23,27 +23,22 @@ use crate::keys::{self, Curve, Span, Track};
 use crate::time::Timebase;
 use crate::Host;
 
-/// What kind of number a value is, which decides how finely it is written.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Class {
     /// Pixels, per cent and anything else a person reads in whole units.
     Px,
-    /// Degrees.
     Deg,
     /// A number from 0 to 1: a colour channel, an easing handle.
     Unit,
-    /// Frames and seconds.
     Time,
 }
 
-/// How numbers are written.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Fmt {
     pub minify: bool,
 }
 
 impl Fmt {
-    /// `v` rounded for its class, as a JSON number.
     #[must_use]
     pub fn num(self, v: f64, class: Class) -> Value {
         let decimals = match class {
@@ -53,7 +48,6 @@ impl Fmt {
         number(v, decimals)
     }
 
-    /// Several numbers of one class, as an array.
     #[must_use]
     pub fn nums(self, v: &[f64], class: Class) -> Value {
         Value::Array(v.iter().map(|x| self.num(*x, class)).collect())
@@ -92,7 +86,6 @@ pub struct Clock<'a> {
     pub doc: &'a Arc<Document>,
     pub comp: &'a Composition,
     pub layer: &'a Layer,
-    /// The clock of the comp the layer is in.
     pub tb: &'a Timebase,
     pub host: &'a dyn Host,
     pub fmt: Fmt,
@@ -155,7 +148,6 @@ impl<'a> Clock<'a> {
             .collect()
     }
 
-    /// What the layer's expressions read at layer time `lt`.
     #[must_use]
     pub fn context(&self, lt: f64) -> Arc<ExpressionContext> {
         Arc::new(ExpressionContext {
@@ -168,7 +160,6 @@ impl<'a> Clock<'a> {
         })
     }
 
-    /// `p` at layer time `lt`.
     #[must_use]
     pub fn value(&self, p: &Property, lt: f64) -> f64 {
         match p.animation {
@@ -209,7 +200,6 @@ impl<'a> Clock<'a> {
         )
     }
 
-    /// True when `p` moves at all.
     #[must_use]
     pub fn moves(p: &Property) -> bool {
         match &p.animation {
@@ -264,8 +254,6 @@ impl<'a> Clock<'a> {
         json!({"a": 1, "k": out})
     }
 
-    /// `props` as one Lottie property, keyed or sampled as [`Self::track`]
-    /// decides.
     #[must_use]
     pub fn prop(&self, props: &[&Property], class: Class, tolerance: f64) -> Value {
         let track = self.track(props, &vec![tolerance; props.len()]);
@@ -320,7 +308,6 @@ impl<'a> Clock<'a> {
         self.write(&track, Class::Unit, true, pad)
     }
 
-    /// A path as a Lottie shape property, `offset` added to every point.
     #[must_use]
     pub fn path(&self, path: &BezierPath, keys: &[PathKeyframe], offset: (f64, f64)) -> Value {
         if keys.len() < 2 {
@@ -462,7 +449,6 @@ impl<'a> Clock<'a> {
                     json!([bezier(self.fmt, &at(k.seconds, &k.value), offset)]),
                 );
                 if i < last {
-                    // Straight between samples.
                     m.insert("o".into(), json!({"x": 0, "y": 0}));
                     m.insert("i".into(), json!({"x": 1, "y": 1}));
                 }
@@ -516,7 +502,6 @@ impl<'a> Clock<'a> {
     }
 }
 
-/// The curve `p` follows, or `None` when an expression drives it.
 #[must_use]
 pub fn curve(p: &Property) -> Option<Curve> {
     match &p.animation {
@@ -556,14 +541,12 @@ fn handles(h: &[[f64; 2]]) -> Vec<[f64; 2]> {
     }
 }
 
-/// An easing handle as Lottie's `{x: [..], y: [..]}`.
 fn easing(fmt: Fmt, h: &[[f64; 2]]) -> Value {
     let x: Vec<f64> = h.iter().map(|p| p[0]).collect();
     let y: Vec<f64> = h.iter().map(|p| p[1]).collect();
     json!({"x": fmt.nums(&x, Class::Unit), "y": fmt.nums(&y, Class::Unit)})
 }
 
-/// Rounds the scalar easing handles of a shape key in place.
 fn round_easing(fmt: Fmt, m: &mut Map<String, Value>) {
     for side in ["o", "i"] {
         if let Some(Value::Object(h)) = m.get_mut(side) {
@@ -604,7 +587,6 @@ fn padded(mut path: BezierPath, n: usize) -> BezierPath {
     path
 }
 
-/// `path` moved by `d`.
 #[must_use]
 pub fn moved(mut path: BezierPath, d: (f64, f64)) -> BezierPath {
     for v in &mut path.vertices {
@@ -613,7 +595,6 @@ pub fn moved(mut path: BezierPath, d: (f64, f64)) -> BezierPath {
     path
 }
 
-/// A path as Lottie's bezier object, `offset` added to every point.
 #[must_use]
 pub fn bezier(fmt: Fmt, path: &BezierPath, offset: (f64, f64)) -> Value {
     let pt = |p: (f64, f64)| fmt.nums(&[p.0, p.1], Class::Px);

@@ -28,15 +28,13 @@ void main() {
   test('fps counts the frames whose vsync falls inside the gesture window, '
       'however late their timings report arrived', () {
     const t0 = 1000000; // gesture start, µs
-    const t1 = 2500000; // gesture end
+    const t1 = 2500000;
     final frames = <FrameTiming>[
-      // Landed in the bucket during the pre-gesture settle: not the gesture's.
       frameAt(t0 - 40000),
       // The gesture's own frames — in a real run the last batch of these
       // arrives after the gesture, in a late timings report. Their
       // timestamps place them; where the report landed must not matter.
       for (var v = t0; v < t1; v += 100000) frameAt(v),
-      // Trailing follow-on frames after the gesture: reported, not counted.
       frameAt(t1 + 1000),
       frameAt(t1 + 200000),
     ];
@@ -48,8 +46,6 @@ void main() {
               f.timestampInMicroseconds(FramePhase.vsyncStart) < t1),
       everyElement(isTrue),
     );
-    // The fps the probe prints is count over the gesture's own wall clock —
-    // 15 frames over 1.5 s — and no tail it waits out can dilute it.
     expect(counted.length / ((t1 - t0) / 1e6), closeTo(10.0, 0.001));
   });
 }

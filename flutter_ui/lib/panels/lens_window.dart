@@ -37,7 +37,6 @@ const int _maxSurfaces = 40;
 /// the widest field angle.
 const double _sensorHalfMm = 21.63;
 
-/// Press a lens effect's Edit lens… row. Answers whether [param] was it.
 bool pressLensButton({
   required BuildContext context,
   required InstanceHome home,
@@ -55,8 +54,6 @@ bool pressLensButton({
   return true;
 }
 
-/// What the window hands back: a bundled lens untouched, or a lens to keep,
-/// and the F-stop if it was moved.
 class _Chosen {
   final int? library;
   final BridgeLens? lens;
@@ -65,8 +62,6 @@ class _Chosen {
   const _Chosen.kept(BridgeLens this.lens, this.fstop) : library = null;
 }
 
-/// Open the window on one effect and commit what it returns. Answers whether
-/// anything changed.
 Future<bool> showLensWindow({
   required BuildContext context,
   required InstanceHome home,
@@ -242,7 +237,6 @@ class _LensWindowState extends State<_LensWindow> {
         for (final (j, r) in l.rows.indexed)
           if (j == i)
             row
-          // One stop: ticking a row clears the others.
           else if (row.stop && r.stop)
             _with(r, stop: false)
           else
@@ -290,7 +284,6 @@ class _LensWindowState extends State<_LensWindow> {
     }
   }
 
-  /// One of your lenses under a new name, in the same file.
   Future<void> _renameFile(String path, String was) async {
     final name =
         await askThemeName(context, title: l10n.rename, suggested: was, confirm: l10n.rename);
@@ -323,7 +316,6 @@ class _LensWindowState extends State<_LensWindow> {
     if (_source == 'file:$path') _openLibrary(widget.model);
   }
 
-  /// A copy of surface [i], straight after it.
   void _duplicateRow(int i) {
     final l = _draft!;
     if (l.rows.length >= _maxSurfaces) return;
@@ -399,7 +391,6 @@ class _LensWindowState extends State<_LensWindow> {
   Widget _entry(LumitTheme t, String source, String label, VoidCallback onTap) {
     final on = _source == source;
     final path = source.startsWith('file:') ? source.substring(5) : null;
-    // One of your own, in your lenses folder, rather than a file brought in.
     final yours = _yours.any((f) => f.path == path);
     return GestureDetector(
       key: ValueKey('lens-entry-$source'),
@@ -749,9 +740,6 @@ BridgeLensRow _with(
       stop: stop ?? r.stop,
     );
 
-/// The cross-section, fitted to the box: glass filled between its two
-/// surfaces, the rays through it, the iris in amber, the sensor and the
-/// axis as a hairline.
 class _LensPainter extends CustomPainter {
   final List<BridgeLensLine> lines;
   final BridgeLensRays? rays;
@@ -846,7 +834,6 @@ class _LensPainter extends CustomPainter {
         canvas.drawPath(path(l.points), line(edge, 1));
         continue;
       }
-      // The iris: blades from the bore in to the opening at this F-stop.
       final z = ox + l.points[0] * scale;
       final full = (r?.stopFullMm ?? l.points[1].abs()) * scale;
       final open = (r?.stopRMm ?? l.points[1].abs()) * scale;

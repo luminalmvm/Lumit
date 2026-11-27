@@ -35,7 +35,6 @@ String stabiliseScalePercent(double scale) {
   return text.endsWith('.0') ? text.substring(0, text.length - 2) : text;
 }
 
-/// Whether a finished analysis stopped short of the frames it was asked for.
 bool _partial(BridgeStabiliseStatus status) =>
     status.frames < status.clipFrames;
 
@@ -59,8 +58,6 @@ String stabiliseStatusSentence(
   if (reverse) {
     final layer = status?.reversing;
     if (layer == null) return l10n.stabiliseNothingToFollow;
-    // The stage is the followed layer's own: its refusals read as they do on
-    // that layer's line, after its name.
     final failed = l10n.stabiliseFollowedFailed;
     return switch (status!.stage) {
       BridgeTrackStage.done => l10n.stabiliseFollows(layer),
@@ -107,7 +104,6 @@ String stabiliseStatusSentence(
   };
 }
 
-/// A command beside the line, framed as the Analyse button under it is.
 Widget _action(
   BuildContext context, {
   required String label,
@@ -127,8 +123,6 @@ Widget _action(
   );
 }
 
-/// Whether a reading is still moving: an analysis queued or running, or a
-/// Reverse waiting for the layer it follows.
 bool stabiliseIsMoving(BridgeStabiliseStatus? status) =>
     switch (status?.stage) {
       BridgeTrackStage.queued ||
@@ -143,7 +137,6 @@ bool stabiliseIsMoving(BridgeStabiliseStatus? status) =>
 /// the rows stay greyed while any line holds them.
 final Map<UuidValue, Map<Object, Set<String>>> _restingBy = {};
 
-/// Record what [holder] greys on [effect], null for nothing, and tell the rows.
 void _holdResting(UuidValue effect, Object holder, Set<String>? rest) {
   final holders = _restingBy[effect] ?? {};
   if (rest == null) {
@@ -167,18 +160,13 @@ void _holdResting(UuidValue effect, Object holder, Set<String>? rest) {
   actionsResting.value = next;
 }
 
-/// The line above Stabilise's buttons.
 class StabiliseDisplayFrb extends StatefulWidget {
-  /// The layer the effect sits on.
   final LayerReference layer;
 
-  /// Which instance on that layer: an analysis is filed under the effect.
   final UuidValue effectId;
 
-  /// The Mode row is Reverse.
   final bool reverse;
 
-  /// Something changed that the rest of the interface should re-read.
   final VoidCallback onChanged;
 
   /// Bumped by the panel every time one of the effect's Action buttons is
@@ -208,7 +196,6 @@ class _StabiliseDisplayFrbState extends State<StabiliseDisplayFrb>
   @override
   bool shouldResample(StabiliseDisplayFrb old) => false;
 
-  /// The document revision the line was last read at.
   int? _readAt;
 
   // Read once as the line mounts, so its first frame says what is happening:
@@ -221,7 +208,6 @@ class _StabiliseDisplayFrbState extends State<StabiliseDisplayFrb>
     try {
       status = fetchStatus();
     } catch (_) {
-      // The layer went away; the read after the frame finds the same.
     }
   }
 
@@ -238,7 +224,6 @@ class _StabiliseDisplayFrbState extends State<StabiliseDisplayFrb>
     WidgetsBinding.instance.addPostFrameCallback((_) => sample());
   }
 
-  /// Reads in a row that found a fresh effect idle on footage.
   int _idleReads = 0;
 
   bool _idleOnFootage(BridgeStabiliseStatus? status) =>
@@ -330,11 +315,8 @@ class _StabiliseDisplayFrbState extends State<StabiliseDisplayFrb>
         name: l10n.stabilisePrecompName(name),
       );
     } catch (_) {
-      // The layer or its analysis went away; nothing was made.
       return;
     }
-    // The Precomp layer is what the user is now working on, as Precompose
-    // leaves it.
     ui.setSelection([precomp]);
     widget.onChanged();
   }
@@ -343,7 +325,6 @@ class _StabiliseDisplayFrbState extends State<StabiliseDisplayFrb>
     try {
       stabiliseBakeKeyframes(layer: widget.layer, effect: widget.effectId);
     } catch (_) {
-      // The layer or its analysis went away; nothing was written.
       return;
     }
     widget.onChanged();
@@ -353,7 +334,6 @@ class _StabiliseDisplayFrbState extends State<StabiliseDisplayFrb>
     try {
       stabiliseRestorePoints(layer: widget.layer, effect: widget.effectId);
     } catch (_) {
-      // The layer went away; the count goes with the next read.
     }
     widget.onChanged();
   }
@@ -373,8 +353,6 @@ class _StabiliseDisplayFrbState extends State<StabiliseDisplayFrb>
       ),
       overflow: TextOverflow.ellipsis,
     );
-    // What the engine says can be done now: nothing on a switched-off or
-    // Reverse Stabilise, before an analysis, or a precomp inside a precomp.
     final actions = [
       if (status?.canPrecomp ?? false)
         _action(
@@ -410,9 +388,6 @@ class _StabiliseDisplayFrbState extends State<StabiliseDisplayFrb>
               analysed: status?.frames ?? 0,
               total: status?.clipFrames ?? 0,
             ),
-          // The Camera track's line where it fits: the sentence at the left,
-          // the actions at the right. Narrower, the actions go under the
-          // sentence from the same edge, and narrower still they stack.
           if (actions.isEmpty)
             sentence
           else

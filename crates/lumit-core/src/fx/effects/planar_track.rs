@@ -53,17 +53,14 @@ use super::camera_track::{DENSITY_DEFAULT, DENSITY_OPTIONS};
 /// the boxes are on one plane, or on one object.
 pub const FOLLOW_OPTIONS: &[&str] = &["Surface", "One point", "Two points"];
 
-/// The default **Follow** index — the surface, which is what the effect was.
 pub const FOLLOW_DEFAULT: u32 = 0;
 
 /// The **Follow** index meaning one point: the only one whose answer carries no
 /// turn and no growth, and so the only one that writes Position alone.
 pub const FOLLOW_ONE_POINT: u32 = 1;
 
-/// The **Follow** index meaning two points.
 pub const FOLLOW_TWO_POINTS: u32 = 2;
 
-/// The Planar track effect's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "planar_track",
@@ -77,10 +74,8 @@ pub const FOLLOW_TWO_POINTS: u32 = 2;
     matte = false,
 )]
 pub struct PlanarTrack {
-    /// Start the analysis.
     #[action(label = "Analyse")]
     pub analyse: (),
-    /// Stop a running analysis.
     #[action(label = "Cancel")]
     pub cancel: (),
     /// Put a Corner pin on [`pin_layer`](Self::pin_layer), keyframed to the
@@ -114,25 +109,21 @@ pub struct PlanarTrack {
     /// schema constant cannot know the raster (§1.2).
     #[slider(label = "Upper left x", min = -1920.0, max = 3840.0, default = 660.0, unit = Px)]
     pub upper_left_x: f32,
-    /// px@comp; see [`upper_left_x`](Self::upper_left_x).
     #[slider(label = "Upper left y", min = -1080.0, max = 2160.0, default = 370.0, unit = Px)]
     pub upper_left_y: f32,
     /// px@comp: the quad's upper-right corner on the reference frame.
     #[slider(label = "Upper right x", min = -1920.0, max = 3840.0, default = 1260.0, unit = Px)]
     pub upper_right_x: f32,
-    /// px@comp; see [`upper_right_x`](Self::upper_right_x).
     #[slider(label = "Upper right y", min = -1080.0, max = 2160.0, default = 370.0, unit = Px)]
     pub upper_right_y: f32,
     /// px@comp: the quad's lower-left corner on the reference frame.
     #[slider(label = "Lower left x", min = -1920.0, max = 3840.0, default = 660.0, unit = Px)]
     pub lower_left_x: f32,
-    /// px@comp; see [`lower_left_x`](Self::lower_left_x).
     #[slider(label = "Lower left y", min = -1080.0, max = 2160.0, default = 710.0, unit = Px)]
     pub lower_left_y: f32,
     /// px@comp: the quad's lower-right corner on the reference frame.
     #[slider(label = "Lower right x", min = -1920.0, max = 3840.0, default = 1260.0, unit = Px)]
     pub lower_right_x: f32,
-    /// px@comp; see [`lower_right_x`](Self::lower_right_x).
     #[slider(label = "Lower right y", min = -1080.0, max = 2160.0, default = 710.0, unit = Px)]
     pub lower_right_y: f32,
 
@@ -140,7 +131,6 @@ pub struct PlanarTrack {
     /// when [`follow`](Self::follow) is one of the point options.
     #[slider(label = "Point 1 x", min = -1920.0, max = 3840.0, default = 860.0, unit = Px)]
     pub point1_x: f32,
-    /// px@comp; see [`point1_x`](Self::point1_x).
     #[slider(label = "Point 1 y", min = -1080.0, max = 2160.0, default = 440.0, unit = Px)]
     pub point1_y: f32,
     /// px@comp: the second tracked point, read only when
@@ -149,7 +139,6 @@ pub struct PlanarTrack {
     /// first.
     #[slider(label = "Point 2 x", min = -1920.0, max = 3840.0, default = 1060.0, unit = Px)]
     pub point2_x: f32,
-    /// px@comp; see [`point2_x`](Self::point2_x).
     #[slider(label = "Point 2 y", min = -1080.0, max = 2160.0, default = 640.0, unit = Px)]
     pub point2_y: f32,
 
@@ -193,12 +182,10 @@ pub struct PlanarTrack {
     /// inside it — the hand over the phone, the reflection crossing the sign.
     #[toggle(default = true, label = "Use masks")]
     pub use_masks: bool,
-    /// Which frames Analyse tracks - see [`crate::planes::FRAMES_OPTIONS`].
     #[choice(options = *crate::planes::FRAMES_OPTIONS, default = 0, label = "Frames")]
     pub frames: u32,
 }
 
-/// The Planar track's behaviour: none, by design.
 pub struct PlanarTrackDef;
 
 impl EffectDef for PlanarTrackDef {

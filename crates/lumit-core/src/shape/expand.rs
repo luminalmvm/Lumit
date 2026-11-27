@@ -20,15 +20,12 @@ use super::modifier::{ModifierKind, Repeater, ShapeEntry, ShapeGroup};
 use super::ShapeItem;
 use crate::anim::{Animation, Property};
 
-/// `entries` with the repeater `id` expanded at `t`, or `None` when there is
-/// no such repeater.
 #[must_use]
 pub fn expanded(entries: &[ShapeEntry], id: Uuid, t: f64) -> Option<Vec<ShapeEntry>> {
     let mut out = entries.to_vec();
     expand_in(&mut out, id, t).then_some(out)
 }
 
-/// `entries` with every repeater expanded, top to bottom.
 #[must_use]
 pub fn all_expanded(entries: &[ShapeEntry], t: f64) -> Vec<ShapeEntry> {
     let mut out = entries.to_vec();
@@ -74,8 +71,6 @@ pub fn split_all(entries: &[ShapeEntry], t: f64) -> Vec<Vec<ShapeEntry>> {
     }
 }
 
-/// Expand the repeater `id` wherever it sits in `entries`. False when it is
-/// not there.
 fn expand_in(entries: &mut Vec<ShapeEntry>, id: Uuid, t: f64) -> bool {
     let Some(path) = path_to(entries, id) else {
         return false;
@@ -141,7 +136,6 @@ fn repeater_at<'a>(entries: &'a [ShapeEntry], path: &[usize]) -> Option<&'a Repe
     }
 }
 
-/// The first repeater in `entries`, groups opened, in list order.
 fn first_repeater(entries: &[ShapeEntry]) -> Option<Uuid> {
     entries.iter().find_map(|e| match e {
         ShapeEntry::Modifier(m) if matches!(m.kind, ModifierKind::Repeat(_)) => Some(m.id),
@@ -150,8 +144,6 @@ fn first_repeater(entries: &[ShapeEntry]) -> Option<Uuid> {
     })
 }
 
-/// `entries` with the repeater at `path` replaced by its `copies` of the art
-/// above it: the art drawn out, the repeater gone, everything else kept.
 fn with_copies(
     entries: &[ShapeEntry],
     path: &[usize],
@@ -270,7 +262,6 @@ fn baked(art: &[ShapeEntry], copies: &[(Affine, f64)]) -> Vec<ShapeEntry> {
     while i < art.len() {
         match &art[i] {
             ShapeEntry::Item(_) => {
-                // The run this item starts: it and the items joined onto it.
                 let mut end = i + 1;
                 while end < art.len()
                     && matches!(&art[end], ShapeEntry::Item(item) if item.combine != 0)
@@ -302,8 +293,6 @@ fn baked(art: &[ShapeEntry], copies: &[(Affine, f64)]) -> Vec<ShapeEntry> {
     out
 }
 
-/// `art` placed by one `copy`, the `n`th: every item moved, nothing drawn
-/// out more than once.
 fn baked_nth(art: &[ShapeEntry], copy: &(Affine, f64), n: usize) -> Vec<ShapeEntry> {
     art.iter()
         .map(|e| match e {

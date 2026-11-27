@@ -1,11 +1,8 @@
-//! Contrast (docs/08 §3.14): a scale about mid-grey.
-
 use crate::fx::{
     cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
 };
 use lumit_fx_macros::Effect;
 
-/// Contrast's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "contrast",
@@ -25,7 +22,6 @@ pub struct Contrast {
     #[slider(min = 0.0, max = 200.0, default = 100.0, hard_min = 0.0, unit = Percent)]
     pub contrast: f32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -58,7 +54,6 @@ impl Contrast {
     }
 }
 
-/// Contrast's behaviour.
 pub struct ContrastDef;
 
 impl EffectDef for ContrastDef {

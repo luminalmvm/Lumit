@@ -61,8 +61,6 @@ void main() {
     await tester.pumpWidget(MaterialAppShim(state: state, ui: ui));
     await tester.pumpAndSettle();
 
-    // Drive frames through the real pipeline: move the playhead, let the
-    // worker render, let the runner register and announce.
     for (var f = 0; f < 30; f++) {
       ui.playheadFrame.value = f % 60;
       await tester.pump(const Duration(milliseconds: 33));
@@ -125,7 +123,6 @@ void main() {
   });
 }
 
-/// The minimum shell the Viewer needs, without dragging the whole app in.
 class MaterialAppShim extends StatelessWidget {
   final LumitState state;
   final LumitUiState ui;

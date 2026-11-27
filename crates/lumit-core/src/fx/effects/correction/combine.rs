@@ -16,7 +16,6 @@ use crate::fx::params::{ParamId, Params, ResolvedFx, ResolvedStack};
 use crate::fx::registry::EffectMetadata;
 use crate::fx::schema::{EffectSchema, MIX_ID};
 
-/// How a node meets the run above it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Combine {
     #[default]
@@ -74,7 +73,6 @@ pub fn graded_packed(p: Params<'_>) -> Packed {
     pk
 }
 
-/// Parallel: what the node changed (`out - input`) added to `acc`.
 pub fn parallel(acc: &mut [f32], out: &[f32], input: &[f32]) {
     for ((a, o), i) in acc.iter_mut().zip(out).zip(input) {
         *a += o - i;
@@ -111,12 +109,10 @@ pub fn matte_view_of(p: Params<'_>) -> u32 {
     }
 }
 
-/// Where a run stands as a stack is walked on the CPU.
 #[derive(Default)]
 pub struct Run {
     /// The picture the run's first node read, while a node below joins it.
     input: Option<Vec<f32>>,
-    /// What the run had made before the joining node now drawing.
     acc: Option<Vec<f32>>,
     combine: Combine,
     /// Each node's colour part only, for a LUT ([`Packed::colour_only`]).

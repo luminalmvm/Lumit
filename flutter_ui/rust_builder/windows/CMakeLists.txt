@@ -23,6 +23,13 @@ cmake_minimum_required(VERSION 3.14)
 set(PROJECT_NAME "lumit_bridge")
 project(${PROJECT_NAME} LANGUAGES CXX)
 
+# Development builds may supply the already built bridge, keeping Flutter's
+# packaging separate from Cargo's shared target directory.
+if(DEFINED ENV{LUMIT_PREBUILT_BRIDGE})
+  set(lumit_bridge_bundled_libraries "$ENV{LUMIT_PREBUILT_BRIDGE}" PARENT_SCOPE)
+  return()
+endif()
+
 include("../cargokit/cmake/cargokit.cmake")
 apply_cargokit(${PROJECT_NAME} ../../../../../../../crates/lumit-bridge lumit_bridge "")
 

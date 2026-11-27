@@ -17,10 +17,8 @@ import 'package:uuid/uuid.dart';
 import '../l10n/strings.dart';
 import 'shader_editor.dart' show InstanceHome, editExpressionOn;
 
-/// What a row's menu can wire onto it.
 enum DriveKind { wiggle, audioLevel, beatTrigger, colourCycle, expression }
 
-/// The output feeding [target], or null while nothing is wired into it.
 BridgeOutputRef? wiredInto(BridgeLayerGraph graph, BridgeInputRef target) {
   for (final e in graph.wiring.edges) {
     if (e.to == target) return e.from;
@@ -180,7 +178,6 @@ bool removeDriveFrom(LayerReference layer, BridgeInputRef target) {
     final graph = layer.getGraph();
     final edges = [...graph.wiring.edges];
     final gone = <UuidValue>{};
-    // The sources to look at: a driver that has just lost its last wire.
     final pending = <UuidValue>[];
     void unwire(BridgeInputRef to) {
       for (final e in edges.where((e) => e.to == to).toList()) {

@@ -22,8 +22,6 @@ fn er_reach() -> i32 {
     return clamp(i32(round(abs(p.amount) * lumit.comp_scale)), 0, ER_MAX);
 }
 
-// Keeps whichever of two pixels wins: the clearer one to shrink, the more
-// opaque one to grow.
 fn er_pick(best: vec4<f32>, s: vec4<f32>) -> vec4<f32> {
     if (p.amount >= 0.0) {
         return select(best, s, s.a < best.a);
@@ -31,7 +29,6 @@ fn er_pick(best: vec4<f32>, s: vec4<f32>) -> vec4<f32> {
     return select(best, s, s.a > best.a);
 }
 
-// Pass one: across.
 fn rows(uv: vec2<f32>) -> vec4<f32> {
     let xy = vec2<i32>(floor(uv * lumit_size()));
     let reach = er_reach();
@@ -44,7 +41,6 @@ fn rows(uv: vec2<f32>) -> vec4<f32> {
     return best;
 }
 
-// Pass two: down, reading pass one.
 fn cols(uv: vec2<f32>) -> vec4<f32> {
     let size = lumit_size();
     let xy = vec2<i32>(floor(uv * size));

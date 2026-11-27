@@ -75,7 +75,6 @@ fn vd(i: i32) -> vec2<f32> {
     return vec2<f32>(fl(i * 6 + 4), fl(i * 6 + 5));
 }
 
-// The cubic Bernstein weights at t.
 fn weights(t: f32) -> vec4<f32> {
     let s = 1.0 - t;
     return vec4<f32>(s * s * s, 3.0 * s * s * t, 3.0 * s * t * t, t * t * t);
@@ -92,7 +91,6 @@ struct Surface {
     sv: vec2<f32>,
 };
 
-// == mesh_warp::cell_net and mesh_warp::surface.
 fn surface(u: f32, v: f32) -> Surface {
     let cols = f32(p.cols);
     let rows = f32(p.rows);

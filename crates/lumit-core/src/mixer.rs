@@ -1,11 +1,6 @@
-//! The mixer's own settings on a layer and a composition: how a fader's
-//! automation is written, the level a layer lowers to behind another, and
-//! the loudness a mix is made for.
-
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// How a fader writes its keys while the comp plays.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AutomationMode {
@@ -51,7 +46,6 @@ pub struct Duck {
 }
 
 impl Duck {
-    /// Lower behind `behind` with the usual settings.
     #[must_use]
     pub fn behind(behind: Uuid) -> Self {
         Self {

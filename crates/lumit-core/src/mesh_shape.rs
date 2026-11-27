@@ -13,7 +13,6 @@ use crate::model::{Composition, EffectInstance, EffectValue, Layer, LayerKind, S
 use lumit_fx_macros::Effect;
 use serde::{Deserialize, Serialize};
 
-/// Which shape a [`LayerKind::Mesh`] is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MeshShape {
@@ -27,7 +26,6 @@ pub enum MeshShape {
 }
 
 impl MeshShape {
-    /// What its Geometry options are known by.
     #[must_use]
     pub fn options(self) -> &'static str {
         match self {
@@ -41,7 +39,6 @@ impl MeshShape {
     }
 }
 
-/// A menu entry: a name, the shape, and the rows that differ from its own.
 pub type Entry = (&'static str, MeshShape, &'static [(&'static str, f64)]);
 
 /// What a menu offers, in its order. A pyramid is a cone with four sides and
@@ -86,7 +83,6 @@ pub fn mesh_layer(comp: &Composition, entry: usize) -> Option<Layer> {
     Some(layer)
 }
 
-/// The rows a layer of `shape` reads, kept or else its defaults.
 #[must_use]
 pub fn options_of(shape: MeshShape, kept: Option<&EffectInstance>) -> Option<EffectInstance> {
     kept.cloned()

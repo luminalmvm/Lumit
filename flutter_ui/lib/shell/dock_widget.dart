@@ -1,10 +1,3 @@
-// Renders the dock tree (state/dock.dart): weighted splits with draggable
-// dividers, tab groups as pill tab bars (dock.rs::tab_ui styling), solo panes
-// bare, and the Sharp/Round pane chrome. A tab drags to re-dock (dock.rs
-// drag-to-redock, via egui_tiles): a ghost pill follows the cursor, the
-// hovered pane shows a drop-zone preview, and release commits the move through
-// movePanel. Every pane is a drop target, bare ones included. A pane standing
-// alone has no tab, so its title lifts it instead (DockPaneHandle).
 
 import 'dart:async' show Timer, unawaited;
 import 'dart:math' show max, min;
@@ -43,8 +36,6 @@ import 'window_frame.dart'
 
 typedef PanelBuilder = Widget Function(BuildContext context, PaneId pane);
 
-/// A pointer must travel this far before a press on a tab becomes a re-dock
-/// drag rather than a click.
 const double _dragSlop = 6.0;
 
 /// **The width below which a panel stops giving way and starts sliding** (the
@@ -125,9 +116,6 @@ double panelMinWidth(Panel panel) => switch (panel) {
       Panel.extension => 240,
     };
 
-/// The smallest width a whole dock subtree can be drawn at: a pane is its
-/// panel's floor, a tab group is the widest of the panels stacked in it, and a
-/// split is the sum of its children across, or the widest of them down.
 double dockMinWidth(DockNode node) => switch (node) {
       DockPane(:final panel) => panelMinWidth(panel),
       DockTabs(:final children) => children.isEmpty
@@ -153,8 +141,6 @@ double panelMinHeight(Panel panel) => switch (panel) {
       _ => 0,
     };
 
-/// [dockMinWidth]'s twin down the page: a split is the sum of its children
-/// down, or the tallest of them across.
 double dockMinHeight(DockNode node) => switch (node) {
       DockPane(:final panel) => panelMinHeight(panel),
       DockTabs(:final children) => children.isEmpty
@@ -185,14 +171,11 @@ class PanelFloor extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
         builder: (context, box) {
-          // Nothing to hold it to, or room to spare: the panel lays out
-          // exactly as it always did, and this wrapper costs one LayoutBuilder.
           if (!box.hasBoundedWidth ||
               !box.hasBoundedHeight ||
               box.maxWidth >= minWidth) {
             return child;
           }
-          // Faded at the edge that has more, so a cut panel says it slides.
           return EdgeFade(
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
@@ -251,10 +234,8 @@ abstract final class DockCommands {
   static bool Function(PaneId pane) _float = (_) => false;
   static bool Function(PaneId pane) _dock = (_) => false;
 
-  /// Move [pane] into a window of its own.
   static bool float(PaneId pane) => _float(pane);
 
-  /// Put [pane] back in the main window.
   static bool dock(PaneId pane) => _dock(pane);
 
   static void Function(PaneId pane) _front = (_) {};
@@ -317,7 +298,6 @@ class _DockWidgetState extends State<DockWidget> with WidgetsBindingObserver {
   /// leaves, so a view is never drawn into a window that is not there.
   final Map<int, _Host> _hosts = {};
 
-  /// A frame has been asked for to open the windows still missing.
   bool _opening = false;
 
   /// The main window's view, which every other window's place is read
@@ -355,10 +335,8 @@ class _DockWidgetState extends State<DockWidget> with WidgetsBindingObserver {
     mainWindowOnly = _mainWindowOnly;
   }
 
-  /// The main window's own overlay.
   OverlayState? _mainOverlay() => mounted ? Overlay.maybeOf(context) : null;
 
-  /// Every window's overlay but [own].
   List<OverlayState> _otherOverlays(OverlayState own) => [
         if (_mainOverlay() case final main? when main != own) main,
         for (final host in _hosts.values)
@@ -456,10 +434,6 @@ class _DockWidgetState extends State<DockWidget> with WidgetsBindingObserver {
     return null;
   }
 
-  // --- Floating windows ---------------------------------------------------
-
-  /// Open the windows the arrangement has and the screen has not, and close
-  /// the ones it no longer has.
   void _syncWindows() {
     final wanted = {for (final w in widget.root.windows) w.id};
     for (final id in _hosts.keys.where((id) => !wanted.contains(id)).toList()) {
@@ -559,7 +533,6 @@ class _DockWidgetState extends State<DockWidget> with WidgetsBindingObserver {
           maximised: frame.maximised);
       if (frame.fullScreen) host.window.setFullScreen(true);
     }
-    // A window made just now by hand comes to the front with the keyboard.
     if (!quiet && _hosts.containsKey(w.id)) {
       if (frame?.maximised ?? false) {
         host.window.setMaximised(true);
@@ -569,8 +542,6 @@ class _DockWidgetState extends State<DockWidget> with WidgetsBindingObserver {
     }
   }
 
-  /// Every window the new arrangement shares with the old keeps its native
-  /// window; the ones whose place differs move.
   void _replace() {
     for (final w in widget.root.windows) {
       final host = _hosts[w.id];
@@ -592,7 +563,6 @@ class _DockWidgetState extends State<DockWidget> with WidgetsBindingObserver {
     }
   }
 
-  /// The system's own title for [w]: what its panels are called.
   String _windowTitle(DockWindow w) => l10n.floatingWindowTitle([
         for (final node in w.root.children) ..._frontTitles(node),
       ].join(', '));
@@ -620,8 +590,6 @@ class _DockWidgetState extends State<DockWidget> with WidgetsBindingObserver {
     widget.onLayoutChanged();
   }
 
-  /// Window [id] was resized, put in front or sent back (and moved, on
-  /// Linux).
   void _changed(int id) {
     final host = _hosts[id];
     if (host == null || !mounted) return;
@@ -631,7 +599,6 @@ class _DockWidgetState extends State<DockWidget> with WidgetsBindingObserver {
     host.soon(() => _noteFrame(id));
   }
 
-  /// The runner says a window it watches stopped moving.
   void _movedByRunner(int handle) {
     for (final host in _hosts.values) {
       if (host.window.handle == handle) {
@@ -641,7 +608,6 @@ class _DockWidgetState extends State<DockWidget> with WidgetsBindingObserver {
     }
   }
 
-  /// Write down where window [id] is now, so it opens there next time.
   Future<void> _noteFrame(int id) async {
     final host = _hosts[id];
     if (host == null) return;
@@ -671,15 +637,12 @@ class _DockWidgetState extends State<DockWidget> with WidgetsBindingObserver {
     widget.onLayoutChanged();
   }
 
-  /// Keep the last pane the keyboard was in, per window.
   void _noteActive() {
     final pane = widget.activePanel.value;
     if (pane == null) return;
     _lastActive[windowOf(widget.root, pane)?.id ?? 0] = pane;
   }
 
-  /// Window [id] (0 for the main one) came to the front: the keyboard goes
-  /// back to the pane it was in there.
   void _focusWindow(int id) {
     final roots = id == 0
         ? mainPanesIn(widget.root)
@@ -707,7 +670,6 @@ class _DockWidgetState extends State<DockWidget> with WidgetsBindingObserver {
     }
   }
 
-  /// Ask the runner where every view is, for a drag that may cross windows.
   Future<void> _placeViews() async {
     final main = _mainView;
     final asked = <int, Future<NativeFrame?>>{
@@ -754,20 +716,17 @@ class _DockWidgetState extends State<DockWidget> with WidgetsBindingObserver {
         .size;
   }
 
-  /// Put [pane] back in the main window.
   void _dockPane(PaneId pane) {
     setState(() => dockPane(widget.root, pane));
     widget.activePanel.value = pane;
     widget.onLayoutChanged();
   }
 
-  /// Put every panel of window [id] back in the main window.
   void _dockWindow(int id) {
     setState(() => dockWindow(widget.root, id));
     widget.onLayoutChanged();
   }
 
-  /// Keep window [id] above other programs' windows, or not.
   void _setOnTop(int id, bool on) {
     final w = _window(id);
     final host = _hosts[id];
@@ -814,7 +773,6 @@ class _DockWidgetState extends State<DockWidget> with WidgetsBindingObserver {
     widget.onLayoutChanged();
   }
 
-  /// Close every other pane of [keep]'s group.
   void _closeOthers(PaneId keep, DockTabs group) {
     setState(() {
       for (final c in group.children.toList()) {
@@ -897,7 +855,6 @@ class _DockWidgetState extends State<DockWidget> with WidgetsBindingObserver {
               ? mainPanesIn(tree)
               : panesIn(tree);
           return Container(
-            // Cards stand on the room; flush panes sit on the canvas.
             color: t.tokens.roomed ? t.room : t.surface0,
             padding: EdgeInsets.all(t.tokens.windowInset),
             child: maximised != null && held.contains(maximised)
@@ -959,7 +916,6 @@ class _DockWidgetState extends State<DockWidget> with WidgetsBindingObserver {
     );
   }
 
-  /// A floating window's own menu, on its top line.
   void _showWindowMenu(BuildContext context, Offset at, int id) {
     final w = _window(id);
     final host = _hosts[id];
@@ -1004,7 +960,6 @@ class _DockWidgetState extends State<DockWidget> with WidgetsBindingObserver {
   /// draws a header of its own has no second one.
   Widget? _bareTitle(LumitTheme t, PaneId pane) {
     final panel = pane.panel;
-    // These four draw a header line of their own.
     if (panel == Panel.viewer ||
         panel == Panel.timeline ||
         panel == Panel.audioTimeline ||
@@ -1061,8 +1016,6 @@ class _DockWidgetState extends State<DockWidget> with WidgetsBindingObserver {
         DockSplit() => _buildSplit(context, node, edge: edge),
       };
 
-  /// A group changed something of its own: the fronted tab, what is twirled
-  /// open, a height, or whether it is a stack at all.
   void _groupChanged() {
     setState(() {});
     widget.onLayoutChanged();
@@ -1099,7 +1052,6 @@ class _DockWidgetState extends State<DockWidget> with WidgetsBindingObserver {
     );
   }
 
-  /// The least a child of [split] can be drawn at along the split.
   double _least(DockSplit split, DockNode child) =>
       split.axis == DockAxis.horizontal
           ? dockMinWidth(child)
@@ -1128,7 +1080,6 @@ class _DockWidgetState extends State<DockWidget> with WidgetsBindingObserver {
             spare = width[j] - least[j];
           }
         }
-        // Nothing left to give: the panel slides inside its pane instead.
         if (giver < 0) break;
         final take = short < spare ? short : spare;
         width[giver] -= take;
@@ -1139,8 +1090,6 @@ class _DockWidgetState extends State<DockWidget> with WidgetsBindingObserver {
     return width;
   }
 
-  /// A split's children and the seams between them, each child weighted by
-  /// [weights] where given, else by its share.
   List<Widget> _splitChildren(BuildContext context, LumitTheme t,
       DockSplit split, List<int> shown, List<double>? weights,
       [_Edge? edge]) {
@@ -1190,8 +1139,6 @@ class _DockWidgetState extends State<DockWidget> with WidgetsBindingObserver {
     return children;
   }
 
-  /// Move the boundary between child i and child j, the next one drawn, by
-  /// `deltaPx` of `totalExtent`.
   void _resize(
       DockSplit split, int i, int j, double deltaPx, double totalExtent) {
     if (totalExtent <= 0) return;
@@ -1233,7 +1180,6 @@ class _DragController extends ChangeNotifier {
   final GlobalKey Function(PaneId) headerKey;
   final Iterable<PaneId> Function() panes;
 
-  /// Each view's place on the screen, by view id. Filled by [onStart].
   final Map<int, _ViewPlace> places;
   final Future<void> Function() onStart;
   final VoidCallback onGhostShow;
@@ -1383,8 +1329,6 @@ class _DragController extends ChangeNotifier {
         content.width * s, (content.height + 32) * s);
   }
 
-  /// Find the pane under the pointer and the drop position within it, in
-  /// whichever window it is.
   void _resolve() {
     hoveredPanel = null;
     dropPosition = null;
@@ -1401,7 +1345,6 @@ class _DragController extends ChangeNotifier {
       dropPosition = _positionIn(hit.rect, hit.point);
       return;
     }
-    // A header in a stack joins the stack, under the panel it belongs to.
     for (final id in panes()) {
       if (_hit(headerKey(id)) == null) continue;
       hoveredPanel = id;
@@ -1447,7 +1390,6 @@ class _DragController extends ChangeNotifier {
   static int? _viewOf(BuildContext context) =>
       context.findAncestorWidgetOfExactType<View>()?.view.viewId;
 
-  /// Whether [box] has no offstage ancestor — i.e. it is actually painted.
   static bool _onStage(RenderObject box) {
     RenderObject? node = box;
     while (node != null) {
@@ -1550,7 +1492,6 @@ class _DragSourceState extends State<_DragSource> {
     );
   }
 
-  /// The dragged pane's size on screen, in logical pixels.
   Size? _paneSize() {
     final box =
         widget.drag.paneKey(widget.pane).currentContext?.findRenderObject();
@@ -1568,7 +1509,6 @@ class _DragSourceState extends State<_DragSource> {
 class _GhostLayer extends StatelessWidget {
   final _DragController drag;
 
-  /// The view this layer is drawn in.
   final int? view;
   const _GhostLayer({required this.drag, required this.view});
 
@@ -1635,7 +1575,6 @@ class _GhostLayer extends StatelessWidget {
       );
 }
 
-/// The floating tab pill, styled like the active pill it was lifted from.
 class _GhostPill extends StatelessWidget {
   final String title;
   final LumitTheme theme;
@@ -1706,10 +1645,8 @@ class _DividerState extends State<_Divider> {
   bool _hover = false;
   bool _dragging = false;
 
-  /// When the seam was last clicked, for the second click of a double one.
   DateTime? _lastTap;
 
-  /// The split's own width or height: the row or column the seam sits in.
   double _extent() {
     final parent = context.findAncestorRenderObjectOfType<RenderBox>()?.size;
     if (parent == null) return 0;
@@ -1816,10 +1753,8 @@ class _DividerState extends State<_Divider> {
 class _TitleLine extends StatelessWidget {
   final Widget child;
 
-  /// The panel it heads, or the fronted one of a group.
   final String panel;
 
-  /// Whether the line lifts its pane, as a bare pane's title does.
   final bool lifts;
 
   const _TitleLine(
@@ -1866,8 +1801,6 @@ class _TitleLine extends StatelessWidget {
   }
 }
 
-/// The card a roomed pane stands in: `surface1`, the card radius and shadow,
-/// clipped. A flush shape hands the child back as it is.
 Widget _card(BuildContext context, LumitTheme t, String? panel, Widget child) {
   if (!t.tokens.roomed) return child;
   final style = partStyle(context, t, 'pane', inside: panel);
@@ -1893,8 +1826,6 @@ Widget _card(BuildContext context, LumitTheme t, String? panel, Widget child) {
   );
 }
 
-/// A tab group: the title line of tabs plus the active pane's body. Under
-/// Lantern the whole group is one card and the tabs sit on its title line.
 class _TabGroup extends StatelessWidget {
   final DockTabs tabs;
   final PanelBuilder buildPanel;
@@ -1902,11 +1833,8 @@ class _TabGroup extends StatelessWidget {
   final ValueNotifier<PaneId?> activePanel;
   final _DragController drag;
 
-  /// Take one pane out of the arrangement, for the tab's right-click menu.
   final void Function(PaneId) onClose;
 
-  /// Where it stands against a floating window's top edge, which its strip
-  /// of tabs runs along when it does.
   final _Edge? edge;
 
   const _TabGroup({
@@ -1987,7 +1915,6 @@ class _TabGroup extends StatelessWidget {
 /// A tab's width less its name, in each shape: what [_TabPill] puts round the
 /// word.
 double _tabChrome(LumitTheme t) {
-  // The always-there border, one either side.
   const border = 2.0;
   if (t.tokens.actionRadius == ShapeTokens.stadium) {
     return t.tokens.pillInset * 2 + 16 + border;
@@ -2043,7 +1970,6 @@ class _TabStripState extends State<_TabStrip> {
     super.dispose();
   }
 
-  /// The plain wheel moves the strip sideways, as it would a list.
   void _wheel(PointerSignalEvent event) {
     if (event is! PointerScrollEvent || !_scroll.hasClients) return;
     final position = _scroll.position;
@@ -2072,13 +1998,11 @@ class _TabStripState extends State<_TabStrip> {
     if (parts.length < 2) return _word(t, ambient, i, scaler);
     final kept = '${parts[0]} ${parts[1].substring(0, min(2, parts[1].length))}';
     if (kept.length >= name.length) return _word(t, ambient, i, scaler);
-    // The fade covers an ellipsis' width at the cut.
     return _measure(t, ambient, i, scaler, '$kept…');
   }
 
   double _measure(LumitTheme t, TextStyle ambient, int i, TextScaler scaler,
       String words) {
-    // Over the ambient style, as the tab's own Text is drawn.
     final style = ambient.merge(i == widget.front ? t.kickerOn : t.kicker);
     return _words.putIfAbsent((words, style, scaler), () {
       final painter = TextPainter(
@@ -2148,7 +2072,6 @@ class _TabStripState extends State<_TabStrip> {
     );
   }
 
-  /// Every tab of the group under the mark, the fronted one ticked.
   void _list(BuildContext context) {
     final box = context.findRenderObject();
     if (box is! RenderBox) return;
@@ -2260,10 +2183,8 @@ class _TabStripState extends State<_TabStrip> {
   }
 }
 
-/// The mark at a cut strip's end.
 const double _tabMarkWidth = 24;
 
-/// A row for each of [shown], the fronted one ticked, which fronts its tab.
 List<Widget> _tabRows(DockTabs tabs, List<int> shown, int front,
         VoidCallback close, void Function(int) pick) =>
     [
@@ -2321,7 +2242,6 @@ class _TabPill extends StatefulWidget {
   /// for all of it.
   final double? word;
 
-  /// The tab's right-click menu, opened at a point.
   final void Function(BuildContext context, Offset at, PaneId pane) onMenu;
 
   const _TabPill({
@@ -2341,7 +2261,6 @@ class _TabPill extends StatefulWidget {
 class _TabPillState extends State<_TabPill> {
   bool _hover = false;
 
-  /// When the tab was last clicked, for the second click of a double one.
   DateTime? _lastTap;
 
   /// A click fronts the tab at once, and a second within the double-click
@@ -2374,8 +2293,6 @@ class _TabPillState extends State<_TabPill> {
     if (widget.active && !old.active) _reveal();
   }
 
-  /// The fronted tab brings itself into view, so a strip narrower than its
-  /// tabs never hides the one that is open.
   void _reveal() {
     if (!widget.active) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -2394,10 +2311,7 @@ class _TabPillState extends State<_TabPill> {
         : _hover
             ? scope.motion.hoverIn
             : scope.motion.hoverOut;
-    // A filled pill marks the fronted tab only where actions are capsules.
     final round = t.tokens.actionRadius == ShapeTokens.stadium;
-    // Desk draws the mockup's tab: a bare lowercase word on the 24 line, the
-    // fronted one over a 2px accent rule, no fill and no box on hover.
     final ruled = t.shape == ThemeShape.desk;
     final Color fill;
     final Color textColour;
@@ -2434,8 +2348,6 @@ class _TabPillState extends State<_TabPill> {
     final style =
         (widget.active ? t.kickerOn : t.kicker).copyWith(color: textColour);
     final word = widget.word;
-    // A name cut short fades where it stops, and says the whole of itself on
-    // hover.
     final label = word == null
         ? Text(t.kickerCase(widget.title), style: style)
         : LumitTooltip(
@@ -2499,7 +2411,6 @@ class _TabPillState extends State<_TabPill> {
       drag: widget.drag,
       child: MouseRegion(
         key: ValueKey<String>('dock-tab-${widget.pane.panel.name}'),
-        // The arrow, as a tab is on Windows.
         cursor: MouseCursor.defer,
         onEnter: (_) => setState(() => _hover = true),
         onExit: (_) => setState(() => _hover = false),
@@ -2523,12 +2434,6 @@ class _TabPillState extends State<_TabPill> {
   }
 }
 
-/// A panel's right-click menu, on its tab, its header in a stack, its own
-/// title when it stands alone, and the empty end of its strip: the panel's
-/// own commands (close, close the others, fill the window), where it lives
-/// (a window of its own, its group in one, back in the main window), what to
-/// add beside it, how the group it is in is drawn, and the way back to the
-/// workspace. A pane standing alone has no group, so those rows go.
 void _showPaneMenu(
   BuildContext context,
   Offset position, {
@@ -2552,14 +2457,12 @@ void _showPaneMenu(
   final maximised = dock?.widget.maximised;
   final windows = popOutAvailable && root != null;
   final floating = root == null ? null : windowOf(root, pane);
-  // The whole group goes when something is left behind it.
   final groupFloats = windows &&
       group != null &&
       group.children.length > 1 &&
       (floating == null
           ? mainPanesIn(root).length > group.children.length
           : panesIn(floating.root).length > group.children.length);
-  // A strip too narrow for its tabs lists them first, as its mark does.
   final shown = !listTabs || group == null
       ? const <int>[]
       : [for (var i = 0; i < group.children.length; i++) i];
@@ -2666,8 +2569,6 @@ void _showPaneMenu(
                 onPressed: () {
                   close(null);
                   group.stacked = !group.stacked;
-                  // A stack with nothing open is a column of headers, so the
-                  // panel that was in front opens with it.
                   if (group.stacked && group.open.isEmpty) {
                     group.setOpen(group.activePane.id, true);
                   }
@@ -2793,7 +2694,6 @@ class _StackGroup extends StatelessWidget {
   final PanelBuilder buildPanel;
   final VoidCallback onChanged;
 
-  /// A seam is being dragged: redraw, and save when it lets go.
   final VoidCallback onResized;
   final ValueNotifier<PaneId?> activePanel;
   final _DragController drag;
@@ -2822,12 +2722,9 @@ class _StackGroup extends StatelessWidget {
       t,
       null,
       Container(
-        // What shows under the headers when every panel is shut.
         color: t.surface1,
         child: LayoutBuilder(
           builder: (context, constraints) {
-            // What the open panels share: the stack less its headers and the
-            // seams between the open ones.
             final shared = (constraints.maxHeight -
                     panes.length * t.density.headerStrip -
                     (open.isEmpty ? 0 : open.length - 1) * hit)
@@ -2835,8 +2732,6 @@ class _StackGroup extends StatelessWidget {
             final children = <Widget>[];
             for (final (i, pane) in panes.indexed) {
               final isOpen = tabs.isOpen(pane);
-              // A line over the header when an open panel ends right above it
-              // with no seam of its own, as a shut header's line does below.
               final above = i == 0 ? null : panes[i - 1];
               final lineAbove = above != null &&
                   tabs.isOpen(above) &&
@@ -2884,7 +2779,6 @@ class _StackGroup extends StatelessWidget {
                   ),
                 ),
               ));
-              // A seam under every open panel with another open one below it.
               final next = open.indexOf(pane) + 1;
               if (isOpen && next < open.length) {
                 final below = open[next];
@@ -2929,8 +2823,6 @@ class _StackGroup extends StatelessWidget {
   }
 }
 
-/// One panel's header in a stack: a twirl and its name. A click twirls it, a
-/// drag re-docks it, a right-click opens the panel's menu.
 class _StackHeader extends StatefulWidget {
   final PaneId pane;
   final bool open;
@@ -3029,18 +2921,12 @@ class _StackHeaderState extends State<_StackHeader> {
   }
 }
 
-/// The pane body chrome: Sharp draws edge-to-edge on `surface1`; Round wraps
-/// the content in a rounded, shadowed, padded card (dock.rs::pane_ui). Any
-/// click inside makes this the active panel, which wears the accent boundary
-/// (Shell::active_panel). A live re-dock drag paints the drop-zone preview
-/// over the hovered pane.
 class _PaneChrome extends StatelessWidget {
   final PaneId pane;
   final ValueNotifier<PaneId?> activePanel;
   final _DragController drag;
   final Widget child;
 
-  /// The title line drawn above the body, for a pane standing alone.
   final Widget? header;
 
   /// Whether a tab group's card already wraps this pane, so it draws no card
@@ -3067,7 +2953,6 @@ class _PaneChrome extends StatelessWidget {
     final t = scope.theme;
     final round = t.tokens.roomed && !inCard;
     final onRoom = round && pane.panel == Panel.viewer;
-    // Whether this pane is itself a card, with a card's corners and shadow.
     final card = round && !onRoom;
     final corner = Radius.circular(t.tokens.cardRadius);
     final edgeRadius = onRoom
@@ -3098,7 +2983,6 @@ class _PaneChrome extends StatelessWidget {
     return ValueListenableBuilder<PaneId?>(
       valueListenable: activePanel,
       builder: (context, active, _) {
-        // Inside a group's card, the card wears the style's edge.
         final style = onRoom
             ? PartStyle.none
             : partStyle(context, t, 'pane',
@@ -3204,12 +3088,10 @@ extension on _PaneChrome {
   }
 }
 
-/// What a pane hands down to its panel, so the panel's own title can lift it.
 class _PaneScope extends InheritedWidget {
   final PaneId pane;
   final _DragController drag;
 
-  /// Null in a group, where there is a tab to drag instead.
   final void Function(PaneId)? onClose;
 
   const _PaneScope({
@@ -3262,9 +3144,6 @@ class DockPaneHandle extends StatelessWidget {
   }
 }
 
-/// Where a node of a floating window stands against the window's top edge:
-/// which window, whether in the corner the window's buttons stand in, the
-/// way the window reads, which decides that corner, and the window's menu.
 typedef _Edge = ({
   _Host host,
   bool corner,
@@ -3358,7 +3237,6 @@ class DockWindowButtons extends StatefulWidget {
 }
 
 class _DockWindowButtonsState extends State<DockWindowButtons> {
-  /// The window these are counted as shown in.
   _Host? _counted;
 
   /// Count these as shown in [host]'s window, or in none. After the frame,
@@ -3386,7 +3264,6 @@ class _DockWindowButtonsState extends State<DockWindowButtons> {
     _count(corner?.host);
     if (corner == null) return const SizedBox.shrink();
     return GestureDetector(
-      // As on the empty line: a right click opens the window's menu.
       onSecondaryTapUp: (d) => corner.onMenu(context, d.globalPosition),
       child: Directionality(
         textDirection: corner.direction,
@@ -3398,9 +3275,6 @@ class _DockWindowButtonsState extends State<DockWindowButtons> {
   }
 }
 
-/// The translucent accent region shown over the pane the pointer hovers while
-/// a re-dock drag is live: the whole pane for a stack, the near half for an
-/// edge split.
 class _DropPreview extends StatelessWidget {
   final PaneId pane;
   final _DragController drag;
@@ -3442,8 +3316,6 @@ class _DropPreview extends StatelessWidget {
       );
 }
 
-/// Where a drop at [pos] lands, as a fraction of the pane: the whole of it for
-/// a stack, the near half for an edge split.
 Rect _dropRegion(DropPosition pos) => switch (pos) {
       DropPosition.stack => const Rect.fromLTWH(0, 0, 1, 1),
       DropPosition.left => const Rect.fromLTWH(0, 0, 0.5, 1),
@@ -3453,7 +3325,6 @@ Rect _dropRegion(DropPosition pos) => switch (pos) {
     };
 
 class _DropPainter extends CustomPainter {
-  /// The region to light, as a fraction of the pane ([_dropRegion]).
   final Rect region;
   final Color accent;
   const _DropPainter({required this.region, required this.accent});
@@ -3481,22 +3352,6 @@ class _DropPainter extends CustomPainter {
       old.region != region || old.accent != accent;
 }
 
-/// **The bare-pane corner grip is gone** (owner review, 2026-08-24).
-///
-/// A solo pane used to carry a 16px dot-grid square in its top-right corner
-/// (dock.rs::paint_bare_pane_grip), which dragged the pane's panel exactly like
-/// a tab. It read as a control on every panel that had one, and on the Viewer it
-/// sat over the right-hand end of that panel's own header strip — so the one
-/// dock affordance drawn on the picture was also the one covering a picker.
-///
-/// What carries re-docking now: a **tab pill** drags its panel (`_TabPill`),
-/// every pane is still a **drop target** (`_DropPreview`), and Window →
-/// Workspace holds the presets, the reset and the per-panel toggles. A pane
-/// that is alone in its slot is lifted by its own title (`DockPaneHandle`),
-/// which sits in the panel's header strip rather than floating over its content.
-
-/// The dock itself, for the menus of the panes in it: what they close, add
-/// and fill the window with.
 class _DockScope extends InheritedWidget {
   final _DockWidgetState dock;
   const _DockScope({required this.dock, required super.child});
@@ -3508,8 +3363,6 @@ class _DockScope extends InheritedWidget {
   bool updateShouldNotify(_DockScope old) => old.dock != dock;
 }
 
-/// A floating window on screen: its native window, and what the dock keeps
-/// about it while it is up.
 class _Host {
   final int id;
   final PopOutWindow window;
@@ -3522,13 +3375,10 @@ class _Host {
   /// when its place differs.
   FloatingFrame? placed;
 
-  /// In front, as last seen.
   bool active = false;
 
-  /// The system's title for it, as last set.
   String? title;
 
-  /// Done once the runner has taken the window on and placed it.
   Future<void> ready = Future<void>.value();
 
   VoidCallback? listener;

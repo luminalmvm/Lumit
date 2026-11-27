@@ -15,12 +15,10 @@ use uuid::Uuid;
 
 use crate::track::{AnalysisError, LumaFrames, Progress, Requested};
 
-/// One window track, as handed to the analysis thread.
 pub struct WindowJob {
     /// What the run is filed under: the Correction's instance id, which Cancel
     /// and the progress reading name.
     pub effect: Uuid,
-    /// Opens the frames to follow, on the analysis thread.
     pub open: Box<dyn FnOnce() -> Option<Box<dyn LumaFrames>> + Send>,
     /// The moment of each step on the frames' own clock, seconds, in
     /// tracking order.
@@ -33,14 +31,10 @@ pub struct WindowJob {
     pub outline: WindowOutline,
 }
 
-/// How a run ended.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WindowEnd {
-    /// Every step was followed.
     Finished,
-    /// The window could not be followed onto the next step.
     Lost,
-    /// Cancel was pressed.
     Cancelled,
 }
 
@@ -74,8 +68,6 @@ pub fn request_window(
     })
 }
 
-/// The frame loop: one frame and one push per step, checking Cancel before
-/// each.
 fn follow(
     job: WindowJob,
     cancel: &AtomicBool,

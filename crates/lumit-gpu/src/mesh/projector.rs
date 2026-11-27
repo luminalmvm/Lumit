@@ -12,7 +12,6 @@ use crate::fx::FxEngine;
 use crate::GpuContext;
 use glam::{Mat3, Mat4, Vec3};
 
-/// A camera as the shader reads it.
 #[derive(Clone)]
 pub struct Projector {
     /// Comp pixels to where the camera sees them ([`view_of`]).
@@ -27,11 +26,9 @@ pub struct Projector {
     /// wherever it has got to. Following, the picture is read where a point is
     /// drawn, as a moving shot's plate has its own blur already.
     pub held: bool,
-    /// What the camera sees first, when there is anything.
     pub depth: Option<ProjectorDepth>,
 }
 
-/// How far the nearest surface is from a camera at every texel.
 #[derive(Clone)]
 pub struct ProjectorDepth {
     pub(super) texture: wgpu::Texture,
@@ -54,7 +51,6 @@ pub fn view_of(camera: Mat4, (w, h): (u32, u32), zoom: f32) -> Mat4 {
     .transpose()
 }
 
-/// What [`Projector::uniform`] answers.
 type Numbers = ([[f32; 4]; 4], [[f32; 4]; 3], [f32; 4], [f32; 4]);
 
 impl Projector {

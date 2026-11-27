@@ -1,6 +1,3 @@
-//! A Light layer's settings across the bridge, to and from the
-//! project's own.
-
 use crate::api::layer::{BridgeLightFalloff, BridgeLightKind, BridgeLightSettings};
 
 impl BridgeLightSettings {

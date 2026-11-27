@@ -9,10 +9,8 @@ use crate::fx::{
 use crate::model::{EffectInstance, EffectValue};
 use lumit_fx_macros::Effect;
 
-/// What a 3D precomp hands over.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PassKind {
-    /// Which way each pixel faces, as colour.
     Normal,
     /// Where each pixel is, metres.
     Position,
@@ -20,22 +18,17 @@ pub enum PassKind {
     PartId,
     /// How far each pixel is from the camera, metres.
     Depth,
-    /// White over the parts named, with soft edges.
     Matte,
 }
 
-/// What a row reads from a 3D precomp in place of its picture.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SceneRead {
     pub pass: PassKind,
-    /// Normal and Position from the camera's point of view, not the comp's.
     pub from_camera: bool,
-    /// The parts a matte shows.
     pub parts: Vec<u32>,
 }
 
 impl SceneRead {
-    /// Whether it has nothing to read: a matte of no parts.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.pass == PassKind::Matte && self.parts.is_empty()
@@ -57,7 +50,6 @@ fn choice(inst: &EffectInstance, id: &str) -> u32 {
     }
 }
 
-/// Scene pass's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "scene_pass",
@@ -72,7 +64,6 @@ pub struct ScenePass {
     #[choice(options = ["Normals", "Position", "Part id", "Depth"], default = 0)]
     pub pass: u32,
 
-    /// Whose point of view Normal and Position are from.
     #[choice(options = ["Comp", "Camera"], default = 0)]
     pub space: u32,
 
@@ -101,7 +92,6 @@ impl EffectDef for ScenePassDef {
     }
 }
 
-/// Part matte's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "part_matte",
@@ -115,7 +105,6 @@ impl EffectDef for ScenePassDef {
     matte = false,
 )]
 pub struct PartMatte {
-    /// The parts it keeps, filled in by picking them in the Viewer.
     #[text(label = "Parts", default = "")]
     pub parts: ShortText,
 

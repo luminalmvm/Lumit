@@ -10,13 +10,10 @@ use crate::model::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// An Environment light's own rows.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LightEnvironment {
-    /// The layer whose picture surrounds the scene.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<Uuid>,
-    /// Shown behind everything, as the camera sees it.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub background: bool,
     /// Percent: how soft it is there.
@@ -34,7 +31,6 @@ impl Default for LightEnvironment {
     }
 }
 
-/// The part of [`LightEnvironment`] the choice rows set, one op at a time.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct EnvironmentSettings {
     #[serde(default)]
@@ -73,10 +69,8 @@ impl LightEnvironment {
     }
 }
 
-/// The comp's environment at one moment, as the renderer takes it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ResolvedEnvironment {
-    /// The layer whose picture it is.
     pub source: Uuid,
     /// Scene-linear, the intensity in it.
     pub colour: [f32; 3],
@@ -179,7 +173,6 @@ mod tests {
         crate::edits::base_layer("Environment".into(), kind, ten, TransformGroup::default())
     }
 
-    /// A saved light keeps its picture, and the topmost one that shows wins.
     #[test]
     fn an_environment_light_keeps_its_source_and_the_top_one_wins() {
         let (top, under) = (uuid::Uuid::now_v7(), uuid::Uuid::now_v7());

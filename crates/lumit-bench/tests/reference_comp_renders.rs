@@ -43,7 +43,6 @@ fn the_reference_comp_builds_and_renders_a_named_frame() {
         }
     };
 
-    // docs/13 §1's five picture layers plus the audio layer.
     let comp = doc
         .comp(comp_id)
         .expect("the built comp is in the document");

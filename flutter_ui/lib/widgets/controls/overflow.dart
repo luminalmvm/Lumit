@@ -17,15 +17,12 @@ import 'buttons.dart';
 import 'menus.dart';
 import 'popups.dart';
 
-/// The app's one overflow mark: a frameless button with a ⋯ on it. [onOpen]
-/// gets the button's own context, to anchor what it opens.
 class OverflowMark extends StatelessWidget {
   final double width;
   final double height;
   final Key? buttonKey;
   final void Function(BuildContext context) onOpen;
 
-  /// What it holds, on hover: more controls unless told otherwise.
   final String? tooltip;
 
   const OverflowMark({
@@ -60,8 +57,6 @@ class OverflowMark extends StatelessWidget {
   }
 }
 
-/// One button on a bar that folds: the button as the bar draws it, and the
-/// row the overflow menu lists it as once it has folded.
 class FoldItem {
   final Widget child;
   final String label;
@@ -69,7 +64,6 @@ class FoldItem {
   final VoidCallback? onPressed;
   final bool selected;
 
-  /// Never folds: what the bar is for.
   final bool keep;
 
   const FoldItem({
@@ -91,12 +85,10 @@ class FoldItem {
 class FoldingRow extends StatefulWidget {
   final List<FoldItem> items;
 
-  /// The mark's size, which the bar decides.
   final double markWidth;
   final double markHeight;
   final Key? markKey;
 
-  /// Down the page for a rail, folding from the bottom.
   final Axis axis;
 
   const FoldingRow({
@@ -130,7 +122,6 @@ class _FoldingRowState extends State<FoldingRow> {
       position: box.localToGlobal(widget.axis == Axis.vertical
           ? Offset(box.size.width, 0)
           : Offset(0, box.size.height)),
-      // As wide as its longest row, not the window.
       builder: (close) => IntrinsicWidth(
           child: FloatSurface(
         child: Column(
@@ -293,7 +284,6 @@ class _RenderFold extends RenderBox
   @override
   void performLayout() {
     final kids = _kids;
-    // Along is the way the row runs, across the other way.
     final down = _down;
     double along(RenderBox k) => down ? k.size.height : k.size.width;
     double across(RenderBox k) => down ? k.size.width : k.size.height;

@@ -58,7 +58,6 @@ bool libraryKindListed(LibraryKind kind, int count) =>
 /// presets' come as a bare count, and are written out here.
 String libraryDetail(LibraryEntry e) => libraryDetailOf(e.kind, e.detail);
 
-/// The same for a [detail] line of [kind], as a conflict's other side has.
 String libraryDetailOf(LibraryKind kind, String detail) {
   // A preset's line is its effects, kept by their ids and said by name.
   if (kind.name == 'presets' && detail.isNotEmpty) {
@@ -74,7 +73,6 @@ String libraryDetailOf(LibraryKind kind, String detail) {
   };
 }
 
-/// The last part of an item's path: its file, or its folder for a style.
 String libraryFileName(LibraryEntry e) => e.path.split('/').last;
 
 /// What Undo or Redo would do, from the state's `<action>:<names>` label:
@@ -88,8 +86,6 @@ String libraryUndoWords(String label, {required bool redo}) {
   return names.isEmpty ? verb : '$verb · $names';
 }
 
-/// How a status line is coloured: nothing to say, all well, under way, or
-/// something for the person to look at.
 enum LibraryTone { quiet, good, busy, warn }
 
 /// The one line the library has to say about itself, for the title strip,
@@ -123,7 +119,6 @@ enum LibraryTone { quiet, good, busy, warn }
   };
 }
 
-/// The colour a tone reads in.
 Color libraryToneColour(LumitTheme t, LibraryTone tone) => switch (tone) {
       LibraryTone.quiet => t.textMuted,
       LibraryTone.good => t.textSecondary,
@@ -170,7 +165,6 @@ LibraryHold libraryHoldOf(LibraryEntry e, LibraryMachine m) {
   return held >= head ? LibraryHold.newest : LibraryHold.older;
 }
 
-/// The same in words, for the Where section and a disc's tooltip.
 String libraryWhereWords(LibraryEntry e, LibraryMachine m) {
   if (m.me) return libraryEntryWords(e) ?? l10n.libraryWhereUpToDate;
   return switch (libraryHoldOf(e, m)) {
@@ -180,7 +174,6 @@ String libraryWhereWords(LibraryEntry e, LibraryMachine m) {
   };
 }
 
-/// A computer's name as the window says it: this one is "This computer".
 String libraryMachineName(LibraryMachine m) =>
     m.me ? l10n.libraryThisComputer : m.name;
 
@@ -195,12 +188,9 @@ String librarySeen(LibraryMachine m) {
   return l10n.libraryAgoDays(gap.inDays);
 }
 
-/// The glyph an item wears when it has no picture of its own: its kind's, or
-/// the node graph's for a saved node group.
 String libraryGlyph(LibraryEntry e) =>
     e.path.toLowerCase().endsWith('.lumngrp') ? LumitIcons.nodes : libraryKindGlyph(e.kind);
 
-/// The glyph a kind wears.
 String libraryKindGlyph(LibraryKind kind) => switch (kind.name) {
       'presets' => LumitIcons.effectsSwitch,
       'styles' => LumitIcons.label,
@@ -213,8 +203,6 @@ String libraryKindGlyph(LibraryKind kind) => switch (kind.name) {
       'luts' => LumitIcons.channels,
       _ => LumitIcons.composition,
     };
-
-// --- Fonts ----------------------------------------------------------------
 
 final Map<String, Future<String?>> _loadedFonts = {};
 
@@ -274,8 +262,6 @@ class LibraryFontSample extends StatelessWidget {
   }
 }
 
-// --- Template posters -------------------------------------------------------
-
 final Map<String, Future<Uint8List?>> _posters = {};
 
 /// The poster a template file carries, read once a [modified] time, or null
@@ -315,10 +301,6 @@ class LibraryPoster extends StatelessWidget {
       );
 }
 
-// --- The tile -------------------------------------------------------------
-
-/// An item's preview: a font's "Aa" in its own face, a theme's or style's
-/// colours, or the kind's glyph.
 class LibraryTile extends StatelessWidget {
   final LibraryEntry entry;
   final double size;
@@ -376,10 +358,8 @@ class LibraryTile extends StatelessWidget {
   }
 }
 
-/// A theme's or style's colours as upright stripes, the first the widest.
 class LibrarySwatches extends StatelessWidget {
   final List<int> colours;
-  /// How many of the colours are drawn, the first one wider.
   final int count;
   const LibrarySwatches(this.colours, {super.key, this.count = 5});
 
@@ -397,8 +377,6 @@ class LibrarySwatches extends StatelessWidget {
         ),
       );
 }
-
-// --- Discs -----------------------------------------------------------------
 
 /// One disc per computer: filled when it has the newest version, a ring for
 /// an older one or one on its way, dashed when it is not kept there. Each
@@ -437,7 +415,6 @@ class LibraryDiscs extends StatelessWidget {
   }
 }
 
-/// The disc itself, with its computer's initial in it.
 class LibraryDisc extends StatelessWidget {
   final LibraryHold hold;
   final String initial;
@@ -519,8 +496,6 @@ class _DiscPainter extends CustomPainter {
       old.hold != hold || old.ink != ink || old.ground != ground;
 }
 
-// --- Marks -----------------------------------------------------------------
-
 /// The mark an exception wears at the end of its row, with its words on
 /// hover. Nothing for the ordinary synced state. "Not on this computer" is
 /// the one that is a button, since Get is what it wants.
@@ -528,7 +503,6 @@ class LibraryMark extends StatelessWidget {
   final LibraryEntry entry;
   final VoidCallback? onGet;
 
-  /// What the Get button is keyed by, for the row it sits in.
   final String? getKey;
   const LibraryMark(this.entry, {super.key, this.onGet, this.getKey});
 
@@ -577,11 +551,6 @@ class LibraryMark extends StatelessWidget {
   }
 }
 
-// --- Storage ----------------------------------------------------------------
-
-/// The footer's storage: a bar with the library's own share lit in the
-/// accent and the rest of the account's use behind it, and the line that
-/// says the numbers.
 class LibraryStorage extends StatelessWidget {
   final ({int bytes, int limit, int library}) usage;
   const LibraryStorage(this.usage, {super.key});

@@ -31,7 +31,6 @@ import 'graph_edits.dart';
 import 'layer_fold_frb.dart' show MaskValue;
 import 'property_link.dart';
 
-/// The narrowest the editor opens, however small the thing it opens over.
 const double _minWidth = 460;
 
 /// Open the editor over [over], a box in window coordinates.
@@ -308,8 +307,6 @@ class _ExpressionEditorState extends State<_ExpressionEditor> {
                               overflow: TextOverflow.ellipsis,
                             ),
                     ),
-                    // Dragged onto a property row, the reference lands at
-                    // the caret.
                     LinkMark(
                       key: const ValueKey('expression-editor-link'),
                       always: true,
@@ -420,7 +417,6 @@ int expressionDecimals(GraphChannel channel) {
   };
 }
 
-/// An expression drawn on one line, in its language's colours.
 InlineSpan expressionLine(
         BuildContext context, BridgeScalar_Expression value) =>
     ExpressionTextEditingController.spanOf(
@@ -435,7 +431,6 @@ InlineSpan expressionLine(
 /// and pressing it opens the editor across the lane. A row of two axes shows
 /// each axis's own.
 class ExpressionLane extends StatelessWidget {
-  /// The row's channels that hold an expression.
   final List<GraphChannel> channels;
 
   /// Whether each is named, which a row of more than one axis needs.

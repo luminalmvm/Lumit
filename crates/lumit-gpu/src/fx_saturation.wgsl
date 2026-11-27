@@ -62,7 +62,6 @@ fn saturate_fx(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     let u = unpremult(o);
     let luma = u.r * LUMA.r + u.g * LUMA.g + u.b * LUMA.b;
-    // The matte pulls Saturation toward 1 per pixel.
     var sat = p.saturation;
     if (p.matte_on != 0.0) {
         sat = matte_toward(sat, 1.0, matte_k(xy));

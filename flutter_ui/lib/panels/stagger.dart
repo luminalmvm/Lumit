@@ -1,6 +1,3 @@
-// What the Stagger panel and a stagger drag on bars or keys share: the keys
-// that turn a move into a stagger, the order the layers are taken in, and how
-// far each one goes.
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';

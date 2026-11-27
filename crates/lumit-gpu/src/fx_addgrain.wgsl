@@ -56,7 +56,6 @@ fn matte_toward(value: f32, neutral: f32, k: f32) -> f32 {
     return neutral * (1.0 - k) + value * k;
 }
 
-// == lumit_core::fx::cpu::grain_at.
 fn grain_at(qx: f32, qy: f32, lane: u32) -> f32 {
     let hard = nc_hash01(p.seed, lane, i32(floor(qx)), i32(floor(qy)), p.tick) * 2.0 - 1.0;
     let soft = nc_value3(p.seed, lane, qx, qy, f32(p.tick), 0);

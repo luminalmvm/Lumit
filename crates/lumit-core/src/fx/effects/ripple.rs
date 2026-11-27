@@ -1,20 +1,9 @@
-//! Ripple (docs/08 §3.53): rings spreading from a point — AE's Ripple.
-//!
-//! **In plain terms.** A stone goes into the picture. Rings of distortion
-//! spread out from where it landed, strongest a third of the way out and fading
-//! to nothing at the rim, and turning Evolution sends the rings travelling
-//! outward. Symmetric slides each pixel in and out along the radius, which reads
-//! as a lens breathing; Asymmetric walks it round a small circle instead, which
-//! is what water actually does and is why it is the default. Wave speed turns
-//! Evolution on with layer time, so fresh rings travel without a key.
-
 use crate::fx::{
     cpu, effects::wave_warp, params::ParamId, params::Params, params::Value, registry::EffectDef,
     registry::EffectMetadata, registry::ResolveCx, schema::EffectSchema,
 };
 use lumit_fx_macros::Effect;
 
-/// Ripple's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "ripple",
@@ -22,9 +11,7 @@ use lumit_fx_macros::Effect;
     // 2: Wave speed. Older rings hold still, as they did.
     version = 2,
     category = Distortion,
-    // One sine and cosine and one bilinear tap a pixel.
     cost = Cheap,
-    // The rings can span the whole frame.
     roi = FullFrame,
     premultiplied = true,
     // Wave speed moves it with layer time under constant controls, so the
@@ -57,7 +44,6 @@ pub struct Ripple {
     #[slider(label = "Centre X", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
     pub centre_x: f32,
 
-    /// px@comp; see [`centre_x`](Self::centre_x).
     #[slider(label = "Centre Y", min = 0.0, max = 2160.0, default = 540.0, unit = Px)]
     pub centre_y: f32,
 
@@ -100,7 +86,6 @@ pub struct Ripple {
     #[slider(label = "Wave speed", min = -5.0, max = 5.0, default = 1.0, unit = Raw)]
     pub wave_speed: f32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -120,7 +105,6 @@ impl Ripple {
     /// paths multiply by the identical constant.
     pub const ENVELOPE_PEAK_RECIP: f32 = 6.75;
 
-    /// Turns the rings have travelled by this frame, Wave speed × layer time.
     pub const DERIVED_TRAVEL: ParamId = ParamId::new("derived.travel");
 
     /// The bundle both kernels consume (docs/impl/effect-registry.md §2.4).
@@ -145,7 +129,6 @@ impl Ripple {
     }
 }
 
-/// Ripple's behaviour.
 pub struct RippleDef;
 
 impl EffectDef for RippleDef {

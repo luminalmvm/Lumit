@@ -28,18 +28,14 @@ pub struct Step {
     pub similarity: [f64; 4],
     /// A homography, row-major, mapping column vectors `(x, y, 1)`.
     pub homography: [f64; 9],
-    /// Specks that agreed with the homography.
     pub kept: u32,
-    /// Specks that agreed with the similarity.
     pub kept_similarity: u32,
-    /// Specks seen on both frames.
     pub seen: u32,
     /// The two frames are of different shots: the path starts again after it.
     pub cut: bool,
 }
 
 impl Step {
-    /// No motion at all, for a pair nothing could be fitted to.
     pub const STILL: Step = Step {
         similarity: [1.0, 0.0, 0.0, 0.0],
         homography: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
@@ -49,13 +45,11 @@ impl Step {
         cut: false,
     };
 
-    /// Whether enough specks agreed with the homography for it to be used.
     #[must_use]
     pub fn trusted(&self) -> bool {
         self.kept >= MIN_KEPT && !self.cut
     }
 
-    /// Whether enough specks agreed with the similarity for it to be used.
     #[must_use]
     pub fn trusted_similarity(&self) -> bool {
         self.kept_similarity >= MIN_KEPT && !self.cut
@@ -83,14 +77,12 @@ pub struct Run {
 }
 
 impl Run {
-    /// Where the speck was on analysed frame `frame`, if it was seen there.
     #[must_use]
     pub fn at(&self, frame: u32) -> Option<[f32; 2]> {
         let i = frame.checked_sub(self.first)?;
         self.points.get(i as usize).copied()
     }
 
-    /// Whether the speck agreed with the step out of analysed frame `frame`.
     #[must_use]
     pub fn agreed_at(&self, frame: u32) -> bool {
         let Some(i) = frame.checked_sub(self.first) else {
@@ -100,14 +92,12 @@ impl Run {
         self.agreed.get(byte).is_some_and(|b| b & (1 << bit) != 0)
     }
 
-    /// The last analysed frame it was seen on.
     #[must_use]
     pub fn last(&self) -> u32 {
         self.first + (self.points.len() as u32).saturating_sub(1)
     }
 }
 
-/// Pack per-step agreement flags into the bytes [`Run::agreed`] keeps.
 #[must_use]
 pub fn pack_agreed(flags: &[bool]) -> Vec<u8> {
     let mut out = vec![0u8; flags.len().div_ceil(8)];
@@ -121,7 +111,6 @@ pub fn pack_agreed(flags: &[bool]) -> Vec<u8> {
     out
 }
 
-/// A whole analysis of one clip.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Analysis {
     /// The rate the frames were read at: the file's own, with no Interpret
@@ -139,7 +128,6 @@ pub struct Analysis {
     /// Those pixels to one of the raster the specks were followed on: more
     /// than one when the frames were read smaller.
     pub scale: f64,
-    /// The source frame the analysis starts on.
     pub first: i64,
     /// How many frames were analysed. Never fewer than one.
     pub frames: u32,
@@ -237,19 +225,16 @@ pub struct Filed {
     pub analysis: Arc<Analysis>,
 }
 
-/// Every analysis in hand, by Stabilise instance.
 fn table() -> &'static RwLock<HashMap<Uuid, Filed>> {
     static TABLE: OnceLock<RwLock<HashMap<Uuid, Filed>>> = OnceLock::new();
     TABLE.get_or_init(|| RwLock::new(HashMap::new()))
 }
 
-/// The generation the next filing takes.
 fn next_generation() -> u64 {
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
     NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
-/// File a finished analysis of `source` under the instance it was made for.
 pub fn publish(effect: Uuid, key: [u8; 32], source: Uuid, analysis: Analysis) {
     let filed = Filed {
         key,
@@ -269,10 +254,8 @@ pub fn filed(effect: Uuid) -> Option<Filed> {
     table().read().ok()?.get(&effect).cloned()
 }
 
-/// What asks for an analysis: the effect, the document, its comp and its layer.
 pub type Missing = dyn Fn(Uuid, &Arc<crate::model::Document>, Uuid, Uuid) + Send + Sync;
 
-/// The renderer's way of asking for an analysis, once it has given one.
 fn on_missing_cell() -> &'static OnceLock<Box<Missing>> {
     static ASK: OnceLock<Box<Missing>> = OnceLock::new();
     &ASK

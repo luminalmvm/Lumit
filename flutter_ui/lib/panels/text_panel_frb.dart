@@ -33,17 +33,12 @@ class TextPanelFrb extends StatefulWidget {
 
 class _TextPanelFrbState extends State<TextPanelFrb>
     with TextTargetState<TextPanelFrb> {
-  /// The installed families, once the engine has listed them.
   List<String>? _families;
 
-  /// The faces of each family asked about so far.
   final Map<String, List<String>> _faces = {};
 
-  /// Whether the less used controls are showing.
   bool _more = false;
 
-  /// Whether the font list shows the variable fonts alone, and those
-  /// families once the engine has listed them.
   bool _variableOnly = false;
   List<String>? _variableFamilies;
 
@@ -60,7 +55,6 @@ class _TextPanelFrbState extends State<TextPanelFrb>
     super.dispose();
   }
 
-  /// Read the families now, and again when the library's fonts change.
   void _readFamilies() {
     _faces.clear();
     textFontFamilies().then((families) {
@@ -261,7 +255,6 @@ class _TextPanelFrbState extends State<TextPanelFrb>
                     ),
                   ),
                 ],
-                // A plate behind the words, set the way the outline is.
                 textCell(
                   t,
                   l10n.textBackground,
@@ -365,7 +358,6 @@ class _TextPanelFrbState extends State<TextPanelFrb>
     );
   }
 
-  /// The filter that keeps the font list to the families with axes.
   Widget _variableOnlyRow(LumitTheme t) => SizedBox(
         height: t.density.propertyRow,
         child: Row(
@@ -480,8 +472,6 @@ class _TextPanelFrbState extends State<TextPanelFrb>
     ];
   }
 
-  /// The way to the less used controls, the same twirl every fold in the app
-  /// has, and on the same text edge as the labels above it.
   Widget _moreTwirl(LumitTheme t) => HoverMark(
         builder: (context, lit) => GestureDetector(
           key: const ValueKey('text-more'),
@@ -819,7 +809,6 @@ class _TextPanelFrbState extends State<TextPanelFrb>
       ColourSwatchButton(
         key: ValueKey<String>(keyName),
         resetTo: resetTo,
-        // Named, the row's menu holds the chip's rows and Add to controls.
         rowMenu: named != null,
         linear: true,
         colour: shown,

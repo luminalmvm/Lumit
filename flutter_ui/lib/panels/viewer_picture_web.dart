@@ -29,7 +29,6 @@ Widget viewerPicture(int textureId,
       ),
     );
 
-/// Take the newest picture the engine left for [view].
 Future<void> takeViewerPicture(int view) async {
   final shelf = globalContext['lumitViewer'];
   if (shelf == null || !shelf.isA<JSObject>()) return;

@@ -14,20 +14,18 @@
 use crate::time::FrameRate;
 use serde::{Deserialize, Serialize};
 
-/// What a file's alpha channel means.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AlphaMode {
-    /// The colour is whole and the alpha cuts it out.
     #[default]
     Straight,
-    /// The file has no transparency, whatever its alpha channel holds.
     Ignore,
     /// The colour was saved already mixed into `matte`, sRGB bytes.
-    Premultiplied { matte: [u8; 3] },
+    Premultiplied {
+        matte: [u8; 3],
+    },
 }
 
-/// Whether a frame is two fields, and which was shot first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FieldOrder {
@@ -44,30 +42,27 @@ pub enum FieldOrder {
 pub enum Pulldown {
     #[default]
     Off,
-    /// 3:2 pulldown.
-    ThreeTwo { phase: u8 },
-    /// 24Pa, the advanced cadence.
-    Advanced { phase: u8 },
+    ThreeTwo {
+        phase: u8,
+    },
+    Advanced {
+        phase: u8,
+    },
 }
 
-/// Whether a file's numbers are already linear light.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LinearLight {
-    /// A float file is, anything else carries its colour space's curve.
     #[default]
     Auto,
     On,
     Off,
 }
 
-/// The timecode a file's first frame is given, in place of the file's own.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub struct StartTimecode {
     /// The first frame's number, counted at the footage's own rate.
     pub frame: u64,
-    /// Written the drop-frame way, which skips numbers to keep 29.97 on the
-    /// clock.
     #[serde(default, skip_serializing_if = "is_default")]
     pub drop_frame: bool,
 }
@@ -86,7 +81,6 @@ impl StartTimecode {
         (per_second, if ntsc { per_second / 15 } else { 0 })
     }
 
-    /// Whether a count at `rate` can be written the drop-frame way at all.
     #[must_use]
     pub fn drops_at(rate: FrameRate) -> bool {
         Self::base(rate).1 > 0
@@ -148,13 +142,11 @@ impl StartTimecode {
     }
 }
 
-/// How one footage item's file is read.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Interpretation {
     #[serde(skip_serializing_if = "is_default")]
     pub alpha: AlphaMode,
-    /// Swap what the alpha calls opaque and clear.
     #[serde(skip_serializing_if = "is_default")]
     pub invert_alpha: bool,
     /// Play a video's frames at this rate instead of the file's own. A run of
@@ -166,10 +158,8 @@ pub struct Interpretation {
     pub start_timecode: Option<StartTimecode>,
     #[serde(skip_serializing_if = "is_default")]
     pub fields: FieldOrder,
-    /// Fill a separated field's missing rows along the picture's edges.
     #[serde(skip_serializing_if = "is_default")]
     pub preserve_edges: bool,
-    /// Only read while [`Self::fields`] is on.
     #[serde(skip_serializing_if = "is_default")]
     pub pulldown: Pulldown,
     /// How much wider than tall one pixel is, as a fraction. `None` is square.
@@ -194,7 +184,6 @@ pub struct Interpretation {
 }
 
 impl Interpretation {
-    /// Whether this reads the file exactly as it is.
     #[must_use]
     pub fn is_default(&self) -> bool {
         *self == Self::default()
@@ -216,9 +205,6 @@ fn is_default<T: Default + PartialEq>(v: &T) -> bool {
 mod tests {
     use super::*;
 
-    /// A default interpretation must write nothing, or every project saved
-    /// before this existed would come back changed, and a set one must come
-    /// back as it went.
     #[test]
     fn the_default_writes_nothing_and_a_set_one_round_trips() {
         assert_eq!(
@@ -260,7 +246,6 @@ mod tests {
         };
         assert_eq!(hour.text(ntsc), "01:00:00;00");
         assert_eq!(StartTimecode::parse("01:00:00;00", ntsc), Some(hour));
-        // The first frame of a minute that skips is numbered 02.
         let minute = StartTimecode {
             frame: 1800,
             drop_frame: true,
@@ -273,7 +258,6 @@ mod tests {
         assert_eq!((plain.frame, plain.drop_frame), (86_412, false));
         assert_eq!(plain.text(film), "01:00:00:12");
         assert_eq!(StartTimecode::parse("00:00:00:24", film), None);
-        // A `;` at a rate that drops nothing is an ordinary count.
         let pal = FrameRate::new(25, 1).unwrap();
         let hour = StartTimecode::parse("01:00:00;00", pal).unwrap();
         assert_eq!((hour.frame, hour.drop_frame), (90_000, false));

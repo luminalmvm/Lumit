@@ -34,19 +34,16 @@
 
 use super::Correction;
 
-/// Mid grey, the zones' nought.
 pub const GREY: f32 = 0.18;
 
 /// The most stops either side of grey a zone reads.
 pub const STOPS: f32 = 16.0;
 
-/// Zones that reach from their range down: Black, Dark and Shadow come first.
 pub const DOWN_ZONES: usize = 3;
 
 /// How many `vec4`s [`Hdr::words`] writes.
 pub const HDR_WORDS: usize = 2 + 2 * 6;
 
-/// One zone, ready to draw.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Zone {
     /// Stops a channel.
@@ -59,10 +56,8 @@ pub struct Zone {
     pub sat: f32,
 }
 
-/// The zones and the global rows, ready to draw.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Hdr {
-    /// Whether any row moves the picture.
     pub on: bool,
     /// Stops.
     pub falloff: f32,
@@ -75,7 +70,6 @@ pub struct Hdr {
 }
 
 impl Hdr {
-    /// The rows, read from the Correction.
     #[must_use]
     pub fn of(c: &Correction) -> Self {
         let rgb = |v: [f32; 4]| [v[0], v[1], v[2]];
@@ -162,7 +156,6 @@ pub fn weight(i: usize, s: f32, range: f32, width: f32) -> f32 {
     }
 }
 
-/// The zones over one scene-linear colour.
 #[must_use]
 pub fn zones(u: [f32; 3], h: &Hdr) -> [f32; 3] {
     use super::maths::{luma, ss};

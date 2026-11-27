@@ -1,5 +1,3 @@
-//! Learn measures the noise that is there.
-
 use super::atrous::level_of;
 use super::learn::learn;
 use super::space::ycc_to_linear;
@@ -89,7 +87,6 @@ fn learn_measures_white_and_blurred_noise_on_a_flat_patch() {
 fn learn_finds_the_flat_part_of_a_textured_picture() {
     for blur in [0, 1] {
         let (w, h) = (320, 192);
-        // Stripes and a ramp across the left half, flat on the right.
         let flat = |x: u32, _y: u32| x >= 160;
         let base = move |x: u32, y: u32| {
             if flat(x, y) {

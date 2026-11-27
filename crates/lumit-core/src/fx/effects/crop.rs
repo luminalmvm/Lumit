@@ -1,14 +1,8 @@
-//! Crop: takes the picture away past four edges, each set in per cent of the
-//! frame from its own side, with a soft edge if asked for. The crop half of
-//! Vegas's Pan/Crop. Nothing is cropped at the defaults, so it can go on a
-//! clip beside a Transform without changing what the clip shows.
-
 use crate::fx::{
     params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
 };
 use lumit_fx_macros::Effect;
 
-/// Crop's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "crop",
@@ -22,19 +16,15 @@ use lumit_fx_macros::Effect;
     premultiplied = true,
 )]
 pub struct Crop {
-    /// How much of the frame goes from the left, per cent.
     #[bounded(min = 0.0, max = 100.0, default = 0.0, unit = Percent)]
     pub left: f32,
 
-    /// How much goes from the top, per cent.
     #[bounded(min = 0.0, max = 100.0, default = 0.0, unit = Percent)]
     pub top: f32,
 
-    /// How much goes from the right, per cent.
     #[bounded(min = 0.0, max = 100.0, default = 0.0, unit = Percent)]
     pub right: f32,
 
-    /// How much goes from the bottom, per cent.
     #[bounded(min = 0.0, max = 100.0, default = 0.0, unit = Percent)]
     pub bottom: f32,
 
@@ -42,7 +32,6 @@ pub struct Crop {
     #[slider(min = 0.0, max = 500.0, default = 0.0, hard_min = 0.0, unit = Px)]
     pub feather: f32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -67,7 +56,6 @@ pub struct CropParams {
 }
 
 impl Crop {
-    /// The bundle both kernels read.
     #[must_use]
     pub fn packed(self) -> CropParams {
         let edge = |v: f32| (v / 100.0).clamp(0.0, 1.0);
@@ -97,7 +85,6 @@ pub fn crop_keep(x: f32, y: f32, w: f32, h: f32, p: &CropParams) -> f32 {
     (inside / p.band + 0.5).clamp(0.0, 1.0)
 }
 
-/// The CPU oracle: every channel scaled by what the crop keeps.
 pub fn crop(rgba: &mut [f32], w: u32, h: u32, p: &CropParams) {
     let (fw, fh) = (w as f32, h as f32);
     for (i, px) in rgba.chunks_exact_mut(4).enumerate() {
@@ -112,7 +99,6 @@ pub fn crop(rgba: &mut [f32], w: u32, h: u32, p: &CropParams) {
     }
 }
 
-/// Crop's behaviour.
 pub struct CropDef;
 
 impl EffectDef for CropDef {

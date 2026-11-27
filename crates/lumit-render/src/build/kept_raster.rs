@@ -25,13 +25,10 @@ use crate::placement::world_placement;
 use super::raster_scale::Seen;
 use super::SHAPE_RASTER_PIXELS;
 
-/// A layer's raster: the bytes, the raster size and the natural size.
 pub(super) type LayerRaster = (Arc<Vec<u8>>, u32, u32, (f32, f32));
 
-/// The most bytes kept rasters hold, in memory.
 pub(crate) const RASTER_BYTES: usize = 256 << 20;
 
-/// The kept rasters, by name.
 pub(crate) static RASTERS: Shelf<KeptRaster> = std::sync::Mutex::new(None);
 
 /// One kept raster. A mask or a stroke copies it before writing, so the kept
@@ -40,7 +37,6 @@ pub(crate) struct KeptRaster {
     rgba: Arc<Vec<u8>>,
     w: u32,
     h: u32,
-    /// The layer's own size, which the placement draws the raster at.
     natural: (f32, f32),
     /// How far up and left of the layer's corner the raster starts, for
     /// animated letters thrown further than their room.
@@ -53,12 +49,10 @@ impl ByteSized for Kept<KeptRaster> {
     }
 }
 
-/// The raster named `name`, made by `make` if it is not kept.
 fn kept(name: u128, make: impl FnOnce() -> KeptRaster) -> Arc<KeptRaster> {
     crate::extrude::kept(&RASTERS, RASTER_BYTES, name, make)
 }
 
-/// A solid's colour as a `tw` by `th` raster.
 pub(super) fn solid(colour: LinearColour, tw: u32, th: u32) -> Arc<Vec<u8>> {
     let mut h = blake3::Hasher::new();
     h.update(b"solid/1/");
@@ -215,9 +209,6 @@ fn still_moves(contents: &[ShapeEntry]) -> bool {
         || serde_json::to_value(contents).map_or(true, |v| moves(&v))
 }
 
-/// A Text layer's words at layer time `lt`, comp time `t_comp`, rasterised
-/// for where they are `seen`, the raster's name, and how far up and left of
-/// the layer's corner it starts.
 pub(super) fn text(
     doc: &Arc<Document>,
     comp: &Composition,
@@ -347,8 +338,6 @@ fn laid<'a>(
         Some(other) => offset_line.insert(other).as_str(),
         None => line,
     };
-    // An unstyled single line draws the way it always has. A
-    // styled one, or one with a line break, is set by the shaper.
     let block = lumit_text::TextBlock::of(document, line);
     let three_d = layer.switches.three_d;
     let flat = seen.flat(world);
@@ -425,8 +414,6 @@ fn kept_of((r, natural): (lumit_text::RasterText, (u32, u32)), grow: [u32; 4]) -
     }
 }
 
-/// A Shape layer's art at layer time `lt`, rasterised for where it is `seen`,
-/// and the raster's name when it has one. `None` when it has nothing to draw.
 pub(super) fn shape(
     comp: &Composition,
     layer: &Layer,

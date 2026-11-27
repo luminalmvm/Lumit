@@ -1,10 +1,3 @@
-// The Audio timeline panel over a real document (docs/impl/audio-timeline.md
-// §6, plans 10 and 11): the tracks it lists, the faded picture row with its
-// Detach audio button, the twirl opening on to Volume, the clips on a converted
-// track with their trims, slides, cross-track moves, drops and razor, and the
-// budget gates every timeline-shaped panel has to meet - idle costs nothing, a
-// scrub moves the playhead's own layer and leaves the lanes alone, and a drag
-// writes once, on release.
 
 import 'dart:io';
 
@@ -222,7 +215,6 @@ void main() {
         reason: 'a comp on show was marked, which is an undo step for looking '
             'at it:\n${calls.ranking()}');
 
-    // The mute switch, which is a write like any other made here.
     await tester.tap(find.byKey(ValueKey<String>('atl-audible-${p.music}')));
     await settleFrb(tester, minRounds: 3);
     expect(p.comp.soundMix(), isTrue,
@@ -337,7 +329,6 @@ void main() {
         fromRight > 0 ? box.right - fromRight : box.center.dx, box.bottom - 6);
   }
 
-  /// How strongly a clip's box is filled: the picked one is held stronger.
   double fillAlpha(WidgetTester tester, BridgeClip clip) {
     final box = tester.widget<Container>(find
         .descendant(
@@ -391,8 +382,6 @@ void main() {
         reason: 'a fade is not a trim: the clip is where it was');
   });
 
-  /// Plan 18: the clip's own level, drawn across its box and taken hold of on
-  /// the line. Written once, on release, and the fades rise to it.
   testWidgets('a drag on the gain line writes the clip gain once',
       (tester) async {
     final p = await mountClips(tester);
@@ -547,9 +536,6 @@ void main() {
     await tester.pump();
     expect(lumitPopupOpen, isTrue,
         reason: 'the add-effect menu drops from the button');
-    // The catalogue narrowed to what a clip can be heard through: the one
-    // Audio heading, holding Lumit's own effects and whatever plugins this
-    // machine has, and none of the picture families this build also carries.
     final sound = listEffects().where((e) => e.category == 'audio').toList();
     expect(sound, isNotEmpty, reason: 'the built-in suite is in the catalogue');
     expect(listEffects().where((e) => e.category != 'audio'), isNotEmpty,
@@ -558,7 +544,6 @@ void main() {
     expect(find.byKey(const ValueKey<String>('fx-category-audio')),
         findsOneWidget);
 
-    // And behind it the effects themselves, by their sentence-case labels.
     await tester.tap(find.byKey(const ValueKey<String>('fx-category-audio')));
     await tester.pump();
     for (final label in ['Gain', 'Parametric EQ', 'Compressor', 'Reverb']) {
@@ -658,7 +643,7 @@ void main() {
     });
 
     testWidgets('a clip drag writes once, on release', (tester) async {
-      rebuilds.remove(); // this one counts bridge calls, not rebuilds
+      rebuilds.remove();
       final p = await mountClips(tester);
       final before = p.top.getClips().single;
 

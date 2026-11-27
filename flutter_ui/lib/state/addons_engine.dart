@@ -10,8 +10,6 @@ import 'package:lumit_flutter/src/rust/api/addons.dart';
 
 import 'addons.dart';
 
-/// The service as the application runs it, with every collaborator wired to the
-/// engine. A test builds an [AddonService] directly instead.
 AddonService createAddonService() => AddonService(
       list: _list,
       accepts: (manifest) => addonAccepts(manifest: manifest),

@@ -40,12 +40,8 @@ use lumit_fx_macros::Effect;
 pub mod rows;
 pub mod sprite_shape;
 
-/// Particulate's declared **data** output: the same particles it
-/// draws, offered as a stream. Teal, like every geometry socket, and drawn from
-/// the signature rather than from anything Particulate-specific at the seam.
 const POINTS_OUT: &[Port] = &[Port::new("points", "Points", PortType::Points)];
 
-/// Particulate's controls (particulate.md §2).
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "particulate",
@@ -55,7 +51,6 @@ const POINTS_OUT: &[Port] = &[Port::new("points", "Points", PortType::Points)];
     // A playback-class effect, not a simulation-class one: the budget
     // is the user's own Max particles dial.
     cost = Moderate,
-    // A particle may travel anywhere, so no padding covers it.
     roi = FullFrame,
     premultiplied = true,
     // The layer's local time joins the cache key, the standard rule for a
@@ -71,7 +66,6 @@ pub struct Particulate {
     #[toggle(label = "Simulate", default = false)]
     pub simulate: bool,
 
-    /// How many times a frame the particles move. More keeps fast ones honest.
     #[counter(
         label = "Sub-steps",
         min = 1,
@@ -83,11 +77,9 @@ pub struct Particulate {
     )]
     pub sub_steps: i32,
 
-    /// Bake the simulation to the project's cache.
     #[action(label = "Bake")]
     pub bake: (),
 
-    /// Stop a running bake.
     #[action(label = "Cancel")]
     pub cancel: (),
 
@@ -111,7 +103,6 @@ pub struct Particulate {
     #[slider(label = "Position x", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
     pub position_x: f32,
 
-    /// px@comp; see [`position_x`](Self::position_x).
     #[slider(label = "Position y", min = 0.0, max = 2160.0, default = 540.0, unit = Px)]
     pub position_y: f32,
 
@@ -128,7 +119,6 @@ pub struct Particulate {
     #[slider(min = 0.0, max = 2000.0, default = 400.0, hard_min = 0.0, unit = Px)]
     pub width: f32,
 
-    /// The emitter's extent down, px@comp; see [`width`](Self::width).
     #[slider(min = 0.0, max = 2000.0, default = 400.0, hard_min = 0.0, unit = Px)]
     pub height: f32,
 
@@ -138,7 +128,6 @@ pub struct Particulate {
     #[slider(min = 0.0, max = 2000.0, default = 0.0, hard_min = 0.0, unit = Px)]
     pub depth: f32,
 
-    /// Rotates Line, Ellipse and Rectangle about Position.
     #[dial(label = "Emitter angle", default = 0.0)]
     pub emitter_angle: f32,
 
@@ -162,8 +151,6 @@ pub struct Particulate {
     #[layer(label = "Density layer")]
     pub density_layer: bool,
 
-    /// Where the Density layer's picture sits on this one: as it sits in the
-    /// comp, stretched over the frame, or centred at its own size.
     #[choice(label = "Map placement", options = *MAP_PLACEMENT_OPTIONS, default = 0)]
     pub density_layer_placement: u32,
 
@@ -266,11 +253,9 @@ pub struct Particulate {
     #[slider(min = 0.0, max = 1.0, default = 0.0, unit = Raw)]
     pub trigger: f32,
 
-    /// How long a particle lasts, seconds.
     #[slider(min = 0.1, max = 10.0, default = 2.0, hard_min = 0.0, unit = Seconds)]
     pub life: f32,
 
-    /// Per-particle spread of Life, per cent.
     #[slider(
         label = "Life jitter",
         min = 0.0,
@@ -286,7 +271,6 @@ pub struct Particulate {
     #[slider(min = 0.0, max = 200.0, default = 4.0, hard_min = 0.0, unit = Px)]
     pub size: f32,
 
-    /// Per-particle spread of Size, per cent.
     #[slider(
         label = "Size jitter",
         min = 0.0,
@@ -356,12 +340,9 @@ pub struct Particulate {
     #[choice(label = "Size by", options = *points::Drive::OPTIONS, default = 0)]
     pub size_by: u32,
 
-    /// What runs Opacity over life; see [`size_by`](Self::size_by).
     #[choice(label = "Opacity by", options = *points::Drive::OPTIONS, default = 0)]
     pub opacity_by: u32,
 
-    /// What runs the blend from Colour through Colour over life to End
-    /// colour; see [`size_by`](Self::size_by).
     #[choice(label = "Colour by", options = *points::Drive::OPTIONS, default = 0)]
     pub colour_by: u32,
 
@@ -392,11 +373,9 @@ pub struct Particulate {
     #[slider(label = "Field x", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
     pub field_x: f32,
 
-    /// See [`field_x`](Self::field_x).
     #[slider(label = "Field y", min = 0.0, max = 2160.0, default = 540.0, unit = Px)]
     pub field_y: f32,
 
-    /// See [`field_x`](Self::field_x).
     #[slider(label = "Field z", min = -2000.0, max = 2000.0, default = 0.0, unit = Px)]
     pub field_z: f32,
 
@@ -421,7 +400,6 @@ pub struct Particulate {
     #[slider(min = -2000.0, max = 2000.0, default = 0.0, unit = Px)]
     pub vortex: f32,
 
-    /// The line the Vortex turns about.
     #[choice(label = "Vortex axis", options = ["X", "Y", "Z"], default = 1)]
     pub vortex_axis: u32,
 
@@ -439,8 +417,6 @@ pub struct Particulate {
     #[slider(label = "Wind x", min = -2000.0, max = 2000.0, default = 0.0, unit = Px)]
     pub wind_x: f32,
 
-    /// The air's own speed down, px@comp per second; see
-    /// [`wind_x`](Self::wind_x).
     #[slider(label = "Wind y", min = -2000.0, max = 2000.0, default = 0.0, unit = Px)]
     pub wind_y: f32,
 
@@ -453,7 +429,6 @@ pub struct Particulate {
     #[slider(min = 0.0, max = 10.0, default = 0.5, hard_min = 0.0, unit = Raw)]
     pub drag: f32,
 
-    /// How far the noise pushes a particle off its path, px@comp.
     #[slider(
         label = "Turbulence amount",
         min = 0.0,
@@ -510,15 +485,12 @@ pub struct Particulate {
     #[layer(label = "Collide with")]
     pub collide_with: bool,
 
-    /// Particles hit every 3D layer in the comp, as well as Collide with.
     #[toggle(label = "All 3D layers", default = false)]
     pub collide_all: bool,
 
-    /// Particles hit the floor the 3D views draw.
     #[toggle(label = "Ground", default = false)]
     pub ground: bool,
 
-    /// How far above that floor they hit it, px@comp.
     #[slider(
         label = "Ground height",
         min = -2000.0,
@@ -528,7 +500,6 @@ pub struct Particulate {
     )]
     pub ground_height: f32,
 
-    /// What a particle does when it hits.
     #[choice(label = "On contact", options = *points::Contact::OPTIONS, default = 0)]
     pub on_contact: u32,
 
@@ -543,7 +514,6 @@ pub struct Particulate {
     )]
     pub bounciness: f32,
 
-    /// How much a particle slows along the surface it hits, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -567,8 +537,6 @@ pub struct Particulate {
     )]
     pub separation: f32,
 
-    /// How strongly a particle steers to go the way its neighbours go, per
-    /// cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -579,8 +547,6 @@ pub struct Particulate {
     )]
     pub alignment: f32,
 
-    /// How strongly a particle steers towards the middle of its neighbours,
-    /// per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -591,7 +557,6 @@ pub struct Particulate {
     )]
     pub cohesion: f32,
 
-    /// How far off another particle still counts as a neighbour, px@comp.
     #[slider(
         label = "Flock radius",
         min = 0.0,
@@ -619,7 +584,6 @@ pub struct Particulate {
     #[choice(label = "Sparks from", options = ["Death", "Bounce", "Flight"], default = 0)]
     pub sparks_from: u32,
 
-    /// How fast sparks fly out, px@comp per second.
     #[slider(
         label = "Spark speed",
         min = 0.0,
@@ -630,7 +594,6 @@ pub struct Particulate {
     )]
     pub spark_speed: f32,
 
-    /// How much of its parent's speed a spark starts with, per cent.
     #[slider(
         label = "Spark inherit",
         min = 0.0,
@@ -642,7 +605,6 @@ pub struct Particulate {
     )]
     pub spark_inherit: f32,
 
-    /// How long a spark lasts, seconds.
     #[slider(
         label = "Spark life",
         min = 0.1,
@@ -653,7 +615,6 @@ pub struct Particulate {
     )]
     pub spark_life: f32,
 
-    /// How big a spark is, per cent of the particle it came from.
     #[slider(
         label = "Spark size",
         min = 0.0,
@@ -682,8 +643,6 @@ pub struct Particulate {
     #[slider(min = -100.0, max = 100.0, default = 0.0, hard_min = -100.0, unit = Percent)]
     pub zoom: f32,
 
-    /// How far the kept picture turns each second, degrees, about the
-    /// emitter's position.
     #[slider(min = -360.0, max = 360.0, default = 0.0, unit = Degrees)]
     pub turn: f32,
 
@@ -696,7 +655,6 @@ pub struct Particulate {
     #[choice(label = "Mode", options = *points::RenderMode::OPTIONS, default = 0)]
     pub mode: u32,
 
-    /// How soft a disc's edge is, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -770,7 +728,6 @@ pub struct Particulate {
     )]
     pub max_particles: i32,
 
-    /// Which particles (§2.4). The reseed button rolls it.
     #[seed]
     pub seed: u32,
 
@@ -781,7 +738,6 @@ pub struct Particulate {
     #[toggle(label = "Composite on original", default = true)]
     pub composite_on_original: bool,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -800,14 +756,11 @@ impl Particulate {
     /// Stroke's and Scribble's row, for their reason.
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
 
-    /// This instance's raster factor, read back out of a resolved bag.
     #[must_use]
     pub fn px_scale_of(p: Params<'_>) -> f32 {
         p.float(Self::DERIVED_PX_SCALE, 1.0)
     }
 
-    /// The layer row births are weighted by: a Layer emitter's own layer, or
-    /// the Density layer.
     #[must_use]
     pub fn density_row(&self) -> &'static str {
         if self.shape == 9 {
@@ -877,7 +830,6 @@ impl Particulate {
             projection: points::Projection::FLAT,
             edge: points::Edge::from_code(self.edge),
             margin: self.edge_margin.max(0.0),
-            // The picture's size is the caller's to say, as the camera is.
             frame: [0.0; 2],
         }
     }
@@ -973,8 +925,6 @@ impl EffectDef for ParticulateDef {
         &<Particulate as EffectMetadata>::SCHEMA
     }
 
-    /// The picture *and* the data: a stack effect that declares an
-    /// output beside its image, which is the first of its kind.
     fn signature(&self) -> Signature {
         Signature::Image {
             inputs: &[],
@@ -986,8 +936,6 @@ impl EffectDef for ParticulateDef {
         &["collide_with"]
     }
 
-    /// The raster factor, so a Mask path emitter's px@comp vertices reach the
-    /// pixels this frame is drawn at.
     fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
         push(Particulate::DERIVED_PX_SCALE, Value::Float(cx.px_scale));
     }

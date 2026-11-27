@@ -40,8 +40,6 @@ pub(crate) fn guard(body: impl FnOnce() -> StatusResult) -> OfxStatus {
     code
 }
 
-/// As [`guard`], for the entry points whose successful answer is a code other
-/// than `kOfxStatOK` — the message suite answers a question with a reply.
 pub(crate) fn guard_code(body: impl FnOnce() -> Status) -> OfxStatus {
     let code = match catch_unwind(AssertUnwindSafe(body)) {
         Ok(status) => status.code(),

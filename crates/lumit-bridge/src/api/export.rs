@@ -672,6 +672,8 @@ pub struct BridgeExportQueueItem {
     /// default: the work area as it stood at queue time, else the whole comp.
     pub range_start_frame: i64,
     pub range_end_frame: i64,
+    pub height: u32,
+    pub fps: f64,
     pub state: BridgeExportQueueState,
     /// The remote export this item does for another computer, empty for one of
     /// this computer's own. Its other details are in `remote_jobs`.
@@ -788,6 +790,8 @@ pub fn export_queue_list() -> Vec<BridgeExportQueueItem> {
             codec: row.codec,
             range_start_frame: row.range.map_or(-1, |(a, _)| a as i64),
             range_end_frame: row.range.map_or(-1, |(_, b)| b as i64),
+            height: row.height,
+            fps: row.fps,
             state: match row.state {
                 crate::export::QueueRowState::Waiting => BridgeExportQueueState::Waiting,
                 crate::export::QueueRowState::Running {

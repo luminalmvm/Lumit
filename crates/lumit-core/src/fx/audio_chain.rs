@@ -60,11 +60,8 @@ use super::params::ParamId;
 /// same control rate the Volume envelope already uses.
 pub const AUDIO_BLOCK_FRAMES: usize = 512;
 
-/// Channels. v1 hosts stereo effect plugins only
-/// (docs/impl/audio-plugins.md §4).
 pub const AUDIO_CHANNELS: usize = 2;
 
-/// Interleaved samples in one block.
 pub const AUDIO_BLOCK_SAMPLES: usize = AUDIO_BLOCK_FRAMES * AUDIO_CHANNELS;
 
 /// The splice ramp either side of a dry stretch: 5 ms at 48 kHz.
@@ -154,8 +151,6 @@ pub trait AudioProcessor: Send + Sync {
     }
 }
 
-/// One link of a chain: a live processor and what its rows hold, block by
-/// block.
 pub struct ChainLink {
     pub processor: Arc<dyn AudioProcessor>,
     /// `values[b]` is what block `b` is handed; the last entry holds past the
@@ -165,7 +160,6 @@ pub struct ChainLink {
     pub values: Vec<Vec<(ParamId, f64)>>,
 }
 
-/// What one run of a chain produced.
 pub struct ChainOutput {
     /// Interleaved stereo, `frames + latency + tail` frames long: the input's
     /// own length, plus what the compensation asked for, plus what the chain
@@ -326,16 +320,12 @@ fn splice(out: &mut [f32], dry: &[f32], wet: &[bool]) {
         if wet[b] == wet[b - 1] {
             continue;
         }
-        // Entering a dry stretch, ramp out over the tail before it; leaving
-        // one, ramp in over the head after it.
         let (first, rising) = if wet[b] {
             (b * AUDIO_BLOCK_FRAMES, true)
         } else {
             (b * AUDIO_BLOCK_FRAMES - AUDIO_SPLICE_FRAMES, false)
         };
         for i in 0..AUDIO_SPLICE_FRAMES {
-            // The wet share: nought at the dry end of the ramp, one at the
-            // other.
             let x = if rising {
                 i as f32 / AUDIO_SPLICE_FRAMES as f32
             } else {
@@ -355,8 +345,6 @@ fn splice(out: &mut [f32], dry: &[f32], wet: &[bool]) {
         }
     }
 }
-
-// -------------------------------------------------------------- denormals --
 
 /// Flush-to-zero and denormals-are-zero, for as long as this value lives.
 ///
@@ -384,7 +372,6 @@ pub struct Denormals {
 }
 
 impl Denormals {
-    /// Switch them off.
     #[must_use]
     #[allow(unsafe_code)]
     pub fn on() -> Self {
@@ -404,9 +391,6 @@ impl Denormals {
             unsafe { std::arch::asm!("ldmxcsr [{}]", in(reg) &raised, options(nostack)) };
             Some(csr)
         };
-        // ponytail: aarch64 keeps the same flag in FPCR's FZ bit; nothing in
-        // this project builds for it yet, so the guard is honestly a no-op
-        // there rather than a wrong write.
         #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
         let previous = None;
 
@@ -432,8 +416,6 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Mutex;
 
-    /// A processor that multiplies by whatever its one row holds, and can be
-    /// told to fail on one block.
     struct Gain {
         row: ParamId,
         fail_on: Option<usize>,
@@ -489,7 +471,6 @@ mod tests {
 
     #[test]
     fn each_block_is_handed_its_own_value_and_two_runs_agree() {
-        // A sweep: block b is multiplied by b.
         let blocks = 4;
         let frames = AUDIO_BLOCK_FRAMES * blocks;
         let input = vec![1.0f32; frames * AUDIO_CHANNELS];
@@ -513,7 +494,6 @@ mod tests {
         let blocks = 3;
         let frames = AUDIO_BLOCK_FRAMES * blocks;
         let input = vec![1.0f32; frames * AUDIO_CHANNELS];
-        // Doubling, except block 1, which is refused.
         let out = run_chain(
             &[link(
                 Gain::new(Some(1)),
@@ -522,20 +502,15 @@ mod tests {
             &input,
         );
         assert_eq!(out.dry_blocks, 1);
-        // The dry block itself is the input, unchanged.
         let dry_at = AUDIO_BLOCK_SAMPLES + AUDIO_SPLICE_FRAMES * AUDIO_CHANNELS;
         assert!((out.samples[dry_at] - 1.0).abs() < 1e-6, "the block is dry");
-        // Block 0 is wet where the ramp has not reached…
         assert!((out.samples[0] - 2.0).abs() < 1e-6);
-        // …and has come all the way down to dry by the splice.
         let edge = (AUDIO_BLOCK_FRAMES - 1) * AUDIO_CHANNELS;
         assert!(
             (out.samples[edge] - 1.0).abs() < 0.02,
             "the wet tail reaches the splice already dry, got {}",
             out.samples[edge]
         );
-        // Block 2 comes back wet, ramping up from the splice rather than
-        // jumping there.
         let back = 2 * AUDIO_BLOCK_SAMPLES;
         assert!(
             (out.samples[back] - 1.0).abs() < 0.02,
@@ -543,7 +518,6 @@ mod tests {
         );
         let settled = back + AUDIO_SPLICE_FRAMES * AUDIO_CHANNELS;
         assert!((out.samples[settled] - 2.0).abs() < 1e-6, "and reaches wet");
-        // Nothing jumps: the biggest step between neighbouring frames is small.
         let worst = out
             .samples
             .chunks_exact(AUDIO_CHANNELS)
@@ -576,14 +550,8 @@ mod tests {
         );
     }
 
-    /// **A tail runs the sound on past its input.** The echo below is silent
-    /// while the input plays and only speaks a block later, which is exactly
-    /// what a decay does: with no tail declared the run would end before the
-    /// repeat and the repeat would never be heard.
     #[test]
     fn a_tail_runs_the_chain_on_past_the_input() {
-        /// One block of delay, and it says so: everything handed in comes back
-        /// out one block later, and nothing at all comes out of the first.
         struct Echo {
             held: Mutex<Vec<f32>>,
         }
@@ -628,7 +596,6 @@ mod tests {
             (frames + AUDIO_BLOCK_FRAMES) * AUDIO_CHANNELS,
             "the run is one block longer than the input"
         );
-        // The first block is the delay itself, the second the echo of it.
         assert!((out.samples[0]).abs() < 1e-6, "nothing has arrived yet");
         assert!(
             (out.samples[AUDIO_BLOCK_SAMPLES] - 0.5).abs() < 1e-6,
@@ -636,10 +603,6 @@ mod tests {
         );
     }
 
-    /// **A look sees what the blocks get.** The second link records what its
-    /// look was shown and what its blocks were handed, and the two must be the
-    /// same samples: the input after the first link's doubling, run on through
-    /// the latency the chain asked for.
     #[test]
     fn a_look_is_shown_exactly_what_the_blocks_are_handed() {
         #[derive(Default)]
