@@ -1,53 +1,89 @@
 ---
 import SectionHead from "../SectionHead.astro";
 
-// Three stages. The last one is drawn dashed and hollow: past the near work
-// the order is a guess and the site should say so. Completed opens on its
-// first SHOWN items, the biggest, and the rest are a click away.
+// Four stages. The next release is already built, so it is drawn as done. The
+// last one is drawn dashed and hollow: past the near work the order is a guess
+// and the site should say so. A done stage opens on its first SHOWN items, the
+// biggest, and the rest are a click away.
 const SHOWN = 12;
 
 const roadmap = [
   {
-    label: "Completed",
+    label: "Released",
     state: "done",
-    count: "shipped",
+    count: "in 0.11.2",
     items: [
-      "Multi-edit, with friends",
-      "Lumit for iPhone",
-      "3D lights, shadows and materials",
-      "3D layers, camera and depth of field",
-      "Sequence layers and the Retime system",
+      "Multi-edit with friends",
+      "Lumit in the browser",
+      "Lumit for iPhone and Android",
+      "Over 200 built-in effects",
+      "3D models, 3D shapes, and extruded text",
+      "3D layers, cameras, lights, and materials",
+      "Particle simulation on the graphics card",
       "Node graph effects and compositions",
-      "Expressions and the Expressions panel",
-      "Text layers, animators and panels",
-      "Shape layers, modifiers and paint",
+      "Colour workspace with grading and scopes",
+      "Cut workspace with multicam and transitions",
+      "Captions and editing by transcript",
+      "Mixer with buses, sends, and automation",
+      "Smoke, fire, and volumetric light",
+      "After Effects, PSD, and Illustrator import",
+      "OFX, CLAP, and VST3 plugin hosting",
+      "Sequence layers and Retime",
+      "Expressions and drivers",
+      "Text layers and animators",
+      "Shape layers, modifiers, and paint",
+      "Layers, masks, mattes, and blend modes",
+      "Keyframes and the Graph editor",
       "Roto brush and Puppet",
-      "OFX, CLAP and VST3 plugin hosting",
-      "After Effects, PSD and Illustrator import",
-      "Layers, masks, mattes and blend modes",
-      "Keyframes and the graph editor",
-      "Optical-flow frame interpolation",
-      "Beat detection and markers",
-      "Over 100 GPU effects",
-      "Points effects",
-      "Presets, saved and shared",
       "Camera and planar tracking",
-      "The Audio timeline and audio effects",
-      "The Audio workspace",
-      "The Cut workspace",
-      "Interpret footage",
-      "Scripting, the command line and MCP",
-      "Lumit Pro: previews, backup and sync",
-      "Multiple Viewers, with compare",
+      "Denoise and Stabilise",
+      "Optical-flow frame interpolation",
+      "Custom shaders, as code or a graph",
+      "LFX, Lumit's own effect format",
+      "Colour management with OpenColorIO",
+      "Tone mapping in the Viewer",
+      "Points effects and Depth points",
+      "Graphics templates",
+      "Presets and the Library",
+      "Lottie import, Lottie and animated SVG export",
+      "Audio workspace, Audio timeline, and effects",
+      "Sound clean-up and voice isolation",
+      "Beat detection and markers",
+      "Scripting, the command line, and MCP",
+      "Lumit Pro: previews, backup, and sync",
+      "Export on another computer, with Lumit Pro",
+      "Multiple Viewers, compare, and a video monitor",
+      "Panels in their own windows",
       "Interface styles and colour themes",
       "Addons with local models",
       "Extensions",
+      "Interpret footage",
       "Packed project files",
       "Setup screen and guided tour",
       "Export queue with hardware encoding",
       "Proxies and background caching",
       "Autosave and crash recovery",
-      "Windows, macOS and Linux builds",
+      "Translations, with Arabic right to left",
+      "Windows, macOS, and Linux builds",
+    ],
+  },
+  {
+    label: "Next release",
+    state: "done",
+    count: "built for 0.12",
+    items: [
+      "DaVinci Resolve link on Windows",
+      "Reworked text animators, with new selectors",
+      "Keyframes on a text layer's words",
+      "Expressions beside keyframes, and on Retime",
+      "Curved motion paths",
+      "Outline, angle, and keyed gradients on shapes",
+      "More procedural textures and noise types",
+      "Holographic foil, Hologram, and Flicker effects",
+      "Particle colour over life and sprite shapes",
+      "Depth Anything V3 Small in the Depth effect",
+      "Redesigned Settings window",
+      "Shape fill and stroke on the toolbar",
     ],
   },
   {
@@ -55,33 +91,36 @@ const roadmap = [
     state: "now",
     count: "under way",
     items: [
-      "Custom shader nodes",
-      "Colour management",
-      "Tone mapping",
-      "Interface performance at 60 and 120 fps",
+      "A more responsive interface, Viewer, and audio",
+      "A picture that follows drags and scrubs",
+      "Faster playback and export on heavy comps",
+      "Lower memory use on heavy frames",
+      "Fixes for bugs reported on Discord and GitHub",
+      "More pictures in the manual's tutorials",
     ],
   },
   {
-    label: "Long run",
+    label: "Later",
     state: "next",
     count: "planned",
     items: [
-      "Lumit's own effect format",
-      "Particle simulator",
-      "Blender scene import",
-      "Lottie export",
+      "Bounce and elastic easing",
+      "A Properties panel",
+      "Graph editor tangent controls and handle modes",
+      "A transform box for picked keys",
+      "Animation presets",
+      "Blender camera, null, and light import",
       "OpenTimelineIO interchange",
-      "Render-farm export",
+      "Exports split across many computers",
     ],
   },
 ];
 ---
 
 <section id="roadmap" class="wrap flex scroll-mt-20 flex-col gap-12 pb-20 sm:pb-28">
-  <SectionHead kicker="Roadmap" title="What we are building." no="06 / 07">
+  <SectionHead kicker="Roadmap" title="What is built, and what is next." no="06 / 07">
     <Fragment slot="lede">
-      Lumit is in public beta. Here is what is built, what is being worked on now, and
-      what comes after.
+      Lumit is in public beta. Later work has no dates, and its order may change.
     </Fragment>
   </SectionHead>
 
@@ -168,7 +207,8 @@ const roadmap = [
   .seg {
     position: relative;
     display: flex;
-    min-width: 0;
+    /* A short stage still has room for its name. */
+    min-width: max-content;
     flex-direction: column;
     gap: 10px;
   }
@@ -234,6 +274,7 @@ const roadmap = [
     align-items: baseline;
     gap: 8px;
     overflow: hidden;
+    padding-right: 12px;
     color: var(--color-fg-3);
     font-family: var(--font-mono);
     font-size: 10px;
