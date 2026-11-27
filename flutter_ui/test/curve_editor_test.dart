@@ -110,19 +110,4 @@ void main() {
         reason: 'the point moved, so the plot must repaint');
     await gesture.up();
   });
-
-  testWidgets('a lone curve names itself with a label, not a button',
-      (tester) async {
-    await tester.pumpWidget(host(CurveChannelEditor(
-      keyPrefix: 'one',
-      labels: const ['Spacing profile'],
-      curves: const [curveIdentity],
-      onLive: (_, __) {},
-      onCommit: (_, __) {},
-      resetTip: 'Reset this curve',
-    )));
-    await tester.pump();
-    expect(find.byKey(const ValueKey<String>('one-label')), findsOneWidget);
-    expect(find.byKey(const ValueKey<String>('one-tab-0')), findsNothing);
-  });
 }

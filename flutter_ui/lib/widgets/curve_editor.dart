@@ -816,28 +816,13 @@ class _CurveChannelEditorState extends State<CurveChannelEditor> {
     final channels = Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (widget.labels.length == 1)
-          LumitTooltip(
-            message: widget.labels.single,
-            child: SizedBox(
-              key: ValueKey<String>('${widget.keyPrefix}-label'),
-              width: columnWidth,
-              child: Text(
-                widget.labels.single,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: t.small.copyWith(color: t.textMuted),
-              ),
-            ),
-          )
-        else
-          ChannelButtons(
-            labels: widget.labels,
-            channel: channel,
-            onChannel: (i) => setState(() => _channel = i),
-            keyPrefix: widget.keyPrefix,
-            colours: widget.channelColours,
-          ),
+        ChannelButtons(
+          labels: widget.labels,
+          channel: channel,
+          onChannel: (i) => setState(() => _channel = i),
+          keyPrefix: widget.keyPrefix,
+          colours: widget.channelColours,
+        ),
         if (!curveIs(widget.curves[channel], rest))
           LumitTooltip(
             message: widget.resetTip,
