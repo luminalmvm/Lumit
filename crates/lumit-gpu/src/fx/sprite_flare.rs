@@ -215,7 +215,7 @@ impl SpriteFlareFx {
         let over_bgl = bind_layout(
             device,
             "fx-sprite-flare-over",
-            &[(4, Slot::Tex), (15, Slot::Store(ctx.working()))],
+            &[(4, Slot::Tex), (15, Slot::Store(LIGHT_FORMAT))],
             c,
         );
         let over_pipe = compute(&over_bgl, &module, "sf_over");
@@ -504,8 +504,15 @@ impl FxEngine {
         rp.set_bind_group(0, &draw_group, &[]);
         rp.draw(0..6, 0..count);
         drop(rp);
-        let (v_soft, mut enc) = if op.defocus > 0.0 {
-            let over = work_texture(ctx, w, h, "fx-sprite-flare-over");
+        let (soft, mut enc) = if op.defocus > 0.0 {
+            let over = scratch(
+                ctx,
+                w,
+                h,
+                LIGHT_FORMAT,
+                U::STORAGE_BINDING | U::TEXTURE_BINDING,
+                "fx-sprite-flare-over",
+            );
             let over_group = group(
                 &fx.over.0,
                 &[
@@ -532,11 +539,11 @@ impl FxEngine {
                     mix: 1.0,
                 },
             );
-            ctx.recycle(over);
-            (view(&b), ctx.encoder("fx-sprite-flare-add"))
+            (Some(b), ctx.encoder("fx-sprite-flare-add"))
         } else {
-            (view(&light), enc)
+            (None, enc)
         };
+        let v_soft = view(soft.as_ref().unwrap_or(&light));
         let add_group = group(
             &fx.add.0,
             &[
@@ -554,6 +561,9 @@ impl FxEngine {
             [w.div_ceil(8), h.div_ceil(8)],
         );
         drop(enc);
+        if let Some(b) = soft {
+            ctx.recycle(b);
+        }
         out
     }
 }
