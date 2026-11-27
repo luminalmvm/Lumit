@@ -127,7 +127,7 @@
   "crates/lumit-bridge/src/api/grade_solve.rs": 70,
   "crates/lumit-bridge/src/api/grade_track.rs": 57,
   "crates/lumit-bridge/src/api/grade_versions.rs": 20,
-  "crates/lumit-bridge/src/api/graph.rs": 169,
+  "crates/lumit-bridge/src/api/graph.rs": 167,
   "crates/lumit-bridge/src/api/graph_looks.rs": 15,
   "crates/lumit-bridge/src/api/handler.rs": 12,
   "crates/lumit-bridge/src/api/history.rs": 6,
