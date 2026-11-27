@@ -214,14 +214,16 @@ fn a_solid_arrow_sits_on_the_stroke_end() {
     let head = &vertices[vertices.len() - 3..];
     assert!((head[1][0] - 180.0).abs() < 1e-3 && (head[2][0] - 180.0).abs() < 1e-3);
     assert!((head[0][0] - (180.0 + 20.0 * 45f32.to_radians().cos())).abs() < 1e-3);
-    // Wrapped round the path's ends it is still one stroke, with no tip at the seam.
     let wrapped = Turbiniu {
         stroke_loop: true,
         stroke_offset: 50.0,
         ..fx
     };
     let vertices = wrapped.geometry(&guide, &guide, 1.0, [200, 100]);
-    assert!(vertices.iter().all(|v| v[0] <= 180.0 + 1e-3));
+    assert!(
+        vertices.iter().all(|v| v[0] <= 180.0 + 1e-3),
+        "a wrapped stroke has no tip at the seam"
+    );
 }
 
 #[test]
