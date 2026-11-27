@@ -167,7 +167,7 @@ impl FxEngine {
                 h,
                 bytemuck::bytes_of(&pass),
             );
-            light = next;
+            ctx.recycle(std::mem::replace(&mut light, next));
         }
         let out = work_texture(ctx, w, h, "fx-light-rays-out");
         self.dispatch(
@@ -180,6 +180,7 @@ impl FxEngine {
             h,
             bytemuck::bytes_of(&base),
         );
+        ctx.recycle(light);
         out
     }
 }
