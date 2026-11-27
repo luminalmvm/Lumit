@@ -15,6 +15,8 @@ import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/orient.dart';
+import 'package:lumit_flutter/src/rust/api/project_item.dart'
+    show ItemReference_Footage;
 import 'package:lumit_flutter/src/rust/api/shape.dart';
 import 'package:lumit_flutter/src/rust/api/wireframes.dart';
 import 'package:provider/provider.dart';
@@ -1710,12 +1712,14 @@ Matrix4? parentMatrix(
 final Map<UuidValue, bool> _pictured = {};
 
 /// Whether [entry] puts anything on the picture. Only footage has to be asked,
-/// and only once a layer: the engine answers from the probe it made at import,
-/// so the first ask is the one crossing and the rest are a lookup.
+/// and only once per footage item: the engine answers from the probe it made at
+/// import, so the first ask is the one crossing and the rest are a lookup.
 bool _drawsPicture(BridgeLayerEntry entry) => switch (entry.info.kind) {
       BridgeLayerKind.audio || BridgeLayerKind.bus => false,
-      BridgeLayerKind.footage =>
-        _pictured[entry.layer.internallayerId] ??= () {
+      BridgeLayerKind.footage => _pictured[switch (entry.info.source) {
+          ItemReference_Footage(:final field0) => field0.internalid,
+          _ => entry.layer.internallayerId,
+        }] ??= () {
           try {
             return entry.layer.hasPicture();
           } catch (_) {
@@ -1844,7 +1848,10 @@ class _MissingBadgeState extends State<_MissingBadge> {
     _changes = Provider.of<LumitState>(context, listen: false)
         .onChange
         .listen((event) {
-      if (event.items) _probe();
+      if (event.items) {
+        _pictured.clear();
+        _probe();
+      }
     });
   }
 
