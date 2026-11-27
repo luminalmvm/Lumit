@@ -945,12 +945,13 @@ class _LumitAppViewState extends State<LumitAppView> {
         } else {
           final work = comp.getWorkArea();
           final start = action.endsWith('start');
+          final last = comp.durationFrames() - 1;
           if (work == null) {
-            final last = comp.durationFrames() - 1;
             ui.scrubTo(start ? 0 : (last < 0 ? 0 : last));
           } else {
-            ui.scrubTo(
-                comp.frameAtTime(time: start ? work.inPoint : work.outPoint));
+            ui.scrubTo(_endFrame(comp.frameAtTime(time: work.inPoint),
+                comp.frameAtTime(time: work.outPoint), last,
+                start: start));
           }
         }
       // The ends of the selected layer's bar (`I` and `O`). From the read
@@ -966,9 +967,9 @@ class _LumitAppViewState extends State<LumitAppView> {
         if (entry == null) {
           handled = false;
         } else {
-          ui.scrubTo(action == 'playback.layer.in'
-              ? entry.info.inFrame
-              : entry.info.outFrame);
+          ui.scrubTo(_endFrame(entry.info.inFrame, entry.info.outFrame,
+              (comp?.durationFrames() ?? 1) - 1,
+              start: action == 'playback.layer.in'));
         }
       case 'layer.retime.hold':
         holdHere(context, ui);
@@ -1580,6 +1581,11 @@ class _LumitAppViewState extends State<LumitAppView> {
     if (handled && event is KeyDownEvent) ui.usage.count('command', action);
     return handled ? KeyEventResult.handled : KeyEventResult.ignored;
   }
+}
+
+int _endFrame(int inFrame, int outFrame, int last, {required bool start}) {
+  final frame = start || outFrame - 1 < inFrame ? inFrame : outFrame - 1;
+  return frame.clamp(0, last < 0 ? 0 : last);
 }
 
 /// One end of the work area set to the playhead. The work area is the span
