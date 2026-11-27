@@ -276,13 +276,6 @@ fn a_float_plates_neighbours_are_read_as_floats() {
     }
 }
 
-/// **A stack's picture is multiplied out once.** A layer's own pixels arrive
-/// with their colour apart from their alpha; the stack is handed them
-/// multiplied out and the composite reads what it made as such. Before, the
-/// composite multiplied the stack's picture by its alpha a second time, so
-/// any light an effect laid where the layer was part clear came out dimmed:
-/// here a Fill on a half-clear pixel drew a quarter of the light, and Light
-/// rays past an opaque solid's edge fell off a cliff there.
 #[test]
 fn a_stack_on_a_layers_own_pixels_is_multiplied_out_once() {
     let Some(ctx) = lumit_gpu::test_support::lease() else {
@@ -316,7 +309,10 @@ fn a_stack_on_a_layers_own_pixels_is_multiplied_out_once() {
     let full = centre(255);
     let half = centre(128);
     let a = 128.0 / 255.0;
-    assert!(full[0] + full[1] + full[2] > 0.1, "the fill draws: {full:?}");
+    assert!(
+        full[0] + full[1] + full[2] > 0.1,
+        "the fill draws: {full:?}"
+    );
     for c in 0..3 {
         assert!(
             (half[c] - full[c] * a).abs() < 4e-3,

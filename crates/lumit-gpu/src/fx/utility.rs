@@ -697,9 +697,6 @@ impl FxEngine {
 }
 
 impl FxEngine {
-    /// A picture whose colour is apart from its alpha, multiplied out: what an
-    /// effect stack expects, for a layer's own pixels. Returns a new texture
-    /// of the same size.
     pub fn premultiply(&self, ctx: &GpuContext, src: &wgpu::Texture) -> wgpu::Texture {
         let (w, h) = (src.width(), src.height());
         let out = work_texture(ctx, w, h, "fx-premultiply-out");

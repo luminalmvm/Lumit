@@ -877,10 +877,6 @@ impl CompLayerDraw {
         !matches!(self.source, DrawSource::Pixels { .. })
     }
 
-    /// Whether the picture the composite draws for it, after its effect
-    /// stack, has its alpha in its colour: a layer's own pixels are
-    /// multiplied out before a stack runs on them, so a stack's picture
-    /// always is.
     pub(crate) fn picture_premultiplied(&self) -> bool {
         self.premultiplied() || !self.fx.is_empty()
     }

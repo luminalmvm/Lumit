@@ -1,7 +1,3 @@
-// A layer's own pixels arrive with their colour apart from their alpha. Every
-// effect works on premultiplied colour, so the picture is multiplied out once
-// before a stack runs on it.
-
 struct Params {
     unused: vec4<f32>,
 };
