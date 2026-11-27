@@ -283,6 +283,7 @@ pub struct FxEngine {
     light_leak: wgpu::ComputePipeline,
     /// Flicker: this frame's gains on the picture in one pass.
     flicker: wgpu::ComputePipeline,
+    premultiply: wgpu::ComputePipeline,
     slices: wgpu::ComputePipeline,
     glow_bright: wgpu::ComputePipeline,
     glow_combine: wgpu::ComputePipeline,

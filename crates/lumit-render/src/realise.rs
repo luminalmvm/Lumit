@@ -563,7 +563,7 @@ impl Realiser<'_> {
                         w,
                         h,
                         linear,
-                        d.nested.is_some(),
+                        d.nested.is_some() || !d.fx.is_empty(),
                         d.natural,
                         place,
                         of,
@@ -574,7 +574,7 @@ impl Realiser<'_> {
                         w,
                         h,
                         linear,
-                        d.nested.is_some(),
+                        d.nested.is_some() || !d.fx.is_empty(),
                         d.tex_w as f32,
                         d.tex_h as f32,
                     ),
@@ -607,6 +607,11 @@ impl Realiser<'_> {
                 let linear = if d.fx.is_empty() {
                     linear
                 } else {
+                    let linear = if d.nested.is_some() {
+                        linear
+                    } else {
+                        self.fx.premultiply(&self.ctx, &linear)
+                    };
                     let tables = self.load_tables(&d.colour_tables);
                     // The referenced layer's **own** baked pictures. Without
                     // these its stack ran with every carriage empty, so a Roto
@@ -1728,6 +1733,11 @@ impl Realiser<'_> {
         let linear = if m.fx.is_empty() {
             linear
         } else {
+            let linear = if m.nested.is_some() {
+                linear
+            } else {
+                self.fx.premultiply(&self.ctx, &linear)
+            };
             let tables = self.load_tables(&m.colour_tables);
             // The matte source's **own** baked pictures, uploaded exactly as
             // the layer-input path uploads a referenced layer's. Without them
@@ -1818,7 +1828,7 @@ impl Realiser<'_> {
                 three_d: m.three_d,
                 layer_mask: None,
                 pre: m.pre,
-                premultiplied: m.nested.is_some(),
+                premultiplied: m.nested.is_some() || !m.fx.is_empty(),
             }],
             cam_mat,
             None,
@@ -2101,7 +2111,7 @@ impl Realiser<'_> {
                         width,
                         height,
                         tex,
-                        l.premultiplied(),
+                        l.picture_premultiplied(),
                         grow_size(l.natural_size, *g),
                         if mb.is_empty() { &l.mb } else { &mb },
                         l.three_d,
@@ -2212,7 +2222,7 @@ impl Realiser<'_> {
                         blend: l.blend,
                         layer_mask: mask_tex.as_ref(),
                         pre: l.pre,
-                        premultiplied: l.premultiplied(),
+                        premultiplied: l.picture_premultiplied(),
                     },
                 }
             })
@@ -2479,7 +2489,7 @@ pub(crate) fn placed_in_3d<'a>(
         blend: l.blend,
         layer_mask: None,
         pre: l.pre,
-        premultiplied: l.premultiplied(),
+        premultiplied: l.picture_premultiplied(),
     }
 }
 

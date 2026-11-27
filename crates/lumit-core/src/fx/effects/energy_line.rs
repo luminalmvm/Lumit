@@ -123,9 +123,9 @@ pub const ENERGY_LINE_GROUPS: &[ParamGroup] = &[
     cost = Moderate,
     // The glow is read far out of the picture's own pixels.
     roi = FullFrame,
-    // Straight alpha in and out, which is how the compositor reads a layer's
+    // Premultiplied in and out, which is how the compositor reads a stack's
     // picture (draw::combine).
-    premultiplied = false,
+    premultiplied = true,
     groups = ENERGY_LINE_GROUPS,
 )]
 pub struct EnergyLine {
