@@ -285,16 +285,29 @@ class FoldRow extends StatelessWidget {
               )
             : _control(context);
     final animator = locked ? null : _animatorIndexOf(path);
-    final body = animator == null
-        ? body_
+    final effect = _ownEffectOf(path);
+    final body = animator != null
         // An animator's heading takes another's grip dropped on it.
-        : animatorDropTarget(
+        ? animatorDropTarget(
             layerId: layer.internallayerId.toString(),
             index: animator,
             onMove: (from) => _writeAnimators(context,
                 (list) => animatorsMoved(list, from, animator)),
             child: body_,
-          );
+          )
+        : effect != null
+            ? FxDropZone<EffectDrag>(
+                accepts: (d) =>
+                    d.layer == layer.internallayerId.toString() &&
+                    d.effect != effect,
+                onDropped: (d, after) {
+                  fxMoveEffect(
+                      layer, layer.getEffects(), d.effect, effect, after);
+                  onChanged();
+                },
+                child: body_,
+              )
+            : body_;
     final eye =
         eyeX == null ? null : _shapeEye(context, t) ?? _animatorEye(context);
     final solo = eyeX == null ? null : _animatorSolo(context);
@@ -666,6 +679,28 @@ class FoldRow extends StatelessWidget {
     );
   }
 
+  String? _ownEffectOf(String path) {
+    final id = layer.internallayerId.toString();
+    final effect = effectIdOfPath(path);
+    return locked || effect == null || path != effectPath(id, effect)
+        ? null
+        : effect;
+  }
+
+  Widget _effectDraggable(BuildContext context, String label, Widget child) {
+    final effect = _ownEffectOf(path);
+    if (effect == null) return child;
+    return Draggable<EffectDrag>(
+      key: ValueKey<String>('tl-fx-drag-$path'),
+      data: (layer: layer.internallayerId.toString(), effect: effect),
+      affinity: Axis.vertical,
+      dragAnchorStrategy: pointerDragAnchorStrategy,
+      feedback: fxDragChip(ThemeScope.of(context).theme, label),
+      childWhenDragging: Opacity(opacity: 0.4, child: child),
+      child: child,
+    );
+  }
+
   int? _animatorIndexOf(String? path) {
     if (path == null) return null;
     final stem = '${animatorsPath(layer.internallayerId.toString())}/';
@@ -995,7 +1030,9 @@ class FoldRow extends StatelessWidget {
                 // where the layer rows' numbers are.
                 if (effectIdOfPath(path) case final String effectId
                     when timingsColumn.width > 0) ...[
-                  Expanded(child: _headingName(context, label, named, lit)),
+                  Expanded(
+                      child: _effectDraggable(context, label,
+                          _headingName(context, label, named, lit))),
                   Padding(
                     padding: EdgeInsets.only(right: timingsColumn.rightInset),
                     child: SizedBox(
@@ -1152,7 +1189,9 @@ class FoldRow extends StatelessWidget {
                   const SizedBox(width: 6),
                   SizedBox(width: valueColumn.width),
                 ] else
-                  Flexible(child: _headingName(context, label, named, lit)),
+                  Flexible(
+                      child: _effectDraggable(context, label,
+                          _headingName(context, label, named, lit))),
                 // The glyph that fills the rack this heading names, where a
                 // panel offers one. It sits after the word, so the heading reads
                 // as what it is and the button as what it does.

@@ -2832,16 +2832,6 @@ class _EffectSection extends StatelessWidget {
 
   List<BridgeParamInfo> get _rows => _commands.rows;
 
-  /// Whether an effect dragged from [from] lands **below** this heading, which
-  /// it does when it is travelling down the stack. Read as the pointer arrives
-  /// over this heading, as a card is not rebuilt when a neighbour goes.
-  bool _landsBelow(String from) {
-    final stack = _instances();
-    final it = stack.indexWhere((e) => '${e.id()}' == from);
-    final me = stack.indexWhere((e) => e.id() == info.id);
-    return it >= 0 && me >= 0 && it < me;
-  }
-
   /// What the Compositing fold holds: the Mix and Matte rows nearly every
   /// effect ends with, and the Blend, Invert and Channel that go with them,
   /// each a row of its own ([compositingRowsOf]).
@@ -3022,17 +3012,8 @@ class _EffectSection extends StatelessWidget {
       // A style is not draggable: its place in the list is Photoshop's, not
       // the user's (docs/impl/layer-styles.md §2).
       dragKey: style || inputs ? null : '$id',
-      landsBelow: _landsBelow,
-      onDropped: (from) {
-        final stack = _instances();
-        final it = stack.indexWhere((e) => '${e.id()}' == from);
-        final to = stack.indexWhere((e) => e.id() == id);
-        if (it < 0 || to < 0) return;
-        try {
-          layer.reorderEffect(effect: stack[it], newIndex: to);
-        } catch (_) {
-          // The stack changed under the drag; re-reading is the recovery.
-        }
+      onDropped: (from, after) {
+        fxMoveEffect(layer, _instances(), from, '$id', after);
         onStackChanged();
       },
       onContextMenu: (at) => _commands.showMenu(
