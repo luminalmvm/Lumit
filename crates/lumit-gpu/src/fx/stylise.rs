@@ -1,6 +1,3 @@
-//! Stylise and geometry kernels (docs/08 §3.5, §3.12, §3.14, §3.21): the matte
-//! key, vignette, affine transform, block glitch and scanlines.
-
 use crate::GpuContext;
 
 use super::{blur::BlurOp, work_texture, FxEngine};
@@ -82,7 +79,6 @@ pub const MATTE_MORPH_MAX_PX: f32 = 256.0;
 pub struct MaskFillOp {
     /// The outline, as `(ax, ay, bx, by)` in raster pixels, closed.
     pub segments: [[f32; 4]; MASK_FILL_SEGMENTS],
-    /// How many of the above are real.
     pub count: u32,
     /// The feather ramp's width, raster pixels, never below one.
     pub ramp: f32,
@@ -91,7 +87,6 @@ pub struct MaskFillOp {
 }
 
 impl MaskFillOp {
-    /// A mask that holds nothing out.
     #[must_use]
     pub fn blank() -> Self {
         Self {
@@ -394,7 +389,6 @@ pub struct RoughenEdgesOp {
     pub offset: [f32; 2],
     /// `1 ÷ Scale`, raster pixels.
     pub inv_scale: f32,
-    /// The field's depth coordinate.
     pub z: f32,
     /// Border, raster pixels: the first pass's gaussian radius.
     pub border_px: f32,
@@ -569,7 +563,6 @@ impl FxEngine {
             bytes,
         );
 
-        // 3. Shrink/grow: two separable morphological passes.
         if op.shrink_grow != 0.0 {
             let r = op.shrink_grow.abs().min(MATTE_MORPH_MAX_PX);
             let ri = r.floor() as i32;
@@ -610,7 +603,6 @@ impl FxEngine {
             matte = out;
         }
 
-        // 4. Softness: the shared Gaussian blur, on the matte alone.
         if op.softness > 0.0 {
             matte = self.blur(
                 ctx,
@@ -626,7 +618,6 @@ impl FxEngine {
             );
         }
 
-        // 5. Despot black and white, in one pass.
         if op.despot_black > 0.0 || op.despot_white > 0.0 {
             let out = work_texture(ctx, w, h, "fx-matte-key-despot");
             self.dispatch(
@@ -677,7 +668,6 @@ impl FxEngine {
             matte = out;
         }
 
-        // 7. Spend the finished matte on the original colour.
         let out = work_texture(ctx, w, h, "fx-matte-key-out");
         self.dispatch(ctx, &self.matte_key_combine, src, &matte, &out, w, h, bytes);
         out
@@ -803,10 +793,6 @@ impl FxEngine {
         out
     }
 
-    /// Apply one Block glitch (docs/08 §3.12, split out of the old combined
-    /// Glitch effect) to a linear working texture, returning a new texture of
-    /// the same size. One pointwise-with-taps pass: block UV displacement and
-    /// channel offset.
     pub fn block_glitch(
         &self,
         ctx: &GpuContext,
@@ -844,10 +830,6 @@ impl FxEngine {
         out
     }
 
-    /// Apply one Scanlines (docs/08 §3.12, split out of the old combined
-    /// Glitch effect) to a linear working texture, returning a new texture of
-    /// the same size. One pointwise pass: periodic darkening in raster Y, no
-    /// neighbour taps.
     pub fn scanlines(
         &self,
         ctx: &GpuContext,
@@ -935,7 +917,6 @@ struct MosaicParams {
     mix_amt: f32,
 }
 
-/// One resolved Find edges (docs/08 §3.66).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FindEdgesOp {
     /// 1 for bright edges on black, 0 for AE's dark edges on white.
@@ -1331,12 +1312,6 @@ impl FxEngine {
         out
     }
 
-    /// Apply one Stroke **style** (docs/impl/layer-styles.md §4) to a
-    /// linear working texture, returning a new texture of the same size.
-    ///
-    /// Three passes: the two separable morphological passes that carry the
-    /// fattened and thinned copies of the alpha together, then one combine that
-    /// cuts the band between them, paints it and lays it over the layer.
     pub fn stroke_contour(
         &self,
         ctx: &GpuContext,
@@ -1421,11 +1396,9 @@ pub const PIXEL_SORT_MAX_SPAN: u32 = 4096;
 pub struct PixelSortOp {
     /// 0 Red, 1 Green, 2 Blue, 3 Luminance, 4 Hue, 5 Saturation.
     pub sort_by: u32,
-    /// True when spans run down columns instead of along rows.
     pub vertical: bool,
     /// 0 Sort, 1 Stretch, 2 Mirror.
     pub span_mode: u32,
-    /// True when a span is ordered the other way round.
     pub reverse: bool,
     /// The bottom of the band that sorts, 0..1.
     pub min: f32,

@@ -32,11 +32,9 @@ pub(crate) struct Track {
     pub trim: bool,
     /// The value heard at each time: dB or pan units, or the change.
     pub points: Vec<(f64, f64)>,
-    /// Still being written.
     pub open: bool,
 }
 
-/// Points closer together than this are one point.
 const CLOSEST_S: f64 = 0.020;
 
 /// How far a dropped point may sit from the line that replaces it: dB for
@@ -97,7 +95,6 @@ pub(crate) fn write_pass(
     wrote
 }
 
-/// The op that writes one track of a pass over `doc`.
 fn pass_op(doc: &Document, comp: Uuid, track: &Track, rate: u32) -> Option<Op> {
     let c = doc.comp(comp)?;
     let trim = track.trim;
@@ -227,7 +224,6 @@ fn between(points: &[(f64, f64)], t: f64) -> f64 {
     }
 }
 
-/// A linear key.
 fn key(time: Rational, value: f64) -> Keyframe {
     Keyframe {
         time,
@@ -264,7 +260,6 @@ fn splice(
     let time = |t: f64| Rational::from_f64_on_grid(t, grid).ok();
     let step = 1.0 / grid as f64;
 
-    // The new values over the stretch.
     let mut new: Vec<(f64, f64)> = if trim {
         let mut moved: Vec<(f64, f64)> = points
             .iter()
@@ -495,10 +490,6 @@ mod tests {
     use super::*;
     use crate::api::state::LumitBridgeState;
 
-    /// **A recorded pass is not lost.** A Touch ride over a keyed Volume is
-    /// written as keys that give back the ride within the thinning
-    /// tolerance, the curve either side of it is exactly what it was, and
-    /// one undo takes the whole pass back.
     #[test]
     fn a_recorded_pass_commits_keys_that_give_the_ride_back_and_undo_in_one_step() {
         let project = LumitBridgeState::new_project(None).expect("a project");
@@ -526,8 +517,6 @@ mod tests {
         };
         let was = volume();
 
-        // Two seconds of a ride that leaves the keys and comes back to them,
-        // a point every ten milliseconds as the pointer moves.
         let ride = |t: f64| was.value_at(t) + 3.0 * (std::f64::consts::PI * (t - 2.0) / 2.0).sin();
         let points: Vec<(f64, f64)> = (0..=200)
             .map(|i| 2.0 + f64::from(i) * 0.01)
@@ -566,9 +555,6 @@ mod tests {
         project.undo().expect("undone");
         assert_eq!(volume(), was, "one undo takes the whole pass back");
 
-        // In Trim the points are changes: the keys already there are heard
-        // moved by them. A control taken before playback began holds levels
-        // even on a strip in Trim, and those are written as levels.
         let change = |t: f64| 2.0 * (std::f64::consts::PI * (t - 5.0) / 2.0).sin();
         let trims: Vec<(f64, f64)> = (0..=200)
             .map(|i| 5.0 + f64::from(i) * 0.01)
@@ -608,8 +594,6 @@ mod tests {
             );
         }
         for &(t, v) in &levels {
-            // They start and end off the curve: each step is a short ramp
-            // just inside them.
             if !(8.02..=8.98).contains(&t) {
                 continue;
             }
@@ -622,9 +606,6 @@ mod tests {
         project.undo().expect("undone");
         assert_eq!(volume(), was, "and one undo takes the trim pass back");
 
-        // A ride taken a sample after a key, on the curve, and a hold that
-        // starts and ends off it: one key per sample, the curve outside as
-        // it was, and the hold given back away from its edges.
         let step = 1.0 / 48_000.0;
         let near: Vec<(f64, f64)> = (0..=200)
             .map(|i| step + f64::from(i) * 0.01)
@@ -676,15 +657,9 @@ mod tests {
         project.undo().expect("undone");
         assert_eq!(volume(), was, "and the last pass goes back too");
 
-        // A Touch ride as the mixer records it: taken on the curve and held
-        // still a moment, pulled down to -12 dB by 3.05 s, held there until
-        // let go at 3.51 s (the clock noting the hold), then the glide back.
-        // The hold replays flat from where the fader stopped, and the still
-        // start leaves one key.
         let mut ride: Vec<(f64, f64)> = vec![(2.0, -2.0), (2.01, -2.01), (2.05, -2.05)];
         ride.extend((0..=99).map(|i| {
             let t = 2.06 + f64::from(i) * 0.01;
-            // The last move is to -12 dB itself, as the held value is.
             let v = -2.06 + (t - 2.06) / 0.99 * (-12.0 + 2.06);
             (t, if i == 99 { -12.0 } else { v })
         }));
@@ -717,8 +692,6 @@ mod tests {
         project.undo().expect("undone");
         assert_eq!(volume(), was, "and the ride goes back");
 
-        // A ride taken 2.35 ms after a key, on its value: the key holding
-        // the curve outside stays, and the ride's first point goes.
         let late = 0.00235;
         let ride: Vec<(f64, f64)> = (0..=100)
             .map(|i| late + f64::from(i) * 0.01)

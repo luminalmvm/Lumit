@@ -1,7 +1,3 @@
-//! Construction of the effect engine: `FxEngine::new` compiles every WGSL
-//! kernel, builds the bind-group layouts and assembles the pipeline table.
-//! The per-effect apply methods live in the sibling family modules.
-
 use crate::GpuContext;
 
 use super::{at_depth, FxEngine};

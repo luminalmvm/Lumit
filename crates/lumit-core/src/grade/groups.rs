@@ -22,15 +22,12 @@ use crate::model::{Document, EffectInstance, Layer, LayerKind, ProjectItem};
 use crate::ops::Op;
 use crate::time::Rational;
 
-/// One grade group.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GradeGroup {
     pub id: Uuid,
     pub name: String,
-    /// What runs before each member's own grade.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pre: Vec<EffectInstance>,
-    /// What runs after it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub post: Vec<EffectInstance>,
     /// A shared node rather than a group: its Pre list is the one node
@@ -40,7 +37,6 @@ pub struct GradeGroup {
 }
 
 impl GradeGroup {
-    /// The list `part` names.
     #[must_use]
     pub fn part(&self, part: Part) -> &[EffectInstance] {
         match part {
@@ -49,7 +45,6 @@ impl GradeGroup {
         }
     }
 
-    /// The list `part` names, to change.
     pub fn part_mut(&mut self, part: Part) -> &mut Vec<EffectInstance> {
         match part {
             Part::Pre => &mut self.pre,
@@ -94,20 +89,16 @@ pub fn worn_at(doc: &Document, layer: &Layer, lt: f64) -> Option<Layer> {
     Some(worn)
 }
 
-/// Group `id`, if the document has it.
 #[must_use]
 pub fn group(doc: &Document, id: Uuid) -> Option<&GradeGroup> {
     doc.grade_groups.iter().find(|g| g.id == id)
 }
 
-/// The group a stack's references name, if any. A shared node's reference
-/// is not a group.
 #[must_use]
 pub fn group_in(stack: &[EffectInstance]) -> Option<Uuid> {
     stack.iter().filter(|e| !is_shared(e)).find_map(group_of)
 }
 
-/// Which group's list holds effect `id`, and which of its two.
 #[must_use]
 pub fn home_of(doc: &Document, id: Uuid) -> Option<(Uuid, Part)> {
     doc.grade_groups.iter().find_map(|g| {
@@ -118,8 +109,6 @@ pub fn home_of(doc: &Document, id: Uuid) -> Option<(Uuid, Part)> {
     })
 }
 
-/// Where effect `id` sits when a reference in `stack` holds it: that
-/// reference's place in `stack`, and the group and list it names.
 #[must_use]
 pub fn holder(doc: &Document, stack: &[EffectInstance], id: Uuid) -> Option<(usize, Uuid, Part)> {
     stack.iter().enumerate().find_map(|(at, e)| {
@@ -132,8 +121,6 @@ pub fn holder(doc: &Document, stack: &[EffectInstance], id: Uuid) -> Option<(usi
     })
 }
 
-/// Lay `staged` over the group list that holds its first effect, for a
-/// preview. False when no group holds it.
 pub fn stage(doc: &mut Document, staged: &[EffectInstance]) -> bool {
     let Some((id, part)) = staged.first().and_then(|f| home_of(doc, f.id)) else {
         return false;
@@ -145,7 +132,6 @@ pub fn stage(doc: &mut Document, staged: &[EffectInstance]) -> bool {
     true
 }
 
-/// The op that lets `edit` change one of group `id`'s two lists.
 pub fn set_list(
     doc: &Document,
     id: Uuid,
@@ -161,7 +147,6 @@ pub fn set_list(
     Ok((groups != doc.grade_groups).then_some(Op::SetGradeGroups { groups }))
 }
 
-/// Every shot in `doc` that is in group `id`, comp by comp, layer by layer.
 #[must_use]
 pub fn members(doc: &Document, id: Uuid) -> Vec<Shot> {
     let mut out = Vec::new();
@@ -189,8 +174,6 @@ pub fn members(doc: &Document, id: Uuid) -> Vec<Shot> {
     out
 }
 
-/// Take a stack's references out and, for `group`, put a Pre at the start of
-/// its grade and a Post after it.
 fn place(stack: &mut Vec<EffectInstance>, group: Option<Uuid>) {
     stack.retain(|e| !is_reference(e) || is_shared(e));
     let Some(group) = group else {
@@ -223,7 +206,6 @@ pub fn set_group(
     .map(|((), op)| op)
 }
 
-/// A new group, empty, with `shots` in it. Answers its id.
 pub fn create(doc: &Document, shots: &[Shot]) -> Result<(Uuid, Op), GradeError> {
     let id = Uuid::now_v7();
     let mut n = doc.grade_groups.len() + 1;
@@ -252,7 +234,6 @@ pub fn create(doc: &Document, shots: &[Shot]) -> Result<(Uuid, Op), GradeError> 
     Ok((id, op))
 }
 
-/// Call group `id` `name`.
 pub fn rename(doc: &Document, id: Uuid, name: &str) -> Result<Option<Op>, GradeError> {
     let name = name.trim();
     if name.is_empty() {
@@ -270,7 +251,6 @@ pub fn rename(doc: &Document, id: Uuid, name: &str) -> Result<Option<Op>, GradeE
     Ok(Some(Op::SetGradeGroups { groups }))
 }
 
-/// Delete group `id`, and its references from every member.
 pub fn delete(doc: &Document, id: Uuid) -> Result<Op, GradeError> {
     if group(doc, id).is_none() {
         return Err(GradeError::UnknownGroup);

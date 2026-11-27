@@ -45,9 +45,6 @@ fn comp(layers: Vec<Layer>) -> Composition {
     }
 }
 
-/// A clip of a multicam comp draws and sounds its own angle and no other,
-/// whatever the angles' own switches say inside the comp, and a clip of a
-/// deleted angle draws and sounds nothing.
 #[test]
 fn a_multicam_clip_plays_only_its_angle() {
     let footage = || ClipSource::Footage(Uuid::now_v7());
@@ -66,7 +63,6 @@ fn a_multicam_clip_plays_only_its_angle() {
         vec![Clip::new(footage(), s(0), s(60), s(0), s(60))],
         true,
     );
-    // Worked on inside the comp: A hidden and B soloed, to look at B.
     a.switches.visible = false;
     b.switches.solo = true;
     let mut mc = comp(vec![a.clone(), b.clone(), sound.clone()]);
@@ -90,13 +86,11 @@ fn a_multicam_clip_plays_only_its_angle() {
     assert_eq!(switches(&b), (false, false, false));
     assert_eq!(switches(&sound), (false, false, false));
 
-    // A sound angle is heard and never drawn.
     clip.angle = Some(sound.id);
     let seen = nested_for(&doc, &clip).unwrap();
     let rec = seen.layers.iter().find(|x| x.id == sound.id).unwrap();
     assert_eq!((rec.switches.visible, rec.switches.audible), (false, true));
 
-    // A deleted angle leaves every angle off.
     clip.angle = Some(Uuid::now_v7());
     let seen = nested_for(&doc, &clip).unwrap();
     assert!(seen
@@ -104,20 +98,13 @@ fn a_multicam_clip_plays_only_its_angle() {
         .iter()
         .all(|l| !l.switches.visible && !l.switches.audible));
 
-    // A clip of the comp naming no angle plays the comp as it is.
     clip.angle = None;
     assert!(matches!(nested_for(&doc, &clip), Some(Cow::Borrowed(_))));
 }
 
-/// The footage a multicam clip shows follows its angle into the comp: through
-/// the clip's trim, the angle row's own start and the angle clip's trim. A gap
-/// in the angle shows nothing.
 #[test]
 fn footage_at_follows_the_angle_through_every_offset() {
     let file = Uuid::now_v7();
-    // The camera's file starts 10 s into the multicam comp and is used from
-    // 2 s in. The angle row itself starts 1 s late.
-    // It carries a grade and fades in over a second.
     let mut inner = Clip::new(ClipSource::Footage(file), s(2), s(30), s(10), s(28));
     inner
         .effects
@@ -131,25 +118,18 @@ fn footage_at_follows_the_angle_through_every_offset() {
     let mut doc = Document::new();
     doc.items.push(ProjectItem::Composition(mc.clone()));
 
-    // A multicam clip at 100 s of its row, trimmed 15 s into the comp.
     let mut clip = Clip::new(ClipSource::Comp(id), s(15), s(25), s(100), s(10));
     clip.angle = Some(cam.id);
-    // 3 s into the clip: comp time 18, row time 17, 7 s into the file's clip,
-    // which started 2 s into the file.
     let shown = footage_at(&doc, &clip, s(103)).unwrap();
     assert_eq!((shown.item, shown.source_time), (file, s(9)));
-    // Before the file starts on its row: a gap.
     let mut early = clip.clone();
     early.source_in = s(0);
     assert!(footage_at(&doc, &early, s(100)).is_none());
-    // Its head is still the file's first picture.
     assert_eq!(
         opens_on(&doc, &early).map(|shown| shown.source_time),
         Some(s(2))
     );
 
-    // The parent comp: the picture clip on a picture row and its sound on a
-    // sound row, linked, the sound on another angle.
     let link = Some(Uuid::now_v7());
     let mut picture = clip.clone();
     picture.link = link;
@@ -168,8 +148,6 @@ fn footage_at_follows_the_angle_through_every_offset() {
     assert_eq!((found.picture, found.sound), (picture.angle, heard.angle));
     assert!(under(&doc, &parent, s(99)).is_none());
 
-    // Flattened from before the file starts, the piece keeps the file's own
-    // look: its grade ahead of anything else, and its fade at its own start.
     let mut wide = Clip::new(ClipSource::Comp(id), s(5), s(20), s(100), s(15));
     wide.angle = Some(cam.id);
     let flat = flattened(&doc, &wide).unwrap();
@@ -179,7 +157,6 @@ fn footage_at_follows_the_angle_through_every_offset() {
     assert!(flat[0].effects[0].enabled);
     assert_eq!(flat[0].fade_in.seconds, s(1));
 
-    // The file itself in a cut is in step with the comp, but not once slowed.
     let own = Clip::new(ClipSource::Footage(file), s(5), s(15), s(0), s(10));
     let cut = comp(vec![angle("Picture 1", vec![own.clone()], false)]);
     let found = under(&doc, &cut, s(2)).unwrap();

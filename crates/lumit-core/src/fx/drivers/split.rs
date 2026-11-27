@@ -16,7 +16,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Split's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "split",
@@ -35,16 +34,11 @@ pub struct Split {
     pub colour: [f32; 4],
 }
 
-/// The port the red channel leaves by.
 pub const RED_PORT: &str = "red";
-/// The port the green channel leaves by.
 pub const GREEN_PORT: &str = "green";
-/// The port the blue channel leaves by.
 pub const BLUE_PORT: &str = "blue";
-/// The port the alpha channel leaves by.
 pub const ALPHA_PORT: &str = "alpha";
 
-/// Split's behaviour.
 pub struct SplitDef;
 
 impl EffectDef for SplitDef {

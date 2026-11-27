@@ -69,11 +69,8 @@ class DrawnPointerRegion extends StatefulWidget {
 }
 
 class _DrawnPointerRegionState extends State<DrawnPointerRegion> {
-  /// Which mouse the events are arriving from, for the cursor request below.
   int? _device;
 
-  /// Whether the pointer is over this region at all — there is nothing to hide
-  /// when it is not.
   bool _inside = false;
 
   @override
@@ -175,9 +172,6 @@ void paintTwoPassStroke(
   }
 }
 
-/// The sweep rectangle every marquee draws — a faint fill under a hairline
-/// edge — shared so "I am sweeping an area" reads the same whichever tool is
-/// in hand.
 void paintMarquee(Canvas canvas, Rect rect, Color accent) {
   canvas.drawRect(rect, Paint()..color = accent.withValues(alpha: 0.12));
   canvas.drawRect(
@@ -189,9 +183,6 @@ void paintMarquee(Canvas canvas, Rect rect, Color accent) {
   );
 }
 
-/// The anchor point's mark — a small ring with a cross through it, the same
-/// figure the anchor-point tool's icon carries — shared by the gizmo's pivot
-/// handle and the Anchor point tool so the two read as one idea.
 void paintAnchorMark(Canvas canvas, Offset at, Color colour,
     {double reach = 8}) {
   final paint = Paint()
@@ -229,8 +220,6 @@ class ToolPointer extends StatelessWidget {
   final Offset? at;
   final ToolMode tool;
 
-  /// The ink and the halo behind it, so the pointer is legible on a white
-  /// picture and on a black one alike.
   final Color mark;
   final Color outline;
 
@@ -324,12 +313,6 @@ class _ToolPointerPainter extends CustomPainter {
       old.ringRadius != ringRadius;
 }
 
-/// The ring a brush of [width] layer pixels draws at this magnification, kept
-/// within sight either way.
-///
-/// The painting tools are disabled on this branch — the engine has no
-/// paint strokes — so nothing calls this yet; it is the pointer they wear the
-/// moment they do, and it is tested so it will be right when they arrive.
 double brushRingRadius(double width, double viewScale) =>
     (width * viewScale / 2).clamp(minBrushRingRadius, maxBrushRingRadius);
 
@@ -345,7 +328,6 @@ double brushRingRadius(double width, double viewScale) =>
 class HandPointer extends StatelessWidget {
   final Offset? at;
 
-  /// Whether the hand is holding: a drag in flight.
   final bool holding;
   final Color mark;
   final Color outline;
@@ -398,7 +380,6 @@ class _HandPainter extends CustomPainter {
     required this.outline,
   });
 
-  /// How tall the drawn hand is, in screen pixels.
   static const double _size = 20;
 
   @override
@@ -407,7 +388,6 @@ class _HandPainter extends CustomPainter {
     canvas.translate(at.dx, at.dy);
     final s = _size / 24;
     canvas.scale(s, s);
-    // The palm's middle sits on the pointer, which is where a hand grips.
     canvas.translate(-12, -12);
     final path = holding ? _fist() : _openHand();
     canvas.drawPath(
@@ -423,7 +403,6 @@ class _HandPainter extends CustomPainter {
     canvas.restore();
   }
 
-  /// An open hand: palm, four fingers standing, thumb out to the left.
   Path _openHand() => Path()
     ..moveTo(6, 14)
     ..lineTo(6, 9)
@@ -443,8 +422,6 @@ class _HandPainter extends CustomPainter {
     ..cubicTo(9, 21, 6, 19, 6, 15)
     ..close();
 
-  /// The same hand closed: the fingers curled down onto the palm, with the
-  /// knuckles as the line across the top.
   Path _fist() => Path()
     ..moveTo(6, 13)
     ..cubicTo(6, 10, 8, 9, 10, 9)
@@ -474,7 +451,6 @@ class ViewerHandLayer extends StatefulWidget {
   /// system cursor hidden.
   final bool active;
 
-  /// How far the picture should move, per pointer movement.
   final ValueChanged<Offset> onPan;
 
   final Color mark;
@@ -566,7 +542,6 @@ Widget handPanLayer(
 class MagnifierPointer extends StatelessWidget {
   final Offset? at;
 
-  /// Whether the click would zoom out (the Alt modifier).
   final bool out;
   final Color mark;
   final Color outline;
@@ -613,7 +588,6 @@ class _MagnifierPainter extends CustomPainter {
     required this.outline,
   });
 
-  /// The lens' radius in screen pixels, and how far the handle runs past it.
   static const double _lens = 6.5;
   static const double _handle = 7;
 
@@ -633,9 +607,6 @@ class _MagnifierPainter extends CustomPainter {
         const Offset(grip + _handle * 0.7071, grip + _handle * 0.7071),
         paint,
       );
-      // The sign inside the glass: plus in, minus out. The bar across is drawn
-      // for both, so the two pointers differ by one stroke and read as one
-      // family.
       const arm = 3.0;
       canvas.drawLine(const Offset(-arm, 0), const Offset(arm, 0), paint);
       if (!out) {
@@ -687,7 +658,6 @@ class TextPointer extends StatelessWidget {
   }
 }
 
-/// An I-beam lying on its side: the bar runs across, its serifs stand up.
 class _BeamPainter extends CustomPainter {
   final Offset at;
   final Color mark;

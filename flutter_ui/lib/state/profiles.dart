@@ -48,7 +48,6 @@ enum ProfileGroup {
   preferences,
   library;
 
-  /// The keys of the settings file this group owns.
   List<String> get keys => switch (this) {
         appearance => const [
             'color_scheme',
@@ -102,7 +101,6 @@ const String _scaleKey = 'ui_scale';
 /// takes a mebibyte, and this leaves room for the envelope.
 const int _groupLimit = 900 * 1024;
 
-/// One profile on this machine.
 class Profile {
   final String id;
   String name;
@@ -134,7 +132,6 @@ class Profile {
     this.libraryHome,
   }) : unsynced = unsynced ?? {};
 
-  /// The secret store's name for this profile's sign-in.
   String get slot => 'sign-in/$id';
 
   Map<String, dynamic> toJson() => {
@@ -169,7 +166,6 @@ class Profile {
   }
 }
 
-/// Where a sync stands, for the strip to say.
 enum SyncStatus { off, idle, syncing, failed }
 
 /// Three-way merge of two edits to the same JSON. Where both sides are maps
@@ -274,7 +270,6 @@ void _copy(String from, String to) {
   }
 }
 
-/// The profiles on this machine, which one is in use, and its sync.
 class ProfilesState extends ChangeNotifier {
   final Workspace workspace;
   final AccountState account;
@@ -313,8 +308,6 @@ class ProfilesState extends ChangeNotifier {
   File get _index => File('${_dir.path}${Platform.pathSeparator}profiles.json');
   File _file(String id, String what) => File('${_dir.path}'
       '${Platform.pathSeparator}profiles${Platform.pathSeparator}$id.$what.json');
-
-  // --- The list ------------------------------------------------------------
 
   void _load() {
     Object? inUse;
@@ -358,7 +351,6 @@ class ProfilesState extends ChangeNotifier {
     }
   }
 
-  /// Where a profile made here keeps its library.
   String _homeFor(String id) => '${_dir.path}${Platform.pathSeparator}profiles'
       '${Platform.pathSeparator}$id${Platform.pathSeparator}library';
 
@@ -366,8 +358,6 @@ class ProfilesState extends ChangeNotifier {
   /// has always used.
   String? homeOf(Profile profile) => profile.libraryHome;
 
-  /// Point the library at the current profile's home, here and in the
-  /// engine.
   void _useHome() {
     final home = homeOf(current);
     Workspace.libraryHome = home;
@@ -419,7 +409,6 @@ class ProfilesState extends ChangeNotifier {
           file.deleteSync();
         }
       } catch (_) {
-        // Nothing was copied.
       }
       for (final MapEntry(:key, :value) in files.entries) {
         if (key is! String || value is! String || !_safeName(key)) continue;
@@ -432,7 +421,6 @@ class ProfilesState extends ChangeNotifier {
       try {
         Directory(dir).deleteSync(recursive: true);
       } catch (_) {
-        // Nothing was copied.
       }
       for (final entry in themes) {
         if (entry is! Map) continue;
@@ -485,9 +473,6 @@ class ProfilesState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// A new profile that starts as a copy of the one in use, its library too.
-  // ponytail: no way to start one from the shipped defaults. Add it if
-  // people ask for a clean slate.
   Profile add(String name) {
     final taken = {for (final p in all) p.colour};
     var colour = 1;
@@ -535,7 +520,6 @@ class ProfilesState extends ChangeNotifier {
       try {
         _file(profile.id, what).deleteSync();
       } catch (_) {
-        // Never written.
       }
     }
     // Its library too, but only where Lumit put it: a hand-edited list must
@@ -547,7 +531,6 @@ class ProfilesState extends ChangeNotifier {
               '${Platform.pathSeparator}${profile.id}.library')
           .deleteSync(recursive: true);
     } catch (_) {
-      // Never made.
     }
     final home = homeOf(profile);
     if (home != null && home == _homeFor(profile.id)) {
@@ -562,7 +545,6 @@ class ProfilesState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Put the current profile away and take [next] out, its library with it.
   Future<void> switchTo(Profile next) async {
     // One switch at a time: a second waits for the first to land.
     for (var under = _switching; under != null; under = _switching) {
@@ -603,12 +585,8 @@ class ProfilesState extends ChangeNotifier {
     }
   }
 
-  /// The switch under way, if one is.
   Future<void>? _switching;
 
-  // --- Reading settings out and writing them back --------------------------
-
-  /// Every group as it stands now.
   Map<String, dynamic> _export() =>
       {for (final group in ProfileGroup.values) group.name: _read1(group)};
 
@@ -682,7 +660,6 @@ class ProfilesState extends ChangeNotifier {
     }
   }
 
-  /// Write [groups] of [settings] into the live settings.
   void _apply(Map<String, dynamic> settings, Iterable<ProfileGroup> groups) {
     final live = workspace.toJson();
     final dock = workspace.dock;
@@ -750,13 +727,9 @@ class ProfilesState extends ChangeNotifier {
       file.parent.createSync(recursive: true);
       file.writeAsStringSync(text);
     } catch (_) {
-      // Tried.
     }
   }
 
-  // --- Sync ----------------------------------------------------------------
-
-  /// Whether the current profile is being kept on the server.
   bool get syncing => current.sync && account.pro;
 
   void setSync(bool on) {
@@ -782,7 +755,6 @@ class ProfilesState extends ChangeNotifier {
     }
   }
 
-  /// A setting changed here. Wait for the changes to stop, then send them.
   void _settingsChanged() {
     if (_applying || !syncing) return;
     _settle?.cancel();

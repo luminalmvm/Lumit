@@ -19,8 +19,6 @@ import 'package:lumit_flutter/widgets/controls.dart';
 import 'package:lumit_flutter/widgets/ui_scale.dart';
 
 void main() {
-  /// The application's own arrangement in miniature: the scale view wrapping
-  /// an overlay, with a control in it to open a menu from.
   Widget host(double userScale) => Directionality(
         textDirection: TextDirection.ltr,
         child: ThemeScope(

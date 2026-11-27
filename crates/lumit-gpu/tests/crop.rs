@@ -1,7 +1,5 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-//! Crop's kernel against its CPU oracle, hard-edged and feathered.
-
 use lumit_core::fx::effects::crop::{crop, CropParams};
 use lumit_gpu::fx::common::{readback_linear_f32, upload_linear_f32};
 use lumit_gpu::fx::utility::CropOp;

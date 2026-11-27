@@ -1,13 +1,3 @@
-// The welcome screen, measured against the approved drawing, and made to work.
-//
-// **Why this file exists.** The screen is the first thing anybody sees, and it
-// is built entirely to one mockup: every width, every row
-// height, every face is a number read off that drawing, and a value that
-// disagrees with it is a defect. So the first half of this file is a ruler.
-//
-// The second half is the behaviour: three cards that start work, a recents list
-// that opens what it lists, a Clear that empties it and a × that takes one row
-// off it. None of that is visible in a screenshot, and all of it is the point.
 
 @Tags(['opens-project'])
 library;
@@ -44,7 +34,6 @@ void main() {
   setUpAll(initEngineForTests);
 
   group('Welcome screen (frb)', () {
-    /// Three remembered projects, newest first once the store has them.
     const paths = [
       '/home/ed/Projects/Camera tests/Train POV.lum',
       '/home/ed/Projects/Opening titles/Opening titles.lum',
@@ -84,10 +73,6 @@ void main() {
       await tester.pump();
       return p;
     }
-
-    // --- The ruler --------------------------------------------------------
-
-    // --- What it does -----------------------------------------------------
 
     /// 11. **The × forgets exactly one row**, and forgets nothing else. It is
     /// the innermost hit on the row, so pressing it never also opens the
@@ -131,8 +116,6 @@ void main() {
       await settleFrb(tester, until: () => !p.state.opening.value);
     });
 
-    // --- The picture on a row ---------------------------------------------
-
     /// A `.lum` to save to, and the thumbnail it would be filed under, both
     /// cleaned up after the test. The thumbnails themselves land beside the
     /// workspace store, which the harness has already redirected into a scratch
@@ -173,7 +156,6 @@ void main() {
           reason: 'the save filed the project\'s picture');
       expect(scratch.thumb.readAsBytesSync(), onePixelPng);
 
-      // A different picture, saved again over the same project.
       shot = Uint8List.fromList([...onePixelPng, 0, 1, 2]);
       await tester.runAsync(() => saveProjectFrb(p.state, p.uiState));
 
@@ -233,9 +215,6 @@ void main() {
       return p;
     }
 
-    /// 18. **Nothing open, so the Viewer offers the two ways to start.** An
-    /// empty editor whose largest panel says "select a composition" when there
-    /// is no composition to select is a dead end.
     testWidgets('the two actions stand where the picture would be',
         (tester) async {
       await mount(tester);

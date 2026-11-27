@@ -41,10 +41,8 @@ pub struct Multicam {
 }
 
 impl Composition {
-    /// The key a multicam comp's [`Multicam`] is kept under in `extra`.
     pub const MULTICAM_KEY: &'static str = "multicam";
 
-    /// This comp's multicam mark, or `None` for an ordinary comp.
     #[must_use]
     pub fn multicam(&self) -> Option<Multicam> {
         self.extra
@@ -52,13 +50,11 @@ impl Composition {
             .and_then(|v| serde_json::from_value(v.clone()).ok())
     }
 
-    /// Whether this is a multicam comp, without reading the mark.
     #[must_use]
     pub fn is_multicam(&self) -> bool {
         self.extra.contains_key(Self::MULTICAM_KEY)
     }
 
-    /// Set the multicam mark, or take it away with `None`.
     pub fn set_multicam(&mut self, multicam: Option<&Multicam>) {
         match multicam.and_then(|m| serde_json::to_value(m).ok()) {
             Some(v) => {
@@ -71,7 +67,6 @@ impl Composition {
     }
 }
 
-/// Apply [`crate::ops::Op::SetCompMulticam`], answering its inverse.
 pub(crate) fn set_mark(
     doc: &mut Document,
     comp: Uuid,
@@ -195,7 +190,6 @@ pub fn angle_items(doc: &Document, clip: &Clip) -> Option<Vec<Uuid>> {
     Some(items)
 }
 
-/// The layer a multicam clip's angle is.
 #[must_use]
 pub fn angle_layer<'a>(doc: &'a Document, clip: &Clip) -> Option<&'a Layer> {
     let (ClipSource::Comp(id), Some(angle)) = (clip.source, clip.angle) else {
@@ -204,8 +198,6 @@ pub fn angle_layer<'a>(doc: &'a Document, clip: &Clip) -> Option<&'a Layer> {
     doc.comp(id)?.layers.iter().find(|l| l.id == angle)
 }
 
-/// What a clip shows or sounds at one moment: the footage item, the moment of
-/// it, and the streams of it that are heard.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Shown {
     pub item: Uuid,
@@ -282,21 +274,15 @@ pub fn opens_on(doc: &Document, clip: &Clip) -> Option<Shown> {
     })
 }
 
-/// What a clip sounds at layer time `lt`: [`footage_at`], named for the
-/// readers that follow speech through a cut.
 #[must_use]
 pub fn heard_at(doc: &Document, clip: &Clip, lt: Rational) -> Option<Shown> {
     footage_at(doc, clip, lt)
 }
 
-/// The multicam clip under one moment of a composition, as the angle viewer
-/// follows it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Under {
-    /// The Sequence layer the clip is on.
     pub layer: Uuid,
     pub clip: Uuid,
-    /// The multicam comp it plays.
     pub comp: Uuid,
     /// The moment of the multicam comp it shows, in seconds.
     pub time: Rational,
@@ -487,7 +473,6 @@ pub fn flattened(doc: &Document, clip: &Clip) -> Option<Vec<Clip>> {
     let speed = clip.constant_speed().filter(|s| *s > 0.0)?;
     let speed = Rational::from_f64_on_grid(speed, Rational::FLICK_DEN).ok()?;
     let offset = layer.start_offset.0;
-    // The stretch of the comp the clip plays, and where its first moment sits.
     let (s0, s1) = (clip.source_in, clip.source_out);
     let mut order: Vec<&Clip> = inner.iter().collect();
     order.sort_by_key(|c| c.place_start);
@@ -532,7 +517,6 @@ pub fn flattened(doc: &Document, clip: &Clip) -> Option<Vec<Clip>> {
         )?);
         let (first, last) = (lo == s0, hi == s1);
         let (own_start, own_end) = (lo == a0, hi == a1);
-        // The angle clip's fades, timed on the piece's clock.
         let own = |f: Fade| -> Option<Fade> {
             Some(Fade {
                 seconds: f.seconds.checked_div(speed).ok()?,
@@ -614,7 +598,6 @@ pub fn grid(count: usize) -> (usize, usize) {
     }
 }
 
-/// The most angles one page of the angle viewer holds.
 pub const PAGE: usize = 16;
 
 #[cfg(test)]

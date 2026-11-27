@@ -14,7 +14,6 @@
 
 abstract final class LumitIcons {
 
-  // --- Tools ---
   static const String select =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2l10 6-4.5 1L6 13z"/></svg>';
   static const String directSelect =
@@ -29,7 +28,6 @@ abstract final class LumitIcons {
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="8" cy="8" rx="5.5" ry="4.5"/></svg>';
   static const String polygon =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5l5.5 4-2 6.5h-7l-2-6.5z"/></svg>';
-  /// 3D shapes. A ball with its equator's near half.
   static const String sphere =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.5"/><path d="M2.5 8a5.5 2 0 0 0 11 0"/></svg>';
   static const String cylinder =
@@ -75,19 +73,16 @@ abstract final class LumitIcons {
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3.5v9h9"/><circle cx="3" cy="12.5" r="1.4" fill="currentColor" stroke="none"/><path d="M10 5.5v5M7.5 8h5"/></svg>';
   static const String vertexDelete =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3.5v9h9"/><circle cx="3" cy="12.5" r="1.4" fill="currentColor" stroke="none"/><path d="M7.5 8h5"/></svg>';
-  /// The dashed arc cutting the corner is what the tool does to it.
   static const String vertexConvert =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3.5v9h9"/><circle cx="3" cy="12.5" r="1.4" fill="currentColor" stroke="none"/><path d="M3 6.5A6 6 0 0 0 9 12.5" stroke-dasharray="2 1.5" opacity=".65"/></svg>';
   /// The hard edge inside, the soft one outside. Mask is a frame with a dashed shape in it; this one drops the frame, because feather is about the edge and nothing else.
   static const String maskFeather =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="3"/><circle cx="8" cy="8" r="5.5" stroke-dasharray="2 1.5" opacity=".55"/></svg>';
-  /// A rubber stamp: head, neck, pad.
   static const String cloneStamp =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.5h4v3l1.5 2.5h-7L6 5.5z"/><path d="M8 8v2"/><rect x="3.5" y="10" width="9" height="3.5"/></svg>';
   /// The divider is what makes the rhombus an eraser rather than a tilted rectangle; the line under it is the surface being cleared.
   static const String eraser =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l5 5-6 6-5-5z"/><path d="M6 5l5 5"/><path d="M8 13h6"/></svg>';
-  /// The set's brush nib over a dashed selection: a brush that selects, which is exactly what the tool is.
   static const String rotoBrush =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.5" cy="8.5" r="5" stroke-dasharray="2 1.5"/><path d="M12.5 2.5l1.5 1.5-6 6-2 .5.5-2z"/></svg>';
   /// A region, the hard edge it has, and the soft one the tool gives it. Mask feather says the same thing with closed rings, where this is an open edge - the two never share a surface, and a roto edge is a boundary rather than a shape.
@@ -117,18 +112,13 @@ abstract final class LumitIcons {
   /// The three axes turned the layer's way, two of them with heads. World axes is the same three standing upright.
   static const String localAxes =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10.5l6.8-3.2M6 10.5L2.8 3.7M6 10.5l-1.5 4"/><path d="M10.5 6.9 12.8 7.3 11.7 9.3M2.4 6 2.8 3.7 4.8 4.8"/></svg>';
-  /// The three axes standing upright over the ground line, the comp's own way round.
   static const String worldAxes =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 13.5h13" opacity=".55"/><path d="M5 11h8.5M5 11V2.5M5 11l-2.5 2.5"/><path d="M11.6 9.7 13.5 11l-1.9 1.3M3.7 4.4 5 2.5l1.3 1.9"/></svg>';
-  /// Right and up inside the frame of the screen.
   static const String viewAxes =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11" rx="1" opacity=".55"/><path d="M8 8h4.5M8 8V3.5"/><path d="M10.6 6.7 12.5 8l-1.9 1.3M6.7 5.4 8 3.5l1.3 1.9"/></svg>';
 
-  // --- Cutting ---
-  /// An edge, and what is after it pushed along.
   static const String rippleTrim =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 3H3v10h2.5"/><path d="M8 8h6"/><path d="M11.5 5.5L14 8l-2.5 2.5"/></svg>';
-  /// Two clips meeting, the meeting point going either way.
   static const String roll =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 3H7v10H5.5"/><path d="M10.5 3H9v10h1.5"/><path d="M3.5 8H1.5M2.75 6.75L1.5 8l1.25 1.25"/><path d="M12.5 8h2M13.25 6.75L14.5 8l-1.25 1.25"/></svg>';
   /// The arrows inside the clip: the box stays and what it shows moves.
@@ -137,17 +127,14 @@ abstract final class LumitIcons {
   /// The arrows outside the clip: the box itself moves. Slip's twin.
   static const String slide =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="6" height="8" rx="1"/><path d="M3.25 6.75L2 8l1.25 1.25"/><path d="M12.75 6.75L14 8l-1.25 1.25"/></svg>';
-  /// Two clips, and the later one coming back to close the gap.
   static const String autoRipple =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="4" width="3.5" height="8" rx="1"/><rect x="11" y="4" width="3.5" height="8" rx="1"/><path d="M9.5 8H6.5M8 6.5 6.5 8 8 9.5"/></svg>';
   /// One ramp falling through one rising. Curved, so it is never read as Close.
   static const String crossfade =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12C6 12 10 4 14 4"/><path d="M2 4C6 4 10 12 14 12"/></svg>';
-  /// A beat grid, with a point sat on one of its lines.
   static const String quantise =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v10M8 3v10M13 3v10"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg>';
 
-  // --- Layer switches ---
   static const String visible =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 8c2.5-4.5 10.5-4.5 13 0-2.5 4.5-10.5 4.5-13 0z"/><circle cx="8" cy="8" r="2"/></svg>';
   static const String hidden =
@@ -200,7 +187,6 @@ abstract final class LumitIcons {
   static const String collapseTransformations =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8h12" opacity=".4"/><path d="M8 2v3.5M6 3.7l2 1.8 2-1.8M8 14v-3.5M6 12.3l2-1.8 2 1.8"/></svg>';
 
-  // --- Transport ---
   static const String toStart =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v10M13 3L6 8l7 5z"/></svg>';
   static const String previousFrame =
@@ -218,7 +204,6 @@ abstract final class LumitIcons {
   static const String workArea =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v8M14 4v8"/><rect x="5" y="6" width="6" height="4" fill="currentColor" opacity=".5"/></svg>';
 
-  // --- Timeline and graph ---
   static const String layers =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h12M2 8h8M2 11h10"/></svg>';
   static const String graph =
@@ -229,7 +214,6 @@ abstract final class LumitIcons {
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h10M3 8h10M3 12h10"/></svg>';
   static const String value =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12V4M2 12h12"/><path d="M4 9l3-3 3 2 3-4"/></svg>';
-  /// The speed line itself, ramping up over its clip.
   static const String speed =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13.5h12" opacity=".55"/><path d="M2 11h3.5l5-7H14"/></svg>';
   static const String auto =
@@ -264,7 +248,6 @@ abstract final class LumitIcons {
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M3 8h10"/></svg>';
   static const String zoomOut =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h10"/></svg>';
-  /// A horseshoe magnet: the Timeline's snapping, in the mark every editor uses for it.
   static const String snap =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 13V8a4.5 4.5 0 0 1 9 0v5h-3V8a1.5 1.5 0 0 0-3 0v5z"/></svg>';
   /// An hourglass: how long a layer took to draw. Not a stopwatch, which is the mark that starts a property animating a few rows above it.
@@ -298,7 +281,6 @@ abstract final class LumitIcons {
   static const String selectedKey =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2l6 6-6 6-6-6z" fill="currentColor"/></svg>';
 
-  // --- Effects ---
   static const String addEffect =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M3 8h10"/></svg>';
   static const String bypass =
@@ -312,7 +294,6 @@ abstract final class LumitIcons {
   static const String delete =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h10M6 4V2.5h4V4M5 4l.5 9h5l.5-9"/></svg>';
 
-  // --- Viewer bar ---
   static const String fitToView =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3.5" width="11" height="9"/><path d="M5 6h6v4H5z" opacity=".5"/></svg>';
   static const String actualSize =
@@ -363,7 +344,6 @@ abstract final class LumitIcons {
   static const String fitToCompHeight =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2.5h10M3 13.5h10M8 5v6M6.5 6.5L8 5l1.5 1.5M6.5 9.5L8 11l1.5-1.5"/></svg>';
 
-  // --- Project ---
   static const String folder =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h5l1 1h6v8H2z"/></svg>';
   static const String newFolder =
@@ -396,7 +376,6 @@ abstract final class LumitIcons {
   static const String solid =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11"/><rect x="4.5" y="4.5" width="7" height="7" fill="currentColor" stroke="none"/></svg>';
 
-  // --- Graph panel ---
   static const String autoWire =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="3.5" cy="8" r="1.5"/><circle cx="12.5" cy="8" r="1.5"/><path d="M5 8h6" stroke-dasharray="2 1.5"/><path d="M8 3l1.5 1.5L8 6" opacity=".6"/></svg>';
   static const String heal =
@@ -413,7 +392,6 @@ abstract final class LumitIcons {
   static const String nodes =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="5.5" height="4"/><rect x="8.5" y="9" width="5.5" height="4"/><path d="M7.5 5h2.5a1.5 1.5 0 0 1 1.5 1.5V9"/></svg>';
 
-  // --- Application ---
   static const String export =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 10V2M5 5l3-3 3 3M3 9v4h10V9"/></svg>';
   static const String addToQueue =
@@ -443,11 +421,9 @@ abstract final class LumitIcons {
   /// Export turned over: the arrow goes into the tray instead of out of it. Import lands on a bare line, which is a file coming into a project and not Lumit fetching itself.
   static const String downloadUpdate =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v8M5 7l3 3 3-3M3 9v4h10V9"/></svg>';
-  /// One turn with a tick inside it: the update is here, and a restart finishes it.
   static const String restartToUpdate =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 8a5 5 0 1 1-1.5-3.5"/><path d="M13 2.5v3h-3"/><path d="M5.8 8.8l1.4 1.4 2.2-2.5"/></svg>';
 
-  // --- Text ---
   static const String alignLeft =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 3.5h11M2.5 7.5h7M2.5 11.5h9"/></svg>';
   static const String alignCentre =
@@ -462,13 +438,10 @@ abstract final class LumitIcons {
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 3.5h4M4.5 12.5h4M9.5 3.5l-3 9"/></svg>';
   static const String allCaps =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.5h5M4.5 4.5v7M9 4.5h5M11.5 4.5v7"/></svg>';
-  /// A capital T beside a shorter one standing on the same baseline, which is what small capitals are.
   static const String smallCaps =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.5h5M4.5 4.5v7M9.5 7.5h4M11.5 7.5v4"/></svg>';
-  /// A word held between two brackets: a find that matches whole words only.
   static const String wholeWord =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 4h-2v8h2M11.5 4h2v8h-2"/><path d="M5.5 9.5h5"/></svg>';
-  /// Two arrows passing each other: what was found going out and what replaces it coming in.
   static const String replace =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 5.5h8.5M8.5 3l2.5 2.5L8.5 8"/><path d="M13.5 10.5H5M7.5 8L5 10.5 7.5 13"/></svg>';
   static const String superscript =
@@ -482,13 +455,11 @@ abstract final class LumitIcons {
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h8"/></svg>';
   static const String windowMaximise =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="9" height="9" rx="1.5"/></svg>';
-  /// The window in front and the top and right of the one behind it: maximised, and about to be put back.
   static const String windowRestore =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5.5" width="7.5" height="7.5" rx="1.5"/><path d="M5.75 3h5.75A1.5 1.5 0 0 1 13 4.5v5.75"/></svg>';
   /// Desk's four: square ends and mitred corners, since that style is square throughout. Minimise is a line on the floor of the box, the place the window goes to.
   static const String windowMinimiseSquare =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path stroke-linecap="butt" stroke-linejoin="miter" d="M3.5 12h9"/></svg>';
-  /// A plate with a second line under its top edge, the way an instrument's panel is drawn with its own title strip.
   static const String windowMaximiseSquare =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path stroke-linecap="butt" stroke-linejoin="miter" d="M3.5 3.5h9v9h-9zM3.5 5.5h9"/></svg>';
   static const String windowRestoreSquare =
@@ -505,7 +476,6 @@ abstract final class LumitIcons {
   static const String windowCloseRound =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l6 6M11 5l-6 6"/></svg>';
 
-  // --- Grade ---
   static const String pickAdd =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 13.5l.7-2.4 4.3-4.3 1.7 1.7-4.3 4.3z"/><path d="M8.5 3.9a1.5 1.5 0 0 1 2.4 2.4l-1.4 1.4-2.4-2.4z"/><path d="M12 10v4M10 12h4"/></svg>';
   static const String pickSubtract =
@@ -515,8 +485,6 @@ abstract final class LumitIcons {
   static const String stop =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="8" height="8"/></svg>';
 
-  /// Every glyph by its chrome word — the names tooltips and
-  /// the Words setting use (docs/15-DESIGN.md §5.1).
   static const Map<String, String> byName = <String, String>{
     'Select': select,
     'Direct select': directSelect,

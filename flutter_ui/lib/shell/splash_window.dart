@@ -40,7 +40,6 @@ const double _lineLeft = 144, _lineRight = 556, _lineBaseline = 434;
 const double _barTop = 444, _barHeight = 3;
 const double _textSize = 12;
 
-/// The splash window, while it is up.
 class BootSplash {
   BootSplash._(
       this._scale, this._art, this._wordmark, this._version, ui.Color? accent)
@@ -51,7 +50,6 @@ class BootSplash {
 
   static const _channel = MethodChannel('lumit/window');
 
-  /// The splash on screen, if there is one.
   static BootSplash? _current;
 
   final double _scale;
@@ -59,7 +57,6 @@ class BootSplash {
   final PictureInfo? _wordmark;
   final String _version;
 
-  /// The two colours the card is lit with, and the bar fills with.
   final ui.Color _lightA, _lightB;
 
   String _step = '';
@@ -86,7 +83,6 @@ class BootSplash {
       if (!await splash._draw()) return null;
       return _current = splash;
     } catch (_) {
-      // No splash is not a reason not to start.
       return null;
     }
   }
@@ -224,8 +220,6 @@ class BootSplash {
     return recorder.endRecording();
   }
 
-  /// Lumit's own picture: a dark card with a soft shadow, lit from its top
-  /// left by one colour and its bottom right by the other.
   void _paintCard(ui.Canvas canvas) {
     final dark = LumitTheme.dark();
     final shape =
@@ -292,7 +286,6 @@ class BootSplash {
     try {
       if (own.existsSync()) return await _decode(await own.readAsBytes());
     } catch (_) {
-      // A file that is not a picture falls back to Lumit's own.
     }
     return null;
   }

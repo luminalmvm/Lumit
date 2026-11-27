@@ -1,5 +1,3 @@
-//! sRGB curve's GPU pass, kept beside the dispatch table rather than in it.
-
 use lumit_core::fx::effects::srgb_curve::SrgbCurve;
 use lumit_core::fx::params::Params;
 use lumit_core::fx::registry::EffectMetadata;

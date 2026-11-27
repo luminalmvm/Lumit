@@ -19,10 +19,8 @@ use crate::track::LumaFrames;
 /// a 4K clip is followed at 1280 by 720.
 pub const TRACK_EDGE: usize = 1280;
 
-/// How many decoded frames may wait for the tracker.
 const QUEUE: usize = 4;
 
-/// What the decode thread says before its first frame.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Opened {
     /// The clip's frames, its raster as decoded, and its rate.
@@ -33,20 +31,16 @@ pub struct Opened {
     /// Layer pixels per decoded pixel: more than one for a nested comp
     /// rendered smaller than it is.
     pub to_layer: f64,
-    /// How many decoded pixels each tracked pixel averages, along each side.
     pub div: usize,
 }
 
 impl Opened {
-    /// The tracked raster.
     #[must_use]
     pub fn tracked(&self) -> (usize, usize) {
         (self.width / self.div, self.height / self.div)
     }
 }
 
-/// One frame, ready to follow: its number and its brightness at the tracked
-/// size.
 pub struct Plane {
     pub n: usize,
     pub luma: Vec<f32>,
@@ -59,8 +53,6 @@ pub struct Feed {
     pub frames: Receiver<Plane>,
 }
 
-/// Start decoding on a thread of its own. `None` when the frames could not be
-/// opened, or the clip has none.
 pub fn start(
     open: Box<dyn FnOnce() -> Option<Box<dyn LumaFrames>> + Send>,
     range: impl FnOnce(usize, f64) -> (usize, usize) + Send + 'static,

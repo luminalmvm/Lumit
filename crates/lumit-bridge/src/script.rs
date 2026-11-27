@@ -33,11 +33,8 @@ use crate::api::{
 };
 use crate::export::QueueRowState;
 
-/// The longest script read, far past any written by hand.
 pub(crate) const MAX_SOURCE_BYTES: u64 = 16 << 20;
 
-/// The script that is running, if one is: how to stop it, and where the
-/// answer it is waiting for goes, a file or what was done in its window.
 struct Running {
     stop: Arc<AtomicBool>,
     answer: Option<SyncSender<Option<String>>>,
@@ -94,8 +91,6 @@ pub(crate) fn start(
     Ok(true)
 }
 
-/// Stop the running script at its next step, and let go of an answer it is
-/// waiting for.
 pub(crate) fn stop() {
     if let Ok(mut running) = RUNNING.lock() {
         if let Some(running) = running.as_mut() {
@@ -117,7 +112,6 @@ pub(crate) fn hold(stop: Arc<AtomicBool>) -> Option<Holding> {
     Some(Holding)
 }
 
-/// The place [`hold`] took, given back when this goes.
 pub(crate) struct Holding;
 
 impl Drop for Holding {
@@ -207,28 +201,20 @@ fn finished(log: Vec<String>, error: &str, line: Option<u32>) -> BridgeScriptEve
     }
 }
 
-/// The open project, as a script sees it.
 pub(crate) struct AppHost<'a> {
     pub(crate) project: ProjectReference,
     store: Arc<DocumentStore>,
     /// The export this run started last. Lumit exports one thing at a time.
     export: RefCell<Option<Export>>,
-    /// The rows' versions this run put in the export queue.
     queued: RefCell<Vec<Queued>>,
-    /// The queue's heading for each template's rows, by its name.
     groups: RefCell<BTreeMap<String, u32>>,
-    /// The last number an export was given.
     jobs: Cell<u64>,
     stop: Arc<AtomicBool>,
-    /// The interface, which hears [`BridgeScriptEvent`]s.
     tell: &'a dyn Fn(BridgeScriptEvent) -> bool,
-    /// The comp open in the Viewer when the run started.
     pub(crate) active: Option<Uuid>,
 }
 
 impl<'a> AppHost<'a> {
-    /// The open `project`, whose store is `store`, for a run that `stop`
-    /// stops and that tells the interface through `tell`.
     pub(crate) fn new(
         project: ProjectReference,
         store: Arc<DocumentStore>,
@@ -248,7 +234,6 @@ impl<'a> AppHost<'a> {
         }
     }
 
-    /// A number for an export, never one given before in this run.
     fn next_job(&self) -> u64 {
         let job = self.jobs.get() + 1;
         self.jobs.set(job);
@@ -279,7 +264,6 @@ impl<'a> AppHost<'a> {
         answered.recv().ok().flatten()
     }
 
-    /// Ask the interface for a file.
     fn choose_file(&self, title: &str, extensions: &[String]) -> Option<PathBuf> {
         self.wait(BridgeScriptEvent::ChooseFile {
             title: title.into(),
@@ -304,21 +288,15 @@ impl<'a> AppHost<'a> {
 struct Export {
     job: u64,
     path: PathBuf,
-    /// Whether the script asked it to stop.
     cancelled: bool,
-    /// Frames to write, once the exporter has said.
     total: u64,
 }
 
-/// A row's version in the export queue.
 struct Queued {
     job: u64,
-    /// The queue's own number for it.
     id: u32,
     path: PathBuf,
-    /// Whether the script asked it to stop.
     cancelled: bool,
-    /// Frames to write, once the exporter has said.
     total: u64,
 }
 
@@ -339,10 +317,8 @@ fn version_name(doc: &Document, comp: Uuid, ops: &[Op]) -> String {
         .unwrap_or_default()
 }
 
-/// The folder a graphics template a script brings in is filed in.
 pub(crate) const TEMPLATES_FOLDER: &str = "Graphics templates";
 
-/// The library, as `template.list` answers it.
 pub(crate) fn template_library() -> Vec<LibraryTemplate> {
     crate::api::template::library::list_templates()
         .into_iter()
@@ -361,7 +337,6 @@ pub(crate) fn template_library() -> Vec<LibraryTemplate> {
         .collect()
 }
 
-/// What a template that will not save to the library tells a script.
 pub(crate) fn not_saved(e: BridgeError) -> ScriptError {
     match e {
         BridgeError::EmptyName => ScriptError::BadArgs("A graphics template needs a name.".into()),
@@ -370,7 +345,6 @@ pub(crate) fn not_saved(e: BridgeError) -> ScriptError {
     }
 }
 
-/// What a `.lumt` file that will not come in tells a script.
 pub(crate) fn not_brought(path: &Path) -> ScriptError {
     ScriptError::Failed(format!(
         "{} could not be opened as a graphics template.",
@@ -404,8 +378,6 @@ pub(crate) fn footage_source(
     }
 }
 
-/// What a script's `item.list` says of the footage `source` reads, as the
-/// project panel reads it.
 #[cfg(feature = "media")]
 pub(crate) fn footage_info(
     source: lumit_media::sequence::MediaSource,
@@ -691,7 +663,6 @@ impl Host for AppHost<'_> {
                     (ExportState::Running, frame, None)
                 }
                 Some(QueueRowState::Done { .. }) => (ExportState::Done, queued.total, None),
-                // A waiting item that is cancelled leaves the queue.
                 None => (ExportState::Cancelled, 0, None),
                 Some(QueueRowState::Failed(_)) if queued.cancelled => {
                     (ExportState::Cancelled, 0, None)
@@ -803,7 +774,6 @@ impl Host for AppHost<'_> {
     }
 }
 
-/// The most scripts File > Scripts lists, and how many folders deep it looks.
 const MAX_LISTED: usize = 500;
 const MAX_DEPTH: usize = 4;
 
@@ -887,7 +857,6 @@ mod tests {
                 "{asked:?}"
             );
             stop();
-            // The window is taken down on the way out.
             let ended = loop {
                 match hearing.recv_timeout(wait).expect("the run ended") {
                     BridgeScriptEvent::CloseDialog => {}

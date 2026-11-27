@@ -62,7 +62,6 @@ void main() {
       expect(m.applied.single,
           easingPresets.firstWhere((p) => p.id == 'backOut').curve);
 
-      // And the tile loaded the box, so Apply sends the same shape again.
       await tester.ensureVisible(find.byKey(const ValueKey('easing-apply')));
       await tester.tap(find.byKey(const ValueKey('easing-apply')));
       await tester.pump();
@@ -103,7 +102,6 @@ void main() {
       expect(sent.y2, 1);
     });
 
-    // The selected key's own numbers, under the editor (docs/07 §5.4).
     testWidgets('one selected key puts its speed and influence under the box',
         (tester) async {
       final m = await mount(tester, claimed: true);
@@ -135,8 +133,6 @@ void main() {
             reason: 'the $well well');
       }
 
-      // A typed speed writes that side and nothing else: the two speeds
-      // differed, so the Continuous tick opened unticked.
       tester
           .widget<DragValueField>(
               find.byKey(const ValueKey('easing-key-speed-out')))
@@ -144,8 +140,6 @@ void main() {
       await tester.pump();
       expect(written, [const KeyEase(outSpeed: 80)]);
 
-      // Ticking Continuous gives the out side the in side's speed; a speed
-      // typed after that lands on both.
       tester
           .widget<HouseCheckbox>(
               find.byKey(const ValueKey('easing-key-continuous')))
@@ -159,7 +153,6 @@ void main() {
       await tester.pump();
       expect(written.last, const KeyEase(inSpeed: 25, outSpeed: 25));
 
-      // An influence is its own number, as a fraction.
       tester
           .widget<DragValueField>(
               find.byKey(const ValueKey('easing-key-influence-in')))
@@ -167,7 +160,6 @@ void main() {
       await tester.pump();
       expect(written.last, const KeyEase(inInfluence: 0.75));
 
-      // The claim withdrawn - several keys, or none - takes the section away.
       m.ui.easingKey.value = null;
       await tester.pump();
       expect(section, findsNothing);
@@ -175,8 +167,6 @@ void main() {
 
   }, skip: !engineAvailable);
 
-  // Shapes of the user's own (item R): saved beside the settings, shown in the
-  // same row as the seven that ship, applied by the same road.
   group('Custom easings (frb)', () {
     setUp(() {
       // Its own scratch folder per test, so one test's collection is never
@@ -187,7 +177,6 @@ void main() {
       CustomEasings.reload();
     });
 
-    /// Draw [preset] into the box and keep it as [name].
     Future<void> saveAs(WidgetTester tester, String preset, String name) async {
       final tile = find.byKey(ValueKey('easing-preset-$preset'));
       await tester.ensureVisible(tile);

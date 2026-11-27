@@ -41,7 +41,6 @@ const LIMITS: Limits = Limits {
 /// Photoshop's own ceiling for a `.psd`, in pixels a side.
 const MAX_SIDE: u32 = 30_000;
 
-/// What a record in the layer list is: a layer, or one end of a group.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Section {
     Layer,
@@ -95,12 +94,10 @@ struct Mask {
 /// A layer's vector mask: an outline that shows the layer inside it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct VectorMask {
-    /// The layer shows outside the outline instead.
     pub inverted: bool,
     pub paths: Vec<VectorPath>,
 }
 
-/// One subpath of a vector mask.
 #[derive(Debug, Clone, PartialEq)]
 pub struct VectorPath {
     /// How it joins the subpaths before it, by Photoshop's own number: 0 is
@@ -119,7 +116,6 @@ enum Note {
     Code(String),
 }
 
-/// One record of the layer list.
 #[derive(Debug, Clone)]
 pub struct PsdLayer {
     pub name: String,
@@ -169,7 +165,6 @@ impl PsdLayer {
         ])
     }
 
-    /// Whether a layer mask may hide part of the layer.
     #[must_use]
     pub fn has_mask(&self) -> bool {
         self.mask
@@ -215,7 +210,6 @@ impl PsdLayer {
     }
 }
 
-/// A document's size and its layer list.
 #[derive(Debug, Clone)]
 pub struct PsdDocument {
     pub width: u32,
@@ -231,7 +225,6 @@ pub struct PsdDocument {
 }
 
 impl PsdDocument {
-    /// How many bytes one sample takes: one at 8 bit, two at 16.
     fn sample(&self) -> usize {
         if self.depth == 16 {
             2
@@ -245,7 +238,6 @@ fn bad(what: &'static str) -> MediaError {
     MediaError::Psd(what)
 }
 
-/// Whether this path names a Photoshop document, by extension.
 #[must_use]
 pub fn is_psd(path: &Path) -> bool {
     path.extension()
@@ -277,9 +269,6 @@ fn read_layer_from<R: Read + Seek>(
     let index = usize::try_from(index).map_err(|_| bad("no such layer"))?;
     let mut rgba = layer_rgba(&doc, r, &mut budget, index)?;
 
-    // A clipped layer shows only where the layer it is clipped to does.
-    // ponytail: baked in, so the clip stays put if the base layer is moved in
-    // Lumit. A matte on the Lumit layer is the upgrade.
     let sample = doc.sample();
     if doc.layers.get(index).is_some_and(|l| l.clipped) {
         if let Some(base) = clip_base(&doc, index) {
@@ -343,7 +332,6 @@ pub fn downsample(frame: DecodedFrame, target_width: Option<u32>) -> DecodedFram
     };
     let float = frame.format == PixelFormat::LinearF32;
     let size = frame.format.bytes_per_px();
-    // One channel of a pixel as a number, at either width.
     let read = |px: &[u8], c: usize| {
         if float {
             let bytes = px.get(c * 4..c * 4 + 4).and_then(|b| b.try_into().ok());
@@ -398,7 +386,6 @@ fn mul255(a: u8, b: u8) -> u8 {
     ((u16::from(a) * u16::from(b) + 127) / 255) as u8
 }
 
-/// Multiply one alpha sample by another of the same width.
 fn fade(alpha: &mut [u8], by: &[u8]) {
     match (alpha, by) {
         ([a], [b]) => *a = mul255(*a, *b),
@@ -425,10 +412,6 @@ fn clip_base(doc: &PsdDocument, index: usize) -> Option<usize> {
     }
     None
 }
-
-// ---------------------------------------------------------------------------
-// The structure
-// ---------------------------------------------------------------------------
 
 /// A file, its length, and big-endian reads that refuse to run off the end.
 struct Reader<R> {
@@ -996,10 +979,6 @@ fn value<R: Read + Seek>(
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// The pixels
-// ---------------------------------------------------------------------------
-
 /// One layer on a document-sized frame, with its mask applied. A pixel is
 /// four samples of the document's own depth, the high byte first.
 fn layer_rgba<R: Read + Seek>(
@@ -1063,13 +1042,11 @@ fn layer_rgba<R: Read + Seek>(
     Ok(out)
 }
 
-/// The part of a rectangle that lands on the canvas.
 struct Overlap {
     x0: usize,
     x1: usize,
     y0: usize,
     y1: usize,
-    /// How far into the rectangle the part starts.
     skip_x: usize,
     skip_y: usize,
 }
@@ -1266,15 +1243,8 @@ fn unpack_bits(source: &[u8], target: &mut [u8]) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// A writer, for tests
-// ---------------------------------------------------------------------------
-
-/// A small Photoshop document written from scratch, so tests here and in the
-/// crates above need no file on disk.
 #[cfg(any(test, feature = "test-fixtures"))]
 pub mod fixture {
-    /// How a fixture layer's channels are stored.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum Packing {
         Raw,
@@ -1304,11 +1274,9 @@ pub mod fixture {
         /// vector mask.
         pub mask_flags: u8,
         pub packing: Packing,
-        /// Further tagged blocks, by key, such as the ones [`described`] makes.
         pub blocks: Vec<([u8; 4], Vec<u8>)>,
     }
 
-    /// A value in a descriptor to write.
     #[derive(Debug, Clone)]
     pub enum Value {
         Number(f64),
@@ -1396,7 +1364,6 @@ pub mod fixture {
             }
         }
 
-        /// A solid rectangle of one colour.
         #[must_use]
         pub fn solid(name: &str, rect: [i32; 4], colour: [u8; 4]) -> Self {
             let area = ((rect[2] - rect[0]) * (rect[3] - rect[1])).max(0) as usize;
@@ -1416,7 +1383,6 @@ pub mod fixture {
             }
         }
 
-        /// A group header (`header` true) or the marker under a group.
         #[must_use]
         pub fn group(name: &str, header: bool) -> Self {
             Self {
@@ -1428,7 +1394,6 @@ pub mod fixture {
     }
 
     fn pack(samples: &[u8], width: usize, depth: u16, packing: Packing) -> Vec<u8> {
-        // Widen to the document's depth first.
         let wide: Vec<u8> = if depth == 16 {
             samples.iter().flat_map(|s| [*s, *s]).collect()
         } else {
@@ -1652,8 +1617,6 @@ mod tests {
         ]
     }
 
-    /// A 4 by 3 document: a full background, and a group holding a hidden,
-    /// half opacity Multiply layer.
     fn sample() -> Vec<Layer> {
         let mut hat = Layer::solid("Hat \u{00e9}", [1, 1, 3, 3], BLUE);
         hat.opacity = 128;
@@ -1708,7 +1671,6 @@ mod tests {
 
     #[test]
     fn a_layer_hanging_off_the_document_is_cropped_not_wrapped() {
-        // Rows -1 to 1 and columns -2 to 1, so only the corner lands.
         let layers = [Layer::solid("Wide", [-1, -2, 2, 2], BLUE)];
         let frame = pixels(&document(4, 3, 8, &layers), 0);
         assert_eq!(px(&frame, 0, 0), BLUE);
@@ -1738,8 +1700,6 @@ mod tests {
                     assert_eq!(frame.rgba, want, "{packing:?} at {depth} bit");
                     continue;
                 }
-                // Sixteen bit keeps its depth: the same colour as linear
-                // floats, and the alpha as it was.
                 assert_eq!(frame.format, PixelFormat::LinearF32);
                 assert_eq!(frame.rgba.len(), want.len() * 4);
                 for (i, (got, byte)) in frame.rgba.chunks_exact(4).zip(&want).enumerate() {
@@ -1760,21 +1720,17 @@ mod tests {
 
     #[test]
     fn a_layer_mask_is_baked_into_the_alpha() {
-        // The mask covers the left column only, half grey, and hides the rest.
         let mut layer = Layer::solid("Masked", [0, 0, 3, 4], RED);
         layer.mask = Some(([0, 0, 3, 1], 0, vec![128; 3]));
         let frame = pixels(&document(4, 3, 8, &[layer.clone()]), 0);
         assert_eq!(px(&frame, 0, 1), [255, 0, 0, 128]);
         assert_eq!(px(&frame, 1, 1)[3], 0, "the default colour hides the rest");
 
-        // The same mask with a white default shows the rest.
         layer.mask = Some(([0, 0, 3, 1], 255, vec![128; 3]));
         let frame = pixels(&document(4, 3, 8, &[layer]), 0);
         assert_eq!(px(&frame, 0, 1)[3], 128);
         assert_eq!(px(&frame, 1, 1)[3], 255);
 
-        // A fill layer has no pixels in the file. It is its colour wherever
-        // its mask shows.
         let mut fill = Layer::fill("Fill", [0.0, 128.0, 255.0]);
         let bare = structure(&document(4, 3, 8, &[fill.clone()])).unwrap();
         assert!(!bare.layers[0].has_mask());
@@ -1785,8 +1741,6 @@ mod tests {
         assert_eq!(px(&frame, 0, 1), [0, 128, 255, 255]);
         assert_eq!(px(&frame, 1, 1)[3], 0);
 
-        // An adjustment layer has no picture either. It reads as where it
-        // acts, which is white wherever its mask shows.
         let mut invert = Layer::solid("Invert", [0, 0, 0, 0], [0; 4]);
         invert.blocks = vec![(*b"nvrt", Vec::new())];
         invert.mask = Some(([0, 0, 3, 1], 0, vec![255; 3]));
@@ -1855,7 +1809,6 @@ mod tests {
             ("Md  ", Value::Code("Mltp")),
             ("Opct", Value::Number(75.0)),
         ]);
-        // Posterize to four levels, as an adjustment layer stores it.
         let posterize = (*b"post", vec![0, 4, 0, 0]);
         // Curves: a byte, a version, which curves are there, then two points
         // on the first. A Vibrance block is a descriptor.
@@ -1901,8 +1854,6 @@ mod tests {
 
     #[test]
     fn a_layer_larger_than_the_budget_is_refused_before_it_is_read() {
-        // A few zipped bytes whose record claims a rectangle two billion
-        // pixels a side.
         let mut layer = Layer::solid("Big", [0, 0, 3, 4], RED);
         layer.packing = Packing::Zip;
         let mut bytes = document(4, 3, 8, &[layer]);
@@ -1938,7 +1889,6 @@ mod tests {
 
     #[test]
     fn downsampling_weights_colour_by_alpha() {
-        // One red pixel beside three empty ones: still red, a quarter as solid.
         let frame = DecodedFrame {
             width: 2,
             height: 2,
@@ -1949,7 +1899,6 @@ mod tests {
         assert_eq!((small.width, small.height), (1, 1));
         assert_eq!(small.rgba, [255, 0, 0, 63]);
 
-        // The same at 16 bit, where a frame is floats.
         let floats = [1.0f32, 0.0, 0.0, 1.0].into_iter().chain([0.0; 12]);
         let frame = DecodedFrame {
             width: 2,

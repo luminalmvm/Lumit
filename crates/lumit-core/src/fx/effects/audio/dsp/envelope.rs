@@ -26,7 +26,6 @@ pub struct PeakFollower {
 }
 
 impl PeakFollower {
-    /// A follower resting at silence.
     #[must_use]
     pub fn new(attack_ms: f64, release_ms: f64, rate: f64) -> Self {
         Self {
@@ -42,18 +41,15 @@ impl PeakFollower {
         self.release = coeff_of_ms(release_ms, rate);
     }
 
-    /// Back to silence.
     pub fn reset(&mut self) {
         self.env = 0.0;
     }
 
-    /// Where it stands, without feeding it anything.
     #[must_use]
     pub fn value(&self) -> f64 {
         self.env
     }
 
-    /// One sample in, the envelope out.
     pub fn process(&mut self, sample: f32) -> f64 {
         let x = f64::from(sample).abs();
         let coeff = if x > self.env {
@@ -75,7 +71,6 @@ pub struct RmsFollower {
 }
 
 impl RmsFollower {
-    /// A follower resting at silence.
     #[must_use]
     pub fn new(attack_ms: f64, release_ms: f64, rate: f64) -> Self {
         Self {
@@ -91,18 +86,15 @@ impl RmsFollower {
         self.release = coeff_of_ms(release_ms, rate);
     }
 
-    /// Back to silence.
     pub fn reset(&mut self) {
         self.mean_square = 0.0;
     }
 
-    /// Where it stands, without feeding it anything.
     #[must_use]
     pub fn value(&self) -> f64 {
         self.mean_square.max(0.0).sqrt()
     }
 
-    /// One sample in, the envelope out.
     pub fn process(&mut self, sample: f32) -> f64 {
         let x = f64::from(sample);
         let square = x * x;
@@ -131,7 +123,6 @@ pub struct GainReduction {
 }
 
 impl GainReduction {
-    /// No reduction, to start with.
     #[must_use]
     pub fn new(attack_ms: f64, release_ms: f64, rate: f64) -> Self {
         Self {
@@ -147,12 +138,10 @@ impl GainReduction {
         self.release = coeff_of_ms(release_ms, rate);
     }
 
-    /// Back to no reduction.
     pub fn reset(&mut self) {
         self.db = 0.0;
     }
 
-    /// Where it stands, in dB, without moving it.
     #[must_use]
     pub fn value(&self) -> f64 {
         self.db

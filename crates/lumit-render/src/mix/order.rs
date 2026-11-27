@@ -3,12 +3,10 @@
 //!
 //! Pure arithmetic on indices, run on the thread building the plan.
 
-/// One node's edges, by index into the list the builder made.
 #[derive(Clone, Debug, Default)]
 pub(super) struct Edges {
     /// The node its output goes to, None for the master.
     pub out: Option<usize>,
-    /// The nodes it sends to.
     pub sends: Vec<usize>,
     /// The nodes of those its muted sends go to: in the order, never on.
     pub quiet: Vec<usize>,
@@ -17,7 +15,6 @@ pub(super) struct Edges {
     /// What the solo rule reads: soloed or solo safe, and soloed.
     pub marked: bool,
     pub solo: bool,
-    /// Its audible switch is off.
     pub muted: bool,
     /// Where it stands when nothing else decides: buses after strips, then
     /// in layer order.

@@ -13,7 +13,6 @@ import 'package:uuid/uuid.dart';
 
 import 'comp_model.dart';
 
-/// A row a control can name, and the composition it is in.
 class ControlRow {
   final CompositionReference comp;
   final BridgeRowRef row;
@@ -36,8 +35,6 @@ String controlRowKey(BridgeRowRef row) => [
       row.paramY ?? '',
     ].join('|');
 
-/// The fronted composition's template and its controls, by the row each sets.
-/// Tells its listeners whenever it has read a template again.
 class TemplateControls extends ChangeNotifier {
   CompModel? _model;
   CompositionReference? Function() _front = _none;
@@ -62,14 +59,12 @@ class TemplateControls extends ChangeNotifier {
     _read();
   }
 
-  /// The composition this holds the template of.
   CompositionReference? get comp => _comp;
 
   /// The template, or null for a composition with no controls and for no
   /// composition at all.
   BridgeTemplate? get template => _template;
 
-  /// The controls in the template's order.
   List<BridgeControl> get controls => _template?.controls ?? const [];
 
   /// Whether rows of [comp] can be made controls: it is the composition held
@@ -77,7 +72,6 @@ class TemplateControls extends ChangeNotifier {
   bool offers(CompositionReference comp) =>
       _comp == comp && !(_model?.heldIsNodeGraph ?? true);
 
-  /// The control that sets [row], or null when the row is not one.
   BridgeControl? controlFor(BridgeRowRef row) =>
       _byRow.isEmpty ? null : _byRow[controlRowKey(row)];
 
@@ -100,7 +94,6 @@ class TemplateControls extends ChangeNotifier {
     try {
       made = comp.addControls(rows: rows);
     } catch (_) {
-      // The composition or a layer went away under the press.
       return false;
     }
     if (made.isEmpty) return false;
@@ -141,7 +134,6 @@ class TemplateControls extends ChangeNotifier {
           ? null
           : comp.getTemplate();
     } catch (_) {
-      // The composition has gone. No template, as for none fronted.
       next = null;
     }
     if (next == null && _template == null) return;

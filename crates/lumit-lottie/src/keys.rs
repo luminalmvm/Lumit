@@ -87,7 +87,6 @@ impl Span {
         }
     }
 
-    /// True when the value does not move across the span at all.
     fn is_constant(&self) -> bool {
         match self {
             Span::Hold { .. } => true,
@@ -101,7 +100,6 @@ impl Span {
     }
 }
 
-/// How close two values are taken as equal, for a span from `y`.
 fn tolerance(y: &[f64; 4]) -> f64 {
     1e-9 * (1.0 + y[0].abs() + y[3].abs())
 }
@@ -139,7 +137,6 @@ pub fn curve(keys: &[Keyframe]) -> Curve {
     Curve { spans, first, last }
 }
 
-/// A side's speed and influence as `anim::side_params` reads it.
 fn side(side: SideInterp, chord: f64) -> (f64, f64) {
     match side {
         SideInterp::Bezier { speed, influence } => (speed, influence.clamp(1e-3, 1.0)),
@@ -193,14 +190,11 @@ fn unbumped(x: [f64; 4], y: [f64; 4]) -> Vec<Span> {
     out
 }
 
-/// One key of an output track: its time, its numbers, and the span that
-/// leaves it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TrackKey {
     /// Seconds on the property owner's clock (a layer's own time).
     pub seconds: f64,
     pub value: Vec<f64>,
-    /// The whole key holds until the next.
     pub hold: bool,
     /// Per dimension, the handle leaving this key in the unit square
     /// (Lottie `o`, the first two numbers of a `keySplines` entry). Empty on a
@@ -210,19 +204,15 @@ pub struct TrackKey {
     pub inn: Vec<[f64; 2]>,
 }
 
-/// A property as output keys: one or more, the values between them eased
-/// exactly as Lumit eases them.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Track {
     pub keys: Vec<TrackKey>,
 }
 
-/// The straight line's handles, a third and two thirds along the diagonal.
 pub const LINEAR_OUT: [f64; 2] = [1.0 / 3.0, 1.0 / 3.0];
 pub const LINEAR_IN: [f64; 2] = [2.0 / 3.0, 2.0 / 3.0];
 
 impl Track {
-    /// A track holding `value` throughout.
     #[must_use]
     pub fn still(value: Vec<f64>) -> Track {
         Track {
@@ -236,8 +226,6 @@ impl Track {
         }
     }
 
-    /// True when every key holds the first one's value, so the track can be
-    /// written as a still value.
     #[must_use]
     pub fn is_still(&self) -> bool {
         let Some(first) = self.keys.first() else {
@@ -252,7 +240,6 @@ impl Track {
         })
     }
 
-    /// The first key's value.
     #[must_use]
     pub fn first_value(&self) -> Vec<f64> {
         self.keys
@@ -325,7 +312,6 @@ impl Track {
     }
 }
 
-/// Why several numbers' keys could not be merged into one track.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Unmergeable;
 
@@ -334,7 +320,6 @@ pub struct Unmergeable;
 /// another moves: a Lottie key holds all its numbers or none, so the caller
 /// samples that value instead.
 pub fn track(curves: &[Curve]) -> Result<Track, Unmergeable> {
-    // Every time any number has a key, in order.
     let mut times: Vec<f64> = curves
         .iter()
         .flat_map(|c| c.spans.iter().flat_map(|s| [s.t0(), s.t1()]))
@@ -349,7 +334,6 @@ pub fn track(curves: &[Curve]) -> Result<Track, Unmergeable> {
         }
         return Ok(still);
     }
-    // Each number's spans cut at every one of those times.
     let cut: Vec<Vec<Span>> = curves.iter().map(|c| on_grid(c, &times)).collect();
     let mut keys = Vec::with_capacity(times.len());
     for (k, t) in times.iter().enumerate() {
@@ -442,7 +426,6 @@ fn on_grid(curve: &Curve, times: &[f64]) -> Vec<Span> {
         let [a, b] = gap else { continue };
         let (a, b) = (*a, *b);
         let near = |p: f64, q: f64| (p - q).abs() <= 1e-9 * (1.0 + q.abs());
-        // Take the span that covers `a`, carrying any remainder of a cut one.
         let current = match pending.take() {
             Some(s) => Some(s),
             None => {
@@ -459,7 +442,6 @@ fn on_grid(curve: &Curve, times: &[f64]) -> Vec<Span> {
             }
         };
         let Some(span) = current else {
-            // Before the first key or after the last: the value stands still.
             let v = if curve.spans.first().is_some_and(|s| b <= s.t0() + 1e-12) {
                 curve.first
             } else {
@@ -514,9 +496,6 @@ mod tests {
         }
     }
 
-    /// The whole promise of this module: written keys, evaluated the way a
-    /// player evaluates them, give the value Lumit gives, everywhere, for
-    /// eased, straight, held, automatic and bumped spans alike.
     #[test]
     fn written_keys_play_back_exactly_what_lumit_evaluates() {
         let mut rng = Lcg(7);
@@ -568,8 +547,6 @@ mod tests {
         }
     }
 
-    /// Two numbers keyed at different times merge into one track that plays
-    /// both back exactly.
     #[test]
     fn numbers_keyed_apart_merge_exactly() {
         let x = vec![

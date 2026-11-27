@@ -15,8 +15,6 @@ use lumit_core::model_part::{
 use lumit_scene::pose::{pose, take_time, Looping, PartEdit, Pose};
 use lumit_scene::{Clip, ModelScene};
 
-/// The take `settings` names in `scene`, `None` for none or one the file no
-/// longer has.
 #[must_use]
 pub fn clip_of<'a>(settings: &ModelSettings, scene: &'a ModelScene) -> Option<&'a Clip> {
     match &settings.take {
@@ -89,7 +87,6 @@ pub(crate) fn take_moment(
     take_time(at, f64::from(clip.duration), looping)
 }
 
-/// A part's pivot, and the corners of the box round what it moves.
 pub type PartPlace = ([f32; 3], Option<[[f32; 3]; 8]>);
 
 /// Where the part with rows `id` on Model layer `layer` is at comp time `t`, in
@@ -142,9 +139,6 @@ pub fn layer_pose(doc: &Arc<Document>, comp: &Composition, layer: &Layer, t: f64
     pose_at(comp, layer, settings, &scene, t, &context)
 }
 
-/// Every row Model layer `layer` showing `scene` has: its playback rows first,
-/// the file's takes read into them, then a part's for each node. Those it keeps
-/// are as it keeps them, the rest as nobody has changed them.
 #[must_use]
 pub fn all_rows(
     layer: &Layer,
@@ -178,7 +172,6 @@ pub fn all_rows(
     list
 }
 
-/// The file's takes by name, as the Animation row lists them after its first.
 #[must_use]
 pub fn take_names(scene: &ModelScene) -> Vec<String> {
     scene.clips.iter().map(|c| c.name.clone()).collect()
@@ -222,7 +215,6 @@ pub fn with_rows(
     out
 }
 
-/// What `settings`' part rows come to at `lt`, in model space.
 fn edits_at(
     layer: &Layer,
     settings: &ModelSettings,
@@ -260,7 +252,6 @@ fn edits_at(
             Some(PartEdit {
                 node,
                 moved: back.transform_vector3(moved),
-                // The layer's axes seen from the model's.
                 turned: turn.inverse() * turned * turn,
                 scale: n("scale", 100.0) / 100.0,
                 hidden: n("visible", 1.0) < 0.5,
@@ -282,15 +273,12 @@ pub fn moves(settings: &ModelSettings, scene: &ModelScene) -> bool {
         })
 }
 
-/// Whether a staged list is this layer's playback or part rows.
 pub fn owns(layer: &Layer, effects: &[EffectInstance]) -> bool {
     effects
         .first()
         .is_some_and(|f| lumit_core::model_part::owns(layer.id, f.id))
 }
 
-/// Lay rows `list`, staged for a drag, on Model layer `layer` for one preview
-/// frame. Nothing while its file isn't read.
 pub fn stage(doc: &Document, layer: &mut Layer, list: &[EffectInstance]) {
     let LayerKind::Model { item, settings } = &mut layer.kind else {
         return;

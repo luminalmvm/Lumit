@@ -14,7 +14,6 @@ use crate::fx::schema::ParamKind;
 use crate::model::{Composition, Document, Layer, LayerKind, ProjectItem, TransformProp};
 use crate::ops::Op;
 
-/// Whether a transform row is an angle.
 fn is_angle(prop: TransformProp) -> bool {
     matches!(
         prop,
@@ -109,7 +108,6 @@ pub fn control_for(
                 }
                 ParamKind::Angle { .. } => ControlKind::Angle,
                 ParamKind::Choice { options, .. } => {
-                    // The words this instance lists, where it lists its own.
                     let own = def
                         .row_state(inst)
                         .options
@@ -242,8 +240,6 @@ pub fn ops(doc: &Document, comp: Uuid, settings: &[Setting]) -> Vec<Op> {
     made
 }
 
-/// The ops that turn layer `before` into `after`, for the parts a row write
-/// can change.
 fn layer_ops(comp: Uuid, settings: &[Setting], before: &Layer, after: &Layer, made: &mut Vec<Op>) {
     let layer = after.id;
     for setting in settings {

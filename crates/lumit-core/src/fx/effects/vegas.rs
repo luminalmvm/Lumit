@@ -27,7 +27,6 @@ use crate::fx::{
 use crate::mask::MaskPolyline;
 use lumit_fx_macros::Effect;
 
-/// Vegas' controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "vegas",
@@ -72,7 +71,6 @@ pub struct Vegas {
     )]
     pub threshold: f32,
 
-    /// How thick the stroke is, px@comp (§2.3).
     #[slider(min = 0.0, max = 50.0, default = 3.0, hard_min = 0.0, unit = Px)]
     pub width: f32,
 
@@ -122,7 +120,6 @@ pub struct Vegas {
     #[colour(default = [1.0, 0.80, 0.25, 1.0], max = 4.0)]
     pub colour: [f32; 4],
 
-    /// How strong the stroke is, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -138,7 +135,6 @@ pub struct Vegas {
     #[toggle(label = "Composite on original", default = true)]
     pub composite_on_original: bool,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -150,8 +146,6 @@ pub struct Vegas {
     pub mix: f32,
 }
 
-/// The two rows that answer to Source: a mask is not a control while the line
-/// is being found in the picture, and a level is not a control while it is not.
 pub const VEGAS_ENABLED_WHEN: &[crate::fx::schema::EnabledWhen] = &[
     crate::fx::schema::EnabledWhen {
         param: "path",
@@ -175,13 +169,11 @@ impl Vegas {
     /// hands its vertices over in px@comp. Never a panel row.
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
 
-    /// This instance's raster factor, read back out of a resolved bag.
     #[must_use]
     pub fn px_scale_of(p: Params<'_>) -> f32 {
         p.float(Self::DERIVED_PX_SCALE, 1.0)
     }
 
-    /// Whether this instance marches round a mask rather than round a contour.
     #[must_use]
     pub fn on_a_path(self) -> bool {
         self.source == Self::SOURCE_MASK_PATH
@@ -243,7 +235,6 @@ impl Vegas {
             } else {
                 (self.length / 100.0).clamp(0.0, 1.0)
             },
-            // Degrees to turns: one full turn is one segment (§3.76 decision 3).
             phase: self.rotation / 360.0,
             colour: [self.colour[0], self.colour[1], self.colour[2]],
             opacity: (self.opacity / 100.0).clamp(0.0, 1.0),
@@ -253,7 +244,6 @@ impl Vegas {
     }
 }
 
-/// Vegas' behaviour.
 pub struct VegasDef;
 
 impl EffectDef for VegasDef {

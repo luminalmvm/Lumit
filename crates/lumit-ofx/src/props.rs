@@ -29,9 +29,7 @@ use crate::status::Status;
 /// has none in it.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum PropValue {
-    /// `int`.
     Int(Vec<i32>),
-    /// `double`.
     Double(Vec<f64>),
     /// A C string. Held owned, because the pointer we hand back has to stay
     /// valid until the property is next written.
@@ -43,7 +41,6 @@ pub enum PropValue {
 }
 
 impl PropValue {
-    /// The number of elements — what `propGetDimension` answers.
     #[must_use]
     pub fn dimension(&self) -> usize {
         match self {
@@ -66,13 +63,11 @@ impl PropValue {
         }
     }
 
-    /// A single whole number, for the common case.
     #[must_use]
     pub fn int(value: i32) -> Self {
         Self::Int(vec![value])
     }
 
-    /// A single decimal.
     #[must_use]
     pub fn double(value: f64) -> Self {
         Self::Double(vec![value])
@@ -90,11 +85,6 @@ impl PropValue {
         ]))
     }
 
-    /// A list of strings.
-    ///
-    /// # Errors
-    ///
-    /// As [`PropValue::string`].
     pub fn strings(values: &[&str]) -> Result<Self, Status> {
         let mut out = Vec::with_capacity(values.len());
         for value in values {
@@ -122,7 +112,6 @@ pub struct PropertySet {
 }
 
 impl PropertySet {
-    /// An empty set.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
@@ -169,17 +158,11 @@ impl PropertySet {
             .ok_or(Status::ErrUnknown)
     }
 
-    /// Whether the set has this property at all.
     #[must_use]
     pub fn contains(&self, key: &str) -> bool {
         self.props.contains_key(key)
     }
 
-    /// The number of elements in a property.
-    ///
-    /// # Errors
-    ///
-    /// As [`PropertySet::get`].
     pub fn dimension(&self, key: &str) -> Result<usize, Status> {
         Ok(self.get(key)?.dimension())
     }
@@ -212,11 +195,6 @@ impl PropertySet {
         }
     }
 
-    /// One decimal. Errors as [`PropertySet::get_int`].
-    ///
-    /// # Errors
-    ///
-    /// As [`PropertySet::get_int`].
     pub fn get_double(&self, key: &str, index: usize) -> Result<f64, Status> {
         match self.get(key)? {
             PropValue::Double(values) => values.get(index).copied().ok_or(Status::ErrBadIndex),
@@ -238,11 +216,6 @@ impl PropertySet {
         }
     }
 
-    /// One address, as an integer.
-    ///
-    /// # Errors
-    ///
-    /// As [`PropertySet::get_int`].
     pub fn get_pointer(&self, key: &str, index: usize) -> Result<usize, Status> {
         match self.get(key)? {
             PropValue::Pointer(values) => values.get(index).copied().ok_or(Status::ErrBadIndex),
@@ -273,23 +246,17 @@ impl PropertySet {
         set_one(&mut prop.value, index, element)
     }
 
-    /// Every key, in order, for the golden test and for diagnostics.
     #[must_use]
     pub fn keys(&self) -> Vec<&str> {
         self.props.keys().map(String::as_str).collect()
     }
 }
 
-/// One value to write, at one type.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Element {
-    /// A whole number.
     Int(i32),
-    /// A decimal.
     Double(f64),
-    /// Text.
     String(CString),
-    /// An address, as an integer.
     Pointer(usize),
 }
 
@@ -304,7 +271,6 @@ impl Element {
     }
 }
 
-/// Write one element into an existing value, keeping its type.
 fn set_one(value: &mut PropValue, index: usize, element: Element) -> Result<(), Status> {
     /// Replace at `index`, or append when `index` is exactly the length.
     fn place<T>(values: &mut Vec<T>, index: usize, element: T) -> Result<(), Status> {

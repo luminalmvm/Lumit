@@ -99,7 +99,6 @@ pub(crate) fn add(
     draws.insert(at, CompLayerDraw::over_comp(comp, DrawSource::Haze(haze)));
 }
 
-/// The haze draw a segment ends with, if it has one, and the layers under it.
 pub(crate) fn peel(layers: &[CompLayerDraw]) -> (Option<&HazeLights>, &[CompLayerDraw]) {
     match layers.split_last() {
         Some((
@@ -230,8 +229,6 @@ impl Realiser<'_> {
             .iter()
             .map(|(l, _)| l.shadow_diffusion * DIFFUSION_SPREAD * MAX_STRETCH)
             .fold(0.0, f32::max);
-        // ponytail: made again here when the layers' own shadows made them
-        // too. Share the squares if a profile ever shows it.
         let casters = self.fx.shadow_casters(
             &self.ctx,
             &casting,
@@ -329,7 +326,6 @@ impl Realiser<'_> {
             let lot = boxes.iter().skip(k * lots).take(lots).cloned().collect();
             let mut op = base.clone();
             op.volumes = lot;
-            // The haze only needs walking once.
             if k < extra {
                 for (_, h) in &mut op.lights {
                     h.amount = 0.0;

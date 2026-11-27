@@ -1,13 +1,3 @@
-//! Filters: the audio effects that shape the spectrum
-//! (docs/impl/audio-effects.md §4).
-//!
-//! # In plain terms
-//!
-//! Both equalisers here are the same idea at two sizes: biquads in a row per
-//! channel, their coefficients rebuilt from the block's own values. The two
-//! rules they share live in this file, because getting either wrong is heard
-//! rather than seen.
-
 pub mod eq;
 pub mod graphic_eq;
 
@@ -46,7 +36,6 @@ fn value(values: &[(ParamId, f64)], id: ParamId, default: f64) -> f64 {
 /// hand asks for and short of where the arithmetic gives up.
 const DB_LIMIT: f64 = 48.0;
 
-/// What `id` holds this block as decibels, held inside [`DB_LIMIT`].
 fn decibels(values: &[(ParamId, f64)], id: ParamId, default: f64) -> f64 {
     // The pair is a constant and its own negation, so there is no reversed
     // pair for `clamp` to refuse (docs/14 §4).
@@ -70,7 +59,6 @@ fn measured_db(def: &dyn crate::fx::registry::EffectDef, over: &[(&str, f64)], h
     use super::modulation::harness;
     use crate::fx::{audio_chain::AUDIO_BLOCK_FRAMES, audio_chain::AUDIO_CHANNELS};
 
-    /// How many frames are counted, and as many again ahead of them to settle.
     const WINDOW_FRAMES: usize = 3_072;
 
     /// The amplitude of the left channel at `hz` over the run's second half:

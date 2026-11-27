@@ -36,7 +36,6 @@ use crate::fx::{
     registry::EffectMetadata, schema::EffectSchema,
 };
 
-/// How long a moved row takes to arrive.
 const SMOOTH_MS: f64 = 20.0;
 
 /// The most stages a channel runs. The row's own maximum, so the array is
@@ -57,8 +56,6 @@ struct AllPass {
 }
 
 impl AllPass {
-    /// One sample through, at the coefficient this frame's frequency asks
-    /// for.
     fn process(&mut self, x: f64, coeff: f64) -> f64 {
         let y = coeff * (x - self.y1) + self.x1;
         self.x1 = x;
@@ -77,7 +74,6 @@ fn coeff_of(freq_hz: f64, rate: f64) -> f64 {
     (t - 1.0) / (t + 1.0)
 }
 
-/// The Phaser effect's rows.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "audio_phaser",
@@ -86,8 +82,6 @@ fn coeff_of(freq_hz: f64, rate: f64) -> f64 {
     category = Audio,
     cost = Trivial,
     roi = Exact,
-    // Sound, so no matte and no picture: the Audio family's rule
-    // (docs/impl/audio-effects.md §2).
     matte = false,
 )]
 pub struct AudioPhaser {
@@ -117,7 +111,6 @@ pub struct AudioPhaser {
     pub wet: f32,
 }
 
-/// The Phaser effect's behaviour.
 pub struct AudioPhaserDef;
 
 impl EffectDef for AudioPhaserDef {
@@ -167,13 +160,10 @@ fn feedback_of(values: &[(ParamId, f64)]) -> f64 {
     row(values, AudioPhaser::FEEDBACK, 50.0).clamp(-95.0, 95.0) / 100.0
 }
 
-/// The wet row as a share of the output.
 fn wet_of(values: &[(ParamId, f64)]) -> f64 {
     row(values, AudioPhaser::WET, 50.0).clamp(0.0, 100.0) / 100.0
 }
 
-/// The chain a channel, what the feedback holds, the four smoothed rows, and
-/// where the sweep's cycle stands.
 struct PhaserState {
     stages: [[AllPass; MAX_STAGES]; AUDIO_CHANNELS],
     held: [f64; AUDIO_CHANNELS],
@@ -184,7 +174,6 @@ struct PhaserState {
     phase: Phase,
 }
 
-/// One open Phaser.
 struct PhaserAudio {
     rate: f64,
     /// Behind a mutex because `process` takes `&self`; uncontended by
@@ -262,7 +251,6 @@ mod tests {
     use super::super::harness;
     use super::*;
 
-    /// The level of the left channel over the settled half of a run.
     fn rms(samples: &[f32]) -> f64 {
         let half = samples.len() / 2 / AUDIO_CHANNELS * AUDIO_CHANNELS;
         let settled = &samples[half..];
@@ -273,7 +261,6 @@ mod tests {
         (sum / (settled.len() / AUDIO_CHANNELS) as f64).sqrt()
     }
 
-    /// What a tone at `hz` comes back at, as a share of what went in.
     fn through(over: &[(&str, f64)], hz: f64) -> f64 {
         let input = harness::tone(40, hz);
         let values = harness::values(&AudioPhaserDef, over);

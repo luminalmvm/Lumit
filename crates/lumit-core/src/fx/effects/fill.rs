@@ -1,17 +1,8 @@
-//! Fill (docs/08 §3.34): flood the layer's own coverage with one colour.
-//!
-//! **In plain terms.** The layer already says *where* it is — its alpha carries
-//! the shape, the antialiased edge, the feather. This effect keeps all of that
-//! and replaces only the colour, which is why a shape, a title or a keyed matte
-//! becomes a flat block of colour with its edges intact rather than a hard
-//! stencil.
-
 use crate::fx::{
     cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
 };
 use lumit_fx_macros::Effect;
 
-/// Fill's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "fill",
@@ -60,7 +51,6 @@ impl Fill {
     }
 }
 
-/// Fill's behaviour.
 pub struct FillDef;
 
 impl EffectDef for FillDef {

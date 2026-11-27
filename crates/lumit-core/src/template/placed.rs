@@ -26,15 +26,8 @@ use crate::model::{
 use crate::sequence::Clip;
 use crate::time::{CompTime, Duration, Rational};
 
-/// How many made documents are kept. A frame shows a handful of copies, and
-/// a miss costs one copy of the project.
-// ponytail: a made document is the whole project copied. Copying only the
-// template and what it places is the upgrade, if a large project with many
-// keyed copies ever scrubs slowly.
 const KEPT: usize = 16;
 
-/// One kept document: the project it was made from, the template, the values
-/// written, and the document.
 type Kept = (Weak<Document>, Uuid, Vec<u8>, Arc<Document>);
 
 /// The document the template in composition `nested` is read from for a copy
@@ -60,8 +53,6 @@ pub fn document(
     with(doc, nested, &settings)
 }
 
-/// The project with `settings` written into composition `comp`. `None` when
-/// there is nothing to write.
 #[must_use]
 pub fn with(doc: &Arc<Document>, comp: Uuid, settings: &[Setting]) -> Option<Arc<Document>> {
     if settings.is_empty() {
@@ -97,9 +88,6 @@ pub fn with(doc: &Arc<Document>, comp: Uuid, settings: &[Setting]) -> Option<Arc
     Some(made)
 }
 
-/// The document a Precomp `layer` of composition `owner` reads its nested
-/// composition from at layer time `lt`, when the layer is a copy of a
-/// template that sets something.
 #[must_use]
 pub fn for_layer(
     doc: &Arc<Document>,

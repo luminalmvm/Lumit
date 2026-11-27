@@ -83,7 +83,6 @@ pub(super) fn energy_line(
     fx.float(conv, &id("Glow Intensity", 0), "glow_intensity", 2.0, 0.0);
     fx.float(conv, &id("Glow Spread", 0), "glow_size", 120.0, 0.0);
     fx.float(conv, &id("Glow Bias", 0), "glow_falloff", 100.0, 0.0);
-    // Enable Glow off is no glow at all.
     if let Some(on) = fx.still(conv, &id("Enable Glow", 0)) {
         if on.abs() < f64::EPSILON {
             fx.set(

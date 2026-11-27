@@ -67,7 +67,6 @@ pub enum PixelFormat {
 }
 
 impl PixelFormat {
-    /// Bytes one pixel occupies in the buffer.
     #[must_use]
     pub fn bytes_per_px(self) -> usize {
         match self {
@@ -114,7 +113,6 @@ pub struct VideoDecoder {
     decoder: AVCodecContext,
     stream_index: i32,
     index: FrameIndex,
-    /// Frame number the decoder will produce next if we keep reading forward.
     next_sequential: Option<usize>,
     /// The picture handed out last, with its pts. A conformed variable frame
     /// rate index names the same picture for several frames running, and the
@@ -218,8 +216,6 @@ pub fn set_hardware_decode(allow: bool) {
     HARDWARE_DECODE.store(allow, std::sync::atomic::Ordering::Relaxed);
 }
 
-/// Where hardware decode says which device it found, what each check against
-/// software found, and why it stepped back to software.
 static HARDWARE_REPORT: std::sync::OnceLock<fn(&str)> = std::sync::OnceLock::new();
 
 /// Send hardware decode's diagnostic lines to `sink`. The bridge sets it, so
@@ -245,7 +241,6 @@ impl VideoDecoder {
         Self::open_on(src, index, allow_hardware.then_some(hw::HwKind::Platform))
     }
 
-    /// As [`Self::open_with`], naming the device to try.
     fn open_on(
         src: impl Into<MediaSource>,
         index: FrameIndex,
@@ -298,7 +293,6 @@ impl VideoDecoder {
         self.index.frame_count()
     }
 
-    /// How many seeks this decoder has performed since it was opened.
     pub fn seeks(&self) -> usize {
         self.seeks
     }
@@ -309,8 +303,6 @@ impl VideoDecoder {
         self.scalers.let_go_of_rgba();
     }
 
-    /// Whether the last frame this decoder handed out came from the graphics
-    /// card's video unit (docs/impl/media-io.md §4). Diagnostic only.
     pub fn is_hardware(&self) -> bool {
         self.hardware
     }
@@ -428,16 +420,10 @@ impl VideoDecoder {
             let frame = self.frame_exact(raw)?;
             return convert_luma(&frame);
         }
-        // ponytail: fields and pixel shapes go the long way, through the
-        // colour picture, so the tracker sees the frames the layer shows. A
-        // field-aware luma tap is the upgrade if tracking interlaced footage
-        // is ever slow enough to matter.
         let frame = self.frame_rgba(n, None)?;
         Ok(luma_of(&frame))
     }
 
-    /// [`convert_rgba`] on the kept scaler, at the original's size for a
-    /// smaller stand-in.
     fn convert(
         &mut self,
         frame: &AVFrame,
@@ -481,8 +467,6 @@ impl VideoDecoder {
         Err(failed)
     }
 
-    /// Note whether frame `n` of a run read, for whoever lists the files that
-    /// didn't.
     fn note_frame(&self, n: usize, unreadable: bool) {
         if let Some((run, source)) = &self.run {
             crate::sequence::note_frame(source, || run.file_at(n), unreadable);
@@ -517,7 +501,6 @@ impl VideoDecoder {
             }
         }
 
-        // Where a seek would land, and therefore whether one is worth doing.
         let key = self.index.nearest_keyframe_at_or_before(n);
 
         // **Seek only when it actually saves work.** The decoder is already
@@ -537,12 +520,8 @@ impl VideoDecoder {
         // more expensive, which dropped more frames, which seeked further. The
         // whole collapse followed from one frame arriving late.
         let need_seek = match self.next_sequential {
-            // Already positioned to produce n next.
             Some(m) if m == n => false,
-            // Ahead of us, with no keyframe in between worth jumping to: decode
-            // forward through the gap, discarding what is not wanted.
             Some(m) if m <= n && key <= m => false,
-            // Behind us, or a keyframe closer to n than we are: seek.
             _ => true,
         };
         if need_seek {
@@ -571,7 +550,6 @@ impl VideoDecoder {
                 return Ok(frame);
             }
             if pts > want_pts {
-                // Should not happen with an exact index; be honest about it.
                 return Err(MediaError::Ffmpeg(format!(
                     "seek overshot: wanted pts {want_pts}, got {pts}"
                 )));
@@ -587,7 +565,6 @@ impl VideoDecoder {
                 | Err(rsmpeg::error::RsmpegError::DecoderFlushedError) => {}
                 Err(e) => return Err(e.into()),
             }
-            // Need more input.
             loop {
                 match self.input.read_packet()? {
                     Some(packet) => {
@@ -597,7 +574,7 @@ impl VideoDecoder {
                         }
                     }
                     None => {
-                        self.decoder.send_packet(None)?; // drain at EOF
+                        self.decoder.send_packet(None)?;
                         break;
                     }
                 }
@@ -785,10 +762,6 @@ pub(crate) fn fit(
     )
 }
 
-/// `frame` turned clockwise by `turns` quarter turns.
-///
-/// ponytail: a pixel at a time on the CPU, tens of milliseconds a 4K frame.
-/// Turn on the graphics card if phone footage ever plays slowly.
 #[cfg(not(target_arch = "wasm32"))]
 fn turn(frame: DecodedFrame, turns: u8) -> DecodedFrame {
     let turns = turns % 4;
@@ -850,7 +823,6 @@ fn convert_rgba(
     convert_sized(frame, dst_w, dst_h)
 }
 
-/// A frame as RGBA at exactly this size, eight-bit or float as it arrived.
 #[cfg(not(target_arch = "wasm32"))]
 fn convert_sized(frame: &AVFrame, dst_w: i32, dst_h: i32) -> Result<DecodedFrame, MediaError> {
     scaler::Scalers::default().rgba(frame, dst_w, dst_h)
@@ -863,8 +835,6 @@ fn unsafe_data_slice(frame: &AVFrame, len: usize) -> Result<&[u8], MediaError> {
     unsafe_plane_slice(frame, 0, len)
 }
 
-/// [`unsafe_data_slice`] for a chosen plane — the planar float path reads four
-/// of them, and a packed one only ever asks for plane nought.
 #[cfg(not(target_arch = "wasm32"))]
 fn unsafe_plane_slice(frame: &AVFrame, plane: usize, len: usize) -> Result<&[u8], MediaError> {
     let Some(ptr) = frame.data.get(plane).copied().filter(|p| !p.is_null()) else {
@@ -922,7 +892,6 @@ mod tests {
         blake3::hash(&f.rgba).to_hex().to_string()
     }
 
-    /// Read pixel `n`'s four channels out of a float frame.
     fn float_px(f: &DecodedFrame, n: usize) -> [f32; 4] {
         let mut out = [0.0; 4];
         for (c, slot) in out.iter_mut().enumerate() {
@@ -933,10 +902,6 @@ mod tests {
         out
     }
 
-    /// An interpreted source has to agree with itself: the probe, the index
-    /// and the decoder all counting the same frames, and each frame being the
-    /// one the interpretation names. Get that wrong and every layer cut from
-    /// the clip shows the wrong moment.
     #[test]
     fn an_interpreted_source_is_read_in_interpreted_frames() {
         use crate::{interpret::Fields, interpret::Interpretation, sequence::MediaSource};
@@ -945,7 +910,6 @@ mod tests {
             eprintln!("skipping: no ffmpeg CLI available");
             return;
         };
-        // Two seconds of 320 by 240 at 60 fps: 120 frames.
         let plain = MediaSource::file(&file);
         let read = |src: &MediaSource, n: usize| {
             let index = build_frame_index(src.clone()).unwrap();
@@ -965,7 +929,6 @@ mod tests {
             )
         };
 
-        // Conformed to 24 and played twice: the same pictures, slower, twice.
         let conformed = MediaSource {
             interpret: Interpretation {
                 conform_fps: Some((24, 1)),
@@ -983,7 +946,6 @@ mod tests {
             "the second time round is the first again"
         );
 
-        // Fields separated: two pictures a frame, each keeping its own rows.
         let fields = MediaSource {
             interpret: Interpretation {
                 fields: Fields::Upper,
@@ -1002,7 +964,6 @@ mod tests {
             "the later field is the odd rows"
         );
 
-        // Pixels twice as wide as tall: the picture is, too.
         let wide = MediaSource {
             interpret: Interpretation {
                 pixel_aspect: Some((2, 1)),
@@ -1055,7 +1016,6 @@ mod tests {
         };
         let row = |f: &DecodedFrame, y: usize| f.rgba[y * 160 * 4..(y + 1) * 160 * 4].to_vec();
 
-        // Sixty pictures a second woven into thirty frames, upper field first.
         let (Some(whole), Some(woven)) = (
             make("p60.mkv", "60", "format=yuv444p"),
             make("i30.mkv", "60", "format=yuv444p,tinterlace=interleave_top"),
@@ -1073,7 +1033,6 @@ mod tests {
         });
         assert_eq!(fields.len(), pictures.len() / 2 * 2);
         for n in [0, 1, 10, 11] {
-            // Each field keeps the rows it was shot on: even for the earlier.
             let y = 40 + n % 2;
             assert_eq!(row(&fields[n], y), row(&pictures[n], y), "field {n}");
         }
@@ -1120,7 +1079,6 @@ mod tests {
             "red, then blue"
         );
 
-        // Twenty-four frames a second telecined to thirty, the plain cadence.
         let (Some(film), Some(video)) = (
             make("p24.mkv", "24000/1001", "format=yuv444p"),
             make("t30.mkv", "24000/1001", "format=yuv444p,telecine"),
@@ -1165,7 +1123,7 @@ mod tests {
     fn an_exr_keeps_its_values_above_white() {
         let dir = tempfile::tempdir().unwrap();
         let Some(file) = exr_fixture(dir.path()) else {
-            return; // no ffmpeg CLI on this machine; the suite still passes
+            return;
         };
         let src = MediaSource::file(&file);
         let index = build_frame_index(&src).unwrap();
@@ -1272,14 +1230,12 @@ mod tests {
         };
         let index = build_frame_index(&file).unwrap();
 
-        // Sequential ground truth.
         let mut sequential = VideoDecoder::open(&file, index.clone()).unwrap();
         let mut truth = Vec::new();
         for n in 0..sequential.frame_count() {
             truth.push(frame_hash(&sequential.frame_rgba(n, None).unwrap()));
         }
 
-        // Random-access seeks must land on identical pixels.
         let mut seeker = VideoDecoder::open(&file, index).unwrap();
         for n in [0usize, 31, 45, 90, 119, 30, 0, 119] {
             let f = seeker.frame_rgba(n, None).unwrap();
@@ -1288,9 +1244,6 @@ mod tests {
         }
     }
 
-    /// A clip a phone filmed upright stores its picture on its side with a
-    /// turn beside it. The probe and the frames are the upright picture, the
-    /// same one ffmpeg itself shows.
     #[test]
     fn a_phone_clip_filmed_upright_comes_back_upright() {
         let dir = tempfile::tempdir().unwrap();
@@ -1415,8 +1368,6 @@ mod tests {
             truth.push(frame_hash(&sequential.frame_rgba(n, None).unwrap()));
         }
 
-        // Jump around out of order; every seek must still land on the exact
-        // pts the index promised, irregular spacing notwithstanding.
         let mut seeker = VideoDecoder::open(&file, index).unwrap();
         let probes = [0usize, count / 2, count - 1, count / 3, 1, count - 1, 0];
         for n in probes {
@@ -1425,26 +1376,16 @@ mod tests {
         }
     }
 
-    // ---- copy_tight_rows: pure logic, no ffmpeg required ----------------
-
-    // ---- thread_cap: pure arithmetic, no ffmpeg required ----------------
-
-    /// A frame whose pictures in flight fit the budget keeps a thread a core;
-    /// one big enough that sixteen of them would cost a gigabyte gets fewer.
-    /// Without the cap every one of these answers 0.
     #[test]
     fn a_big_frame_asks_for_fewer_decode_threads() {
         assert_eq!(thread_cap(1920, 1080), 0, "1080p keeps a thread a core");
         assert_eq!(thread_cap(3840, 2160), 0, "4K keeps a thread a core");
         assert_eq!(thread_cap(7680, 4320), 5, "8K gets five");
         assert_eq!(thread_cap(15360, 8640), 1, "16K gets one");
-        // A stream whose header never carried a size must still open.
         assert_eq!(thread_cap(0, 0), 0);
         assert_eq!(thread_cap(-1, -1), 0);
     }
 
-    // A file cut short, as a download that stopped or an export that crashed
-    // leaves one: its start reads as media and the rest is not there.
     #[test]
     fn video_decoder_open_on_truncated_file_errors_not_panics() {
         let dir = tempfile::tempdir().unwrap();

@@ -6,17 +6,14 @@
 use crate::anim::Property;
 use crate::model::LinearColour;
 
-/// The four channels of a still colour.
 pub fn still(colour: LinearColour) -> [Property; 4] {
     colour.0.map(|v| Property::fixed(f64::from(v)))
 }
 
-/// The colour at `t`, on the layer's clock.
 pub fn at(channels: &[Property; 4], t: f64) -> LinearColour {
     LinearColour(channels.each_ref().map(|p| p.value_at(t) as f32))
 }
 
-/// Whether any channel moves.
 pub fn is_animated(channels: &[Property; 4]) -> bool {
     channels.iter().any(Property::is_animated)
 }

@@ -1,5 +1,3 @@
-//! Animated WebP through libwebp's own animation encoder.
-
 #[cfg(not(target_arch = "wasm32"))]
 use super::planes::{copy_pixels_into, frame_len};
 #[cfg(not(target_arch = "wasm32"))]
@@ -124,7 +122,6 @@ impl WebpEncoder {
         })
     }
 
-    /// Encode one tightly-packed eight-bit RGBA frame.
     pub fn write_rgba(&mut self, rgba: &[u8]) -> Result<(), MediaError> {
         let expect = frame_len(self.width, self.height, 4)?;
         if rgba.len() != expect {

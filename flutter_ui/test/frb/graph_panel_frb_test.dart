@@ -38,7 +38,6 @@ void main() {
   setUpAll(initEngineForTests);
 
   group('Graph panel (frb)', () {
-    /// A comp with one solid carrying one Gaussian blur, selected.
     ({LumitState state, LumitUiState uiState, LayerReference layer})
         withBlur({bool open = true}) {
       final p = freshProject();
@@ -67,8 +66,6 @@ void main() {
       return (state: p.state, uiState: p.uiState, layer: layer);
     }
 
-    /// Add `name` as a driver at a spot on the canvas, outside the panel, so a
-    /// test can start from a graph that already has one.
     UuidValue seedDriver(LayerReference layer, String name, Offset at) {
       final made = layer.newDriver(name: name);
       final id = made.id();
@@ -114,12 +111,9 @@ void main() {
     Finder socket(String node, String port) =>
         find.byKey(ValueKey<String>('graph-socket-$node-$port'));
 
-    /// The effect box's key, for a layer whose only effect is the blur.
     String effectKey(LayerReference layer) => graphNodeKey(
         layer.getGraph().nodes.firstWhere((n) => n.matchName == 'blur').node);
 
-    /// A Text layer's Source box stands open with a socket for each of its
-    /// animators' numbers, for a driver to be wired into.
     testWidgets('a text layer\'s Source box shows its animators\' sockets',
         (tester) async {
       final p = freshProject();
@@ -146,9 +140,6 @@ void main() {
       expect(socket(source, 'text.0.axis.wght'), findsOneWidget);
     });
 
-    /// A new effect's box starts shut: a number socket nobody has wired is
-    /// not drawn at all. The header twirl opens it, showing every parameter
-    /// socket.
     testWidgets('exposure shows the parameter sockets, and is one op',
         (tester) async {
       final p = withBlur(open: false);
@@ -214,14 +205,12 @@ void main() {
       await tester.pump();
       expect(p.layer.getGraph().wiring.edges, hasLength(1));
 
-      // Off the input, out onto bare canvas.
       await tester.dragFrom(radius, const Offset(0, 220));
       await tester.pump();
       expect(p.layer.getGraph().wiring.edges, isEmpty);
       expect(find.byKey(const ValueKey<String>('fx-console-bar')), findsNothing,
           reason: 'a wire being taken off is not a wire looking for a node');
 
-      // And it is one undo step of its own, like every other gesture here.
       p.state.project!.undo();
       p.uiState.model.refresh();
       await tester.pump();
@@ -291,7 +280,6 @@ void main() {
       await tester.pump();
       expect(p.layer.getGraph().wiring.edges, hasLength(1));
 
-      // Pick the driver box, then Delete.
       await tester.tapAt(tester.getCenter(
           find.byKey(ValueKey<String>('graph-node-driver:$wiggle'))));
       await tester.pump();
@@ -443,11 +431,9 @@ void main() {
           .wiring
           .layout
           .firstWhere((l) => l.node == BridgeNodeRef.driver(wiggle));
-      // Raw would be (70, 320); the magnet lands it on the 20px pitch.
       expect(placed().x, 80, reason: 'snapped to the dot grid');
       expect(placed().y, 320);
 
-      // Magnet off: the same drag commits exactly where the hand left it.
       await tester.tap(find.byKey(const ValueKey('graph-snap')));
       await tester.pump();
       await tester.dragFrom(
@@ -457,8 +443,6 @@ void main() {
       expect(placed().y, 313);
     });
 
-    /// A box's left or right edge drags its width, which commits with its
-    /// position: the right edge keeps the left one still, and the reverse.
     testWidgets('dragging a box edge commits its width', (tester) async {
       final p = withBlur();
       final wiggle = seedDriver(p.layer, 'wiggle', const Offset(40, 300));
@@ -474,7 +458,6 @@ void main() {
           .layout
           .firstWhere((l) => l.node == BridgeNodeRef.driver(wiggle));
 
-      // On the header, where no socket sits.
       await tester.dragFrom(
           Offset(start.right - 1, start.top + 6), const Offset(60, 0));
       await tester.pump();
@@ -489,8 +472,6 @@ void main() {
       expect(placed().x, closeTo(10, 1.5), reason: 'the right edge stays');
     });
 
-    /// M mutes the picked box, as node editors have it, and M again brings
-    /// it back: the bypass its tick sets.
     testWidgets('M bypasses the picked box and M again restores it',
         (tester) async {
       final p = withBlur();
@@ -646,7 +627,6 @@ void main() {
     Future<void> clickBox(WidgetTester tester, Finder box,
         {LogicalKeyboardKey? held}) async {
       if (held != null) await tester.sendKeyDownEvent(held);
-      // The header: an open box's rows are its controls.
       await tester.tapAt(tester.getTopLeft(box) + const Offset(80, 10));
       if (held != null) await tester.sendKeyUpEvent(held);
       // Past the name's double-click window, which renames.
@@ -672,7 +652,6 @@ void main() {
       expect(p.uiState.selectedEffects.value, [ids[1]],
           reason: 'and a second Ctrl-click on a picked box takes it out again');
 
-      // A plain click on one of several picked boxes collapses the pick to it.
       await clickBox(tester, boxOf(p.layer, 1),
           held: LogicalKeyboardKey.shiftLeft);
       expect(p.uiState.selectedEffects.value, [ids[1]]);
@@ -753,7 +732,6 @@ void main() {
       await mount(tester, p);
       expect(chainNames(p.layer), ['blur', 'exposure']);
 
-      // Grab the wire feeding the exposure box and drop it on bare canvas.
       final at = tester.getCenter(chainInput(p.layer, 1));
       await tester.dragFrom(at, const Offset(40, 220));
       await tester.pump();
@@ -789,7 +767,6 @@ void main() {
       expect(chainEnabled(p.layer), [true, true],
           reason: 'no effect was bypassed by it either');
 
-      // Back in: the wire lands on the Layer out and the layer draws again.
       final from = tester.getCenter(find.byKey(
           ValueKey<String>('graph-socket-effect:${stackIds(p.layer)[1]}-output')));
       await tester.dragFrom(from, at - from);
@@ -802,8 +779,6 @@ void main() {
       final p = withTwoEffects();
       await mount(tester, p);
 
-      // The wire Source → blur, dropped on exposure's input: the Source feeds
-      // exposure now, so exposure moves to the head of the stack.
       final from = tester.getCenter(chainInput(p.layer, 0));
       final to = tester.getCenter(chainInput(p.layer, 1));
       await tester.dragFrom(from, to - from);
@@ -819,9 +794,6 @@ void main() {
           reason: 'one reorder op, one undo step');
     });
 
-    // --- Named groups -----------------------------------------------------
-
-    /// A temporary library folder, cleaned up with the test.
     Directory library() {
       final dir = Directory.systemTemp.createTempSync('lumit-groups');
       addTearDown(() {
@@ -854,7 +826,6 @@ void main() {
           tester,
           find.byKey(ValueKey<String>('graph-node-${effectKey(p.layer)}')),
           held: LogicalKeyboardKey.controlLeft);
-      // Save group… is on the box's menu, over the whole pick.
       await tester.tapAt(
           tester.getCenter(
               find.byKey(ValueKey<String>('graph-node-${effectKey(p.layer)}'))),
@@ -889,7 +860,6 @@ void main() {
       final p = withBlur();
       final wiggle = seedDriver(p.layer, 'wiggle', const Offset(60, 300));
       final smooth = seedDriver(p.layer, 'smooth', const Offset(320, 300));
-      // Wire one into the other, so the file carries a wire of its own.
       final graph = p.layer.getGraph();
       p.layer.setGraph(
         drivers: p.layer.getGraphDrivers(),
@@ -952,8 +922,6 @@ void main() {
       expect(p.layer.getGraph().wiring.groups, isEmpty);
     });
 
-    /// From Effects & presets: an effect joins the stack as the console's does,
-    /// and a driver lands where it was let go. One op each.
     testWidgets('an effect or a driver dragged onto the canvas is added',
         (tester) async {
       final p = freshProject();
@@ -1001,7 +969,6 @@ void main() {
       await tester.pumpAndSettle();
       final drivers = layer.getGraphDrivers();
       expect(drivers, hasLength(1));
-      // The canvas opens framed, so the box is checked on screen.
       final from =
           tester.getTopLeft(find.byKey(const ValueKey<String>('drag-driver')));
       final box = tester.getTopLeft(find.byKey(

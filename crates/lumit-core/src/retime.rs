@@ -20,14 +20,12 @@
 use crate::time::{Rational, TimeError};
 use serde::{Deserialize, Serialize};
 
-/// What can go wrong inside retime maths or structure checks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum RetimeError {
     /// Rational arithmetic failed even after the §4.1 fallback (only
     /// reachable with astronomically out-of-range times).
     #[error("retime arithmetic failed: {0}")]
     Arithmetic(#[from] TimeError),
-    /// The store's shape breaks an invariant (docs/04-RETIMING.md §3).
     #[error("invalid retime structure: {0}")]
     InvalidStructure(&'static str),
 }
@@ -36,7 +34,6 @@ pub enum RetimeError {
 /// the Vegas fade-type vocabulary (docs/04-RETIMING.md §4.1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Ease {
-    /// Straight speed ramp.
     Linear,
     /// Lingers at the starting speed, transitions late.
     Slow,
@@ -120,13 +117,9 @@ impl Ease {
 /// a per-clip render policy, orthogonal to the retime map itself.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub enum Interpolation {
-    /// Round to the nearest source frame — crisp, deterministic, the
-    /// gaming-footage default.
     #[default]
     Nearest,
-    /// Crossfade the two neighbouring frames.
     Blend,
-    /// Optical-flow synthesis of the in-between frame.
     Flow(FlowParams),
 }
 
@@ -147,15 +140,12 @@ pub enum FlowResolution {
     Native,
     /// Half the source's dimensions: ~4× cheaper, vectors scaled back up.
     Half,
-    /// Quarter dimensions — the escape hatch for slow machines on 4K sources.
     Quarter,
 }
 
 impl FlowResolution {
-    /// The Choice option labels, in code order.
     pub const OPTIONS: &'static [&'static str] = &["Native", "Half", "Quarter"];
 
-    /// How much to divide the source dimensions by before measuring.
     pub const fn divisor(self) -> u32 {
         match self {
             FlowResolution::Native => 1,
@@ -164,7 +154,6 @@ impl FlowResolution {
         }
     }
 
-    /// The mode for a stored Choice index, or `None` for an unknown code.
     pub const fn from_code(code: u32) -> Option<Self> {
         match code {
             0 => Some(FlowResolution::Native),
@@ -259,8 +248,6 @@ impl VectorDetail {
     }
 }
 
-/// What synthesis does where a pixel is visible in only one of the two frames
-/// (docs/08 §3.1 "Occlusion handling").
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum OcclusionMode {
     /// Take only the frame the pixel is actually visible in — sharp, and the
@@ -296,7 +283,6 @@ impl OcclusionMode {
 /// garbage — that requirement is binding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum FlowFallback {
-    /// Crossfade the two frames — soft, identical to the Blend policy.
     #[default]
     Blend,
     /// Show the nearer source frame — crisp, and a cleaner failure on footage
@@ -333,18 +319,14 @@ impl FlowFallback {
 /// something else. Nothing here picks it on its own.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum FlowEngineChoice {
-    /// The built-in dense inverse search, measured and warped on the card.
     #[default]
     Dis,
-    /// The RIFE model pack, which paints the frame and measures nothing.
     Rife,
 }
 
 impl FlowEngineChoice {
-    /// The Choice option labels, in code order.
     pub const OPTIONS: &'static [&'static str] = &["Built in", "RIFE"];
 
-    /// The engine for a stored Choice index, or `None` for an unknown code.
     pub const fn from_code(code: u32) -> Option<Self> {
         match code {
             0 => Some(FlowEngineChoice::Dis),
@@ -361,19 +343,14 @@ impl FlowEngineChoice {
     }
 }
 
-/// Optical-flow parameters (docs/08 §3.1). Every knob §3.1 specifies,
-/// plus the engagement override and the HUD guard.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FlowParams {
     /// Which engine paints the in-between frame. Defaults to the built-in one,
     /// so a project written before the choice existed reads as it rendered.
     #[serde(default)]
     pub engine: FlowEngineChoice,
-    /// The resolution flow is measured at — independent of preview quality.
-    /// Defaults to Native.
     #[serde(default)]
     pub resolution: FlowResolution,
-    /// Pyramid depth and refinement iterations (docs/08 §3.1 "Vector detail").
     #[serde(default)]
     pub detail: VectorDetail,
     /// Regularisation weight, 0–100 (docs/08 §3.1 "Smoothness"): high means
@@ -381,10 +358,8 @@ pub struct FlowParams {
     /// and more chance of a vector escaping on its own.
     #[serde(default = "default_smoothness")]
     pub smoothness: f64,
-    /// What to do where a pixel exists in only one of the two frames.
     #[serde(default)]
     pub occlusion: OcclusionMode,
-    /// What to show where confidence is too low to synthesise at all.
     #[serde(default)]
     pub fallback: FlowFallback,
     /// Bias static, well-textured regions toward pure blending (docs/08 §3.1
@@ -413,7 +388,6 @@ pub struct FlowParams {
         skip_serializing_if = "input_fps_is_native"
     )]
     pub input_fps: crate::anim::Property,
-    /// Unknown fields from newer Lumit versions (docs/10-FILE-FORMAT.md §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -567,7 +541,6 @@ pub fn stretch_keys(
         .collect()
 }
 
-/// docs/08 §3.1: Smoothness is 0–100, default 50.
 pub const DEFAULT_SMOOTHNESS: f64 = 50.0;
 
 fn default_smoothness() -> f64 {
@@ -587,7 +560,6 @@ pub struct Boundary {
     /// (docs/04-RETIMING.md §6.1). Evaluation ignores it.
     #[serde(default)]
     pub smooth: bool,
-    /// Unknown fields from newer Lumit versions (docs/10-FILE-FORMAT.md §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -603,12 +575,9 @@ impl Boundary {
     }
 }
 
-/// One span of the retime curve, in one of the two native vocabularies.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum RetimeSegment {
-    /// Speed-native: constant or eased speed (Vegas semantics).
     Rate(RateSegment),
-    /// Value-native: cubic source-time curve (After Effects semantics).
     Map(MapSegment),
 }
 
@@ -618,11 +587,8 @@ pub enum RetimeSegment {
 pub struct RateSegment {
     /// Speed at the segment start (1 = 100%, 0 = freeze).
     pub v0: Rational,
-    /// Speed at the segment end.
     pub v1: Rational,
-    /// Shape of the speed transition between them.
     pub ease: Ease,
-    /// Unknown fields from newer Lumit versions (docs/10-FILE-FORMAT.md §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -645,13 +611,10 @@ impl RateSegment {
 pub struct MapSegment {
     /// Outgoing speed (source seconds per local second) at the start.
     pub m0: Rational,
-    /// Incoming speed at the end.
     pub m1: Rational,
     /// Outgoing influence — how far the start handle reaches, in (0, 1].
     pub b0: Rational,
-    /// Incoming influence, in (0, 1].
     pub b1: Rational,
-    /// Unknown fields from newer Lumit versions (docs/10-FILE-FORMAT.md §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -668,8 +631,6 @@ impl MapSegment {
     }
 }
 
-/// One retime store. Owned by a Clip or by a Footage/Precomp layer
-/// (docs/03-DATA-MODEL.md); this module is only the curve and its maths.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Retime {
     /// n + 1 boundaries for n segments. `boundaries[0].t == 0`, the last sits
@@ -684,10 +645,8 @@ pub struct Retime {
     /// is not re-checked per sample.
     #[serde(default)]
     pub allow_reverse: bool,
-    /// Frame interpolation policy (§10). Default Nearest.
     #[serde(default)]
     pub interpolation: Interpolation,
-    /// Unknown fields from newer Lumit versions (docs/10-FILE-FORMAT.md §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -718,10 +677,6 @@ impl Retime {
         }
     }
 
-    /// A single constant-speed retime over [0, `duration`] (local time),
-    /// source running from `source_in` at `speed` (1 = 100%). This is the
-    /// simple "play this clip faster/slower" case the timeline speed control
-    /// produces; the graph-editor lenses build richer stores later.
     pub fn constant_speed(duration: Rational, source_in: Rational, speed: Rational) -> Self {
         Self::single_ramp(duration, source_in, speed, speed, Ease::Linear)
     }
@@ -747,7 +702,6 @@ impl Retime {
             interpolation: Interpolation::default(),
             extra: serde_json::Map::new(),
         };
-        // Fill the end boundary's source position exactly from the rate.
         let _ = r.recompute_boundaries();
         r
     }
@@ -874,9 +828,6 @@ impl Retime {
             .collect()
     }
 
-    /// Structural sanity (docs/04-RETIMING.md §3 invariants): n + 1
-    /// boundaries for n segments, first boundary at local time zero,
-    /// boundary times strictly increasing.
     pub fn validate(&self) -> Result<(), RetimeError> {
         if self.segments.is_empty() {
             return Err(RetimeError::InvalidStructure(
@@ -955,7 +906,6 @@ impl Retime {
                 let u = ((t - t0) / d).clamp(0.0, 1.0);
                 let (v0, v1) = clamped_speeds(seg, self.allow_reverse);
                 let (v0, v1) = (v0.to_f64(), v1.to_f64());
-                // f(t) = s_i + d·[v0·u + (v1 − v0)·E(u)]  (§4.1)
                 lo.s.to_f64() + d * (v0 * u + (v1 - v0) * seg.ease.big_e(u))
             }
             RetimeSegment::Map(seg) => {
@@ -975,7 +925,6 @@ impl Retime {
             return None;
         }
         let t = t.clamp(first.t.to_f64(), last.t.to_f64());
-        // Largest segment whose start boundary is ≤ t.
         let idx = self.boundaries.partition_point(|b| b.t.to_f64() <= t);
         Some((idx.saturating_sub(1).min(self.segments.len() - 1), t))
     }
@@ -1071,7 +1020,6 @@ fn is_one_third(r: Rational) -> bool {
     r.num() == 1 && r.den() == 3
 }
 
-/// Cubic bezier over four scalar control points (Bernstein form).
 fn bezier(p: &[f64; 4], u: f64) -> f64 {
     let w = 1.0 - u;
     w * w * w * p[0] + 3.0 * w * w * u * p[1] + 3.0 * w * u * u * p[2] + u * u * u * p[3]
@@ -1096,7 +1044,7 @@ fn solve_u(x: &[f64; 4], t: f64) -> f64 {
     }
     let tol = (x3 - x0) * 2.0_f64.powi(-48);
     let (mut lo, mut hi) = (0.0_f64, 1.0_f64);
-    let mut u = ((t - x0) / (x3 - x0)).clamp(0.0, 1.0); // x ≈ identity guess
+    let mut u = ((t - x0) / (x3 - x0)).clamp(0.0, 1.0);
     for _ in 0..48 {
         let xu = bezier(x, u);
         if (xu - t).abs() <= tol {
@@ -1129,8 +1077,6 @@ mod tests {
 
     #[test]
     fn source_keyframes_evaluate_like_a_transform_property() {
-        // The whole point: a Time Remap built from bezier keyframes must
-        // render bit-for-bit like the same keys on a transform property.
         use crate::anim::{Keyframe, SideInterp};
         let keys = vec![
             Keyframe {
@@ -1140,7 +1086,7 @@ mod tests {
                 interp_out: SideInterp::Bezier {
                     speed: 0.0,
                     influence: 1.0 / 3.0,
-                }, // easy-ease out
+                },
             },
             Keyframe {
                 time: rat(2, 1),
@@ -1218,38 +1164,22 @@ mod tests {
         assert_eq!(back, r);
     }
 
-    /// Flow engages only where a source frame would otherwise hold across two
-    /// or more comp frames.
     #[test]
     fn flow_engages_only_where_it_can_help() {
         let p = FlowParams::default();
-        // 30 fps source into a 30 fps comp: at 100% every comp frame lands on
-        // a source frame, so there is no in-between frame to invent.
         assert!(!p.engages(30.0, 30.0, 1.0));
-        // Half speed holds each source frame for two comp frames — the case
-        // flow exists for.
         assert!(p.engages(30.0, 30.0, 0.5));
-        // Faster than real time skips frames; nothing to interpolate.
         assert!(!p.engages(30.0, 30.0, 2.0));
-        // A freeze has no motion to interpolate towards either.
         assert!(!p.engages(30.0, 30.0, 0.0));
-        // Reverse is symmetric: it is the magnitude that decides.
         assert!(p.engages(30.0, 30.0, -0.5));
         assert!(!p.engages(30.0, 30.0, -1.0));
-        // 60 fps source into a 30 fps comp already has frames to spare at
-        // 100%, and only starts repeating below half speed.
         assert!(!p.engages(60.0, 30.0, 1.0));
         assert!(!p.engages(60.0, 30.0, 0.5));
         assert!(p.engages(60.0, 30.0, 0.25));
-        // Degenerate rates decline rather than guess.
         assert!(!p.engages(0.0, 30.0, 0.5));
         assert!(!p.engages(30.0, 0.0, 0.5));
     }
 
-    /// The conform rate is what the gate measures against:
-    /// 600 fps footage at 10% speed still advances 60 source frames per comp
-    /// frame, so flow would decline — until the clip is conformed to 24, at
-    /// which point there is real motion between the bracketing frames.
     #[test]
     fn a_conform_rate_is_what_makes_high_framerate_footage_engage() {
         let native = FlowParams::default();
@@ -1260,8 +1190,6 @@ mod tests {
         };
         assert_eq!(conformed.read_fps_at(0.0, 600.0), 24.0);
         assert!(conformed.engages(conformed.read_fps_at(0.0, 600.0), 30.0, 0.1));
-        // A conform rate at or above native is ignored: it cannot manufacture
-        // frames the source does not have.
         assert_eq!(conformed.read_fps_at(0.0, 24.0), 24.0);
         assert_eq!(conformed.read_fps_at(0.0, 12.0), 12.0);
     }
@@ -1311,7 +1239,6 @@ mod keyframe_seam_tests {
             Rational::new(3, 1).unwrap(),
             Ease::Linear,
         );
-        // Once through, so the store holds MapSegments rather than a Rate.
         let mapped = Retime::from_source_keyframes(&seed.source_keyframes()).expect("a curve");
         let again = Retime::from_source_keyframes(&mapped.source_keyframes()).expect("a curve");
 

@@ -1,8 +1,3 @@
-//! A 3D view's look for models never reaches a picture named for the look
-//! models export with. A precomp holding a model is drawn shaded in a Top
-//! view, then as it exports, on one renderer, and the second must be the
-//! picture a clean render makes.
-
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use lumit_core::edits::{new_comp_ops, CompSettings};
@@ -13,7 +8,6 @@ use lumit_render::headless::HeadlessRenderer;
 use std::sync::Arc;
 use uuid::Uuid;
 
-/// A white triangle facing the camera, as a glTF beside its buffer.
 fn triangle(dir: &std::path::Path) -> std::path::PathBuf {
     let floats: [f32; 9] = [-1.0, -1.0, 0.0, 1.0, -1.0, 0.0, 0.0, 1.0, 0.0];
     let bytes: Vec<u8> = floats.iter().flat_map(|f| f.to_le_bytes()).collect();
@@ -30,8 +24,6 @@ fn triangle(dir: &std::path::Path) -> std::path::PathBuf {
     path
 }
 
-/// A comp holding the triangle's Model layer, placed in a parent comp as a
-/// Precomp layer. Answers the document and the parent.
 fn project(path: &std::path::Path) -> (Arc<Document>, Uuid) {
     let mut doc = Document::new();
     let settings = CompSettings {
@@ -111,8 +103,6 @@ fn a_shaded_precomp_never_reaches_a_final_frame() {
     assert!(after == clean, "Final after Shaded is a clean Final");
 }
 
-/// A model in a collapsed precomp is lit by the parent's lights, exactly as if
-/// it sat in the parent.
 #[test]
 fn a_collapsed_model_takes_its_parents_light() {
     let Ok(mut r) = HeadlessRenderer::shared() else {

@@ -90,7 +90,6 @@ class TrackSpanBar extends StatelessWidget {
   /// analysis follows the source from its first frame and can only stop early.
   final int analysed;
 
-  /// Frames the clip has.
   final int total;
 
   const TrackSpanBar({
@@ -157,10 +156,7 @@ class TrackCorrectedDot extends StatelessWidget {
   }
 }
 
-/// The line under the Camera track's buttons.
 class CameraTrackDisplayFrb extends StatefulWidget {
-  /// The layer the effect sits on — what a press is fired against and what the
-  /// reading is asked about.
   final LayerReference layer;
 
   /// Something changed that the rest of the interface should re-read: a solve
@@ -199,8 +195,6 @@ class _CameraTrackDisplayFrbState extends State<CameraTrackDisplayFrb>
   @override
   VoidCallback get onChanged => widget.onChanged;
 
-  // A button was pressed: read once, which starts the sampling if the press
-  // started something.
   @override
   bool shouldResample(CameraTrackDisplayFrb old) =>
       old.pressed != widget.pressed;
@@ -234,8 +228,6 @@ class _CameraTrackDisplayFrbState extends State<CameraTrackDisplayFrb>
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Above the line, because it is the thing the line is about: there
-          // is nothing to say about a span until there is a span.
           if (status != null && status.clipFrames > 0)
             TrackSpanBar(
               key: const ValueKey('fx-camera-track-span'),
@@ -244,8 +236,6 @@ class _CameraTrackDisplayFrbState extends State<CameraTrackDisplayFrb>
             ),
           Row(
             children: [
-              // Before the line, because it qualifies what the line says: the
-              // numbers are the track's, and the camera is not exactly on them.
               if (widget.corrected)
                 const TrackCorrectedDot(keyName: 'fx-camera-track-corrected'),
               Expanded(
@@ -269,7 +259,6 @@ class _CameraTrackDisplayFrbState extends State<CameraTrackDisplayFrb>
                     try {
                       addSolvedCamera(tracked: widget.layer);
                     } catch (_) {
-                      // The layer went away; nothing to add it beside.
                     }
                     widget.onChanged();
                   },
@@ -305,8 +294,6 @@ class CameraLinkBadge extends StatefulWidget {
   final int playheadFrame;
   final VoidCallback onChanged;
 
-  /// This camera's correction lane holds something — from the read
-  /// model, so it moves with the document rather than with the playhead.
   final bool corrected;
 
   const CameraLinkBadge({
@@ -363,9 +350,6 @@ class _CameraLinkBadgeState extends State<CameraLinkBadge> {
     final (text, colour) = switch (link.state) {
       BridgeLinkState.derived => (l10n.trackLinkFollowing, t.textMuted),
       BridgeLinkState.held => (l10n.trackLinkHolding, t.textMuted),
-      // Not an alarm, and not red: the camera is still drawing, on the numbers
-      // it had when the link was made. It is a state the user has to be told
-      // about, which is what the accent is for.
       BridgeLinkState.unresolved => (l10n.trackLinkLost, t.accent),
       BridgeLinkState.unlinked => ('', t.textMuted),
     };
@@ -386,8 +370,6 @@ class _CameraLinkBadgeState extends State<CameraLinkBadge> {
         ),
         if (widget.corrected) ...[
           const TrackCorrectedDot(keyName: 'tf-camera-link-corrected'),
-          // Only offered when there is something to take back, so the heading
-          // does not carry a command that would refuse.
           fxTextAction(
             context,
             label: l10n.trackClearCorrections,
@@ -397,8 +379,6 @@ class _CameraLinkBadgeState extends State<CameraLinkBadge> {
               try {
                 clearCameraCorrections(camera: widget.camera);
               } catch (_) {
-                // Cleared under us, or the layer went away. The dot goes with
-                // the next read either way.
               }
               _read();
               widget.onChanged();
@@ -415,8 +395,6 @@ class _CameraLinkBadgeState extends State<CameraLinkBadge> {
             try {
               convertCameraToKeyframes(camera: widget.camera);
             } catch (_) {
-              // No solve to bake — the link resolves nowhere. The badge
-              // already says so.
             }
             _read();
             widget.onChanged();

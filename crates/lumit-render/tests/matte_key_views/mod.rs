@@ -1,9 +1,5 @@
-//! The Matte key's view sockets in a node graph.
-
 use super::*;
 
-/// The plate read into a Matte key with its View dropdown on `dropdown`, and
-/// `rest` wiring the key's sockets on to the Output.
 fn keyed_graph(
     dropdown: u32,
     rest: impl FnOnce(Uuid, Uuid, &mut Vec<GraphNode>, &mut Vec<GraphEdge>),
@@ -55,7 +51,6 @@ fn a_view_socket_draws_the_view_it_is_named_for() {
         "the Screen matte socket is the Screen matte view: {socket:?} against {matte:?}"
     );
 
-    // Both wired at once, into a Switch that shows one or the other.
     let both = |index: f64| {
         keyed_graph(FINAL, move |key, out, nodes, edges| {
             let switch = GraphNode::Fx(effect("switch", &[("index", index)]));

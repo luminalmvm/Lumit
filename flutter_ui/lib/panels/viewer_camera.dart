@@ -434,8 +434,6 @@ CameraPose? framePoints(
   final halfH = size.height * 0.45;
   double dot((double, double, double) u, (double, double, double) v) =>
       u.$1 * v.$1 + u.$2 * v.$2 + u.$3 * v.$3;
-  // How far back from the middle the eye has to stand for each point to land
-  // inside the frame, and in front of the eye.
   var reach = 0.0;
   for (final p in points) {
     final r = (p.$1 - c.$1, p.$2 - c.$2, p.$3 - c.$3);
@@ -584,7 +582,6 @@ bool cameraFromView(LumitState app, LumitUiState ui) {
       ]);
     });
   } catch (_) {
-    // A comp that has gone.
     return false;
   }
   app.notifyDocumentChanged();
@@ -623,7 +620,6 @@ bool cameraToView(LumitState app, LumitUiState ui) {
   try {
     rate = comp.fps();
   } catch (_) {
-    // A comp that has gone.
     return false;
   }
   final camera = activeCameraAt(ui, rate <= 0 ? 0.0 : frame / rate);
@@ -668,7 +664,6 @@ bool cameraToView(LumitState app, LumitUiState ui) {
       );
     });
   } catch (_) {
-    // A comp that has gone.
     return false;
   }
   app.notifyDocumentChanged();
@@ -717,7 +712,6 @@ final Map<PhysicalKeyboardKey, (double, double, double)> _flyMoves = {
   PhysicalKeyboardKey.keyQ: (0, -1, 0),
 };
 
-/// Whether [key] is one a flight moves by.
 bool isFlyKey(PhysicalKeyboardKey key) => _flyMoves.containsKey(key);
 
 /// A view's pose as the tools work in it: one-node, and never aimed.
@@ -727,7 +721,6 @@ CameraPose poseOfView(BridgeCameraPose view) => CameraPose(
       zoom: view.zoom,
     );
 
-/// The same pose on the way back to the engine.
 BridgeCameraPose viewOfPose(CameraPose pose) => BridgeCameraPose(
       zoom: pose.zoom,
       x: pose.position.$1,
@@ -890,7 +883,6 @@ bool writeCameraPose(
           BridgeTransformProp.poiX => own.poiX,
           BridgeTransformProp.poiY => own.poiY,
           BridgeTransformProp.poiZ => own.poiZ,
-          // Nothing else is a camera's placement, so nothing else is asked.
           _ => 0,
         };
     writeTransforms(layer, tf,
@@ -906,7 +898,6 @@ bool writeCameraPose(
   }
 }
 
-/// The camera tools over the picture.
 class ViewerCameraLayer extends StatefulWidget {
   /// Whether a camera tool is armed. Otherwise only Alt moves the camera,
   /// and in a 3D viewport the mouse's own buttons.
@@ -925,10 +916,8 @@ class ViewerCameraLayer extends StatefulWidget {
   final LumitState state;
   final LumitUiState uiState;
 
-  /// Where the picture sits on screen, for the pivot mark and the drag's scale.
   final Rect fitted;
 
-  /// The composition's own size, for the same two.
   final Size compSize;
 
   /// Every layer's box, asked for when an orbit needs what is under the
@@ -1020,12 +1009,9 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
   /// a viewport's own buttons. It turns round what is under the pointer.
   bool _navigating = false;
 
-  /// The buttons the last press held, which say what a navigation is.
   int _buttons = 0;
   Offset _pressAt = Offset.zero;
 
-  /// While the right button is down in a viewport: the fly keys held, where
-  /// the flight has got to, how fast it goes, and the clock that moves it.
   bool _flyArmed = false;
   final Set<PhysicalKeyboardKey> _flyKeys = {};
   CameraPose? _flyPose;
@@ -1050,10 +1036,8 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
   /// step to take back.
   bool _wrote = false;
 
-  /// Escape takes the drag back, putting the camera or the view where it was.
   final DragEscape _escape = DragEscape();
 
-  /// What puts a view back as the drag found it, for Escape.
   VoidCallback? _revertView;
 
   /// Whether an undo group is open, so a whole drag, or a run of wheel
@@ -1081,7 +1065,6 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
   Offset _dollyAt = Offset.zero;
   double _framed = 0;
 
-  /// The last point a navigation turned round that was under the pointer.
   (double, double, double)? _lastPivot;
 
   /// The orbit's pivot while no drag runs, held against what moves it so a
@@ -1095,7 +1078,6 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
       widget.state.project?.beginUndoGroup();
       _grouped = true;
     } catch (_) {
-      // No project, so no history to keep tidy.
     }
   }
 
@@ -1115,7 +1097,6 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
     try {
       widget.state.project?.endUndoGroup();
     } catch (_) {
-      // The project closed mid-drag.
     }
   }
 
@@ -1147,7 +1128,6 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
     if (event is PointerDownEvent) _closeUndoStep();
   }
 
-  /// Which move the unified tool was given by the button that started the drag.
   ToolMode _move = ToolMode.cameraOrbit;
 
   /// A custom view is a message to the engine per movement, so it goes out at
@@ -1231,7 +1211,6 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
     return (c.$1 - e.$1) * f.$1 + (c.$2 - e.$2) * f.$2 + (c.$3 - e.$3) * f.$3;
   }
 
-  /// [p]'s depth in front of [pose]'s eye, over its zoom.
   static double _depthOf(CameraPose pose, (double, double, double) p) {
     final f = pose.axes.forward;
     final e = pose.position;
@@ -1276,7 +1255,6 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
       try {
         evaluated = entry.layer.cameraAimAt(frame: frame);
       } catch (_) {
-        // The layer went away between the model and the read.
       }
       if (evaluated == null) return null;
       final pose = evaluated.pose;
@@ -1386,7 +1364,6 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
                 onWireframe: () => ui.toggleLines(widget.viewId),
               ),
             ),
-          // How fast a flight goes, for a moment after the wheel sets it.
           if (speed != null)
             Positioned(
               left: speed.$2.dx + 16,
@@ -1403,7 +1380,6 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
     );
   }
 
-  /// The camera tools' own layer, while one is in hand.
   Widget _tools() {
     final unified = widget.tool == ToolMode.cameraUnified;
     final stack = Stack(
@@ -1439,7 +1415,6 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
       // camera tool is armed, so nothing underneath takes the drag instead.
       child: Listener(
         onPointerSignal: _wheel,
-        // A trackpad's two-finger push dollies as the wheel does.
         onPointerPanZoomUpdate: (e) =>
             _dollyBy(e.localPosition, -e.panDelta.dy),
         child: unified
@@ -1527,7 +1502,6 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
         ),
       );
 
-  /// This view's own record, for what a viewport keeps of it.
   ViewerSurface? get _surface {
     for (final view in widget.uiState.views.views) {
       if (view.engineId == widget.viewId) return view;
@@ -1567,8 +1541,6 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
   bool _altClaimed = false;
   bool _placeClaimed = false;
 
-  /// Where the pointer last rested over the picture, for Place on surface
-  /// from the menu.
   Offset? _hover;
 
   /// Which presses move the camera with no tool: any button with Alt where
@@ -1650,7 +1622,6 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
           height: widget.compSize.height,
         ).zoom;
       } catch (_) {
-        // A comp that has gone.
         return;
       }
     }
@@ -1662,7 +1633,6 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
     );
   }
 
-  /// The button has come up, or the drag was taken away.
   void _release() {
     if (_flyArmed) {
       _flyArmed = false;
@@ -1670,7 +1640,6 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
       HardwareKeyboard.instance.removeHandler(_flyKey);
     }
     if (_navigating && _start != null) _end();
-    // A press that never became a drag lets go of the pointer it held.
     if (_locked && _start == null) {
       thawCursor();
       _locked = false;
@@ -1767,7 +1736,6 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
     _write(preview: true);
   }
 
-  /// The flight is over, and the keys go back to everything else.
   void _landFlight() {
     if (_flyArmed) {
       _flyArmed = false;
@@ -1782,8 +1750,6 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
     widget.uiState.cameraFlying = false;
   }
 
-  /// The pace a flight was last given and where the pointer was, shown for a
-  /// moment after the wheel sets it.
   (double, Offset)? _speedShown;
   Timer? _speedFade;
 
@@ -1815,7 +1781,6 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
           width: widget.compSize.width,
           height: widget.compSize.height);
     } catch (_) {
-      // A comp that has gone.
       return;
     }
     _stopEase();
@@ -2140,7 +2105,6 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
         }
       });
     } catch (_) {
-      // A comp or a layer that has gone.
       return;
     }
     widget.onChanged();
@@ -2216,7 +2180,6 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
             : pointUnder(pose, _toPicture(at), widget.compSize, fallback));
   }
 
-  /// [pose] after a dolly of [travel] toward what [_aimAt] found.
   CameraPose _dollied(CameraPose pose, double travel) => _flat
       ? zoomView(pose, travel, at: _dollyAt, depth: _framed)
       : dollyCamera(pose, travel, toward: _dollyToward);
@@ -2275,7 +2238,6 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
   /// measured from, and that first movement would repeat on every event.
   void _hold() => _locked = freezeCursor();
 
-  /// A drag turned the way Settings has the orbit go.
   Offset _orbitWay(Offset d) {
     final s = widget.uiState.workspace.interface;
     return Offset(s.invertOrbitAcross ? -d.dx : d.dx,
@@ -2296,7 +2258,6 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
       if (moved == Offset.zero) return;
       restoreFrozenCursor();
     }
-    // In flight the mouse looks about from where the eye is.
     final flying = _flyPose;
     setState(() {
       if (flying != null) {
@@ -2315,7 +2276,6 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
         (_delta != Offset.zero || _flyPose != null)) {
       _throttle.cancel();
       _write(preview: false);
-      // A viewport keeps where it was left with the session.
       if (_actingView && widget.viewport) widget.uiState.rememberSession();
     }
     _landFlight();
@@ -2350,13 +2310,10 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
     try {
       widget.state.project?.undo();
     } catch (_) {
-      // The project closed mid-drag.
     }
     widget.onChanged();
   }
 
-  /// Which move the drag is: the armed tool's, or the button's under the
-  /// unified tool and with no tool at all.
   ToolMode get _activeMove =>
       widget.active && widget.tool != ToolMode.cameraUnified
           ? widget.tool
@@ -2455,7 +2412,6 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
         take(box, box.map.ax, box.map.ay);
         continue;
       }
-      // A model by the eight corners of its box.
       final c = box.cube;
       for (var i = 0; c != null && i + 2 < c.length; i += 3) {
         final p = box.map.inParent(c[i], c[i + 1], c[i + 2]);
@@ -2508,7 +2464,6 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
     switch (command) {
       case ViewerCameraCommand.lookAtSelected ||
             ViewerCameraCommand.lookAtAll:
-        // With nothing selected, everything is the selection.
         final selected = widget.uiState.selectedLayerIds;
         final boxes = widget.boxes().where((b) =>
             command == ViewerCameraCommand.lookAtAll ||
@@ -2527,11 +2482,9 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
                   ?.pose;
               if (eye != null) points.add((eye.x, eye.y, eye.z));
             } catch (_) {
-              // The layer went away between the model and the read.
             }
           }
         }
-        // A fixed view magnifies to fit, so it stays flat.
         to = _flat
             ? frameFlat(target.pose, points, widget.compSize,
                 _framedDepth(target.pose))
@@ -2629,7 +2582,6 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
     return _idlePivot;
   }
 
-  /// The pose the drag so far implies.
   CameraPose? _moved() {
     final start = _start;
     if (start == null) return null;
@@ -2722,8 +2674,6 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
   }
 }
 
-/// Takes the pointer from everything under it while [claims] says so, and
-/// otherwise lets it through.
 class _NavigationHit extends SingleChildRenderObjectWidget {
   final bool Function(Offset at) claims;
 
@@ -2748,8 +2698,6 @@ class _RenderNavigationHit extends RenderProxyBox {
   bool hitTestSelf(Offset position) => claims(position);
 }
 
-/// The camera gizmo: the point the camera is turning around, and - while
-/// orbiting - the circle it would swing round.
 class _CameraGizmoPainter extends CustomPainter {
   final Offset? pivot;
   final bool orbiting;
@@ -2777,8 +2725,6 @@ class _CameraGizmoPainter extends CustomPainter {
           at - const Offset(0, reach), at + const Offset(0, reach), paint);
     });
     if (!orbiting) return;
-    // The orbit's own circle, faint: it says which point the swing goes round
-    // without drawing attention away from the picture.
     canvas.drawCircle(
       at,
       reach * 3,

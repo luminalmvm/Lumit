@@ -33,11 +33,11 @@ import 'package:lumit_flutter/src/rust/api/import.dart' show cancelImport;
 import 'package:lumit_flutter/src/rust/api/shell.dart';
 
 import '../l10n/strings.dart';
+import '../state/usage_data.dart' show UsageData;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'dialog_frame.dart';
 
-/// What the user chose.
 enum RecoveryChoice { journal, autosave, discard }
 
 /// The frame this dialogue takes.
@@ -112,11 +112,13 @@ Future<RecoveryChoice?> showRecoveryDialogFrb({
             crashed: crashed);
       }
       state.sharingLetGo();
+      UsageData.note('stability', 'recovered');
     case RecoveryChoice.autosave:
       // Before the autosave opens: the edits are the saved file's, and the
       // project in hand stops being that file the moment another opens.
       if (crashed) state.project?.discardJournal();
       await state.openProject(autosaves.first.path, recover: false);
+      UsageData.note('stability', 'recovered');
     case RecoveryChoice.discard:
       if (crashed) state.project?.discardJournal();
   }
@@ -127,7 +129,6 @@ Future<RecoveryChoice?> showRecoveryDialogFrb({
 class _RecoveryDialog extends StatelessWidget {
   final ValueChanged<RecoveryChoice?> onChoose;
 
-  /// Whether there is a timed copy to offer.
   final bool hasAutosave;
 
   const _RecoveryDialog({required this.onChoose, this.hasAutosave = true});
@@ -159,8 +160,6 @@ class _RecoveryDialog extends StatelessWidget {
             if (hasAutosave)
               _button(t, 'recover-autosave', l10n.recoveryRestoreAutosave,
                   l10n.tipRecoverAutosave, RecoveryChoice.autosave),
-            // The window's default action: focused on open, so Enter
-            // restores everything — the answer that loses nothing.
             _button(t, 'recover-journal', l10n.recoveryRestoreAll,
                 l10n.tipRecoverAll, RecoveryChoice.journal,
                 primary: true),
@@ -170,8 +169,6 @@ class _RecoveryDialog extends StatelessWidget {
     );
   }
 
-  /// One way to answer, with what it actually does on hover: the labels say
-  /// what happens, the tooltips say what it costs.
   Widget _button(
     LumitTheme t,
     String key,

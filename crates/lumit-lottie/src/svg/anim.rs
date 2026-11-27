@@ -28,7 +28,6 @@ use crate::keys::Track;
 /// a layer's.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Clock {
-    /// The owner's seconds are the root's less this.
     Shift(f64),
     /// The owner's seconds at each frame of the grid, for a clock a Retime
     /// bends, which no shift describes.
@@ -36,7 +35,6 @@ pub enum Clock {
 }
 
 impl Clock {
-    /// The owner's seconds at grid frame `i`, which falls at `root` seconds.
     #[must_use]
     pub fn at(&self, i: usize, root: f64) -> f64 {
         match self {
@@ -56,10 +54,8 @@ impl Clock {
     }
 }
 
-/// How one span eases from its first value to its last.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Ease {
-    /// The first value until the span ends.
     Hold,
     /// A unit-square cubic `[x1, y1, x2, y2]` per number, or one shared by
     /// every number.
@@ -76,7 +72,6 @@ pub struct Seg {
     pub ease: Ease,
 }
 
-/// The straight line, as a unit-square cubic.
 pub const LINEAR: [f64; 4] = [0.0, 0.0, 1.0, 1.0];
 
 impl Seg {
@@ -87,7 +82,6 @@ impl Seg {
         }
     }
 
-    /// The value at `t`, inside the span.
     fn at(&self, t: f64) -> Vec<f64> {
         if matches!(self.ease, Ease::Hold) || self.t1 <= self.t0 {
             return if t < self.t1 {
@@ -106,7 +100,6 @@ impl Seg {
     }
 }
 
-/// The unit-square cubic `sp` read at `s`, the way a player reads it.
 fn eased(sp: [f64; 4], s: f64) -> f64 {
     CubicSpan::from_points([0.0, sp[0], sp[2], 1.0], [0.0, sp[1], sp[3], 1.0]).value_at(s)
 }
@@ -161,14 +154,12 @@ impl Value {
         Value::Moving(segs)
     }
 
-    /// Samples taken at `times`, as the fewest straight keys within `tol`.
     #[must_use]
     pub fn sampled(times: &[f64], samples: Vec<Vec<f64>>, tol: &[f64]) -> Value {
         let pairs: Vec<(f64, Vec<f64>)> = times.iter().copied().zip(samples).collect();
         Value::from_track(&fit::linear(&pairs, tol))
     }
 
-    /// The value at root second `t`.
     #[must_use]
     pub fn at(&self, t: f64) -> Vec<f64> {
         match self {
@@ -209,7 +200,6 @@ impl Value {
         }
     }
 
-    /// True for a value that never moves.
     #[must_use]
     pub fn is_still(&self) -> bool {
         matches!(self, Value::Still(_))
@@ -243,7 +233,6 @@ pub fn smil(value: &Value, span: &Span, tol: &[f64]) -> Option<Smil> {
         return None;
     };
     let (start, end) = (span.start, span.end);
-    // The spans inside the file's span, those that cross its ends cut there.
     let mut inside: Vec<Seg> = Vec::with_capacity(segs.len() + 2);
     for seg in segs {
         if seg.t1 <= start || seg.t0 >= end {
@@ -291,7 +280,6 @@ pub fn smil(value: &Value, span: &Span, tol: &[f64]) -> Option<Smil> {
             (Some(t), Some(v)) => (*t, v.clone()),
             _ => continue,
         };
-        // A step into this span: a hold ending, or the padding before it.
         if seg.t0 > last_t {
             push(&mut out, seg.t0, last_v.clone(), LINEAR);
         }
@@ -301,7 +289,6 @@ pub fn smil(value: &Value, span: &Span, tol: &[f64]) -> Option<Smil> {
         match &seg.ease {
             Ease::Hold => {
                 push(&mut out, seg.t1, seg.v0.clone(), LINEAR);
-                // The step at its end, which a last span has no next one for.
                 if differs(&seg.v1, &seg.v0) {
                     push(&mut out, seg.t1, seg.v1.clone(), LINEAR);
                 }
@@ -320,7 +307,6 @@ pub fn smil(value: &Value, span: &Span, tol: &[f64]) -> Option<Smil> {
             },
         }
     }
-    // Held to the end.
     if let (Some(t), Some(v)) = (out.times.last().copied(), out.values.last().cloned()) {
         if t < end {
             push(&mut out, end, v, LINEAR);
@@ -337,8 +323,6 @@ fn differs(a: &[f64], b: &[f64]) -> bool {
             .any(|(x, y)| (x - y).abs() > 1e-9 * (1.0 + x.abs() + y.abs()))
 }
 
-/// `seg` from `a` to `b` as straight spans through its values at the grid's
-/// frames, thinned to `tol`.
 fn straightened(seg: &Seg, a: f64, b: f64, grid: &[f64], tol: &[f64]) -> Vec<Seg> {
     let mut times = vec![a];
     times.extend(grid.iter().copied().filter(|t| *t > a && *t < b));
@@ -356,7 +340,6 @@ fn straightened(seg: &Seg, a: f64, b: f64, grid: &[f64], tol: &[f64]) -> Vec<Seg
     }
 }
 
-/// One SMIL piece: its end time, its end value and its keySpline.
 type Piece = (f64, Vec<f64>, [f64; 4]);
 
 /// One eased span as SMIL pieces, each `(end time, end value, keySpline)`
@@ -431,8 +414,6 @@ pub fn fitted(sp: [f64; 4]) -> Option<Vec<(f64, f64, [f64; 4])>> {
 /// span, far finer than a frame of any span worth easing.
 const MAX_DEPTH: u32 = 12;
 
-/// `piece` as pieces whose own handles fit their own square, halving it until
-/// they do.
 fn settle(piece: &CubicSpan, depth: u32, out: &mut Vec<(f64, f64, [f64; 4])>) -> Option<()> {
     let (x, y) = piece.control_points();
     let (dx, dy) = (x[3] - x[0], y[3] - y[0]);
@@ -469,8 +450,6 @@ fn in_range(sp: &[f64; 4]) -> bool {
     sp.iter().all(|v| (-1e-9..=1.0 + 1e-9).contains(v))
 }
 
-/// Where the value of the unit-square ease `sp` turns round, as parameters,
-/// in order.
 fn turning_points(sp: [f64; 4]) -> Vec<f64> {
     // y'(u)/3 = a·u² + b·u + c over the handle deltas.
     let (p0, p1, p2) = (sp[1], sp[3] - sp[1], 1.0 - sp[3]);
@@ -493,7 +472,6 @@ fn turning_points(sp: [f64; 4]) -> Vec<f64> {
     roots
 }
 
-/// A number written to `decimals` places, without trailing zeros.
 #[must_use]
 pub fn num(v: f64, decimals: u32) -> String {
     let v = if v.is_finite() { v } else { 0.0 };
@@ -512,7 +490,6 @@ pub fn num(v: f64, decimals: u32) -> String {
     s
 }
 
-/// How the animation repeats and how long it runs.
 fn timing(span: &Span) -> String {
     let dur = num(span.end - span.start, 6);
     if span.looping {
@@ -543,8 +520,6 @@ fn key_times(times: &[f64], span: &Span) -> String {
         .join(";")
 }
 
-/// An `<animate>` (or, with `kind`, an `<animateTransform>` of that type) of
-/// `attr` through `smil`, each value written by `fmt`.
 pub fn write(
     out: &mut String,
     attr: &str,
@@ -623,10 +598,6 @@ mod tests {
     use lumit_core::anim::{evaluate, Keyframe, SideInterp};
     use lumit_core::time::Rational;
 
-    /// The one promise SMIL forces on us: an ease that overshoots its keys
-    /// is written with every keySpline number inside 0..1, and the file,
-    /// played the way SMIL plays it (one cubic per gap of keyTimes), still
-    /// shows the value Lumit evaluates.
     #[test]
     fn an_overshooting_ease_fits_smil_and_plays_back() {
         let key = |t: i64, v: f64, inn: SideInterp, out: SideInterp| Keyframe {
@@ -635,8 +606,6 @@ mod tests {
             interp_in: inn,
             interp_out: out,
         };
-        // Leaves fast and arrives fast in the wrong direction: a bounce past
-        // both keys, the shape a back ease makes.
         let keys = vec![
             key(
                 0,
@@ -672,7 +641,6 @@ mod tests {
         for sp in &s.splines {
             assert!(sp.iter().all(|v| (0.0..=1.0).contains(v)), "{sp:?}");
         }
-        // SMIL's own reading: find the gap, read its spline, mix the values.
         let play = |t: f64| -> f64 {
             let i = s
                 .times
@@ -693,7 +661,6 @@ mod tests {
             worst = worst.max((play(t) - want).abs());
         }
         assert!(worst < 1e-6, "off by {worst}");
-        // And the overshoot really is there to be kept.
         let peak = (0..=100)
             .map(|k| evaluate(&keys, f64::from(k) / 100.0).unwrap())
             .fold(f64::MIN, f64::max);

@@ -60,8 +60,6 @@ fn distance(a: [f32; 3], b: [f32; 3]) -> f32 {
     (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt()
 }
 
-/// The samples cut down to what a Shape row holds: the closest two merged,
-/// weighted by how many each stands for, until they fit.
 fn merged(mut s: Vec<([f32; 3], f32)>) -> Vec<[f32; 3]> {
     while s.len() > SHAPE_MAX_POINTS {
         let mut best = (f32::MAX, 0, 1);
@@ -152,8 +150,6 @@ mod tests {
     use super::*;
     use crate::grade_solve::test_support::{declared, with_rows};
 
-    /// A stroke over an orange band keys the band and not the blue beside
-    /// it, and a drop stroke over the band's dark end takes that end out.
     #[test]
     fn a_stroke_over_a_band_keys_that_band() {
         let (w, h) = (64u32, 32u32);

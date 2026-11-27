@@ -15,10 +15,8 @@ use uuid::Uuid;
 /// when it was added or removed. Project-wide settings are keyed on the nil id.
 pub type Key = (Uuid, String);
 
-/// The path segment that stands for the order of a list's entries.
 const ORDER: &str = "#order";
 
-/// Whether the part `outer` names holds the part `inner` names.
 fn holds(outer: &str, inner: &str) -> bool {
     outer.is_empty()
         || inner
@@ -26,14 +24,11 @@ fn holds(outer: &str, inner: &str) -> bool {
             .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
 }
 
-/// Whether two keys name the same part of the document, or one holds the
-/// other.
 #[must_use]
 pub fn overlaps(a: &Key, b: &Key) -> bool {
     a.0 == b.0 && (holds(&a.1, &b.1) || holds(&b.1, &a.1))
 }
 
-/// Whether any key of `a` overlaps any key of `b`.
 #[must_use]
 pub fn any_overlap<'a>(
     a: impl IntoIterator<Item = &'a Key>,
@@ -231,7 +226,6 @@ fn variants(a: &Map<String, Value>, b: &Map<String, Value>) -> bool {
     a.len() == 1 && b.len() == 1 && a.keys().ne(b.keys())
 }
 
-/// Whether the ids both lists hold come in a different order in each.
 fn reordered<I: Copy + Eq + Hash>(a: &[I], b: &[I]) -> bool {
     let in_a: HashSet<I> = a.iter().copied().collect();
     let in_b: HashSet<I> = b.iter().copied().collect();
@@ -240,7 +234,6 @@ fn reordered<I: Copy + Eq + Hash>(a: &[I], b: &[I]) -> bool {
     kept_a.ne(kept_b)
 }
 
-/// Run `f` with `segment` on the end of `path`. An empty one is `path` itself.
 fn within(path: &mut String, segment: &str, f: impl FnOnce(&mut String)) {
     let len = path.len();
     if len > 0 && !segment.is_empty() {
@@ -258,7 +251,6 @@ fn walk(id: Uuid, a: &Value, b: &Value, path: &mut String, keys: &mut BTreeSet<K
     if a == b {
         return;
     }
-    // The part at `segment` differs as a whole when either side lacks it.
     let mut part = |path: &mut String, segment: &str, x: Option<&Value>, y: Option<&Value>| {
         within(path, segment, |p| match (x, y) {
             (Some(x), Some(y)) => walk(id, x, y, p, keys),
@@ -364,7 +356,6 @@ fn merge_lists<I: Copy + Eq + Hash, V: Clone>(
     };
     let mut merged: Vec<(I, V)> = Vec::with_capacity(lead.len());
     for id in lead {
-        // In both to start with, and the other side has taken it out.
         if w.contains_key(id) && !others.contains_key(id) {
             continue;
         }
@@ -373,7 +364,6 @@ fn merge_lists<I: Copy + Eq + Hash, V: Clone>(
             merged.push((*id, entry));
         }
     }
-    // What the other side added goes after whatever it followed there.
     for (at, (id, entry)) in other.iter().zip(added).enumerate() {
         if w.contains_key(id) || leads.contains_key(id) {
             continue;
@@ -410,7 +400,6 @@ fn merged_children(was: &Op, mine: &Op, now: &Op) -> Option<Option<Op>> {
     } else if t == w || t == m {
         return Some(None);
     } else {
-        // An id that both still hold is the same on both sides.
         let entry = |w: Option<&Uuid>, m: Option<&Uuid>, t: Option<&Uuid>| match m == w {
             true => t.copied(),
             false => m.copied(),
@@ -540,7 +529,6 @@ pub fn land(doc: &mut Document, op: &Op, was: Option<&Op>) -> Result<(Op, Op), O
     let Some(merged) = merged else {
         return Ok((applied, now));
     };
-    // Put back what was here, and apply the cut-down edit in its place.
     if apply(doc, &now).is_err() {
         return Ok((applied, now));
     }
@@ -566,7 +554,6 @@ pub struct Conflict {
     pub ops: Vec<(Op, Op)>,
 }
 
-/// The outcome of [`plan_merge`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct Merge {
     /// Their document with every clean edit of mine applied.

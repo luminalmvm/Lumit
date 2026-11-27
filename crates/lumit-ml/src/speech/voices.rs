@@ -26,7 +26,6 @@ use crate::{
     session::{Feed, Place, Prefer, Session},
 };
 
-/// The speaker model, open.
 #[derive(Debug)]
 pub struct Voices {
     session: Session,
@@ -171,7 +170,6 @@ pub fn group(prints: &[&[f32]], count: Option<usize>, threshold: f32) -> Vec<u32
         .collect()
 }
 
-/// [`group`], with every fingerprint measured against every other.
 fn linked(prints: &[&[f32]], count: Option<usize>, threshold: f32) -> Vec<u32> {
     let n = prints.len();
     if n == 0 {

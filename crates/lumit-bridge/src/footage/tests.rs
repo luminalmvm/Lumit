@@ -12,10 +12,6 @@ fn until(what: &str, done: impl Fn() -> bool) {
     }
 }
 
-/// A clip one person has and the other has not is read by the other
-/// from a stand-in the first makes when asked: a file of the clip's own
-/// size with every one of its frames. Asked for the original, it is
-/// the file itself that arrives, and the stand-in gives way to it.
 #[test]
 fn a_clip_missing_here_is_read_from_what_another_person_sends() {
     let dir = tempfile::tempdir().unwrap();
@@ -39,7 +35,6 @@ fn a_clip_missing_here_is_read_from_what_another_person_sends() {
     }
     encoder.finish().unwrap();
 
-    // The host has the clip in its project.
     let item = Uuid::now_v7();
     let value = json!({ "id": item, "name": "clip", "media": { "relative_path": "clip.mp4" } });
     let mut clip_item: FootageItem = serde_json::from_value(value).unwrap();
@@ -55,8 +50,6 @@ fn a_clip_missing_here_is_read_from_what_another_person_sends() {
     };
     hosted.commit(added).unwrap();
 
-    // Two machines in one process: each with a project, an end of the
-    // sharing, and a folder of its own for what it is sent.
     let quiet: lumit_share::Events = Arc::new(|_| {});
     let loopback = IpAddr::V4(Ipv4Addr::LOCALHOST);
     let host = lumit_share::host::host(
@@ -139,8 +132,6 @@ fn a_clip_missing_here_is_read_from_what_another_person_sends() {
     crate::api::share::stop(guest_project);
 }
 
-/// Two machines sharing a project that has a clip in a composition: the
-/// host has the clip and the guest has not.
 struct Rig {
     dir: tempfile::TempDir,
     hosted: Arc<DocumentStore>,
@@ -150,7 +141,6 @@ struct Rig {
     projects: (Uuid, Uuid),
     item: Uuid,
     comp: Uuid,
-    /// The exports the host has been asked to do.
     asked: Arc<Mutex<Vec<Uuid>>>,
 }
 
@@ -183,8 +173,6 @@ fn rig() -> Rig {
     }
     encoder.finish().unwrap();
 
-    // A project with the clip in a composition, made the way the
-    // interface makes one, and then its document on its own.
     let project = crate::api::state::LumitBridgeState::new_project(None).unwrap();
     let comp = project.new_composition("Scene".into(), None).unwrap();
     let placed = project
@@ -202,7 +190,6 @@ fn rig() -> Rig {
     let hosted = Arc::new(DocumentStore::new(document));
     let loopback = IpAddr::V4(Ipv4Addr::LOCALHOST);
     let projects = (Uuid::now_v7(), Uuid::now_v7());
-    // A note reaches a machine's carrier as the bridge hands it on.
     let notes_for = |project: Uuid| -> lumit_share::Events {
         Arc::new(move |event| {
             if let lumit_share::Event::Note { from, body } = event {
@@ -271,16 +258,11 @@ fn rig() -> Rig {
     }
 }
 
-/// An export on a machine without the clip fetches the frames it reads
-/// and is queued from them. Asking the other machine to do it instead
-/// reaches that machine as a question, and its no comes back.
 #[test]
 fn an_export_fetches_its_frames_or_is_asked_of_whoever_has_them() {
     let _queue = crate::api::tests::export_queue_test();
     let rig = rig();
     let (item, comp) = (rig.item, rig.comp);
-    // The clip is in a composition, so the guest asks for a stand-in of
-    // it without being told to.
     until("a stand-in arrives by itself", || {
         let doc = rig.joined.snapshot();
         matches!(here(footage(&doc, item).unwrap()), Here::StandIn(_))
@@ -313,14 +295,11 @@ fn an_export_fetches_its_frames_or_is_asked_of_whoever_has_them() {
         })
         .map(|file| file.file_name().to_string_lossy().into_owned())
         .collect();
-    // The names say what came instead when it fails, which only CI's
-    // Macs have seen.
     assert!(
         sent.iter().any(|name| name.starts_with("parts-")),
         "the frames the export reads came as a file of their own: {sent:?}"
     );
 
-    // Asked of the host instead, the host is asked, and says no.
     rig.guests.ask_export(0, comp, &spec, &out);
     until("the host is asked", || {
         !rig.asked.lock().unwrap().is_empty()
@@ -347,7 +326,6 @@ fn an_export_asked_of_another_machine_comes_back() {
     let _queue = crate::api::tests::export_queue_test();
     let rig = rig();
     let out = rig.dir.path().join("out.mp4");
-    // A dozen frames: it is the journey that is under test.
     let spec = BridgeExportSpec {
         range_start_frame: 0,
         range_end_frame: 12,

@@ -8,7 +8,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `card_memory`, `free_memory_bytes`, `low_memory_floor`, `meminfo_bytes`, `memory_low`, `short_of_memory`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Card`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `eq`, `fmt`, `fmt`
 
 /// What this process is actually holding, in bytes, or 0 where it cannot be
 /// asked — the number the operating system's own monitor shows.
@@ -52,6 +52,8 @@ void setWindowInFront({required bool front}) =>
 /// profile at `low-power`. macOS: running on the battery, or Low Power Mode
 /// on. False elsewhere and where it cannot be asked.
 bool powerSaving() => BridgeLib.instance.api.crateApiSystemPowerSaving();
+
+BridgeGpuKind gpuKind() => BridgeLib.instance.api.crateApiSystemGpuKind();
 
 /// The graphics card's memory in bytes, or 0 where it cannot be asked.
 ///
@@ -99,3 +101,24 @@ void thawCursor() => BridgeLib.instance.api.crateApiSystemThawCursor();
 /// card is opened when it is first needed.
 Future<bool> prepareGraphics() =>
     BridgeLib.instance.api.crateApiSystemPrepareGraphics();
+
+class BridgeGpuKind {
+  final int vendor;
+  final String kind;
+
+  const BridgeGpuKind({
+    required this.vendor,
+    required this.kind,
+  });
+
+  @override
+  int get hashCode => vendor.hashCode ^ kind.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeGpuKind &&
+          runtimeType == other.runtimeType &&
+          vendor == other.vendor &&
+          kind == other.kind;
+}

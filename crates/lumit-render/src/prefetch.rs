@@ -45,8 +45,6 @@ const WAITING_PER_STREAM: usize = 16;
 /// of megabytes nobody will read. Past it a decode is dropped, as above.
 const FINISHED_WAITING: usize = 32;
 
-/// One finished decode, to be filed with
-/// [`crate::headless::HeadlessRenderer::preload_decoded`].
 pub struct Prefetched {
     pub item: Uuid,
     /// The file it was read from and how, so a frame that lands after the
@@ -59,8 +57,6 @@ pub struct Prefetched {
     pub decoded: lumit_media::decode::DecodedFrame,
 }
 
-/// One file being read ahead: the way to its thread, and when it is next
-/// expected to be wanted.
 struct Stream {
     tx: SyncSender<Vec<PrefetchWant>>,
     /// The frame count ([`Prefetcher::frame`]) this stream was last asked
@@ -112,7 +108,6 @@ impl Prefetcher {
         self.send(wants, frames_ahead);
     }
 
-    /// Everything decoded since the last drain.
     pub fn drain(&self) -> Vec<Prefetched> {
         let mut out = Vec::new();
         while let Ok(done) = self.done_rx.try_recv() {
@@ -121,18 +116,15 @@ impl Prefetcher {
         out
     }
 
-    /// The next finished decode, waiting up to `limit` for it.
     pub fn wait(&self, limit: std::time::Duration) -> Option<Prefetched> {
         self.done_rx.recv_timeout(limit).ok()
     }
 
-    /// How many files are open for reading ahead.
     #[must_use]
     pub fn open(&self) -> usize {
         self.streams.len()
     }
 
-    /// Hand each want to its file's stream, starting one where there is none.
     fn send(&mut self, wants: Vec<PrefetchWant>, frames_ahead: u64) {
         let wanted = self.frame + frames_ahead;
         // Grouped by file, in the order the files were first named, so one
@@ -268,9 +260,6 @@ mod tests {
         }
     }
 
-    /// Playing through more files than the cap closes the ones left behind,
-    /// and never the one opened ahead for a clip that has not started: that
-    /// is the next file playback needs, however long ago it was asked for.
     #[test]
     fn the_cap_closes_what_was_left_behind_and_keeps_what_is_coming() {
         let mut ahead = Prefetcher::default();
@@ -288,7 +277,6 @@ mod tests {
             "the next clip's file stayed"
         );
 
-        // One frame that reads more files than the cap keeps them all.
         let mut wide = Prefetcher::default();
         let frame: Vec<PrefetchWant> = (0..MAX_OPEN_DECODERS + 4)
             .map(|_| want(Uuid::now_v7()))

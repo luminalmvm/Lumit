@@ -61,7 +61,6 @@ fn comp(doc: &mut Document, fps: u32) -> Uuid {
     id
 }
 
-/// A layer on top of `comp` holding `kind`, from 0 to 30 s.
 fn layer(doc: &mut Document, comp: Uuid, kind: LayerKind, audio_only: bool) -> Uuid {
     let mut layer = crate::edits::base_layer(
         "Row".into(),
@@ -120,11 +119,8 @@ fn a_cut_says_the_words_its_heard_clips_play() {
     let item = footage(&mut doc);
     transcribe(&mut doc, item, "en", TALK);
     let c = comp(&mut doc, 25);
-    // The sound plays 0.5 s to 2 s of the file, from 10 s on a layer whose
-    // zero is 1 s into the comp.
     let sound = row(&mut doc, c, vec![clip(item, 500, 2000, 10_000)]);
     layer_mut(&mut doc, c, sound).start_offset = CompTime(ms(1000));
-    // Its picture is silent, so nothing is heard twice.
     let mut picture = clip(item, 500, 2000, 11_000);
     picture.audible = false;
     layer(
@@ -140,7 +136,6 @@ fn a_cut_says_the_words_its_heard_clips_play() {
         [(1, 11_000.0, 11_400.0), (2, 12_000.0, 12_400.0)]
     );
 
-    // The transcript heard the second stream, which this clip does not play.
     let mut on_two = (*doc.transcripts[&item]).clone();
     on_two.stream = 1;
     doc.transcripts.insert(item, Arc::new(on_two));
@@ -150,7 +145,6 @@ fn a_cut_says_the_words_its_heard_clips_play() {
     }
     assert_eq!(said(&doc, c).len(), 2);
 
-    // A soloed sound elsewhere leaves this layer unheard, and so does muting it.
     let solo = row(&mut doc, c, Vec::new());
     layer_mut(&mut doc, c, solo).switches.solo = true;
     assert!(said(&doc, c).is_empty());
@@ -159,7 +153,6 @@ fn a_cut_says_the_words_its_heard_clips_play() {
     assert!(said(&doc, c).is_empty());
 }
 
-/// A key on a clip's Retime map.
 fn key(time: i64, value: f64) -> Keyframe {
     Keyframe {
         time: ms(time),
@@ -169,9 +162,6 @@ fn key(time: i64, value: f64) -> Keyframe {
     }
 }
 
-/// **Retimed clips.** At one speed a word is said in proportion. Through a
-/// ramp it is found where the source reaches it going forwards, and a
-/// stretch played backwards or frozen says no words.
 #[test]
 fn retimed_clips_say_their_words_where_the_map_puts_them() {
     let mut doc = Document::new();
@@ -186,7 +176,6 @@ fn retimed_clips_say_their_words_where_the_map_puts_them() {
     assert_eq!(words.iter().map(|w| w.0).collect::<Vec<_>>(), [0, 1, 2]);
     assert!((words[1].1 - 250.0).abs() < 0.01 && (words[1].2 - 450.0).abs() < 0.01);
 
-    // Forwards to 1 s of source in the first half second, then back to 0.5 s.
     let mut ramp = clip(item, 0, 1000, 0);
     ramp.retime = Some(Property {
         animation: Animation::Keyframed(vec![key(0, 0.0), key(500, 1.0), key(1000, 0.5)]),
@@ -203,7 +192,6 @@ fn retimed_clips_say_their_words_where_the_map_puts_them() {
     );
     assert!((words[1].1 - 250.0).abs() < 1.0, "{words:?}");
 
-    // Played backwards: nothing said.
     ramp.retime = Some(Property {
         animation: Animation::Keyframed(vec![key(0, 1.0), key(1000, 0.0)]),
         extra: serde_json::Map::new(),
@@ -214,11 +202,6 @@ fn retimed_clips_say_their_words_where_the_map_puts_them() {
     assert!(said(&doc, c).is_empty());
 }
 
-/// **Nesting, Footage layers and mic bleed.** A clip that plays a
-/// composition says what that composition says, through its own trim. A
-/// Footage layer says its file's words from its own zero, held to its span.
-/// The same word picked up by two microphones at once is said once, by the
-/// one that heard it best.
 #[test]
 fn nested_comps_footage_layers_and_bleed() {
     let mut doc = Document::new();
@@ -244,8 +227,6 @@ fn nested_comps_footage_layers_and_bleed() {
     row(&mut doc, outer, vec![nested, solid]);
     assert_eq!(said(&doc, outer), [(2, 500.0, 900.0), (3, 1000.0, 1400.0)]);
 
-    // A second microphone on a Footage layer that starts 1 s in and stops at
-    // 2.2 s: it hears "friend" faintly, and a word of its own.
     let b = footage(&mut doc);
     transcribe(
         &mut doc,
@@ -262,8 +243,6 @@ fn nested_comps_footage_layers_and_bleed() {
     assert_eq!(items, [(a, 2), (b, 1), (a, 3)], "the faint copy went");
     assert_eq!(heard[1].end, ms(1200), "held to the layer's out point");
 
-    // A multicam clip says its own angle's words and no other's, and a clip
-    // of footage takes no notice of an angle left on it.
     let angles = comp(&mut doc, 25);
     let wide = row(&mut doc, angles, vec![clip(a, 0, 4000, 0)]);
     let close = row(&mut doc, angles, vec![clip(b, 0, 4000, 0)]);
@@ -322,7 +301,6 @@ fn tokens_tile_the_cut_and_mark_pauses_and_fillers() {
     let kinds: Vec<TokenKind> = tokens.iter().map(|t| t.kind).collect();
     use TokenKind::{Pause, Word};
     assert_eq!(kinds, [Word, Word, Word, Pause, Word, Word, Word, Word]);
-    // A lead of 150 ms either side, on the 40 ms grid.
     assert_eq!((tokens[3].start, tokens[3].end), (ms(1040), ms(1840)));
     let fillers: Vec<Option<Filler>> = tokens.iter().map(|t| t.filler).collect();
     assert_eq!(
@@ -339,8 +317,6 @@ fn tokens_tile_the_cut_and_mark_pauses_and_fillers() {
         ]
     );
 
-    // 100 ms kept either side of the silence, 900 ms to 2 s, and the cut
-    // inside it on whole frames.
     let cut = shorten_pauses(&tokens, ms(500), ms(200), FrameRate::new(25, 1).unwrap());
     assert_eq!(cut, [(ms(1000), ms(1880))]);
     assert_eq!(
@@ -348,23 +324,17 @@ fn tokens_tile_the_cut_and_mark_pauses_and_fillers() {
         [(ms(0), ms(80))]
     );
 
-    // On its own clock every silence is a pause, and nothing names a layer.
     let own = source_tokens(&doc, item, FrameRate::new(25, 1).unwrap(), &Look::default());
     assert_eq!(own.iter().filter(|t| t.kind == Pause).count(), 1);
     assert!(own.iter().all(|t| t.row.is_none()));
 }
 
-/// **What a cut took out.** After an extract the words that were in the
-/// middle come back as removed tokens at the edit point, the cut there falls
-/// on the edit point even when the word before ends right on it, and the
-/// word after it says an edit comes before it.
 #[test]
 fn an_extract_leaves_its_words_at_the_edit_point() {
     let mut doc = Document::new();
     let item = footage(&mut doc);
     transcribe(&mut doc, item, "en", PLAN);
     let c = comp(&mut doc, 25);
-    // The extract trims "um" to end on the edit point.
     let (a, b) = (clip(item, 0, 560, 0), clip(item, 1920, 4000, 560));
     let first = a.id;
     row(&mut doc, c, vec![a, b]);
@@ -391,8 +361,6 @@ fn an_extract_leaves_its_words_at_the_edit_point() {
     assert!(tokens[plan].edit_before);
 }
 
-/// Fillers in every language with a list: each one's first hesitation is
-/// one, and a phrase set off by a pause is one.
 #[test]
 fn every_language_has_its_fillers() {
     for language in [
@@ -423,9 +391,6 @@ fn every_language_has_its_fillers() {
     }
 }
 
-/// **A script finds its takes.** Names and directions are not lines, a line
-/// is found where enough of it is said, the better take comes first, and a
-/// line nobody said finds nothing.
 #[test]
 fn a_script_finds_each_line_and_its_takes() {
     let script =
@@ -478,11 +443,6 @@ fn a_script_finds_each_line_and_its_takes() {
     assert!(found[2].is_empty() && found[3].is_empty());
 }
 
-/// **A two-microphone interview.** The silence between one speaker and the
-/// other, each on a row of their own, is a pause, since speech plays on
-/// under it, so shortening pauses reaches it. A b-roll cut on a silent
-/// picture clip is no edit point between words. And a word both microphones
-/// heard, taken out of both, comes back once.
 #[test]
 fn two_microphones_pause_between_speakers_and_restore_once() {
     let mut doc = Document::new();
@@ -500,7 +460,6 @@ fn two_microphones_pause_between_speakers_and_restore_once() {
         &[("Yes.", 3000, 3300, 0.8), ("Go.", 3400, 3800, 0.9)],
     );
     let c = comp(&mut doc, 25);
-    // Each microphone lifted from 1 s to 3.36 s, so both lose the "Yes.".
     row(
         &mut doc,
         c,
@@ -511,7 +470,6 @@ fn two_microphones_pause_between_speakers_and_restore_once() {
         c,
         vec![clip(bo, 0, 1000, 0), clip(bo, 3360, 4000, 1000)],
     );
-    // B-roll cut at 0.8 s on a heard picture row, its own sound off.
     let mut broll = Clip::new(
         ClipSource::Solid(Uuid::now_v7()),
         ms(0),
@@ -543,7 +501,6 @@ fn two_microphones_pause_between_speakers_and_restore_once() {
         tokens[1].clip, tokens[0].clip,
         "the pause is the word before's"
     );
-    // Its silence is 0.5 s to 1.04 s, with 100 ms kept either side.
     assert_eq!(
         shorten_pauses(&tokens, ms(500), ms(200), FrameRate::new(25, 1).unwrap()),
         [(ms(600), ms(920))]
@@ -560,11 +517,6 @@ fn two_microphones_pause_between_speakers_and_restore_once() {
     );
 }
 
-/// **Speech on another row.** A silence is measured from the latest end of
-/// any word, so a short word on one row said inside a long word on another
-/// leaves no pause in the long word for shortening to cut, and sets off no
-/// phrase after it. The short word takes no time, so deleting it takes
-/// nothing of the long word.
 #[test]
 fn a_pause_never_lies_over_a_word_still_playing() {
     let mut doc = Document::new();
@@ -594,10 +546,6 @@ fn a_pause_never_lies_over_a_word_still_playing() {
     assert_eq!(tokens[2].filler, None, "\"so\" is not set off");
 }
 
-/// **Retakes.** A sentence the speaker stopped and said again soon after is
-/// marked, every word of the earlier attempt, and the attempt kept and the
-/// apology between them are not. Two words said twice are too short to
-/// count.
 #[test]
 fn an_earlier_attempt_at_a_sentence_is_a_retake() {
     let script = "Start with sound. People forgive a soft picture, but they won't forgive bad sound. \
@@ -652,8 +600,6 @@ fn an_earlier_attempt_at_a_sentence_is_a_retake() {
     );
 }
 
-/// The filler marked on each word a cut says, in order. Each row plays its
-/// own file, its words as (text, start ms, end ms).
 fn fillers_said(language: &str, rows: &[Vec<(&str, i64, i64)>]) -> Vec<Option<Filler>> {
     let mut doc = Document::new();
     let c = comp(&mut doc, 25);
@@ -669,9 +615,6 @@ fn fillers_said(language: &str, rows: &[Vec<(&str, i64, i64)>]) -> Vec<Option<Fi
         .collect()
 }
 
-/// **Words that are not fillers.** A phrase is set off on both sides, so
-/// "well," before a comma and "É" after a pause stay. Two people on two rows
-/// saying one word is no restart, even with no speakers told apart.
 #[test]
 fn a_filler_is_set_off_on_both_sides_and_said_by_one_voice() {
     let spaced = |text: &'static str| -> Vec<(&str, i64, i64)> {

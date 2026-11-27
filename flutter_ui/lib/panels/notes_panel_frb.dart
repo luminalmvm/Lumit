@@ -1,4 +1,3 @@
-// The Notes panel: one page of text kept in the project file.
 
 import 'dart:async';
 
@@ -21,7 +20,6 @@ class _NotesPanelFrbState extends State<NotesPanelFrb> {
   final _text = TextEditingController();
   final _focus = FocusNode();
 
-  /// The project the text belongs to, and what it last held there.
   ProjectReference? _project;
   String _sent = '';
 
@@ -52,7 +50,6 @@ class _NotesPanelFrbState extends State<NotesPanelFrb> {
     super.dispose();
   }
 
-  /// Pick up another project, or an undo or someone else's edit here.
   void _read() {
     final project = _app.project;
     if (project != _project) {
@@ -82,7 +79,6 @@ class _NotesPanelFrbState extends State<NotesPanelFrb> {
     if (_flush()) _app.notifyDocumentChanged();
   }
 
-  /// Sends the text, and says whether the project took it.
   bool _flush() {
     _pause?.cancel();
     _pause = null;
@@ -93,7 +89,6 @@ class _NotesPanelFrbState extends State<NotesPanelFrb> {
       _project?.setNotes(notes: text);
       return _project != null;
     } catch (_) {
-      // A project closed under the panel has nowhere to keep it.
       return false;
     }
   }

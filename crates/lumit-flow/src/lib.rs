@@ -25,11 +25,8 @@ pub mod gpu;
 mod rows;
 pub mod synth;
 
-/// Patch side in pixels (impl note §1: 8×8 patches).
 pub(crate) const PATCH: usize = 8;
-/// Patch grid stride (impl note §1: stride-4 grid).
 pub(crate) const STRIDE: usize = 4;
-/// Inverse-search iteration cap (impl note §1: ≤ 12 iterations).
 pub(crate) const MAX_ITERS: usize = 12;
 /// Convergence: stop when |Δu| < 0.02 px (squared here).
 pub(crate) const CONV2: f32 = 0.02 * 0.02;
@@ -54,10 +51,8 @@ pub(crate) const FLOW_SIGMA2: f32 = 1.0;
 /// motion boundary, and whole strips of the coarsest field start as garbage
 /// that finer levels can't always heal (measured in the §6.1 occlusion test).
 pub(crate) const MIN_LEVEL_DIM: usize = 24;
-/// Occlusion consistency test constants (§2).
 pub(crate) const OCC_ABS: f32 = 1.5;
 pub(crate) const OCC_REL: f32 = 0.05;
-/// Synthesis weight epsilon (§3).
 const SYNTH_EPS: f32 = 1e-4;
 /// How much confidence a pixel keeps when the flow does not explain it but the
 /// two directions still agree (FX-19). Not zero: a hard cut-off is exactly the
@@ -72,9 +67,7 @@ const VALID_DIM: f32 = 0.4;
 // motion everywhere.
 /// Intensity-constancy weight σ (Kroeger et al., §3.3).
 pub(crate) const VR_SIGMA: f32 = 5.0;
-/// Gradient-constancy weight γ.
 pub(crate) const VR_GAMMA: f32 = 10.0;
-/// Smoothness weight α.
 pub(crate) const VR_ALPHA: f32 = 10.0;
 /// Robust penaliser floor: Ψ(a²) = √(a² + ε²).
 pub(crate) const VR_EPS2: f32 = 0.001 * 0.001;
@@ -152,8 +145,6 @@ impl FlowField {
     }
 }
 
-/// What synthesis does where a pixel exists in only one of the two frames
-/// (docs/08 §3.1 "Occlusion handling").
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum OcclusionMode {
     /// Take only the frame the pixel is visible in.
@@ -187,7 +178,6 @@ pub struct FlowSettings {
     pub divisor: u32,
     /// Inverse-search iterations per patch per level ("Vector detail").
     pub iterations: u32,
-    /// Pyramid floor: stop when the next level would drop under this.
     pub min_level_dim: u32,
     /// Regularisation, 0–100 ("Smoothness"): scales the flow-range sigma of the
     /// edge-aware smoothing pass, so high means fewer tears and a gloopier
@@ -380,7 +370,6 @@ pub(crate) fn patch_origin(i: usize, dim: usize) -> usize {
     (i * STRIDE).min(dim - PATCH)
 }
 
-/// One patch's answer: its flow vector and whether the solve was trustworthy.
 struct PatchField {
     npx: usize,
     npy: usize,
@@ -470,7 +459,7 @@ fn inverse_search(
                     v = cv;
                 }
             }
-            let mut ok = det >= DET_MIN; // textureless patches are invalid (§1)
+            let mut ok = det >= DET_MIN;
             if ok {
                 // Best-so-far bookkeeping: a Gauss–Newton step that makes the
                 // patch match *worse* is reverted and the search stops (the
@@ -492,7 +481,7 @@ fn inverse_search(
                         }
                     }
                     if cost >= best {
-                        u = bu; // the last step made things worse: revert
+                        u = bu;
                         v = bv;
                         break;
                     }
@@ -540,8 +529,6 @@ fn densify(
             let i = y * w + x;
             let gi = (x / STRIDE) as i32;
             let gj = (y / STRIDE) as i32;
-            // First pass: collect the covering patches' votes and find the
-            // best-matching one (the winner).
             let (mut best_w, mut best_u, mut best_v) = (0f32, 0f32, 0f32);
             let mut votes = [(0f32, 0f32, 0f32); 9];
             let mut n_votes = 0usize;
@@ -559,7 +546,7 @@ fn densify(
                     let x0 = patch_origin(ci, w);
                     let y0 = patch_origin(cj, h);
                     if x < x0 || x > x0 + (PATCH - 1) || y < y0 || y > y0 + (PATCH - 1) {
-                        continue; // this candidate patch doesn't cover the pixel
+                        continue;
                     }
                     let p = cj * patches.npx + ci;
                     if patches.valid[p] == 0 {
@@ -745,10 +732,8 @@ fn refine(
                 bwy[i] = sample_scalar(&by, w, h, sx, sy);
             }
         }
-        // Per-pixel data-term coefficients, held fixed across the sweeps.
         let mut du = vec![0f32; n];
         let mut dv = vec![0f32; n];
-        // Second derivatives of the warped frame, for the gradient term.
         let (bwxx, bwxy) = sobel_slice(&bwx, w, h);
         let (bwyx, bwyy) = sobel_slice(&bwy, w, h);
         // Red–black (checkerboard) sweeps rather than plain raster order.
@@ -780,7 +765,6 @@ fn refine(
                         let n_i = 1.0 / (ix * ix + iy * iy + VR_ZETA2);
                         let psi_i = VR_SIGMA * n_i / (2.0 * (e_i * e_i + VR_EPS2).sqrt());
 
-                        // Gradient constancy, one residual per gradient channel.
                         let gzx = bwx[i] - ax[i];
                         let gzy = bwy[i] - ay[i];
                         let e_gx = gzx + bwxx[i] * du[i] + bwxy[i] * dv[i];
@@ -887,7 +871,7 @@ fn flow_core(
 ) -> FlowField {
     let (w0, h0) = (pa[0].w, pa[0].h);
     if w0 < PATCH || h0 < PATCH {
-        return FlowField::zeroed(w0, h0); // too small to search — degrade
+        return FlowField::zeroed(w0, h0);
     }
     let levels = pa.len();
     let top = &pa[levels - 1];
@@ -933,8 +917,6 @@ fn flow_core(
     }
 }
 
-/// Dense forward flow A→B by DIS (coarse-to-fine inverse search) under
-/// explicit settings.
 pub fn flow_with(a: &Gray, b: &Gray, set: &FlowSettings) -> FlowField {
     if a.w < PATCH || a.h < PATCH || a.w != b.w || a.h != b.h {
         return FlowField::zeroed(a.w, a.h);
@@ -981,7 +963,7 @@ fn occlusion_raw(f: &FlowField, g: &FlowField) -> Vec<u8> {
         for x in 0..w {
             let i = y * w + x;
             if f.valid[i] == 0 {
-                raw[i] = 1; // invalid-patch bits count as occluded (§2)
+                raw[i] = 1;
                 continue;
             }
             let (fu, fv) = (f.u[i], f.v[i]);
@@ -1212,7 +1194,6 @@ pub fn hud_weights(a: &Gray, f: &FlowField) -> Vec<f32> {
     let mut raw = vec![0f32; n];
     for i in 0..n {
         let speed = (f.u[i] * f.u[i] + f.v[i] * f.v[i]).sqrt();
-        // 1 where still, 0 where moving.
         let stillness = 1.0 - smoothstep(HUD_STATIC_LO, HUD_STATIC_HI, speed);
         if stillness <= 0.0 {
             continue;
@@ -1240,7 +1221,6 @@ pub fn hud_weights(a: &Gray, f: &FlowField) -> Vec<f32> {
     out
 }
 
-/// 3×3 max filter (grow a mask by one pixel).
 fn dilate3(mask: &[u8], w: usize, h: usize) -> Vec<u8> {
     let mut out = vec![0u8; w * h];
     for y in 0..h {
@@ -1266,11 +1246,9 @@ fn dilate3(mask: &[u8], w: usize, h: usize) -> Vec<u8> {
 /// depended on a byte was reading a frame in and writing one out, so this is
 /// that, and the synthesis itself is written once.
 pub trait Texel {
-    /// Bytes one pixel occupies.
     const BYTES: usize;
     /// Channel `c` of pixel `i`, in the units the synthesis works in.
     fn get(buf: &[u8], i: usize, c: usize) -> f32;
-    /// Write channel `c` of pixel `i` back.
     fn put(buf: &mut [u8], i: usize, c: usize, v: f32);
 }
 
@@ -1310,7 +1288,6 @@ impl Texel for Floats {
     }
 }
 
-/// [`sample_rgba`] over whichever width [`Texel`] describes.
 fn sample_texel<T: Texel>(rgba: &[u8], w: usize, h: usize, x: f32, y: f32) -> [f32; 4] {
     if w == 0 || h == 0 {
         return [0.0; 4];
@@ -1333,7 +1310,6 @@ fn sample_texel<T: Texel>(rgba: &[u8], w: usize, h: usize, x: f32, y: f32) -> [f
     out
 }
 
-/// [`crossfade`] over whichever width [`Texel`] describes.
 fn crossfade_as<T: Texel>(a: &[u8], b: &[u8], phi: f32) -> Vec<u8> {
     let n = a.len().min(b.len()) / T::BYTES;
     let mut out = vec![0u8; n * T::BYTES];
@@ -1379,7 +1355,6 @@ pub fn synthesize_with(
     synthesize_with_as::<Bytes>(a, b, w, h, fwd, bwd, phi, set, hud)
 }
 
-/// [`synthesize_with`] over whichever width [`Texel`] describes.
 #[allow(clippy::too_many_arguments)]
 pub fn synthesize_with_as<T: Texel>(
     a: &[u8],
@@ -1596,7 +1571,6 @@ impl FlowEngine {
         }
     }
 
-    /// True when synthesis runs on the card.
     pub fn gpu_synthesis(&self) -> bool {
         self.synth.is_some()
     }
@@ -1610,7 +1584,6 @@ impl FlowEngine {
         }
     }
 
-    /// CPU only (tests, or by explicit choice).
     pub fn cpu() -> Self {
         FlowEngine {
             gpu: None,
@@ -1618,7 +1591,6 @@ impl FlowEngine {
         }
     }
 
-    /// Which backend this engine currently uses.
     pub fn backend(&self) -> &'static str {
         match (self.gpu.is_some(), self.synth.is_some()) {
             (true, true) => "dis-gpu",
@@ -1645,7 +1617,7 @@ impl FlowEngine {
         if let Some(g) = self.gpu.as_mut() {
             match g.flow_pair_with(a, b, set) {
                 Ok(pair) => return pair,
-                Err(_) => self.gpu = None, // degrade to CPU from here on
+                Err(_) => self.gpu = None,
             }
         }
         flow_pair_with(a, b, set)
@@ -1671,13 +1643,12 @@ impl FlowEngine {
         match g.flow_pair_textures(a, b, set) {
             Ok(pair) => Some(pair),
             Err(_) => {
-                self.gpu = None; // degrade to CPU-only from here on
+                self.gpu = None;
                 None
             }
         }
     }
 
-    /// The flow-interpolated frame at `phi` under explicit settings.
     pub fn interpolate_at(
         &mut self,
         a: &[u8],
@@ -1734,7 +1705,7 @@ impl FlowEngine {
         if let Some(s) = self.synth.as_ref() {
             match s.synthesize(a, b, w, h, fwd, bwd, phi, set) {
                 Ok(px) => return px,
-                Err(_) => self.synth = None, // degrade for the rest of this engine
+                Err(_) => self.synth = None,
             }
         }
         self.synthesize_cpu::<Bytes>(a, b, w, h, fwd, bwd, phi, set)
@@ -1844,7 +1815,6 @@ pub(crate) mod testutil {
         t * t * (3.0 - 2.0 * t)
     }
 
-    /// Value noise: smooth interpolation between lattice hashes.
     fn value_noise(x: f32, y: f32, seed: u32) -> f32 {
         let ix = x.floor();
         let iy = y.floor();
@@ -1872,7 +1842,6 @@ pub(crate) mod testutil {
         value_noise(x / 8.0, y / 8.0, seed.wrapping_add(23))
     }
 
-    /// Render a continuous scalar field into a Gray image.
     pub fn render(w: usize, h: usize, f: impl Fn(f32, f32) -> f32) -> Gray {
         let mut data = vec![0f32; w * h];
         for y in 0..h {
@@ -1910,7 +1879,6 @@ mod tests {
     use super::testutil::*;
     use super::*;
 
-    /// A smooth, well-textured test image (sum of a few non-aliasing sines).
     fn texture(w: usize, h: usize, dx: f32, dy: f32) -> Gray {
         render(w, h, |x, y| {
             let fx = x - dx;
@@ -1921,7 +1889,6 @@ mod tests {
         })
     }
 
-    /// Impl note §6.1: a known rotation field.
     #[test]
     fn recovers_a_known_rotation() {
         let (w, h) = (192, 192);
@@ -1943,8 +1910,6 @@ mod tests {
         assert!(epe < 0.3, "mean endpoint error too high on rotation: {epe}");
     }
 
-    /// Impl note §6.1: occlusion mask of a sliding square vs the analytic
-    /// answer, ≥ 90% IoU.
     #[test]
     fn occlusion_mask_matches_a_sliding_square() {
         let (w, h) = (384, 288);
@@ -1985,8 +1950,6 @@ mod tests {
         // is a synthesis-safety margin whose perimeter alone would eat the
         // whole IoU error budget of a strip this size.
         let occ_a = occlusion_raw(&f, &g);
-        // Analytic: A-pixels occluded in B = background covered by the moved
-        // square = S_B \ S_A.
         let (mut inter, mut uni) = (0usize, 0usize);
         for y in 0..h {
             for x in 0..w {
@@ -2006,9 +1969,6 @@ mod tests {
 
     #[test]
     fn midpoint_beats_a_plain_crossfade_on_textured_motion() {
-        // On well-textured motion, the flow-synthesised midpoint should be
-        // closer to the *true* midpoint frame than a naive crossfade is — that
-        // difference (sharp vs ghosted) is the whole point of flow interpolation.
         let (w, h) = (96, 96);
         let to_rgba = |g: &Gray| -> Vec<u8> {
             let mut f = vec![0u8; w * h * 4];
@@ -2023,7 +1983,7 @@ mod tests {
         };
         let a = to_rgba(&texture(w, h, 0.0, 0.0));
         let b = to_rgba(&texture(w, h, 8.0, 0.0));
-        let truth = to_rgba(&texture(w, h, 4.0, 0.0)); // the real in-between frame
+        let truth = to_rgba(&texture(w, h, 4.0, 0.0));
         let synth = FlowEngine::cpu().interpolate_at(&a, &b, w, h, 0.5, &FlowSettings::default());
         let crossfade: Vec<u8> = a
             .iter()
@@ -2048,26 +2008,16 @@ mod tests {
         );
     }
 
-    /// The HUD guard (docs/08 §3.1 step 5) fires on the thing it is named for:
-    /// a static, detailed overlay sitting over a moving world.
-    ///
-    /// Built as the artefact itself — a sharp textured block that does not
-    /// move, and a flow field that (wrongly, as DIS does near a strong moving
-    /// edge) claims it does not — so the assertion is that the guard picks out
-    /// the overlay and leaves the moving background alone.
     #[test]
     fn the_hud_guard_fires_on_static_detail_and_not_on_moving_content() {
         let (w, h) = (128, 96);
-        // Left half: a busy static "HUD" panel. Right half: smooth gradient.
         let img = render(w, h, |x, y| {
             if x < 48.0 {
-                // High-frequency detail, like text.
                 0.5 + 0.45 * ((x * 1.7).sin() * (y * 1.9).sin()).signum()
             } else {
                 0.2 + 0.5 * (x / w as f32)
             }
         });
-        // Flow: the HUD region measured as still, the rest as moving fast.
         let n = w * h;
         let mut f = FlowField {
             w,
@@ -2084,7 +2034,6 @@ mod tests {
             }
         }
         let g = hud_weights(&img, &f);
-        // Sample well inside each region, clear of the blurred boundary.
         let at = |x: usize, y: usize| g[y * w + x];
         assert!(
             at(24, 48) > 0.8,
@@ -2098,15 +2047,12 @@ mod tests {
         );
     }
 
-    /// The Fallback knob (docs/08 §3.1) picks what shows where neither frame
-    /// can explain a pixel: a crossfade, or the nearer frame.
     #[test]
     fn the_fallback_knob_chooses_blend_or_nearest_where_both_are_occluded() {
         let (w, h) = (16, 16);
         let n = w * h;
         let a = vec![0u8; n * 4];
         let b = vec![200u8; n * 4];
-        // All-invalid fields make every pixel occluded in both directions.
         let dead = || FlowField {
             w,
             h,
@@ -2161,14 +2107,11 @@ mod tests {
     fn refinement_recovers_motion_in_untextured_regions() {
         let (w, h) = (192, 192);
         let (dx, dy) = (4.0f32, 2.0f32);
-        // Detailed everywhere except a broad horizontal band with almost no
-        // contrast — the case local patch matching cannot answer.
         let scene = |ox: f32, oy: f32| {
             render(w, h, move |x, y| {
                 let (sx, sy) = (x - ox, y - oy);
                 let band = ((sy - 96.0) / 40.0).abs().min(1.0);
                 let detail = perlin(sx, sy, 21) + 0.3 * detail(sx, sy, 22);
-                // band == 0 in the middle: flat grey. band == 1 at the edges.
                 0.5 * (1.0 - band) + band * detail + 0.01 * (sx * 0.05).sin()
             })
         };
@@ -2176,7 +2119,6 @@ mod tests {
         let b = scene(dx, dy);
         let epe_in_band = |set: &FlowSettings| {
             let f = flow_with(&a, &b, set);
-            // Measure only inside the flat band, where the artefact lives.
             let (mut sum, mut n) = (0.0f64, 0usize);
             for y in 86..106 {
                 for x in 32..160 {
@@ -2210,8 +2152,6 @@ mod tests {
     /// mean. What must hold is that they are the same *picture*.
     #[test]
     fn gpu_synthesis_matches_the_cpu_within_tolerance() {
-        // One device, not two: this used to build one inside `gpu_flow`, drop
-        // it, and then build a second for the synthesiser.
         let Some(lease) = lumit_gpu::test_support::lease() else {
             lumit_gpu::no_adapter();
             return;
@@ -2270,15 +2210,14 @@ mod tests {
     #[test]
     fn validity_survives_real_footage_conditions() {
         let (w, h) = (256, 192);
-        let (dx, dy) = (24.0f32, 6.0f32); // a fast flick, not a gentle pan
-                                          // What makes this hard is not the distance, it is that a frame taken
-                                          // during a fast move is *itself* smeared: the shutter was open while
-                                          // the camera turned. So each frame is the scene averaged along its own
-                                          // motion, and the two smears do not line up. Add per-frame grain and a
-                                          // slight exposure change, both of which real capture has.
+        let (dx, dy) = (24.0f32, 6.0f32);
+        // What makes this hard is not the distance, it is that a frame taken
+        // during a fast move is *itself* smeared: the shutter was open while
+        // the camera turned. So each frame is the scene averaged along its own
+        // motion, and the two smears do not line up. Add per-frame grain and a
+        // slight exposure change, both of which real capture has.
         let grain = |x: f32, y: f32, seed: u32| detail(x * 3.1, y * 2.7, seed) - 0.5;
         let scene = |x: f32, y: f32| 0.55 * perlin(x, y, 61) + 0.35 * detail(x, y, 62);
-        // Box-average along the motion — the source's own motion blur.
         let smeared = move |x: f32, y: f32, ox: f32, oy: f32| {
             let mut acc = 0.0;
             for k in 0..7 {
@@ -2315,7 +2254,6 @@ mod tests {
         );
     }
 
-    /// Engine crates never fault: degenerate inputs degrade, not crash.
     #[test]
     fn tiny_frames_degrade_gracefully() {
         let (w, h) = (6, 6);
@@ -2329,7 +2267,6 @@ mod tests {
         assert_eq!(mid.len(), w * h * 4);
     }
 
-    /// Same inputs → same flow, bit for bit (docs/14 §3 determinism).
     #[test]
     fn flow_is_deterministic() {
         let (w, h) = (128, 96);
@@ -2344,17 +2281,10 @@ mod tests {
         assert_eq!(g1.v, g2.v);
     }
 
-    // An uncertain patch inside a neighbourhood that agrees ends up moving
-    // with the neighbourhood, and a confident pixel keeps its own vector to
-    // the bit. Synthesis used to warp the patch along its wild vector and drop
-    // it somewhere unrelated, which is what the torn blocks on a fast edge
-    // were.
     #[test]
     fn an_uncertain_patch_borrows_the_motion_its_neighbourhood_agrees_on() {
         let (w, h) = (48usize, 48usize);
         let n = w * h;
-        // Everything moves (8, 0), the backward twin (-8, 0), so the pair is
-        // consistent and fully confident.
         let mut f = FlowField {
             w,
             h,
@@ -2369,8 +2299,6 @@ mod tests {
             v: vec![0.0; n],
             valid: vec![1; n],
         };
-        // A 6x6 patch in the middle has a wild vector nothing explains, and
-        // the measurement marked it invalid.
         for y in 20..26 {
             for x in 20..26 {
                 f.u[y * w + x] = -15.0;
@@ -2398,8 +2326,6 @@ mod tests {
             "a confident pixel is untouched"
         );
     }
-
-    // ---- The WGSL backend against the CPU oracle (impl note §6.5) ----
 
     fn gpu_flow_on(ctx: &lumit_gpu::GpuContext) -> Option<gpu::GpuFlow> {
         match gpu::GpuFlow::new(ctx) {
@@ -2449,7 +2375,6 @@ mod tests {
         let a = render(w, h, |x, y| perlin(x, y, 1));
         let b = render(w, h, |x, y| perlin(x - 7.3, y - 3.9, 1));
 
-        // sRGB-encoded grey → the scene-linear RGBA a composite carries.
         let decode = |v: f32| {
             if v <= 0.04045 {
                 v / 12.92
@@ -2525,14 +2450,10 @@ mod tests {
              mean absolute difference {diff}"
         );
 
-        // And it is deterministic — a second measurement of the same pair is
-        // the same field, which is what the render path's two runs rest on.
         let (again, _) = g.flow_pair_textures(&ta, &tb, &set).expect("texture entry");
         assert_eq!(tex_fwd.u, again.u, "the same pair measures the same way");
         assert_eq!(tex_fwd.v, again.v);
 
-        // Half resolution measures at half the size — the working-size rule the
-        // decode path's effect settings use, expressed by the same divisor.
         let half = FlowSettings {
             divisor: 2,
             ..FlowSettings::default()
@@ -2541,7 +2462,6 @@ mod tests {
         assert_eq!((small.w, small.h), (w / 2, h / 2));
     }
 
-    /// Mean absolute difference between two fields, per component.
     fn mean_abs_diff(a: &FlowField, b: &FlowField) -> f32 {
         let n = a.u.len();
         let mut sum = 0f64;
@@ -2551,15 +2471,12 @@ mod tests {
         (sum / (2 * n) as f64) as f32
     }
 
-    /// The CPU implementation is the oracle: the WGSL backend must match it
-    /// within 1e-3 on the analytic scenes (impl note §6.5).
     #[test]
     fn gpu_matches_the_cpu_oracle() {
         let Some((_lease, mut g)) = gpu_flow() else {
             return;
         };
         let (w, h) = (192, 160);
-        // Translation and rotation, same scenes the CPU tests use.
         let scenes = [
             (
                 render(w, h, |x, y| perlin(x, y, 1)),
@@ -2578,15 +2495,6 @@ mod tests {
                 }),
             ),
         ];
-        // All three parts of DIS, both backends: the shader now has
-        // the refinement, and the oracle's red-black sweeps mean the two can
-        // agree step for step rather than merely in spirit.
-        //
-        // Default settings AND a deliberately non-default set: every knob the
-        // settings carry has a GPU expression (the old refusal is gone), and
-        // this is what holds the two backends to the same answer under the
-        // knobs a user actually turns - fewer iterations, heavier smoothing,
-        // a higher pyramid floor, a different refinement budget.
         let tuned = FlowSettings {
             iterations: 8,
             smoothness: 80.0,
@@ -2623,8 +2531,6 @@ mod tests {
         }
     }
 
-    /// The engine degrades, interpolates, and honours the endpoint contract
-    /// whichever backend it holds.
     #[test]
     fn engine_interpolates_on_any_backend() {
         let mut eng = FlowEngine::new_auto();
@@ -2637,7 +2543,6 @@ mod tests {
         assert_eq!(eng.interpolate_at(&a, &b, w, h, 1.0, &set), b);
         let mid = eng.interpolate_at(&a, &b, w, h, 0.5, &set);
         assert_eq!(mid.len(), w * h * 4);
-        // A CPU-only engine reports itself honestly and still interpolates.
         let mut cpu = FlowEngine::cpu();
         assert_eq!(cpu.backend(), "dis-cpu");
         assert_eq!(cpu.interpolate_at(&a, &b, w, h, 0.5, &set).len(), mid.len());
@@ -2649,7 +2554,6 @@ mod tests {
 mod float_synth_tests {
     use super::*;
 
-    /// `n` pixels of float RGBA, every colour channel `v`, opaque.
     fn frame(n: usize, v: f32) -> Vec<u8> {
         let mut out = Vec::new();
         for _ in 0..n {

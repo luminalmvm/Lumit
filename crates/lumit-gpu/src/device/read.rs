@@ -12,7 +12,6 @@ use std::cell::{Cell, RefCell};
 use std::hash::{Hash, Hasher};
 use std::sync::mpsc;
 
-/// The most places kept at once, each with its last answer.
 const PLACES: usize = 8;
 
 struct Place {
@@ -21,7 +20,6 @@ struct Place {
     copy: Option<Underway>,
 }
 
-/// A copy on its way: the buffer, its map, and how its rows are laid out.
 struct Underway {
     buffer: wgpu::Buffer,
     done: mpsc::Receiver<Result<(), wgpu::BufferAsyncError>>,
@@ -77,13 +75,11 @@ pub fn texture(ctx: &crate::GpuContext, key: impl Hash, tex: &wgpu::Texture) -> 
     })
 }
 
-/// How many copies have landed with an answer their place did not have.
 pub fn landed() -> u64 {
     collect();
     LANDED.with(Cell::get)
 }
 
-/// How many times a frame has taken an earlier copy than its own.
 pub fn stand_ins() -> u64 {
     STOOD_IN.with(Cell::get)
 }

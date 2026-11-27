@@ -1,6 +1,3 @@
-// Lumit's Flutter frontend (the frontend alternative experiment).
-// The engine stays in the Rust crates; this application is the chrome —
-// see docs/archive/flutter-port/ for the plan and the parity checklist.
 
 import 'dart:async';
 
@@ -32,6 +29,7 @@ import 'package:lumit_flutter/state/files.dart'
     if (dart.library.js_interop) 'package:lumit_flutter/state/files_web.dart';
 import 'package:lumit_flutter/state/ui_state.dart';
 import 'package:lumit_flutter/state/updates.dart' show versionFromBootLine;
+import 'package:lumit_flutter/state/usage_data.dart' show UsageData;
 
 // main.dart is the entry point and nothing else; the shell's parts live beside
 // it and are re-exported here so every existing `main.dart` import still finds
@@ -42,6 +40,7 @@ export 'package:lumit_flutter/state/bridge_trace.dart';
 export 'package:lumit_flutter/state/ui_state.dart';
 
 Future<void> main(List<String> args) async {
+  UsageData.launch.start();
   enablePopOut();
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -69,10 +68,8 @@ Future<void> main(List<String> args) async {
   }
 }
 
-/// The boot splash, while it is up.
 BootSplash? _splash;
 
-/// Everything that has to happen before the shell can go on screen.
 Future<void> _start(List<String> args) async {
   // Sweep up after an update before anything else happens: delete the
   // version we have just replaced, now that nothing is holding its files, and
@@ -112,11 +109,8 @@ Future<void> _start(List<String> args) async {
   // An invite link clicked in a browser starts Lumit with the link, and the
   // Shared project window opens on it once there is a window to open it in.
   state.launchInvite = inviteFromArgs(args);
-  // And a double-clicked extension package asks to be installed.
   state.launchPackage = packagePathFromArgs(args);
-  // And a double-clicked style asks to be used.
   state.launchStyle = stylePathFromArgs(args);
-  // And a double-clicked graphics template asks to join the library.
   state.launchTemplate = templatePathFromArgs(args);
   final ui = LumitUiState(state);
   // A double-clicked theme is in use before anything is drawn.
@@ -133,13 +127,19 @@ Future<void> _start(List<String> args) async {
   // A document on the command line opens over the empty project. On failure
   // openProject posts its notice and the empty project stands — the same
   // degraded-but-alive behaviour as a failed File → Open.
+  for (final argument in args) {
+    if (argument.startsWith('--resolve-open=') ||
+        argument.startsWith('--resolve-import=')) {
+      state.launchResolve = args;
+    }
+  }
   if (fromArgs != null) state.openProject(fromArgs, launch: true);
   // Where a new project's template is, which is the workspace's to say. The
   // project Lumit starts on is a new one too, unless something else was asked
   // for.
   state.projectTemplate = () =>
       ui.workspace.projectTemplate.isEmpty ? null : ui.workspace.projectTemplate;
-  if (fromArgs == null && ui.workspace.projectTemplate.isNotEmpty) {
+  if (fromArgs == null && state.launchResolve == null && ui.workspace.projectTemplate.isNotEmpty) {
     unawaited(state.newProject(ask: false));
   }
   // The account and its sync, which a test never starts: nothing else at
@@ -161,12 +161,12 @@ Future<void> _start(List<String> args) async {
     clearVramCache();
   });
   unawaited(applyBackground(ui.workspace));
-  // The main window takes over from the splash once it has something on it.
   WidgetsBinding.instance.addPostFrameCallback((_) => BootSplash.handOver());
   // Somebody who double-clicked a `.lum` has already answered the welcome
   // screen's question, so it is not put to them.
   runApp(LumitAppNew(state, ui,
       welcome: fromArgs == null &&
+          state.launchResolve == null &&
           state.launchInvite == null &&
           state.launchPackage == null &&
           state.launchStyle == null &&

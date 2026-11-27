@@ -50,13 +50,10 @@ pub const TYPE_CLICKS: u32 = 0;
 pub const TYPE_CRACKLE: u32 = 1;
 pub const TYPE_MOUTH: u32 = 2;
 
-/// The block at 48 kHz: 55 ms.
 const BLOCK_AT_48K: f64 = 2_640.0;
 
-/// The prediction's order at 48 kHz, two per cent of the block.
 const ORDER_AT_48K: f64 = 53.0;
 
-/// Flagged samples this close at 48 kHz become one click.
 const FUSE_AT_48K: f64 = 5.0;
 
 /// The error, in multiples of the fit's own prediction error, that counts as
@@ -75,17 +72,14 @@ const SECOND_PASS: f64 = 1.5;
 /// counting on the display; the rest are small corrections.
 const COUNTED: f32 = 2.5;
 
-/// Where mouth clicks are listened for.
 const MOUTH_HZ: f64 = 2_000.0;
 
 /// The shortest repair and the least widening for mouth clicks, in ms.
 const MOUTH_LONGEST_MS: f64 = 3.0;
 const MOUTH_WIDEN_MS: f64 = 0.25;
 
-/// How long the mouth filter is given to settle at a block's start.
 const MOUTH_SETTLE_MS: f64 = 2.0;
 
-/// Click removal's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "audio_declick",
@@ -97,10 +91,8 @@ const MOUTH_SETTLE_MS: f64 = 2.0;
     matte = false,
 )]
 pub struct AudioDeclick {
-    /// What is hunted.
     #[choice(label = "Type", options = ["Clicks", "Crackle", "Mouth clicks"], default = 0)]
     pub mode: u32,
-    /// How readily a surprise counts as a click.
     #[bounded(min = 1.0, max = 10.0, default = SENSITIVITY, unit = Raw)]
     pub sensitivity: f32,
     /// The longest a click may be, in milliseconds.
@@ -110,12 +102,10 @@ pub struct AudioDeclick {
     /// milliseconds.
     #[bounded(min = 0.0, max = 5.0, default = WIDEN_MS, unit = Raw)]
     pub widen: f32,
-    /// Play only what was taken out.
     #[toggle(default = false, label = "Clicks only")]
     pub clicks_only: bool,
 }
 
-/// Click removal's behaviour.
 pub struct AudioDeclickDef;
 
 impl EffectDef for AudioDeclickDef {
@@ -174,7 +164,6 @@ fn trapezoid(n: usize, hop: usize) -> Vec<f32> {
         .collect()
 }
 
-/// What one block is searched with.
 #[derive(Clone, Copy, Debug)]
 pub(super) struct Hunt {
     /// The error multiple that counts as a click.
@@ -183,9 +172,7 @@ pub(super) struct Hunt {
     longest: usize,
     /// How far a repair reaches either side, in samples.
     widen: usize,
-    /// Search the sound above 2 kHz.
     mouth: bool,
-    /// Look again with the model refitted to the repaired block.
     second: bool,
 }
 
@@ -279,7 +266,6 @@ impl Repairer {
             return;
         }
         self.flags.fill(false);
-        // What is searched: the block itself, or its top for mouth clicks.
         let mut first = self.order + before;
         self.detect.copy_from_slice(x);
         if hunt.mouth {
@@ -378,7 +364,6 @@ impl Repairer {
         Some(err.max(1e-30).sqrt())
     }
 
-    /// The predictor's error over `x`, from the order on, into the residual.
     fn predict(&mut self, x: &[f32]) {
         let p = self.order;
         for (t, slot) in self.residual.iter_mut().enumerate().skip(p) {
@@ -418,7 +403,6 @@ impl Repairer {
                 t += 1;
                 continue;
             }
-            // A run of flagged samples, gaps up to the fuse joined.
             let start = t;
             let mut end = t + 1;
             let mut gap = 0;
@@ -461,7 +445,6 @@ impl Repairer {
     /// known samples.
     fn interpolate(&mut self, x: &mut [f32]) {
         let p = self.order;
-        // The predictor's autocorrelation, lags 0..=p.
         for (lag, r) in self.scratch.iter_mut().enumerate() {
             *r = self
                 .coeffs
@@ -487,7 +470,6 @@ impl Repairer {
         self.band.clear();
         self.band.resize(m * width, 0.0);
         self.rhs.clear();
-        // The right-hand side: each unknown's reach into the known samples.
         for &u in &self.unknown {
             let lo = u.saturating_sub(p);
             let hi = (u + p + 1).min(self.block);
@@ -536,7 +518,6 @@ impl Repairer {
                 }
             }
         }
-        // Forwards then back.
         for i in 0..m {
             let mut s = self.rhs.get(i).copied().unwrap_or(0.0);
             for k in i.saturating_sub(p)..i {
@@ -566,13 +547,11 @@ impl Repairer {
         }
     }
 
-    /// Samples per second this repairer was built for.
     pub(super) fn rate(&self) -> f64 {
         self.rate
     }
 }
 
-/// One open Click removal.
 struct Declick {
     state: Mutex<State>,
     latency: u32,
@@ -684,7 +663,6 @@ mod tests {
     use super::*;
     use crate::fx::effects::audio::modulation::harness;
 
-    /// A sine with a click every 100 ms: a few samples of decaying spike.
     fn clicked(rate: u32, blocks: usize) -> (Vec<f32>, Vec<f32>) {
         let clean = harness::tone_at(rate, blocks, 440.0);
         let mut dirty = clean.clone();
@@ -712,8 +690,6 @@ mod tests {
         harness::same_seconds_at_any_rate(&AudioDeclickDef, &[], 440.0, 1.0, 0.06);
     }
 
-    /// **Plan 3**: the clicks are repaired and the sine under them is kept,
-    /// and each one is found.
     #[test]
     fn it_repairs_clicks_and_keeps_the_sine() {
         let (dirty, clean) = clicked(48_000, 200);
@@ -739,7 +715,6 @@ mod tests {
         let found = find_clicks(&mono, &values, 48_000);
         assert_eq!(found.len(), 21, "found {found:?}");
 
-        // A clean sine goes through as it came.
         let p = harness::looked(&AudioDeclickDef, &values, &clean);
         let out = harness::run(&*p, &clean, &values);
         let moved = out[from + lat..]

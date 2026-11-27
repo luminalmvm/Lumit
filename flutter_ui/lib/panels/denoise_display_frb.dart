@@ -34,7 +34,6 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 const double _plotHeight = 54;
 const double _barsWidth = 146;
 
-/// The four sizes, fine first, as the rows spell them.
 const List<String> _sizes = ['fine', 'medium', 'coarse', 'broad'];
 
 class DenoiseDisplayFrb extends StatefulWidget {
@@ -107,7 +106,6 @@ class _DenoiseDisplayFrbState extends State<DenoiseDisplayFrb>
     }
   }
 
-  /// The Sample rows at the playhead, as one comparable value.
   static String _square(
       Map<String, BridgeEffectValue> values, DenoiseDisplayFrb of) {
     double at(String id) {
@@ -146,7 +144,6 @@ class _DenoiseDisplayFrbState extends State<DenoiseDisplayFrb>
     super.dispose();
   }
 
-  /// The patch as a picture, decoded once per measure.
   void _decode(BridgeNoiseStatus s) {
     if (s.generation == _patchOf || s.side == 0 || s.picture.isEmpty) return;
     _patchOf = s.generation;

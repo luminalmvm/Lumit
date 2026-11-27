@@ -17,7 +17,7 @@ struct Params {
     opacity: f32,          // 0..1
     mix_amt: f32,          // 0..1, blended against the unprocessed input
     shadow_only: u32,
-    matte_on: f32,         // 1 = the matte scales the shadow's Opacity
+    matte_on: f32,
     spread_scale: f32,     // Spread's threshold-remap slope; 1 = none
     knockout: u32,         // 1 = the layer's shape knocks the shadow out
     invert: u32,           // 1 = read the coverage from the inverted alpha
@@ -107,8 +107,6 @@ fn drop_shadow(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (p.spread_scale != 1.0) {
         cover = clamp((cover - 0.5) * p.spread_scale + 0.5, 0.0, 1.0);
     }
-    // Layer knocks out shadow: the shape takes the shadow away first,
-    // and the composite below then puts the layer over what is left.
     if (p.knockout != 0u) {
         cover = cover * (1.0 - o.a);
     }

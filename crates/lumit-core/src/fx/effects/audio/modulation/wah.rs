@@ -33,10 +33,8 @@ use crate::fx::{
     registry::EffectMetadata, schema::EffectSchema,
 };
 
-/// How long a moved row takes to arrive.
 const SMOOTH_MS: f64 = 20.0;
 
-/// How far the sweep travels at full depth, either side of the frequency.
 const MAX_OCTAVES: f64 = 2.0;
 
 /// How the follower chases the playing in envelope mode. Quick up so a note
@@ -45,10 +43,8 @@ const MAX_OCTAVES: f64 = 2.0;
 const FOLLOW_ATTACK_MS: f64 = 5.0;
 const FOLLOW_RELEASE_MS: f64 = 80.0;
 
-/// How hard the level pushes the sweep at full sensitivity.
 const MAX_FOLLOW_GAIN: f64 = 16.0;
 
-/// The Wah effect's rows.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "audio_wah",
@@ -57,8 +53,6 @@ const MAX_FOLLOW_GAIN: f64 = 16.0;
     category = Audio,
     cost = Trivial,
     roi = Exact,
-    // Sound, so no matte and no picture: the Audio family's rule
-    // (docs/impl/audio-effects.md §2).
     matte = false,
 )]
 pub struct AudioWah {
@@ -76,18 +70,14 @@ pub struct AudioWah {
     /// the level sweeps up from it.
     #[bounded(min = 100.0, max = 3000.0, default = 500.0, log = true, unit = Raw)]
     pub frequency: f32,
-    /// How narrow the band is.
     #[bounded(min = 0.5, max = 20.0, default = 6.0, unit = Raw)]
     pub resonance: f32,
-    /// How hard the level pushes the sweep, in envelope mode.
     #[bounded(min = 0.0, max = 100.0, default = 50.0, unit = Percent)]
     pub sensitivity: f32,
-    /// How much of the filtered sound is heard.
     #[bounded(min = 0.0, max = 100.0, default = 100.0, unit = Percent)]
     pub wet: f32,
 }
 
-/// The Wah effect's behaviour.
 pub struct AudioWahDef;
 
 impl EffectDef for AudioWahDef {
@@ -135,17 +125,14 @@ fn octaves_of(values: &[(ParamId, f64)]) -> f64 {
     row(values, AudioWah::DEPTH, 70.0).clamp(0.0, 100.0) / 100.0 * MAX_OCTAVES
 }
 
-/// How narrow the band is.
 fn resonance_of(values: &[(ParamId, f64)]) -> f64 {
     row(values, AudioWah::RESONANCE, 6.0).clamp(0.5, 20.0)
 }
 
-/// The wet row as a share of the output.
 fn wet_of(values: &[(ParamId, f64)]) -> f64 {
     row(values, AudioWah::WET, 100.0).clamp(0.0, 100.0) / 100.0
 }
 
-/// The filter a channel, the one follower both share, and the smoothed rows.
 struct WahState {
     filters: [Svf; AUDIO_CHANNELS],
     /// One follower over the louder channel, so the two sides sweep together
@@ -154,11 +141,9 @@ struct WahState {
     frequency: Smoother,
     octaves: Smoother,
     wet: Smoother,
-    /// Where the sweep's cycle stands, whichever mode is picked.
     phase: Phase,
 }
 
-/// One open Wah.
 struct WahAudio {
     rate: f64,
     /// Behind a mutex because `process` takes `&self`; uncontended by
@@ -235,7 +220,6 @@ mod tests {
     use super::super::harness;
     use super::*;
 
-    /// The level of a run, as the loudest sample on the left.
     fn peak(samples: &[f32]) -> f32 {
         samples
             .chunks_exact(AUDIO_CHANNELS)

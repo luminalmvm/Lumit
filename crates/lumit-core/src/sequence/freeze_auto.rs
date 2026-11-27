@@ -1,5 +1,3 @@
-//! Freezing the automatic tangents either side of a cut in a map.
-
 use super::*;
 
 /// Write down the **automatic** tangents either side of `tau` as the beziers

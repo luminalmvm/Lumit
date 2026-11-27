@@ -32,19 +32,10 @@ use lumit_fx_macros::Effect;
 /// against it.
 pub const MATCH_NAME: &str = "bake_points";
 
-/// The Mode index that hands on the bake whatever has changed above.
 const MODE_READ: u32 = 1;
-/// The Mode index that never reads a bake.
 pub const MODE_BYPASS: u32 = 2;
 
-/// The most frames one bake holds.
-///
-/// ponytail: three fixed budgets and no rows for them. A bake lives whole in
-/// memory once it is read, and [`MAX_BYTES`] is what bounds that. Past any of
-/// the three the bake stops early and the frames after it read as not baked.
-/// Reading frames from the file as they are asked for is the upgrade.
 pub const MAX_FRAMES: usize = 20_000;
-/// The most points kept from one frame. See [`MAX_FRAMES`].
 pub const MAX_POINTS: usize = 100_000;
 /// The most one bake holds over all its frames, in bytes: 160 MB. It is
 /// counted as the frames are packed, so it is also the size of the file
@@ -58,7 +49,6 @@ pub const MAX_BYTES: usize = 160 << 20;
 /// and the one-value columns, which come to about 600 bytes in the file.
 const FRAME_BYTES: usize = 1024;
 
-/// Just the disc's softness, since the size and colour are the stream's own.
 pub const BAKE_GROUPS: &[ParamGroup] = &[ParamGroup {
     label: "Point",
     params: &["feather"],
@@ -67,7 +57,6 @@ pub const BAKE_GROUPS: &[ParamGroup] = &[ParamGroup {
     visible_when_lens_elements: None,
 }];
 
-/// Bake points' controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "bake_points",
@@ -90,15 +79,12 @@ pub struct BakePoints {
     #[choice(label = "Mode", options = ["Auto", "Read", "Bypass"], default = 0)]
     pub mode: u32,
 
-    /// Start the bake. A button, not a value.
     #[action(label = "Bake")]
     pub bake: (),
 
-    /// Stop a running bake.
     #[action(label = "Cancel")]
     pub cancel: (),
 
-    /// How soft the disc a point is drawn as is, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -122,10 +108,8 @@ pub struct BakePoints {
     pub mix: f32,
 }
 
-/// One number per point, or one number for all of them.
 #[derive(Debug, Clone, PartialEq)]
 enum Column {
-    /// Every point has this value, so it is written once.
     Same(f32),
     /// One value per point. Empty for a column the stream did not carry.
     Each(Vec<f32>),
@@ -151,7 +135,6 @@ impl Column {
     }
 }
 
-/// A frame's ids: where they start when they count up by one, or all of them.
 #[derive(Debug, Clone, PartialEq)]
 enum Ids {
     Run(u64),
@@ -162,7 +145,6 @@ enum Ids {
 /// rotation and colour, then the three a stream may leave out, stretch, pick
 /// and index. A stream's named columns follow them, four each.
 const COLUMNS: usize = 18;
-/// Where the columns a stream may leave out begin.
 const STRETCH: usize = 14;
 const PICK: usize = 16;
 const INDEX: usize = 17;
@@ -181,7 +163,6 @@ pub struct Frame {
     /// Their numbers are the columns after the first [`COLUMNS`], four a
     /// name.
     names: Vec<(String, u8)>,
-    /// The stream's own raster factor, kept as it came.
     px_scale: f32,
 }
 
@@ -251,7 +232,6 @@ impl Frame {
         }
     }
 
-    /// What this frame counts as against [`MAX_BYTES`].
     fn bytes(&self) -> usize {
         let numbers: usize = (self.columns.iter())
             .map(|column| match column {
@@ -326,17 +306,13 @@ impl Frame {
     }
 }
 
-/// A finished bake: a stream for every frame of a layer's span.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Baked {
-    /// What was above the effect when this was baked. See [`fingerprint`].
     pub fingerprint: [u8; 32],
     /// A hash of the frames themselves. A frame's name takes it, so a new
     /// bake is never served a frame drawn from the old one.
     pub content: [u8; 32],
-    /// The composition's rate, which the frames count at.
     pub fps: f64,
-    /// The composition frame the first baked frame is.
     pub first: i64,
     /// How many frames the layer's span had. More than [`frames`](Self::frames)
     /// holds when a budget stopped the bake early.
@@ -348,7 +324,6 @@ pub struct Baked {
 }
 
 impl Baked {
-    /// An empty bake of a span starting at composition frame `first`.
     #[must_use]
     pub fn new(fingerprint: [u8; 32], fps: f64, first: i64, span: u32) -> Self {
         Baked {
@@ -427,20 +402,6 @@ impl Baked {
     }
 }
 
-/// A bake as it is written to disk, laid out for a compressor.
-///
-/// A point moves a little from one frame to the next, so most of the bits of
-/// each number are the bits it had the frame before. Every number is written
-/// as the bits that changed since the same point's on the frame before, and
-/// a column's bytes are regrouped so the high bytes of every number sit
-/// together. The high bytes are then long runs of nought, which is what LZ4
-/// is good at. Nothing is rounded: reading it back gives the same bits.
-///
-/// ponytail: the guess for a number is its value on the frame before, which
-/// comes to about 24 bytes a point where every column of a stream moves, and
-/// next to nothing for one that holds still. Guessing from the two frames
-/// before, or Deflate in place of LZ4, is the upgrade if bakes of busy
-/// streams grow too large.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Stored {
     fingerprint: [u8; 32],
@@ -466,8 +427,6 @@ struct StoredFrame {
     px_scale: f32,
 }
 
-/// `words` with their bytes regrouped: every first byte, then every second,
-/// and so on.
 fn regroup<const N: usize>(words: &[[u8; N]]) -> Vec<u8> {
     (0..N)
         .flat_map(|byte| words.iter().map(move |word| word[byte]))
@@ -497,7 +456,6 @@ impl Frame {
         }
     }
 
-    /// For each of `ids`, where the same point sits in this frame.
     fn places(&self, ids: &[u64]) -> Vec<Option<usize>> {
         let mut at: HashMap<u64, usize> = HashMap::new();
         for (i, id) in self.id_list().into_iter().enumerate() {
@@ -627,7 +585,6 @@ impl Frame {
 }
 
 impl Baked {
-    /// This bake as it is written to disk.
     #[must_use]
     pub fn stored(&self) -> Stored {
         let before = std::iter::once(None).chain(self.unique.iter().map(Some));
@@ -677,14 +634,12 @@ fn table() -> &'static RwLock<HashMap<Uuid, Arc<Baked>>> {
     TABLE.get_or_init(|| RwLock::new(HashMap::new()))
 }
 
-/// Put a finished bake in the table under the instance it was made for.
 pub fn publish(effect: Uuid, baked: Baked) {
     if let Ok(mut held) = table().write() {
         held.insert(effect, Arc::new(baked));
     }
 }
 
-/// The bake in hand for `effect`, whatever it was made from.
 #[must_use]
 pub fn baked(effect: Uuid) -> Option<Arc<Baked>> {
     table().read().ok()?.get(&effect).cloned()
@@ -859,14 +814,10 @@ fn mode_of(inst: &EffectInstance) -> u32 {
     }
 }
 
-/// What a Bake points instance hands on at one moment.
 #[derive(Debug, Clone)]
 pub enum Reading {
-    /// The stream wired into it.
     Live,
-    /// No points at all: Read, with no bake for this frame.
     Nothing,
-    /// This frame of a bake, as its place in [`Baked::unique`].
     Baked(Arc<Baked>, u32),
 }
 
@@ -892,13 +843,6 @@ impl Reading {
     }
 }
 
-/// What `inst` on `layer` hands on at layer time `t`, by its Mode and the
-/// bake in hand. The one answer every reader goes by: the resolve walk, the
-/// draw builder, the frame's name and the status line.
-///
-/// ponytail: a moment between two frames reads the nearer frame, so baked
-/// points hold still inside a frame and accumulation motion blur has nothing
-/// to smear. Blending the two frames by id is the upgrade.
 #[must_use]
 pub fn reading(
     doc: &Arc<Document>,
@@ -957,7 +901,6 @@ impl EffectDef for BakePointsDef {
         &<BakePoints as EffectMetadata>::SCHEMA
     }
 
-    /// A stream in and a stream out, beside the picture.
     fn signature(&self) -> Signature {
         Signature::Image {
             inputs: POINTS_IN,
@@ -991,7 +934,6 @@ impl EffectDef for BakePointsDef {
         push(BakePoints::DERIVED_FRAME, Value::Int(frame));
     }
 
-    /// The stream it was handed, which is the bake where one is being read.
     fn modify_points(
         &self,
         _p: Params<'_>,

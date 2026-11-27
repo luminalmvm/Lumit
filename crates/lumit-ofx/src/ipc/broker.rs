@@ -56,8 +56,6 @@ use crate::ipc::spawn::{
 use crate::quirks::Quirks;
 use crate::render::{RenderRequest, SOURCE_CLIP};
 
-/// How many consecutive failures a plugin gets before it is put away for the
-/// session (docs/12 §2.3).
 pub const STRIKES_BEFORE_DISABLED: u32 = 3;
 
 /// How long the host waits for a freshly spawned broker to connect and say
@@ -100,11 +98,8 @@ pub const MAX_NOTES: usize = 64;
 /// wanted. The plugin sees a raised cancel word at its next `abort`.
 const CANCEL_POLL: Duration = Duration::from_millis(5);
 
-/// The environment variable that overrides where the broker executable is,
-/// for a test or for a developer running from a build tree.
 pub const BROKER_EXE_ENV: &str = "LUMIT_OFX_BROKER";
 
-/// The broker executable's file name.
 #[must_use]
 pub fn broker_exe_name() -> &'static str {
     if cfg!(windows) {
@@ -128,49 +123,30 @@ pub fn broker_exe() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(name))
 }
 
-/// What can go wrong before there is a broker to blame.
 #[derive(Debug, Error)]
 pub enum BrokerError {
-    /// The executable would not start.
     #[error("the plugin broker would not start: {0}")]
     Spawn(std::io::Error),
-    /// The pipe.
     #[error(transparent)]
     Pipe(#[from] PipeError),
-    /// The ring.
     #[error(transparent)]
     Ring(#[from] ShmError),
-    /// The broker never connected, or never said hello.
     #[error("the plugin broker did not answer when it started")]
     NoHandshake,
     /// The broker speaks another version of the protocol. Refused here, with a
     /// sentence, rather than deserialised into whatever it happens to mean.
     #[error("the plugin broker speaks protocol {theirs}, this host speaks {ours}")]
-    ProtocolMismatch {
-        /// What the broker said.
-        theirs: u32,
-        /// What this host speaks.
-        ours: u32,
-    },
-    /// The plugin has used up its three strikes.
+    ProtocolMismatch { theirs: u32, ours: u32 },
     #[error("the plugin is disabled for this session")]
     Disabled,
-    /// A message arrived that made no sense where it arrived.
     #[error("the plugin broker answered {0} out of turn")]
     Unexpected(&'static str),
-    /// No such instance.
     #[error("no such plugin instance")]
     NoSuchInstance,
-    /// The peer on the pipe could not prove it is the broker this host started,
-    /// or the credential could not be minted or handed over at all.
     #[error(transparent)]
     Peer(lumit_peer::PeerError),
-    /// More instances of one bundle than [`MAX_LIVE_INSTANCES`].
     #[error("this plugin already has {limit} instances, which is as many as Lumit hosts at once")]
-    TooManyInstances {
-        /// The ceiling.
-        limit: usize,
-    },
+    TooManyInstances { limit: usize },
 }
 
 /// Where the frames a plugin asks for come from: the evaluation graph, in
@@ -179,36 +155,24 @@ pub enum BrokerError {
 /// frames past the end of a clip all the time.
 pub type FrameSource<'a> = dyn Fn(&str, f64) -> Option<Frame16> + 'a;
 
-/// One failure of one action: the three things that count as a strike.
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Fault {
-    /// The deadline passed.
     Timeout,
-    /// The process went away.
     Gone,
-    /// The plugin answered with a failure, or the broker could not do it.
     Refused(String),
 }
 
-/// How a plugin should be started.
 pub struct BrokerConfig {
-    /// The `.ofx` binary inside the bundle.
     pub bundle: PathBuf,
-    /// The deadlines and workarounds for this bundle.
     pub quirks: Quirks,
     /// The frame size the ring starts at. A bigger frame regrows the ring
     /// when it arrives ([`Broker::fit`]).
     pub frame: (usize, usize),
-    /// Where the broker executable is, if not beside Lumit's own.
     pub exe: Option<PathBuf>,
-    /// Extra environment for the child: the graphics card setting and which
-    /// card Lumit draws with ([`crate::gpu`]), and in the tests a plugin told
-    /// to misbehave on purpose.
     pub env: Vec<(String, String)>,
 }
 
 impl BrokerConfig {
-    /// The common case: a bundle, the shipped defaults, and a frame size.
     #[must_use]
     pub fn new(bundle: impl Into<PathBuf>, frame: (usize, usize)) -> Self {
         Self {
@@ -230,7 +194,6 @@ struct InstanceRecord {
     params: ParamSnapshot,
 }
 
-/// One render's answer.
 pub struct BrokerRender {
     /// The picture. On a failure this is the effect's own input — identity —
     /// so the comp still composites.
@@ -238,19 +201,16 @@ pub struct BrokerRender {
     /// Whether this frame is the plugin's work or a placeholder for it. The
     /// caller badges the layer; nothing here is modal (docs/12 §2.3).
     pub errored: bool,
-    /// What went wrong, in a sentence, when `errored` is set.
     pub error: Option<String>,
     /// `getFramesNeeded`'s answer, which is what the evaluation graph's
     /// temporal edges are made of (docs/05 §4.2).
     pub frames_needed: BTreeMap<String, (f64, f64)>,
-    /// The clip the plugin said this frame simply is, if it said so.
     pub identity_of: Option<String>,
     /// The graphics card path the plugin renders its next frame through,
     /// `None` being the CPU.
     pub path: Option<GpuApi>,
 }
 
-/// One plugin bundle, hosted in a process of its own.
 pub struct Broker {
     pub(crate) config: BrokerConfig,
     ring: Ring,
@@ -261,7 +221,6 @@ pub struct Broker {
     ring_frame: (usize, usize),
     link: Option<Link>,
     descriptors: Vec<PluginDescriptor>,
-    /// The graphics card path of each of `descriptors`, as the broker last said.
     pub(crate) paths: Vec<Option<GpuApi>>,
     refused: Vec<String>,
     instances: BTreeMap<InstanceId, InstanceRecord>,
@@ -278,12 +237,6 @@ pub struct Broker {
 }
 
 impl Broker {
-    /// Start a broker for one bundle, and describe what is in it.
-    ///
-    /// # Errors
-    ///
-    /// [`BrokerError`] — the executable, the pipe, the ring, or a broker that
-    /// speaks another protocol.
     pub fn spawn(config: BrokerConfig) -> Result<Self, BrokerError> {
         let identifier = fresh_identifier()?;
         let ring = Ring::create(&ring_path(&identifier), config.frame.0, config.frame.1)?;
@@ -311,7 +264,6 @@ impl Broker {
         Ok(broker)
     }
 
-    /// Bring a broker process up, hand it the ring, and describe the bundle.
     fn start(&mut self, identifier: &str) -> Result<(), BrokerError> {
         let name = pipe::pipe_name(identifier);
         let listener = pipe::listen(&name)?;
@@ -430,11 +382,6 @@ impl Broker {
         Ok(())
     }
 
-    /// Ask the bundle what is in it, and remember the answer.
-    ///
-    /// # Errors
-    ///
-    /// [`BrokerError`].
     pub fn describe(&mut self) -> Result<&[PluginDescriptor], BrokerError> {
         let deadline = describe_deadline(&self.config.quirks);
         match self.action(&HostMessage::Describe, deadline, None) {
@@ -469,7 +416,6 @@ impl Broker {
         }
     }
 
-    /// Keep each plugin's path, here and where the frame key reads it.
     pub(crate) fn note_paths(&mut self, paths: Vec<Option<GpuApi>>) {
         self.paths = paths;
         for (index, descriptor) in self.descriptors.iter().enumerate() {
@@ -478,7 +424,6 @@ impl Broker {
         }
     }
 
-    /// One plugin's path changed: the card failed on it and the CPU took over.
     fn note_path(&mut self, instance: InstanceId, path: Option<GpuApi>) {
         let Some(plugin) = self.instances.get(&instance).map(|record| record.plugin) else {
             return;
@@ -495,19 +440,16 @@ impl Broker {
         }
     }
 
-    /// What the bundle holds, as last described.
     #[must_use]
     pub fn descriptors(&self) -> &[PluginDescriptor] {
         &self.descriptors
     }
 
-    /// The plugins the last description turned away, one line each saying why.
     #[must_use]
     pub fn refused(&self) -> &[String] {
         &self.refused
     }
 
-    /// The plugin's render deadline, as the quirks table set it.
     #[must_use]
     pub fn render_timeout(&self) -> Duration {
         self.config.quirks.render_timeout
@@ -520,11 +462,6 @@ impl Broker {
         quirks.warm_up_timeout.max(quirks.render_timeout)
     }
 
-    /// Make an instance of one of the plugins.
-    ///
-    /// # Errors
-    ///
-    /// [`BrokerError`].
     pub fn create_instance(
         &mut self,
         plugin: u32,
@@ -658,7 +595,6 @@ impl Broker {
         self.settled(instance, answer)
     }
 
-    /// Read the answer to a press or a settle.
     fn settled(
         &mut self,
         instance: InstanceId,
@@ -790,11 +726,6 @@ impl Broker {
         }
     }
 
-    /// Destroy an instance and forget it.
-    ///
-    /// # Errors
-    ///
-    /// [`BrokerError::NoSuchInstance`].
     pub fn destroy(&mut self, instance: InstanceId) -> Result<(), BrokerError> {
         if self.instances.remove(&instance).is_none() {
             return Err(BrokerError::NoSuchInstance);
@@ -809,26 +740,21 @@ impl Broker {
         Ok(())
     }
 
-    /// Whether the plugin has used up its three strikes.
     #[must_use]
     pub const fn is_disabled(&self) -> bool {
         self.disabled
     }
 
-    /// How many consecutive failures stand against the plugin right now.
     #[must_use]
     pub const fn strikes(&self) -> u32 {
         self.strikes
     }
 
-    /// How many times a broker has been started again after one died.
     #[must_use]
     pub const fn restarts(&self) -> usize {
         self.restarts
     }
 
-    /// How many prefetch shipments have gone out. One shipment per render is
-    /// the whole point of batching (docs/impl/ofx-host.md §4).
     #[must_use]
     pub const fn shipments(&self) -> usize {
         self.shipments
@@ -859,8 +785,6 @@ impl Broker {
     pub fn ring_path_for_test(&self) -> String {
         self.ring.spec().path.clone()
     }
-
-    // ------------------------------------------------------------ the wire --
 
     /// One action, with its deadline and its consequences: a failure is a
     /// strike, and a strike is either a restart or the end of the plugin.
@@ -983,7 +907,6 @@ impl Broker {
             .map_err(|_| Fault::Gone)
     }
 
-    /// Write one message to the broker.
     fn send(&mut self, message: &HostMessage) -> Result<(), BrokerError> {
         let link = self.link.as_mut().ok_or(BrokerError::NoHandshake)?;
         pipe::send(&mut link.sender, message)?;
@@ -1026,7 +949,6 @@ impl Broker {
         }
     }
 
-    /// Wait for one message, or for the deadline, or for the process to die.
     fn wait_for(&mut self, left: Duration) -> Result<BrokerMessage, Fault> {
         let Some(link) = self.link.as_ref() else {
             return Err(Fault::Gone);
@@ -1053,8 +975,6 @@ impl Broker {
         self.next_slot = 0;
         let spec = self.ring.spec().clone();
         self.send(&HostMessage::Open { ring: spec })?;
-        // The replacement ring loses its name once the broker has mapped it,
-        // exactly as the first one did.
         self.ring_is_shared();
         Ok(())
     }
@@ -1068,9 +988,6 @@ impl Broker {
         slot
     }
 
-    // ------------------------------------------------------- the watchdog --
-
-    /// Count a failure, and either start again or stop trying.
     fn strike(&mut self, process_is_suspect: bool) {
         self.strikes = self.strikes.saturating_add(1);
         if self.strikes >= STRIKES_BEFORE_DISABLED {
@@ -1094,7 +1011,6 @@ impl Broker {
         self.warm.clear();
     }
 
-    /// Whether the broker is parked: no process, and not put away.
     #[must_use]
     pub fn is_parked(&self) -> bool {
         self.link.is_none() && !self.disabled
@@ -1110,8 +1026,6 @@ impl Broker {
         self.respawn()
     }
 
-    /// Start a broker again and put it back where the last one was: describe
-    /// the bundle, make every instance, with the values the host holds.
     pub(crate) fn restart(&mut self) -> Result<(), BrokerError> {
         self.kill();
         self.restarts = self.restarts.saturating_add(1);
@@ -1126,7 +1040,6 @@ impl Broker {
         self.respawn()
     }
 
-    /// A new process in the old one's place, told everything again.
     fn respawn(&mut self) -> Result<(), BrokerError> {
         // A new process loads everything again, so every instance warms up again.
         self.warm.clear();
@@ -1172,7 +1085,6 @@ impl Broker {
         Ok(())
     }
 
-    /// End the broker process, however it feels about that.
     pub(crate) fn kill(&mut self) {
         if let Some(mut link) = self.link.take() {
             let _ = pipe::send(&mut link.sender, &HostMessage::Shutdown);
@@ -1188,7 +1100,6 @@ impl Drop for Broker {
     }
 }
 
-/// The frame a failed render answers with: its own input, and a sentence.
 fn errored(frame: Frame16, why: &str) -> BrokerRender {
     BrokerRender {
         frame,

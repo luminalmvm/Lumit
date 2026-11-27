@@ -1,6 +1,3 @@
-//! What both readers share: the budget, finding the files a model names, and
-//! decoding its pictures.
-
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -13,8 +10,6 @@ use crate::{Image, SceneError};
 /// charged before it is read rather than after.
 pub(crate) const VERTEX_BYTES: usize = 128;
 
-/// One read in progress: the file, the budget it spends and the flag that
-/// stops it.
 pub(crate) struct Reader<'a> {
     pub path: &'a Path,
     pub dir: PathBuf,
@@ -193,7 +188,6 @@ pub(crate) fn unescape(uri: &str) -> String {
     String::from_utf8(out).unwrap_or_else(|_| uri.to_string())
 }
 
-/// The `mtllib` files an OBJ names, as written.
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn obj_libraries(obj: &[u8]) -> Vec<String> {
     String::from_utf8_lossy(obj)

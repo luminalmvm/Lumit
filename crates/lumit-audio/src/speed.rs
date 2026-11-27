@@ -10,10 +10,8 @@
 //! output frames and straight lines between. A speed ramp, a freeze or a run
 //! backwards are all just a table.
 
-/// Output frames between two entries of a position table.
 pub const STEP: usize = 64;
 
-/// Where output frame `i` reads the source, from the table.
 fn position(table: &[f64], i: usize) -> f64 {
     let c = i / STEP;
     let along = (i % STEP) as f64 / STEP as f64;
@@ -149,7 +147,6 @@ pub fn keep_pitch(src: &[f32], table: &[f64], frames: usize, rate: u32) -> Vec<f
 mod tests {
     use super::*;
 
-    /// A sine at `hz`, stereo, `frames` long.
     fn sine(hz: f32, frames: usize, rate: u32) -> Vec<f32> {
         (0..frames)
             .flat_map(|i| {
@@ -169,8 +166,6 @@ mod tests {
         n as f32 * rate as f32 / left.len() as f32
     }
 
-    /// Half speed: tape halves the pitch, keep-pitch holds it, and both run
-    /// twice as long through the same stretch of source.
     #[test]
     fn half_speed_tape_drops_an_octave_and_keep_pitch_holds() {
         let rate = 48_000;
@@ -186,7 +181,6 @@ mod tests {
         assert!((crossings(&body(&kept), rate) - 440.0).abs() < 10.0);
     }
 
-    /// At 100% keep-pitch gives the source back.
     #[test]
     fn keep_pitch_at_full_speed_is_the_source() {
         let rate = 48_000;

@@ -4,15 +4,12 @@ part of 'cut_timeline_panel_frb.dart';
 // the Sync to angle rows a track has inside a multicam comp. The engine makes
 // every edit; these only name the angle and the clips.
 
-/// The multicam comp [clip] plays an angle of, as a reference.
 CompositionReference cutMulticamOf(
         CompositionReference comp, BridgeClip clip) =>
     CompositionReference(
         internalproject: comp.internalproject, internalid: clip.source);
 
 extension CutMulticamMenu<W extends StatefulWidget> on CutClipMenu<W> {
-  /// A multicam clip's own rows: its picture angle, its sound angle, its
-  /// angles in the source side, its comp, and Flatten.
   List<Widget> _multicamRows(void Function(void) close, LumitUiState ui,
       CompositionReference comp, BridgeClip clip) {
     final mc = cutMulticamOf(comp, clip);
@@ -93,7 +90,6 @@ extension CutMulticamMenu<W extends StatefulWidget> on CutClipMenu<W> {
           angleRow('ctl-menu-sound-angle', a, a.id == sound,
               () => switchTo(a.id, BridgeAngleSwitch.sound)),
       ]),
-      // Another angle heard under the clip as well, or taken away again.
       _flyout(close, 'ctl-menu-add-sound', l10n.cutAddSoundMenu, [
         for (final a in angles)
           if (a.id != sound)

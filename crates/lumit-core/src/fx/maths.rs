@@ -319,14 +319,12 @@ impl ShakeWobble {
 pub struct ShakeSample {
     /// Wobble offset at this sub-frame, raster pixels.
     pub offset_px: [f32; 2],
-    /// Rotation wobble at this sub-frame, degrees.
     pub rotation_deg: f32,
     /// Zoom factor at this sub-frame; 1 = no depth (z) shake.
     pub zoom: f32,
 }
 
 impl ShakeSample {
-    /// The neutral (identity) sample — the fixed-size array's initialiser.
     pub const IDENTITY: Self = Self {
         offset_px: [0.0, 0.0],
         rotation_deg: 0.0,
@@ -540,9 +538,9 @@ pub fn normalise_tint_columns(mut tints: [[f32; 3]; 3]) -> [[f32; 3]; 3] {
 /// tints give a red→green→blue fringe.
 pub fn tint_gradient(tints: [[f32; 3]; 3], t: f64) -> [f64; 3] {
     let (a, b, f) = if t <= 0.0 {
-        (tints[0], tints[1], t + 1.0) // [-1, 0] → f in [0, 1]
+        (tints[0], tints[1], t + 1.0)
     } else {
-        (tints[1], tints[2], t) // [0, 1]
+        (tints[1], tints[2], t)
     };
     [
         f64::from(a[0]) * (1.0 - f) + f64::from(b[0]) * f,
@@ -580,7 +578,6 @@ pub fn spectral_taps(samples: i32, tints: [[f32; 3]; 3]) -> Vec<[f32; 4]> {
         let c = tint_gradient(tints, t);
         taps.push([c[0], c[1], c[2], t]);
     }
-    // Normalise each colour column to sum 1 (uniform-image preservation).
     for c in 0..3 {
         let sum: f64 = taps.iter().map(|t| t[c]).sum();
         if sum > 0.0 {

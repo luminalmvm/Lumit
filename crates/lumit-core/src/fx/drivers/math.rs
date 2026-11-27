@@ -17,7 +17,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// The operations Math offers, in dropdown order.
 pub const OPERATIONS: &[&str] = &[
     "Add",
     "Subtract",
@@ -29,7 +28,6 @@ pub const OPERATIONS: &[&str] = &[
     "Power",
 ];
 
-/// Math's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "math",
@@ -41,23 +39,18 @@ pub const OPERATIONS: &[&str] = &[
     matte = false,
 )]
 pub struct Math {
-    /// The left-hand number.
     #[slider(min = -100.0, max = 100.0, default = 0.0, unit = Raw)]
     pub a: f32,
 
-    /// The right-hand number.
     #[slider(min = -100.0, max = 100.0, default = 1.0, unit = Raw)]
     pub b: f32,
 
-    /// What to do with them.
     #[choice(options = *OPERATIONS, dividers_after = CHOICE_UNGROUPED, default = 2)]
     pub operation: u32,
 }
 
-/// The port the result leaves by.
 pub const VALUE_PORT: &str = "value";
 
-/// Math's behaviour.
 pub struct MathDef;
 
 impl EffectDef for MathDef {

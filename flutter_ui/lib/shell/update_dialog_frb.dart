@@ -34,8 +34,6 @@ Future<void> pressUpdateRow(
   required bool Function() projectIsDirty,
   required Future<void> Function() saveProject,
 }) async {
-  // In flight: the row is disabled anyway, and a second press should not start
-  // a second check.
   if (updates.busy) return;
 
   if (updates.stage == UpdateStage.available) {
@@ -122,7 +120,6 @@ Future<void> pressUpdateButton(
   }
 }
 
-/// Ask, download, then move on to the restart question.
 Future<void> _offerAndFetch(
   BuildContext context, {
   required UpdateService updates,
@@ -175,8 +172,6 @@ Future<void> _offerAndFetch(
   );
 }
 
-/// The last window: restart now, or later, and save first if there is work
-/// open.
 Future<void> _askAboutRestart(
   BuildContext context, {
   required UpdateService updates,
@@ -217,7 +212,6 @@ Future<void> _askAboutRestart(
   await updates.install();
 }
 
-/// What the restart window can be answered with.
 enum _RestartAnswer { restart, saveAndRestart, later }
 
 /// What the release says to read before it is applied. Only ever shown for a
@@ -247,8 +241,6 @@ class _BeforeYouUpdate extends StatelessWidget {
         questionFilled(
             'update-notice-continue', l10n.updateContinue, () => onChoose(true)),
       ],
-      // Capped and scrolling, so a release with a lot to say does not push the
-      // buttons off the screen.
       content: ConstrainedBox(
         key: const ValueKey('update-notice'),
         constraints: const BoxConstraints(maxHeight: 220),
@@ -280,14 +272,11 @@ class _BeforeYouUpdate extends StatelessWidget {
   }
 }
 
-/// A question with [summary] in its footer: "Not now", and the way forward.
-/// The offer of an update and the nightly warning are both this.
 class _Ask extends StatelessWidget {
   final String title;
   final String? body;
   final String summary;
 
-  /// The label on the button that goes ahead.
   final String yes;
   final ValueChanged<bool?> onChoose;
 
@@ -357,16 +346,11 @@ class _DownloadProgress extends StatelessWidget {
       );
 }
 
-/// The end of the update: it is on disk, and applying it means closing Lumit.
 class _RestartToFinish extends StatelessWidget {
   final String version;
 
-  /// Whether the open project has unsaved work, which is what puts the save
-  /// button on this window rather than leaving the choice to be regretted.
   final bool dirty;
 
-  /// How the update will be applied: a swap and a restart, an installer and a
-  /// restart, or a file handed to Flatpak while Lumit stays open.
   final UpdateDelivery delivery;
 
   final ValueChanged<_RestartAnswer?> onChoose;
@@ -378,13 +362,11 @@ class _RestartToFinish extends StatelessWidget {
     required this.onChoose,
   });
 
-  /// Whether finishing means leaving. False only for the Flatpak hand-off.
   bool get quits => delivery != UpdateDelivery.flatpakBundle;
 
   @override
   Widget build(BuildContext context) => QuestionWindow(
         width: 460,
-        // Three answers, and one of them a whole phrase.
         stacked: quits && dirty,
         title:
             quits ? l10n.updateRestartToFinish : l10n.updateDownloaded(version),
@@ -400,7 +382,6 @@ class _RestartToFinish extends StatelessWidget {
           if (quits && dirty) ...[
             questionPlain('update-restart-now', l10n.updateRestartWithoutSaving,
                 () => onChoose(_RestartAnswer.restart)),
-            // The default: Enter takes the safe restart, the one that saves.
             questionFilled('update-save-restart', l10n.updateSaveAndRestart,
                 () => onChoose(_RestartAnswer.saveAndRestart)),
           ] else

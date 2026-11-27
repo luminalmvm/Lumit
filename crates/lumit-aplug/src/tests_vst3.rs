@@ -34,8 +34,6 @@ use crate::tests::{a_ramp, action_log_of, built_cdylib, fixture_lock, reset_log_
 use crate::vst3::{join_state, split_state};
 use crate::VST3_HOST_ACTIONS;
 
-// ---------------------------------------------------------------- fixture --
-
 /// Lay the fixture out as a `.vst3` bundle under `root`, and answer the bundle.
 ///
 /// A bundle is a folder, not a file: the library lives at
@@ -52,7 +50,6 @@ pub(crate) fn a_bundle_in(root: &Path) -> Option<PathBuf> {
     Some(bundle)
 }
 
-/// The architecture folder a bundle on this platform is read from.
 fn architecture() -> &'static str {
     if cfg!(target_os = "windows") {
         "x86_64-win"
@@ -80,18 +77,14 @@ fn fixture() -> Option<&'static Path> {
         .map(|(_, path)| path.as_path())
 }
 
-/// The library inside the bundle — where the logs actually live.
 fn loaded_binary() -> Option<PathBuf> {
     crate::vst3::payload(fixture()?)
 }
 
-/// The module, open.
 fn open_module() -> Option<AnyModule> {
     AnyModule::open(fixture()?).ok()
 }
 
-/// One of the eight, by kind — a VST3 class id rather than a CLAP id string, so
-/// it has to be read off the module the host just described.
 fn class_of(module: &AnyModule, kind: Kind) -> Option<String> {
     module
         .entries()
@@ -100,14 +93,11 @@ fn class_of(module: &AnyModule, kind: Kind) -> Option<String> {
         .map(|entry| entry.id.clone())
 }
 
-/// The name a person would see, as the fixture spells it.
 fn name_of(kind: Kind) -> String {
     String::from_utf8_lossy(kind.name())
         .trim_end_matches('\0')
         .to_string()
 }
-
-// -------------------------------------------------------------- discovery --
 
 #[test]
 fn a_scan_offers_the_vst3_effects_and_reports_the_refusals() {
@@ -153,8 +143,6 @@ fn a_scan_offers_the_vst3_effects_and_reports_the_refusals() {
     );
 }
 
-// --------------------------------------------------------------- describe --
-
 #[test]
 fn a_described_vst3_plugin_lands_as_ordinary_properties() {
     let _guard = fixture_lock();
@@ -171,8 +159,6 @@ fn a_described_vst3_plugin_lands_as_ordinary_properties() {
     let row = schema.params.first().expect("one row");
     assert_eq!(row.id, format!("p{PARAM_GAIN}"));
     assert_eq!(row.label, "Gain");
-    // The range is the **plain** one, not nought to one: a person keyframes the
-    // number they read, and the normalising happens at the boundary.
     assert!(
         matches!(row.kind, ParamKind::Slider { default, range, .. } if default == 1.0 && range == (0.0, 4.0)),
         "a closed VST3 range is a slider in plain units: {:?}",
@@ -186,16 +172,12 @@ fn a_described_vst3_plugin_lands_as_ordinary_properties() {
     assert!(!def.is_image_op(), "an audio effect touches no picture");
 }
 
-// -------------------------------------------------- the order of actions --
-
 #[test]
 fn the_vst3_order_of_actions_is_the_one_written_down() {
     let _guard = fixture_lock();
     let (Some(bundle), Some(binary)) = (fixture(), loaded_binary()) else {
         return skipped("the_vst3_order_of_actions_is_the_one_written_down");
     };
-    // The bundle has already been enumerated, so reset and enumerate again: the
-    // log has to start at the factory.
     reset_log_of(&binary);
     let Ok(module) = AnyModule::open(bundle) else {
         return skipped("the_vst3_order_of_actions_is_the_one_written_down");
@@ -220,8 +202,6 @@ fn the_vst3_order_of_actions_is_the_one_written_down() {
 
     assert_eq!(action_log_of(&binary), VST3_HOST_ACTIONS.to_vec());
 }
-
-// -------------------------------------------------------------- the sound --
 
 #[test]
 fn a_vst3_gain_plugin_multiplies_every_sample_exactly() {
@@ -252,8 +232,6 @@ fn a_vst3_gain_plugin_multiplies_every_sample_exactly() {
     assert_eq!(output, expected);
 }
 
-// -------------------------------------------------------------- the state --
-
 #[test]
 fn a_vst3_state_blob_round_trips_both_halves() {
     let _guard = fixture_lock();
@@ -263,8 +241,6 @@ fn a_vst3_state_blob_round_trips_both_halves() {
     let Some(echo) = class_of(&module, Kind::StateEcho) else {
         return;
     };
-    // Two halves, deliberately different lengths, so a blob that came back with
-    // the split in the wrong place could not pass.
     let processor: Vec<u8> = (0u8..=255).cycle().take(4096).collect();
     let controller: Vec<u8> = b"the controller's own memory".to_vec();
     let blob = join_state(&processor, &controller);
@@ -285,7 +261,6 @@ fn a_vst3_state_blob_round_trips_both_halves() {
     );
     assert_eq!(host.warning(), None, "nothing went wrong bringing it up");
 
-    // And with nothing to load, what it saves is its own answer, not silence.
     let host = LocalHost::open(
         &module,
         &InstanceSetup {
@@ -299,8 +274,6 @@ fn a_vst3_state_blob_round_trips_both_halves() {
         STATE_ECHO_DEFAULT
     );
 }
-
-// --------------------------------------------------------- the automation --
 
 #[test]
 fn a_vst3_param_sweep_arrives_as_sorted_per_block_points() {
@@ -324,9 +297,6 @@ fn a_vst3_param_sweep_arrives_as_sorted_per_block_points() {
     let input = vec![0.0f32; INTERLEAVED_LEN];
     let mut output = vec![0.0f32; INTERLEAVED_LEN];
     for block in 0..3u32 {
-        // Deliberately out of order. A VST3 queue is read front to back, so the
-        // boundary sorts for the same reason CLAP's does and no caller has to
-        // remember.
         let events = [
             ParamEvent {
                 time: 256,

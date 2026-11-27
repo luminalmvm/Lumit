@@ -23,7 +23,6 @@ import 'package:lumit_flutter/state/viewer_views.dart';
 
 import 'frb_test_support.dart';
 
-/// A ticked menu row's mark: the set's checkmark.
 final Finder _tick = find.byWidgetPredicate(
     (w) => w is glyph.LumitIcon && w.glyph == LumitIcons.tick);
 
@@ -35,8 +34,6 @@ void main() {
         withScene() {
       final p = freshProject();
       final comp = p.state.project!.newComposition(name: 'Scene');
-      // A camera and a light, so the wireframes have something to draw beyond
-      // the layer rectangles.
       comp.addCameraLayer();
       comp.addLightLayer(kind: 0);
       p.uiState.setSelectedComp(comp);
@@ -60,8 +57,6 @@ void main() {
       await tester.pump();
     }
 
-    /// Open the first view's picker, scrolling it into reach first, should
-    /// its strip be narrower than the bar wants.
     Future<void> openPicker(WidgetTester tester) async {
       final button = find.byKey(const ValueKey('viewer-view')).first;
       await tester.ensureVisible(button);
@@ -80,7 +75,6 @@ void main() {
         (tester) async {
       final p = withScene();
       await mount(tester, p);
-      // Split into a two-up of the one comp, picked on the first pane's bar.
       final pane = Panel.viewer.pane();
       p.uiState.views.setLayout(pane, ViewLayout.twoAcross);
       await tester.pump();
@@ -103,7 +97,6 @@ void main() {
       expect(front.z, closeTo(-100.0 * size.width, 1e-6));
       expect(front.rotationY, closeTo(0, 1e-9));
 
-      // Back looks the other way, and is its own stored pose.
       await pickView(tester, ViewerView.back);
       expect(p.uiState.viewPoseOf(first.engineId)!.rotationY,
           closeTo(180, 1e-6));

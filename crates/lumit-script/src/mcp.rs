@@ -33,7 +33,6 @@ const MAX_PICTURE: u64 = 2 << 20;
 const SCRIPT_TOOL: &str = "script_run";
 const SCRIPT_SCHEMA: &str = r#"{"type":"object","properties":{"source":{"type":"string","description":"The script, as lumit-cli run takes it, with the lumit object and After Effects' objects"},"name":{"type":"string","description":"What its undo step is called"}},"required":["source"],"additionalProperties":false}"#;
 
-/// A JSON-RPC error: its code, message and any data.
 type Failure = (i64, String, Option<Value>);
 
 /// The reply to one message, `line`, or `None` when it needs none, as a
@@ -42,8 +41,6 @@ pub fn answer(line: &str, host: &dyn Host) -> Option<String> {
     reply_to(line, Ok(host))
 }
 
-/// [`answer`] while there is no project to work on: a tool call answers
-/// `why`, and everything else as usual.
 pub fn answer_without(line: &str, why: &str) -> Option<String> {
     reply_to(line, Err(why))
 }
@@ -195,7 +192,6 @@ fn call(params: &Value, host: Result<&dyn Host, &str>) -> Result<Value, Failure>
         }
         (Ok(host), None) => script(host, &args),
     };
-    // A frame comes with its picture, so the client can look at it.
     let picture = match (&done, command) {
         (Ok(value), Some(command)) if command.name == "comp.frame" => picture(value),
         _ => None,
@@ -212,8 +208,6 @@ fn call(params: &Value, host: Result<&dyn Host, &str>) -> Result<Value, Failure>
     Ok(json!({ "content": content, "isError": failed }))
 }
 
-/// The PNG `comp.frame` answered with, as an image for the client, when it
-/// is no bigger than [`MAX_PICTURE`].
 fn picture(answer: &Value) -> Option<Value> {
     let path = std::path::Path::new(answer.get("path")?.as_str()?);
     if std::fs::metadata(path).ok()?.len() > MAX_PICTURE {
@@ -223,7 +217,6 @@ fn picture(answer: &Value) -> Option<Value> {
     Some(json!({ "type": "image", "data": base64(&bytes), "mimeType": "image/png" }))
 }
 
-/// `bytes` in standard base64, with padding.
 fn base64(bytes: &[u8]) -> String {
     const LETTERS: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);

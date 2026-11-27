@@ -46,14 +46,12 @@ use uuid::Uuid;
 /// than at the end of a wait that could be half an hour.
 const MAX_TICK: Duration = Duration::from_secs(1);
 
-/// The interval and the keep count, as the frontend last set them.
 struct Schedule {
     /// Zero means off, and off is a setting a user is entitled to hold.
     every: Duration,
     keep: u32,
 }
 
-/// docs/10 §4's defaults, in force until the frontend says otherwise.
 static SCHEDULE: LazyLock<Mutex<Schedule>> = LazyLock::new(|| {
     Mutex::new(Schedule {
         every: Duration::from_secs(5 * 60),
@@ -123,7 +121,6 @@ fn page_turn() -> impl FnMut() -> bool {
     }
 }
 
-/// The timer. Sleeps, counts, sweeps — for the life of the process.
 #[cfg(not(target_arch = "wasm32"))]
 fn run() {
     let mut waited = Duration::ZERO;
@@ -152,7 +149,6 @@ fn run() {
     }
 }
 
-/// The cadence as it stands.
 fn now() -> (Duration, u32) {
     let sched = lock(&SCHEDULE);
     (sched.every, sched.keep)
@@ -177,17 +173,6 @@ pub(crate) fn sweep(keep: u32) -> Vec<PathBuf> {
         .collect()
 }
 
-/// Consider one project. `None` when there was nothing to write, or when the
-/// write failed — a failed autosave is not an error anybody can act on, and the
-/// next round will try again.
-///
-// ponytail: an autosave does not refresh the welcome screen's thumbnail.
-// The file it would write is named by a digest the *frontend* owns
-// (`Workspace.thumbnailKey`) in a folder the frontend owns, so writing it here
-// would make one filename two sources of truth. The trigger for changing that
-// is somebody minding that a picture can be an editing session stale; the
-// upgrade is an "autosaved" event on the change stream that the frontend
-// answers by drawing one, not a write made from this thread.
 pub(crate) fn sweep_one(id: Uuid, keep: u32) -> Option<PathBuf> {
     let state = {
         let projects = crate::api::state::PROJECTS.read().ok()?;
@@ -200,8 +185,6 @@ pub(crate) fn sweep_one(id: Uuid, keep: u32) -> Option<PathBuf> {
     let (document, target, revision) = {
         let state = state.read().ok()?;
         let revision = state.store.revision();
-        // Unmoved since the last save, or since the last autosave: there is
-        // nothing a copy would preserve.
         if revision == state.saved_revision || marked == Some(revision) {
             return None;
         }
@@ -228,7 +211,6 @@ mod tests {
     /// copies of the projects the other tests are counting.
     static ONE_AT_A_TIME: Mutex<()> = Mutex::new(());
 
-    /// A project saved to `dir/scene.lum`, with a comp in it.
     fn saved_project(dir: &Path) -> crate::api::project::ProjectReference {
         std::fs::create_dir_all(dir).expect("temp dir");
         let project = LumitBridgeState::new_project(None).expect("a new project");
@@ -270,10 +252,6 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// **The interval is honoured**, on a clock shortened to milliseconds: the
-    /// timer writes nothing before it is due, writes once it is, and writes
-    /// nothing at all once the interval is set to zero — which is what a user
-    /// turning autosave off is entitled to expect.
     #[test]
     fn the_timer_waits_for_its_interval_and_off_means_off() {
         let _turn = lock(&ONE_AT_A_TIME);

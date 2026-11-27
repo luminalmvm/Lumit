@@ -8,27 +8,19 @@ extern crate self as lumit_core;
 
 pub mod anim;
 pub mod camera;
-/// Captions: a Text layer whose words change with the speech.
 pub mod captions;
-/// The node graph composition: what a comp holds instead of a layer stack.
 pub mod comp_graph;
-/// The layer and asset defaults every front end builds from.
 pub mod edits;
-/// The Environment light: a picture of everything round the scene.
 pub mod environment;
 pub mod expression;
 pub mod extrude;
 pub mod fx;
 pub mod grade;
 pub mod grade_solve;
-/// The layer driver graph: the additive wiring beside the effect stack.
 pub mod graph;
-/// Layer groups: the Timeline's organisational fold over a run of layers.
 pub mod group;
-/// Volumetric light: a Light layer seen in the air it shines through.
 pub mod haze;
 pub mod interpretation;
-/// The largest picture the renderer makes, and saying when one was cut to it.
 pub mod largest_picture;
 pub mod lighting;
 pub mod linalg;
@@ -43,41 +35,29 @@ pub mod model_material;
 pub mod model_part;
 pub mod motion_path;
 pub mod multicam;
-/// Occlusion culling: the full-frame opaque layer that hides what is under it.
 pub mod occlusion;
 pub mod ops;
 pub mod orient;
 pub mod paint;
 pub mod pixels;
-/// The planes tier's document half: which effects ask a model for a plane of
-/// depth or coverage, and the stamp that names one frame's answer.
 pub mod planes;
-/// Flow on a Precomp layer: the two nested frames a moment sits between.
 pub mod precomp_flow;
 pub mod preset;
 pub mod preset_parts;
-/// Puppet: the mesh over a layer's own silhouette and the as-rigid-as-possible
-/// deformer over it.
 pub mod puppet;
 pub mod retime;
 pub mod roto;
 pub mod routes;
 pub mod sequence;
 pub mod shape;
-/// Shared projects: what an edit touched, and merging edits made apart.
 pub mod shared;
 pub mod shown_size;
-/// Stabilise: the path, the edges and the plan a frame is drawn with.
 pub mod stabilise;
 pub mod store;
-/// Graphics templates: a composition with controls a placed copy can set.
 pub mod template;
-/// Text animators: a Text layer's words moved a letter at a time.
 pub mod text;
 pub mod time;
-/// The solve link: a Camera layer driven by a tracked layer.
 pub mod track;
-/// What was said in a footage item's sound, word by word.
 pub mod transcript;
 pub mod view_camera;
 pub mod wire_tie;

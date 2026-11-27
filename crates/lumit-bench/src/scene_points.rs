@@ -23,15 +23,12 @@ use std::sync::Arc;
 use std::time::Instant;
 use uuid::Uuid;
 
-/// Frames behind the stopwatch, after the warm-up.
 const RUNS: u32 = 10;
 const WARMUP: u32 = 3;
-/// The fastest of these is kept, as for Particulate's three.
 const REPEATS: u32 = 3;
 /// Four seconds in at 60 fps: two whole lifetimes, so the cloud is full.
 const FRAME: u64 = 240;
 
-/// The comp, its particles in the scene or flat on their layer, and its id.
 fn comp(in_scene: bool) -> Result<(Document, Uuid), String> {
     let mut doc = Document::new();
     let span = rat(10, 1);
@@ -125,7 +122,6 @@ fn comp(in_scene: bool) -> Result<(Document, Uuid), String> {
     Ok((doc, id))
 }
 
-/// Milliseconds per frame of one of the two comps, the fastest of the repeats.
 fn time(r: &mut HeadlessRenderer, in_scene: bool) -> Result<f64, String> {
     let (doc, id) = comp(in_scene)?;
     let doc = Arc::new(doc);
@@ -143,8 +139,6 @@ fn time(r: &mut HeadlessRenderer, in_scene: bool) -> Result<f64, String> {
     Ok(best)
 }
 
-/// A 1080p comp of one 3D solid seen through a camera turned `off` degrees from
-/// square on, its Depth points on it if `points`, and its id.
 fn shot(points: bool, off: f64) -> Result<(Document, Uuid), String> {
     let mut doc = Document::new();
     let def = Uuid::now_v7();
@@ -210,7 +204,6 @@ fn shot(points: bool, off: f64) -> Result<(Document, Uuid), String> {
         blending: Default::default(),
         extra: serde_json::Map::new(),
     };
-    // Round the comp's middle, at the same distance a fresh camera stands.
     let mut camera = lumit_core::edits::fresh_camera(&comp, "Camera".into(), None);
     let far = lumit_core::camera::default_zoom(1920.0);
     let (s, c) = off.to_radians().sin_cos();
@@ -226,7 +219,6 @@ fn shot(points: bool, off: f64) -> Result<(Document, Uuid), String> {
     Ok((doc, id))
 }
 
-/// Milliseconds per frame of a comp, the fastest of the repeats.
 fn timed(r: &mut HeadlessRenderer, (doc, id): (Document, Uuid)) -> Result<f64, String> {
     let doc = Arc::new(doc);
     for _ in 0..WARMUP {
@@ -243,7 +235,6 @@ fn timed(r: &mut HeadlessRenderer, (doc, id): (Document, Uuid)) -> Result<f64, S
     Ok(best)
 }
 
-/// Measure B31 and B38. `Err` when there is no graphics adapter.
 pub fn budgets(progress: &mut dyn FnMut(Measurement)) -> Result<Vec<Measurement>, String> {
     let mut r = HeadlessRenderer::new()?;
     let square = timed(&mut r, shot(true, 0.0)?)? - timed(&mut r, shot(false, 0.0)?)?;

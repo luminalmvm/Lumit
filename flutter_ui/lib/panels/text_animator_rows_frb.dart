@@ -44,13 +44,10 @@ export 'text_animator_tools.dart';
 /// down the panel.
 const double _cellWidth = 78;
 
-/// The Animators section for [layer], or nothing when it is not a Text layer.
 class TextAnimatorRowsFrb extends StatefulWidget {
   final LayerReference layer;
   final VoidCallback onChanged;
 
-  /// The comp and playhead: every number here is keyable, so every row carries
-  /// the stopwatch and the ◄ ◆ ► navigator.
   final CompositionReference comp;
   final int playheadFrame;
   final ValueChanged<int> onSeek;
@@ -129,7 +126,6 @@ class _TextAnimatorRowsFrbState extends State<TextAnimatorRowsFrb> {
   }
 }
 
-/// The section itself, for the animators [TextAnimatorRowsFrb] holds.
 class _AnimatorSection extends StatelessWidget {
   final TextAnimatorRowsFrb of;
   final List<BridgeTextAnimator> animators;
@@ -238,9 +234,6 @@ class _AnimatorSection extends StatelessWidget {
     );
   }
 
-  /// One animator: its heading, its own Amount and Link, its selectors top
-  /// to bottom, then its property groups in the order they read — where the
-  /// letter is, how it is turned, how big, how faded, what colour.
   List<Widget> _animatorRows(
     BuildContext context,
     List<BridgeTextAnimator> animators,
@@ -589,8 +582,6 @@ class _AnimatorSection extends StatelessWidget {
     ];
   }
 
-  /// One axis an animator moves the letters along: a keyable place, and a
-  /// way to take it off.
   Widget _axisRow(
     BuildContext context,
     List<BridgeTextAnimator> animators,
@@ -639,8 +630,6 @@ class _AnimatorSection extends StatelessWidget {
     );
   }
 
-  /// A keyable row: the stopwatch and navigator, the name, and one scrub field
-  /// per channel — a two-axis property draws two, the fill offset three.
   Widget _numberRow(
     BuildContext context,
     String label,
@@ -734,7 +723,6 @@ class _AnimatorSection extends StatelessWidget {
           children: [
             for (var i = 0; i < scalars.length; i++) ...[
               if (i > 0) const SizedBox(width: 6),
-              // Three values in a narrow panel give way, rather than run off it.
               Flexible(
                 child: SizedBox(
                   width: _cellWidth,
@@ -955,12 +943,9 @@ BridgeTextAnimator freshTextAnimator(String name) => BridgeTextAnimator(
       boxG: BridgeScalar.static_(textAnimatorDefault(TextAnimatorValue.boxG)),
       boxB: BridgeScalar.static_(textAnimatorDefault(TextAnimatorValue.boxB)),
       axes: const [],
-      // Nothing listed yet: Add ▸ Property builds it up, as After Effects'
-      // blank animator.
       properties: const [],
     );
 
-/// Whether any of [a]'s rows are keyed, any selector's included.
 bool animatorHasKeys(BridgeTextAnimator a) => firstKeySeconds([a]) != null;
 
 /// [animator] with one channel replaced — the generated struct is immutable and
@@ -1062,8 +1047,6 @@ enum TextAnimatorValue {
   boxR,
   boxG,
   boxB,
-  // A Proximity selector's reach, a Wiggly selector's four, then the font
-  // axes in the animator's order.
   radius,
   minAmount,
   maxAmount,
@@ -1093,7 +1076,6 @@ enum TextAnimatorValue {
   axis7,
 }
 
-/// The font axes' slots, in order.
 const _axisValues = [
   TextAnimatorValue.axis0,
   TextAnimatorValue.axis1,
@@ -1105,7 +1087,6 @@ const _axisValues = [
   TextAnimatorValue.axis7,
 ];
 
-/// Which of [a]'s font axes [value] is, or null for any other number.
 int? textAnimatorAxisIndex(TextAnimatorValue value) {
   final i = _axisValues.indexOf(value);
   return i < 0 ? null : i;
@@ -1134,9 +1115,6 @@ bool isSelectorValue(TextAnimatorValue value) => switch (value) {
       _ => false,
     };
 
-/// The animator's own numbers [a] has rows for, after its selectors': its
-/// Amount, the property groups it shows ([solid] adds the 3D ones) and one
-/// per font axis it moves. A selector's are [selectorItemsOf]'s.
 List<TextAnimatorValue> textAnimatorValuesOf(BridgeTextAnimator a,
     {required bool solid}) {
   return [
@@ -1155,8 +1133,6 @@ List<TextAnimatorValue> textAnimatorValuesOf(BridgeTextAnimator a,
   ];
 }
 
-/// A group of an animator's numbers that Add ▸ Property adds as one, the way
-/// After Effects lists them.
 enum AnimatorProperty {
   position('position'),
   rotation('rotation'),
@@ -1172,11 +1148,9 @@ enum AnimatorProperty {
   blur('blur'),
   characterOffset('character_offset');
 
-  /// How the document names it.
   final String key;
   const AnimatorProperty(this.key);
 
-  /// Only a solid layer's letters move in depth and turn in 3D.
   bool get solidOnly =>
       this == positionZ || this == rotationX || this == rotationY;
 
@@ -1189,7 +1163,6 @@ enum AnimatorProperty {
       this == blur ||
       this == characterOffset;
 
-  /// The numbers in the group.
   List<TextAnimatorValue> get numbers => switch (this) {
         position => const [
             TextAnimatorValue.positionX,
@@ -1218,7 +1191,6 @@ enum AnimatorProperty {
         characterOffset => const [TextAnimatorValue.characterOffset],
       };
 
-  /// What the Add ▸ Property menu calls it.
   String get label => switch (this) {
         position => l10n.transformPosition,
         rotation => l10n.transformRotation,
@@ -1236,7 +1208,6 @@ enum AnimatorProperty {
       };
 }
 
-/// The group [value] belongs to, or null for a selector's number or an axis.
 AnimatorProperty? animatorPropertyOf(TextAnimatorValue value) {
   for (final p in AnimatorProperty.values) {
     if (p.numbers.contains(value)) return p;
@@ -1256,7 +1227,6 @@ bool animatorShowsProperty(BridgeTextAnimator a, AnimatorProperty p) {
       BridgeScalar.static_(textAnimatorDefault(v)));
 }
 
-/// [a] listing [p] too.
 BridgeTextAnimator animatorWithProperty(
     BridgeTextAnimator a, AnimatorProperty p) {
   final listed = a.properties;
@@ -1294,15 +1264,12 @@ BridgeTextAnimator animatorWithoutProperty(
   ]);
 }
 
-/// The numbers only a solid layer's letters can use.
 const solidAnimatorValues = {
   TextAnimatorValue.positionZ,
   TextAnimatorValue.rotationX,
   TextAnimatorValue.rotationY,
 };
 
-/// What one of an animator's numbers is called — shared by the Timeline row,
-/// the graph channel and anything else that has to name one.
 String textAnimatorValueLabel(TextAnimatorValue value,
         [BridgeTextAnimator? a]) =>
     switch (value) {
@@ -1351,14 +1318,11 @@ String textAnimatorValueLabel(TextAnimatorValue value,
       _ => value.name,
     };
 
-/// The tag of the font axis in [value]'s slot of [a], or the slot's number
-/// when [a] is not known.
 String _axisTag(BridgeTextAnimator? a, TextAnimatorValue value) {
   final i = textAnimatorAxisIndex(value) ?? 0;
   return a != null && i < a.axes.length ? a.axes[i].tag : '${i + 1}';
 }
 
-/// What one of an animator's numbers is when it changes nothing, for Reset.
 double textAnimatorDefault(TextAnimatorValue value) => switch (value) {
       TextAnimatorValue.radius => 200,
       TextAnimatorValue.wiggles => 2,
@@ -1430,8 +1394,6 @@ BridgeRangeSelector selectorWithScalar(
       _ => s,
     };
 
-/// Which of [a]'s numbers [value] names; a selector's number is read off
-/// its selector [selector], the first by default.
 BridgeScalar textAnimatorScalarOf(
         BridgeTextAnimator a, TextAnimatorValue value,
         {int selector = 0}) =>
@@ -1466,8 +1428,6 @@ BridgeScalar textAnimatorScalarOf(
         },
     };
 
-/// [a] with the one number [value] names replaced, a selector's on its
-/// selector [selector].
 BridgeTextAnimator animatorWithScalar(
         BridgeTextAnimator a, TextAnimatorValue value, BridgeScalar to,
         {int selector = 0}) =>
@@ -1547,7 +1507,6 @@ void writeTextAnimatorScalar({
   );
 }
 
-/// [selector] with one field replaced, for the same reason.
 BridgeRangeSelector selectorWith(
   BridgeRangeSelector s, {
   BridgeScalar? start,
@@ -1646,9 +1605,6 @@ BridgeTextAnimator animatorWithSelectorKind(
               : null));
 }
 
-/// The rows of an animator's Add menu, After Effects' Add beside an
-/// animator: **Property** lists the groups it doesn't show yet and the font's
-/// axes it doesn't move, **Selector** what picks its letters.
 List<Widget> animatorAddMenuRows({
   required VoidCallback close,
   required List<BridgeTextAnimator> animators,
@@ -1751,9 +1707,6 @@ List<Widget> animatorAddMenuRows({
   ];
 }
 
-/// The rows of a Text layer's **Add animator** menu, After Effects' Animate:
-/// each one adds an animator showing that property, or moving that font axis.
-/// A blank one first, with nothing on it to start.
 List<Widget> animateMenuRows({
   required VoidCallback close,
   required LayerReference layer,
@@ -1827,7 +1780,6 @@ List<Widget> animateMenuRows({
         ),
         child: Text(l10n.textFontAxes),
       ),
-    // The presets, a second of keys from the playhead, as Animate text has.
     if (comp != null) ...[
       const MenuDivider(),
       for (final preset in TextAnimationPreset.values)
@@ -1877,8 +1829,6 @@ List<Widget> animateMenuRows({
   ];
 }
 
-/// [layer]'s animators with [index] taken off, or all of them when [index] is
-/// null: what Delete does on an animator's heading and on Animators.
 void removeTextAnimators(LayerReference layer,
     {int? index, LumitUiState? ui}) {
   final document = layer.getText();
@@ -1948,8 +1898,6 @@ bool removeTextAnimatorValue(
   return true;
 }
 
-/// Write [layer]'s animator [index] back as [next], the rest of the document
-/// as it is.
 void writeTextAnimator(
     LayerReference layer, int index, BridgeTextAnimator next) {
   final document = layer.getText();

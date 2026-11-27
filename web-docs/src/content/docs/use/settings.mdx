@@ -12,13 +12,13 @@ is in the **Lumit** menu.
 
 <Shot file="settings.png" caption="The settings window, on the Appearance page." eager/>
 
-The search box in the title strip finds a setting by its name, its section or its page, and
+The search box at the top of the sidebar finds a setting by its name, its section or its page, and
 lists what it finds under the page names. On the Shortcuts page it searches the shortcuts instead.
 
 Changes apply at once. A dot beside a setting's name marks one changed from how it shipped,
 and the same dot beside a page's name says the page holds one.
 Right-click a row for **Reset** and, where there is a number, path or colour, **Copy value**.
-**Reset page**, at the foot of the window or on a right-click of a page's or section's name,
+**Reset page**, the arrow at the top right of the window or on a right-click of a page's or section's name,
 puts every setting on that page back, after asking. On **Preview and cache** it leaves the
 cache budgets as they are. **Addons** and **Account** have no **Reset page**.
 
@@ -40,6 +40,19 @@ The window resizes from its corner and opens where it was left.
   **Choose…** picks it and **Clear** goes back to an empty project. **Panel layout ▸ Reset
   workspace** puts the panels back in the
   [Edit arrangement](/use/workspaces/#the-shipped-workspaces).
+- **Privacy**: **Share anonymous telemetry**, on as shipped, shares the Lumit version and
+  whether it is a nightly build, the operating system and its version, the processor type,
+  the system's language, some settings, such as the style and the shortcut preset, and the
+  rough size of the computer's processor, memory and screen, with the make and memory of
+  its graphics card. It counts how often each effect, panel and command is used, which
+  file types are imported, how each export ends, with its format, size and frame rate in
+  bands, how long start-up and opening a project take, how often and how long Lumit is
+  open, whether work was recovered after a crash, and whether updates install or fail. A
+  random ID made on this computer goes with them. Never projects, files, names or paths.
+  Turning it off forgets the ID and the counts. **Telemetry ▸ What is sent** shows the
+  report word for word. The first-run screen has it as a tick, on to begin with. After an
+  update from a version without it, a **Telemetry** popup says so once, and nothing is
+  counted or sent until it is closed.
 - **Updates**: **Automatic updates** checks for a new version at launch, at most once a
   day; downloading waits for a click. **Nightly builds** follows nightly builds instead of
   releases, and asks first. **Nightly icon**, on a nightly build on Windows or macOS,
@@ -69,24 +82,26 @@ The window resizes from its corner and opens where it was left.
 
 ## Appearance
 
-- **Theme**: **Colour scheme** offers 33 built-in schemes grouped dark and light, plus your
-  own, and pointing at one previews it. **Customise…** opens
-  [the theme editor](#the-theme-editor). **Your themes** acts on the ones you have made:
-  **Duplicate** copies the theme in use to a new one of your own, **Rename…** and **Delete**
-  act on one of your own, **Import…** reads a `.lumtheme` file and switches to it, and
-  **Export…** writes the colours on screen to one. An imported theme never replaces one of
-  your own: a name already taken gets a number. **Accent** and **Style** tune whichever
-  scheme is in force. Accent has six colours, with the accent in force written beside them,
-  and pointing at one previews it. **Splash uses theme colour** lights the start-up splash
-  with the accent. Style is how the interface is built: **Studio**, **Desk** or **Lantern**,
-  then any styles of your own. **Your styles** takes a style in with **Import…**, packs the
-  one in use into a file with **Make a package**, and opens the folder with **Show folder**.
+- **Style**: how the interface is built, **Studio**, **Desk** or **Lantern**, then any styles
+  of your own. **Your styles** takes a style in with **Import…**, packs the one in use into
+  a file with **Make a package**, and opens the folder with **Show folder**.
   See [Make a theme](/make/themes/#a-style). **Reduce transparency** draws a style's
   see-through parts solid. **Label case** sets how panel titles, headings and other labels
   are cased: **Style's choice**, **All caps**, **First letter** or **Lower case**. Left to the
   style, Studio writes the first letter as a capital, Desk is lower case and Lantern is all
   caps.
   **Room**, shown with Lantern only, is **Style's choice**, **Day** or **Night**.
+  The sidebar, the page heading and the cards are drawn differently under each style.
+- **Theme**: **Accent** has six colours, with the accent in force written beside them, and
+  pointing at one previews it. **Colour scheme** is a grid of pictures under **Dark**,
+  **Light** and **Custom**, one for each of the 33 built-in schemes and your own. Each
+  picture is the window in that scheme, drawn in the style in use. **Customise…** opens
+  [the theme editor](#the-theme-editor). **Your themes** acts on the ones you have made:
+  **Duplicate** copies the theme in use to a new one of your own, **Rename…** and **Delete**
+  act on one of your own, **Import…** reads a `.lumtheme` file and switches to it, and
+  **Export…** writes the colours on screen to one. An imported theme never replaces one of
+  your own: a name already taken gets a number. **Splash uses theme colour** lights the
+  start-up splash with the accent.
 - **Interface**: [**Scale**](/use/workspaces/#how-large-everything-draws), 75 % to 200 %.
   **Tooltips**, on or off. **Motion**, for how much controls animate: **Full**, **Minimal**
   or **None**. **Compact**, which tightens the row spacing throughout. And **Chrome
@@ -269,10 +284,14 @@ What the export dialogue opens on.
   **Third** or **Quarter**. **Reset** starts it again at full.
 - **Cache budgets** for all three tiers: rendered frames in memory, preview frames on the
   graphics card, and frames parked on disk. Each **Budget** is typed or dragged in
-  megabytes, from 64. Each tier shows what is **In use**, with **Clear**, and clearing the
-  disk tier asks first. The disk cache's location is set here too: **Where** is **With
-  Lumit**, **Beside the project** or **A folder I choose**, and **Applies to** makes the
-  choice for **Everything** or **This project**.
+  megabytes, from 64. The graphics card's budget is held to half of the **Graphics memory**
+  budget under **Resource governor**. A higher figure can be entered, and the field and the
+  status line's meter read the figure that applies. It is not held on Windows with a
+  graphics card that shares the computer's memory, or with a card that reports no memory
+  figure. Each tier shows what is **In use**, with **Clear**, and clearing the disk tier
+  asks first. The disk cache's location is set here too: **Where** is **With Lumit**,
+  **Beside the project** or **A folder I choose**, and **Applies to** makes the choice for
+  **Everything** or **This project**.
 - **Resource governor**: how much **Graphics memory** and **Ordinary memory** is in use
   against its budget, the most held at once, and how many requests it has turned away. Under
   each is **Room to spare**, **Getting tight**, **Nearly full**, which pauses cache fill, or

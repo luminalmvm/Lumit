@@ -62,8 +62,6 @@ fn vibrance_fx(@builtin(global_invocation_id) gid: vec3<u32>) {
     let mx = max(max(u.r, u.g), u.b);
     let mn = min(min(u.r, u.g), u.b);
     let sat = select(0.0, clamp((mx - mn) / mx, 0.0, 1.0), mx > 0.0);
-    // More boost where sat is low; none where already saturated.
-    // The matte scales Amount per pixel.
     var amount = p.amount;
     if (p.matte_on != 0.0) {
         amount = amount * matte_k(xy);

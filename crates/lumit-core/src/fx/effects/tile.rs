@@ -22,7 +22,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Tile's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "tile",
@@ -32,10 +31,7 @@ use lumit_fx_macros::Effect;
     // instance on load.
     version = 2,
     category = Distortion,
-    // One bilinear tap a pixel; the arithmetic before it is a handful of
-    // multiplies and a floor.
     cost = Cheap,
-    // A tile is cut from anywhere in the frame and stamped anywhere else.
     roi = FullFrame,
     premultiplied = true,
 )]
@@ -113,8 +109,6 @@ pub struct Tile {
     )]
     pub output_height: f32,
 
-    /// Flip alternate stamps instead of butting copies together, which is what
-    /// makes a tiled texture seamless without a seamless source.
     #[toggle(label = "Mirror edges", default = false)]
     pub mirror_edges: bool,
 
@@ -127,7 +121,6 @@ pub struct Tile {
     #[toggle(label = "Horizontal phase shift", default = false)]
     pub horizontal_phase_shift: bool,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -169,7 +162,6 @@ impl Tile {
     }
 }
 
-/// Tile's behaviour.
 pub struct TileDef;
 
 impl EffectDef for TileDef {

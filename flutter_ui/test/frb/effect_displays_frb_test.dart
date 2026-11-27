@@ -55,8 +55,6 @@ void main() {
           _ => const [],
         };
 
-    // --------------------------------------------------------------- Curves
-
     testWidgets('a tab shows that channel, and Reset restores only it',
         (tester) async {
       final p = withLayer();
@@ -64,7 +62,6 @@ void main() {
       await mount(tester, p);
       final id = p.layer.getEffects().single.id();
 
-      // Bend Blue, by clicking the middle of its plot to add a point.
       await tester.tap(find.byKey(ValueKey<String>('fx-curves-$id-tab-3')));
       await tester.pump();
       expect(
@@ -97,7 +94,6 @@ void main() {
       p.layer.addEffect(name: 'curves');
       await mount(tester, p);
 
-      // Plant a mid-point to drag, then take hold of it and pull it up.
       final plot = find.byType(CurveEditor);
       final centre = tester.getCenter(plot);
       await tester.tapAt(centre);
@@ -129,14 +125,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(curveOf(p.layer, 'master'), hasLength(3));
 
-      // Straight down, far past the bottom edge.
       await tester.dragFrom(centre, const Offset(0, 220));
       await tester.pumpAndSettle();
       expect(curveOf(p.layer, 'master'), hasLength(2),
           reason: 'the point is gone, and the two ends remain');
     });
-
-    // --------------------------------------------------------------- Levels
 
     testWidgets('the channel buttons aim the handles at that channel',
         (tester) async {
@@ -171,8 +164,6 @@ void main() {
       expect(black('red_in_black'), lessThan(0.4));
       expect(black('master_in_black'), 0, reason: 'and Master is untouched');
     });
-
-    // --------------------------------------------------------------- Slider
 
     testWidgets('a closed range draws a track, and a drag on it commits once',
         (tester) async {

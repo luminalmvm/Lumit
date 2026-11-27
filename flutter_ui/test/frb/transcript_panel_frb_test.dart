@@ -1,6 +1,3 @@
-// Deleting words in the Transcript panel cuts exactly their stretch out of
-// the clips, and one undo puts it back. The one check here guards lost work:
-// the words a person picks are the media that goes, no more and no less.
 
 import 'dart:io';
 import 'dart:typed_data';
@@ -27,7 +24,6 @@ void main() {
       final comp = project.newComposition(name: 'Talk');
       final footage = project.importFootage(path: _toneWavFile());
       comp.addFootageLayer(footage: footage, asSequence: true);
-      // Five words, a tenth of a second each, over the half-second file.
       BridgeRational tenths(int n) => BridgeRational(num: n, den: 10);
       const said = ['one', 'two', 'three', 'four', 'five'];
       footage.setTranscript(
@@ -59,7 +55,6 @@ void main() {
           until: () =>
               find.byKey(const ValueKey('transcript-page')).evaluate().isNotEmpty);
 
-      // The stretch the engine says "two" and "three" take.
       final read = await tester.runAsync(() => comp.cutTranscript(
           look: const BridgeSpokenLook(pauseMs: 500, showRemoved: false)));
       final words = read!.tokens
@@ -85,7 +80,6 @@ void main() {
       expect(before.start, 0);
       expect(length, greaterThan(taken));
 
-      // The caret after the first word, then two words taken with Shift.
       p.uiState.activePane.value = Panel.transcript.pane();
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
       await tester.sendKeyEvent(LogicalKeyboardKey.home);
@@ -102,8 +96,6 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.delete);
       await settleFrb(tester);
 
-      // Exactly that stretch has gone: the clip is cut where the words
-      // started and what followed them has moved up by their length.
       expect(clips(), [(0, start), (start, length - taken)]);
 
       project.undo();
@@ -120,8 +112,6 @@ void main() {
   }, skip: !engineAvailable);
 }
 
-/// A real, probeable WAV: half a second of 8 kHz mono square wave. Written
-/// synchronously, as the other frb tests write theirs.
 String _toneWavFile() {
   final dir = Directory.systemTemp.createTempSync('lumit-transcript');
   final file = File('${dir.path}/talk.wav');

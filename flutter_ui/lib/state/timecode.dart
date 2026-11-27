@@ -1,7 +1,3 @@
-// The one clock face: `HH:MM:SS:FF` at an exact rational rate.
-//
-// Shared by the Viewer's readout, the Project panel's info header and the
-// Composition settings duration field, so a length reads the same everywhere.
 
 /// `HH:MM:SS:FF` for `frame` at an exact rate.
 ///
@@ -48,8 +44,6 @@ int timecodeFrameDigits(int fpsNum, int fpsDen) {
   return (perSecond - 1).toString().length.clamp(2, 4);
 }
 
-/// How many characters a clock face takes at this rate: `HH:MM:SS:` and its
-/// frames field.
 int timecodeChars(int fpsNum, int fpsDen) =>
     9 + timecodeFrameDigits(fpsNum, fpsDen);
 
@@ -61,7 +55,6 @@ String timecodeOfRateSigned(int frame, int fpsNum, int fpsDen) =>
         ? '-${timecodeOfRate(-frame, fpsNum, fpsDen)}'
         : timecodeOfRate(frame, fpsNum, fpsDen);
 
-/// [framesOfTimecode], accepting a leading minus for a time before zero.
 int? framesOfTimecodeSigned(String text, int fpsNum, int fpsDen) {
   final trimmed = text.trim();
   final negative = trimmed.startsWith('-');

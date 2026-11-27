@@ -17,7 +17,6 @@ fn bb_weight(i: i32, centre: vec4<f32>, s: vec4<f32>) -> f32 {
     return exp(-3.0 * x * x) * exp(-diff * diff);
 }
 
-// Pass one: across.
 fn across(uv: vec2<f32>) -> vec4<f32> {
     let centre = lumit_sample(uv);
     let step = vec2<f32>(p.radius / f32(BB_TAPS) * lumit.comp_scale / lumit_size().x, 0.0);
@@ -32,7 +31,6 @@ fn across(uv: vec2<f32>) -> vec4<f32> {
     return sum / total;
 }
 
-// Pass two: down, over pass one.
 fn down(uv: vec2<f32>) -> vec4<f32> {
     let centre = lumit_read(pass_across, uv);
     let step = vec2<f32>(0.0, p.radius / f32(BB_TAPS) * lumit.comp_scale / lumit_size().y);

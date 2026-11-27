@@ -1,10 +1,3 @@
-//! An export of sound alone: the comp's mix written with no picture, and the
-//! stems, one file per bus, beside any export that carries sound.
-//!
-//! # Thread role
-//!
-//! The export's own thread.
-
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;

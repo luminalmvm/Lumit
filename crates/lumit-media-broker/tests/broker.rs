@@ -34,7 +34,6 @@ fn a_file_is_read_through_the_helper_and_a_helper_that_fails_is_an_error() {
     assert_eq!(px(2, 1), [0, 0, 255, 255]);
     assert_eq!(px(0, 0), [0; 4], "the background is another layer");
 
-    // The helper's own reason for refusing a file comes back with it.
     let reason = |result: Result<_, MediaError>| match result {
         Err(MediaError::Ai(reason)) => reason,
         _ => panic!("the read should have failed"),

@@ -32,15 +32,12 @@ use crate::model::{Composition, EffectInstance, EffectValue};
 use lumit_fx_macros::Effect;
 use uuid::Uuid;
 
-/// The ways round, in Choice order.
 pub const LOOP_TYPE_OPTIONS: &[&str] = &["Cycle", "Ping-pong", "Crossfade Bastiuni"];
 const PING_PONG: u32 = 1;
 const CROSSFADE: u32 = 2;
 
-/// The two fade curves, in Choice order.
 pub const FADE_CURVE_OPTIONS: &[&str] = &["Linear", "Smooth"];
 
-/// The fade rows are read only by Crossfade Bastiuni.
 pub const TIME_LOOP_ENABLED_WHEN: &[EnabledWhen] = &[
     EnabledWhen {
         param: "fade_length",
@@ -54,7 +51,6 @@ pub const TIME_LOOP_ENABLED_WHEN: &[EnabledWhen] = &[
     },
 ];
 
-/// Time loop's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "time_loop",
@@ -67,14 +63,9 @@ pub const TIME_LOOP_ENABLED_WHEN: &[EnabledWhen] = &[
     enabled_when = TIME_LOOP_ENABLED_WHEN,
 )]
 pub struct TimeLoop {
-    /// The layer whose stretch is looped. Empty or this layer, the layer the
-    /// effect is on.
     #[layer(label = "Source layer")]
     pub source: bool,
 
-    /// Where the source sits on this layer. As placed in comp follows the
-    /// source's own transform at the looped moment, so its movement loops
-    /// too.
     #[choice(
         label = "Map placement",
         options = *crate::fx::builtins::MAP_PLACEMENT_OPTIONS,
@@ -82,7 +73,6 @@ pub struct TimeLoop {
     )]
     pub source_placement: u32,
 
-    /// How the loop comes round.
     #[choice(label = "Type", options = LOOP_TYPE_OPTIONS, default = 0)]
     pub loop_type: u32,
 
@@ -90,7 +80,6 @@ pub struct TimeLoop {
     #[slider(label = "Start", min = 0.0, max = 60.0, default = 0.0, unit = Seconds)]
     pub start: f32,
 
-    /// How long the looped stretch is, seconds.
     #[slider(
         label = "Duration",
         min = 0.1,
@@ -101,8 +90,6 @@ pub struct TimeLoop {
     )]
     pub duration: f32,
 
-    /// Crossfade Bastiuni: how long each lap fades from the next lap in,
-    /// seconds, up to Duration.
     #[slider(
         label = "Fade length",
         min = 0.0,
@@ -113,11 +100,9 @@ pub struct TimeLoop {
     )]
     pub fade_length: f32,
 
-    /// Crossfade Bastiuni: the fade at an even pace, or eased at both ends.
     #[choice(label = "Fade curve", options = FADE_CURVE_OPTIONS, default = 0)]
     pub fade_curve: u32,
 
-    /// The Mix every effect ends with, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -129,8 +114,6 @@ pub struct TimeLoop {
     pub mix: f32,
 }
 
-/// The moments a frame shows: the source at `now`, and while a crossfade
-/// runs the source at `next` too, mixed in by `next_share`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Moments {
     pub now: f64,
@@ -139,14 +122,11 @@ pub struct Moments {
 }
 
 impl TimeLoop {
-    /// How much of the lap after this one shows, read back by the draw.
     pub const DERIVED_NEXT_SHARE: ParamId = ParamId::new("derived.next_share");
     /// 1 when Source layer is empty: the loop takes the place of the
     /// layer's picture instead of lying over it.
     pub const DERIVED_OWN: ParamId = ParamId::new("derived.own");
 
-    /// The moments, on this layer's clock, that the frame at layer time `lt`
-    /// shows.
     #[must_use]
     pub fn moments(self, lt: f64) -> Moments {
         let start = f64::from(self.start);
@@ -179,7 +159,6 @@ impl TimeLoop {
                     next_share: 1.0 - into,
                 }
             }
-            // Cycle.
             _ => plain(start + (lt - start).rem_euclid(d)),
         }
     }
@@ -193,8 +172,6 @@ impl TimeLoop {
         let Some(source) = e.layer_ref("source") else {
             return Vec::new();
         };
-        // A source missing, or the layer the effect is on, which loops itself
-        // through its own moments instead.
         if !comp
             .layers
             .iter()
@@ -209,8 +186,6 @@ impl TimeLoop {
             .collect()
     }
 
-    /// The rows that decide the moments, read off the stored instance at
-    /// layer time `lt`.
     #[must_use]
     pub fn stored(e: &EffectInstance, lt: f64) -> Self {
         let mut c = Self::read(Params::EMPTY);
@@ -248,8 +223,6 @@ impl EffectDef for TimeLoopDef {
         }
     }
 
-    /// With Source layer empty, the layer's own picture at the loop's
-    /// moments: the same moments a Source layer is drawn at.
     fn own_moments(
         &self,
         e: &EffectInstance,

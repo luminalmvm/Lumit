@@ -44,7 +44,6 @@ pub struct Brightness {
     #[slider(min = -100.0, max = 100.0, default = 0.0, hard_min = -100.0, unit = Percent)]
     pub contrast: f32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -71,7 +70,6 @@ impl Brightness {
     }
 }
 
-/// Brightness' behaviour.
 pub struct BrightnessDef;
 
 impl EffectDef for BrightnessDef {

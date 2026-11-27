@@ -5,13 +5,9 @@ use super::*;
 
 #[derive(Default)]
 pub(super) struct Voices {
-    /// Every file's voices so far, in the order the files were heard.
     heard: Vec<Vec<lumit_ml::speech::Voice>>,
-    /// The speaker each of those voices was given when its file landed.
     given: Vec<Vec<Uuid>>,
-    /// Every speaker made, in order, with their name.
     names: Vec<(Uuid, String)>,
-    /// The one speaker of a job asked to hear one voice.
     one: Option<Uuid>,
 }
 
@@ -28,7 +24,6 @@ impl Voices {
         self.heard.push(voices);
         let all: Vec<&[lumit_ml::speech::Voice]> = self.heard.iter().map(Vec::as_slice).collect();
         let clusters = lumit_ml::speech::cluster(&all, count);
-        // The speakers already given to each cluster, by votes.
         let mut votes: BTreeMap<u32, BTreeMap<Uuid, usize>> = BTreeMap::new();
         for (file, given) in self.given.iter().enumerate() {
             for (voice, speaker) in given.iter().enumerate() {
@@ -61,7 +56,6 @@ impl Voices {
         ids
     }
 
-    /// The single speaker of a job asked to hear one voice.
     pub(super) fn only(&mut self, template: &str) -> Uuid {
         if let Some(one) = self.one {
             return one;
@@ -83,7 +77,6 @@ impl Voices {
         id
     }
 
-    /// The speakers `used`, named, in the order they were made.
     pub(super) fn named(&self, used: &[Uuid]) -> Vec<Speaker> {
         self.names
             .iter()

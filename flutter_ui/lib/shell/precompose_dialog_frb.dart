@@ -104,7 +104,6 @@ Future<void> showPrecomposeDialogFrb({
           // that never happened.
           return l10n.precomposeFailed;
         }
-        // The Precomp layer is what the user is now working on.
         ui.setSelection([precomp]);
         ui.model.refresh();
         if (openNewComp) {

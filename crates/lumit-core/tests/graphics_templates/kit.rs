@@ -1,7 +1,3 @@
-//! The project every test starts from: a lower third with a text layer, a
-//! shape layer with a mask, a solid carrying four effects and a Precomp layer
-//! showing a logo, made a template the way the Controls panel makes one.
-
 use std::sync::Arc;
 
 use lumit_core::anim::Property;
@@ -56,28 +52,20 @@ fn layer(name: &str, kind: LayerKind) -> Layer {
     base_layer(name.into(), kind, secs(5), TransformGroup::default())
 }
 
-/// The project, and the ids the tests reach for.
 pub struct Kit {
     pub doc: Document,
-    /// The lower third.
     pub tpl: Uuid,
-    /// Its text layer, saying "Hello" in Inter Regular at 72 px.
     pub title: Uuid,
-    /// Its shape layer, one blue rectangle 400 by 80, with a mask.
     pub bar: Uuid,
     pub item: Uuid,
     pub mask: Uuid,
-    /// Its solid at 960, 540, carrying Fill, Gaussian blur, Broadcast safe
-    /// and a Point control.
     pub plate: Uuid,
     pub fill: Uuid,
     pub blur: Uuid,
     pub safe: Uuid,
     pub point: Uuid,
-    /// Its Precomp layer showing the logo, 100 by 50.
     pub logo: Uuid,
     pub logo_comp: Uuid,
-    /// A second picture, 200 by 200, for a copy to put in the logo's place.
     pub badge: Uuid,
 }
 
@@ -91,7 +79,6 @@ impl Kit {
     }
 }
 
-/// The control `id` of `template`.
 pub fn control<'a>(template: &'a Template, id: &str) -> &'a Control {
     template.control(id).unwrap()
 }
@@ -189,9 +176,6 @@ pub fn kit() -> Kit {
     }
 }
 
-/// The template the tests share, made as the Controls panel makes one: each
-/// control from the row it names, its id free among those before it. The
-/// title lets a copy change its font, size and colour too.
 pub fn authored(kit: &Kit) -> Template {
     let (doc, c) = (&kit.doc, kit.comp());
     let mut template = Template {
@@ -250,8 +234,6 @@ pub fn authored(kit: &Kit) -> Template {
     template
 }
 
-/// Make the lower third `template` through the op the Controls panel
-/// commits, answering its undo.
 pub fn install(kit: &mut Kit, template: &Template) -> Op {
     let op = Op::SetCompTemplate {
         comp: kit.tpl,
@@ -267,9 +249,6 @@ pub fn kit_with_template() -> (Kit, Template) {
     (kit, template)
 }
 
-/// A composition "Show" placing the template as a Precomp layer "Copy"
-/// holding `layer_values`, and as one clip on a Sequence layer "Cut" from two
-/// seconds holding `clip_values`, beside a Null "Other". Answers its id.
 pub fn show(
     kit: &mut Kit,
     layer_values: Option<EffectInstance>,

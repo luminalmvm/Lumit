@@ -48,14 +48,12 @@ const double _inspectorWidth = 300;
 const double _rowHeight = 24;
 const double _labelWidth = 120;
 
-/// The widest a preset tile grows; the grid fits as many as the width takes.
 const double _tileMaxWidth = 160;
 
 /// The comp the preview stands in for when the window has no comp to ask: a
 /// node graph's Fx box with no layer behind it.
 const Size _fallbackComp = Size(1920, 1080);
 
-/// The longest edge of the Frame background. One still, asked for once.
 const int _stillEdge = 960;
 
 /// The Frame background's last choice, kept for the next opening.
@@ -226,7 +224,6 @@ class _FlareWindowState extends State<FlareWindow>
   /// The one element the preview shows alone, from an Alt-click on its eye.
   int? _solo;
 
-  /// Snapshots of the design and the selection, for Ctrl+Z.
   final List<(String, int)> _undo = [];
   final List<(String, int)> _redo = [];
   String? _coalesce;
@@ -252,7 +249,6 @@ class _FlareWindowState extends State<FlareWindow>
   bool _fit = true;
   late final Ticker _ticker = createTicker(_tick);
 
-  /// Which presets tab is open, or null for the default.
   bool? _yours;
   String _group = '';
   String? _said;
@@ -263,7 +259,6 @@ class _FlareWindowState extends State<FlareWindow>
   int? _lastTap;
   DateTime _lastTapAt = DateTime.now();
 
-  /// The list row being renamed in place, and its field.
   int? _renaming;
   final _listName = TextEditingController();
 
@@ -327,7 +322,6 @@ class _FlareWindowState extends State<FlareWindow>
     _drawViewer();
   }
 
-  /// The Viewer shows the design as it stands, the window's solo left out.
   void _drawViewer() {
     final draw = widget.draw;
     if (draw == null) return;
@@ -478,8 +472,6 @@ class _FlareWindowState extends State<FlareWindow>
     _requestPreview();
   }
 
-  // The elements.
-
   void _select(int i) {
     if (!mounted) return;
     setState(() {
@@ -537,8 +529,6 @@ class _FlareWindowState extends State<FlareWindow>
     }
     _edit(() => e['name'] = name);
   }
-
-  // Files and the clipboard.
 
   Future<void> _import() async {
     final path = await pickEffectInputFile(['flare'], l10n.flareFileType);
@@ -771,7 +761,6 @@ class _FlareWindowState extends State<FlareWindow>
         }),
       );
 
-  /// A row of small buttons where one is in force.
   Widget _segmented(
     LumitTheme t, {
     required String keyPrefix,
@@ -839,8 +828,6 @@ Future<ui.Image> _decode(Uint8List bytes, int w, int h) {
   return done.future;
 }
 
-/// The preview: the ground or the Frame still, the flare added over it, and
-/// the light's handle and the centre mark on top.
 class _PreviewPaint extends CustomPainter {
   final Color ground;
   final ui.Image? still;

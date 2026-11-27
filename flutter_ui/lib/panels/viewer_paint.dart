@@ -54,16 +54,13 @@ import 'viewer_tool_cursor.dart';
 /// below what any brush edge can show.
 const double paintSampleDistance = 2;
 
-/// The mark drawn where a clone stamp will copy from.
 const double cloneSourceMarkSize = 7;
 
-/// What a brush shape is called in the tool options and on a stroke's row.
 String brushShapeLabel(BridgeBrushShape shape) => switch (shape) {
       BridgeBrushShape.round => l10n.brushShapeRound,
       BridgeBrushShape.square => l10n.brushShapeSquare,
     };
 
-/// Which engine mode each painting tool commits.
 BridgePaintMode paintModeFor(ToolMode tool) => switch (tool) {
       ToolMode.eraser => BridgePaintMode.erase,
       ToolMode.cloneStamp => BridgePaintMode.clone,
@@ -135,9 +132,7 @@ double stylusPressure(PointerEvent event) {
   return ((event.pressure - event.pressureMin) / span).clamp(0.0, 1.0);
 }
 
-/// The painting tools over the picture.
 class ViewerPaintLayer extends StatefulWidget {
-  /// Whether a painting tool is armed. Inert otherwise.
   final bool active;
 
   final ToolMode tool;
@@ -170,7 +165,6 @@ class ViewerPaintLayer extends StatefulWidget {
 }
 
 class _ViewerPaintLayerState extends State<ViewerPaintLayer> {
-  /// Where the pointer is, for the ring.
   Offset? _pointer;
 
   /// The stroke in flight, in screen coordinates.
@@ -202,7 +196,6 @@ class _ViewerPaintLayerState extends State<ViewerPaintLayer> {
     _escapeRelease = EscapeLadder.register(EscapeRung.gesture, _escape);
   }
 
-  /// How to stand down from the ladder.
   VoidCallback? _escapeRelease;
 
   /// Escape abandons the stroke being drawn — the ladder's gesture rung
@@ -319,8 +312,6 @@ class _ViewerPaintLayerState extends State<ViewerPaintLayer> {
       ),
     );
   }
-
-  // --- The gesture ----------------------------------------------------------
 
   /// A click: for the clone stamp with `Alt`, that is how the source is set.
   /// Otherwise it is a single dab, which is a stroke of one point.

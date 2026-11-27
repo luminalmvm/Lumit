@@ -1,5 +1,3 @@
-//! Repeat pairs: finding them, and the graph each time of one draws.
-
 use uuid::Uuid;
 
 use super::{
@@ -16,7 +14,6 @@ fn repeat_node(start: Uuid, kind: u128, k: usize) -> Uuid {
     Uuid::from_u128(start.as_u128() ^ (0x5245_5045_4154 << 64 | kind << 32 | (k as u128 + 1)))
 }
 
-/// What a time's Input box stands for: a picture, or a number named `id`.
 fn repeat_input(id: String, kind: InputKind) -> GraphInput {
     GraphInput {
         label: id.clone(),

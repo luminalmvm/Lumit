@@ -1,6 +1,3 @@
-// A Mixer strip's rack: its audio effects (the inserts) and its sends, one
-// short row each, or one row counting them where the panel is short, which
-// opens the rows in a popover.
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/widgets.dart';
@@ -26,20 +23,16 @@ import 'mixer_live.dart';
 import 'mixer_meter.dart';
 import 'timeline_extras_frb.dart' show showMenuAt;
 
-/// How tall one rack row stands.
 const double rackRow = 16;
 
-/// What a rack section needs from its strip.
 class RackScope {
   final LumitUiState ui;
   final LumitState app;
   final CompositionReference comp;
   final VoidCallback onChanged;
 
-  /// Where a send's bus strip is brought into view, by bus id.
   final void Function(UuidValue bus) showBus;
 
-  /// Where the controls stand while the comp plays, from the meter feed.
   final ValueListenable<Map<String, StripPosition>> positions;
 
   const RackScope({
@@ -60,21 +53,17 @@ class RackScope {
     return null;
   }
 
-  /// The comp's buses, in layer order.
   List<BridgeLayerEntry> get buses => [
         for (final e in ui.model.heldLayers)
           if (e.info.kind == BridgeLayerKind.bus) e,
       ];
 }
 
-/// The audio effects a strip plays through.
 List<BridgeEffectInstanceInfo> inserts(BridgeLayerInfo info) => [
       for (final e in info.effects)
         if (e.audio) e
     ];
 
-/// A rack section: its rows when [expanded], else one row counting them that
-/// opens the rows in a popover.
 class RackSection extends StatelessWidget {
   final RackScope scope;
   final BridgeLayerEntry entry;
@@ -143,9 +132,6 @@ class RackSection extends StatelessWidget {
   }
 }
 
-/// One rack slot, the strip's width less a margin: filled when it holds an
-/// effect or a send, an empty outline when it adds one. A hover lifts it, a
-/// click and a right-click answer.
 class _RackRow extends StatelessWidget {
   final Widget? child;
   final void Function(BuildContext row)? onTap;
@@ -181,7 +167,6 @@ class _RackRow extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 4),
             alignment: Alignment.centerLeft,
             decoration: child == null || empty
-                // An empty slot: an outline, filled faintly under the pointer.
                 ? BoxDecoration(
                     // Sunk into the ground, so it reads on a picked strip.
                     color: Color.lerp(t.surface0, t.surface3, 0.5 * lit),
@@ -210,11 +195,9 @@ class _RackRow extends StatelessWidget {
   }
 }
 
-/// The empty slot closing a section, which adds to it.
 Widget _addRow(String key, String tip, void Function(BuildContext row) onTap) =>
     _RackRow(key: ValueKey<String>(key), tip: tip, onTap: onTap);
 
-/// The strip's audio effects, one row each, and a + row that adds one.
 class InsertRows extends StatelessWidget {
   final RackScope scope;
   final BridgeLayerEntry entry;
@@ -238,13 +221,11 @@ class InsertRows extends StatelessWidget {
     try {
       write();
     } catch (_) {
-      // A locked layer refuses, and quietly.
       return;
     }
     scope.onChanged();
   }
 
-  /// Pick the effect and bring Effect controls to the front on it.
   void _front(BridgeEffectInstanceInfo effect) {
     final ui = scope.ui;
     ui.setSelection([entry.layer]);
@@ -257,7 +238,6 @@ class InsertRows extends StatelessWidget {
       List<BridgeEffectInstanceInfo> rack) {
     final all = entry.info.effects;
     final i = rack.indexOf(effect);
-    // Up and down among the audio effects, wherever the stack has others.
     int? to(int step) {
       final j = i + step;
       if (j < 0 || j >= rack.length) return null;
@@ -349,8 +329,6 @@ class InsertRows extends StatelessWidget {
   }
 }
 
-/// The strip's sends, one row each with its level bar and Pre chip, and a +
-/// row listing the buses it may send to.
 class SendRows extends StatelessWidget {
   final RackScope scope;
   final BridgeLayerEntry entry;
@@ -425,7 +403,6 @@ class SendRows extends StatelessWidget {
     );
   }
 
-  /// The buses this strip may send to, asked as the list opens.
   void _add(BuildContext row) {
     final box = row.findRenderObject();
     if (box is! RenderBox) return;
@@ -492,8 +469,6 @@ class SendRows extends StatelessWidget {
   }
 }
 
-/// A send's row: the bus name with the Pre chip, and the level bar under it,
-/// dragged sideways to set the level.
 class _SendLine extends StatefulWidget {
   final RackScope scope;
   final BridgeLayerEntry entry;
@@ -560,7 +535,6 @@ class _SendLineState extends State<_SendLine> {
       ]),
       builder: (context, _) {
         final db = _drag ?? _level();
-        // A muted send is still there, and reads as a muted layer does.
         final muted = widget.send.muted;
         return LayoutBuilder(
           builder: (context, box) => GestureDetector(
@@ -634,7 +608,6 @@ class _SendLineState extends State<_SendLine> {
   }
 }
 
-/// One undo step over [targets]' writes, for the menus that act on several.
 void eachAsOne(LumitState app, Iterable<BridgeLayerEntry> targets,
     void Function(BridgeLayerEntry e) write) {
   asOneUndoStep(app.project, () {
@@ -642,7 +615,6 @@ void eachAsOne(LumitState app, Iterable<BridgeLayerEntry> targets,
       try {
         write(e);
       } catch (_) {
-        // A locked layer refuses, and the rest still take it.
       }
     }
   });

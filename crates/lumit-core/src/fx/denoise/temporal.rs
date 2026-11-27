@@ -1,6 +1,3 @@
-//! The temporal half: a neighbour frame moved along the measured motion so it
-//! lines up with this one, then averaged in where it agrees.
-
 use super::space::{pixel_to_ycc, tone};
 use super::DenoiseParams;
 
@@ -48,7 +45,6 @@ impl Field<'_> {
     }
 }
 
-/// The four Catmull-Rom weights at fraction `t`.
 #[must_use]
 pub fn catmull_rom(t: f32) -> [f32; 4] {
     let (t2, t3) = (t * t, t * t * t);
@@ -181,7 +177,6 @@ pub fn inverse_noise(y: f32, p: &DenoiseParams) -> (f32, f32) {
     )
 }
 
-/// The weight a patch distance `d` earns at full confidence.
 #[must_use]
 pub fn agreement(d: f32, p: &DenoiseParams) -> f32 {
     if p.strength <= 0.0 || p.t1 <= 0.0 {

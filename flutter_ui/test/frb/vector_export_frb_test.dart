@@ -1,7 +1,3 @@
-// The Lottie and SVG window on the real engine: it opens on a composition,
-// the check lists what the file leaves out with a place for each, the footer
-// says how big the file is and the player plays it; and a place, clicked,
-// selects its layer behind the window.
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -17,8 +13,6 @@ void main() {
   setUpAll(initEngineForTests);
 
   group('Lottie and SVG window (frb)', () {
-    /// A comp with one solid wearing a Glow, which no Lottie carries, and the
-    /// window open on it with its first export back.
     Future<({LumitState state, LumitUiState uiState, LayerReference solid})>
         open(WidgetTester tester) async {
       final p = freshProject();

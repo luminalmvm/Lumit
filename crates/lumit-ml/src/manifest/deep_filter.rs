@@ -14,11 +14,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DeepFilter {
-    /// The encoder `.onnx` file inside the addon folder.
     pub enc: String,
-    /// The band-gain decoder `.onnx` file.
     pub erb_dec: String,
-    /// The deep-filter decoder `.onnx` file.
     pub df_dec: String,
     /// The encoder's band input, `[1, 1, T, nb_erb]`.
     pub feat_erb: String,
@@ -34,13 +31,10 @@ pub struct DeepFilter {
     pub fft_size: u32,
     /// Samples between frames. Half the window: nothing else is supported.
     pub hop_size: u32,
-    /// How many bands the gains come in.
     pub nb_erb: u32,
-    /// The fewest bins a band may have.
     pub min_nb_erb_freqs: u32,
     /// How many of the lowest bins the filter replaces.
     pub nb_df: u32,
-    /// How many frames the filter spans.
     pub df_order: u32,
     /// How many of those frames are ahead of the one it makes.
     pub df_lookahead: u32,

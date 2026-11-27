@@ -6,6 +6,7 @@
 import '../api.dart';
 import '../frb_generated.dart';
 import '../lib.dart';
+import 'cache.dart';
 import 'composition.dart';
 import 'folder.dart';
 import 'footage.dart';
@@ -866,4 +867,10 @@ sealed class WorkerResponse with _$WorkerResponse {
   /// picture back, and the frontend's whole part is one calm line in the
   /// status bar saying why the preview blinked.
   const factory WorkerResponse.deviceReset() = WorkerResponse_DeviceReset;
+
+  /// A frame the Viewer asked for needs more video memory than Lumit may
+  /// use, so it was not drawn and the last picture stays. Sent once.
+  const factory WorkerResponse.frameOverBudget(
+    BridgeFrameOverBudget field0,
+  ) = WorkerResponse_FrameOverBudget;
 }

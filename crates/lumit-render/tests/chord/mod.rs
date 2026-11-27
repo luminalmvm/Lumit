@@ -1,10 +1,7 @@
-//! A sound for Audio spectrum's picture, since the plate is silent.
-
 use lumit_core::model::{Layer, LayerKind};
 use lumit_core::time::Rational;
 use uuid::Uuid;
 
-/// The rate the chord is written at, and how long it lasts in seconds.
 const RATE: u32 = 48_000;
 const SECONDS: u32 = 2;
 
@@ -42,7 +39,6 @@ pub(super) fn written() -> std::path::PathBuf {
     path
 }
 
-/// A layer of nothing but that sound.
 pub(super) fn layer(item: Uuid, span: Rational) -> Layer {
     let mut l = super::layer("Chord", LayerKind::Footage { item }, span);
     l.audio_only = true;

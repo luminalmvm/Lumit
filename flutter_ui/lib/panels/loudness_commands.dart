@@ -1,5 +1,3 @@
-// The comp's loudness target and Normalise mix, shared by the Master strip's
-// menu and Composition ▸ Audio.
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -17,11 +15,9 @@ const List<double> loudnessPresets = [-14, -16, -23, -24];
 /// The true peak a preset target keeps under, in dBTP.
 const double presetTruePeakDb = -1;
 
-/// A target as its menu row reads.
 String loudnessTargetLabel(double lufs) => l10n.audioLoudnessTarget(
     '−${(-lufs).toStringAsFixed(lufs.truncateToDouble() == lufs ? 0 : 1)}');
 
-/// Set the comp's loudness target, or clear it with null, as one undo step.
 void setCompLoudnessTarget(CompositionReference comp,
     BridgeLoudnessTarget? target, VoidCallback onChanged) {
   try {
@@ -32,17 +28,14 @@ void setCompLoudnessTarget(CompositionReference comp,
   onChanged();
 }
 
-/// A preset target.
 BridgeLoudnessTarget presetTarget(double lufs) =>
     BridgeLoudnessTarget(lufs: lufs, truePeakDb: presetTruePeakDb);
 
-/// Whether [target] is one of the presets, for the menu's tick.
 bool isPreset(BridgeLoudnessTarget? target, double lufs) =>
     target != null &&
     target.lufs == lufs &&
     target.truePeakDb == presetTruePeakDb;
 
-/// Ask for a loudness and a true peak, seeded with [current].
 Future<BridgeLoudnessTarget?> askLoudnessTarget(
         BuildContext context, BridgeLoudnessTarget? current) =>
     showLumitModal<BridgeLoudnessTarget>(
@@ -54,7 +47,6 @@ Future<BridgeLoudnessTarget?> askLoudnessTarget(
       ),
     );
 
-/// Custom…: a target of the person's own.
 Future<void> customLoudnessTarget(BuildContext context,
     CompositionReference comp, VoidCallback onChanged) async {
   BridgeLoudnessTarget? current;
@@ -195,7 +187,6 @@ class _TargetBodyState extends State<_TargetBody> {
   }
 }
 
-/// **Loudness target ▸** and **Normalise mix…**, as right-click menu rows.
 List<Widget> loudnessMenuRows({
   required BuildContext context,
   required LumitState app,
@@ -203,7 +194,6 @@ List<Widget> loudnessMenuRows({
   required BridgeLoudnessTarget? current,
   required VoidCallback close,
   required VoidCallback onChanged,
-  // Room for a tick beside every name, where the menu's other rows have it.
   bool tickColumn = true,
 }) =>
     [

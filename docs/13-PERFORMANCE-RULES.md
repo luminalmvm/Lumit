@@ -124,6 +124,9 @@ Steps in order, the cheapest that works, each shown in the status readout:
 Steps reverse once pressure has been clear for about 2 s. Export ignores 3 and 5. Under
 pressure it slows down, it never changes output.
 
+A frame that needs more than the whole budget is not drawn in the Viewer. It says so once,
+with Undo when an edit caused it. Export draws it anyway.
+
 ## 5. Device loss
 
 - No dispatch should get near Windows' 2 s timeout. Keep the worst case on minimum spec

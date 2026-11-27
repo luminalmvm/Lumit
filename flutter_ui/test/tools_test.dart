@@ -1,9 +1,3 @@
-// The toolbar's state machine: which tool is armed, what a group button
-// stands for, and what pressing a tool's key twice does.
-//
-// Pure state, so this needs no engine and no widgets — the parts of a toolbar
-// that are easy to get subtly wrong (a group forgetting the variant you chose,
-// a shortcut cycling when it should not) are all here rather than in the paint.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/state/tools.dart';

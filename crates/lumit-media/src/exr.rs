@@ -230,7 +230,6 @@ pub fn read_channels(
             .map(|c| &c.sample_data)
     });
 
-    // Four bytes a channel, four channels a pixel.
     let interleaved = checked_usize(checked_raster_bytes(
         layer.size.width() as u64,
         layer.size.height() as u64,
@@ -240,7 +239,6 @@ pub fn read_channels(
     let mut rgba = budget.vec_with_capacity::<u8>(interleaved)?;
     for i in 0..px {
         for (slot, plane) in planes.iter().enumerate() {
-            // An unfilled alpha is opaque; an unfilled colour is black.
             let default = if slot == 3 { 1.0f32 } else { 0.0 };
             let v = plane.map_or(default, |samples| sample_at(samples, i));
             rgba.extend_from_slice(&v.to_le_bytes());
@@ -263,7 +261,6 @@ pub fn read_channels(
 // in whichever part it sits. ffmpeg can't open most of these files at all, and
 // shows a lone channel as black, so they are read here.
 
-/// What the plain R, G, B and A of a file are called as a pass.
 const PLAIN: &str = "RGBA";
 
 /// One pass: the part it is in, and its channels by their place in that
@@ -418,7 +415,6 @@ pub fn read_pass(path: &Path, wanted: Option<&str>) -> Result<DecodedFrame, Medi
         }));
     }
 
-    // Which channel each of red, green, blue and alpha takes.
     let mut slots: [Option<usize>; 4] = [None; 4];
     if let [(only, _)] = pass.channels.as_slice() {
         slots = [Some(*only), Some(*only), Some(*only), None];
@@ -433,7 +429,6 @@ pub fn read_pass(path: &Path, wanted: Option<&str>) -> Result<DecodedFrame, Medi
             };
             slots[slot].get_or_insert(*place);
         }
-        // Names that say nothing: the first three, in order.
         if slots[..3].iter().all(Option::is_none) {
             for (slot, (place, _)) in slots.iter_mut().zip(&pass.channels).take(3) {
                 *slot = Some(*place);
@@ -454,7 +449,6 @@ pub fn read_pass(path: &Path, wanted: Option<&str>) -> Result<DecodedFrame, Medi
     use exr::meta::attribute::SampleType;
     let part = pass.part;
     let channels = header.channels.clone();
-    // One line of samples at a time, as floats, reused line to line.
     let (mut half, mut float, mut uint) = (Vec::new(), Vec::new(), Vec::new());
     reader
         .filter_chunks(false, |_, tile, block| {
@@ -597,9 +591,6 @@ fn sample_at(samples: &exr::prelude::FlatSamples, i: usize) -> f32 {
 mod tests {
     use super::*;
 
-    /// The thing ffmpeg cannot do: say what is in the file. Every channel a
-    /// render wrote comes back, layer prefix and all, so the effect's dropdowns
-    /// offer the names the user set in their render settings.
     #[test]
     fn every_channel_of_a_render_is_listed() {
         let dir = tempfile::tempdir().unwrap();
@@ -630,9 +621,6 @@ mod tests {
         }
     }
 
-    /// A lone depth channel opens as a picture of its values in grey, not as
-    /// black or a file that won't open: the same value in red, green and blue,
-    /// kept as it is past one, and opaque.
     #[test]
     fn a_lone_depth_channel_opens_as_grey() {
         use exr::prelude::*;
@@ -700,11 +688,8 @@ mod tests {
             .to_file(&out)
             .unwrap();
 
-        // Every part counted, not just the first: 8 × 4 × 4 × 4 channels × 4.
         assert_eq!(weigh_header(&out).unwrap(), 2_048);
 
-        // A byte ceiling between one part and all eight refuses the file, and
-        // does it from the header — no pixels were read to find out.
         let tight = weigh_header_within(
             &out,
             Ceilings {
@@ -723,8 +708,6 @@ mod tests {
             "a file past the byte ceiling must be refused: {tight:?}"
         );
 
-        // The channel count is an aggregate too — thirty-two channels spread
-        // over eight parts cost the same as thirty-two in one.
         let tight = weigh_header_within(
             &out,
             Ceilings {
@@ -761,7 +744,6 @@ mod tests {
             "an oversized picture must be refused: {tight:?}"
         );
 
-        // The listing walks the same parts and de-duplicates the names.
         let listed = channels(&out).unwrap();
         assert_eq!(listed.len(), 4, "the names repeat across parts: {listed:?}");
     }

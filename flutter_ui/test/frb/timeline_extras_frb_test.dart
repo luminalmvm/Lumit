@@ -1,8 +1,3 @@
-// The Timeline's chrome on frb: comp tabs, cache bar, search, the parent
-// picker, markers, the work area and the razor.
-//
-// Driven through the panel rather than in isolation, for the same reason as
-// everywhere else here: what matters is that a click reaches the document.
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
@@ -47,8 +42,6 @@ void main() {
       await tester.pump();
     }
 
-    /// Open the toolbar's ⋯ menu, where the layer/work-area/marker commands
-    /// live now that the toolbar row belongs to the readouts and the search.
     Future<void> openMore(WidgetTester tester) async {
       await tester.tap(find.byKey(const ValueKey('tl-more')));
       await tester.pumpAndSettle();
@@ -78,8 +71,6 @@ void main() {
       expect(tab, findsOneWidget, reason: 'switching away keeps the tab open');
     });
 
-    /// The × closes only the tab: the comp stays in the project, and closing
-    /// the fronted tab fronts its nearest remaining neighbour.
     testWidgets('closing a comp tab keeps the comp and fronts a neighbour',
         (tester) async {
       final p = withComp();
@@ -98,7 +89,6 @@ void main() {
       expect(p.state.comps().map((c) => c.$2), contains('Titles'),
           reason: 'closing a tab never deletes the comp');
 
-      // Closing the last tab leaves no comp fronted, and the panel says so.
       await tester.tap(
           find.byKey(ValueKey<String>('tl-tab-close-${p.comp.internalid}')));
       await tester.pump();
@@ -149,8 +139,6 @@ void main() {
       p.comp.addCameraLayer();
       await mount(tester, p);
 
-      // Once each: the outline names the layer, and its bar carries no label
-      // unless the setting asks for one.
       expect(find.text('Text'), findsOneWidget);
       expect(find.text('Camera'), findsOneWidget);
 
@@ -173,13 +161,11 @@ void main() {
       await tester.tap(
           find.byKey(ValueKey<String>('tl-parent-${child.internallayerId}')));
       await tester.pumpAndSettle();
-      // The entry leads with the layer's number, in a text of its own.
       await tester.tap(find.textContaining(parent.getName()).last);
       await tester.pumpAndSettle();
 
       expect(child.getParent(), parent.internallayerId);
 
-      // Clearing it is a first-class choice, not an error state.
       await tester.tap(
           find.byKey(ValueKey<String>('tl-parent-${child.internallayerId}')));
       await tester.pumpAndSettle();
@@ -235,7 +221,6 @@ void main() {
       await mount(tester, p);
       final frames = p.comp.durationFrames();
 
-      // Well past the end, then well before the start.
       p.comp.setWorkArea(
         span: workAreaWith(
           comp: p.comp,
@@ -306,9 +291,6 @@ void main() {
       expect(p.uiState.playheadFrame.value, greaterThan(0));
     });
 
-    /// Markers on the ruler are direct manipulation now: a flag can be
-    /// dragged to another moment, and its text changed from its own menu. The
-    /// dialogue in the ⋯ menu is still there for adding one by hand.
     testWidgets('a marker flag drags along the ruler', (tester) async {
       final p = withComp();
       p.comp.addAdjustmentLayer();
@@ -358,10 +340,6 @@ void main() {
       expect(comp.getMarkers().single.label, 'Drop');
     });
 
-    // --- layer markers ---------------------------------------------------
-
-    // --- the sequence view -----------------------------------------------
-
     /// A Sequence layer, ready to open. Added layers land at the top of the
     /// stack, so it is always the first — which lets a test put something
     /// underneath it first.
@@ -396,7 +374,6 @@ void main() {
       expect(find.byKey(const ValueKey('seq-envelope')), findsOneWidget,
           reason: 'and so is the speed envelope beneath it');
 
-      // Double-clicking again shuts it.
       await tester.tap(name);
       await tester.pump(kDoubleTapMinTime);
       await tester.tap(name);
@@ -435,7 +412,6 @@ void main() {
 
       final after = layer.getClips().single;
       expect(after.speedPercent, isNotNull);
-      // The whole 48px of travel, not the first step of it.
       final oneStepOnly = 100 - (8 / strip.height) * 161;
       expect(after.speedPercent!, lessThan(oneStepOnly - 20),
           reason: 'every move counted, not just the one before the readout '
@@ -455,7 +431,6 @@ void main() {
       await mount(tester, p);
       await tester.pump();
 
-      // Unarmed, a click on the bar does not cut.
       final bar = find
           .byKey(ValueKey<String>('tl-bar-body-${sequenced.internallayerId}'));
       expect(bar, findsOneWidget);
@@ -480,8 +455,6 @@ void main() {
       expect(p.comp.getLayers().single.getClips(), hasLength(1),
           reason: 'the razor is a mode, not the default click');
 
-      // The Timeline's menu item arms the toolbar's Razor tool —
-      // one razor, two doors.
       await openMore(tester);
       await tester.tap(find.byKey(const ValueKey('tl-razor')));
       await tester.pumpAndSettle();
@@ -494,14 +467,6 @@ void main() {
           reason: 'the armed razor cut the clip under the pointer');
     });
 
-    // -----------------------------------------------------------------------
-    // 6.43 — the Animated filter.
-    // -----------------------------------------------------------------------
-
-    /// **Animated lists what is keyed, All brings the twirls back.** The filter
-    /// reaches past the twirl set entirely: a layer that has never been opened
-    /// shows its keyed rows the moment the filter is on, and a keyed row's
-    /// headings come with it while the ones with nothing under them go.
     testWidgets('the Animated filter lists only the rows that carry keys',
         (tester) async {
       final p = withComp();
@@ -525,7 +490,6 @@ void main() {
       Finder row(String path) =>
           find.byKey(ValueKey<String>('tl-keys-prop-$id/$path'));
 
-      // Shut by default, so nothing of the fold-out is drawn at all.
       expect(row('transform'), findsNothing);
 
       final filter = find.byKey(const ValueKey('tl-filter-animated'));
@@ -539,7 +503,6 @@ void main() {
       expect(row('transform/position'), findsNothing,
           reason: 'a transform row with nothing keyed is not listed');
 
-      // All: the twirl set is back in charge, and it says shut.
       await tester.tap(filter);
       await tester.pumpAndSettle();
       expect(row('transform'), findsNothing);

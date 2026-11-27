@@ -1,10 +1,5 @@
-//! The motion an effect is handed is measured on the picture, whatever width
-//! its samples are.
-
 use super::*;
 
-/// A float plate with detail at a few sizes, its content moved `shift` pixels
-/// to the right.
 fn plate(w: u32, h: u32, shift: f32) -> lumit_media::decode::DecodedFrame {
     let mut rgba = Vec::with_capacity((w * h * 16) as usize);
     for y in 0..h {
@@ -70,7 +65,6 @@ fn a_float_plates_motion_is_measured_on_its_floats() {
         (w, h),
         "at the frame's own size"
     );
-    // The middle of the frame, away from the edges the content slid in at.
     let mut us: Vec<f32> = Vec::new();
     let mut vs: Vec<f32> = Vec::new();
     for y in 32..96 {

@@ -50,7 +50,6 @@ pub fn expose(src: &[f32], k: &FilmKernel) -> Vec<f32> {
     out
 }
 
-/// Where the clipped highlights start, linear.
 pub const KNEE: f32 = 0.75;
 
 /// How much a pixel is lifted by Clipped highlights: from nothing at [`KNEE`]

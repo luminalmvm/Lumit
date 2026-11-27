@@ -119,21 +119,17 @@ const SHARED_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
 /// dimensions change (a new handle is reported then). The `wgpu::Texture` keeps
 /// the D3D12 resource alive; the COM references keep the D3D11 side alive.
 pub struct SharedTexture {
-    /// How a finished frame gets from wgpu into `d3d11_shared`.
     hop: Hop,
     /// The *legacy* share handle of `d3d11_shared`, the one Flutter opens.
     /// Legacy handles are identifiers rather than kernel handles and must NOT be
     /// closed.
     legacy_handle: isize,
-    /// The D3D11 device and context on Flutter's card that do the per-frame hop.
     d3d11_context: ID3D11DeviceContext,
-    /// The legacy-shared D3D11 texture Flutter samples.
     d3d11_shared: ID3D11Texture2D,
     /// An event query, reused every frame, that reports when the per-frame
     /// D3D11 copy has actually *finished* on the GPU rather than merely been
     /// submitted. See the module note on synchronisation.
     copy_done: ID3D11Query,
-    /// The device the two textures above are on.
     d3d11_device: ID3D11Device,
     pub width: u32,
     pub height: u32,
@@ -145,21 +141,14 @@ pub struct SharedTexture {
 unsafe impl Send for SharedTexture {}
 unsafe impl Sync for SharedTexture {}
 
-/// The two ways a finished frame reaches the texture Flutter samples.
 enum Hop {
-    /// On the card: wgpu copies into a shared D3D12 texture, and D3D11 copies
-    /// that into the legacy one. The pixels never leave the card.
     Card {
-        /// The copy destination the render path writes the finished frame into.
         texture: wgpu::Texture,
         /// The NT handle for the D3D12 resource (`HANDLE.0 as isize`). Held
         /// only to be closed on drop — Flutter never sees it.
         nt_handle: isize,
-        /// The D3D12 resource as D3D11 sees it (opened from the NT handle).
         view: ID3D11Texture2D,
     },
-    /// Through memory: wgpu reads the frame back into `buffer`, rows
-    /// `row_bytes` apart, and D3D11 uploads it. See the module note.
     Memory {
         buffer: wgpu::Buffer,
         row_bytes: u32,
@@ -174,12 +163,10 @@ static THROUGH_MEMORY: OnceLock<String> = OnceLock::new();
 /// diagnostics file a bug report is asked for.
 static REPORT: OnceLock<fn(&str)> = OnceLock::new();
 
-/// Send the reason the Viewer goes through memory to `report`, when it does.
 pub fn report_to(report: fn(&str)) {
     let _ = REPORT.set(report);
 }
 
-/// The card Flutter draws with, by name, when the runner said which.
 pub fn flutter_adapter() -> Option<String> {
     flutter_luid().map(|luid| unsafe { adapter_name(luid) })
 }
@@ -223,10 +210,7 @@ impl SharedTexture {
         Self::through_memory(gpu, target, width, height)
     }
 
-    /// The hop on the card, described on [`SharedTexture`].
     fn on_card(gpu: &GpuContext, width: u32, height: u32) -> Result<Self, String> {
-        // Reach through wgpu to the raw D3D12 device, create the shared resource
-        // there, and export its NT handle — all while wgpu holds the device.
         let created = unsafe {
             gpu.device
                 .as_hal::<wgpu::hal::api::Dx12, _, _>(|hal_device| {
@@ -248,7 +232,6 @@ impl SharedTexture {
         {
             Ok(parts) => parts,
             Err(err) => {
-                // Nothing D3D11 was kept; release the D3D12 side too.
                 unsafe {
                     let _ = CloseHandle(HANDLE(handle as *mut core::ffi::c_void));
                 }
@@ -308,7 +291,6 @@ impl SharedTexture {
         })
     }
 
-    /// The hop through memory, onto the card named by `luid` (Flutter's).
     fn through_memory(
         gpu: &GpuContext,
         luid: LUID,
@@ -391,9 +373,6 @@ impl SharedTexture {
                 // synchronisation). Zero *CPU* pixel work still — the bytes
                 // never leave the card.
                 gpu.device.poll(wgpu::Maintain::Wait);
-                // D3D12 has finished writing the simultaneous-access resource,
-                // so copy it into the legacy-shared texture ANGLE samples,
-                // still on the GPU.
                 unsafe { self.d3d11_context.CopyResource(&self.d3d11_shared, view) };
             }
             Hop::Memory { buffer, row_bytes } => {
@@ -562,7 +541,6 @@ fn probe_pixel(x: u32, y: u32) -> [u8; 4] {
     }
 }
 
-/// From now on the Viewer goes through memory, and the reason is said once.
 fn go_through_memory(why: String) {
     let line = format!("the Viewer goes through memory: {why}");
     note!("lumit-gpu: {line}");
@@ -572,7 +550,6 @@ fn go_through_memory(why: String) {
     let _ = THROUGH_MEMORY.set(line);
 }
 
-/// The card wgpu draws on, or `None` off the D3D12 backend.
 fn wgpu_luid(gpu: &GpuContext) -> Option<LUID> {
     unsafe {
         gpu.device
@@ -632,7 +609,6 @@ unsafe fn wait_for_copy(context: &ID3D11DeviceContext, query: &ID3D11Query) {
         );
         match status {
             Ok(()) if done.as_bool() => return,
-            // Device removed or reset: no amount of waiting will finish this.
             Err(err) => {
                 note!("lumit-gpu: shared texture: GetData failed while awaiting the frame copy: {err}");
                 return;
@@ -939,7 +915,6 @@ mod tests {
             };
             unsafe { shared.probe(&gpu) }.unwrap();
             shared.present(&gpu, &display);
-            // ANGLE's side: a device of its own and the legacy open.
             let bgra = unsafe {
                 let (device, context) = d3d11_device(luid).unwrap();
                 let mut opened: Option<ID3D11Texture2D> = None;

@@ -1,12 +1,3 @@
-//! Reading whatever file a `FileTransform` points at.
-//!
-//! In plain terms: a config's `FileTransform` says "the maths is in that file
-//! over there". This module works out which grammar the file is in from its
-//! extension and hands back a chain: one step for a table file, two for a
-//! format that carries a shaper as well as a cube, several for a CLF, which is
-//! a list of steps by design. An extension Lumit does not read is refused by
-//! name rather than guessed at.
-
 use std::path::Path;
 
 use crate::error::{ColourError, Result};
@@ -14,7 +5,6 @@ use crate::op::{Chain, Direction, Op};
 use crate::sample::{Cube, Curve};
 use crate::{autodesk, clf, spi, truelight};
 
-/// The look-up table and grade file extensions this crate reads.
 pub const READABLE: [&str; 11] = [
     "cube", "spi1d", "spi3d", "spimtx", "cub", "3dl", "clf", "ctf", "cc", "ccc", "cdl",
 ];
@@ -43,7 +33,6 @@ pub fn load(path: &Path) -> Result<Chain> {
     parse(&name, &extension, &text)
 }
 
-/// The grammar half of [`load`], split out so tests need no files on disk.
 pub fn parse(name: &str, extension: &str, text: &str) -> Result<Chain> {
     Ok(match extension {
         "cube" => {
@@ -119,8 +108,6 @@ mod tests {
         assert!(matches!(chain.ops.first(), Some(Op::Lut3d { .. })));
     }
 
-    /// The ASC CDL file grammar: the same block a CLF `ASC_CDL` node carries,
-    /// under its own wrappers. A collection yields its first grade only.
     #[test]
     fn a_cdl_file_becomes_one_cdl_step() {
         let cc = r#"<ColorCorrection id="shot1">

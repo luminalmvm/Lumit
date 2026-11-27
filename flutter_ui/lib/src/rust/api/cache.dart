@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `read`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// The cache's live numbers.
 ///
@@ -206,6 +206,38 @@ class BridgeDiskCacheStats {
           budgetBytes == other.budgetBytes &&
           entries == other.entries &&
           root == other.root;
+}
+
+/// A frame the Viewer did not draw because it needs more video memory than
+/// Lumit may use.
+class BridgeFrameOverBudget {
+  /// Bytes the frame needs.
+  final int wanted;
+
+  /// Bytes Lumit may use.
+  final int budget;
+
+  /// Whether an edit or a redo made here stopped a frame that was drawing,
+  /// so undoing it would put it right.
+  final bool undoable;
+
+  const BridgeFrameOverBudget({
+    required this.wanted,
+    required this.budget,
+    required this.undoable,
+  });
+
+  @override
+  int get hashCode => wanted.hashCode ^ budget.hashCode ^ undoable.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeFrameOverBudget &&
+          runtimeType == other.runtimeType &&
+          wanted == other.wanted &&
+          budget == other.budget &&
+          undoable == other.undoable;
 }
 
 /// **What the resource governor is holding, and whether it is refusing

@@ -1,5 +1,3 @@
-//! The empty path drawing every path effect starts from.
-
 use super::*;
 
 impl PathDrawParams {

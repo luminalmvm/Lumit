@@ -1,5 +1,3 @@
-// The two small boxes a retime asks through: how far and how fast a ramp goes,
-// and how long a freeze holds.
 
 import 'package:flutter/widgets.dart';
 
@@ -10,13 +8,11 @@ import 'graph_key_fields.dart';
 import 'graph_maths.dart';
 import 'timeline_extras_frb.dart' show Segment, SegmentOption;
 
-/// The speeds a ramp most often goes to, one click each.
 const List<int> rampChips = [20, 50, 100, 200, 400];
 
 const double _rampWidth = 236;
 const double _rampLabel = 42;
 
-/// The name of a curve the speed can take.
 String speedCurveName(SpeedCurve curve) => switch (curve) {
       SpeedCurve.linear => l10n.speedCurveLinear,
       SpeedCurve.fast => l10n.speedCurveFast,

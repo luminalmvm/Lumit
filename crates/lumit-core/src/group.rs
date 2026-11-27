@@ -39,7 +39,6 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// A named fold over a run of a composition's layers.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LayerGroup {
     pub id: Uuid,
@@ -138,8 +137,6 @@ pub fn is_contiguous(stack: &[Uuid], members: &[Uuid]) -> bool {
         .filter(|(_, id)| members.contains(id))
         .map(|(i, _)| i)
         .collect();
-    // Every named layer must be in this comp, and no id may be named twice —
-    // both come out as a length that does not match.
     if indices.len() != members.len() {
         return false;
     }
@@ -167,8 +164,6 @@ mod tests {
 
     #[test]
     fn a_member_dragged_out_of_the_run_leaves_the_group() {
-        // 1 and 3 are named, but an ungrouped 2 sits between them: the run
-        // stops at 1, and 3 draws as the ungrouped layer it now looks like.
         let stack = ids(&[1, 2, 3]);
         assert_eq!(drawn_members(&stack, &group(&[1, 3])), ids(&[1]));
         assert_eq!(

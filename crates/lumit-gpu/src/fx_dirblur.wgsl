@@ -9,10 +9,10 @@ struct Params {
     dx: f32,        // unit streak direction (host-computed)
     dy: f32,
     length: f32,    // full streak length, raster px
-    taps: i32,      // == cpu::dir_blur_taps(length)
+    taps: i32,
     edge: u32,      // 0 transparent, 1 repeat, 2 mirror
     mix_amt: f32,   // 0..1, blended against the unprocessed input
-    matte_on: f32,     // 1 = the matte drives the control below
+    matte_on: f32,
     _pad1: f32,
 };
 
@@ -64,8 +64,6 @@ fn tap(x: i32, y: i32, size: vec2<i32>) -> vec4<f32> {
     return select(textureLoad(src, c, 0), vec4<f32>(0.0), xi < 0 || yi < 0);
 }
 
-// Edge-policy bilinear at continuous pixel-centre coordinates
-// (== cpu::bilinear_edge, same arithmetic order).
 fn bilinear_edge(sx: f32, sy: f32, size: vec2<i32>) -> vec4<f32> {
     let fx = sx - 0.5;
     let fy = sy - 0.5;

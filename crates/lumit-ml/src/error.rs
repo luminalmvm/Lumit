@@ -17,7 +17,6 @@ use crate::manifest::Task;
 /// badge's detail slot.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum MlError {
-    /// No model runtime is installed, so nothing can be opened at all.
     #[error("no model runtime is installed")]
     RuntimeMissing,
 
@@ -31,7 +30,6 @@ pub enum MlError {
     #[error("the model runtime is in use until Lumit is restarted")]
     RuntimeInUse,
 
-    /// Nothing installed does this task.
     #[error("no model pack is installed for the {0} task")]
     PackMissing(Task),
 
@@ -40,7 +38,6 @@ pub enum MlError {
     #[error("that model pack cannot be read")]
     PackUnreadable,
 
-    /// An addon of that id is not installed.
     #[error("no addon of that id is installed")]
     NotInstalled,
 

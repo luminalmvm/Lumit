@@ -14,7 +14,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Drop shadow's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "drop_shadow",
@@ -75,12 +74,9 @@ pub struct DropShadow {
     #[slider(min = 0.0, max = 250.0, default = 8.0, hard_min = 0.0, unit = Px)]
     pub softness: f32,
 
-    /// Keep the shadow and throw the layer away — how a shadow ends up on a
-    /// different layer from the thing casting it.
     #[toggle(label = "Shadow only", default = false)]
     pub shadow_only: bool,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -126,7 +122,6 @@ impl DropShadow {
     }
 }
 
-/// Drop shadow's behaviour.
 pub struct DropShadowDef;
 
 impl EffectDef for DropShadowDef {

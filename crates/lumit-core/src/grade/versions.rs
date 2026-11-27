@@ -15,16 +15,12 @@ use crate::fx::effects::grade_group::{is_reference, part_of, Part};
 use crate::model::{Document, EffectInstance};
 use crate::ops::Op;
 
-/// A shot's versions, and which one the stack holds.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GradeVersions {
-    /// The version the stack holds.
     pub live: Uuid,
-    /// Every version, in the order they were made.
     pub versions: Vec<GradeVersion>,
 }
 
-/// One version of a grade.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GradeVersion {
     pub id: Uuid,
@@ -36,7 +32,6 @@ pub struct GradeVersion {
 }
 
 impl GradeVersions {
-    /// "Version n" for the next n no version is called yet.
     fn fresh_name(&self) -> String {
         let mut n = self.versions.len() + 1;
         while self
@@ -94,8 +89,6 @@ fn lift(stack: &mut Vec<EffectInstance>) -> (Vec<EffectInstance>, usize) {
     (grade, at)
 }
 
-/// Make `to` the live version: the live grade leaves the stack into its own
-/// version, and `to`'s goes in where it started.
 fn swap(
     stack: &mut Vec<EffectInstance>,
     set: &mut GradeVersions,
@@ -177,7 +170,6 @@ pub fn add(doc: &Document, shot: Shot, copy: bool) -> Result<(Uuid, Option<Op>),
     })
 }
 
-/// Make `to` the live version of `shot`.
 pub fn switch(doc: &Document, shot: Shot, to: Uuid) -> Result<Option<Op>, GradeError> {
     edit(doc, shot, |stack, versions| {
         swap(
@@ -189,7 +181,6 @@ pub fn switch(doc: &Document, shot: Shot, to: Uuid) -> Result<Option<Op>, GradeE
     .map(|((), op)| op)
 }
 
-/// Call version `id` of `shot` `name`.
 pub fn rename(doc: &Document, shot: Shot, id: Uuid, name: &str) -> Result<Option<Op>, GradeError> {
     let name = name.trim();
     if name.is_empty() {
@@ -252,9 +243,6 @@ mod tests {
         crate::grade::read(doc, shot).unwrap().0.to_vec()
     }
 
-    /// A shot's grade goes into a new empty version and comes back from it
-    /// exactly as it was, keys and all, while the effects around it and a
-    /// group's references stay where they are.
     #[test]
     fn switching_versions_and_back_loses_nothing() {
         let mut exposure = fx("exposure");

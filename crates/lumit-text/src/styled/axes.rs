@@ -1,12 +1,9 @@
-//! Letters set at their own place on a variable font's axes.
-
 use lumit_core::text::{AxisSpacing, GlyphXform, TextAlign};
 
 use super::Laid;
 use crate::fonts::Face;
 use crate::TextBlock;
 
-/// The face a block names, at the layer's own place on its axes.
 pub(super) fn face_of(block: &TextBlock<'_>) -> std::sync::Arc<Face> {
     let face = crate::fonts::face(&block.style.family, &block.style.face);
     if block.style.axes.is_empty() {
@@ -43,7 +40,6 @@ pub(super) fn respace(laid: &mut Laid, face: &Face, xforms: &[GlyphXform], block
     let base_shaper = harfrust::ShaperFont::new(&face.shaper);
     let mut keys: std::collections::HashMap<Vec<([u8; 4], i32)>, usize> =
         std::collections::HashMap::new();
-    // The width each letter gains, by its place in `laid.glyphs`.
     let mut gains = vec![0.0f32; laid.glyphs.len()];
     let base = |tag: [u8; 4]| face.place_on(tag).unwrap_or(f32::NAN);
     for (g, glyph) in laid.glyphs.iter_mut().enumerate() {
@@ -84,8 +80,6 @@ pub(super) fn respace(laid: &mut Laid, face: &Face, xforms: &[GlyphXform], block
             }
         }
         spacing @ (AxisSpacing::Adaptive | AxisSpacing::Default) => {
-            // Each letter's middle before the push and what it gained, line
-            // by line, so the carets can follow the letters.
             let mut middles: Vec<Vec<(f32, f32)>> = vec![Vec::new(); laid.lines.len()];
             for (glyph, gain) in laid.glyphs.iter().zip(&gains) {
                 if let Some(line) = middles.get_mut(glyph.line) {

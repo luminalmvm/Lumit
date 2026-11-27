@@ -12,7 +12,6 @@ import 'package:flutter/widgets.dart';
 import 'theme.dart';
 import 'theme_tokens.dart';
 
-/// A user-made theme, kept as a file in the library (theme_file.dart).
 class CustomTheme {
   /// What the user called it. Also its identity — the dropdown shows it and
   /// the workspace stores the selection by it, so two cannot share one.
@@ -37,26 +36,20 @@ class CustomTheme {
     this.base,
   });
 
-  /// The scheme a custom theme is built over: the one it names, else the
-  /// plainest of its mode, Lumit's own neutral ramp.
   LumitColorScheme get baseScheme =>
       base ??
       (mode == ThemeMode2.light
           ? LumitColorScheme.light
           : LumitColorScheme.dark);
 
-  /// This theme, resolved: the base scheme under the shape, with the stored
-  /// colours over it.
   LumitTheme build(ThemeShape shape) => applyTokens(
         baseScheme.build().copyWith(shape: shape, tokens: ShapeTokens.of(shape)),
         colours,
       );
 
-  /// The same theme under a new name — what "save as" does.
   CustomTheme renamed(String to) =>
       CustomTheme(name: to, mode: mode, colours: colours, base: base);
 
-  /// Capture a whole theme's colours under [name]. What the editor saves.
   factory CustomTheme.from(String name, LumitTheme theme,
           {LumitColorScheme? base}) =>
       CustomTheme(

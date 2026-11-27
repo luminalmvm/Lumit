@@ -56,7 +56,6 @@ void main() {
         (100.0, 100.0),
         (0.0, 50.0),
       ]);
-      // The top vertex's handles run sideways, by kappa of the x radius.
       expect(path.first.tanOutX, closeTo(100 * kappa, 1e-9));
       expect(path.first.tanOutY, 0);
       expect(path.first.tanInX, closeTo(-100 * kappa, 1e-9));
@@ -73,8 +72,6 @@ void main() {
       expect(path.length, polygonSides);
       expect(path.first.x, closeTo(50, 1e-9));
       expect(path.first.y, closeTo(0, 1e-9), reason: 'the top point');
-      // Every point sits on the ellipse inscribed in the box, so every one is
-      // the same distance from the middle of a square box.
       for (final v in path) {
         final d = math.sqrt(math.pow(v.x - 50, 2) + math.pow(v.y - 50, 2));
         expect(d, closeTo(50, 1e-9));
@@ -84,8 +81,6 @@ void main() {
     });
   });
 
-  /// The Pen's path builder. This gesture was briefly on the polygon
-  /// tool; it is After Effects' pen, and it belongs to the Pen.
   group('The Pen\'s draft', () {
     test('three points make it closable', () {
       final draft = const PathDraft()
@@ -110,10 +105,7 @@ void main() {
   group('Closing the path', () {
     test('the tolerance is in screen pixels, so it follows the magnification',
         () {
-      // Zoomed right out, ten layer pixels is one screen pixel: still a click
-      // on the point.
       expect(withinClosingDistance((100, 0), (0, 0), screenScale: 0.1), isTrue);
-      // Zoomed right in, one layer pixel is ten screen ones: not a click on it.
       expect(withinClosingDistance((2, 0), (0, 0), screenScale: 10), isFalse);
     });
   });

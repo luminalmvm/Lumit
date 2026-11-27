@@ -45,7 +45,6 @@ import 'text_animator_rows_frb.dart';
 import 'transform_rows_frb.dart';
 import 'keyframe_controls_frb.dart' show asKeyed, keysOfScalar, withKeys;
 
-/// One row of a layer's fold-out.
 sealed class LayerFoldRow {
   /// How far this row is indented — 1 for a section heading, 2 for a property
   /// under one, 3 for a parameter under an effect.
@@ -53,10 +52,7 @@ sealed class LayerFoldRow {
   const LayerFoldRow(this.depth);
 }
 
-/// A section heading with its own twirl: Transform, Effects, an effect, Audio.
 final class FoldGroupRow extends LayerFoldRow {
-  /// Whether the part of a 3D model this heading names shows, the tick it
-  /// wears beside its twirl. Null on every other heading.
   final bool? shown;
 
   /// Identifies this group in the open set. Built from ids, not labels, so two
@@ -75,8 +71,6 @@ final class FoldGroupRow extends LayerFoldRow {
   /// effect), which is drawn as typed whatever the label case.
   final bool named;
 
-  /// Whether the Audio heading's waveform lane is open, for the tick on its
-  /// menu. Null on every other heading.
   final bool? waveform;
 
   /// The rows a shut group of an effect's rows holds, so its lane can draw
@@ -105,7 +99,6 @@ final class FoldTransformRow extends LayerFoldRow {
       : super(depth);
 }
 
-/// One of a layer's choice rows: a light's type or falloff.
 final class FoldSettingRow extends LayerFoldRow {
   final LayerSetting setting;
   final BridgeLayerInfo info;
@@ -187,7 +180,6 @@ final class FoldEffectParamRow extends LayerFoldRow {
       : super(depth);
 }
 
-/// The layer's Volume.
 final class FoldVolumeRow extends LayerFoldRow {
   /// The Volume scalar, read once per document revision by the panel and
   /// carried here so the row draws without a bridge call. Null only
@@ -215,7 +207,6 @@ final class FoldGainRow extends LayerFoldRow {
 final class FoldSendRow extends LayerFoldRow {
   final BridgeSend send;
 
-  /// The bus's name, read off the comp's layers when the rows are built.
   final String bus;
   const FoldSendRow(this.send, {required this.bus, required int depth})
       : super(depth);
@@ -231,8 +222,6 @@ final class FoldRetimeRow extends LayerFoldRow {
   const FoldRetimeRow(this.scalar, {required int depth}) : super(depth);
 }
 
-/// One mask on the layer: its name, and the switches that decide how it
-/// gates the picture.
 final class FoldMaskRow extends LayerFoldRow {
   final BridgeMask mask;
   const FoldMaskRow(this.mask, {required int depth}) : super(depth);
@@ -264,30 +253,23 @@ final class FoldMaskValueRow extends LayerFoldRow {
       : super(depth);
 }
 
-/// One piece of a shape layer's art: its name, its fill and its
-/// outline — the row that makes a drawn shape editable after the fact.
 final class FoldShapeRow extends LayerFoldRow {
   final BridgeShapeItem item;
 
-  /// Whether its own twirl is down, showing the rows under it.
   final bool open;
   const FoldShapeRow(this.item, {required this.open, required int depth})
       : super(depth);
 }
 
-/// A modifier entry in a shape layer's contents: a repeater, a trim, an
-/// offset, a twist, a deform or a smooth, acting on the art above it.
 final class FoldShapeModifierRow extends LayerFoldRow {
   final BridgeShapeModifier modifier;
 
-  /// Whether its own twirl is down, showing the rows under it.
   final bool open;
   const FoldShapeModifierRow(this.modifier,
       {required this.open, required int depth})
       : super(depth);
 }
 
-/// A group in a shape layer's contents, folding the entries under it.
 final class FoldShapeGroupRow extends LayerFoldRow {
   final BridgeShapeGroup group;
   final bool open;
@@ -318,9 +300,6 @@ enum ShapeValue {
   /// stopwatch and its diamonds and nothing else; its keys are whole paths.
   path,
 
-  /// A parametric shape's numbers, in place of its path row: the size and
-  /// corners of a rectangle or an ellipse, the points and radii of a polygon
-  /// or a star.
   shapeWidth,
   shapeHeight,
   shapePositionX,
@@ -419,8 +398,6 @@ ShapeValue? fillTwin(ShapeValue value) => switch (value) {
       _ => null,
     };
 
-/// Which of a shape item's values are its colours, three numbers under one
-/// stopwatch.
 bool isColourValue(ShapeValue value) => switch (value) {
       ShapeValue.fillColour ||
       ShapeValue.gradientColour ||
@@ -439,8 +416,6 @@ bool isColourValue(ShapeValue value) => switch (value) {
 int shapeSlot(ShapeValue value, int stop, int channel) =>
     isColourValue(value) ? stop * 4 + channel : stop;
 
-/// Which of a shape item's values are its paint, given rows of their own
-/// before the numbers that change the path.
 bool isPaintValue(ShapeValue value) => switch (value) {
       ShapeValue.fillColour ||
       ShapeValue.gradientColour ||
@@ -461,7 +436,6 @@ BridgeScalar colourChannel(BridgeColour colour, int channel) =>
       _ => colour.r,
     };
 
-/// [colour] with one channel replaced.
 BridgeColour colourWithChannel(
         BridgeColour colour, int channel, BridgeScalar to) =>
     BridgeColour(
@@ -471,7 +445,6 @@ BridgeColour colourWithChannel(
       a: channel == 3 ? to : colour.a,
     );
 
-/// A colour that does not move, as the engine stores one.
 BridgeColour stillColour(BridgeColourRgba c) => BridgeColour(
       r: BridgeScalar.static_(c.r),
       g: BridgeScalar.static_(c.g),
@@ -479,8 +452,6 @@ BridgeColour stillColour(BridgeColourRgba c) => BridgeColour(
       a: BridgeScalar.static_(c.a),
     );
 
-/// What the Add menu on a shape row offers: a modifier entry below the row,
-/// the item's own fill, outline or stroke taper, or a group round the row.
 enum ShapeAdd {
   repeater,
   trim,
@@ -494,7 +465,6 @@ enum ShapeAdd {
   group
 }
 
-/// Which adds belong to an item itself rather than making an entry.
 bool isItemAdd(ShapeAdd add) =>
     add == ShapeAdd.fill || add == ShapeAdd.stroke || add == ShapeAdd.taper;
 
@@ -520,11 +490,9 @@ List<ShapeValue> primitiveValues(int kind) => switch (kind) {
         ],
     };
 
-/// Which of a shape item's values are a parametric shape's numbers.
 bool isPrimitiveValue(ShapeValue value) =>
     primitiveValues(0).contains(value) || primitiveValues(3).contains(value);
 
-/// What [add] is called in the menu, and what a new entry of it is named.
 String shapeAddLabel(ShapeAdd add) => switch (add) {
       ShapeAdd.repeater => l10n.shapeRepeater,
       ShapeAdd.trim => l10n.shapeTrimPaths,
@@ -538,8 +506,6 @@ String shapeAddLabel(ShapeAdd add) => switch (add) {
       ShapeAdd.group => l10n.shapeGroup,
     };
 
-/// The modifier kind [value] belongs to, or null for a number on the item
-/// itself.
 ShapeAdd? shapeModifierOf(ShapeValue value) => switch (value) {
       ShapeValue.smoothAmount => ShapeAdd.smooth,
       ShapeValue.twistAngle ||
@@ -573,7 +539,6 @@ ShapeAdd? shapeModifierOf(ShapeValue value) => switch (value) {
       _ => null,
     };
 
-/// Which of a shape item's numbers are its stroke taper's.
 bool isTaperValue(ShapeValue value) => switch (value) {
       ShapeValue.taperStart ||
       ShapeValue.taperEnd ||
@@ -596,8 +561,6 @@ bool isDashValue(ShapeValue value) => switch (value) {
 /// a slider dragged to its end asks for a frame that arrives.
 const double maxShapeCopies = 100;
 
-/// The values a stop between a gradient's ends has, which take the stop they
-/// belong to from their row.
 bool isGradientStopValue(ShapeValue value) => switch (fillTwin(value) ?? value) {
       ShapeValue.gradientStopPosition ||
       ShapeValue.gradientStopColour ||
@@ -711,7 +674,6 @@ bool isRepeated(BridgeShapeRepeater repeater) => switch (repeater.copies) {
       _ => true,
     };
 
-/// The value rows a modifier entry shows under it, in order.
 List<ShapeValue> modifierValues(BridgeShapeModifier modifier) =>
     switch (modifier.kind) {
       BridgeShapeModifierKind_Repeat(:final field0) => [
@@ -760,7 +722,6 @@ enum ShapePaint {
   /// are painting.
   combine,
 
-  /// Flat, linear, radial or angle.
   gradient,
 
   /// The outline's: flat, linear, radial, angle or along the path.
@@ -769,19 +730,13 @@ enum ShapePaint {
   /// The outline's ramp, which opens the editor for its stops.
   strokeGradientStops,
 
-  /// The ramp itself, which opens the editor for the stops along it.
   gradientStops,
 
-  /// Whether a deform pushes the outline out or scales it.
   deformMode,
 
-  /// Whether a stroke taper runs along each path or the whole shape.
   taperScope,
 }
 
-/// A shape item's gradient choice, its ramp, or how it joins the item before
-/// it, on a row of its own. A deform entry's Displace or Scale choice is
-/// the one that belongs to a [modifier] rather than to an item.
 final class FoldShapePaintRow extends LayerFoldRow {
   final BridgeShapeItem? item;
   final BridgeShapeModifier? modifier;
@@ -791,7 +746,6 @@ final class FoldShapePaintRow extends LayerFoldRow {
       : super(depth);
 }
 
-/// What a shape item's paint row is called.
 String shapePaintLabel(ShapePaint which) => switch (which) {
       ShapePaint.combine => l10n.shapeCombine,
       ShapePaint.gradient => l10n.shapeGradient,
@@ -807,37 +761,28 @@ String shapePaintLabel(ShapePaint which) => switch (which) {
 /// row, for the reason [FoldMaskValueRow] gives: a property without a row has
 /// nowhere to put the stopwatch that animates it.
 final class FoldShapeValueRow extends LayerFoldRow {
-  /// The item the number belongs to, or null for a modifier's.
   final BridgeShapeItem? item;
   final BridgeShapeModifier? modifier;
   final ShapeValue value;
 
-  /// Which gradient stop the row is for, on the values a stop has.
   final int stop;
   const FoldShapeValueRow(this.item, this.value,
       {this.modifier, required int depth, this.stop = 0})
       : super(depth);
 
-  /// The id the row's path names: the item's or the modifier's.
   UuidValue get ownerId => modifier?.id ?? item!.id;
 
-  /// The number itself, from whichever the row belongs to.
   BridgeScalar get scalar => switch (modifier) {
         final m? => modifierScalarOf(m, value),
         null => shapeScalarOf(item!, value, stop: shapeSlot(value, stop, 0)),
       };
 }
 
-/// One paint stroke on the layer: its name, so a stroke can be found,
-/// renamed and deleted after it was painted.
 final class FoldStrokeRow extends LayerFoldRow {
   final BridgeStroke stroke;
   const FoldStrokeRow(this.stroke, {required int depth}) : super(depth);
 }
 
-/// One puppet pin on the layer: its name, and — for the three kinds
-/// that reach — how far it reaches, in the value column where a mask's opacity
-/// sits.
 final class FoldPuppetPinRow extends LayerFoldRow {
   final BridgePuppetPin pin;
   const FoldPuppetPinRow(this.pin, {required int depth}) : super(depth);
@@ -885,8 +830,6 @@ List<PuppetValue> puppetValuesFor(BridgePuppetPinKind kind) => switch (kind) {
         ],
     };
 
-/// What a pin's value row is called — shared by the row and the graph channel,
-/// exactly as [maskValueLabel] is.
 String puppetValueLabel(PuppetValue value) => switch (value) {
       PuppetValue.positionX => l10n.transformPositionX,
       PuppetValue.positionY => l10n.transformPositionY,
@@ -895,7 +838,6 @@ String puppetValueLabel(PuppetValue value) => switch (value) {
       PuppetValue.amount => l10n.puppetAmount,
     };
 
-/// Which of a pin's animatable numbers [value] names.
 BridgeScalar puppetScalarOf(BridgePuppetPin pin, PuppetValue value) =>
     switch (value) {
       PuppetValue.positionX => pin.x,
@@ -930,7 +872,6 @@ BridgePuppetPin puppetPinCopy(
       extent: extent ?? pin.extent,
     );
 
-/// [pin] with the one number [value] names replaced.
 BridgePuppetPin puppetPinWithScalar(
         BridgePuppetPin pin, PuppetValue value, BridgeScalar to) =>
     switch (value) {
@@ -973,9 +914,6 @@ final class FoldAnimatorValueRow extends LayerFoldRow {
       : super(depth);
 }
 
-/// One of [AnimatorSetting] on selector [selector] of animator [index], as
-/// the Effect controls panel shows it, so the Timeline has the whole
-/// selector too.
 final class FoldAnimatorSettingRow extends LayerFoldRow {
   final int index;
   final BridgeTextAnimator animator;
@@ -1011,7 +949,6 @@ String animatorSelectorSegment(int k) => k == 0 ? '' : 's$k/';
 final class FoldFlowRow extends LayerFoldRow {
   final FlowRowKind kind;
 
-  /// The Input rate's curve; null on every other kind.
   final BridgeScalar? rate;
 
   /// The whole group's parameters, read once per document revision by the
@@ -1058,8 +995,6 @@ enum FlowRowKind {
 bool hasFlow(BridgeLayerKind kind) =>
     kind == BridgeLayerKind.footage || kind == BridgeLayerKind.precomp;
 
-/// The waveform lane: the outline names it, the lane side draws the
-/// layer's source peaks through its live in/out/offset.
 final class FoldWaveformRow extends LayerFoldRow {
   const FoldWaveformRow({required int depth}) : super(depth);
 }
@@ -1189,16 +1124,13 @@ List<LayerFoldRow> animatedFoldRows(List<LayerFoldRow> rows) =>
 /// effect they applied, a mask they drew. Each is a superset of the one before,
 /// so a row shown by the narrow answer is shown by the wide one.
 enum RevealFilter {
-  /// `U`'s own rule: the rows carrying keyframes.
   keyframed,
 
   /// Keyed, expression-driven, or driven by a wire.
   animated,
 
-  /// Anything that differs from what a freshly made layer carries.
   modified,
 
-  /// The property rows picked in the Timeline, and nothing else.
   picked,
 }
 
@@ -1266,7 +1198,6 @@ List<LayerFoldRow> withHeadingsShut(
     List<LayerFoldRow> rows, Set<String> shut) {
   if (shut.isEmpty) return rows;
   final out = <LayerFoldRow>[];
-  // The depth of the shut heading whose rows are being passed over.
   int? under;
   for (final row in rows) {
     if (under != null && row.depth > under) continue;
@@ -1412,7 +1343,6 @@ bool _foldRowChanged(LayerFoldRow row, double compWidth, double compHeight) =>
           }),
       FoldAnimatorLinkRow(:final animator, :final offset) =>
         offset ? animator.followOffset != 0 : animator.follow != null,
-      // A selector's choice is a change when it is not the fresh one.
       FoldAnimatorSettingRow(:final animator, :final setting, :final selector) =>
         selector > 0 ||
             animatorSettingChanged(selectorAt(animator, selector), setting),
@@ -1516,9 +1446,7 @@ double? transformDefault(BridgeTransformProp prop, double w, double h) =>
       BridgeTransformProp.scaleZ ||
       BridgeTransformProp.opacity =>
         100,
-      // A full circle of confusion, which is what a fresh camera carries.
       BridgeTransformProp.blurLevel => 100,
-      // A fresh light's, After Effects' own.
       BridgeTransformProp.lightIntensity => 100,
       BridgeTransformProp.lightColourR ||
       BridgeTransformProp.lightColourG ||
@@ -1532,7 +1460,6 @@ double? transformDefault(BridgeTransformProp prop, double w, double h) =>
       // Seeded from the comp, as a camera's are.
       BridgeTransformProp.lightWidth || BridgeTransformProp.lightHeight => null,
       BridgeTransformProp.shadowDarkness => 100,
-      // A fresh light's haze.
       BridgeTransformProp.hazeAmount => 0,
       BridgeTransformProp.hazeDensity || BridgeTransformProp.hazeScatter => 30,
       BridgeTransformProp.hazeNoise => 40,
@@ -1622,8 +1549,6 @@ class _EveryLayer extends MapBase<String, RevealFilter> {
   RevealFilter? remove(Object? key) => null;
 }
 
-/// What a mask's value row is called — shared by the row, the graph channel
-/// and anything else that has to name one.
 String maskValueLabel(MaskValue value, [int vertex = -1]) => switch (value) {
       MaskValue.path => l10n.maskPath,
       MaskValue.opacity => l10n.maskOpacity,
@@ -1649,7 +1574,6 @@ BridgeScalar maskScalarOf(BridgeMask mask, MaskValue value,
       MaskValue.path => const BridgeScalar.static_(0),
     };
 
-/// [mask] with the one number [value] names replaced.
 BridgeMask maskWithScalar(BridgeMask mask, MaskValue value, BridgeScalar to,
         [int vertex = -1]) =>
     BridgeMask(
@@ -1736,21 +1660,17 @@ List<BridgeKeyframe> keysOfRows(Iterable<LayerFoldRow> rows) {
   ];
 }
 
-/// What a stroke's value row is called — shared by the row and the graph
-/// channel, exactly as [maskValueLabel] is.
 String strokeValueLabel(StrokeValue value) => switch (value) {
       StrokeValue.start => l10n.strokeStart,
       StrokeValue.end => l10n.strokeEnd,
     };
 
-/// Which of a stroke's two animatable numbers [value] names.
 BridgeScalar strokeScalarOf(BridgeStroke stroke, StrokeValue value) =>
     switch (value) {
       StrokeValue.start => stroke.start,
       StrokeValue.end => stroke.end,
     };
 
-/// [stroke] with the one number [value] names replaced.
 BridgeStroke strokeWithScalar(
         BridgeStroke stroke, StrokeValue value, BridgeScalar to) =>
     BridgeStroke(
@@ -1770,8 +1690,6 @@ BridgeStroke strokeWithScalar(
       cloneOffsetY: stroke.cloneOffsetY,
     );
 
-/// What a shape item's value row is called — shared by the row and the graph
-/// channel, exactly as [maskValueLabel] is.
 String shapeValueLabel(ShapeValue value, {int stop = 0}) => switch (value) {
       ShapeValue.path => l10n.shapePath,
       ShapeValue.shapeWidth => l10n.fxWidth,
@@ -1911,7 +1829,6 @@ BridgeScalar _dashAt(BridgeShapeItem item, int index) =>
         ? item.dashes[index]
         : const BridgeScalar.static_(0);
 
-/// Which of a shape item's animatable numbers [value] names.
 BridgeScalar shapeScalarOf(BridgeShapeItem item, ShapeValue value,
         {int stop = 0}) =>
     switch (value) {
@@ -2187,14 +2104,11 @@ BridgeShapeItem shapeItemWith(
   );
 }
 
-/// [item] with the one number [value] names replaced.
 BridgeShapeItem shapeWithScalar(
         BridgeShapeItem item, ShapeValue value, BridgeScalar to,
         {int stop = 0}) =>
     shapeItemWith(item, value: value, to: to, stop: stop);
 
-/// Which of a modifier entry's numbers [value] names; the still zero for one
-/// it has not got.
 BridgeScalar modifierScalarOf(BridgeShapeModifier modifier, ShapeValue value) =>
     switch ((modifier.kind, value)) {
       (BridgeShapeModifierKind_Smooth(:final field0), ShapeValue.smoothAmount) =>
@@ -2277,8 +2191,6 @@ BridgeScalar modifierScalarOf(BridgeShapeModifier modifier, ShapeValue value) =>
       _ => _none,
     };
 
-/// [modifier] with the one number [value] names replaced by [to], or with
-/// its deform reading set to [deformMode].
 BridgeShapeModifier modifierWith(BridgeShapeModifier modifier,
     {ShapeValue? value, BridgeScalar? to, int? deformMode, bool? hidden}) {
   BridgeScalar at(ShapeValue which, BridgeScalar was) =>
@@ -2333,8 +2245,6 @@ BridgeShapeModifier modifierWith(BridgeShapeModifier modifier,
       own: modifier.own);
 }
 
-/// The whole list with the one number [row] names replaced by [to]: on its
-/// item, or on its modifier entry.
 List<BridgeShapeEntry> shapeEntriesWithScalar(
         List<BridgeShapeEntry> entries, FoldShapeValueRow row, BridgeScalar to) =>
     switch (row.modifier) {
@@ -2389,7 +2299,6 @@ void asOneUndoStep(ProjectReference? project, void Function() body,
     return;
   }
   project.beginUndoGroup();
-  // The step's name in the History list, where the command has its own.
   if (name != null) project.nameUndoGroup(name: name);
   try {
     body();
@@ -2459,7 +2368,6 @@ bool moveLaneKeys({
       final values = <BridgeScalar>[];
       for (final axis in group.axes) {
         final scalar = read(transform, axis.prop);
-        // An axis with no keys, or none at these times, has nothing to move.
         // Keys under an expression move, and the expression stays.
         final keys = keysOfScalar(scalar);
         if (keys == null) continue;
@@ -2791,8 +2699,6 @@ String foldRowPath(String layerId, LayerFoldRow row) => switch (row) {
         '${contentsPath(layerId)}/${modifier?.id ?? item!.id}/${which.name}',
     };
 
-/// Whether [path] sits under [ancestor] — a property under its group, a
-/// parameter under its effect, anything under its layer.
 bool isUnderPath(String ancestor, String path) =>
     ancestor.isNotEmpty && path.startsWith('$ancestor/');
 
@@ -2803,13 +2709,10 @@ String? layerIdOfPath(String path) {
   return cut > 0 ? path.substring(0, cut) : null;
 }
 
-/// The path of a layer's Retime row.
 String retimePath(String layerId) => '$layerId/retime';
 
-/// The path of a layer's Flow group in the open set.
 String flowPath(String layerId) => '$layerId/flow';
 
-/// The path of a layer's Transform group in the open set.
 String transformPath(String layerId) => '$layerId/transform';
 
 /// The path of the Camera options heading inside it - the second twirl a
@@ -2820,12 +2723,9 @@ String transformPath(String layerId) => '$layerId/transform';
 String cameraOptionsPath(String layerId) =>
     '${transformPath(layerId)}/camera-options';
 
-/// The path of a light's Light options heading, on the same terms.
 String lightOptionsPath(String layerId) =>
     '${transformPath(layerId)}/light-options';
 
-/// The path of a 3D layer's Material options, a heading of its own beside
-/// Transform as in After Effects.
 String materialPath(String layerId) => '$layerId/material';
 
 /// The path of one Transform row — Position, Scale, Rotation and the rest.
@@ -2836,10 +2736,8 @@ String materialPath(String layerId) => '$layerId/material';
 String transformGroupPath(String layerId, TransformGroup group) =>
     '${transformPath(layerId)}/${group.axes.first.prop.name}';
 
-/// The path of a layer's Effects group.
 String effectsPath(String layerId) => '$layerId/effects';
 
-/// The path of one effect within the Effects group.
 String effectPath(String layerId, String effectId) =>
     '$layerId/effects/$effectId';
 
@@ -3056,13 +2954,10 @@ List<LayerFoldRow> clipFoldRows({
 /// after it, of each of its rows: there is only ever one instance.
 String inputsPath(String layerId) => '$layerId/inputs';
 
-/// The path of a Model layer's **Materials** group, and of one material in
-/// it.
 String materialsPath(String layerId) => '$layerId/materials';
 String modelMaterialPath(String layerId, String materialId) =>
     '${materialsPath(layerId)}/$materialId';
 
-/// The path of a layer's **Styles** group.
 String stylesPath(String layerId) => '$layerId/styles';
 
 /// The path of one style within it. Its own prefix rather than the Effects
@@ -3072,11 +2967,8 @@ String stylesPath(String layerId) => '$layerId/styles';
 String stylePath(String layerId, String styleId) =>
     '${stylesPath(layerId)}/$styleId';
 
-/// The path of a layer's **Drivers** group: the Node graph's driver boxes,
-/// whose rows key and drag as an effect's do.
 String driversPath(String layerId) => '$layerId/drivers';
 
-/// The path of one driver within it.
 String driverPath(String layerId, String driverId) =>
     '${driversPath(layerId)}/$driverId';
 
@@ -3112,7 +3004,6 @@ String? styleIdOfPath(String path) {
   return parts[2];
 }
 
-/// The path of a Text layer's Animators group.
 String animatorsPath(String layerId) => '$layerId/animators';
 
 /// The path of one animator within it. Its **index**, because an animator has
@@ -3122,28 +3013,20 @@ String animatorsPath(String layerId) => '$layerId/animators';
 String animatorPath(String layerId, int index) =>
     '${animatorsPath(layerId)}/$index';
 
-/// The path of a layer's Masks group.
 String masksPath(String layerId) => '$layerId/masks';
 
-/// The path of a shape layer's Contents group.
 String contentsPath(String layerId) => '$layerId/contents';
 
-/// The path of the heading over a shape layer's global modifiers.
 String globalModifiersPath(String layerId) => '${contentsPath(layerId)}/global';
 
-/// The path of a layer's Paint group.
 String paintPath(String layerId) => '$layerId/paint';
 
-/// The path of a layer's Puppet group.
 String puppetPath(String layerId) => '$layerId/puppet';
 
-/// The path of a layer's Audio group.
 String audioPath(String layerId) => '$layerId/audio';
 
-/// The path of the Sends heading on an Audio timeline track.
 String sendsPath(String layerId) => '$layerId/sends';
 
-/// The path of the Waveform twirl inside the Audio group.
 String waveformPath(String layerId) => '$layerId/audio/waveform';
 
 /// The rows to draw under an open layer, in order.
@@ -3358,10 +3241,7 @@ List<LayerFoldRow> layerFoldRows({
     ));
     if (contentsOpen) {
       final entries = info.shapeContents;
-      // The modifiers at the end that act on every shape go under a heading
-      // of their own, below all the art.
       final globalFrom = entries.globalStart;
-      // A modifier's row and, open, its numbers under it.
       void modifierRows(BridgeShapeModifier modifier, int depth, bool open) {
         rows.add(FoldShapeModifierRow(modifier, open: open, depth: depth));
         if (!open) return;
@@ -3376,7 +3256,6 @@ List<LayerFoldRow> layerFoldRows({
               modifier: modifier, depth: depth + 1));
         }
       }
-      // The depth of a shut group whose entries are being passed over.
       int? shutUnder;
       for (final (index, entry) in entries.indexed.take(globalFrom)) {
         if (shutUnder != null && entry.depth > shutUnder) continue;
@@ -3392,13 +3271,10 @@ List<LayerFoldRow> layerFoldRows({
             rows.add(FoldShapeGroupRow(field0, open: entryOpen, depth: depth));
             if (!entryOpen) shutUnder = entry.depth;
           case BridgeShapeEntryKind_Modifier(:final field0):
-            // One that is its shape's own sits a little in, under it.
             modifierRows(field0, field0.own ? depth + 1 : depth, entryOpen);
           case BridgeShapeEntryKind_Item(field0: final item):
             rows.add(FoldShapeRow(item, open: entryOpen, depth: depth));
             if (!entryOpen) continue;
-            // How this item joins the one before it. An item with nothing
-            // directly above it to join has no such row.
             final above = index > 0 ? entries[index - 1] : null;
             if (above != null &&
                 above.depth == entry.depth &&
@@ -3449,8 +3325,6 @@ List<LayerFoldRow> layerFoldRows({
               if (isPaintValue(value) || shapeModifierOf(value) != null) {
                 continue;
               }
-              // A parametric shape shows its numbers where a path shows its
-              // shape.
               final made = item.primitive;
               if (isPrimitiveValue(value)) continue;
               if (value == ShapeValue.path && made != null) {
@@ -3463,8 +3337,6 @@ List<LayerFoldRow> layerFoldRows({
               // where there is one to dash: three dead rows on a fill-only
               // shape would be three promises the item cannot keep.
               if (isDashValue(value) && item.stroke == null) continue;
-              // The gradient's two points aim a ramp and its two opacities
-              // fade one; with no ramp there is nothing for them to work on.
               // The outline's ramp shows under an outline that has one, as
               // the fill's does, and along the path has no points to aim.
               if (fillTwin(value) case final twin?) {
@@ -3481,8 +3353,6 @@ List<LayerFoldRow> layerFoldRows({
               // The highlight moves a radial ramp's centre, so only a radial
               // ramp shows it.
               if (isHighlightValue(value) && item.gradient != 2) continue;
-              // A taper narrows the outline, so it shows only where there is
-              // one, as the dashes do, and only once it has been added.
               if (isTaperValue(value) &&
                   (item.taper == null || item.stroke == null)) {
                 continue;
@@ -3692,9 +3562,6 @@ List<LayerFoldRow> layerFoldRows({
     if (paintOpen) {
       for (final stroke in info.paint) {
         rows.add(FoldStrokeRow(stroke, depth: 2));
-        // Its two trim values sit under it, the way a mask's numbers sit under
-        // the mask — and in the order they read: where the mark
-        // begins, then where it ends.
         for (final value in StrokeValue.values) {
           rows.add(FoldStrokeValueRow(stroke, value, depth: 3));
         }
@@ -3754,7 +3621,6 @@ List<LayerFoldRow> layerFoldRows({
         final materialOpen = open.contains(path);
         rows.add(FoldGroupRow(
           path: path,
-          // A material its file gives no name is numbered.
           label: geometry
               ? engineLabel(material.customName ?? '')
               : material.customName ?? l10n.modelMaterialNumbered(i + 1),
@@ -3774,8 +3640,6 @@ List<LayerFoldRow> layerFoldRows({
     }
   }
 
-  // Effects appear only once there are some: an empty heading is a promise the
-  // row cannot keep.
   if (info.effects.isNotEmpty) {
     final effectsOpen = open.contains(effectsPath(id));
     rows.add(FoldGroupRow(
@@ -3906,7 +3770,6 @@ List<LayerFoldRow> layerFoldRows({
       final bus = info.kind == BridgeLayerKind.bus;
       rows.add(FoldVolumeRow(scalar: volumeDb, depth: 2));
       rows.add(FoldPanRow(info.pan, depth: 2));
-      // A bus has no sound of its own to bring up or down, nor a wave.
       if (!bus) rows.add(FoldGainRow(info.audioGainDb, depth: 2));
       if (info.sends.isNotEmpty) {
         final sendsOpen = open.contains(sendsPath(id));

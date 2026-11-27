@@ -84,9 +84,7 @@ pub const ROTO_BRUSH: &str = "roto_brush";
 /// (docs/impl/tracking.md §5a, deviation 1). The render path converts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RotoStrokeKind {
-    /// These pixels are the subject.
     Foreground,
-    /// These pixels are not.
     Background,
     /// These pixels want the refine band, whatever the segmentation decided.
     Refine,
@@ -313,7 +311,6 @@ impl RotoSettings {
         }
     }
 
-    /// Whether the base frame is seeded by a model reading the prompt.
     #[must_use]
     pub fn segments(&self) -> bool {
         self.seed == crate::fx::effects::roto_brush::SEED_SEGMENT
@@ -477,16 +474,12 @@ mod tests {
     #[test]
     fn influence_flows_outward_from_the_base_and_never_back() {
         let b = block(10, &[10, 5, 15]);
-        // Forward of the base: the base's stroke and the one at 15, never the
-        // correction at 5 on the other side.
         let f = b.contributing(20);
         assert_eq!(f.len(), 2);
         assert!(f.iter().all(|s| s.frame == 10 || s.frame == 15));
-        // Backward: the base and the one at 5.
         let back = b.contributing(4);
         assert_eq!(back.len(), 2);
         assert!(back.iter().all(|s| s.frame == 10 || s.frame == 5));
-        // The base itself is decided by its own stroke alone.
         assert_eq!(b.contributing(10).len(), 1);
     }
 
@@ -497,7 +490,6 @@ mod tests {
         let mut after = before.clone();
         after.strokes.push(stroke(20, 40.0));
 
-        // Every frame before the correction keeps its name...
         for f in 0..20 {
             assert_eq!(
                 chain_hash(&before, s, f),
@@ -505,11 +497,9 @@ mod tests {
                 "frame {f} was renamed by a correction it does not depend on"
             );
         }
-        // ...and every frame from it onward is renamed.
         for f in 20..30 {
             assert_ne!(chain_hash(&before, s, f), chain_hash(&after, s, f));
         }
-        // The other side of the base is untouched: influence flows outward.
         for f in -10..0 {
             assert_eq!(chain_hash(&before, s, f), chain_hash(&after, s, f));
         }
@@ -556,8 +546,6 @@ mod tests {
         assert_ne!(chain_hash(&b, segment, 4), chain_hash(&b, other_pack, 4));
         assert_ne!(key_hash(&b, segment), key_hash(&b, other_pack));
 
-        // The same pack installed beside a brush that reads its strokes is not
-        // an edit to that brush.
         let installed = RotoSettings {
             identity: [9; 32],
             ..strokes

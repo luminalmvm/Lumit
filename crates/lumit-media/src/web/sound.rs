@@ -1,15 +1,9 @@
-//! The sound the page decoded, read as the desktop reads a file's.
-
 use std::path::Path;
 use std::sync::Arc;
 
 use crate::audio::{AudioBuffer, AudioReader};
 use crate::MediaError;
 
-/// `samples`, interleaved stereo at `from`, at `rate`: the same samples when
-/// the two agree, and otherwise each drawn between its two neighbours.
-// ponytail: linear, so a resampled file loses a little of its top end. A
-// windowed sinc is the upgrade if anyone hears it.
 fn at_rate(from: u32, samples: Arc<[f32]>, rate: u32) -> Arc<[f32]> {
     if from == rate || from == 0 || rate == 0 {
         return samples;
@@ -35,14 +29,11 @@ fn at_rate(from: u32, samples: Arc<[f32]>, rate: u32) -> Arc<[f32]> {
     out.into()
 }
 
-// ponytail: resampled afresh for each reader. Keep the last rate's beside the
-// sound if long files open slowly.
 fn sound_at(path: &Path, rate: u32) -> Result<Arc<[f32]>, MediaError> {
     let (from, samples) = super::sound(path).ok_or(MediaError::NoStreams)?;
     Ok(at_rate(from, samples, rate))
 }
 
-/// All of `path`'s sound at `target_rate`.
 pub(crate) fn decode_all(path: &Path, target_rate: u32) -> Result<AudioBuffer, MediaError> {
     Ok(AudioBuffer {
         rate: target_rate,
@@ -68,7 +59,6 @@ impl AudioReader {
         Self::open_stream(path, 0, target_rate)
     }
 
-    /// The page decodes a file's first sound only.
     pub fn open_stream(path: &Path, stream: u32, target_rate: u32) -> Result<Self, MediaError> {
         if stream != 0 {
             return Err(MediaError::NoStreams);

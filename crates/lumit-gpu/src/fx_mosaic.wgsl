@@ -27,22 +27,18 @@ struct Params {
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
 
-// == cpu::MOSAIC_MAX_SAMPLES.
 const MAX_SAMPLES: i32 = 8;
 
-// == cpu::mosaic_span.
 fn span_lo(x: i32, len: i32, blocks: i32) -> i32 {
     let i = (x * blocks) / len;
     return (i * len) / blocks;
 }
 
-// == cpu::mosaic_span's upper bound.
 fn span_hi(x: i32, len: i32, blocks: i32) -> i32 {
     let i = (x * blocks) / len;
     return ((i + 1) * len) / blocks;
 }
 
-// == cpu::mosaic_sample.
 fn sample_at(lo: i32, span: i32, n: i32, k: i32) -> i32 {
     return lo + (2 * k * span + span) / (2 * n);
 }

@@ -12,8 +12,6 @@ use crate::GpuContext;
 
 use super::{work_texture, FxEngine};
 
-/// One resolved Set matte (docs/08 §3.44). Mirrors the arguments of
-/// `lumit_core::fx::cpu::set_matte`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SetMatteOp {
     /// `CHANNEL_OPTIONS` index: 0 luminance, 1 alpha, 2 R, 3 G, 4 B.
@@ -37,8 +35,6 @@ struct SetMatteParams {
     _pad: [f32; 3],
 }
 
-/// One resolved Set channels (docs/08 §3.94). Mirrors the arguments of
-/// `lumit_core::fx::cpu::set_channels`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SetChannelsOp {
     /// `SET_CHANNELS_OPTIONS` indices for R, G, B and A: 0..4 this layer's
@@ -57,8 +53,6 @@ struct SetChannelsParams {
     _pad: [f32; 2],
 }
 
-/// One resolved Linear wipe (docs/08 §3.46). Mirrors
-/// `lumit_core::fx::cpu::LinearWipeParams`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LinearWipeOp {
     /// The sweep direction, host-computed `(sin θ, −cos θ)`.
@@ -83,8 +77,6 @@ struct LinearWipeParams {
     _pad: [f32; 2],
 }
 
-/// One resolved Radial wipe (docs/08 §3.47). Mirrors
-/// `lumit_core::fx::cpu::RadialWipeParams`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RadialWipeOp {
     /// Where the hand pivots, raster pixels.
@@ -193,8 +185,6 @@ impl FxEngine {
         out
     }
 
-    /// Apply one Linear wipe (docs/08 §3.46) to a linear working texture,
-    /// returning a new texture of the same size. One pass, one multiply a pixel.
     pub fn linear_wipe(
         &self,
         ctx: &GpuContext,
@@ -226,8 +216,6 @@ impl FxEngine {
         out
     }
 
-    /// Apply one Crop to a linear working texture, returning a new texture of
-    /// the same size. One pass, one multiply a pixel.
     pub fn crop(
         &self,
         ctx: &GpuContext,
@@ -256,9 +244,6 @@ impl FxEngine {
         out
     }
 
-    /// Apply one Radial wipe (docs/08 §3.47) to a linear working texture,
-    /// returning a new texture of the same size. One pass: one `atan2` and one
-    /// multiply a pixel.
     pub fn radial_wipe(
         &self,
         ctx: &GpuContext,
@@ -292,8 +277,6 @@ impl FxEngine {
     }
 }
 
-/// One resolved Venetian blinds (docs/08 §3.70). Mirrors
-/// `lumit_core::fx::cpu::VenetianBlindsParams`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct VenetianBlindsOp {
     /// The direction the slats close along, host-computed `(sin θ, −cos θ)`.
@@ -359,8 +342,6 @@ struct IrisWipeParams {
     matte_on: f32,
 }
 
-/// One resolved Card wipe (docs/08 §3.72). Mirrors
-/// `lumit_core::fx::cpu::CardWipeParams`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CardWipeOp {
     /// Columns then rows.
@@ -375,7 +356,6 @@ pub struct CardWipeOp {
     pub order_axis: u32,
     /// The ramp's offset and slope.
     pub order_bias: f32,
-    /// See [`order_bias`](Self::order_bias).
     pub order_scale: f32,
     /// 0 horizontal, 1 vertical, 2 per card.
     pub axis: u32,
@@ -383,7 +363,6 @@ pub struct CardWipeOp {
     pub direction: u32,
     /// Randomness ÷ 100.
     pub randomness: f32,
-    /// Which shuffle this instance gets.
     pub seed: u32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
@@ -411,8 +390,6 @@ struct CardWipeParams {
 }
 
 impl FxEngine {
-    /// Apply one Venetian blinds (docs/08 §3.70) to a linear working texture,
-    /// returning a new texture of the same size. One pass, one multiply a pixel.
     pub fn venetian_blinds(
         &self,
         ctx: &GpuContext,
@@ -445,9 +422,6 @@ impl FxEngine {
         out
     }
 
-    /// Apply one Iris wipe (docs/08 §3.71) to a linear working texture,
-    /// returning a new texture of the same size. One pass: one `atan2`, one
-    /// dot product and one multiply a pixel.
     pub fn iris_wipe(
         &self,
         ctx: &GpuContext,
@@ -482,9 +456,6 @@ impl FxEngine {
         out
     }
 
-    /// Apply one Card wipe (docs/08 §3.72) to a linear working texture,
-    /// returning a new texture of the same size. One pass: one hash, one divide
-    /// and one bilinear tap a pixel.
     pub fn card_wipe(
         &self,
         ctx: &GpuContext,
@@ -583,7 +554,6 @@ impl FxEngine {
     }
 }
 
-/// One Crop's parameters, as the host packs them.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CropOp {
     /// Left, top, right and bottom, each 0..1 from its own side.
@@ -594,7 +564,6 @@ pub struct CropOp {
     pub mix: f32,
 }
 
-/// Crop's uniform, laid out as `fx_crop.wgsl` reads it.
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct CropParams {
@@ -604,7 +573,6 @@ struct CropParams {
     _pad: [f32; 2],
 }
 
-/// One resolved Luma fade. Mirrors `lumit_core::fx::effects::luma_fade::LumaFadeParams`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LumaFadeOp {
     /// Completion ÷ 100.
@@ -684,7 +652,6 @@ impl FxEngine {
     }
 }
 
-/// One resolved sRGB curve: onto the sRGB curve, or back off it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SrgbCurveOp {
     /// True for sRGB to linear.
@@ -702,8 +669,6 @@ struct SrgbCurveParams {
 }
 
 impl FxEngine {
-    /// Apply one sRGB curve to a working texture, returning a new texture of
-    /// the same size.
     pub fn srgb_curve(
         &self,
         ctx: &GpuContext,

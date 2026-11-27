@@ -1,16 +1,3 @@
-// Manual screenshots, sweep 3: the graph editor, a speed ramp, and a Sequence
-// layer.
-//
-// sequence-layer · graph-editor · speed-ramp
-//
-//   cargo build -p lumit_bridge
-//   cd flutter_ui
-//   $env:LUMIT_SHOTS=1   # PowerShell; LUMIT_SHOTS=1 elsewhere
-//   flutter run -d windows -t tool/shots/shots_3.dart
-//
-// Its own sweep because the project it wants is a different one: a rough cut
-// with a Sequence layer in it and a shot that has been retimed, rather than
-// the title sequence sweep 2 stages.
 
 import 'dart:io';
 import 'dart:typed_data';
@@ -72,10 +59,7 @@ Future<void> main() async {
   comp.addFootageLayer(
       footage: project.importFootage(path: '$fixtures/Music.wav'),
       asSequence: false);
-  // The retimed shot: a plain footage layer whose Retime property is keyed, so
-  // the source runs slowly at first and then catches up.
   comp.addFootageLayer(footage: card, asSequence: false);
-  // The cut itself: one Sequence layer, razored into three clips.
   comp.addFootageLayer(footage: gameplay, asSequence: true);
   final title = comp.addTextLayer();
   title.setText(
@@ -95,11 +79,8 @@ Future<void> main() async {
   final cut = layers[1];
   final slow = layers[2];
 
-  // ---- The Sequence layer: three clips, cut back to back ------------------
   // ignore: avoid_print
   print('KIND ${cut.getKind()}');
-  // The source is six seconds long, so the row is 150 frames and the razor
-  // has to land inside it.
   cut.cutClipAt(frame: 55);
   cut.cutClipAt(frame: 105);
   // ignore: avoid_print
@@ -134,7 +115,6 @@ Future<void> main() async {
     ]),
   );
 
-  // ---- The title's own animation, for the value graph ---------------------
   chapter.setTransforms(props: const [
     BridgeTransformProp.positionX,
     BridgeTransformProp.positionY,
@@ -153,7 +133,6 @@ Future<void> main() async {
   ui.setSelectedComp(comp);
   ui.playheadFrame.value = 60;
 
-  // The sweeps photograph the shell; the welcome screen has its own sweep.
   runApp(shotRoot(LumitAppNew(state, ui, welcome: false)));
   await pause(2);
   await sizeWindow(1720, 1000);
@@ -170,9 +149,6 @@ Future<void> main() async {
     await pause(2);
   }
 
-  // ---- Shot: a Sequence layer, clips cut back-to-back ---------------------
-  // Double-clicking the row is what opens a Sequence layer's view, so
-  // the clips are shown the way the program shows them.
   await timelineShare(0.45);
   await doubleTapKey('tl-name-$cutId', settle: 2);
   // Ends under the last row: four layers do not fill a Timeline opened wide
@@ -184,9 +160,6 @@ Future<void> main() async {
         boxOf('tl-rowbody-${layers[3].internallayerId}')!.bottom + 12),
   );
 
-  // ---- Shot: the graph editor, showing the value graph --------------------
-  // Close the sequence view again, open the title's transform, pick the three
-  // animated rows, and switch the lanes for the graph.
   await doubleTapKey('tl-name-$cutId', settle: 1.5);
   await timelineShare(0.38);
   await tapKey('tl-twirl-$chapterId');
@@ -206,9 +179,6 @@ Future<void> main() async {
   await tapKey('graph-lens-value', settle: 2);
   await captureUi('graph-editor.png', scale: 2, crop: timelinePanelBox());
 
-  // ---- Shot: a speed ramp, through the Speed lens -------------------------
-  // The Retime row of the retimed layer, read as speed rather than as value:
-  // the curve that crawls and then runs.
   await tapKey('tl-graph', settle: 1.5);
   await tapKey('tl-twirl-$chapterId');
   await tapKey('tl-twirl-$slowId');

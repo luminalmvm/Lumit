@@ -1,22 +1,3 @@
-// Manual screenshots, sweep: the Timeline's two modes.
-//
-// layers-shut · layers-open · layers-selected · graph-mode
-//
-// Staged the way an inspection wants it: two layers, one with a Glow and
-// four opacity keyframes wearing every interpolation the marks can say —
-// linear (diamond), bezier (hourglass), held (square), and a bezier-in /
-// held-out split — plus position keys, so the open fold shows shaped marks
-// on two lanes, the shut bar shows summary diamonds, and Graph mode shows
-// the same truth its own way. The twirl and the mode tabs are clicked, not
-// reached into, like every sweep.
-//
-// There were three modes when this was written. Keys — the dope sheet — is
-// gone, and with it `tl-view-keys`; what is left is Layers and Graph.
-//
-//   cargo build -p lumit_bridge
-//   cd flutter_ui
-//   $env:LUMIT_SHOTS=1
-//   flutter run -d windows -t tool/shots/shots_modes.dart
 
 import 'dart:io';
 import 'dart:typed_data';
@@ -65,8 +46,6 @@ Future<void> main() async {
   );
   ui.setSelectedComp(comp);
 
-  // The inspected layer: a Glow, and opacity keys wearing every mark —
-  // linear, bezier both sides, held both sides, and the split pair.
   final title = comp.addSolidLayer();
   title.addEffect(name: 'glow');
   title.setTransform(
@@ -78,7 +57,6 @@ Future<void> main() async {
       _key(100, 90, _bezier, _hold),
     ]),
   );
-  // A second animated lane, so the open fold is more than one row.
   title.setTransform(
     prop: BridgeTransformProp.positionX,
     value: BridgeScalar.keyframed([
@@ -87,7 +65,6 @@ Future<void> main() async {
     ]),
   );
 
-  // A shut neighbour whose bar wears the summary diamonds.
   final gameplay = comp.addSolidLayer();
   gameplay.setTransform(
     prop: BridgeTransformProp.opacity,
@@ -115,10 +92,8 @@ Future<void> main() async {
   ui.workspace.touch();
   await pause(2);
 
-  // 1 — Layers mode, everything shut: summary diamonds on both bars.
   await captureUi('layers-shut.png', crop: timelinePanelBox());
 
-  // 2 — the Title layer twirled open: two lanes of shaped marks.
   final id = title.internallayerId;
   await tapKey('tl-twirl-$id');
   await pause(1);

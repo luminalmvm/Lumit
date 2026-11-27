@@ -1,7 +1,3 @@
-//! Whether an export would write over something, and the name that would
-//! not: the file itself, frame one of a sequence, the caption files beside
-//! it, the files written beside it, and what the queue has yet to write.
-
 use super::{captions_out, first_file, queue_list, with_format_extension, QueueRowState};
 use crate::api::export::{BridgeCaptionsOut, BridgeExportAlso};
 use lumit_render::export::captions::sidecar_taken;

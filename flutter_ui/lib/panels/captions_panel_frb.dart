@@ -49,26 +49,20 @@ class _CaptionsPanelFrbState extends State<CaptionsPanelFrb> {
   late final LumitUiState _ui =
       Provider.of<LumitUiState>(context, listen: false);
 
-  /// The composition's caption layers, and the one shown.
   List<BridgeLayerEntry> _layers = const [];
   BridgeLayerEntry? _entry;
 
-  /// The one picked in the dropdown, which holds while it is there.
   UuidValue? _picked;
 
-  /// What was read, and at which revision of the document.
   BridgeCaptions? _captions;
   List<CaptionRow> _rows = const [];
   UuidValue? _readLayer;
   int? _readRevision;
 
-  /// The selected layer has sound to caption, for the empty state's button.
   bool _canCreate = false;
 
-  /// The row under the playhead, or -1.
   int _current = -1;
 
-  /// The row the last plain or Ctrl click landed on, for Shift to run from.
   int? _anchor;
 
   final ScrollController _scroll = ScrollController();
@@ -82,24 +76,19 @@ class _CaptionsPanelFrbState extends State<CaptionsPanelFrb> {
   bool _matchCase = false;
   bool _wholeWord = false;
 
-  /// The rows a find has found, and which of them was stepped to last.
   List<int> _found = const [];
   int _foundAt = -1;
 
-  /// The caption being typed into, by its index, and what it said.
   int? _typing;
   String _typed = '';
   final TextEditingController _typeText = TextEditingController();
   final FocusNode _typeFocus = FocusNode();
 
-  /// The time being changed: the caption's index, and whether its end.
   (int, bool)? _timing;
   final TextEditingController _timeText = TextEditingController();
 
   bool Function()? _priorDelete;
 
-  /// A read put off while the document moves, and whether the next one is
-  /// owed at once.
   Timer? _later;
   bool _urgent = false;
 
@@ -118,7 +107,6 @@ class _CaptionsPanelFrbState extends State<CaptionsPanelFrb> {
     _ui.deleteClaim = _deleteClaim;
     HardwareKeyboard.instance.addHandler(_onKey);
     _sync();
-    // A caption asked for before the panel was up is opened as it comes up.
     if (_ui.captionSelection.typing != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _typeAsked());
     }
@@ -153,10 +141,6 @@ class _CaptionsPanelFrbState extends State<CaptionsPanelFrb> {
 
   (int, int) get _fps => _ui.model.fpsExact;
 
-  // --- Reading ----------------------------------------------------------------
-
-  /// Work out which layer is shown, and read its captions again when it or the
-  /// document has moved.
   void _sync() {
     if (!mounted) return;
     final comp = _ui.selectedComp;
@@ -227,7 +211,6 @@ class _CaptionsPanelFrbState extends State<CaptionsPanelFrb> {
     _refind();
   }
 
-  /// The row showing at [frame], or -1.
   int _rowAt(int frame) {
     var low = 0, high = _rows.length - 1, at = -1;
     while (low <= high) {
@@ -244,15 +227,11 @@ class _CaptionsPanelFrbState extends State<CaptionsPanelFrb> {
 
   int _rowOf(int cue) => _rows.indexWhere((r) => r.index == cue);
 
-  // --- The playhead ------------------------------------------------------------
-
   void _playheadMoved() {
     if (!mounted) return;
     final at = _rowAt(_ui.playheadFrame.value);
     if (at == _current) return;
     setState(() => _current = at);
-    // Played through, the list keeps the caption being said in sight, unless
-    // it was scrolled by hand a moment ago.
     final byHand =
         DateTime.now().difference(_scrolledByHand) < const Duration(seconds: 4);
     if (at >= 0 && _ui.playing.value && !byHand) _reveal(at, ease: true);
@@ -263,12 +242,9 @@ class _CaptionsPanelFrbState extends State<CaptionsPanelFrb> {
       typing: _rows[row].index == _typing,
       timing: _rows[row].index == _timing?.$1);
 
-  /// How the list was last laid out: the times side by side, and every
-  /// row's height at the width its words have.
   bool _wide = false;
   final CaptionRowHeights _heights = CaptionRowHeights();
 
-  /// Scroll row [row] into view, as little as it takes.
   void _reveal(int row, {bool ease = false}) {
     if (!_scroll.hasClients || row < 0 || row >= _rows.length) return;
     var top = 0.0;
@@ -298,8 +274,6 @@ class _CaptionsPanelFrbState extends State<CaptionsPanelFrb> {
     }
   }
 
-  // --- Picking ---------------------------------------------------------------
-
   Set<int> get _picks {
     final selection = _ui.captionSelection;
     return selection.layer == _readLayer ? selection.cues : const {};
@@ -307,8 +281,6 @@ class _CaptionsPanelFrbState extends State<CaptionsPanelFrb> {
 
   void _choose(Set<int> cues) => _ui.captionSelection.choose(_readLayer, cues);
 
-  /// A press on row [row]: pick it, or add it or run to it with Ctrl or
-  /// Shift, and take the playhead to where it starts.
   void _press(int row) {
     final keys = HardwareKeyboard.instance;
     final cue = _rows[row].index;
@@ -328,7 +300,6 @@ class _CaptionsPanelFrbState extends State<CaptionsPanelFrb> {
     _ui.scrubTo(_rows[row].start);
   }
 
-  /// The arrows: the pick moves a row, or grows with Shift.
   bool _step(int by) {
     if (_rows.isEmpty) return false;
     final picked = _picks;
@@ -359,17 +330,12 @@ class _CaptionsPanelFrbState extends State<CaptionsPanelFrb> {
     _choose({for (final row in _rows) row.index});
   }
 
-  // --- Editing ----------------------------------------------------------------
-
-  /// An edit went in: say so, and read it back.
   void _edited() {
     _urgent = true;
     _app.notifyDocumentChanged();
     _ui.model.refresh();
   }
 
-  /// Run [edit] on the shown layer, and say in the status line when the
-  /// engine turns it down.
   bool _try(void Function() edit, {String? refused}) {
     try {
       edit();
@@ -420,7 +386,6 @@ class _CaptionsPanelFrbState extends State<CaptionsPanelFrb> {
     final selection = _ui.captionSelection;
     final cue = selection.typing;
     if (!mounted || cue == null) return;
-    // The Timeline or the Viewer asked about a layer; show that one.
     if (selection.layer != null && selection.layer != _readLayer) {
       _picked = selection.layer;
       _sync();
@@ -525,8 +490,6 @@ class _CaptionsPanelFrbState extends State<CaptionsPanelFrb> {
     return true;
   }
 
-  // --- Finding ----------------------------------------------------------------
-
   void _searchAsked() {
     if (mounted && _ui.searchRequestIsFor(Panel.captions)) {
       _findFocus.requestFocus();
@@ -551,7 +514,6 @@ class _CaptionsPanelFrbState extends State<CaptionsPanelFrb> {
     if (_foundAt >= _found.length) _foundAt = _found.length - 1;
   }
 
-  /// Step to the next or previous caption found, from the playhead.
   void _stepFound(int by) {
     if (_found.isEmpty) return;
     if (_foundAt < 0) {
@@ -571,7 +533,6 @@ class _CaptionsPanelFrbState extends State<CaptionsPanelFrb> {
     _reveal(row);
   }
 
-  /// Change what was found in the caption stepped to, and step on.
   void _replaceOne() {
     final layer = _entry?.layer;
     if (layer == null || _found.isEmpty) return;
@@ -599,8 +560,6 @@ class _CaptionsPanelFrbState extends State<CaptionsPanelFrb> {
       _app.postNotice(l10n.captionsReplaced(count));
     }
   }
-
-  // --- Keys -------------------------------------------------------------------
 
   bool _onKey(KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;
@@ -645,8 +604,6 @@ class _CaptionsPanelFrbState extends State<CaptionsPanelFrb> {
     }
     return false;
   }
-
-  // --- Drawing ----------------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
@@ -868,8 +825,6 @@ class _CaptionsPanelFrbState extends State<CaptionsPanelFrb> {
     final picks = _picks;
     final find = _find.text;
     return LayoutBuilder(builder: (context, box) {
-      // The two times side by side once the words still have room beside
-      // them, and one over the other before that.
       _wide = box.maxWidth >= timeWidth * 2 + 320;
       final wide = _wide;
       final words = box.maxWidth -
@@ -939,8 +894,6 @@ class _CaptionsPanelFrbState extends State<CaptionsPanelFrb> {
     });
   }
 
-  /// A caption's right-click menu, about it and the rest of the pick, and
-  /// about [word] when the press was on one of its words.
   void _rowMenu(CaptionRow row, Offset at, int? word) {
     final layer = _entry?.layer;
     if (layer == null) return;
@@ -953,7 +906,6 @@ class _CaptionsPanelFrbState extends State<CaptionsPanelFrb> {
     final raised = row.cue.offsetX != 0 || row.cue.offsetY != 0;
     final last = _rows.isNotEmpty && _rows.last.index == row.index;
     final emphasised = word != null && row.cue.words[word].emphasis;
-    // The picked captions together when the row is one of them.
     final cues = [
       row.cue,
       for (final r in _rows)

@@ -15,7 +15,6 @@ import '../widgets/controls.dart';
 import 'effect_commands.dart' show EffectCommands;
 import 'timeline_extras_frb.dart' show labelChips, showMenuAt;
 
-/// What a socket's colour means, for its tooltip.
 String graphPortWord(BridgePortType type) => switch (type) {
       BridgePortType.image => l10n.graphPortImage,
       BridgePortType.matte => l10n.graphPortMatte,
@@ -27,8 +26,6 @@ String graphPortWord(BridgePortType type) => switch (type) {
       BridgePortType.audio => l10n.graphPortAudio,
     };
 
-/// One row: the word, the keymap action whose chord it shows, and whether it
-/// is there, and live, on this canvas.
 class _Row {
   final String key;
   final String text;
@@ -37,13 +34,11 @@ class _Row {
   final bool enabled;
   final bool? ticked;
 
-  /// A flyout instead of a command, built with what closes the whole menu.
   final Widget Function(VoidCallback dismiss)? submenu;
   const _Row(this.key, this.text, this.run,
       {this.action, this.enabled = true, this.ticked, this.submenu});
 }
 
-/// The groups' rows with a line between each pair, empty groups dropped.
 Future<void> _show(
   BuildContext context,
   Offset at,
@@ -136,11 +131,7 @@ Future<void> showGraphBoxMenu(
   bool locked = false,
 }) {
   final open = !locked;
-  // What a box does on its canvas: the same rows, in the same places, on an
-  // effect's box and on any other.
   final own = [
-    // The socket menu's pair, so the twirl has one name wherever it is
-    // pressed.
     _Row(
         'expand',
         (expanded ?? false) ? l10n.graphHideSockets : l10n.graphShowSockets,
@@ -160,16 +151,12 @@ Future<void> showGraphBoxMenu(
     _Row('ungroup', l10n.graphUngroup, onUngroup,
         action: 'layer.ungroup', enabled: canUngroup && open),
   ];
-  // The Viewer's "at" chip, from the box itself. Ticked while the picture
-  // stops here.
   final view =
       _Row('view-here', l10n.graphViewHere, onViewHere, ticked: viewHere);
   final look = [
     _Row('collapse', (collapsed ?? false) ? l10n.expand : l10n.collapse,
         onCollapse,
         enabled: open),
-    // The Timeline's label chips; the first, the quiet one, takes the
-    // colour away.
     _Row('colour', l10n.graphBoxColour,
         onColour == null || locked ? null : () {},
         submenu: (dismiss) => FloatSurface(
@@ -182,7 +169,6 @@ Future<void> showGraphBoxMenu(
             )),
   ];
   if (effect != null) {
-    // Bypass gives the effect's menu a tick column.
     List<Widget> draw(List<_Row> rows, VoidCallback close) => [
           for (final r in rows)
             if (r.run != null) _draw(r, close, ticks: true),
@@ -222,8 +208,6 @@ Future<void> showGraphBoxMenu(
   ]);
 }
 
-/// A socket's menu: take its wire off, and open or shut the box's unused
-/// sockets.
 Future<void> showGraphSocketMenu(
   BuildContext context,
   Offset at, {
@@ -241,7 +225,6 @@ Future<void> showGraphSocketMenu(
       ],
     ]);
 
-/// A wire's menu.
 Future<void> showGraphWireMenu(
   BuildContext context,
   Offset at, {
@@ -257,8 +240,6 @@ Future<void> showGraphWireMenu(
       [_Row('delete', l10n.delete, onDelete)],
     ]);
 
-/// A tie's menu, where a stationary right-click used to take the tie away
-/// with no way to ask first.
 Future<void> showGraphTieMenu(
   BuildContext context,
   Offset at, {
@@ -268,7 +249,6 @@ Future<void> showGraphTieMenu(
       [_Row('delete', l10n.delete, onDelete)],
     ]);
 
-/// The ground's menu.
 Future<void> showGraphCanvasMenu(
   BuildContext context,
   Offset at, {
@@ -314,8 +294,6 @@ Future<void> showGraphCanvasMenu(
       ],
     ]);
 
-/// A canvas toolbar's menu: its switches as ticked rows, then the framing.
-/// A switch the canvas doesn't have is left out.
 Future<void> showGraphToolbarMenu(
   BuildContext context,
   Offset at, {

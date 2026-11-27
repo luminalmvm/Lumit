@@ -51,8 +51,6 @@ use crate::MediaError;
 pub mod helper;
 pub mod paths;
 
-/// What one read may spend: a picture's worth of bytes, and more layers than
-/// anybody draws on.
 const LIMITS: Limits = Limits::IMAGE;
 
 /// The longest file that is read. All of it is held in memory while a layer
@@ -64,7 +62,6 @@ const MAX_FILE: u64 = 1 << 30;
 /// there is, and a little over Illustrator's own canvas.
 const MAX_SIDE: u32 = 16_384;
 
-/// One top-level layer.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct AiLayer {
     pub name: String,
@@ -73,7 +70,6 @@ pub struct AiLayer {
     switch: (i32, i32),
 }
 
-/// An artboard's size and its layer list.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct AiDocument {
     pub width: u32,
@@ -88,7 +84,6 @@ fn bad(what: &'static str) -> MediaError {
     MediaError::Ai(what)
 }
 
-/// The reason for a file nothing more can be said about.
 const UNREADABLE: &str = "the file could not be read";
 
 /// Every reason the reader gives. The helper's comes back as text, and this
@@ -104,7 +99,6 @@ const REASONS: [&str; 7] = [
     "no such layer",
 ];
 
-/// Whether this path names an Illustrator document, by extension.
 #[must_use]
 pub fn is_ai(path: &Path) -> bool {
     path.extension()
@@ -112,7 +106,6 @@ pub fn is_ai(path: &Path) -> bool {
         .is_some_and(|e| e.eq_ignore_ascii_case("ai"))
 }
 
-/// The first artboard's size and layer list. Nothing is drawn.
 pub fn open(path: &Path) -> Result<AiDocument, MediaError> {
     helper::open(path)
 }
@@ -123,7 +116,6 @@ fn open_here(path: &Path) -> Result<AiDocument, MediaError> {
     guarded(move || Ok(parse(bytes)?.1))
 }
 
-/// What a probe of the file answers: a still the size of the artboard.
 pub fn probe(path: &Path) -> Result<MediaProbe, MediaError> {
     let doc = open(path)?;
     Ok(MediaProbe {
@@ -157,8 +149,6 @@ pub fn read_layer(
     helper::read_layer(path, index, target_width, helper::DEADLINE)
 }
 
-/// [`read_layer`] with the helper given `deadline` to answer in, so a test
-/// can watch one run out of time.
 #[cfg(any(test, feature = "test-fixtures"))]
 pub fn read_layer_within(
     path: &Path,
@@ -180,8 +170,6 @@ fn read_layer_here(
     guarded(move || draw(bytes, index, target_width))
 }
 
-/// One layer's artwork as paths, in the artboard's pixels, for making shapes
-/// from it. `index` is as [`read_layer`] takes it.
 pub fn read_paths(path: &Path, index: Option<u32>) -> Result<Vec<paths::AiPath>, MediaError> {
     helper::read_paths(path, index)
 }
@@ -201,7 +189,6 @@ fn guarded<T>(read: impl FnOnce() -> Result<T, MediaError>) -> Result<T, MediaEr
         .unwrap_or_else(|_| Err(bad(UNREADABLE)))
 }
 
-/// The PDF in `bytes` and what it holds.
 fn parse(bytes: Vec<u8>) -> Result<(Pdf, AiDocument), MediaError> {
     if !bytes.starts_with(b"%PDF-") {
         return Err(bad("the file has no PDF copy of the artwork to read"));
@@ -211,10 +198,7 @@ fn parse(bytes: Vec<u8>) -> Result<(Pdf, AiDocument), MediaError> {
     Ok((pdf, doc))
 }
 
-/// The size of a page as the frame it is drawn on.
 fn frame_size(pdf: &Pdf) -> Result<(u32, u32), MediaError> {
-    // ponytail: the first artboard only, which is what After Effects reads.
-    // The upgrade is a composition for each artboard.
     let page = pdf
         .pages()
         .iter()
@@ -261,11 +245,6 @@ fn describe(pdf: &Pdf) -> Result<AiDocument, MediaError> {
         .get::<Name<'_>>("BaseState")
         .is_some_and(|state| state.as_str() == "OFF");
 
-    // A layer is a stretch of the page marked with a switch, and the page
-    // draws them bottom first. A stretch inside another is a sublayer, which
-    // is drawn as part of the layer it is in.
-    // ponytail: top-level layers only, as Illustrator writes them. The upgrade
-    // is reading the sublayers out of Illustrator's own half of the file.
     let mut budget = Budget::new(LIMITS);
     let properties = &page.resources().properties;
     let mut depth = 0usize;
@@ -330,7 +309,6 @@ fn text(bytes: &[u8]) -> String {
     }
 }
 
-/// How far back from the end of a file its last `startxref` is looked for.
 const TAIL: usize = 1 << 16;
 
 /// Where the file's newest table of objects starts, which a change added on
@@ -416,11 +394,8 @@ fn took(pdf: &Pdf, layers: usize) -> bool {
     off.is_some_and(|off| off.raw_iter().count() + 1 == layers)
 }
 
-/// The PDF in `bytes` with only layer `index` switched on, or as the file
-/// has it when `index` is `None`.
 fn picked(bytes: Vec<u8>, index: Option<u32>) -> Result<(Pdf, AiDocument), MediaError> {
     let (mut pdf, doc) = parse(bytes)?;
-    // A file with no layers to tell apart is all one layer.
     if let Some(index) = index.filter(|_| !doc.layers.is_empty()) {
         let keep = usize::try_from(index)
             .ok()
@@ -502,15 +477,8 @@ fn draw(
     })
 }
 
-// ---------------------------------------------------------------------------
-// A writer, for tests
-// ---------------------------------------------------------------------------
-
-/// A small Illustrator document written from scratch, so tests here and in the
-/// crates above need no file on disk.
 #[cfg(any(test, feature = "test-fixtures"))]
 pub mod fixture {
-    /// One layer to write: a rectangle of one colour.
     #[derive(Debug, Clone)]
     pub struct Layer {
         pub name: String,
@@ -533,8 +501,6 @@ pub mod fixture {
         }
     }
 
-    /// The bytes of a document `width` by `height` holding `layers`, bottom
-    /// first, each one a top-level layer the way Illustrator writes it.
     #[must_use]
     pub fn document(width: u32, height: u32, layers: &[Layer]) -> Vec<u8> {
         // Objects 1 to 4 are the catalog, the page list, the page and what
@@ -633,8 +599,6 @@ mod tests {
         ]
     }
 
-    /// An 8 by 6 artboard: a full background, a square, and a hidden square
-    /// above both.
     fn sample() -> Vec<u8> {
         let mut hidden = Layer::solid("Guide", [0, 0, 2, 2], [0, 255, 0]);
         hidden.visible = false;
@@ -674,7 +638,6 @@ mod tests {
         assert_eq!(px(&frame, 0, 0), [0; 4], "the background is another layer");
         assert_eq!(px(&frame, 2, 3), [0; 4], "below the square is empty");
 
-        // A hidden layer is still a layer, and is drawn when asked for.
         let hidden = draw(sample(), Some(2), None).unwrap();
         assert_eq!(px(&hidden, 1, 1), [0, 255, 0, 255]);
         assert_eq!(px(&hidden, 4, 4), [0; 4]);
@@ -701,13 +664,11 @@ mod tests {
         let frame = draw(sample(), Some(0), Some(4)).unwrap();
         assert_eq!((frame.width, frame.height), (4, 3));
         assert_eq!(px(&frame, 3, 2), [255, 0, 0, 255]);
-        // Never wider than the artboard.
         assert_eq!(draw(sample(), Some(0), Some(64)).unwrap().width, 8);
     }
 
     #[test]
     fn a_file_with_no_layers_to_tell_apart_is_one_picture() {
-        // The same page with the switches taken out of its resources.
         let bytes = String::from_utf8(sample())
             .unwrap()
             .replace("/Properties", "/Propertiez");

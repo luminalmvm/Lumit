@@ -79,7 +79,6 @@ class _ExpressionBodyState extends State<_ExpressionBody> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    // The text is coloured in the language the dropdown shows.
     _text.language = expressionGrammar(_language);
     return DialogFrame(
       children: [
@@ -87,7 +86,6 @@ class _ExpressionBodyState extends State<_ExpressionBody> {
             title: l10n.menuAddExpression,
             onClose: widget.onCancel,
             keyPrefix: 'expression'),
-        // The well takes whatever the window is resized to.
         Expanded(
           child: Padding(
             padding: const EdgeInsets.all(dialogPadding),

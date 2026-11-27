@@ -17,10 +17,8 @@ use zip::{CompressionMethod, ZipArchive, ZipWriter};
 use crate::package::{gather, plain};
 use crate::{invalid, ExtensionError, MAX_BYTES, MAX_DEPTH, MAX_FILES, MAX_MANIFEST};
 
-/// A library package's file extension.
 pub const LIBRARY_EXTENSION: &str = "lumlibrary";
 
-/// The list at a package's root.
 const LIST_FILE: &str = "library.json";
 
 /// The library's kinds, by id. An item of any other kind is skipped.
@@ -37,12 +35,9 @@ const KINDS: [&str; 10] = [
     "templates",
 ];
 
-/// One thing in the library.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LibraryItem {
-    /// The kind's id, such as `presets`.
     pub kind: String,
-    /// The file or folder on this computer.
     pub path: PathBuf,
     /// Where it sits inside its kind's folder, `/` separated.
     pub name: String,
@@ -71,7 +66,6 @@ const FORMAT: &str = "lumit-library";
 /// An unknown kind or a name that isn't a plain path, a link, more than the
 /// caps, or a file that would not read or write.
 pub fn pack(items: &[LibraryItem], out: &Path) -> Result<u32, ExtensionError> {
-    // (name in the package, the file it is read from), and the folders.
     let mut files: Vec<(String, PathBuf)> = Vec::new();
     let mut folders: Vec<String> = Vec::new();
     let mut bytes = 0u64;
@@ -174,7 +168,6 @@ pub fn unpack(file: &Path, into: &Path) -> Result<Vec<LibraryItem>, ExtensionErr
     if zip.len() > MAX_FILES {
         return Err(ExtensionError::TooLarge);
     }
-    // (index, name, size) of every file, and the folders.
     let mut entries: Vec<(usize, String, u64)> = Vec::new();
     let mut folders: Vec<String> = Vec::new();
     let mut folded = BTreeSet::new();
@@ -257,7 +250,6 @@ pub fn unpack(file: &Path, into: &Path) -> Result<Vec<LibraryItem>, ExtensionErr
     Ok(items)
 }
 
-/// Write the judged `folders` and files `entries` of `zip` into `into`.
 fn put(
     zip: &mut ZipArchive<File>,
     into: &Path,
@@ -292,10 +284,6 @@ fn put(
 mod tests {
     use super::*;
 
-    /// **A package unpacks to the bytes that went in, and a hostile one
-    /// writes nothing.** A preset in a group, a style folder and an empty
-    /// group go in and come out the same. A package naming `../` is refused
-    /// and leaves nothing outside the folder or in it.
     #[test]
     fn a_package_round_trips_and_a_hostile_one_writes_nothing() {
         let root = std::env::temp_dir().join(format!("lumit-library-{}", std::process::id()));

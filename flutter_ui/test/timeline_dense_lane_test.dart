@@ -103,7 +103,6 @@ BridgeLayerEntry _entry({BridgeTransform? transform}) {
   );
 }
 
-/// A transform with nothing animated on it.
 const _still = BridgeTransform(
   orient: BridgeOrient.off,
   anchorX: BridgeScalar.static_(0),
@@ -119,8 +118,6 @@ const _still = BridgeTransform(
   opacity: BridgeScalar.static_(100),
 );
 
-/// The same, with [position] (its first axis), [rotation] and [opacity] keyed
-/// — three fold rows of the layer's own, whatever times each is given.
 BridgeTransform _keyed({
   List<BridgeKeyframe> position = const [],
   List<BridgeKeyframe> rotation = const [],
@@ -141,8 +138,6 @@ BridgeTransform _keyed({
       opacity: BridgeScalar.keyframed(opacity),
     );
 
-/// `count` linear keys, one per frame at 25 fps — the shape a baked AE
-/// import has.
 List<BridgeKeyframe> _bakedKeys(int count) => [
       for (var i = 0; i < count; i++)
         BridgeKeyframe(
@@ -211,8 +206,6 @@ void main() {
       find.byKey(const ValueKey<String>('tl-key-slot-$rowId#0')),
       findsNothing,
     );
-    // The whole lane, diamonds and hit surface included, is a bounded handful
-    // of elements — not thousands. Fails loudly if the per-key path leaks back.
     var elements = 0;
     void count(Element e) {
       elements += 1;
@@ -237,7 +230,6 @@ void main() {
     final strip = find.byKey(const ValueKey<String>('tl-key-strip-$rowId'));
     final axis = TimelineAxis(frames: 200, width: laneWidth);
     final origin = tester.getTopLeft(strip);
-    // Key #100's own pixel, dead centre of the row.
     final at = origin + Offset(axis.xOf(100), 8);
     final gesture = await tester.startGesture(at);
     await gesture.moveBy(const Offset(60, 0));
@@ -250,8 +242,6 @@ void main() {
 
   test('the painter walks the clip, not the comp', () {
     final frames = [for (var i = 0; i < 10000; i++) i.toDouble()];
-    // Ten thousand keys laid over forty thousand pixels, window on the first
-    // eight hundred: the walk may only pay for what the clip shows.
     final axis = TimelineAxis(frames: 10000, width: 40000);
     final painter = LaneKeysPainter(
       frames: frames,
@@ -293,7 +283,6 @@ void main() {
   });
 }
 
-/// Counts [drawPath] calls and answers the clip; everything else is inert.
 class _CountingCanvas implements Canvas {
   final Rect clip;
   int paths = 0;

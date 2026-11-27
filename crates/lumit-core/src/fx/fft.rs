@@ -12,9 +12,7 @@
 /// dependency: the bake needs add, multiply, scale and exp, nothing more.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Cx {
-    /// Real part.
     pub re: f64,
-    /// Imaginary part.
     pub im: f64,
 }
 
@@ -43,25 +41,20 @@ impl std::ops::Mul for Cx {
 }
 
 impl Cx {
-    /// Zero.
     pub const ZERO: Cx = Cx { re: 0.0, im: 0.0 };
 
-    /// Build from parts.
     pub fn new(re: f64, im: f64) -> Cx {
         Cx { re, im }
     }
 
-    /// Scale by a real.
     pub fn scale(self, s: f64) -> Cx {
         Cx::new(self.re * s, self.im * s)
     }
 
-    /// `e^(i·theta)` — the unit phasor at angle `theta`.
     pub fn cis(theta: f64) -> Cx {
         Cx::new(theta.cos(), theta.sin())
     }
 
-    /// `|z|²`.
     pub fn norm_sq(self) -> f64 {
         self.re * self.re + self.im * self.im
     }
@@ -78,7 +71,6 @@ pub fn fft_inplace(data: &mut [Cx], inverse: bool) {
     if n < 2 || !n.is_power_of_two() {
         return;
     }
-    // Bit-reversal permutation.
     let bits = n.trailing_zeros();
     for i in 0..n {
         let j = (i as u32).reverse_bits() >> (32 - bits);
@@ -87,7 +79,6 @@ pub fn fft_inplace(data: &mut [Cx], inverse: bool) {
             data.swap(i, j);
         }
     }
-    // Butterflies.
     let sign = if inverse { 1.0 } else { -1.0 };
     let mut len = 2usize;
     while len <= n {
@@ -107,7 +98,6 @@ pub fn fft_inplace(data: &mut [Cx], inverse: bool) {
         }
         len <<= 1;
     }
-    // Ortho normalisation.
     let s = 1.0 / (n as f64).sqrt();
     for z in data.iter_mut() {
         *z = z.scale(s);
@@ -120,11 +110,9 @@ pub fn fft2_inplace(data: &mut [Cx], w: usize, h: usize, inverse: bool) {
     if data.len() != w * h || !w.is_power_of_two() || !h.is_power_of_two() {
         return;
     }
-    // Rows.
     for row in data.chunks_mut(w) {
         fft_inplace(row, inverse);
     }
-    // Columns, through a scratch column buffer.
     let mut col = vec![Cx::ZERO; h];
     for x in 0..w {
         for (y, c) in col.iter_mut().enumerate() {

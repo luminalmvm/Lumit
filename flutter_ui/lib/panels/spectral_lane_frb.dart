@@ -25,8 +25,6 @@ import '../l10n/strings.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 
-/// Which picture a layer's audio lane draws (the board's per-layer chips):
-/// the plain wave, the three-band multiwave stack, or the spectrogram.
 enum LaneMode { wave, stack, spectral }
 
 /// Every layer's lane-mode choice, for the session.
@@ -48,7 +46,6 @@ class LaneModes extends ChangeNotifier {
   LaneMode of(String layerId) =>
       _byLayer[layerId] ?? (stackDefault ? LaneMode.stack : LaneMode.wave);
 
-  /// The chip's tap: wave → stack → spectral → wave.
   void cycle(String layerId) {
     _byLayer[layerId] = switch (of(layerId)) {
       LaneMode.wave => LaneMode.stack,
@@ -58,14 +55,12 @@ class LaneModes extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Every choice forgotten — a test's isolation, and a closed project's.
   void reset() {
     _byLayer.clear();
     notifyListeners();
   }
 }
 
-/// The session's one store.
 final LaneModes laneModes = LaneModes();
 
 /// One layer's spectrogram, as a texture the lane paints in a single call.
@@ -83,12 +78,9 @@ class SpectralLane extends StatefulWidget {
   final double originSeconds;
   final double secondsPerPixel;
 
-  /// The columns to draw between — the visible part of the layer's bar.
   final double left;
   final double right;
 
-  /// How tall to draw, anchored to the bottom of the row (the same borrowed
-  /// pair the wave uses).
   final double height;
 
   const SpectralLane({
@@ -182,7 +174,6 @@ class _SpectralLaneState extends State<SpectralLane> {
         left: widget.left,
         right: widget.right,
         height: widget.height,
-        // The board's own caption: what the picture's height spans.
         caption: l10n.spectralRange,
         captionStyle: t.mono.copyWith(fontSize: 9, color: t.textMuted),
       ),
@@ -222,11 +213,9 @@ class _SpectralPainter extends CustomPainter {
     final from = left.clamp(0.0, size.width);
     final to = right.clamp(0.0, size.width);
     if (!(to > from)) return;
-    // Where the fetched window lands on the canvas, in the shared clock.
     final destLeft = (window.startSeconds - originSeconds) / secondsPerPixel;
     final destRight = (window.endSeconds - originSeconds) / secondsPerPixel;
     canvas.save();
-    // Only the layer's own bar shows its sound, exactly as the wave clips.
     canvas.clipRect(Rect.fromLTRB(from, size.height - height, to, size.height));
     canvas.drawImageRect(
       held,

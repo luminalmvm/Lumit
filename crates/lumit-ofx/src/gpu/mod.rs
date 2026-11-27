@@ -22,11 +22,6 @@
 //! The card is used by the broker's main thread, one frame at a time. No lock
 //! is held across a driver call.
 
-// ponytail: every frame crosses the CPU twice, ring to card and back. Sharing
-// memory with Lumit's own device removes both copies (D3D12 shared handles
-// into CUDA, Vulkan fds, Metal on unified memory, as lumit-gpu's shared.rs and
-// shared_linux.rs already export for Flutter).
-
 pub mod cuda;
 #[cfg(target_os = "macos")]
 mod metal;
@@ -58,7 +53,6 @@ pub const ADAPTER_ENV: &str = "LUMIT_OFX_GPU_ADAPTER";
 /// the life of its broker.
 pub const GPU_FAILURES_ALLOWED: u32 = 2;
 
-/// One of the three ways a plugin can render on the card.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub enum GpuApi {
     Cuda,
@@ -89,7 +83,6 @@ pub struct GpuSupport {
 }
 
 impl GpuSupport {
-    /// Read off a plugin descriptor.
     pub(crate) fn declared(props: &PropertySet) -> Self {
         let yes = |key: &str| {
             props
@@ -105,7 +98,6 @@ impl GpuSupport {
     }
 }
 
-/// How one frame is rendered on the card.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GpuRender {
     pub api: GpuApi,
@@ -114,11 +106,7 @@ pub struct GpuRender {
     pub stream: bool,
 }
 
-// ------------------------------------------------------------ in Lumit --
-
-/// Set when the person has turned "Render plugins on the graphics card" off.
 static CPU_ONLY: AtomicBool = AtomicBool::new(false);
-/// The card Lumit draws with, for its brokers to find.
 static ADAPTER: Mutex<Option<String>> = Mutex::new(None);
 
 /// The setting, for brokers started from now on.
@@ -131,7 +119,6 @@ pub fn set_adapter(summary: Option<&str>) {
     *ADAPTER.lock() = summary.map(str::to_owned);
 }
 
-/// The environment a broker is started with for both.
 pub(crate) fn broker_env() -> Vec<(String, String)> {
     let mut env = Vec::new();
     if CPU_ONLY.load(Ordering::Relaxed) {
@@ -143,14 +130,12 @@ pub(crate) fn broker_env() -> Vec<(String, String)> {
     env
 }
 
-/// A plugin, by identifier and version.
 type PluginKey = (String, (u32, u32));
 
 /// The path each plugin renders through, as its broker last said. One entry
 /// per plugin a scan found, replaced in place.
 static PATHS: Mutex<BTreeMap<PluginKey, GpuApi>> = Mutex::new(BTreeMap::new());
 
-/// Keep what a broker said about one plugin's path.
 pub(crate) fn note_path(identifier: &str, version: (u32, u32), path: Option<GpuApi>) {
     let key = (identifier.to_owned(), version);
     let mut paths = PATHS.lock();
@@ -178,25 +163,18 @@ fn names_card(summary: &str, name: &str) -> bool {
             .is_some_and(|rest| rest.is_empty() || rest.starts_with(" ("))
 }
 
-// ------------------------------------------------------- in the broker --
-
-/// One opened API, as the render needs it.
 trait Device: Send + Sync {
-    /// Ready the API on this thread before a render.
     fn prepare(&self) -> Result<(), String> {
         Ok(())
     }
-    /// The stream or queue a plugin enqueues on.
     fn queue(&self) -> usize;
     fn alloc(&self, bytes: usize) -> Result<usize, String>;
     fn upload(&self, at: usize, bytes: &[u8]) -> Result<(), String>;
     fn download(&self, at: usize, into: &mut [u8]) -> Result<(), String>;
     fn free(&self, at: usize);
-    /// Wait for everything the plugin queued.
     fn finish(&self) -> Result<(), String>;
 }
 
-/// Spelled out once per API: each one's own methods, behind the one face.
 macro_rules! device {
     ($api:ty $(, $prepare:ident)?) => {
         impl Device for $api {
@@ -258,7 +236,6 @@ impl<T> Lazy<T> {
     }
 }
 
-/// What this broker found.
 struct Card {
     adapter: Option<String>,
     cuda: Lazy<cuda::Cuda>,
@@ -319,7 +296,6 @@ pub fn open_in_broker() {
     let _ = CARD.set(card);
 }
 
-/// What the host table offers: what is there.
 pub(crate) fn available() -> GpuSupport {
     let Some(card) = CARD.get() else {
         return GpuSupport::default();
@@ -340,15 +316,12 @@ pub(crate) fn available() -> GpuSupport {
 /// a restart describes it again.
 static DECLARED: Mutex<BTreeMap<PluginKey, GpuSupport>> = Mutex::new(BTreeMap::new());
 
-/// Keep what a describe read off one plugin's descriptor.
 pub(crate) fn note_declared(identifier: &str, version: (u32, u32), declared: GpuSupport) {
     DECLARED
         .lock()
         .insert((identifier.to_owned(), version), declared);
 }
 
-/// The path a plugin described in this process renders through: what it
-/// declared, against what this broker opened.
 #[must_use]
 pub fn path_for(identifier: &str, version: (u32, u32)) -> Option<GpuRender> {
     let declared = DECLARED
@@ -473,7 +446,6 @@ impl DeviceImages {
         Ok(frames)
     }
 
-    /// One image onto the card.
     fn put(&mut self, image: &mut Image) -> Result<usize, String> {
         // The broker only ever sends bottom-up pictures, and a device buffer
         // has no address inside it to start a top-down one at.
@@ -487,7 +459,6 @@ impl DeviceImages {
         Ok(at)
     }
 
-    /// Wait for the plugin, and bring the output down into its host block.
     pub(crate) fn download(&self, handle: Handle) -> Result<(), RenderError> {
         self.device.finish().map_err(gpu_error)?;
         let (mut images, mut images_at) = take_all_images(handle)?;

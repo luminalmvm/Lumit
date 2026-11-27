@@ -65,7 +65,6 @@ pub(crate) fn frame(chunk: &[f32]) -> (f32, f32) {
     )
 }
 
-/// One frame written back, a chunk too short to hold it left alone.
 pub(crate) fn put(chunk: &mut [f32], left: f32, right: f32) {
     if let Some(slot) = chunk.first_mut() {
         *slot = left;
@@ -89,7 +88,6 @@ pub(crate) mod harness {
         registry::EffectDef, schema::ParamKind,
     };
 
-    /// The rate every test here bakes at.
     pub const RATE: u32 = 48_000;
 
     /// The effect's rows at their declared defaults, with `over` applied by id.
@@ -118,8 +116,6 @@ pub(crate) mod harness {
             .collect()
     }
 
-    /// A stereo tone at `hz`, whole blocks of it, at the rate the tests bake
-    /// at.
     pub fn tone(blocks: usize, hz: f64) -> Vec<f32> {
         tone_at(RATE, blocks, hz)
     }
@@ -140,7 +136,6 @@ pub(crate) mod harness {
             .collect()
     }
 
-    /// One open instance of the effect.
     pub fn open(def: &dyn EffectDef, values: &[(ParamId, f64)]) -> Arc<dyn AudioProcessor> {
         def.open_audio(None, values, RATE, false)
             .expect("an audio effect opens a processor")
@@ -158,7 +153,6 @@ pub(crate) mod harness {
         processor
     }
 
-    /// Whole blocks through one processor, the run starting at block `first`.
     pub fn run_from(
         processor: &dyn AudioProcessor,
         input: &[f32],
@@ -180,7 +174,6 @@ pub(crate) mod harness {
         out
     }
 
-    /// The whole input from the chain's first sample.
     pub fn run(
         processor: &dyn AudioProcessor,
         input: &[f32],
@@ -213,7 +206,6 @@ pub(crate) mod harness {
     /// (docs/impl/audio-effects.md §6 plan 1).
     const RATES: [u32; 3] = [44_100, 48_000, 96_000];
 
-    /// How long one bucket of a coarse envelope is.
     const BUCKET_MS: f64 = 10.0;
 
     /// The mean level over each bucket of a run.

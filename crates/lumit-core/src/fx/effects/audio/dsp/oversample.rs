@@ -26,18 +26,15 @@ const TAPS: usize = 33;
 /// The centre tap, which is the filter's delay in samples at its own rate.
 const CENTRE: usize = 16;
 
-/// Non-zero taps either side of the centre.
 const ODD: usize = 16;
 
 /// The ring one decimating stage needs: back to `v[2m - 31]`.
 const DOWN_RING: usize = 33;
 
-/// The half-band's coefficients, already split into the two phases.
 #[derive(Clone, Copy, Debug)]
 struct Halfband {
     /// Taps 1, 3, ... 31, in that order.
     odd: [f64; ODD],
-    /// Tap 16.
     centre: f64,
 }
 
@@ -83,7 +80,6 @@ impl Halfband {
     }
 }
 
-/// One 2x interpolating stage: one sample in, two out.
 #[derive(Clone, Debug)]
 struct Up2x {
     half: Halfband,
@@ -105,7 +101,6 @@ impl Up2x {
         self.pos = 0;
     }
 
-    /// `back` samples behind the newest.
     fn at(&self, back: usize) -> f64 {
         let index = (self.pos + back) % ODD;
         f64::from(self.hist.get(index).copied().unwrap_or(0.0))
@@ -127,7 +122,6 @@ impl Up2x {
     }
 }
 
-/// One 2x decimating stage: two samples in, one out.
 #[derive(Clone, Debug)]
 struct Down2x {
     half: Halfband,
@@ -156,7 +150,6 @@ impl Down2x {
         }
     }
 
-    /// `back` samples behind the newest.
     fn at(&self, back: usize) -> f64 {
         let index = (self.pos + back) % DOWN_RING;
         f64::from(self.hist.get(index).copied().unwrap_or(0.0))
@@ -174,7 +167,6 @@ impl Down2x {
     }
 }
 
-/// Up to four times the rate and back again.
 #[derive(Clone, Debug)]
 pub struct Oversample4x {
     up1: Up2x,
@@ -195,7 +187,6 @@ impl Oversample4x {
     /// stage at the base rate and four for each at twice it.
     pub const LATENCY_FRAMES: u32 = 24;
 
-    /// An oversampler holding silence.
     #[must_use]
     pub fn new() -> Self {
         let half = Halfband::design();
@@ -207,7 +198,6 @@ impl Oversample4x {
         }
     }
 
-    /// Forget every stage's state.
     pub fn reset(&mut self) {
         self.up1.reset();
         self.up2.reset();
@@ -224,7 +214,6 @@ impl Oversample4x {
         [p, q, r, s]
     }
 
-    /// Four shaped samples back to one frame.
     pub fn down(&mut self, samples: [f32; 4]) -> f32 {
         let [p, q, r, s] = samples;
         let a = self.down1.process(p, q);
@@ -239,7 +228,6 @@ mod tests {
 
     const LATENCY: usize = Oversample4x::LATENCY_FRAMES as usize;
 
-    /// Straight through, nothing shaped: what the pair costs on its own.
     fn through(input: &[f32]) -> Vec<f32> {
         let mut os = Oversample4x::new();
         input

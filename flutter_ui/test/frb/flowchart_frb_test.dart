@@ -1,5 +1,3 @@
-// Tab in the shell, against the real engine: it opens the flowchart for the
-// fronted composition.
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -14,7 +12,6 @@ void main() {
 
   final chart = find.byKey(const ValueKey('flowchart'));
 
-  /// Film places Shot and Shot places Plate, with Shot fronted.
   ({
     LumitState state,
     LumitUiState uiState,
@@ -77,7 +74,6 @@ void main() {
       expect(chart, findsNothing);
       expect(p.uiState.selectedComp, p.film);
 
-      // From Film the way back is to the right.
       await press(tester, LogicalKeyboardKey.tab);
       await press(tester, LogicalKeyboardKey.arrowRight);
       await press(tester, LogicalKeyboardKey.enter);

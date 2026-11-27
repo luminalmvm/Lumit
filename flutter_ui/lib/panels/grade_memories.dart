@@ -15,7 +15,6 @@ import '../l10n/strings.dart';
 import '../state/grade_target.dart';
 import 'grade_clipboard.dart';
 
-/// The slots there are.
 const int gradeMemorySlots = 8;
 
 /// The project's filled slots, read once per document revision.
@@ -42,8 +41,6 @@ List<BridgeGradeMemory> gradeMemories(LumitState app, LumitUiState ui) {
 BridgeGradeMemory? gradeMemory(LumitState app, LumitUiState ui, int slot) =>
     gradeMemories(app, ui).where((m) => m.slot == slot).firstOrNull;
 
-/// Memory [slot]'s grade in place of the grade on every picked shot. False
-/// when the slot is empty or nothing can take it.
 bool applyMemory(LumitState app, LumitUiState ui, int slot) {
   final memory = gradeMemory(app, ui, slot);
   if (memory == null || gradeTargets(ui).isEmpty) return false;
@@ -51,8 +48,6 @@ bool applyMemory(LumitState app, LumitUiState ui, int slot) {
   return true;
 }
 
-/// The current shot's grade kept in [slot], with a small picture of the shot
-/// at the playhead. False when the shot has no grade.
 bool storeMemory(LumitState app, LumitUiState ui, int slot) {
   final shot = ui.gradeShot.value;
   final project = app.project;
@@ -79,7 +74,6 @@ bool storeMemory(LumitState app, LumitUiState ui, int slot) {
   return true;
 }
 
-/// Empty [slot].
 void clearMemory(LumitState app, LumitUiState ui, int slot) {
   try {
     app.project?.setGradeMemory(slot: slot, grade: null, picture: '');

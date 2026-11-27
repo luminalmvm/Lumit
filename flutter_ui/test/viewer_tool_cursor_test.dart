@@ -13,7 +13,6 @@ import 'package:lumit_flutter/panels/viewer_tool_cursor.dart';
 void main() {
   group('The brush ring', () {
     test('is the stroke it would leave, at this magnification', () {
-      // A 40px brush at 1:1 is a 20px radius; at half size, 10.
       expect(brushRingRadius(40, 1), 20);
       expect(brushRingRadius(40, 0.5), 10);
       expect(brushRingRadius(40, 2), 40);
@@ -32,7 +31,6 @@ void main() {
           child: Stack(children: [layer]),
         );
 
-    /// Presses [buttons] at [from] and drags to [to], as a real mouse would.
     Future<void> dragWith(
       WidgetTester tester, {
       required int buttons,

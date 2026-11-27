@@ -32,7 +32,6 @@ use std::sync::{Arc, Mutex, MutexGuard};
 /// interactive queue means the pool is hopelessly behind and the caller
 /// should drop, not queue. Background is the cache-warming horizon.
 pub const INTERACTIVE_QUEUE_CAP: usize = 64;
-/// See [`INTERACTIVE_QUEUE_CAP`].
 pub const BACKGROUND_QUEUE_CAP: usize = 256;
 
 /// Worker-thread count for a machine with `cores` logical cores:
@@ -44,13 +43,9 @@ pub fn worker_threads(cores: usize) -> usize {
     cores.saturating_sub(3).max(2)
 }
 
-/// The two priority classes (docs/05-ARCHITECTURE.md §2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JobClass {
-    /// The current Viewer frame, scrub, audio-adjacent work. Always taken
-    /// before background at every job boundary.
     Interactive,
-    /// Cache warming, thumbnails, proxy checks.
     Background,
 }
 
@@ -70,7 +65,6 @@ impl std::fmt::Display for PoolFull {
 
 impl std::error::Error for PoolFull {}
 
-/// The pool could not be built (thread spawn failure at startup).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PoolBuildError(String);
 
@@ -90,7 +84,6 @@ type Job = Box<dyn FnOnce() + Send + 'static>;
 struct Inner {
     interactive: VecDeque<Job>,
     background: VecDeque<Job>,
-    /// Pump tasks currently alive (≤ `threads`).
     pumps: usize,
     /// Jobs that panicked (contained; the pump survives). Engine code is
     /// panic-free by lint, so this counting is defensive, not expected.
@@ -108,7 +101,6 @@ fn lock(m: &Mutex<Inner>) -> MutexGuard<'_, Inner> {
     }
 }
 
-/// The two-priority evaluation worker pool. See the module docs.
 pub struct WorkerPool {
     threads: usize,
     pool: rayon::ThreadPool,
@@ -116,8 +108,6 @@ pub struct WorkerPool {
 }
 
 impl WorkerPool {
-    /// A pool with exactly `threads` workers (floored at 1). Prefer
-    /// [`WorkerPool::with_default_threads`] outside tests.
     pub fn new(threads: usize) -> Result<Self, PoolBuildError> {
         let threads = threads.max(1);
         let pool = rayon::ThreadPoolBuilder::new()
@@ -137,14 +127,11 @@ impl WorkerPool {
         })
     }
 
-    /// A pool sized for this machine: `cores − 3, min 2`
-    /// (docs/impl/playback-scheduler.md §2).
     pub fn with_default_threads() -> Result<Self, PoolBuildError> {
         let cores = std::thread::available_parallelism().map_or(4, std::num::NonZeroUsize::get);
         Self::new(worker_threads(cores))
     }
 
-    /// Number of worker threads.
     #[must_use]
     pub fn threads(&self) -> usize {
         self.threads
@@ -185,7 +172,6 @@ impl WorkerPool {
         Ok(())
     }
 
-    /// Currently queued (interactive, background) — diagnostics and tests.
     #[must_use]
     pub fn queued(&self) -> (usize, usize) {
         let inner = lock(&self.inner);
@@ -236,10 +222,6 @@ mod tests {
     use std::sync::mpsc;
     use std::time::Duration;
 
-    /// The load-bearing rule: at a job boundary, queued interactive work runs
-    /// before queued background work, whatever order it arrived in. A
-    /// single-worker pool is held busy while both classes queue up, then
-    /// released — the interactive job must come out first.
     #[test]
     fn interactive_preempts_background_at_job_boundaries() {
         let pool = WorkerPool::new(1).unwrap();
@@ -257,7 +239,6 @@ mod tests {
             .recv_timeout(Duration::from_secs(5))
             .unwrap();
 
-        // Queue background first, interactive second — arrival order must not win.
         for (class, label) in [
             (JobClass::Background, "background"),
             (JobClass::Interactive, "interactive"),
@@ -277,7 +258,6 @@ mod tests {
         assert_eq!(*order.lock().unwrap(), vec!["interactive", "background"]);
     }
 
-    /// Bounded everything: a full class queue rejects instead of growing.
     #[test]
     fn a_full_queue_fails_fast() {
         let pool = WorkerPool::new(1).unwrap();
@@ -299,13 +279,10 @@ mod tests {
             pool.try_spawn(JobClass::Interactive, || {}),
             Err(PoolFull(JobClass::Interactive))
         );
-        // The other class is unaffected by this one's back-pressure.
         pool.try_spawn(JobClass::Background, || {}).unwrap();
         release_tx.send(()).unwrap();
     }
 
-    /// A panicking job is contained: the pump survives, later jobs still run,
-    /// and the panic is counted.
     #[test]
     fn a_panicking_job_does_not_take_the_worker_down() {
         let pool = WorkerPool::new(1).unwrap();

@@ -21,16 +21,11 @@ use crate::process::{ParamEvent, INTERLEAVED_LEN};
 use crate::schema::schema_of;
 use crate::HOST_ACTIONS;
 
-// ---------------------------------------------------------------- fixture --
-
-/// Serialises every test that loads the module, because the plugin's logs are
-/// one set of statics shared by the whole process.
 pub(crate) fn fixture_lock() -> MutexGuard<'static, ()> {
     static LOCK: Mutex<()> = Mutex::new(());
     LOCK.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-/// The test plugin's file name on this platform.
 pub(crate) fn cdylib_name() -> &'static str {
     if cfg!(target_os = "windows") {
         "lumit_aplug_testplug.dll"
@@ -41,7 +36,6 @@ pub(crate) fn cdylib_name() -> &'static str {
     }
 }
 
-/// Where Cargo put the test plugin, if it built it.
 pub(crate) fn built_cdylib() -> Option<PathBuf> {
     let name = cdylib_name();
     let exe = std::env::current_exe().ok()?;
@@ -80,17 +74,14 @@ fn fixture() -> Option<&'static Path> {
         .map(|(_, path)| path.as_path())
 }
 
-/// Say why a test did nothing, by name, so a skip is never silent.
 pub(crate) fn skipped(test: &str) {
     eprintln!("{test}: the test plugin was not built, so nothing was checked");
 }
 
-/// The module, open.
 fn open_module() -> Option<AnyModule> {
     AnyModule::open(fixture()?).ok()
 }
 
-/// One of the eight, by kind.
 pub(crate) fn plugin_id(kind: Kind) -> String {
     String::from_utf8_lossy(kind.id())
         .trim_end_matches('\0')
@@ -130,24 +121,20 @@ pub(crate) fn read_export(path: &Path, symbol: &[u8]) -> Vec<String> {
         .collect()
 }
 
-/// Every host call the reporter saw, in the copy loaded from `path`.
 pub(crate) fn action_log_of(path: &Path) -> Vec<String> {
     read_export(path, b"LumitTestPlugLog\0")
 }
 
-/// Every host call the reporter saw.
 fn action_log() -> Vec<String> {
     fixture().map(action_log_of).unwrap_or_default()
 }
 
-/// Every parameter event the echo plugin was sent.
 fn param_log() -> Vec<String> {
     fixture().map_or_else(Vec::new, |path| {
         read_export(path, b"LumitTestPlugParamLog\0")
     })
 }
 
-/// Empty both logs in the copy loaded from `path`.
 pub(crate) fn reset_log_of(path: &Path) {
     // SAFETY: as `read_export`.
     let Ok(library) = (unsafe { libloading::Library::new(path) }) else {
@@ -163,21 +150,17 @@ pub(crate) fn reset_log_of(path: &Path) {
     unsafe { reset() };
 }
 
-/// Empty both logs.
 fn reset_log() {
     if let Some(path) = fixture() {
         reset_log_of(path);
     }
 }
 
-/// A ramp, as Lumit carries sound: interleaved stereo, one whole block.
 pub(crate) fn a_ramp() -> Vec<f32> {
     (0..INTERLEAVED_LEN)
         .map(|index| index as f32 / INTERLEAVED_LEN as f32)
         .collect()
 }
-
-// -------------------------------------------------------------- discovery --
 
 #[test]
 fn the_search_paths_are_the_standard_ones_plus_clap_path() {
@@ -206,7 +189,6 @@ fn the_search_paths_are_the_standard_ones_plus_clap_path() {
     );
     assert_eq!(widened.last(), Some(&extra));
 
-    // And one scan looks in both standards' folders, in that order.
     let both = search_paths();
     assert!(
         both.len() > standard.len(),
@@ -217,8 +199,6 @@ fn the_search_paths_are_the_standard_ones_plus_clap_path() {
         "CLAP's folders are still there, and still first: {both:?}"
     );
 }
-
-// --------------------------------------------------------------- describe --
 
 #[test]
 fn a_row_is_named_by_the_plugins_own_parameter_id() {
@@ -231,8 +211,6 @@ fn a_row_is_named_by_the_plugins_own_parameter_id() {
     let row = schema.params.first().expect("one row");
     assert_eq!(row.id, format!("p{PARAM_GAIN}"));
     assert_eq!(row.label, "Gain");
-    // 0…4 is the whole of what the parameter is, which is a Slider and not a
-    // Float with a typing box beyond its ends.
     assert!(
         matches!(row.kind, ParamKind::Slider { default, range, .. } if default == 1.0 && range == (0.0, 4.0)),
         "a closed CLAP range is a slider: {:?}",
@@ -245,16 +223,12 @@ fn a_row_is_named_by_the_plugins_own_parameter_id() {
     assert!(!def.is_image_op(), "an audio effect touches no picture");
 }
 
-// -------------------------------------------------- the order of actions --
-
 #[test]
 fn the_order_of_actions_is_the_one_written_down() {
     let _guard = fixture_lock();
     let Some(module) = open_module() else {
         return skipped("the_order_of_actions_is_the_one_written_down");
     };
-    // The module has already enumerated its plugins, so reset and enumerate
-    // again: the log has to start at the factory.
     reset_log();
     let module = match AnyModule::open(module.path()) {
         Ok(module) => module,
@@ -277,8 +251,6 @@ fn the_order_of_actions_is_the_one_written_down() {
 
     assert_eq!(action_log(), HOST_ACTIONS.to_vec());
 }
-
-// -------------------------------------------------------------- the sound --
 
 #[test]
 fn a_gain_plugin_multiplies_every_sample_exactly() {
@@ -326,8 +298,6 @@ fn latency_is_read_off_the_live_plugin() {
     assert_eq!(host.latency(), 0, "an effect with no delay reports none");
 }
 
-// -------------------------------------------------------------- the state --
-
 #[test]
 fn a_state_blob_round_trips_byte_identical() {
     let _guard = fixture_lock();
@@ -344,7 +314,6 @@ fn a_state_blob_round_trips_byte_identical() {
     assert_eq!(host.save().expect("it saves"), blob);
     assert_eq!(host.warning(), None, "nothing went wrong bringing it up");
 
-    // And with nothing to load, what it saves is its own answer, not silence.
     let fresh = InstanceSetup {
         plugin_id: plugin_id(Kind::StateEcho),
         ..InstanceSetup::default()
@@ -359,8 +328,6 @@ fn properties_win_over_a_stale_state() {
     let Some(module) = open_module() else {
         return skipped("properties_win_over_a_stale_state");
     };
-    // The blob says four; the project says two. The project is this year's
-    // answer, and a keyframed gain must not revert to a preset's.
     let setup = InstanceSetup {
         plugin_id: plugin_id(Kind::Gain),
         state: Some(4.0f64.to_le_bytes().to_vec()),
@@ -381,8 +348,6 @@ fn properties_win_over_a_stale_state() {
     );
 }
 
-// ---------------------------------------------------------- the automation --
-
 #[test]
 fn a_param_sweep_arrives_as_sorted_per_block_events() {
     let _guard = fixture_lock();
@@ -399,9 +364,6 @@ fn a_param_sweep_arrives_as_sorted_per_block_events() {
     let input = vec![0.0f32; INTERLEAVED_LEN];
     let mut output = vec![0.0f32; INTERLEAVED_LEN];
     for block in 0..3u32 {
-        // Deliberately out of order: CLAP calls an unsorted list undefined and
-        // real plugins crash on one, so the boundary sorts and no caller has to
-        // remember.
         let events = [
             ParamEvent {
                 time: 256,
@@ -445,10 +407,6 @@ fn a_param_sweep_arrives_as_sorted_per_block_events() {
     );
 }
 
-// ---------------------------------------------------------- the interleave --
-
-// -------------------------------------------------------------- denormals --
-
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[test]
 fn denormals_flush_to_zero_inside_the_guard_and_are_restored_after() {
@@ -468,8 +426,6 @@ fn denormals_flush_to_zero_inside_the_guard_and_are_restored_after() {
     let after = black_box(tiny) * black_box(half);
     assert_eq!(after, before, "the thread is given back as it was found");
 }
-
-// --------------------------------------------------------- console windows --
 
 /// The host keeps its brokers in a static, and a static is never dropped, so
 /// a ring file only ever went away by luck. The maker's handle now carries

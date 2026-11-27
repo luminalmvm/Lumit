@@ -1,8 +1,3 @@
-// Effects & presets, Scopes and Hierarchy on frb, against the real engine.
-//
-// All three were `PlaceholderPanel`s, so there is nothing to migrate; v0 never
-// built the preset *listing* at all. What is asserted is that each reaches the
-// document — an effect list nothing can apply from is a picture of a panel.
 
 import 'dart:io' hide Platform;
 
@@ -108,7 +103,6 @@ void main() {
       expect(File(path).existsSync(), isTrue);
       expect(File(path).readAsStringSync(), contains('blur'));
 
-      // Load it back: the stack grows, and the copy is its own instance.
       final before = p.layer.getEffects().single.id();
       await tester.tap(find.byKey(const ValueKey('preset-load')));
       // The file is read off the interface's thread.
@@ -120,9 +114,6 @@ void main() {
           reason: 'a loaded preset is a fresh instance, never a shared id');
     });
 
-    /// The library listing (docs/TODO: saved presets were not listed at all):
-    /// a preset in the library appears under its saved name, the search field
-    /// filters it, and a double-click applies its whole stack to the layer.
     testWidgets('a library preset is listed and applies on double-click',
         (tester) async {
       final p = withLayer();
@@ -152,7 +143,6 @@ void main() {
       expect(p.layer.getEffects(), hasLength(1));
       expect(p.layer.getEffects().single.name(), 'blur');
 
-      // The search field filters the library too.
       await tester.enterText(
           find.byKey(const ValueKey('fx-search')), 'zzz-nothing');
       await tester.pump();
@@ -189,7 +179,6 @@ void main() {
       expect(p.uiState.workspace.isFavouriteEffect('blur'), isTrue,
           reason: 'the star is a preference, so it went to the workspace');
 
-      // It twirls like every other heading.
       await tester.tap(find.byKey(const ValueKey('fx-group-*favourites')));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('fav-item-blur')), findsNothing);
@@ -197,7 +186,6 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('fx-group-*favourites')));
       await tester.pumpAndSettle();
 
-      // And the star comes off from either row.
       await tester.tap(find.byKey(const ValueKey('fx-star-blur')).first);
       await tester.pumpAndSettle();
       expect(find.text('Favourites'), findsNothing);

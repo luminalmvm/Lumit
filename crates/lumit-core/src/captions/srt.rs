@@ -19,7 +19,6 @@ use super::{
     CaptionsError,
 };
 
-/// `cues` as an `.srt` file.
 #[must_use]
 pub fn write(cues: &[Cue]) -> String {
     let mut out = String::new();
@@ -66,7 +65,6 @@ pub fn read(text: &str) -> Result<Vec<Cue>, CaptionsError> {
             i += 1;
             continue;
         }
-        // The number is optional; the timing line is not.
         let timing = if lines[i].contains("-->") {
             i
         } else if lines.get(i + 1).is_some_and(|l| l.contains("-->")) {
@@ -93,7 +91,6 @@ pub fn read(text: &str) -> Result<Vec<Cue>, CaptionsError> {
     Ok(cues)
 }
 
-/// The two times on a timing line, ignoring anything written after them.
 pub(super) fn timings(line: &str) -> Option<(Rational, Rational)> {
     let (from, rest) = line.split_once("-->")?;
     let to = rest.split_whitespace().next()?;

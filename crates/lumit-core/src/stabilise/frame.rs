@@ -1,13 +1,3 @@
-//! What happens at the edges once the picture has been moved.
-//!
-//! In plain terms: moving each frame to follow a smooth path drags its edges
-//! into view, so the corners of the output would show nothing. The picture can
-//! be left like that, cropped to the part that always has something in it,
-//! scaled up until the empty edges are pushed out of frame, or filled from the
-//! frames either side. This works out how far each frame has to be scaled for
-//! its edges to vanish, and from that the one scale for the shot, or a scale
-//! that eases along with the shot when the crop is allowed to move.
-
 use super::motion::{apply, Mat3};
 
 /// The largest scale the bisection looks at. Past it a frame counts as not
@@ -62,20 +52,14 @@ fn covers(w: &Mat3, size: [f64; 2], margin: f64, z: f64) -> bool {
     })
 }
 
-/// How the shot's edges are dealt with.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Edges {
-    /// Leave the moving edges in view.
     Show,
-    /// Cut the picture to the part that always has something in it.
     Crop,
-    /// Scale up until the edges are out of frame.
     CropAndScale,
-    /// Fill the edges from the frames either side.
     Fill,
 }
 
-/// The rows the edge handling reads.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Framing {
     pub edges: Edges,
@@ -86,11 +70,9 @@ pub struct Framing {
     /// 0 lets the crop follow the shot frame by frame and crop least; 1 holds
     /// one crop for the whole shot, the smoothest.
     pub smooth_more: f64,
-    /// Frames per second, for how quickly a moving crop may ease.
     pub fps: f64,
 }
 
-/// What the edge handling decided for the shot.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Framed {
     /// The scale each analysed frame is drawn at, before the extra scale: what

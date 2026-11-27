@@ -25,28 +25,18 @@ use crate::fx::params::Unit;
 use crate::model::{Composition, Document, TransformProp};
 use crate::time::Rational;
 
-/// Making and changing a template: controls, the ops that set them, looks.
 pub mod author;
-/// Reading a table of rows, and each cell as the control it feeds.
 pub mod data;
-/// Which rows of a table feed which controls, and one row as values.
 pub mod feed;
-/// The fonts a template's text names, for packing them with it.
 pub mod fonts;
-/// A copy's document: the template with the copy's values written in.
 pub mod placed;
-/// Reading and writing the row a control names.
 pub mod rows;
 /// A template's clock on a copy: the intro and the outro keep their speed.
 pub mod time;
-/// One row's version of a template: a copy fed from it, and its file's name.
 pub mod version;
 
-/// The most controls a template keeps.
 pub const MAX_CONTROLS: usize = 256;
 
-/// What makes a composition a graphics template: its controls, in the order
-/// a copy shows them, and how it behaves when a copy is longer or shorter.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Template {
     /// The library's name for this template, the same through every version.
@@ -65,7 +55,6 @@ pub struct Template {
     /// changed since.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub saved: Option<String>,
-    /// The controls, in the order a copy shows them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub controls: Vec<Control>,
     /// The frame the library shows for it. `None` is the first.
@@ -77,7 +66,6 @@ pub struct Template {
     /// The moment the outro starts. `None` is no outro.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub outro: Option<Rational>,
-    /// Unknown fields from newer Lumit versions (docs/10-FILE-FORMAT.md §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -99,7 +87,6 @@ fn is_raw(unit: &Unit) -> bool {
 }
 
 impl Template {
-    /// The control called `id`.
     #[must_use]
     pub fn control(&self, id: &str) -> Option<&Control> {
         self.controls.iter().find(|c| c.id == id)
@@ -159,9 +146,7 @@ impl Template {
 /// The row ids a copy keeps that are not a control's: whether it plays the
 /// template's intro and its outro.
 pub const RESERVED_IDS: &[&str] = &[PLAY_INTRO, PLAY_OUTRO];
-/// The row a copy keeps for playing the template's intro.
 pub const PLAY_INTRO: &str = "play_intro";
-/// The row a copy keeps for playing the template's outro.
 pub const PLAY_OUTRO: &str = "play_outro";
 
 /// What a control's further rows on a copy end in: a point's axes, and a text
@@ -169,7 +154,6 @@ pub const PLAY_OUTRO: &str = "play_outro";
 /// fitted.
 pub const ROW_ENDINGS: &[&str] = &["_x", "_y", "_z", "_font", "_size", "_colour", "_fit"];
 
-/// One control: a row inside the template that a copy can set.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Control {
     /// What a copy's value is kept under. Never changes once made, so a
@@ -177,24 +161,18 @@ pub struct Control {
     pub id: String,
     /// What a copy shows it as, and what a data column is matched by.
     pub label: String,
-    /// What it is drawn as on a copy.
     pub kind: ControlKind,
-    /// The row it sets.
     pub target: Target,
-    /// The folding heading it sits under on a copy.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub group: Option<String>,
     /// A number's range: the slider's travel on a copy, which typing stays
     /// inside. `None` leaves the row's own range.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub range: Option<(f64, f64)>,
-    /// For a text control: whether a copy may also change the font.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub font: bool,
-    /// For a text control: whether a copy may also change the size.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub size: bool,
-    /// For a text control: whether a copy may also change the colour.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub colour: bool,
     /// For a menu: what each option sets besides the menu's own row, in the
@@ -205,22 +183,18 @@ pub struct Control {
     /// the row's own, as it was when the control was made.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub slider: Option<(f64, f64)>,
-    /// What a number is counted in, written beside it on a copy.
     #[serde(default = "raw", skip_serializing_if = "is_raw")]
     pub unit: Unit,
-    /// A menu's options, as the row lists them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub options: Vec<String>,
     /// A point's axes: 2, or 3 for a row in 3D.
     #[serde(default, skip_serializing_if = "is_zero_u8")]
     pub axes: u8,
-    /// Unknown fields from newer Lumit versions (docs/10-FILE-FORMAT.md §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 impl Control {
-    /// A control with nothing set but what every control has.
     #[must_use]
     pub fn new(id: String, label: String, kind: ControlKind, target: Target) -> Self {
         Self {
@@ -243,88 +217,56 @@ impl Control {
     }
 }
 
-/// One row a menu option sets, and what it sets it to.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Setting {
-    /// The row.
     pub target: Target,
-    /// What the option sets it to.
     pub value: Value,
 }
 
-/// What a control is drawn as on a copy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ControlKind {
-    /// A number with a slider.
     Number,
-    /// An angle with a dial.
     Angle,
     /// Two numbers, or three for a row in 3D, with a handle in the Viewer.
     Point,
-    /// A colour.
     Colour,
-    /// A tick.
     Checkbox,
-    /// One of a list of options.
     Menu,
-    /// Words.
     Text,
-    /// A font: a family and a face.
     Font,
-    /// A picture: a footage item or a composition.
     Footage,
 }
 
-/// A row of a text layer that is a number or a colour.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TextRow {
-    /// The size of the letters.
     Size,
-    /// The colour of the letters.
     Fill,
-    /// The outline's colour.
     Stroke,
-    /// The outline's width.
     StrokeWidth,
-    /// The space between letters.
     Tracking,
-    /// The colour of the box behind the words.
     Background,
 }
 
-/// A row of one shape.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ShapeRow {
-    /// The fill colour.
     Fill,
-    /// The stroke colour.
     Stroke,
-    /// The stroke's width.
     StrokeWidth,
-    /// How opaque the shape is.
     Opacity,
-    /// A rectangle's or an ellipse's width.
     Width,
-    /// A rectangle's or an ellipse's height.
     Height,
-    /// A rectangle's corners.
     Roundness,
-    /// How far a parametric shape is turned.
     Rotation,
 }
 
-/// A row of one mask.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MaskRow {
-    /// How opaque the mask is.
     Opacity,
-    /// How soft its edge is.
     Feather,
-    /// How far its edge is pushed out or pulled in.
     Expansion,
 }
 
@@ -336,104 +278,67 @@ pub enum Target {
     /// One transform row, or the rows of a point (position, scale, anchor
     /// point) or of a light's colour, in their own order.
     Transform {
-        /// The layer.
         layer: Uuid,
         /// The rows: one for a number or an angle, two or three for a point,
         /// three for a colour.
         props: Vec<TransformProp>,
     },
-    /// One row of an effect or a layer style.
     Param {
-        /// The layer.
         layer: Uuid,
-        /// The effect or the style.
         effect: Uuid,
-        /// The row.
         param: String,
     },
     /// An effect's point: the two rows the panel shows as one.
     ParamPoint {
-        /// The layer.
         layer: Uuid,
-        /// The effect.
         effect: Uuid,
-        /// The row across.
         x: String,
-        /// The row down.
         y: String,
     },
-    /// Whether an effect is on.
     EffectOn {
-        /// The layer.
         layer: Uuid,
-        /// The effect.
         effect: Uuid,
     },
-    /// A Text layer's words.
     Text {
-        /// The layer.
         layer: Uuid,
     },
-    /// A Text layer's font.
     Font {
-        /// The layer.
         layer: Uuid,
     },
-    /// A number or a colour of a Text layer.
     TextRow {
-        /// The layer.
         layer: Uuid,
-        /// The row.
         value: TextRow,
     },
-    /// A row of one shape on a Shape layer.
     Shape {
-        /// The layer.
         layer: Uuid,
-        /// The shape.
         item: Uuid,
-        /// The row.
         value: ShapeRow,
     },
-    /// A row of one mask.
     Mask {
-        /// The layer.
         layer: Uuid,
-        /// The mask.
         mask: Uuid,
-        /// The row.
         value: MaskRow,
     },
-    /// Whether a layer is shown.
     Visible {
-        /// The layer.
         layer: Uuid,
     },
-    /// A layer's Volume.
     Volume {
-        /// The layer.
         layer: Uuid,
     },
-    /// What a Footage layer or a Precomp layer shows.
     Source {
-        /// The layer.
         layer: Uuid,
         /// The size of the picture the layer showed when the control was
         /// made, which a copy's own picture is fitted into. The document
         /// keeps no size for a footage item, so the control does.
         frame: (u32, u32),
     },
-    /// A control of another template, placed inside this one.
     Copy {
-        /// The Precomp layer placing it.
         layer: Uuid,
-        /// The control, by its id in that template.
         control: String,
     },
 }
 
 impl Target {
-    /// The layer the row is on.
     #[must_use]
     pub fn layer(&self) -> Uuid {
         match self {
@@ -454,16 +359,13 @@ impl Target {
     }
 }
 
-/// How a copy's picture is fitted into the frame of the one it replaces.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Fit {
     /// Covers the frame, cut where it runs over.
     #[default]
     Fill,
-    /// All of it inside the frame.
     Fit,
-    /// Pulled to the frame's own shape.
     Stretch,
 }
 
@@ -478,7 +380,6 @@ impl Fit {
         }
     }
 
-    /// Where this fit sits in a menu.
     #[must_use]
     pub fn to_choice(self) -> u32 {
         match self {
@@ -489,43 +390,31 @@ impl Fit {
     }
 }
 
-/// A picture a copy puts in a footage control.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Picture {
-    /// The footage item or the composition.
     pub item: Uuid,
     /// Its size in pixels, as it was when it was put there. The document
     /// keeps no size for a footage item, so the copy does.
     pub size: (u32, u32),
-    /// How it is fitted.
     #[serde(default)]
     pub fit: Fit,
 }
 
-/// One value of a control: what a row holds at one moment.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Value {
-    /// A number or an angle.
     Number(f64),
-    /// A point, as many numbers as the row has axes.
     Point(Vec<f64>),
     /// A colour as its row keeps it: scene-linear, with alpha.
     Colour([f64; 4]),
-    /// A tick.
     Tick(bool),
     /// A menu's option, counting from 0.
     Choice(u32),
-    /// Words.
     Text(String),
-    /// A font.
     Font {
-        /// The family.
         family: String,
-        /// The face.
         face: String,
     },
-    /// A picture.
     Picture(Picture),
 }
 
@@ -534,7 +423,6 @@ pub enum Value {
 const KEPT: usize = 64;
 
 impl Composition {
-    /// The key a graphics template is kept under in `extra`.
     pub const TEMPLATE_KEY: &'static str = "template";
     /// The key a template's data is kept under in `extra`: apart from the
     /// template, so reading the template every frame never reads the rows.
@@ -573,7 +461,6 @@ impl Composition {
         Some(template)
     }
 
-    /// Set the template, or take it away with `None`.
     pub fn set_template(&mut self, template: Option<&Template>) {
         match template.and_then(|t| serde_json::to_value(t).ok()) {
             Some(v) => {
@@ -610,7 +497,6 @@ impl Composition {
         })
     }
 
-    /// The data linked to this template, or `None` when none is.
     #[must_use]
     pub fn template_data(&self) -> Option<feed::Data> {
         self.extra
@@ -618,7 +504,6 @@ impl Composition {
             .and_then(|v| serde_json::from_value(v.clone()).ok())
     }
 
-    /// Link data to this template, or take it away with `None`.
     pub fn set_template_data(&mut self, data: Option<&feed::Data>) {
         match data.and_then(|d| serde_json::to_value(d).ok()) {
             Some(v) => {
@@ -631,7 +516,6 @@ impl Composition {
     }
 }
 
-/// Apply [`crate::ops::Op::SetCompTemplate`], answering its inverse.
 pub(crate) fn set_template(
     doc: &mut Document,
     comp: Uuid,
@@ -646,7 +530,6 @@ pub(crate) fn set_template(
     })
 }
 
-/// Apply [`crate::ops::Op::SetCompTemplateData`], answering its inverse.
 pub(crate) fn set_data(
     doc: &mut Document,
     comp: Uuid,

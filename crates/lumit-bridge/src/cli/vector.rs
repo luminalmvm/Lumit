@@ -1,7 +1,3 @@
-//! `lumit-cli export --format lottie|dotlottie|svg`: comps written as vector
-//! files through the same export the Lottie and SVG window runs, with what
-//! won't come across told on standard error, a line per thing.
-
 use std::path::{Path, PathBuf};
 
 use lumit_lottie::settings::{Format, Settings, TextMode};

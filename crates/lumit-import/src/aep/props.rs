@@ -68,7 +68,6 @@ mod tdb4 {
     pub const EXPRESSION_FLAGS: usize = 119;
 }
 
-/// `lhd3` field offsets — the header of a keyframe (or shape-point) list.
 mod lhd3 {
     /// Number of records (u16).
     pub const COUNT: usize = 10;
@@ -98,7 +97,6 @@ const PARAM_TOPIC: &[u8] = &[13, 14, 15];
 /// histogram, Hue/Saturation's channel ranges. The DOM cannot read these at
 /// all; the file can, and does, so the bytes come through.
 const PARAM_ARBITRARY: u8 = 11;
-/// The SDK's control types a set of custom controls is made from.
 const PARAM_SLIDER: u8 = 2;
 const PARAM_ANGLE: u8 = 3;
 const PARAM_CHECKBOX: u8 = 4;
@@ -127,9 +125,7 @@ pub(crate) struct Ctx<'a> {
     /// `cdta`'s internal timebase: keyframe times are a count of these per
     /// second.
     pub timebase: f64,
-    /// The comp's width and height in pixels.
     pub comp: (f64, f64),
-    /// The layer's source width and height, where it has a source.
     pub layer: (f64, f64),
     /// Whether the layer has a source item at all. A shape, text or null layer
     /// stores its anchor in raw pixels; a footage layer stores a fraction.
@@ -148,11 +144,8 @@ pub(crate) struct Ctx<'a> {
     pub layers: Option<&'a std::collections::HashMap<u32, u32>>,
 }
 
-/// Everything one property subtree produced.
 pub(crate) struct Read {
-    /// The children of the group, in file order.
     pub properties: Vec<Property>,
-    /// Rows for anything skipped along the way.
     pub skipped: Vec<Unreadable>,
 }
 
@@ -307,7 +300,6 @@ pub(super) fn read_node(
     if let Some(sspc) = list(b"sspc") {
         return Some((read_effect(match_name, sspc, ctx, skipped), false));
     }
-    // A layer's Essential Properties name their controllers beside the group.
     if let (Some(names), Some(group)) = (list(b"OvG2"), list(b"tdgp")) {
         let node = super::essential::read_overrides(names, group, ctx, skipped);
         return Some((node, false));
@@ -361,7 +353,6 @@ pub(super) fn read_node(
     ))
 }
 
-/// A group node — Transform, Masks, a mask atom, an effect's parameters.
 fn read_subgroup(
     match_name: &str,
     group: &Chunk<'_>,
@@ -419,12 +410,6 @@ pub(super) fn read_effect(
         .map(|chunk| chunk.text())
         .filter(|name| !name.trim().is_empty());
 
-    // The effect's own parameter definitions say which of its slots are real
-    // parameters and which are topic headings or arbitrary-data blocks. When
-    // the layer's copy is empty the project's `LIST EfdG` carries the same
-    // table for every effect in use — reading that fallback is owed
-    // (docs/TODO.md); an effect without it simply reads its slots as the plain
-    // numbers they are stored as.
     let param_types = inside
         .iter()
         .find(|chunk| chunk.is_list(b"parT"))
@@ -545,8 +530,6 @@ fn read_shape(
     leaf.value_type = Some("shape".to_string());
     leaf.unreadable = None;
     match leaf.keyframes.as_mut() {
-        // An animated path: the keys carry their times and easing already, and
-        // the values arrive here.
         Some(keys) => {
             for (key, path) in keys.iter_mut().zip(paths.iter()) {
                 key.v = Some(path.clone());
@@ -671,7 +654,6 @@ fn read_orientation(
     leaf
 }
 
-/// One leaf property, out of its `LIST tdbs`.
 fn read_leaf(
     match_name: &str,
     tdbs: &Chunk<'_>,
@@ -909,8 +891,6 @@ fn resolve(
     Some(json!(scaled))
 }
 
-/// A property's display name, or nothing when After Effects wrote its
-/// "nobody renamed this" sentinel.
 fn display_name(inside: &[Chunk<'_>]) -> Option<String> {
     let name = inside
         .iter()
@@ -930,7 +910,6 @@ fn enabled_of(inside: &[Chunk<'_>]) -> bool {
         .is_some_and(|flags| bit(flags, 0))
 }
 
-/// A node this reader can name but not read, said the way the report says it.
 fn unreadable_node(match_name: &str, why: &str) -> Property {
     Property {
         match_name: Some(match_name.to_string()),
@@ -951,7 +930,6 @@ fn doubles(body: &[u8]) -> Vec<f64> {
         .collect()
 }
 
-/// Bytes as lower-case hex — how an undecoded blob reaches the capture.
 fn hex(bytes: &[u8]) -> String {
     const DIGITS: &[u8; 16] = b"0123456789abcdef";
     let mut out = String::with_capacity(bytes.len() * 2);

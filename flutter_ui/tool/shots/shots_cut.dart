@@ -86,7 +86,6 @@ Future<void> main() async {
     if (result != BridgeCutResult.done) say('$what: $result');
   }
 
-  // The main track, cut from the source view: two stretches of Talk.
   ui.openFootageView(talk);
   for (var i = 0; i < 40 && ui.itemFacts(talk) == null; i++) {
     await pause(0.25);
@@ -116,7 +115,6 @@ Future<void> main() async {
   }
 
   final main = layerOf(BridgeLayerKind.sequence);
-  // A title over the join of the two, dissolved in and out.
   report(
       'title',
       comp.cutPlace(
@@ -141,14 +139,12 @@ Future<void> main() async {
       'dissolve out',
       comp.cutTransition(
           clip: titleClip.id, endEdge: true, frames: frames(1), linked: true));
-  // The last clip fades out.
   clips = main.getClips();
   report(
       'fade out',
       comp.cutTransition(
           clip: clips.last.id, endEdge: true, frames: frames(1), linked: true));
 
-  // A second picture track over it, one clip of which is a composition.
   report(
       'second track',
       comp.cutPlace(
@@ -177,7 +173,6 @@ Future<void> main() async {
   final made = comp.cutClipToComposition(clip: over.getClips().last.id);
   say('clip to composition: ${made != null}');
 
-  // Music under the whole of it.
   report(
       'music',
       comp.cutPlace(
@@ -193,9 +188,7 @@ Future<void> main() async {
   comp.audioPrepare();
   await pause(4);
 
-  // The source side stands on a frame inside its marks.
   ui.seekFootageView(source, 90);
-  // The playhead in the middle of the dissolve into the title.
   clips = main.getClips();
   final incoming = clips.firstWhere((c) => c.id == titleClip.id);
   final outgoing = clips.first;

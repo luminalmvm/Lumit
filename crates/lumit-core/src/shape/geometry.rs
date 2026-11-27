@@ -1,6 +1,3 @@
-//! The polyline maths under a shape layer: walking a path into points,
-//! measuring it, and the affine a copy is placed by.
-
 use crate::mask::{BezierPath, Vertex};
 
 /// How many straight steps each cubic segment becomes when a path is walked for
@@ -117,7 +114,6 @@ pub(super) fn control_points(path: &BezierPath) -> impl Iterator<Item = (f64, f6
     })
 }
 
-/// The box round `points`, or `None` for none.
 pub(super) fn box_of(points: impl Iterator<Item = (f64, f64)>) -> Option<(f64, f64, f64, f64)> {
     points.fold(None, |out, (x, y)| {
         Some(match out {
@@ -156,11 +152,9 @@ pub(super) fn arc_of(ring: &[(f64, f64)], closed: bool) -> (Vec<f64>, f64) {
     (arc, total)
 }
 
-/// The point `s` along `ring`, whose points sit at `arc`.
 pub(super) fn point_at(ring: &[(f64, f64)], arc: &[f64], s: f64) -> (f64, f64) {
     let i = arc.partition_point(|&a| a <= s).max(1) - 1;
     let a = ring.get(i).copied().unwrap_or_default();
-    // Past the last point of a closed ring is on the way back to the first.
     let (b, end) = match ring.get(i + 1) {
         Some(&b) => (b, arc.get(i + 1).copied().unwrap_or(s)),
         None => (ring[0], arc[i] + dist(a, ring[0])),
@@ -220,17 +214,12 @@ pub(super) fn rotated(points: &[(f64, f64)], shift: f64) -> Vec<(f64, f64)> {
     if shift == 0.0 || points.len() < 2 {
         return points.to_vec();
     }
-    // Walk to the point `shift` per cent along, cut there, and hand back the
-    // two pieces the other way round. `trimmed` already knows how to cut a
-    // polyline by length, so the two cuts are the two halves of the ring.
     let head = crate::paint::trimmed(points, 0.0, shift);
     let tail = crate::paint::trimmed(points, shift, 100.0);
     if head.len() < 2 || tail.len() < 2 {
         return points.to_vec();
     }
     let mut out = tail;
-    // The join is one shared point, not two: the tail ends where the head
-    // begins.
     out.extend_from_slice(&head[1..]);
     out
 }
@@ -249,7 +238,6 @@ pub struct Affine(pub [f64; 6]);
 impl Affine {
     pub const IDENTITY: Affine = Affine([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
 
-    /// A move and nothing else.
     #[must_use]
     pub fn translation(dx: f64, dy: f64) -> Affine {
         Affine([1.0, 0.0, 0.0, 1.0, dx, dy])

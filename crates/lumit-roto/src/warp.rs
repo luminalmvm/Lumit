@@ -12,11 +12,8 @@
 
 use crate::{check_plane, stroke::Seed, stroke::Seeds, RotoError};
 
-/// Above this warped alpha a pixel seeds foreground.
 const WARP_FG: f32 = 0.9;
-/// Below this warped alpha a pixel seeds background.
 const WARP_BG: f32 = 0.1;
-/// How far both seed sets are shrunk before the solve reads them.
 const ERODE_PX: u32 = 2;
 
 /// One frame pair's flow, borrowed: where each pixel of the **new** frame came
@@ -36,8 +33,6 @@ pub struct FlowField<'a> {
 }
 
 impl<'a> FlowField<'a> {
-    /// Borrow one frame pair's flow, checking every plane against the size it
-    /// claims — the trust boundary between this crate and whoever computed it.
     pub fn new(
         flow: &'a [f32],
         validity: &'a [u8],

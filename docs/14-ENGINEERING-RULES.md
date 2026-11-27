@@ -103,7 +103,8 @@ Same project and inputs, same exported pixels, every run.
   `// SAFETY:` comment and a test.
 - FFI: check pointers, turn C return codes into typed errors at the edge, wrap C-owned
   memory in RAII types, `catch_unwind` in every callback, `#[repr(C)]` with layout tests.
-- Public items in engine crates have doc comments. Modules say which thread they run on.
+- Names and types say what code does. A comment is for a decision, a unit or range the type
+  doesn't show, or a limit set from outside. A module that runs on one thread says which.
 - No user-facing string literal in code. See the strings section of [GUIDE.md](GUIDE.md).
 - The glossary binds identifiers: `retime_map` not `time_remap`, `speed` not
   `velocity`, `clip` not `event`, `playhead` not `cti`, `export` not `render` when a file

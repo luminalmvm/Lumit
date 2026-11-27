@@ -1,5 +1,3 @@
-//! Tests of the layer and asset defaults.
-
 use super::*;
 use lumit_core::anim::{Animation, Keyframe, Property, SideInterp};
 use lumit_core::expression::script::Language;
@@ -77,7 +75,6 @@ fn each_kind_starts_on_its_own_label() {
         );
     }
 
-    // The camera sits a 50 mm zoom back from the comp centre, and wears label 5.
     let mut doc = Document::new();
     let c = add_comp(&mut doc, CompSettings::default());
     let camera = fresh_camera(comp(&doc, c), "Camera".into(), None);
@@ -116,7 +113,6 @@ fn a_newcomer_joins_a_solo_only_when_it_would_show() {
     let picture = [layer(LayerKind::Footage { item }, false, true)];
     let sound = [layer(LayerKind::Footage { item }, true, true)];
     let cases = [
-        // newcomer kind, audio only, existing, soloed after
         (LayerKind::Solid { def: item }, false, &picture, true),
         (LayerKind::Null, false, &picture, false),
         (LayerKind::Solid { def: item }, false, &sound, false),
@@ -180,7 +176,6 @@ fn new_solids_and_nulls_are_comp_sized_and_filed() {
     let folder = doc.folder(doc.auto_folders.solids.unwrap()).unwrap();
     assert_eq!((folder.name.as_str(), &folder.children), ("Solids", &defs));
 
-    // A remembered folder that has since been deleted is made again.
     doc.auto_folders.solids = Some(Uuid::now_v7());
     let (id, ops) = ensure_auto_folder_ops(&doc, AutoFolderKind::Solids);
     run(&mut doc, &ops);
@@ -257,13 +252,11 @@ fn new_settings_crop_about_the_centre() {
         ..CompSettings::default()
     };
 
-    // Nothing but the settings when the size and shutter stand.
     assert_eq!(
         comp_settings_ops(comp(&doc, c), settings(1920, 1080)).len(),
         1
     );
 
-    // Sizes are clamped, and the crop is centred on the old frame.
     let ops = comp_settings_ops(comp(&doc, c), settings(4, 99_999));
     assert!(matches!(
         ops[1],
@@ -280,7 +273,6 @@ fn new_settings_crop_about_the_centre() {
             ..settings(1280, 720)
         },
     );
-    // The settings go first at the old size, so the undo step is named for them.
     assert!(matches!(
         ops[0],
         Op::SetCompSettings {
@@ -307,7 +299,6 @@ fn new_settings_crop_about_the_centre() {
 fn keys_move_onto_the_layer_clock_in_order() {
     let moved = key_on_layer_clock(key(3), rat(1, 1)).unwrap();
     assert_eq!((moved.time, moved.value), (rat(2, 1), 3.0));
-    // A time that would overflow is refused rather than wrapped.
     let far = Keyframe {
         time: rat(-i64::MAX, 1),
         ..key(0)
@@ -340,12 +331,10 @@ fn transform_ops_carry_the_expression_note() {
     };
     let px = TransformProp::PositionX;
 
-    // A plain value writes no note.
     let ops = transform_ops(c, &current(&doc), px, Animation::Static(5.0), None);
     assert_eq!(ops.len(), 1);
     run(&mut doc, &ops);
 
-    // An expression arriving writes one, in the language asked for.
     let expr = |s: &str| Animation::Expression(s.into());
     let ops = transform_ops(
         c,
@@ -363,7 +352,6 @@ fn transform_ops_carry_the_expression_note() {
     assert_eq!(held.expression_language(), Language::JavaScript);
     assert_eq!(held.animation, expr("value + 1"));
 
-    // Editing the text keeps the note; taking the expression off clears it.
     assert_eq!(
         transform_ops(c, &current(&doc), px, expr("value + 2"), None).len(),
         1
@@ -374,7 +362,6 @@ fn transform_ops_carry_the_expression_note() {
         Op::SetTransformExpressionSlot { slot: None, .. }
     ));
 
-    // A camera channel on a layer that has none is only the property op.
     assert_eq!(
         transform_ops(c, &current(&doc), TransformProp::Zoom, expr("1"), None).len(),
         1
@@ -389,6 +376,7 @@ fn category_keys_are_distinct_snake_case() {
         Colour,
         Distortion,
         Generate,
+        Textures,
         Stylise,
         Temporal,
         Transition,
@@ -434,8 +422,6 @@ fn link_copies_keep_parents_and_mattes_across_the_cut() {
     assert!(link_copies(&layers, &[]).is_empty());
     let copies = link_copies(&layers, &[hand.id]);
 
-    // Inside: the hand leans on the arm, so the arm comes along, and the
-    // arm's rig with it, hidden and silent.
     assert_eq!(copies.inside.len(), 2);
     let arm_copy = copies.inside.iter().find(|l| l.name == "arm").unwrap();
     assert_eq!(copies.inside_ids[&arm.id], arm_copy.id);
@@ -445,8 +431,6 @@ fn link_copies_keep_parents_and_mattes_across_the_cut() {
         .iter()
         .all(|l| !l.switches.visible && !l.switches.audible));
 
-    // Outside: the shadow's matte is the hand, so a copy of the hand stays,
-    // still parented to the arm that stays outside too.
     assert_eq!(copies.outside.len(), 1);
     assert_eq!(copies.outside[0].parent, Some(arm.id));
     assert_eq!(copies.outside_ids[&hand.id], copies.outside[0].id);
@@ -503,7 +487,6 @@ fn nested_comps_are_found_everywhere_and_can_be_repointed() {
 
     assert_eq!(nested_comps(&doc, &nest), vec![a, b, c, d, e]);
 
-    // What the visitor writes back is what the comp then names.
     let swap = Uuid::now_v7();
     visit_comp_refs(&mut nest, &mut |id| {
         if *id == c || *id == a {
@@ -541,7 +524,6 @@ fn fresh_ids_follow_links_inside_and_keep_those_outside() {
     assert!(matches!(ch.kind, LayerKind::Precomp { comp } if comp == elsewhere));
 }
 
-/// A span of layers on the comp's clock, for the precompose tests.
 fn spanned(name: &str, from: i64, to: i64) -> Layer {
     let mut l = named(name);
     l.in_point = CompTime(rat(from, 1));
@@ -578,7 +560,6 @@ fn precompose_packs_the_layers_trims_to_their_span_and_keeps_a_parent() {
     .unwrap();
     run(&mut doc, &ops);
 
-    // The Precomp layer takes the top layer's place and spans the pair.
     let outer = comp(&doc, c);
     assert_eq!(outer.layers.len(), 2);
     let pre = &outer.layers[0];
@@ -589,8 +570,6 @@ fn precompose_packs_the_layers_trims_to_their_span_and_keeps_a_parent() {
         panic!("a Precomp layer");
     };
 
-    // Inside, time starts at the first in point, and the parent that
-    // stayed outside is kept by a hidden copy.
     let inner = comp(&doc, inner);
     assert_eq!(inner.name, "Pre-comp 1");
     assert_eq!(inner.duration.0, rat(6, 1));
@@ -618,8 +597,6 @@ fn precompose_leaving_attributes_keeps_them_on_the_precomp_layer() {
     let b = spanned("b", 0, 4);
     doc.comp_mut(c).unwrap().layers = vec![a.clone(), b.clone()];
 
-    // Leaving attributes behind means one layer, so a pair is refused, and
-    // so is a layer the comp does not have.
     let asked = |layers: &[Uuid], leave: bool| {
         precompose_ops(
             &doc,
@@ -659,8 +636,6 @@ fn precompose_leaving_attributes_keeps_them_on_the_precomp_layer() {
     .unwrap();
     run(&mut doc, &ops);
 
-    // The Precomp layer stands where the layer stood, under its id and
-    // with its turn, and the layer inside is back to its source.
     assert_eq!(id, a.id);
     let pre = comp(&doc, c).layers.iter().find(|l| l.id == id).unwrap();
     assert_eq!(value(&pre.transform.rotation), 30.0);

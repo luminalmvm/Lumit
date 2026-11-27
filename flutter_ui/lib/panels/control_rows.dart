@@ -1,6 +1,3 @@
-// Which row of a composition a control of its graphics template can name:
-// the ref a row builder hands its menu, the refs of the rows selected in the
-// Timeline, and the mark a row wears while it is a control.
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
@@ -32,7 +29,6 @@ BridgeRowRef layerControlRow(BridgeRowKind kind, UuidValue layer, String label,
     BridgeRowRef(
         kind: kind, layer: layer, props: const [], owner: owner, label: label);
 
-/// A transform row: every axis it shows, in order.
 BridgeRowRef transformControlRow(UuidValue layer, TransformGroup group) =>
     BridgeRowRef(
       kind: BridgeRowKind.transform,
@@ -165,7 +161,6 @@ BridgeRowRef? shapeControlRow(
         );
 }
 
-/// The layer's Volume.
 BridgeRowRef volumeControlRow(UuidValue layer) =>
     layerControlRow(BridgeRowKind.volume, layer, l10n.volume);
 

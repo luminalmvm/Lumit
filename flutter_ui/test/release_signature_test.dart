@@ -16,10 +16,8 @@ import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/state/release_signature.dart';
 
-/// A plausible digest, for a fixture that does not care what it is.
 final String aDigest = 'a' * 64;
 
-/// A manifest for one file, as the release pipeline writes it.
 List<int> manifestFor({
   String version = '0.3.4',
   String name = 'Lumit-0.3.4-setup.exe',
@@ -52,8 +50,6 @@ void main() {
     final original = manifestFor(sha256: aDigest);
     final signature = await sign(original);
 
-    // The shape the whole mechanism exists for: everything about the release is
-    // the same except the digest of the file it points at.
     final tampered = manifestFor(sha256: 'b' * 64);
     final (manifest, trust) =
         await verifyManifestWithKey(tampered, signature, publicKeyBase64);
@@ -66,9 +62,9 @@ void main() {
     for (final rubbish in <String>[
       '',
       'not base64 at all !!',
-      base64.encode(List<int>.filled(63, 0)), // one byte short
-      base64.encode(List<int>.filled(65, 0)), // one byte over
-      base64.encode(List<int>.filled(64, 0)), // right length, wrong value
+      base64.encode(List<int>.filled(63, 0)),
+      base64.encode(List<int>.filled(65, 0)),
+      base64.encode(List<int>.filled(64, 0)),
     ]) {
       final (_, trust) =
           await verifyManifestWithKey(bytes, rubbish, publicKeyBase64);
@@ -82,10 +78,10 @@ void main() {
     // exactly the shape that gets believed by accident.
     for (final body in <Object>[
       'not json at all',
-      jsonEncode({'assets': []}), // no version
-      jsonEncode({'version': '', 'assets': []}), // empty version
-      jsonEncode({'version': '1', 'assets': []}), // nothing in it
-      jsonEncode({'version': '1'}), // no assets at all
+      jsonEncode({'assets': []}),
+      jsonEncode({'version': '', 'assets': []}),
+      jsonEncode({'version': '1', 'assets': []}),
+      jsonEncode({'version': '1'}),
       jsonEncode({
         'version': '1',
         'assets': [
@@ -95,25 +91,25 @@ void main() {
       jsonEncode({
         'version': '1',
         'assets': [
-          {'name': 'a', 'size': 1, 'sha256': 'z' * 64} // not hex
+          {'name': 'a', 'size': 1, 'sha256': 'z' * 64}
         ]
       }),
       jsonEncode({
         'version': '1',
         'assets': [
-          {'name': 'a', 'size': 0, 'sha256': 'a' * 64} // nothing weighs nothing
+          {'name': 'a', 'size': 0, 'sha256': 'a' * 64}
         ]
       }),
       jsonEncode({
         'version': '1',
         'assets': [
-          {'name': '', 'size': 1, 'sha256': 'a' * 64} // nameless
+          {'name': '', 'size': 1, 'sha256': 'a' * 64}
         ]
       }),
       jsonEncode({
         'version': '1',
         'assets': [
-          {'name': 'a', 'size': '1', 'sha256': 'a' * 64} // a size as text
+          {'name': 'a', 'size': '1', 'sha256': 'a' * 64}
         ]
       }),
     ]) {

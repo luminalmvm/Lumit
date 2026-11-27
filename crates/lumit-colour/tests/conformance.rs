@@ -15,8 +15,6 @@ use lumit_colour::matrix;
 use lumit_colour::op::{CdlParams, Direction, LogParams, Op};
 use lumit_colour::{op::Chain, resolve::LoadedConfig};
 
-/// The chains the fixture rows name. A fixture naming an id that is not here
-/// fails the run rather than being skipped.
 fn chain(id: &str) -> Option<Chain> {
     // A `BuiltinTransform` style names code rather than data, so its rows name
     // the style and resolve through the registry that answers it.
@@ -149,7 +147,6 @@ fn published_rows() -> Vec<Row> {
     read_fixture(include_str!("fixtures/published.fixture"))
 }
 
-/// §7.2, gate one: the resolved chain evaluated exactly on the processor.
 #[test]
 fn every_published_row_passes_the_exact_gate() {
     for row in published_rows() {
@@ -290,7 +287,6 @@ fn gate_config_rows(loaded: &LoadedConfig, rows: &[Row]) {
     gate_rows(rows, |id, line| config_edge(loaded, id, line));
 }
 
-/// The gates themselves, over whatever a row's id resolves to.
 fn gate_rows(rows: &[Row], mut resolve: impl FnMut(&str, usize) -> Chain) {
     // One resolve and one bake per **edge**, not per row. A fixture gives an
     // edge sixteen probes in a row, and baking a 65³ cube sixteen times over to
@@ -450,9 +446,6 @@ fn every_builtin_row_matches_the_reference() {
     }
 }
 
-/// The two grading transforms, one colour space per parameter set: the ten the
-/// Blender and PixelManager configs actually write, and a synthetic set for
-/// every parameter and every style, both ways round.
 #[test]
 fn the_grading_config_matches_the_reference() {
     let (loaded, rows) = reference_fixture("grading");
@@ -508,8 +501,6 @@ fn the_legacy_config_refuses_only_for_luts_that_were_not_vendored() {
 // numbers. `fixtures/clf/clf.fixture` carries the derivation, file by file.
 // ---------------------------------------------------------------------------
 
-/// The vendored documents, by name, so a row naming a file that is not here
-/// fails loudly rather than being skipped.
 fn clf_document(name: &str) -> Option<&'static str> {
     Some(match name {
         "matrix_3x4_example.clf" => include_str!("fixtures/clf/matrix_3x4_example.clf"),
@@ -526,8 +517,6 @@ fn clf_document(name: &str) -> Option<&'static str> {
     })
 }
 
-/// §7.3: the specification's implementation-test files, parsed and evaluated
-/// against their published expectations.
 #[test]
 fn the_clf_specification_test_files_pass() {
     for row in read_fixture(include_str!("fixtures/clf/clf.fixture")) {

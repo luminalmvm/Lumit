@@ -23,7 +23,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// The same Points output every producer declares.
 const POINTS_OUT: &[Port] = &[Port::new("points", "Points", PortType::Points)];
 
 const fn group(label: &'static str, params: &'static [&'static str]) -> ParamGroup {
@@ -36,7 +35,6 @@ const fn group(label: &'static str, params: &'static [&'static str]) -> ParamGro
     }
 }
 
-/// Which text and which pieces of it, and what a point looks like.
 pub const TEXT_TO_POINTS_GROUPS: &[ParamGroup] = &[
     group(
         "Text",
@@ -45,8 +43,6 @@ pub const TEXT_TO_POINTS_GROUPS: &[ParamGroup] = &[
     group("Point", &["size_from_width", "size", "feather", "colour"]),
 ];
 
-/// A space only gets a point of its own when each character does, and Size
-/// is not read while the piece's own width is the size.
 pub const TEXT_TO_POINTS_ENABLED_WHEN: &[EnabledWhen] = &[
     EnabledWhen {
         param: "include_spaces",
@@ -60,7 +56,6 @@ pub const TEXT_TO_POINTS_ENABLED_WHEN: &[EnabledWhen] = &[
     },
 ];
 
-/// Text to points' controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "text_to_points",
@@ -82,7 +77,6 @@ pub struct TextToPoints {
     #[layer(label = "Text layer")]
     pub text_layer: bool,
 
-    /// What gets a point: each character, each word or each line.
     #[choice(label = "Per", options = ["Character", "Word", "Line"], default = 0)]
     pub per: u32,
 
@@ -149,7 +143,6 @@ impl TextToPoints {
     /// The raster factor, since the letters and the camera arrive in px@comp.
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
 
-    /// This instance's raster factor, read back out of a resolved bag.
     #[must_use]
     pub fn px_scale_of(p: Params<'_>) -> f32 {
         p.float(Self::DERIVED_PX_SCALE, 1.0)
@@ -180,7 +173,6 @@ impl TextToPoints {
             self.colour[2] * a,
             a,
         ];
-        // The letters of one word or one line sit next to each other.
         let pieces = glyphs
             .chunk_by(|a, b| match self.per {
                 1 => a.word == b.word,
@@ -188,7 +180,6 @@ impl TextToPoints {
                 _ => false,
             })
             .take(points::CAP_HARD as usize);
-        // How many letters came before this piece.
         let mut letters = 0usize;
         for (n, piece) in pieces.enumerate() {
             let (Some(first), Some(last)) = (piece.first(), piece.last()) else {
@@ -210,9 +201,6 @@ impl TextToPoints {
                 size
             };
             let at = if self.place == 1 {
-                // ponytail: the middle of the piece's box from the font's
-                // ascender to its descender, not of its ink. Take the ink's
-                // box from the glyph outlines if the difference shows.
                 [
                     (first.origin[0] + last.end[0]) * 0.5 + first.up[0],
                     (first.origin[1] + last.end[1]) * 0.5 + first.up[1],
@@ -249,7 +237,6 @@ impl TextToPoints {
         out
     }
 
-    /// How the stream is drawn: a feathered disc per point, and the Mix.
     #[must_use]
     pub fn draw_style(self) -> DrawStyle {
         DrawStyle {
@@ -270,7 +257,6 @@ impl EffectDef for TextToPointsDef {
         &<TextToPoints as EffectMetadata>::SCHEMA
     }
 
-    /// The picture and the data, as every producer declares it.
     fn signature(&self) -> Signature {
         Signature::Image {
             inputs: &[],

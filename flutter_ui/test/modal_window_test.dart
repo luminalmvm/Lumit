@@ -1,6 +1,3 @@
-// Movable, resizable modal windows: dragging moves one, the corner grip
-// resizes one, and both are remembered in the workspace store so the window
-// opens where it was left — this session and the next.
 
 import 'dart:io';
 
@@ -27,7 +24,6 @@ void main() {
     Workspace.storeOverride = null;
   });
 
-  /// An app around a button that opens one modal window.
   Widget host({String? id, Size? initialSize}) => Directionality(
         textDirection: TextDirection.ltr,
         child: ThemeScope(
@@ -83,7 +79,6 @@ void main() {
     expect(workspace.windowPlacements['test-window']?.offset,
         const Offset(50, 30));
 
-    // Close it and reopen. A window with an id ignores a click beside it.
     await tester.tapAt(const Offset(5, 5));
     await tester.pump();
     expect(body, findsOneWidget);
@@ -206,7 +201,6 @@ void main() {
     await tester.pump();
     expect(body, findsOneWidget);
 
-    // The opener goes, and the overlay draws another frame or two after it.
     opener = false;
     tick.value++;
     await tester.pump();

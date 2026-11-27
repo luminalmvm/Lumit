@@ -25,8 +25,6 @@ import '../widgets/escape_ladder.dart';
 import 'menu_bar_frb.dart' show MenuEntry;
 import 'pop_out.dart';
 
-/// Opens and closes the video monitor's window as
-/// [LumitUiState.videoMonitor] says, around [child].
 class VideoMonitorHost extends StatefulWidget {
   final Widget child;
 
@@ -40,10 +38,8 @@ class _VideoMonitorHostState extends State<VideoMonitorHost> {
   late final LumitUiState _ui = context.read<LumitUiState>();
   PopOutWindow? _window;
 
-  /// The display the window was last put on.
   Rect? _placed;
 
-  /// Whether that is the display the main window is on.
   bool _overMain = false;
   bool _opening = false;
   VoidCallback? _escapeRelease;
@@ -113,7 +109,6 @@ class _VideoMonitorHostState extends State<VideoMonitorHost> {
     made = PopOutWindow.open(
       title: l10n.videoMonitorTitle,
       size: display.size / (scale ?? 1.0),
-      // Closed by the system, or from the taskbar: the monitor is off.
       onClosed: () {
         if (made != null && identical(made, _window)) {
           _ui.setVideoMonitor(null);
@@ -154,8 +149,6 @@ class _VideoMonitorHostState extends State<VideoMonitorHost> {
       );
 }
 
-/// What the monitor shows: the active view's picture on black, or the two
-/// sides of its pane's compare.
 class _MonitorPicture extends StatefulWidget {
   const _MonitorPicture();
 
@@ -177,8 +170,6 @@ class _MonitorPictureState extends State<_MonitorPicture> {
       cursor: SystemMouseCursors.none,
       child: ColoredBox(
         color: t.videoMonitorGround,
-        // The engine's answers arrive on the state, and a view fronted,
-        // laid out or compared on the views.
         child: ListenableBuilder(
           listenable: Listenable.merge([ui, ui.views]),
           builder: (context, _) => _content(t, ui),
@@ -249,8 +240,6 @@ class _MonitorPictureState extends State<_MonitorPicture> {
     );
   }
 
-  /// [view]'s picture, or [child] in its place, as large as fits and in the
-  /// picture's own shape.
   Widget _fitted(LumitUiState ui, ViewerSurface view, [Widget? child]) {
     final size = _sizeOf(ui, view);
     if (size == null) return const SizedBox.expand();
@@ -303,15 +292,12 @@ class _MonitorPictureState extends State<_MonitorPicture> {
         if (size.width == 0 || size.height == 0) return null;
         return Size(size.width.toDouble(), size.height.toDouble());
       } catch (_) {
-        // Deleted a moment ago.
         return null;
       }
     });
   }
 }
 
-/// The Window menu's Video monitor rows: Off, then each display, the one it
-/// is on ticked.
 List<MenuEntry> videoMonitorMenu(LumitUiState ui) {
   final on = ui.videoMonitor.value;
   final rows = [

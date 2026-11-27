@@ -72,15 +72,12 @@ void main() {
 
     String idOf(LayerReference l) => l.internallayerId.toString();
 
-    /// The layer's row in the outline — its name, number and switches.
     Rect outlineRow(WidgetTester tester, LayerReference l) =>
         tester.getRect(find.byKey(ValueKey<String>('tl-row-${idOf(l)}')));
 
-    /// The same layer's bar in the lane area.
     Rect laneBar(WidgetTester tester, LayerReference l) =>
         tester.getRect(find.byKey(ValueKey<String>('tl-bar-${idOf(l)}')));
 
-    /// Both halves of one layer's first row occupy the same band of the screen.
     void expectLevel(WidgetTester tester, LayerReference l, {String? why}) {
       final row = outlineRow(tester, l);
       final bar = laneBar(tester, l);
@@ -109,8 +106,6 @@ void main() {
       await tester.pump();
     }
 
-    /// 1. **At rest, every layer's two halves are one row.** The cheapest thing
-    /// the merge can break, and the thing the whole table rests on.
     testWidgets('a layer\'s outline row and its lane bar share a row',
         (tester) async {
       final p = withComp();
@@ -123,13 +118,10 @@ void main() {
       for (final l in layers) {
         expectLevel(tester, l);
       }
-      // And they stack in the same order on both sides: the outline's tops
-      // ascend exactly as the lanes' do.
       final rowTops = [for (final l in layers) outlineRow(tester, l).top];
       final barTops = [for (final l in layers) laneBar(tester, l).top];
       expect(
           barTops, orderedEquals([for (final t in rowTops) closeTo(t, 0.5)]));
-      // Rows are stacked, not overlapping: consecutive tops differ by a row.
       final sorted = [...rowTops]..sort();
       for (var i = 1; i < sorted.length; i++) {
         expect(sorted[i] - sorted[i - 1], greaterThan(1),
@@ -159,29 +151,24 @@ void main() {
           .tap(find.byKey(ValueKey<String>('tl-twirl-${idOf(middle)}')));
       await tester.pumpAndSettle();
 
-      // The outline grew property rows.
       expect(find.text('Transform'), findsOneWidget,
           reason: 'the fold-out opened');
-      // The lanes grew the matching block of lane rows.
       final lanes = find.byKey(ValueKey<String>('tl-lanes-${idOf(middle)}'));
       expect(lanes, findsOneWidget,
           reason: 'the lane side has a block for the fold-out rows');
 
-      // Both sides pushed the layer below down, by the same distance.
       final shiftRow = outlineRow(tester, bottom).top - beforeRow;
       final shiftBar = laneBar(tester, bottom).top - beforeBar;
       expect(shiftRow, greaterThan(0), reason: 'the layer below moved down');
       expect(shiftBar, closeTo(shiftRow, 0.5),
           reason: 'and moved down by exactly as much on the lane side');
 
-      // The lane block sits in the gap the outline opened, to the pixel.
       final laneRect = tester.getRect(lanes);
       expect(laneRect.top, closeTo(laneBar(tester, middle).bottom, 0.5),
           reason: 'the lanes start where the layer\'s own bar ends');
       expect(laneRect.height, closeTo(shiftRow, 0.5),
           reason: 'the lanes are exactly as tall as the outline\'s new rows');
 
-      // And every layer is still level, opened one included.
       for (final l in [top, middle, bottom]) {
         expectLevel(tester, l, why: 'still level after the twirl');
       }
@@ -228,26 +215,20 @@ void main() {
           reason:
               'the spacer holds everything the view added below the bar row');
 
-      // The layer under it moved down, and its two halves moved together.
       expect(outlineRow(tester, below).top, greaterThan(beforeRow));
       expectLevel(tester, below, why: 'below an open Sequence view');
       expectLevel(tester, above, why: 'above an open Sequence view');
     });
 
-    /// 4. **Scrolling moves both halves together, from either side.** Today two
-    /// controllers mirror each other; after the merge there is one scrollable.
-    /// The claim is the same either way: the row you were looking at stays one
-    /// row.
     testWidgets('scrolling one side carries the other with it', (tester) async {
       final p = withComp();
       final layers = [
         for (var i = 0; i < 20; i++) p.comp.addSolidLayer(),
       ];
       p.uiState.model.refresh();
-      // Short enough that twenty layers do not fit.
       await mount(tester, p, height: 300);
 
-      final probe = layers.first; // the bottom-most row on screen
+      final probe = layers.first;
       final laneAt = laneBar(tester, layers.last).center;
       final outlineAt = outlineRow(tester, layers.last).center;
 
@@ -264,15 +245,11 @@ void main() {
           reason: 'a wheel over the outline scrolled the lanes too');
       expectLevel(tester, probe, why: 'after scrolling from the outline side');
 
-      // Everything still on screen is still level.
       for (final l in layers) {
         expectLevel(tester, l, why: 'after scrolling');
       }
     });
 
-    /// 5. **Horizontal scroll belongs to the lanes alone**, and the ruler and
-    /// cache bar ride with them because they share that viewport — while
-    /// neither follows the rows vertically.
     testWidgets(
         'scrolling sideways moves the lanes, the ruler and the cache'
         ' bar, and never the outline', (tester) async {
@@ -318,7 +295,6 @@ void main() {
           reason: 'so does the cache bar');
       expectLevel(tester, probe, why: 'after a sideways scroll');
 
-      // Now scroll the rows: the ruler and cache bar are pinned above them.
       await wheel(tester, laneAt, 120);
       expect(tester.getRect(ruler).top, closeTo(rulerBefore.top, 0.5),
           reason: 'the ruler does not scroll with the rows');
@@ -326,10 +302,6 @@ void main() {
           reason: 'nor does the cache bar');
     });
 
-    /// 6. **The cross-row overlays span the table.** The playhead and the
-    /// work-area wash are drawn over every row rather than inside any of them,
-    /// which is exactly the arrangement a row-per-layer tree has to be careful
-    /// to keep.
     testWidgets('the playhead spans the lanes and stands at the current time',
         (tester) async {
       final p = withComp();
@@ -361,8 +333,6 @@ void main() {
           closeTo(ruler.left + pad + span * (frames ~/ 2) / frames, 1.0),
           reason: 'half way along the comp is half way along the axis');
 
-      // And it runs the full height of the lane side: from the ruler down past
-      // the last layer's bar.
       final marker = playhead();
       expect(marker.top, lessThan(ruler.bottom),
           reason: 'the playhead starts up in the ruler');
@@ -405,8 +375,6 @@ void main() {
       expect(band.bottom, closeTo(ruler.bottom, 0.5),
           reason: 'and reaches its floor, which the cache bar is drawn on');
 
-      // Both handles reach — and are grabbable for — the whole ruler, which
-      // is the half of that earlier rule which stands.
       for (final end in const ['start', 'end']) {
         final handle =
             tester.getRect(find.byKey(ValueKey<String>('tl-work-$end')));
@@ -428,9 +396,6 @@ void main() {
       final t = LumitTheme.dark();
       expect((tab.decoration as BoxDecoration).color, workAreaHandleColour(t));
 
-      // Thicker, shorter, and still a rectangle (the owner's ruling
-      // from desktop testing): the drawn tab stops under the clock's labels
-      // while the grab above it stays the whole ruler's.
       final drawn = tester.getRect(tabFinder);
       expect(drawn.width, closeTo(workAreaHandleTabWidth, 0.01));
       expect(drawn.top, closeTo(ruler.top + workAreaHandleTopInset, 0.5),
@@ -454,8 +419,6 @@ void main() {
       expect(workAreaHandleColour(t), t.animated,
           reason: 'the band\'s own colour, not a new one');
 
-      // The cache bar is *on* the band's row, at the ruler's floor — not a
-      // strip of its own beneath it (§12A.1).
       final cache = tester.getRect(find.byType(TimelineCacheBar).first);
       expect(cache.bottom, closeTo(ruler.bottom, 0.5));
       expect(cache.top, greaterThanOrEqualTo(band.top),
@@ -473,10 +436,6 @@ void main() {
           reason: 'the playhead head is in the upper half, with the clock');
     });
 
-    /// 6c. **The axis pads its two ends, and both halves of the table share the
-    /// padding** (docs/15 §12A.1) — a handle on the first frame has room to be
-    /// drawn and grabbed, and the lanes stay lined up with the ruler while it
-    /// does.
     testWidgets('the axis pads both ends, ruler and lanes alike',
         (tester) async {
       final p = withComp();
@@ -497,9 +456,6 @@ void main() {
       final bar = tester
           .getRect(find.byKey(ValueKey<String>('tl-bar-body-${idOf(layer)}')));
 
-      // A layer running the whole comp starts where frame zero is, and frame
-      // zero is a padding in from the edge — in the lanes exactly as in the
-      // ruler, because there is one axis.
       expect(row.left, closeTo(ruler.left, 0.5),
           reason: 'the lane row and the ruler are the same width');
       expect(bar.left, closeTo(row.left + TimelineAxis.pad, 0.5),
@@ -507,8 +463,6 @@ void main() {
       expect(bar.right, closeTo(row.right - TimelineAxis.pad, 0.5),
           reason: 'and the far end is padded too');
 
-      // Which is what the padding is for: the work-area handle on frame zero
-      // is inside the ruler, whole, rather than half off its edge.
       final handle =
           tester.getRect(find.byKey(const ValueKey('tl-work-start')));
       expect(handle.left, greaterThanOrEqualTo(ruler.left - 0.5),
@@ -534,8 +488,6 @@ void main() {
 
       expect(rect.width, closeTo(ruler.width, 0.5),
           reason: 'the wash covers the whole time axis, not one row');
-      // It starts at the top of the rows and reaches past the last of them:
-      // this is a cross-row overlay, not a decoration on any single row.
       expect(rect.top, lessThan(laneBar(tester, layers.last).top + 0.5));
       expect(
           rect.bottom, greaterThan(laneBar(tester, layers.first).bottom - 0.5));
@@ -566,15 +518,11 @@ void main() {
       final painter = paint.painter! as WorkAreaGroundPainter;
       final area = tester.getRect(wash.first);
 
-      // Frame zero's x *is* the pad, in the area's own pixels — that is what
-      // `TimelineAxis.xOf(0)` returns at any zoom, so this needs no frame
-      // count to state: the band begins one pad in, and ends one pad short.
       expect(painter.compStartX, closeTo(TimelineAxis.pad, 0.01),
           reason: 'the band begins at frame zero, one pad in from the edge');
       expect(painter.compEndX, closeTo(area.width - TimelineAxis.pad, 0.01),
           reason: 'and ends at the comp\'s end, a pad short of the far edge');
 
-      // The clip is real, not just recorded: nothing is painted in the pad.
       expect(
           wash.first,
           paints
@@ -626,7 +574,6 @@ void main() {
         top.internallayerId
       ], reason: 'the dragged layer landed at the bottom of the stack');
 
-      // And the moved row is a row again: both halves level, in its new place.
       for (final l in [top, middle, bottom]) {
         expectLevel(tester, l, why: 'after a reorder drag');
       }
@@ -651,8 +598,6 @@ void main() {
       final cache = tester.getRect(find.byType(TimelineCacheBar).first);
       expect(ruler.height, closeTo(d.ruler, 0.5),
           reason: 'the ruler is the density\'s, cache bar counted inside it');
-      // And the cache bar is *on* the ruler's floor, not a strip beneath it
-      // (§12A.1): the work-area band is what it is drawn over.
       expect(cache.bottom, closeTo(ruler.bottom, 0.5),
           reason: 'the cache bar sits on the ruler floor, inside it');
 
@@ -681,8 +626,6 @@ void main() {
       expect(ruler.top - strip.top, closeTo(TimelineNavigator.band, 0.5),
           reason: 'and the ruler starts one band down, facing the rest of '
               'the toolbar row and the column header');
-      // And they are the two the density states, at the chrome row numbers:
-      // the row that is aimed at all day is the taller of the pair.
       expect(
           tester
                   .getRect(find.byKey(const ValueKey('tl-view-lanes')))
@@ -699,13 +642,10 @@ void main() {
       expect(laneBar(tester, layer).height, closeTo(d.laneRow, 0.5),
           reason: 'and so is its bar');
 
-      // The cache bar's own 3, at the bottom of the ruler's lower row.
       expect(cache.height, closeTo(TimelineCacheBar.height, 0.5));
       expect(TimelineCacheBar.height, 3,
           reason: 'the cache bar is the mockup\'s 3px stripe');
 
-      // The panel header strip: the kicker, the comp tabs and Export, all at
-      // 22 (§12A.6).
       expect(tester.getRect(find.byType(CompTabsFrb)).height, closeTo(22, 0.5),
           reason: 'the panel header strip is 22');
       expect(tester.getRect(find.byKey(const ValueKey('tl-export'))).height,
@@ -713,10 +653,6 @@ void main() {
           reason: 'and the filled Export action fits inside it');
     });
 
-    /// 10. **The pieces inside a row are the mockup's, not approximations of
-    /// them**: a bar is 16 whatever the row measures and centred in it,
-    /// the layer's label colour is a 6px dot, and the number beside it stands
-    /// in an 18px column.
     testWidgets('a lane row draws a 16px bar centred in it', (tester) async {
       final p = withComp();
       final layer = p.comp.addSolidLayer();
@@ -732,7 +668,6 @@ void main() {
       expect(bar.center.dy, closeTo(row.center.dy, 0.5),
           reason: 'and is centred in the row, ground above and below');
 
-      // The label colour is a bullet, not a swatch.
       final dot = tester.getRect(find.descendant(
         of: find.byKey(ValueKey<String>('tl-label-${idOf(layer)}')),
         matching: find.byType(DecoratedBox),
@@ -794,10 +729,6 @@ void main() {
         expect(y + 0.5, closeTo((y + 0.5).roundToDouble(), 1e-9),
             reason: 'the lane seams are crisp, and always were');
       }
-      // The outline side, at fractions a wheel fling really stops on. Its
-      // seams travel with the rows — that is what the phase is for — but they
-      // land on the pixel grid exactly as the lanes' do, which is the parity
-      // the report was about.
       for (final scroll in [0.0, 0.3, 7.5, 11.9, 22.4]) {
         final outline =
             rowSeamOffsets(step: step, height: 200, phase: -(scroll % step));
@@ -807,8 +738,6 @@ void main() {
               reason: 'a seam at scroll $scroll must not land on a fraction');
         }
       }
-      // And a blank leaves its middle unruled while keeping the seams that
-      // bound it.
       final blanked =
           rowSeamOffsets(step: step, height: 200, blanks: [(23, 92)]);
       expect(blanked.where((y) => (y - 45.5).abs() < 0.01), isEmpty);
@@ -830,11 +759,8 @@ void main() {
     test('the two halves rule the same pixel at any scroll offset', () {
       const step = 23.0;
       for (final scroll in [0.0, 7.5, 10.4, 22.9, 61.37, 287.3]) {
-        // The outline overlay: panel-pinned, phased, origin zero.
         final outline = rowSeamOffsets(
             step: step, height: 200, phase: -(scroll % step));
-        // The lane painter: content-riding, translated by the scroll on its
-        // way to the screen, rounding against its device origin.
         final lanes = [
           for (final y in rowSeamOffsets(
               step: step, height: 200 + scroll, origin: -(scroll % 1.0)))
@@ -849,10 +775,6 @@ void main() {
       }
     });
 
-    /// 10c. **The pickers inside a row wear the in-row face** (§12A.6's
-    /// table): matte, blend and parent are cells in a layer's row, not dialog
-    /// controls, and the mockup draws all three at the shorter face with a
-    /// 10px label.
     testWidgets('the matte, blend and parent pickers are the density\'s',
         (tester) async {
       final p = withComp();
@@ -943,8 +865,6 @@ void main() {
 
       expect(well.left - counter.right, closeTo(outlineGap, 0.5),
           reason: 'the gap after the frame counter');
-      // A search box keeps to a field's width rather than filling the row,
-      // so the mode tabs stand clear of it by at least the gap.
       expect(well.width, lessThanOrEqualTo(220.5),
           reason: 'the well is a box, not a bar');
       expect(tabs.left - well.right, greaterThanOrEqualTo(outlineGap - 0.5),
@@ -953,12 +873,6 @@ void main() {
           reason: 'the same number the compose boxes keep between them');
     });
 
-    /// 10d. **Compact is the same panel, a pixel tighter** (§12A.6's
-    /// second column). The setting reaches the rows that matter — the layer
-    /// rows and the panel's own chrome — and it reaches them through the
-    /// theme, so the outline and the lanes move together: a table whose two
-    /// halves agreed at one density and not at the other would be worse than
-    /// no setting at all.
     testWidgets('Compact draws the table\'s tighter column', (tester) async {
       final p = withComp();
       final layer = p.comp.addSolidLayer();
@@ -970,16 +884,10 @@ void main() {
       final row = outlineRow(tester, layer);
       expect(row.height, closeTo(22, 0.5), reason: 'a lane row is 22');
       expect(ruler.height, closeTo(36, 0.5), reason: 'the ruler is 36');
-      // The ruler is still exactly the two chrome rows the outline spends
-      // opposite it, which is what holds the halves level at either density —
-      // and under Compact those two rows are 18 apiece, exactly as they were
-      // before Regular's grew.
       expect(row.top - ruler.top, closeTo(36, 0.5),
           reason: 'two 18px chrome rows stand above the first layer row');
       expect(d.timelineChromeRow, 18);
       expect(d.timelineHeaderRow, 18);
-      // The toolbar row carries the navigator's band under Compact too: the
-      // strip is no denser there, so the grown row is not either.
       expect(tester.getRect(find.byKey(const ValueKey('tl-toolbar'))).height,
           closeTo(d.timelineChromeRow + TimelineNavigator.band, 0.5),
           reason: 'the timecode row fills the band beside the strip');
@@ -1001,15 +909,9 @@ void main() {
             reason: 'an in-row picker is 16 under Compact');
       }
 
-      // And the halves still meet, which is the whole point of the derivation.
       expectLevel(tester, layer, why: 'under Compact');
     });
 
-    /// 10d-bis. **The identity cluster is the drawing's**: twirl,
-    /// then the layer number, then the label dot, then the name — and 8 px of
-    /// air between each of the three marks, where the outline used to run the
-    /// twirl hard against the dot. Measured as edges rather than as widget
-    /// classes, because the claim is about what a reader sees in what order.
     testWidgets(
         'the outline reads twirl, number, dot, name at the drawing\'s '
         'gaps', (tester) async {
@@ -1073,8 +975,6 @@ void main() {
           reason: 'the three faces together are narrower than the 334 that '
               'shipped');
 
-      // **The faces themselves are 84 each**: a dropdown never swells past
-      // the width it is given.
       for (final (cell, width) in [
         ('matte', matteFaceWidth),
         ('blend', blendCellWidth),
@@ -1093,11 +993,6 @@ void main() {
           reason: 'and the group can still be dragged narrower than it starts');
     });
 
-    /// 10d-sexies. **The matte column widens for the toggles, and only while a
-    /// matte is set** (owner). With one set, the two mode toggles have
-    /// to fit between the matte face and the blend column — on the row that
-    /// has the matte *and* on the rows that do not, or the blend column stops
-    /// being a column.
     testWidgets('a matte set carries its toggles without crowding the blend',
         (tester) async {
       final p = withComp();
@@ -1123,8 +1018,6 @@ void main() {
                 'so the two rows keep the same columns');
       }
 
-      // The toggles themselves, on the row that has them: inside the room, and
-      // clear of both neighbours.
       final id = gated.internallayerId;
       expect(at('tl-matte-luma-$id').left,
           greaterThanOrEqualTo(at('tl-matte-$id').right - 0.5),
@@ -1167,14 +1060,9 @@ void main() {
       expect(switchCellWidth - iconSize, closeTo(6, 0.5),
           reason: 'and the glyphs inside a cluster stand at the drawing\'s 6');
 
-      // Across the row: the two cluster seams a solid layer draws cells on
-      // either side of, and then picker to picker.
-      // The column opens with shy and guide put away, so lock is its last
-      // cell and the mark the identity cluster stands a gap away from.
       expect(at('twirl').left - at('locked').right, closeTo(outlineGap, 0.5),
           reason: 'the seam between the switches and the identity cluster is '
               'one gap, where it had been 7');
-      // Modes opens on fx, 3D and motion blur, so motion blur ends it.
       expect(at('matte').left - at('mb').right, closeTo(outlineGap, 0.5),
           reason: 'as is the seam between the modes and the pickers — the '
               'name\'s own trailing 4 is gone with it');
@@ -1216,8 +1104,6 @@ void main() {
       await tester.tap(find.text('Transform'));
       await tester.pumpAndSettle();
 
-      // The lane is there and drawing keys — the size claim below is about
-      // the constant both modes now share.
       expect(
           find.byKey(const ValueKey<String>('tl-lane-diamonds')), findsWidgets,
           reason: 'a twirled-open property draws its own lane of keys');
@@ -1233,17 +1119,11 @@ void main() {
           reason: 'and the lane it is drawn in has the room for it');
     });
 
-    /// 10d-quinquies. **The mark is split at its vertical centre**:
-    /// each half is its own side's shape, all three shapes stand the same
-    /// height, and a bezier side is the **hourglass** — two triangles tip to
-    /// tip — which supersedes the rounded shape Keys mode first drew.
     test('a key\'s two halves are drawn from their own sides', () {
       const x = 100.0, mid = 10.0, half = laneKeyHalf;
       Path pathOf(KeyShape s, {required bool left}) =>
           keyHalfPath(s, x, mid, half, left: left);
 
-      // One height, every shape, either side — the whole of "all at one
-      // height", and the thing that keeps a mixed lane reading as one row.
       for (final shape in KeyShape.values) {
         for (final left in [true, false]) {
           final box = pathOf(shape, left: left).getBounds();
@@ -1254,8 +1134,6 @@ void main() {
         }
       }
 
-      // The diamond comes to a point at top and bottom; the square does not.
-      // Sampled a whisker inside the top edge, on the half's own side.
       final justInside = Offset(x - half + 0.5, mid - half + 0.5);
       expect(pathOf(KeyShape.diamond, left: true).contains(justInside), isFalse,
           reason: 'a diamond is a point at the top, so its corner is empty');
@@ -1265,9 +1143,6 @@ void main() {
           isTrue,
           reason: 'a square is at full width there');
 
-      // The hourglass: wide at top and bottom, pinched to nothing at the
-      // centre — which is what "two triangles tip to tip" means and what a
-      // circle could never say.
       final hourglass = pathOf(KeyShape.hourglass, left: true);
       expect(hourglass.contains(Offset(x - 1, mid - half + 0.5)), isTrue,
           reason: 'wide where the value is furthest from the key');
@@ -1298,9 +1173,6 @@ void main() {
               into == out && into == KeyShape.hourglass ? 2 : 1,
               reason: '$pair is painted in one path with no interior edge');
 
-          // Nothing runs *along* the centre line: the contour may cross it at
-          // top, bottom or an hourglass's pinch, but a vertical edge sitting
-          // on x is exactly the seam this replaced.
           for (final contour in contours) {
             for (var d = 0.0; d < contour.length; d += 0.05) {
               final t = contour.getTangentForOffset(d)!;
@@ -1311,8 +1183,6 @@ void main() {
             }
           }
 
-          // And the union is the two halves and nothing else: same box, and
-          // the same answer as its own half at every probe either side.
           final left = keyHalfPath(into, x, mid, half, left: true);
           final right = keyHalfPath(out, x, mid, half, left: false);
           expect(path.getBounds(),
@@ -1397,8 +1267,6 @@ void main() {
       await mount(tester, p, density: DensityTokens.compact);
       const d = DensityTokens.compact;
 
-      // Twirled open onto Transform, which is how a keyed property's row is
-      // reached (the dope sheet used to open every layer for you).
       await openFold(tester, layer.internallayerId, group: 'Transform');
       await tester.pumpAndSettle();
 
@@ -1419,22 +1287,15 @@ void main() {
           reason: 'the two halves are level in Compact too');
     });
 
-    /// 11. **A switch column drags, and what it buys is cells**, moving an
-    /// earlier pinned width. Both columns are rows of icons, so there is no
-    /// stretching to be had — but narrowing one puts its least-used marks away
-    /// in a named order, and dragging it back brings them out again.
     testWidgets('a narrowed switch column sheds its marks in order',
         (tester) async {
       final p = withComp();
       final layer = p.comp.addSolidLayer();
-      // The fx mark is only drawn on a row with effects to bypass.
       layer.addEffect(name: 'blur');
       p.uiState.model.refresh();
       await mount(tester, p);
       final id = layer.internallayerId;
 
-      // Fully open, both columns are exactly their cells: six A/V marks (guide
-      // is the sixth) and six modes (collapse has one of its own).
       expect(switchesGroupWidth, 6 * switchCellWidth);
       expect(renderGroupWidth, 6 * switchCellWidth);
 
@@ -1446,8 +1307,6 @@ void main() {
           findsOneWidget,
           reason: 'the seam is a handle now, not only a rule');
 
-      // It opens with shy and the grid mark put away, and a drag brings them
-      // out.
       expect(drawn('guide'), isFalse);
       expect(drawn('shy'), isFalse);
       expect(drawn('locked'), isTrue);
@@ -1457,8 +1316,6 @@ void main() {
       expect(drawn('guide'), isTrue);
       expect(drawn('shy'), isTrue);
 
-      // Two cells' worth to the left: the grid mark and shy go, in that order,
-      // and nothing else does.
       await tester.drag(seam, const Offset(-2 * switchCellWidth, 0));
       await tester.pump();
       expect(drawn('guide'), isFalse, reason: 'the grid mark goes first');
@@ -1467,7 +1324,6 @@ void main() {
       expect(drawn('visible'), isTrue,
           reason: 'and the eye is never in the ladder');
 
-      // All the way in: the eye and the speaker are the floor.
       await tester.drag(seam, const Offset(-200, 0));
       await tester.pump();
       expect(drawn('locked'), isFalse);
@@ -1475,13 +1331,10 @@ void main() {
       expect(drawn('visible'), isTrue,
           reason: 'a column that cannot blind a layer is not worth keeping');
 
-      // And back out again — the marks return in the order they left.
       await tester.drag(seam, const Offset(400, 0));
       await tester.pump();
       expect(drawn('guide'), isTrue, reason: 'the whole set comes back');
 
-      // Modes runs its own ladder from the right: collapse, then flow, then
-      // adjustment, leaving fx, 3D and motion blur. It opens on those three.
       final modes = find.byKey(const ValueKey('tl-seam-render'));
       expect(drawn('adjust'), isFalse, reason: 'put away to begin with');
       expect(drawn('mb'), isTrue);
@@ -1496,10 +1349,6 @@ void main() {
       expect(drawn('3d'), isTrue);
     });
 
-    /// 11b. **The rows redraw under the drag, not on release**: the
-    /// Layers column's names widen with the hand. The seam used to stage its
-    /// whole gesture and tell the panel once, on release, because a live drag
-    /// rebuilt the entire Timeline per pointer move.
     testWidgets('the Layers column updates the rows live during a drag',
         (tester) async {
       final p = withComp();
@@ -1512,7 +1361,6 @@ void main() {
           tester.getSize(find.byKey(ValueKey<String>('tl-name-$id'))).width;
       final before = nameWidth();
 
-      // Mid-gesture: the pointer is still down.
       final gesture = await tester.startGesture(
           tester.getCenter(find.byKey(const ValueKey('tl-seam-identity'))));
       await gesture.moveBy(const Offset(60, 0));
@@ -1520,15 +1368,11 @@ void main() {
       expect(nameWidth(), closeTo(before + 60, 1),
           reason: 'the row follows the hand');
 
-      // And letting go keeps it, rather than applying it a second time.
       await gesture.up();
       await tester.pump();
       expect(nameWidth(), closeTo(before + 60, 1));
     });
 
-    /// 12. **The comp-wide switches live in the bottom bar** (§12A.1), after
-    /// the column toggles and behind a divider — and every command they carry
-    /// is the one it always was.
     testWidgets('shy, motion blur and the overflow sit in the bottom bar',
         (tester) async {
       final p = withComp();
@@ -1562,8 +1406,6 @@ void main() {
       p.uiState.model.refresh();
       await mount(tester, p, height: 300);
 
-      // Scroll well into the stack, then to the bottom — the offsets a
-      // relayout has something to clamp against.
       final laneAt = laneBar(tester, layers.last).center;
       for (var i = 0; i < 4; i++) {
         await wheel(tester, laneAt, 120);
@@ -1582,16 +1424,12 @@ void main() {
         expect(seen, greaterThan(0), reason: 'some rows are on screen $why');
       }
 
-      // A divider drag passes through many heights, fractional ones included;
-      // taller frees scroll room, shorter takes it away, and the last step
-      // returns to where it began.
       for (final h in [340.0, 260.0, 421.5, 287.3, 300.0]) {
         await mount(tester, p, height: h);
         await tester.pump();
         levelWherever('after a resize to $h');
       }
 
-      // And the table still scrolls as one afterwards.
       final probe =
           layers.firstWhere((l) => find
               .byKey(ValueKey<String>('tl-row-${idOf(l)}'))
@@ -1601,8 +1439,6 @@ void main() {
       levelWherever('after scrolling again');
     });
 
-    /// 12. **Coming back from the graph keeps the scroll.** The lanes are
-    /// rebuilt on the way back, and they used to come back at the top.
     testWidgets('a trip to the graph and back keeps the rows where they were',
         (tester) async {
       final p = withComp();

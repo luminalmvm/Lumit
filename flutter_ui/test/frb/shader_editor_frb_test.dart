@@ -19,7 +19,6 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 
 import 'frb_test_support.dart';
 
-/// A shader that compiles and declares one row of its own.
 const String _good = r"""
 struct Params {
     /// @slider(0, 200) @default(25) @unit(px) Ripple radius
@@ -31,7 +30,6 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
 }
 """;
 
-/// The same shader with the third line calling something that does not exist.
 const String _broken = r"""
 fn shade(uv: vec2<f32>) -> vec4<f32> {
     let a = 1.0;
@@ -78,7 +76,6 @@ void main() {
             ({LumitState state, LumitUiState uiState, LayerReference layer}) p) =>
         p.layer.getEffects().single.shaderSource();
 
-    /// Open the editor the way a person does: the effect's own Action row.
     Future<void> openEditor(
       WidgetTester tester,
       ({LumitState state, LumitUiState uiState, LayerReference layer}) p,
@@ -88,7 +85,6 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    /// Type into the code well and let the debounce ask the engine.
     Future<void> type(WidgetTester tester, String source) async {
       await tester.enterText(
           find.byKey(const ValueKey<String>('shader-editor-code')), source);
@@ -108,7 +104,6 @@ void main() {
           reason: 'nothing is written yet, so no row exists yet');
 
       await type(tester, _good);
-      // The line numbers count the lines that are there.
       expect(find.text('1\n2\n3\n4\n5\n6\n7\n8\n9'), findsOneWidget);
 
       await tester.tap(
@@ -175,8 +170,6 @@ void main() {
       await tester.tap(find.byKey(ValueKey<String>(
           'fx-action-${p.layer.getEffects().single.id()}-edit')));
       await tester.pumpAndSettle();
-      // The window is already open from the panel's own road; drive the one
-      // under test directly so the two callbacks can be counted.
       await tester.tap(find.byKey(const ValueKey<String>('shader-editor-cancel')));
       await tester.pumpAndSettle();
       unawaited(showShaderEditor(
@@ -199,7 +192,6 @@ void main() {
       expect(drawn.length, 1, reason: 'the settle asks once, for the last text');
       expect(drawn.single.endsWith('// 9'), isTrue);
 
-      // Broken text compiles to nothing, so nothing is drawn with it.
       await tester.enterText(well, 'fn shade( {');
       await tester.pump(const Duration(milliseconds: 500));
       expect(drawn.length, 1,
@@ -209,10 +201,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    // Without the built library there is nothing to test against; the harness
-    // throws with the command to run.
   }, skip: !engineAvailable);
 }
 
-/// The confirmation line, read the way the widget reads it.
 final String l10nShaderCompiles = 'The shader compiles';

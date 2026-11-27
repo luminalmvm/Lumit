@@ -1206,8 +1206,6 @@ class AnimatorHeading extends StatelessWidget {
         return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Add ▸ Property or Selector, as After Effects' Add beside an
-          // animator.
           RowButton(
             key: ValueKey<String>('text-animator-add-to-$index'),
             label: l10n.shapeOpAdd,

@@ -25,12 +25,10 @@ use crate::draw::{CompLayerDraw, DrawSource, GraphDraw, LayerInputDraw, PlaneDra
 
 pub(super) use follow::split;
 
-/// The layer and the moment it is wrapped at.
 pub(super) struct Frame<'a> {
     pub doc: &'a Arc<Document>,
     pub comp: &'a Composition,
     pub layer: &'a Layer,
-    /// Where its time effect sits in its stack, and how it reads.
     pub split: (usize, Follow),
     /// The comp time and the frame's own.
     pub t: (f64, f64),
@@ -38,8 +36,6 @@ pub(super) struct Frame<'a> {
     pub lt: (f64, f64, f64),
 }
 
-/// What the wrapped stack reads besides its ops, made by the walk's own
-/// helpers.
 pub(super) struct Extras {
     pub colour_tables: Vec<Option<crate::colour::TableRequest>>,
     pub dof_inputs: Vec<LayerInputDraw>,
@@ -122,7 +118,6 @@ pub(super) fn wrap(
             None,
         )
     };
-    // A hold draws the whole layer at the time it holds, transform and all.
     let now = match how {
         Follow::Hold => follow::held_time(layer, t),
         Follow::Neighbours | Follow::Moments => t,
@@ -187,7 +182,6 @@ pub(super) fn wrap(
         source: DrawSource::Nested {
             width: comp.width,
             height: comp.height,
-            // Transparent where the layer is not, as a Precomp's picture is.
             background: [0.0, 0.0, 0.0, 0.0],
             draws: members,
             camera: Some(crate::track::camera_pose(doc, comp, t)),
@@ -197,7 +191,6 @@ pub(super) fn wrap(
             flow: None,
         },
         natural_size: (w, h),
-        // Comp-sized and drawn where the layer already landed.
         position: (w * 0.5, h * 0.5),
         anchor: (w * 0.5, h * 0.5),
         scale: (100.0, 100.0),

@@ -33,13 +33,10 @@ typedef AssetDownloader = Future<void> Function(
   required bool Function() cancelled,
 });
 
-/// How long to wait for the other end to say anything at all.
 const Duration _connectTimeout = Duration(seconds: 10);
 
-/// A file that is not the length it was published as.
 const String verifyIncomplete = 'incomplete';
 
-/// A file whose digest is not the one that was published.
 const String verifyChecksum = 'checksum';
 
 /// Read [url] as text, asking for [accept] where the server offers more than

@@ -1,19 +1,13 @@
-//! More than one file from one export: the files written beside the chosen
-//! one, from the same rendered frames. Runs on the export's thread.
-
 use std::path::{Path, PathBuf};
 
 use super::captions::CaptionsOut;
 use super::format::ExportFormat;
 use super::{Bitrate, Channels, ColourSpace, ExportSpec};
 
-/// The most files one export writes beside its own.
 pub const MOST_ALSO: usize = 3;
 
-/// One more file an export writes beside its own, from the same frames.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct AlsoWrite {
-    /// What it is written as: a video or a still sequence.
     pub format: ExportFormat,
     /// Added to the chosen file's name, before its extension.
     pub suffix: String,
@@ -115,9 +109,6 @@ mod tests {
 
     const PNG: ExportFormat = ExportFormat::Images(ImageFormat::Png);
 
-    /// One export writes an mp4 and a PNG sequence from the same frames: as
-    /// many frames in the one as stills in the other, and the stills the same
-    /// bytes a PNG export alone writes.
     #[test]
     fn one_export_writes_a_video_and_stills_from_the_same_frames() {
         let (doc, comp) = solid_doc(32, 16);
@@ -161,8 +152,6 @@ mod tests {
         }
     }
 
-    /// A file that cannot be opened stops the export before its first frame,
-    /// and takes the files already opened with it.
     #[test]
     fn an_extra_that_cannot_open_leaves_nothing_behind() {
         let (doc, comp) = solid_doc(32, 16);

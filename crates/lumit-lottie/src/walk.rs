@@ -29,19 +29,19 @@ use uuid::Uuid;
 use crate::check::{arg, Place, Report};
 use crate::time::Timebase;
 
-/// What a layer is in the output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Role {
-    /// Drawn as itself.
     Drawn,
     /// Not drawn; kept, hidden, so the layers parented to it follow it.
     ParentOnly,
     /// A copy of a matte source, drawn only through the layer below it.
     /// `masks` and `effects` say what of the source the matte reads.
-    MatteCopy { masks: bool, effects: bool },
+    MatteCopy {
+        masks: bool,
+        effects: bool,
+    },
 }
 
-/// The matte a layer is drawn through.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Matte {
     /// The number of the matte copy directly above.
@@ -50,13 +50,11 @@ pub struct Matte {
     pub inverted: bool,
 }
 
-/// One layer as it goes out.
 #[derive(Debug, Clone)]
 pub struct Out<'a> {
     pub layer: &'a Layer,
     /// Its number, from 1, unique in its comp (Lottie `ind`).
     pub ind: u32,
-    /// Its parent's number.
     pub parent: Option<u32>,
     pub role: Role,
     pub matte: Option<Matte>,
@@ -66,8 +64,6 @@ pub struct Out<'a> {
     pub reach: (f64, f64),
 }
 
-/// The layers of `comp` that go out, top of the stack first, with each matte
-/// copy directly above the layer it mattes.
 pub fn walk<'a>(
     doc: &Document,
     comp: &'a Composition,
@@ -141,7 +137,6 @@ pub fn walk<'a>(
         }
     }
 
-    // Every layer something going out is parented to, all the way up.
     let mut needed = drawn.clone();
     let mut stack: Vec<usize> = (0..comp.layers.len())
         .filter(|i| drawn.get(*i).copied().unwrap_or(false))
@@ -259,21 +254,17 @@ pub fn walk<'a>(
     out
 }
 
-/// The part of the span written that `layer` shows in.
 fn span(layer: &Layer, tb: &Timebase) -> (f64, f64) {
     let from = layer.in_point.0.to_f64().max(tb.start);
     (from, layer.out_point.0.to_f64().min(tb.end).max(from))
 }
 
-/// Whether `layer` shows at any moment of the span written.
 fn overlaps(layer: &Layer, tb: &Timebase) -> bool {
     layer.in_point.0.to_f64() < tb.end && layer.out_point.0.to_f64() > tb.start
 }
 
-/// What a Set matte effect comes across as.
 #[derive(Debug, Clone, Copy)]
 pub enum SetMatte<'a> {
-    /// No matte layer is set, so it does nothing in Lumit either.
     Unset,
     /// The layer's alpha multiplied by `source`'s alpha, or by its opposite
     /// when `inverted`. Lumit reads the source's own pixels, without its
@@ -286,7 +277,6 @@ pub enum SetMatte<'a> {
         from: [f64; 4],
         to: [f64; 4],
     },
-    /// No file draws it as Lumit does: the reason id.
     LeftOut(&'static str),
 }
 
@@ -356,7 +346,6 @@ fn own_box(doc: &Document, layer: &Layer) -> Option<[f64; 4]> {
     }
 }
 
-/// The English of a Set matte's reason id, for the effect called `label`.
 #[must_use]
 pub fn set_matte_english(reason: &str, label: &str) -> String {
     match reason {
@@ -366,8 +355,6 @@ pub fn set_matte_english(reason: &str, label: &str) -> String {
     }
 }
 
-/// Why `layer`'s kind can't be drawn by a player, when it can't: the reason
-/// id and its English.
 #[must_use]
 pub fn kind_left_out(doc: &Document, layer: &Layer) -> Option<(&'static str, &'static str)> {
     if layer.is_adjustment() {

@@ -32,30 +32,21 @@ use uuid::Uuid;
 
 use super::{apply_render_overrides, frame::Span, write::Sink, ExportSpec};
 
-/// What an export does with the comp's own caption layers.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub enum CaptionsOut {
-    /// Drawn into the picture like any Text layer.
     #[default]
     Burn,
-    /// Left out of the picture and written beside the file.
     File(SubtitleFormat),
-    /// Left out of the picture and carried inside the file as subtitle
-    /// streams, where the format can hold them ([`super::FormatCaps::subtitles`]).
     Embed,
 }
 
-/// The kind of caption file written beside an export.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, serde::Serialize, serde::Deserialize)]
 pub enum SubtitleFormat {
-    /// SubRip, `.srt`.
     Srt,
-    /// WebVTT, `.vtt`.
     Vtt,
 }
 
 impl SubtitleFormat {
-    /// The file extension it is written with.
     #[must_use]
     pub fn extension(self) -> &'static str {
         match self {
@@ -65,7 +56,6 @@ impl SubtitleFormat {
     }
 }
 
-/// The captions `layer` carries, when it is a caption layer.
 fn captions_of(layer: &Layer) -> Option<&Arc<Captions>> {
     match &layer.kind {
         LayerKind::Text { document } => document.captions.as_ref(),
@@ -73,13 +63,11 @@ fn captions_of(layer: &Layer) -> Option<&Arc<Captions>> {
     }
 }
 
-/// Whether `comp` has a caption layer of its own.
 #[must_use]
 pub fn has_caption_layer(comp: &Composition) -> bool {
     comp.layers.iter().any(|l| captions_of(l).is_some())
 }
 
-/// Refuse captions carried inside a file that cannot hold them.
 pub(super) fn check(spec: &ExportSpec) -> Result<(), String> {
     if spec.captions == CaptionsOut::Embed && !spec.format.caps().subtitles {
         return Err(format!("{} cannot carry captions", spec.format.extension()));
@@ -112,7 +100,6 @@ pub(super) fn leave_out(
     Some(Arc::new(copy))
 }
 
-/// One caption layer as the export writes it.
 struct Stream {
     language: String,
     cues: Vec<Cue>,
@@ -277,7 +264,6 @@ pub(super) fn write_files(
 ) -> Result<Vec<PathBuf>, String> {
     let mut written: Vec<PathBuf> = Vec::new();
     let files = files(doc, comp, out, spec, stop);
-    // Cancelled while they were read: nothing is written.
     if stop() {
         return Ok(written);
     }
@@ -293,11 +279,8 @@ pub(super) fn write_files(
     Ok(written)
 }
 
-/// The caption layers an export carries inside its video file, and how far
-/// into each it has written.
 pub(super) struct Embedded {
     streams: Vec<Stream>,
-    /// The next cue of each stream to write.
     next: Vec<usize>,
 }
 
@@ -319,7 +302,6 @@ impl Embedded {
         Self { streams, next }
     }
 
-    /// Each stream's language, in order.
     pub(super) fn languages(&self) -> Vec<String> {
         self.streams.iter().map(|s| s.language.clone()).collect()
     }
@@ -350,8 +332,6 @@ mod tests {
     use crate::export::{start, ExportEvent, ExportFormat};
     use lumit_core::captions::cues::CueWord;
 
-    /// A 32 x 16 solid comp at 30 fps with a caption layer over it saying
-    /// "Hello" from one second to two, and the id of that layer.
     fn caption_doc() -> (Arc<Document>, Uuid, Uuid) {
         let (doc, comp_id) = super::super::tests::solid_doc(32, 16);
         let mut doc = Document::clone(&doc);
@@ -407,8 +387,6 @@ mod tests {
         (Arc::new(doc), comp_id, caption_id)
     }
 
-    /// Run an export through to its end, or `None` on a machine with no
-    /// graphics card.
     fn export(doc: &Arc<Document>, comp: Uuid, out: &Path, spec: ExportSpec) -> Option<()> {
         let handle = start(Arc::clone(doc), comp, Vec::new(), out.to_path_buf(), spec);
         for event in handle.events.iter() {

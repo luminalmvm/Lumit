@@ -1,6 +1,3 @@
-//! The undo history as a list: every step, where the document stands on it,
-//! and the jump to another point, which is what the History window reads.
-
 use super::{DocumentStore, HistoryEntry};
 use crate::ops::{Op, OpError};
 use std::borrow::Cow;
@@ -50,8 +47,6 @@ impl DocumentStore {
             .collect()
     }
 
-    /// How many of [`Self::history`]'s steps are applied — where the document
-    /// stands on the road.
     #[must_use]
     pub fn applied_steps(&self) -> usize {
         self.journal.lock().undo.len()
@@ -106,6 +101,20 @@ impl DocumentStore {
 
     pub fn can_undo(&self) -> bool {
         !self.journal.lock().undo.is_empty()
+    }
+
+    /// Whether an undo now takes back what made `revision` the current one:
+    /// an edit or a redo made here, not an undo or someone else's edit.
+    #[must_use]
+    pub fn undo_takes_back(&self, revision: u64) -> bool {
+        let journal = self.journal.lock();
+        self.revision() == revision
+            && !journal.undo.is_empty()
+            && journal.redo.last().is_none_or(|e| e.at != revision)
+            && journal
+                .shared
+                .as_ref()
+                .is_none_or(|s| s.touched.values().all(|&at| at != revision))
     }
 
     pub fn can_redo(&self) -> bool {

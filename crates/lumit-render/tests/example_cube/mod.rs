@@ -1,8 +1,3 @@
-//! The LUT the LUT effect's picture is graded with.
-
-/// A small 3D LUT for the LUT effect's picture: cool shadows, warm highlights,
-/// which is the grade everyone recognises and the one a `.cube` is usually
-/// bought to apply. Written as text, because a `.cube` is text.
 pub(super) fn write_example_cube(path: &std::path::Path) -> std::io::Result<()> {
     const N: usize = 17;
     let mut out = String::from(
@@ -20,7 +15,6 @@ LUT_3D_SIZE 17
                     b as f32 / (N - 1) as f32,
                 );
                 let luma = 0.2126 * rf + 0.7152 * gf + 0.0722 * bf;
-                // Warmth rises with brightness, coolness falls away with it.
                 let warm = luma * luma;
                 let cool = (1.0 - luma) * (1.0 - luma);
                 let clamp = |v: f32| v.clamp(0.0, 1.0);

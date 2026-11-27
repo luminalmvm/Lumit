@@ -18,7 +18,6 @@ pub(crate) const APP_NAME: &str = "Lumit";
 /// the Hub's usual 32 counts a turn.
 const SHUTTLE_STEP: i32 = 8;
 
-/// One connection's worth of conversation.
 #[derive(Default)]
 pub(crate) struct Exchange {
     /// What each display was last told, so only a change is sent.
@@ -124,8 +123,6 @@ impl Exchange {
         None
     }
 
-    /// Tell the panels whatever in `shown` has changed since they were last
-    /// told.
     pub(crate) fn refresh(&mut self, shown: &Shown, out: &mut Vec<ToHub>) {
         for p in table::PARAMS {
             let (value, _) = value_of(p, shown);
@@ -192,7 +189,6 @@ fn item(m: &table::Menu, shown: &Shown) -> (&'static str, bool) {
     (text, place == 0)
 }
 
-/// The status lines: the shot, then its node.
 fn status_lines(shown: &Shown) -> Vec<String> {
     let mut lines = vec![shown.shot.clone()];
     if let Some(node) = shown.values.get("node") {
@@ -213,7 +209,6 @@ fn value_of(p: &table::Param, shown: &Shown) -> (f32, bool) {
     (value, (value - p.default).abs() < p.step / 2.0)
 }
 
-/// A panel's name from its type code, as Tangent names it.
 pub(crate) fn panel_name(kind: u32) -> &'static str {
     match kind {
         0x03 => "CP200-BK",

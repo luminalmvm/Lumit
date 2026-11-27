@@ -35,7 +35,6 @@ import 'shots_common.dart';
 import 'package:lumit_flutter/state/platform.dart'
     if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
-/// One picture: the file name and the look it shows.
 class _Look {
   const _Look(
     this.name,
@@ -57,14 +56,12 @@ class _Look {
 }
 
 const _looks = [
-  // Studio, the look as it was, under the stock scheme and four new pairs.
   _Look('studio-dark', ThemeShape.studio, LumitColorScheme.dark),
   _Look('studio-mallow-dark', ThemeShape.studio, LumitColorScheme.mallowDark),
   _Look('studio-glacier-light', ThemeShape.studio,
       LumitColorScheme.glacierLight),
   _Look('studio-hearth-dark', ThemeShape.studio, LumitColorScheme.hearthDark),
   _Look('studio-chalk-light', ThemeShape.studio, LumitColorScheme.chalkLight),
-  // Desk, in its own two rooms first, then three schemes on the same shell.
   _Look('desk-grey-room', ThemeShape.desk, LumitColorScheme.greyRoom),
   _Look('desk-graphite', ThemeShape.desk, LumitColorScheme.graphite),
   _Look('desk-slate-dark', ThemeShape.desk, LumitColorScheme.slateDark),
@@ -72,7 +69,6 @@ const _looks = [
   _Look('desk-chalk-dark', ThemeShape.desk, LumitColorScheme.chalkDark),
   _Look('desk-grey-room-rail-deck', ThemeShape.desk, LumitColorScheme.greyRoom,
       toolBar: ToolBarPosition.left, bars: ViewerBars.deck),
-  // Lantern in the day room.
   _Look('lantern-dark-day', ThemeShape.lantern, LumitColorScheme.dark),
   _Look('lantern-neon-dark-day', ThemeShape.lantern,
       LumitColorScheme.neonDark),
@@ -81,14 +77,12 @@ const _looks = [
       LumitColorScheme.tavernLight),
   _Look('lantern-gilt-dark-day', ThemeShape.lantern,
       LumitColorScheme.giltDark),
-  // Lantern in the night room.
   _Look('lantern-arcane-dark-night', ThemeShape.lantern,
       LumitColorScheme.arcaneDark,
       room: LanternRoom.night),
   _Look('lantern-nocturne-dark-night', ThemeShape.lantern,
       LumitColorScheme.nocturneDark,
       room: LanternRoom.night),
-  // Lantern with the rail and the deck.
   _Look('lantern-canopy-light-rail-deck', ThemeShape.lantern,
       LumitColorScheme.canopyLight,
       toolBar: ToolBarPosition.left, bars: ViewerBars.deck),
@@ -175,7 +169,6 @@ Future<void> main() async {
   // strip has an active member to show.
   ui.workspace.applyWorkspacePreset(WorkspacePreset.edit);
 
-  // The sweeps photograph the shell; the welcome screen has its own sweep.
   runApp(shotRoot(LumitAppNew(state, ui, welcome: false)));
 
   await pause(2);
@@ -188,8 +181,6 @@ Future<void> main() async {
   // Selecting the Title raises its gizmo and points Effect controls at its
   // stack; fronting the tab puts that stack in the left card for every look.
   ui.setSelection([title]);
-  // The Project panel stays on the left and the Effect controls join the
-  // right group, fronted, so a shot shows both.
   movePanel(ui.workspace.dock, Panel.effectControls.pane(),
       Panel.effectsAndPresets.pane(), DropPosition.stack);
   ui.workspace.touch();
@@ -197,8 +188,6 @@ Future<void> main() async {
   await pause(3);
 
   for (final look in _looks) {
-    // The calls Settings, Appearance makes, against the sweep's throwaway
-    // store: the style, the scheme, then the three rows the styles added.
     ui.workspace.setShape(look.shape);
     ui.workspace.setScheme(look.scheme);
     ui.workspace.interface

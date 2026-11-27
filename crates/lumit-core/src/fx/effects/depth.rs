@@ -57,10 +57,8 @@ pub const VIEW_OPTIONS: &[&str] = &["Depth", "Source"];
 /// draw without a string lookup per op.
 pub const VIEW_ID: crate::fx::params::ParamId = crate::fx::params::ParamId::new("view");
 
-/// The **Invert** row's resolved id.
 pub const INVERT_ID: crate::fx::params::ParamId = crate::fx::params::ParamId::new("invert");
 
-/// The Depth effect's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "depth",
@@ -79,7 +77,6 @@ pub const INVERT_ID: crate::fx::params::ParamId = crate::fx::params::ParamId::ne
     matte = false,
 )]
 pub struct Depth {
-    /// Read the shot and file its depth. A button, not a value.
     #[action(label = "Analyse")]
     pub analyse: (),
     /// Stop a running analysis. **Cancel keeps what it had**: the frames

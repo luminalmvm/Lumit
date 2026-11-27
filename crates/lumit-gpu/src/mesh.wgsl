@@ -22,7 +22,6 @@ struct Frame {
     // faces by which way they face, w = whether it takes shadows: 0 no, 1 yes,
     // 2 only the shadows.
     flags: vec4<f32>,
-    // The lines' colour, where a view draws them.
     wire: vec4<f32>,
     lights: array<Light, 8>,
 };
@@ -68,7 +67,6 @@ struct Material {
     // x = 1 when it projects, y and z its depth's range, z nought for none,
     // w = 1 when it holds.
     projection: vec4<f32>,
-    // Where that camera is.
     projector_eye: vec4<f32>,
 };
 
@@ -97,10 +95,8 @@ struct MeshCopy {
 @group(1) @binding(11) var opacity_tex: texture_2d<f32>;
 // The comp's picture under the model's run of 3D layers, for glass to bend.
 @group(1) @binding(12) var behind_tex: texture_2d<f32>;
-// How far each surface is from a camera the base colour is projected from.
 @group(1) @binding(14) var projector_depth: texture_depth_2d;
 
-// The shadows it takes: the 3D layers' casters and the models' maps.
 struct Casters {
     casters_head: vec4<f32>,
     casters: array<Caster, 16>,
@@ -183,7 +179,6 @@ fn projected(at: vec3<f32>) -> vec3<f32> {
     let to_eye = abs(dot(normalise(cross(dpdx(at), dpdy(at))), normalise(frame.eye.xyz - at)));
     let to_camera = abs(dot(normalise(cross(dpdx(still), dpdy(still))), normalise(mat.projector_eye.xyz - still)));
     let keep = 1.0 - smoothstep(4.0, 10.0, to_eye / max(to_camera, 1e-4));
-    // How fast depth changes across the camera's frame, on this face.
     let fx = dpdx(spot);
     let fy = dpdy(spot);
     let zx = dpdx(q.z);
@@ -232,11 +227,6 @@ fn ggx(a2: f32, nh: f32, nl: f32, nv: f32) -> f32 {
     return d * vis * PI * nl;
 }
 
-// What glass shows: the picture behind, where the ray through `at` lands once
-// it has bent at the surface, softened by roughness. ponytail: screen-space,
-// so it bends only what is under the run of 3D layers and never the model
-// itself, and the ray goes as far past the surface as a third of the way back
-// to the eye.
 fn behind(at: vec3<f32>, eye: vec3<f32>, n: vec3<f32>, ior: f32, roughness: f32) -> vec4<f32> {
     let bent = refract(-eye, n, 1.0 / max(ior, 1.0));
     let far = at + bent * 0.35 * length(frame.eye.xyz - at);
@@ -255,8 +245,6 @@ fn behind(at: vec3<f32>, eye: vec3<f32>, n: vec3<f32>, ior: f32, roughness: f32)
     return sum / 25.0;
 }
 
-// A surface no light touches: its own colour, and what glass shows in its
-// place, tinted.
 fn untouched(at: vec3<f32>, eye: vec3<f32>, n: vec3<f32>, own: vec3<f32>, tint: vec3<f32>, alpha: f32, glass: f32) -> vec4<f32> {
     let seen = behind(at, eye, n, mat.extra.y, 0.0);
     return vec4<f32>(own * alpha * (1.0 - glass) + seen.rgb * tint * glass, mix(alpha, seen.a, glass));
@@ -352,7 +340,6 @@ fn shade(in: VsOut, front: bool) -> vec4<f32> {
     // Glass covers as much as what it shows does.
     let surface = mix(alpha, 1.0, glass);
     if (look == 0u && (mat.mode.z > 0.5 || (count == 0u && !surround))) {
-        // Showing only its shadows, with none to show.
         if (accepts == 2u && !plate) {
             return untouched(in.at, eye, normalise(in.normal), whole + emissive, whole, alpha, glass) * seen.z;
         }
@@ -567,7 +554,6 @@ fn fs_down(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     return textureSampleLevel(down_from, down_samp, pos.xy * 2.0 / size, 0.0);
 }
 
-// A shutter sample's picture, added to the others at the pass's share.
 @fragment
 fn fs_add(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     return textureLoad(down_from, vec2<i32>(pos.xy), 0);

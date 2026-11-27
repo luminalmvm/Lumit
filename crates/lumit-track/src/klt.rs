@@ -20,8 +20,6 @@
 
 use crate::pyramid::{Plane, Pyramid};
 
-/// The result of one frame-to-frame track: where the feature landed, and the
-/// linear part of the warp that took it there.
 #[derive(Clone, Copy)]
 pub(crate) struct Step {
     pub(crate) pos: [f64; 2],
@@ -74,7 +72,7 @@ pub(crate) fn solve(
 
         for _ in 0..max_iters {
             if !patch_fits(img, c, dl, &m, hf) {
-                break; // drifted off this level: keep what we have and stop
+                break;
             }
             let mut b = [0.0f64; 6];
             let mut k = 0usize;
@@ -217,7 +215,6 @@ pub(crate) fn slide(
             for q in 1..ring - 1 {
                 let i = r * ring + q;
                 t.push(grid[i]);
-                // Central differences, as the affine template takes them.
                 let gx = 0.5 * (grid[i + 1] - grid[i - 1]);
                 let gy = 0.5 * (grid[i + ring] - grid[i - ring]);
                 hxx += f64::from(gx * gx);
@@ -247,7 +244,7 @@ pub(crate) fn slide(
                 || ix + side as i64 >= img.w as i64
                 || iy + side as i64 >= img.h as i64
             {
-                break; // drifted off this level: keep what we have and stop
+                break;
             }
             let (fx, fy) = ((x0 - fx0) as f32, (y0 - fy0) as f32);
             let (w00, w10, w01, w11) = (
@@ -335,7 +332,6 @@ fn template(tpl: &Plane, c: [f64; 2], half: i64) -> (Vec<f64>, Vec<[f64; 6]>, [[
     (t, sd, hess)
 }
 
-/// Whether all four corners of the warped window still sit inside `img`.
 fn patch_fits(img: &Plane, c: [f64; 2], d: [f64; 2], m: &[[f64; 2]; 2], hf: f64) -> bool {
     for (x, y) in [(-hf, -hf), (hf, -hf), (-hf, hf), (hf, hf)] {
         let px = c[0] + d[0] + m[0][0] * x + m[0][1] * y;

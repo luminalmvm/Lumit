@@ -18,7 +18,6 @@ pub fn oetf(x: f32) -> f32 {
     }
 }
 
-/// sRGB-encoded back to linear, the inverse of [`oetf`].
 #[must_use]
 pub fn eotf(v: f32) -> f32 {
     if v < 0.0 {
@@ -31,14 +30,12 @@ pub fn eotf(v: f32) -> f32 {
     }
 }
 
-/// Encoded R'G'B' to Y'CbCr.
 #[must_use]
 pub fn to_ycc([r, g, b]: [f32; 3]) -> [f32; 3] {
     let y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
     [y, (b - y) / 1.8556, (r - y) / 1.5748]
 }
 
-/// Y'CbCr back to encoded R'G'B'.
 #[must_use]
 pub fn from_ycc([y, cb, cr]: [f32; 3]) -> [f32; 3] {
     let r = y + 1.5748 * cr;

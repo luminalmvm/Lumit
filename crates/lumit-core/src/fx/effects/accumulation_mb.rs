@@ -11,7 +11,6 @@
 use crate::fx::{registry::EffectDef, registry::EffectMetadata, schema::EffectSchema};
 use lumit_fx_macros::Effect;
 
-/// Accumulation motion blur's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "accumulation_mb",
@@ -93,7 +92,6 @@ pub struct AccumulationMb {
     pub mix: f32,
 }
 
-/// Accumulation motion blur's behaviour: none, by design.
 pub struct AccumulationMbDef;
 
 impl EffectDef for AccumulationMbDef {

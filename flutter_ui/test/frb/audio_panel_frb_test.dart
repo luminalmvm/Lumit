@@ -1,6 +1,3 @@
-// The Audio panel against the real engine: the three sections, the Beats
-// controls over the beat engine, Drive with audio's staged chain, which lands
-// as real wires the engine validates, and Lower behind's duck.
 
 import 'dart:io';
 import 'dart:typed_data';
@@ -42,9 +39,6 @@ void main() {
   }
 
   group('Audio panel (frb)', () {
-    /// *Drive with audio…* offers the selected layer's free Number parameters
-    /// and stages Audio level → Remap → Smooth onto the picked one — three
-    /// boxes and three wires in one commit.
     testWidgets('Drive with audio stages the chain onto a picked parameter',
         (tester) async {
       final p = await mount(tester, withBlur: true);
@@ -53,7 +47,6 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('audio-drive')));
       await tester.pump();
-      // The blur's Radius is a free Number socket; pick it.
       final offer = find.text('Gaussian blur › Radius');
       expect(offer, findsWidgets,
           reason: 'the effect\'s parameters are the menu');

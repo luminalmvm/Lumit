@@ -1,5 +1,3 @@
-//! The draws of a run of 3D layers: cut where they meet, and their depth.
-
 use super::display::{display_colour, Seed};
 use super::{
     scaled_size, Blend, CompositeLayer, Compositor, Cut, LayerUniform, Region, CUT_DEPTH,
@@ -278,7 +276,6 @@ impl Compositor {
                             continue;
                         }
                         for (model, bind) in list {
-                            // A model's own draw, the depth or the clear.
                             match joins.as_ref().filter(|_| *model) {
                                 Some(j) => {
                                     pass.set_pipeline(&j[join]);
@@ -474,7 +471,6 @@ impl Compositor {
             })
         });
 
-        // Every draw's uniform in one buffer, each at its own offset.
         let size = std::mem::size_of::<LayerUniform>() as u64;
         let stride = wgpu::util::align_to(
             size,
@@ -525,8 +521,6 @@ impl Compositor {
                 usage: wgpu::BufferUsages::UNIFORM,
             },
         );
-        // The draws of one picture, the pieces of a split layer, share one
-        // bind group.
         type Picture = (
             wgpu::Texture,
             Option<wgpu::Texture>,
@@ -685,7 +679,6 @@ impl Compositor {
             }
             i = end;
         }
-        // The depth they test against, made only when a layer is cut.
         let cut_depth = (draws.len() > layers.len()).then(|| {
             let depth = ctx.device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("comp-cut-depth"),
@@ -710,8 +703,6 @@ impl Compositor {
                 depth.create_view(&Default::default()),
             )
         });
-        // A model in a run cut by depth draws its own way, each pixel at the
-        // model's own depth.
         let joins =
             (cut_depth.is_some() && !models.is_empty()).then(|| self.join_set(ctx, samples));
         let joined: Vec<Option<wgpu::BindGroup>> = match joins {
@@ -744,8 +735,6 @@ impl Compositor {
                     picture_of[before] == picture_of[idx] && before != idx
                 })
         };
-        // The first draw of a run with a holdout, where what is under the run
-        // is kept for it.
         let plate_at = |k: usize| {
             let run = draws[k].2;
             run.is_some()
@@ -786,15 +775,12 @@ impl Compositor {
                     );
                 }
             }
-            // One pass: this draw plus any following fixed-function draws,
-            // and only those of the same run, if it has one.
             let mut end = k + 1;
             while end < draws.len() && !snaps(end) && draws[end].2 == run {
                 end += 1;
             }
             let depth = match (run, &cut_depth) {
                 (Some(run), Some((_, _, view))) => {
-                    // A run starts with nothing in the way.
                     let load = if cleared == Some(run) {
                         wgpu::LoadOp::Load
                     } else {
@@ -860,7 +846,6 @@ impl Compositor {
                     let Some(pipeline) = pipeline else {
                         continue;
                     };
-                    // A piece draws as a fan of triangles over its corners.
                     let vertices = match cut_of(idx) {
                         Some(Cut::Piece { count, .. }) => count.saturating_sub(2) as u32 * 3,
                         _ => 6,
@@ -877,7 +862,6 @@ impl Compositor {
             k = end;
         }
         if first_pass {
-            // No layers at all: still clear to the background.
             let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("composite-clear"),
                 color_attachments: &[Some(attachment(clear))],

@@ -1,5 +1,3 @@
-//! A track measured smaller than its source, put back into the source's pixels.
-
 use lumit_track::planar::PlanarTrack;
 use lumit_track::solve::CameraSolve;
 

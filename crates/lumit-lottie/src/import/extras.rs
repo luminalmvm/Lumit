@@ -24,7 +24,6 @@ use super::{keys, Cx};
 use crate::colour::srgb_decode;
 use crate::LottieError;
 
-/// The layer's effects that have Lumit equals, top of the stack first.
 pub(super) fn effects(
     cx: &mut Cx<'_>,
     path: &ItemPath,

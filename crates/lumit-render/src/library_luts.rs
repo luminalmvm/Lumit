@@ -15,7 +15,6 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, PoisonError};
 use std::time::SystemTime;
 
-/// What the LUT and OCIO effects read.
 const EXTENSIONS: [&str; 8] = ["cube", "spi1d", "spi3d", "clf", "ctf", "cc", "ccc", "cdl"];
 
 /// The library's LUT files as last listed, with every folder the listing
@@ -52,7 +51,6 @@ pub fn found(path: &str) -> Option<String> {
         .map(|f| f.to_string_lossy().into_owned())
 }
 
-/// [`found`], or `path` itself.
 #[must_use]
 pub fn or_found(path: &str) -> String {
     found(path).unwrap_or_else(|| path.to_owned())
@@ -95,7 +93,6 @@ fn walk(folder: &Path, depth: usize, out: &mut Listing) {
         .filter_map(|e| Some((e.path(), e.file_type().ok()?)))
         .collect();
     entries.sort_by(|a, b| a.0.cmp(&b.0));
-    // This folder's files before any folder inside it.
     for (path, kind) in &entries {
         if kind.is_file() {
             out.files.push(path.clone());
@@ -116,9 +113,6 @@ fn walk(folder: &Path, depth: usize, out: &mut Listing) {
 mod tests {
     use lumit_core::model::{EffectValue, FileParam};
 
-    /// **A LUT row whose file is missing draws with the library's LUT of the
-    /// same name.** A white solid through a cube that takes green to nought
-    /// comes out magenta; without the library's copy it would stay white.
     #[test]
     fn a_missing_lut_draws_with_the_one_in_the_library() {
         let Ok(mut r) = crate::headless::HeadlessRenderer::shared() else {

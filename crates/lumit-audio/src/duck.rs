@@ -15,7 +15,6 @@
 /// millisecond at any rate, and short enough that a hit is not missed.
 pub const DUCK_STEP: usize = 32;
 
-/// A node lowered while another plays.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Duck {
     /// The node listened to. Earlier in the plan than the ducked node.
@@ -34,12 +33,10 @@ pub struct Duck {
     pub release_frames: u32,
 }
 
-/// Where one ducked node's gain stands between blocks.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Follower {
     /// The gain now, linear.
     pub gain: f32,
-    /// How many frames the key has been under the threshold.
     pub under: u32,
 }
 
@@ -81,7 +78,6 @@ pub fn apply(duck: &Duck, follower: &mut Follower, key: &[f32], sig: &mut [f32])
         } else {
             from + (target - from) * (1.0 - (-(frames as f32) / tau as f32).exp())
         };
-        // Across the step from where it was to where it is going.
         for (n, frame) in s.chunks_exact_mut(2).enumerate() {
             let g = from + (to - from) * (n + 1) as f32 / frames as f32;
             frame[0] *= g;
@@ -98,10 +94,6 @@ pub fn apply(duck: &Duck, follower: &mut Follower, key: &[f32], sig: &mut [f32])
 mod tests {
     use super::*;
 
-    /// A burst on the key brings a steady tone down to the depth after the
-    /// attack, holds it there while the key plays and for the hold after, and
-    /// lets it back up over the release. A key under the threshold leaves
-    /// the tone alone, sample for sample.
     #[test]
     fn a_key_burst_lowers_a_tone_and_lets_it_back() {
         let duck = Duck {

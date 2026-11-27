@@ -48,7 +48,6 @@ pub(super) fn read_text(
     leaf
 }
 
-/// One document's words and settings, in the names the script uses.
 fn document(bytes: &[u8]) -> Option<Value> {
     let root = Parser {
         bytes,
@@ -146,7 +145,6 @@ fn paint(value: &Cos) -> Option<[f64; 3]> {
     }
 }
 
-/// One value of the record.
 #[derive(Debug, Clone, PartialEq)]
 enum Cos {
     Dict(Vec<(String, Cos)>),

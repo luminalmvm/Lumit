@@ -23,7 +23,6 @@ import '../src/rust/api/multicam/grid.dart';
 import '../src/rust/api/multicam/make.dart';
 import '../src/rust/api/project.dart';
 
-/// What finished when the job landed: the comp it made or synced.
 typedef MulticamLanded = void Function(UuidValue comp, {required bool made});
 
 class MulticamState {
@@ -37,15 +36,12 @@ class MulticamState {
     required this.refused,
   });
 
-  /// The project, the fronted comp and the playhead, read when asked.
   final ProjectReference? Function() project;
   final CompositionReference? Function() comp;
   final int Function() playhead;
 
-  /// Whether edits carry linked clips along: the Cut timeline's Linked switch.
   final bool Function() linked;
 
-  /// The status line, a document change, and a Cut edit's refusal.
   final void Function(String message, {bool error}) notice;
   final VoidCallback edited;
   final void Function(BridgeCutResult result) refused;
@@ -56,14 +52,10 @@ class MulticamState {
   final ValueNotifier<BridgeAngleSwitch> mode =
       ValueNotifier(BridgeAngleSwitch.picture);
 
-  /// The page of angles the angle viewer shows, counting from nought.
   final ValueNotifier<int> page = ValueNotifier(0);
 
-  /// Whether the angle viewer draws each angle's own timecode.
   final ValueNotifier<bool> timecodes = ValueNotifier(false);
 
-  /// The multicam clip under the playhead of the fronted comp, or null.
-  /// Refreshed by [follow].
   final ValueNotifier<BridgeMulticamAt?> under = ValueNotifier(null);
 
   /// The angle a cut or switch last went to, and when: what the angle viewer
@@ -78,7 +70,6 @@ class MulticamState {
   /// How far the running job has got, nought to one, or null with none.
   final ValueNotifier<double?> working = ValueNotifier(null);
 
-  /// Called when a job lands with the comp it made or synced.
   MulticamLanded? onLanded;
 
   /// Whether a window is showing [working], so the status line need not.
@@ -127,7 +118,6 @@ class MulticamState {
       final angles = pageAngles;
       if (n < 1 || n > angles.length) return false;
       final angle = angles[n - 1].id;
-      // Over footage an angle holds, a digit puts that angle above it.
       if (under.value?.plain == true) {
         if (!cut) return false;
         overwriteAbove(angle);
@@ -192,8 +182,6 @@ class MulticamState {
         at);
   }
 
-  /// Switch the multicam clip under the playhead to the next angle, or the
-  /// one before, round the angles.
   void step({required bool forward}) {
     final c = comp();
     if (c == null) return;
@@ -203,7 +191,6 @@ class MulticamState {
     } catch (_) {}
   }
 
-  /// Show [angle] from [from] to [to] on the multicam clip there.
   void paint(UuidValue angle, int from, int to) {
     final c = comp();
     if (c == null || to <= from) return;
@@ -219,7 +206,6 @@ class MulticamState {
         divides: true);
   }
 
-  /// Put the footage each named multicam clip's angle plays in its place.
   void flatten(List<UuidValue> clips) {
     final c = comp();
     if (c == null || clips.isEmpty) return;
@@ -300,8 +286,6 @@ class MulticamState {
     }
   }
 
-  /// Make a multicam comp of the footage [items]. Its progress shows in
-  /// [working] and it lands through [onLanded].
   bool make(List<UuidValue> items, BridgeMulticamNew settings) {
     final p = project();
     if (p == null) return false;
@@ -314,8 +298,6 @@ class MulticamState {
     return true;
   }
 
-  /// Line [layer]'s files up again by their sound against [to]'s, inside the
-  /// multicam comp [mc].
   bool syncAngle(CompositionReference mc, UuidValue layer, UuidValue to) {
     final p = project();
     if (p == null) return false;

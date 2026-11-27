@@ -30,7 +30,6 @@ pub const GLOW_GROUPS: &[ParamGroup] = &[ParamGroup {
     visible_when_lens_elements: None,
 }];
 
-/// Glow's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "glow",
@@ -158,11 +157,9 @@ pub struct Glow {
     #[colour(label = "Colour 1", default = [1.0, 0.0, 0.0, 1.0])]
     pub chromatic_colour_1: [f32; 4],
 
-    /// See [`chromatic_colour_1`](Self::chromatic_colour_1).
     #[colour(label = "Colour 2", default = [0.0, 1.0, 0.0, 1.0])]
     pub chromatic_colour_2: [f32; 4],
 
-    /// See [`chromatic_colour_1`](Self::chromatic_colour_1).
     #[colour(label = "Colour 3", default = [0.0, 0.0, 1.0, 1.0])]
     pub chromatic_colour_3: [f32; 4],
 
@@ -188,7 +185,6 @@ pub struct Glow {
     #[toggle(label = "Repeat edge pixels", default = true)]
     pub repeat_edge_pixels: bool,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -247,7 +243,6 @@ impl Glow {
     }
 }
 
-/// Glow's behaviour.
 pub struct GlowDef;
 
 impl EffectDef for GlowDef {
@@ -282,11 +277,6 @@ impl EffectDef for GlowDef {
         if glow.repeat_edge_pixels || intensity <= 0.0 || mix <= 0.0 {
             return [0.0, 0.0];
         }
-        // The gaussian is read 6σ out and σ is half the Radius.
-        // ponytail: with Falloff up the widest exponential reads 73 Radii out,
-        // which is too much room to make for light that faint. This gives it
-        // up to 21, where that one is down to a hundredth. Raise it if a very
-        // bright halo shows where the room stops.
         let ratio = 1.0 - 1.0 / (1.0 + halo.falloff);
         let reach =
             halo.radius_px * (0.5 * cpu::GLOW_GAUSS_REACH + 18.0 * ratio) + halo.chromatic_px;

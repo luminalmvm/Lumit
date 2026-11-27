@@ -74,7 +74,6 @@ void main() {
       bool shows(String key) =>
           find.byKey(ValueKey<String>(key)).evaluate().isNotEmpty;
 
-      // Wide: every cluster on the bar at once.
       await mount(tester, p, size: const Size(900, 520));
       expect(shows('viewer-play'), isTrue);
       expect(shows('viewer-timecode'), isTrue);
@@ -92,7 +91,6 @@ void main() {
       expect(shows('viewer-timecode'), isTrue);
       expect(shows('viewer-play'), isTrue);
 
-      // Then the ways of looking fold into one mark — §12A.6's step 4.
       await mount(tester, p, size: const Size(430, 520));
       expect(shows('viewer-overflow'), isTrue,
           reason: 'a toolbar collapses into a menu rather than clipping');
@@ -101,7 +99,6 @@ void main() {
       expect(shows('viewer-timecode'), isTrue);
       expect(shows('viewer-play'), isTrue);
 
-      // Then the clock, and the five transport buttons stand alone.
       await mount(tester, p, size: const Size(250, 520));
       expect(shows('viewer-timecode'), isFalse,
           reason: 'the clock is the last thing to leave before the transport');
@@ -118,8 +115,6 @@ void main() {
       }
     });
 
-    /// The controls the overflow mark swallowed are still the same controls:
-    /// pressing it opens them, it does not merely say they exist.
     testWidgets('the overflow mark opens the marks it folded away',
         (tester) async {
       final p = withLayer();

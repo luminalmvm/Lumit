@@ -1,5 +1,3 @@
-// The dock model: default workspace fidelity to dock.rs::default_layout,
-// serialisation round-trip, and the start-up Project-tab rule.
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -72,11 +70,9 @@ void main() {
     expect(back.windows.first.onTop, isTrue);
     expect(panelsIn(back).toSet(), panelsIn(defaultLayout()).toSet(),
         reason: 'every panel is still there, once');
-    // Put back where it came from: Notes rejoins the group it left.
     dockPane(back, Panel.notes.pane());
     expect(groupOf(back, Panel.project.pane())?.children.map((c) => c.panel),
         contains(Panel.notes));
-    // And an arrangement with none writes what it always did.
     expect(defaultLayout().toJson().containsKey('windows'), isFalse);
   });
 
@@ -112,8 +108,6 @@ void main() {
 
       setPanelVisible(root, Panel.align, true);
       expect(panelVisible(root, Panel.align), isTrue);
-      // It went into a tab group, fronted — a panel you just asked for is the
-      // one you want to look at.
       final tabs = panelsIn(root);
       expect(tabs.where((p) => p == Panel.align), hasLength(1));
     });

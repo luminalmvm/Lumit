@@ -16,7 +16,6 @@ use spade::{ConstrainedDelaunayTriangulation, Point2, Triangulation};
 
 use super::{BevelStyle, Profile};
 
-/// Which of a mesh's faces is which, and the order the materials come in.
 pub const FRONT: usize = 0;
 pub const BEVEL: usize = 1;
 pub const SIDE: usize = 2;
@@ -41,14 +40,12 @@ pub struct Face {
     pub indices: Vec<u32>,
 }
 
-/// One outline made solid, by [`FRONT`], [`BEVEL`], [`SIDE`] and [`BACK`].
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Mesh {
     pub faces: [Face; 4],
 }
 
 impl Mesh {
-    /// Roughly the memory it holds.
     #[must_use]
     pub fn byte_size(&self) -> usize {
         self.faces
@@ -85,7 +82,6 @@ fn clean(contours: &[Vec<[f64; 2]>]) -> Vec<Vec<Vec<[f64; 2]>>> {
         (lo[0], lo[1]) = (lo[0].min(p[0]), lo[1].min(p[1]));
         (hi[0], hi[1]) = (hi[0].max(p[0]), hi[1].max(p[1]));
     }
-    // Nothing to fill, a line with no area, or numbers past all reason.
     let (w, h) = (hi[0] - lo[0], hi[1] - lo[1]);
     if rings.is_empty() || !(w > 1e-6 && h > 1e-6 && w < WILD && h < WILD) {
         return Vec::new();
@@ -94,8 +90,6 @@ fn clean(contours: &[Vec<[f64; 2]>]) -> Vec<Vec<Vec<[f64; 2]>>> {
     rings.overlay(&none, OverlayRule::Subject, FillRule::NonZero)
 }
 
-/// A ring ready to be walked: its points, the way out of the solid at and
-/// between them, and how far each may move in for the bevel.
 struct Ring {
     points: Vec<[f64; 2]>,
     /// The way out of the solid across the edge from each point to the next.
@@ -169,7 +163,6 @@ impl Ring {
         })
     }
 
-    /// The ring at its cap.
     fn capped(&self) -> Vec<[f64; 2]> {
         self.points
             .iter()
@@ -287,7 +280,6 @@ fn limit_insets(rings: &mut [Ring]) {
     }
 }
 
-/// How far along `u` from `p` the edge from `a` to `b` is met, if it is.
 fn ray_meets(p: [f64; 2], u: [f64; 2], a: [f64; 2], b: [f64; 2]) -> Option<f64> {
     let (ex, ey) = (b[0] - a[0], b[1] - a[1]);
     let det = u[0] * ey - u[1] * ex;
@@ -300,7 +292,6 @@ fn ray_meets(p: [f64; 2], u: [f64; 2], a: [f64; 2], b: [f64; 2]) -> Option<f64> 
     (s > 1e-9 && (0.0..=1.0).contains(&k)).then_some(s)
 }
 
-/// One row of a strip across a ring.
 #[derive(Clone, Copy)]
 struct Row {
     /// How much of the way to its cap each point has moved.
@@ -309,7 +300,6 @@ struct Row {
     /// The slope here, for the normal: z for each part of the inset.
     dz: f64,
     dout: f64,
-    /// Facing the back rather than the front.
     back: bool,
 }
 
@@ -339,7 +329,6 @@ fn bevel_rows(p: &Profile, z_span: f64, total: f64, back: bool) -> Vec<Row> {
             }
         })
         .collect();
-    // The back's run from the side to the cap, still nearest the front first.
     if back {
         rows.reverse();
     }
@@ -402,7 +391,6 @@ fn strip(face: &mut Face, ring: &Ring, rows: &[Row]) {
         }
     }
     for (i, &start) in starts.iter().enumerate() {
-        // The next point's last column is where this edge ends.
         let end = starts
             .get(i + 1)
             .map_or(column - 1, |&s| if ring.crease[i + 1] { s - 1 } else { s });
@@ -415,7 +403,6 @@ fn strip(face: &mut Face, ring: &Ring, rows: &[Row]) {
 }
 
 type Cdt = ConstrainedDelaunayTriangulation<Point2<f64>>;
-/// A cap's points and its triangles over them.
 type Capped = (Vec<[f64; 2]>, Vec<[u32; 3]>);
 
 /// `rings` triangulated, every triangle counter-clockwise in x and y, kept
@@ -442,7 +429,6 @@ fn triangulated(rings: &[Vec<[f64; 2]>]) -> Option<Capped> {
     if cdt.num_inner_faces() == 0 {
         return Some((Vec::new(), Vec::new()));
     }
-    // In from the outside, crossing a ring each time the answer flips.
     let mut inside: Vec<Option<bool>> = vec![None; cdt.num_all_faces()];
     let mut stack = Vec::new();
     for edge in cdt.convex_hull() {
@@ -488,7 +474,6 @@ fn triangulated(rings: &[Vec<[f64; 2]>]) -> Option<Capped> {
     Some((points, triangles))
 }
 
-/// `rings` as a flat cap at depth `z`, facing the eye or away from it.
 fn cap(face: &mut Face, points: &[[f64; 2]], triangles: &[[u32; 3]], z: f64, front: bool) {
     let Ok(base) = u32::try_from(face.positions.len()) else {
         return;
@@ -574,8 +559,6 @@ mod tests {
         ]
     }
 
-    /// Every triangle turns the way its normals face, and so shows from
-    /// outside, with the mesh's faces where they should be.
     #[test]
     fn a_ring_with_a_hole_makes_a_closed_solid() {
         let outer = vec![[0.0, 0.0], [100.0, 0.0], [100.0, 100.0], [0.0, 100.0]];
@@ -604,7 +587,6 @@ mod tests {
                     assert!(dot > -1e-3, "face {k} shows from inside, {style:?}");
                 }
             }
-            // The caps sit at the front and the back, the front's inset.
             let z = |f: &Face| f.positions[0][2];
             assert_eq!(z(&mesh.faces[FRONT]), 0.0);
             assert_eq!(z(&mesh.faces[BACK]), 56.0);
@@ -622,9 +604,6 @@ mod tests {
         }
     }
 
-    /// The same outline gives the same triangles, and no outline however bad
-    /// panics or hangs: crossings, doubled points, slivers, lines and numbers
-    /// past all reason each lose what can't be made and keep the rest.
     #[test]
     fn any_outline_is_safe_and_repeats() {
         let profile = Profile {
@@ -652,7 +631,6 @@ mod tests {
             vec![vec![[0.0, 0.0], [50.0, 0.0], [100.0, 0.0]]],
             vec![vec![[f64::NAN, 0.0], [f64::INFINITY, 1.0], [2.0, -3.0]]],
             vec![vec![[0.0, 0.0], [1e300, 0.0], [0.0, 1e300]]],
-            // A bow tie, and a sliver far narrower than the bevel.
             vec![vec![[0.0, 0.0], [100.0, 100.0], [100.0, 0.0], [0.0, 100.0]]],
             vec![vec![[0.0, 0.0], [300.0, 0.0], [300.0, 0.5], [0.0, 0.5]]],
             scribble.clone(),
@@ -661,12 +639,10 @@ mod tests {
             assert_eq!(solid(outline, &profile), solid(outline, &profile));
         }
         assert!(!solid(&scribble, &profile).faces[SIDE].indices.is_empty());
-        // The sliver still draws, its bevel a ridge rather than a fold.
         let sliver = solid(&bad[7], &profile);
         assert!(sliver.faces[BEVEL].positions.iter().all(|p| p[1] >= -0.01));
     }
 
-    /// With no depth and no bevel, only the front.
     #[test]
     fn nothing_but_a_front_at_nought() {
         let square = vec![vec![[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0]]];

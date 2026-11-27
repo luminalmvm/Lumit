@@ -14,7 +14,6 @@ use zip::ZipArchive;
 use crate::package::{gather, plain, write_zip};
 use crate::{put_in_place, ExtensionError, MAX_BYTES, MAX_FILES};
 
-/// A style file's extension, and a package's.
 pub const STYLE_EXTENSION: &str = "lumstyle";
 
 #[derive(Debug, thiserror::Error)]
@@ -39,8 +38,6 @@ impl From<ExtensionError> for StyleError {
     }
 }
 
-/// A package opened and judged: its files as (index, name inside the
-/// style's folder, size), and the style's name.
 struct Package {
     zip: ZipArchive<File>,
     files: Vec<(usize, String, u64)>,
@@ -220,8 +217,6 @@ mod tests {
         zip.finish().unwrap();
     }
 
-    // A zipped folder unpacks into the styles folder under the style's own
-    // name, Mac leftovers dropped, and one that climbs out is refused.
     #[test]
     fn a_zipped_style_folder_installs_and_a_hostile_one_does_not() {
         let dir = std::env::temp_dir().join(format!("lumit-style-{}", std::process::id()));

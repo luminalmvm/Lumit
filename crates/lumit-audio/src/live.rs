@@ -14,9 +14,7 @@
 use crate::plan::NONE;
 use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU32, AtomicU8, Ordering};
 
-/// The control is not held: the mix follows the fader's own value or keys.
 pub const FOLLOW: u8 = 0;
-/// The control is held: the mix uses the held gains.
 pub const HOLD: u8 = 1;
 /// The control was let go: the mix crossfades from the held gains (times
 /// the keys, after a trim) back to the keys over the glide, then goes back
@@ -32,13 +30,11 @@ pub const TRIM: u8 = 3;
 pub struct LiveFader {
     /// The held `[left, right]` gains as f32 bits.
     gain: [AtomicU32; 2],
-    /// [`FOLLOW`], [`HOLD`], [`GLIDE`] or [`TRIM`].
     mode: AtomicU8,
     /// Whether the held gains multiply the keys (a trim) rather than take
     /// their place. Kept through a release, so the glide starts from what
     /// was heard.
     times: AtomicBool,
-    /// How long the glide back to the keys takes, in frames.
     glide_frames: AtomicU32,
     /// Moved on by every hold and every release, so the mix can tell a new
     /// glide from the one it is already in.
@@ -46,8 +42,6 @@ pub struct LiveFader {
 }
 
 impl LiveFader {
-    /// Hold the control at `gains`. Called again on every move while it is
-    /// dragged.
     pub fn hold(&self, gains: [f32; 2]) {
         self.set(gains, false, HOLD);
     }
@@ -78,7 +72,6 @@ impl LiveFader {
         self.mode.store(GLIDE, Ordering::Release);
     }
 
-    /// Back to the keys at once, with no glide.
     pub fn drop_hold(&self) {
         self.epoch.fetch_add(1, Ordering::AcqRel);
         self.mode.store(FOLLOW, Ordering::Release);
@@ -91,7 +84,6 @@ impl LiveFader {
         matches!(self.mode(), HOLD | TRIM)
     }
 
-    /// [`FOLLOW`], [`HOLD`], [`GLIDE`] or [`TRIM`].
     #[must_use]
     pub fn mode(&self) -> u8 {
         self.mode.load(Ordering::Acquire)
@@ -104,7 +96,6 @@ impl LiveFader {
         self.times.load(Ordering::Relaxed)
     }
 
-    /// The held gains.
     #[must_use]
     pub fn gains(&self) -> [f32; 2] {
         [
@@ -113,13 +104,11 @@ impl LiveFader {
         ]
     }
 
-    /// The glide's length in frames.
     #[must_use]
     pub fn glide_frames(&self) -> u32 {
         self.glide_frames.load(Ordering::Relaxed)
     }
 
-    /// Which hold or release the control is on.
     #[must_use]
     pub fn epoch(&self) -> u32 {
         self.epoch.load(Ordering::Acquire)
@@ -135,7 +124,6 @@ impl LiveFader {
         }
     }
 
-    /// Take on another fader's state, for a plan swap.
     fn copy_from(&self, other: &LiveFader) {
         for (to, from) in self.gain.iter().zip(&other.gain) {
             to.store(from.load(Ordering::Relaxed), Ordering::Relaxed);
@@ -165,7 +153,6 @@ impl Default for LiveBank {
 }
 
 impl LiveBank {
-    /// A bank for `nodes` nodes and the master, and `sends` sends, none held.
     #[must_use]
     pub fn new(nodes: usize, sends: usize) -> Self {
         Self {
@@ -181,53 +168,45 @@ impl LiveBank {
         self.faders.get(i)
     }
 
-    /// The master's fader.
     #[must_use]
     pub fn master(&self) -> Option<&LiveFader> {
         self.faders.last()
     }
 
-    /// Send `i`'s level.
     #[must_use]
     pub fn send(&self, i: usize) -> Option<&LiveFader> {
         self.sends.get(i)
     }
 
-    /// Which send of the bank before send `i` was seeded from, if any.
     pub(crate) fn send_carried(&self, i: usize) -> Option<u16> {
         let from = self.send_from.get(i)?.load(Ordering::Relaxed);
         (from != NONE).then_some(from)
     }
 
-    /// Hold fader `i` at `gains` ([`LiveFader::hold`]).
     pub fn hold(&self, i: usize, gains: [f32; 2]) {
         if let Some(f) = self.fader(i) {
             f.hold(gains);
         }
     }
 
-    /// Hold fader `i` as a trim of its keys by `gains` ([`LiveFader::trim`]).
     pub fn trim(&self, i: usize, gains: [f32; 2]) {
         if let Some(f) = self.fader(i) {
             f.trim(gains);
         }
     }
 
-    /// Let fader `i` go over `glide_frames` ([`LiveFader::release`]).
     pub fn release(&self, i: usize, glide_frames: u32) {
         if let Some(f) = self.fader(i) {
             f.release(glide_frames);
         }
     }
 
-    /// Fader `i` back to its keys at once ([`LiveFader::drop_hold`]).
     pub fn drop_hold(&self, i: usize) {
         if let Some(f) = self.fader(i) {
             f.drop_hold();
         }
     }
 
-    /// Whether fader `i` is held.
     #[must_use]
     pub fn held(&self, i: usize) -> bool {
         self.fader(i).is_some_and(LiveFader::held)

@@ -18,15 +18,12 @@ use std::path::{Component, Path, PathBuf};
 
 use crate::{Host, ScriptError};
 
-/// What a run may reach besides the project itself.
 #[derive(Debug, Default)]
 pub(crate) struct Reach {
     /// The script's own folder. Anything under it may be read, and saves and
     /// exports may go into it.
     pub(crate) folder: Option<PathBuf>,
-    /// Files the person chose or passed in, as real paths.
     pub(crate) files: Vec<PathBuf>,
-    /// Whether footage may come from the project's folder, as over MCP.
     pub(crate) project: bool,
 }
 
@@ -139,7 +136,6 @@ fn unsaved() -> ScriptError {
 }
 
 impl Reach {
-    /// The project's folder and nothing else, as over MCP.
     pub(crate) fn project() -> Self {
         Self {
             project: true,
@@ -177,7 +173,6 @@ impl Reach {
         whole(&path)
     }
 
-    /// The folders saves and exports may go into.
     fn writes(&self, host: &dyn Host) -> Result<Vec<PathBuf>, ScriptError> {
         let project = host.path().and_then(|p| p.parent().map(Path::to_path_buf));
         let folders: Vec<PathBuf> = project.into_iter().chain(self.folder.clone()).collect();
@@ -195,7 +190,6 @@ impl Reach {
         }
     }
 
-    /// Footage file `path` as the host is to read it, or why it may not.
     pub(crate) fn footage(&self, host: &dyn Host, path: &Path) -> Result<PathBuf, ScriptError> {
         let project = host.path().and_then(|p| p.parent().map(Path::to_path_buf));
         if self.project && project.is_none() {

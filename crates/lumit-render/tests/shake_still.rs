@@ -1,5 +1,3 @@
-//! A Shake at Amplitude 0 draws the layer exactly as it draws with no Shake.
-
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use lumit_core::anim::{Animation, Keyframe, Property, SideInterp};

@@ -16,16 +16,11 @@ fn key(t: Rational, v: f64, side: SideInterp) -> Keyframe {
     }
 }
 
-/// **A fade is a pair of ordinary keys** (docs/09 §6): between the
-/// −∞ knee and the level the property already held, shaped from the
-/// easing vocabulary that already exists, with everything outside the
-/// span left alone.
 #[test]
 fn a_fade_is_an_eased_pair_that_leaves_the_rest_of_the_curve_alone() {
     let floor = -100.0;
     let level = Property::fixed(-3.0);
 
-    // Fade in: silence at the start of the span, the level at its end.
     let faded = level
         .with_fade(rat(0, 1), rat(1, 1), FadeShape::Ease, floor, true)
         .expect("a fade in");
@@ -42,7 +37,6 @@ fn a_fade_is_an_eased_pair_that_leaves_the_rest_of_the_curve_alone() {
     assert_eq!(keys[0].interp_out, EASY_EASE, "Ease eases both keys");
     assert_eq!(keys[1].interp_in, EASY_EASE);
 
-    // Fade out: the level at the start of the span, silence at its end.
     let out = level
         .with_fade(rat(2, 1), rat(3, 1), FadeShape::Linear, floor, false)
         .expect("a fade out");
@@ -53,8 +47,6 @@ fn a_fade_is_an_eased_pair_that_leaves_the_rest_of_the_curve_alone() {
     };
     assert!(keys.iter().all(|k| k.interp_in == SideInterp::Linear));
 
-    // Exponential eases the loud key and leaves the silent one straight,
-    // so the level hangs where it was and then falls away.
     let exp = level
         .with_fade(rat(0, 1), rat(1, 1), FadeShape::Exponential, floor, false)
         .expect("a fade out");
@@ -68,8 +60,6 @@ fn a_fade_is_an_eased_pair_that_leaves_the_rest_of_the_curve_alone() {
         "an exponential fade is still louder a quarter of the way down"
     );
 
-    // The two halves coexist: fading a property that already has a fade
-    // in leaves those keys where they are.
     let both = faded
         .with_fade(rat(3, 1), rat(4, 1), FadeShape::Ease, floor, false)
         .expect("a fade out over a fade in");
@@ -87,8 +77,6 @@ fn a_fade_is_an_eased_pair_that_leaves_the_rest_of_the_curve_alone() {
         "full level between"
     );
 
-    // Running one twice over the same span reshapes it rather than
-    // stacking a second curve on top.
     let again = both
         .with_fade(rat(3, 1), rat(4, 1), FadeShape::Linear, floor, false)
         .expect("a reshape");
@@ -97,8 +85,6 @@ fn a_fade_is_an_eased_pair_that_leaves_the_rest_of_the_curve_alone() {
     };
     assert_eq!(keys.len(), 4, "still four keys, not six");
 
-    // Refusals: no span, and an expression (a fade would rewrite what
-    // somebody typed).
     assert!(level
         .with_fade(rat(1, 1), rat(1, 1), FadeShape::Ease, floor, true)
         .is_none());
@@ -113,7 +99,6 @@ fn a_fade_is_an_eased_pair_that_leaves_the_rest_of_the_curve_alone() {
 
 #[test]
 fn evaluate_speed_is_the_exact_derivative() {
-    // Linear span 0→10 over 1 s: constant slope 10; flat/held outside.
     let lin = [
         key(rat(0, 1), 0.0, SideInterp::Linear),
         key(rat(1, 1), 10.0, SideInterp::Linear),
@@ -122,8 +107,6 @@ fn evaluate_speed_is_the_exact_derivative() {
     assert_eq!(evaluate_speed(&lin, -1.0), Some(0.0));
     assert_eq!(evaluate_speed(&lin, 2.0), Some(0.0));
 
-    // Easy-ease span: speed ~0 at the keys, positive in the middle, and the
-    // analytic derivative agrees with a central finite difference of value.
     let ease = [
         key(rat(0, 1), 0.0, EASY_EASE),
         key(rat(1, 1), 10.0, EASY_EASE),
@@ -132,8 +115,8 @@ fn evaluate_speed_is_the_exact_derivative() {
         evaluate_speed(&ease, 0.02).unwrap(),
         evaluate_speed(&ease, 0.5).unwrap(),
     );
-    assert!((0.0..2.0).contains(&start) && start < middle * 0.2); // slow start
-    assert!((middle - 15.0).abs() < 1e-6); // fast middle (peak of easy-ease)
+    assert!((0.0..2.0).contains(&start) && start < middle * 0.2);
+    assert!((middle - 15.0).abs() < 1e-6);
     for &t in &[0.15_f64, 0.4, 0.6, 0.85] {
         let h = 1e-4;
         let fd = (evaluate(&ease, t + h).unwrap() - evaluate(&ease, t - h).unwrap()) / (2.0 * h);
@@ -158,10 +141,10 @@ fn linear_hold_and_clamping() {
         },
         key(rat(3, 1), 5.0, SideInterp::Linear),
     ];
-    assert_eq!(evaluate(&keys, -1.0), Some(0.0)); // clamp before
-    assert_eq!(evaluate(&keys, 0.5), Some(5.0)); // linear
-    assert_eq!(evaluate(&keys, 2.5), Some(20.0)); // hold-out wins the span
-    assert_eq!(evaluate(&keys, 9.0), Some(5.0)); // clamp after
+    assert_eq!(evaluate(&keys, -1.0), Some(0.0));
+    assert_eq!(evaluate(&keys, 0.5), Some(5.0));
+    assert_eq!(evaluate(&keys, 2.5), Some(20.0));
+    assert_eq!(evaluate(&keys, 9.0), Some(5.0));
 }
 
 #[test]
@@ -170,15 +153,12 @@ fn easy_ease_is_flat_at_both_keys_and_monotone() {
         key(rat(0, 1), 0.0, EASY_EASE),
         key(rat(1, 1), 100.0, EASY_EASE),
     ];
-    // Flat tangents: near the keys the value barely moves.
     let near0 = evaluate(&keys, 0.01).unwrap();
     let near1 = evaluate(&keys, 0.99).unwrap();
     assert!(near0 < 0.5, "start not flat: {near0}");
     assert!(near1 > 99.5, "end not flat: {near1}");
-    // Midpoint of a symmetric ease is the midpoint value.
     let mid = evaluate(&keys, 0.5).unwrap();
     assert!((mid - 50.0).abs() < 1e-9, "mid {mid}");
-    // Monotone in, monotone out.
     let mut prev = f64::MIN;
     for i in 0..=1000 {
         let v = evaluate(&keys, i as f64 / 1000.0).unwrap();
@@ -286,8 +266,6 @@ fn inserting_a_key_preserves_the_curve() {
 }
 
 proptest! {
-    /// solve_u(x(u)) == u to 1e-10 over random monotone cubics,
-    /// including dx = 0 endpoints (keyframe-eval.md test plan §2).
     #[test]
     fn solve_round_trips(
         b1 in 0.001f64..=1.0,
@@ -351,10 +329,6 @@ fn million_evaluations_stay_cheap_on_a_dense_curve() {
     assert!(elapsed.as_millis() < 800, "1M dense evals took {elapsed:?}");
 }
 
-/// Bisection answers exactly what the linear walk answered, spans and
-/// speeds both — sampled between keys, exactly on interior keys, and at
-/// both ends — on a curve dense enough that an off-by-one lands on a
-/// different span with a different value.
 #[test]
 fn span_bisection_matches_the_linear_walk() {
     let sides = [
@@ -388,10 +362,6 @@ fn span_bisection_matches_the_linear_walk() {
     }
 }
 
-// -----------------------------------------------------------------------
-// Tangent modes — Auto / Clamp / Free (docs/impl/keyframe-eval.md §6).
-// -----------------------------------------------------------------------
-
 fn auto(clamped: bool) -> SideInterp {
     SideInterp::Auto {
         clamped,
@@ -400,9 +370,6 @@ fn auto(clamped: bool) -> SideInterp {
     }
 }
 
-/// **Auto recomputes whenever a neighbour moves.** The same key, the same
-/// mode, a moved neighbour — a different tangent, and so a different
-/// curve. A free side would have gone on reading the speed it stored.
 #[test]
 fn an_automatic_tangent_follows_a_moved_neighbour() {
     let mut keys = [
@@ -416,8 +383,6 @@ fn an_automatic_tangent_follows_a_moved_neighbour() {
     assert!((auto_speed(&keys, 1, false) - 100.0).abs() < 1e-12);
     assert!((after - before).abs() > 1.0);
 
-    // With both sides free the stored speed is all there is, so moving the
-    // neighbour's *value* changes the span's ends but not the tangent.
     let free = SideInterp::Bezier {
         speed: 15.0,
         influence: 1.0 / 3.0,
@@ -430,9 +395,6 @@ fn an_automatic_tangent_follows_a_moved_neighbour() {
     assert!((side_params(resolved_side(&frozen, 1, true), 0.0).0 - 15.0).abs() < 1e-12);
 }
 
-/// **Clamp is Auto with no overshoot.** A peak key — both neighbours
-/// below it — gets a flat tangent, so no sample in either span rises above
-/// it; the smooth tangent tilts and does overshoot.
 #[test]
 fn a_clamped_tangent_does_not_overshoot_its_neighbours() {
     let peak = |side: SideInterp| {
@@ -451,8 +413,6 @@ fn a_clamped_tangent_does_not_overshoot_its_neighbours() {
             "clamped overshot at t={t}"
         );
     }
-    // The unclamped one aims from 0 to 9 across two seconds — uphill past
-    // the peak — and does rise above it.
     let smooth = peak(auto(false));
     assert!((auto_speed(&smooth, 1, false) - 4.5).abs() < 1e-12);
     let over = (0..=100)
@@ -461,9 +421,6 @@ fn a_clamped_tangent_does_not_overshoot_its_neighbours() {
     assert!(over > 10.0 + 1e-6, "smooth tangent should overshoot");
 }
 
-/// **Free → Auto → Free keeps the custom ease** (the study's explicit
-/// bar). The mode switch files the ease inside the automatic side and
-/// hands it back untouched.
 #[test]
 fn a_round_trip_through_auto_keeps_the_custom_ease() {
     let custom = SideInterp::Bezier {
@@ -477,8 +434,6 @@ fn a_round_trip_through_auto_keeps_the_custom_ease() {
     assert_eq!(clamped.tangent_mode(), TangentMode::Clamp);
     assert_eq!(clamped.with_tangent_mode(TangentMode::Free), custom);
 
-    // A straight side has no ease of its own to keep; it returns eased,
-    // which is what it has been while automatic.
     let straight = SideInterp::Linear.with_tangent_mode(TangentMode::Auto);
     assert_eq!(
         straight.with_tangent_mode(TangentMode::Free),
@@ -487,20 +442,12 @@ fn a_round_trip_through_auto_keeps_the_custom_ease() {
             influence: 1.0 / 3.0
         }
     );
-    // Free asked of an already-free side changes nothing at all.
     assert_eq!(
         SideInterp::Hold.with_tangent_mode(TangentMode::Free),
         SideInterp::Hold
     );
 }
 
-// -----------------------------------------------------------------------
-// Key presets, After Effects eases and the edges of the evaluator.
-// -----------------------------------------------------------------------
-
-/// **The F9 presets reshape a key and never move it.** Each one rewrites
-/// both sides, the key's own value stays exactly where it was, and the
-/// span it leads shows the shape the preset names.
 #[test]
 fn key_presets_reshape_the_span_and_keep_the_value() {
     let free = SideInterp::Bezier {
@@ -516,8 +463,6 @@ fn key_presets_reshape_the_span_and_keep_the_value() {
     let keys = [linear, end];
     assert!((evaluate(&keys, 0.25).unwrap() - 2.5).abs() < 1e-12);
 
-    // Easy ease leaves the key flat, and the end is straight, so the curve
-    // starts slower than the chord.
     let eased = start.to_bezier();
     assert!(eased.is_bezier() && !eased.is_hold());
     assert_eq!(eased.interp_in, EASY_EASE);
@@ -525,23 +470,17 @@ fn key_presets_reshape_the_span_and_keep_the_value() {
     assert!(evaluate(&keys, 0.05).unwrap() < 0.5);
     assert!((evaluate(&keys, 0.5).unwrap() - 5.0).abs() < 1e-9);
 
-    // Held: the value stays put until the next key, and the speed lens
-    // reads that stretch as still.
     let held = start.to_hold();
     assert!(held.is_hold() && !held.is_bezier());
     let keys = [held, end];
     assert_eq!(evaluate(&keys, 0.99), Some(0.0));
     assert_eq!(evaluate_speed(&keys, 0.5), Some(0.0));
 
-    // An automatic side counts as eased: it has a tangent to draw.
     let mut auto_out = start.to_linear();
     auto_out.interp_out = auto(true);
     assert!(auto_out.is_bezier());
 }
 
-/// **After Effects writes influence as a per cent.** Left out, the ease is
-/// After Effects' own default; given, it is divided down to Lumit's
-/// fraction and kept inside the 0.1 to 100 range After Effects allows.
 #[test]
 fn an_after_effects_ease_reads_per_cent_influence() {
     let SideInterp::Bezier { speed, influence } = ae_ease(None, None) else {
@@ -572,9 +511,6 @@ fn an_after_effects_ease_reads_per_cent_influence() {
     );
 }
 
-/// **Clamp holds the tangent to three times the gentler chord.** A slow
-/// step into a steep climb would have the smooth tangent bulge below the
-/// first key; clamped, the curve climbs without ever turning back.
 #[test]
 fn a_clamped_tangent_is_held_to_the_gentler_chord() {
     let climb = |side: SideInterp| {
@@ -600,10 +536,6 @@ fn a_clamped_tangent_is_held_to_the_gentler_chord() {
     assert!(dip < -1e-6, "the smooth tangent should dip below the start");
 }
 
-/// **A span with no length answers calmly.** Two keys on one time (a
-/// broken import, or keys mid-drag) have no slope to aim along and no
-/// width to solve across, so every reading is flat and finite rather than
-/// a division by zero.
 #[test]
 fn a_span_with_no_length_answers_calmly() {
     let keys = [
@@ -631,9 +563,6 @@ fn a_span_with_no_length_answers_calmly() {
     assert_eq!(flat.in_side(), calm);
 }
 
-/// **A key put into a held span holds on.** The held value carries
-/// through the new key and on to the next, so the picture is unchanged.
-/// With no curve to keep, or no keys at all, nothing is added.
 #[test]
 fn a_key_put_into_a_held_span_holds_on() {
     let mut p = Property {
@@ -668,11 +597,6 @@ fn a_key_put_into_a_held_span_holds_on() {
     assert_eq!(empty.animation, Animation::Keyframed(Vec::new()));
 }
 
-/// **A stretched map keeps its shape.** Every key's time scales about the
-/// pivot and every stored speed is divided by the same factor, so the
-/// stretched curve at the scaled time reads what the original read. An
-/// automatic side's filed ease scales with it, so going back to Free hands
-/// out the ease that fits the new length.
 #[test]
 fn a_stretched_curve_keeps_its_shape() {
     let filed = SideInterp::Auto {

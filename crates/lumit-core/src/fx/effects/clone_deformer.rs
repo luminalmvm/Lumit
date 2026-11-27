@@ -42,22 +42,15 @@ pub mod round;
 use fillet::filleted;
 use round::rounded;
 
-/// The effect's match name.
 pub const MATCH_NAME: &str = "clone_deformer";
 
-/// Mode: read the picture.
 pub const MODE_RASTER: u32 = 0;
-/// Mode: read the Shape layers' outlines.
 pub const MODE_VECTOR: u32 = 1;
 
-/// Deformer: line the group's bounds up on Position.
 pub const DEFORM_ALIGN: u32 = 0;
-/// Deformer: cut the group with a layer.
 pub const DEFORM_BOOLEAN: u32 = 1;
-/// Deformer: round the group's outward corners.
 pub const DEFORM_ROUND: u32 = 2;
 
-/// The Boolean layer row.
 pub const BOOLEAN_LAYER: &str = "boolean_layer";
 
 const fn group(
@@ -74,7 +67,6 @@ const fn group(
     }
 }
 
-/// Align's rows show for Align, Boolean's for Boolean.
 pub const DEFORMER_GROUPS: &[ParamGroup] = &[
     group(
         "Align",
@@ -98,7 +90,6 @@ pub const DEFORMER_GROUPS: &[ParamGroup] = &[
     ),
 ];
 
-/// A Position row is not read while its axis is None.
 pub const DEFORMER_ENABLED_WHEN: &[EnabledWhen] = &[
     EnabledWhen {
         param: "position_x",
@@ -112,7 +103,6 @@ pub const DEFORMER_ENABLED_WHEN: &[EnabledWhen] = &[
     },
 ];
 
-/// Clone deformer's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "clone_deformer",
@@ -133,12 +123,9 @@ pub struct CloneDeformer {
     #[choice(label = "Mode", options = ["Raster", "Vector"], default = 0)]
     pub mode: u32,
 
-    /// What is done to the group.
     #[choice(label = "Deformer", options = ["Align", "Boolean", "Round corners"], default = 0)]
     pub deformer: u32,
 
-    /// Which side of the group's bounds goes on Position x. None leaves the
-    /// group where it is across.
     #[choice(
         label = "Horizontal",
         options = ["None", "Left", "Centre", "Right"],
@@ -146,8 +133,6 @@ pub struct CloneDeformer {
     )]
     pub align_horizontal: u32,
 
-    /// Which side of the group's bounds goes on Position y. None leaves the
-    /// group where it is down.
     #[choice(
         label = "Vertical",
         options = ["None", "Top", "Centre", "Bottom"],
@@ -167,12 +152,9 @@ pub struct CloneDeformer {
     #[layer(label = "Boolean layer", self_default = false)]
     pub boolean_layer: bool,
 
-    /// Where the Boolean layer sits on this one: as it sits in the comp,
-    /// stretched over the frame, or centred at its own size.
     #[choice(label = "Map placement", options = *MAP_PLACEMENT_OPTIONS, default = 0)]
     pub boolean_layer_placement: u32,
 
-    /// How the layer cuts the group.
     #[choice(
         label = "Operation",
         options = ["Union", "Subtract", "Intersect", "Difference", "Subtract from layer"],
@@ -186,7 +168,6 @@ pub struct CloneDeformer {
     #[slider(label = "Radius", min = 0.0, max = 200.0, default = 20.0, hard_min = 0.0, unit = Px)]
     pub radius: f32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -318,7 +299,6 @@ pub fn shape_copies(
             size * stretch[0] * fit.unit[0],
             size * stretch[1] * fit.unit[1],
         ];
-        // The part of the picture the stamp shows, in its own px.
         let lo = [
             own[0] * (0.5 - 0.5 * fit.uv[0]).max(0.0),
             own[1] * (0.5 - 0.5 * fit.uv[1]).max(0.0),
@@ -391,7 +371,6 @@ pub fn cover(
         (lo_y.floor().max(0.0) as u32).min(h),
         (hi_y.ceil().max(0.0) as u32).min(h),
     );
-    // Four lines across each row, each crossing summed with its winding.
     const SUBS: usize = 4;
     let mut row = vec![0.0f32; w as usize];
     let mut xs: Vec<(f32, i32)> = Vec::new();
@@ -563,7 +542,6 @@ impl CloneDeformer {
         grow: [f32; 2],
     ) -> Option<Vec<f32>> {
         let mut c = vec![0.0; (w * h) as usize];
-        // The frame the layer is laid on, px@comp.
         let frame = [
             (w as f32 - 2.0 * grow[0]) / k.max(1e-6),
             (h as f32 - 2.0 * grow[1]) / k.max(1e-6),
@@ -613,8 +591,6 @@ impl CloneDeformer {
         }
         let before = (self.mix < 100.0).then(|| rgba.clone());
         let vector = self.mode == MODE_VECTOR;
-        // The group's coverage as Vector reads it: the copies' outlines where
-        // they came, and the edges an earlier deformer left otherwise.
         let copies = reads.copies.filter(|_| vector);
         let mut edge: Option<Vec<f32>> = vector.then(|| {
             let mut c = vec![0.0; n];
@@ -668,7 +644,6 @@ impl CloneDeformer {
             }
             DEFORM_ROUND => {
                 if reads.result.is_some() && vector {
-                    // The rounded outline is drawn below; the colours stay.
                     finish(
                         rgba,
                         Some(&outline_cover(reads, w, h, k, grow)),
@@ -677,7 +652,6 @@ impl CloneDeformer {
                     );
                     return;
                 }
-                // Vector rounds the sharp edge; Raster the picture's alpha.
                 let alpha: Vec<f32> = match &edge {
                     Some(e) => e.clone(),
                     None => (0..n).map(|i| rgba[i * 4 + 3]).collect(),
@@ -736,7 +710,6 @@ impl CloneDeformer {
                 }
             }
         }
-        // Worked out on the paths: the edge is the result's own.
         if vector && reads.result.is_some() {
             edge = Some(outline_cover(reads, w, h, k, grow));
         }
@@ -771,7 +744,6 @@ impl CloneDeformer {
             DEFORM_ROUND => Some(input.iter().map(|c| filleted(c, self.radius)).collect()),
             _ => {
                 let Some(shape) = boolean else {
-                    // No layer, no cut.
                     return Some(input.clone());
                 };
                 let clip = placed(shape, self.boolean_layer_placement, frame);
@@ -784,7 +756,6 @@ impl CloneDeformer {
     }
 }
 
-/// The result's outline as coverage at raster factor `k`.
 fn outline_cover(reads: &Reads<'_>, w: u32, h: u32, k: f32, grow: [f32; 2]) -> Vec<f32> {
     let mut c = vec![0.0; (w * h) as usize];
     if let Some(result) = reads.result {
@@ -793,8 +764,6 @@ fn outline_cover(reads: &Reads<'_>, w: u32, h: u32, k: f32, grow: [f32; 2]) -> V
     c
 }
 
-/// The Boolean layer's outline where Map placement puts it on a layer
-/// `frame` px@comp in size.
 fn placed(shape: &BooleanShape, placement: u32, frame: [f32; 2]) -> Outline {
     let (contours, scale, offset) = match placement {
         0 => (&shape.placed, [1.0; 2], [0.0; 2]),
@@ -819,8 +788,6 @@ fn placed(shape: &BooleanShape, placement: u32, frame: [f32; 2]) -> Outline {
         .collect()
 }
 
-/// `a` cut with `b` by Operation, each filled by winding: Union, Subtract,
-/// Intersect, Difference, Subtract from layer.
 #[must_use]
 pub fn overlay(a: &Outline, b: &Outline, operation: u32) -> Outline {
     use i_overlay::core::fill_rule::FillRule;
@@ -851,7 +818,6 @@ pub fn overlay(a: &Outline, b: &Outline, operation: u32) -> Outline {
         .collect()
 }
 
-/// The picture's colour with Vector's edge as its alpha, then the Mix.
 fn finish(rgba: &mut [f32], edge: Option<&[f32]>, before: Option<&[f32]>, mix: f32) {
     if let Some(edge) = edge {
         for (px, &c) in rgba.chunks_exact_mut(4).zip(edge) {
@@ -893,7 +859,6 @@ impl EffectDef for CloneDeformerDef {
 }
 
 impl CloneDeformer {
-    /// The raster factor the bag's px rows were scaled by.
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
 
     /// [`DERIVED_PX_SCALE`](Self::DERIVED_PX_SCALE) out of a resolved bag, 1

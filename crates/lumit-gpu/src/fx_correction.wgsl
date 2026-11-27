@@ -341,7 +341,6 @@ fn v_in(o: vec4<f32>, space: i32) -> vec3<f32> {
     return vec3<f32>(encode(u.r, space), encode(u.g, space), encode(u.b, space));
 }
 
-// == hdr::weight.
 fn zone_weight(i: i32, s: f32, range: f32, width: f32) -> f32 {
     if (i < 3) {
         return 1.0 - ss(range - width, range, s);
@@ -349,7 +348,6 @@ fn zone_weight(i: i32, s: f32, range: f32, width: f32) -> f32 {
     return ss(range, range + width, s);
 }
 
-// == hdr::zones: the HDR zones over a scene-linear colour.
 fn hdr(u: vec3<f32>) -> vec3<f32> {
     let y = luma(u);
     let s = clamp(log2(max(y, 0.18 * exp2(-16.0)) / 0.18), -16.0, 16.0);
@@ -389,7 +387,6 @@ fn grade(o: vec4<f32>, key: f32, detail: f32) -> vec4<f32> {
     }
     var v = vec3<f32>(encode(ug.r, space), encode(ug.g, space), encode(ug.b, space));
 
-    // Wheels.
     let y0 = luma(v);
     var x = v + p.offset.rgb;
     x = x + p.lift.rgb * (vec3<f32>(1.0) - x);
@@ -405,7 +402,6 @@ fn grade(o: vec4<f32>, key: f32, detail: f32) -> vec4<f32> {
     v = held(v);
     v = v + vec3<f32>((1.0 - p.g0.z) * (y0 - luma(v)));
 
-    // Adjust.
     v = (v - vec3<f32>(p.g1.w)) * p.g1.z + vec3<f32>(p.g1.w);
     let yt = luma(v);
     let tonal = p.g3.x * (1.0 - ss(0.0, 0.5, yt)) + p.g3.y * ss(0.5, 1.0, yt);
@@ -432,7 +428,6 @@ fn grade(o: vec4<f32>, key: f32, detail: f32) -> vec4<f32> {
         v = v + vec3<f32>(lift);
     }
 
-    // Curves.
     if (p.g4.y != 0.0) {
         v = vec3<f32>(
             table_at(0, table_at(1, v.r)),
@@ -467,7 +462,6 @@ fn grade(o: vec4<f32>, key: f32, detail: f32) -> vec4<f32> {
     }
     v = held(v);
 
-    // Out.
     let k = key * p.g0.y;
     let wv = vin * (1.0 - k) + v * k;
     let lin = vec3<f32>(decode(wv.r, space), decode(wv.g, space), decode(wv.b, space));

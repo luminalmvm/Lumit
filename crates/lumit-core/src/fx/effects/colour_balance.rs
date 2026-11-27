@@ -1,5 +1,3 @@
-//! Colour balance (docs/08 §3.10, as amended): lift / gamma / gain.
-
 use crate::fx::{
     cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
 };
@@ -40,7 +38,6 @@ pub struct ColourBalance {
     #[colour(default = [1.0, 1.0, 1.0, 1.0], min = 0.0, max = 4.0)]
     pub gain: [f32; 4],
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -69,7 +66,6 @@ impl ColourBalance {
     }
 }
 
-/// Colour balance's behaviour.
 pub struct ColourBalanceDef;
 
 impl EffectDef for ColourBalanceDef {

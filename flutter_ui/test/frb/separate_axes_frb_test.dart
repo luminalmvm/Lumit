@@ -59,8 +59,6 @@ void main() {
       expect(separated, containsAll(<String>['Position x', 'Position y']));
       expect(separated, isNot(contains('Position z')),
           reason: 'a 2D layer draws no z row, separated or not');
-      // The other pairs are untouched: the choice is per property, not per
-      // layer.
       expect(separated, contains('Anchor point'));
       expect(separated, contains('Scale'));
 
@@ -126,7 +124,6 @@ void main() {
           reason: 'the ratio held');
       expect([for (final k in y) k.time], [for (final k in x) k.time]);
 
-      // The pair was one write, so one undo takes both back.
       p.state.project!.undo();
       expect(
           (layer.getTransform().scaleY as BridgeScalar_Keyframed)
@@ -135,16 +132,12 @@ void main() {
               .interpOut,
           const BridgeSideInterp.linear());
 
-      // Unlinked, the pair is two curves again.
       layer.setAxisMode(
           pair: BridgeTransformPair.scale, mode: BridgeAxisMode.combined);
       expect(
           graphChannels(layers: [entryOf(p)], selected: [scalePath]).length, 2);
     });
 
-    /// The same pair on a Transform effect, whose Scale is two rows with a
-    /// chain between them. Chained, either row is the one curve, and an ease
-    /// on it reaches the half the graph does not draw.
     testWidgets(
         'a chained effect Scale is one curve, and an ease on it reaches both rows',
         (tester) async {
@@ -206,15 +199,12 @@ void main() {
       expect([for (final k in keysOfRow('scale_y')) k.value], [50.0, 100.0],
           reason: 'the ratio held');
 
-      // Unchained, the pair is two curves again.
       final again = layer.getEffects();
       again.single.setPairLinked(stem: 'scale', linked: false);
       layer.setEffects(effects: again);
       expect(graphChannels(layers: [entryOf(p)], selected: [x, y]).length, 2);
     });
 
-    /// A Node graph driver's keyed row is a curve as an effect's is, so F9
-    /// on its keys eases them, written back into the graph.
     testWidgets('an ease reaches a driver keyed in the Node graph',
         (tester) async {
       final p = withComp();

@@ -16,14 +16,10 @@ use crate::dirs;
 /// profile's. Read for every library path, so held only to clone.
 static LIBRARY_HOME: RwLock<Option<PathBuf>> = RwLock::new(None);
 
-/// Moves the library under `home`, or back to the roaming app-data area with
-/// `None`.
 pub fn set_library_home(home: Option<PathBuf>) {
     *LIBRARY_HOME.write().unwrap_or_else(PoisonError::into_inner) = home;
 }
 
-/// The library home set by [`set_library_home`], or `None` for the first
-/// profile's, which is the roaming app-data area.
 #[must_use]
 pub fn library_home() -> Option<PathBuf> {
     LIBRARY_HOME

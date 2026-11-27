@@ -4,7 +4,6 @@ static ALLOCATED: AtomicU64 = AtomicU64::new(0);
 static RESERVED: AtomicU64 = AtomicU64::new(0);
 static TEXTURES: AtomicU64 = AtomicU64::new(0);
 static BUFFERS: AtomicU64 = AtomicU64::new(0);
-/// Whether the card draws from this process's own memory.
 static UNIFIED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 pub(crate) fn publish_unified(unified: bool) {

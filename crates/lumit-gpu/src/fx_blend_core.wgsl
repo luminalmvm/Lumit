@@ -93,7 +93,6 @@ fn blend_separable(mode: u32, s: f32, d: f32) -> f32 {
     }
 }
 
-// == cpu::blend_lum / blend_clip / blend_set_lum / blend_sat / blend_set_sat.
 fn blend_lum(c: vec3<f32>) -> f32 {
     return 0.3 * c.r + 0.59 * c.g + 0.11 * c.b;
 }
@@ -131,7 +130,6 @@ fn blend_set_sat(c: vec3<f32>, s: f32) -> vec3<f32> {
     return vec3<f32>(0.0);
 }
 
-// == cpu::blend_pixel: the effect's output `s` combined with its input `d`.
 fn blend_pixel(mode: u32, d: vec4<f32>, s: vec4<f32>) -> vec4<f32> {
     var o = vec4<f32>(0.0, 0.0, 0.0, s.a);
     switch mode {

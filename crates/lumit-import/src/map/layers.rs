@@ -258,7 +258,6 @@ pub(crate) fn map_layer(
     Some(layer)
 }
 
-/// The layer's kind, resolved through its source item where it has one.
 fn layer_kind(
     conv: &mut Conv<'_>,
     path: &ItemPath,
@@ -382,7 +381,6 @@ fn layer_kind(
     }
 }
 
-/// Move every value of a property by the same amount, keys and all.
 pub(crate) fn shift(property: &mut LumProperty, by: f64) {
     let moved = std::mem::replace(property, LumProperty::zero());
     *property = super::fx_colour::map_values(moved, |v| v + by).0;
@@ -488,8 +486,6 @@ fn material(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> Materia
     }
 }
 
-/// A Text or Shape layer's Geometry options, keyframes and all, or nothing for
-/// a layer with no depth and no bevel.
 fn geometry(
     conv: &mut Conv<'_>,
     path: &ItemPath,
@@ -589,10 +585,6 @@ fn transform(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> Transf
         anchor_z: scalar(conv, path, props, "ADBE Anchor Point", 2, 0.0),
         scale_z: scalar(conv, path, props, "ADBE Scale", 2, 100.0),
         opacity: scalar(conv, path, props, "ADBE Opacity", 0, 100.0),
-        // An imported layer lands on the house defaults: AE records its
-        // own separated-dimensions and proportional-scale flags, and reading
-        // them is a follow-up — the axes' values and keyframes are already
-        // faithful either way, because both editors store them per axis.
         axis_modes: lumit_core::model::AxisModes::default(),
         material: Box::default(),
         after_effects_order: false,
@@ -715,8 +707,6 @@ fn switches(conv: &mut Conv<'_>, path: &ItemPath, ae: &AeLayer, props: &[Propert
     }
 }
 
-/// The blend mode, and the documented fallback where there is none
-/// (docs/11 §4's three "mapped" blend rows).
 fn blend(conv: &mut Conv<'_>, path: &ItemPath, ae: Option<&str>) -> BlendMode {
     let Some(ae) = ae else {
         return BlendMode::Normal;
@@ -783,7 +773,6 @@ fn standard(ae: &str) -> Option<BlendMode> {
     })
 }
 
-/// Both generations of matte, normalised (docs/11 §3).
 fn matte(
     conv: &mut Conv<'_>,
     path: &ItemPath,
@@ -797,7 +786,6 @@ fn matte(
         Some("ALPHA_INVERTED") => (MatteChannel::Alpha, true),
         Some("LUMA") => (MatteChannel::Luma, false),
         Some("LUMA_INVERTED") => (MatteChannel::Luma, true),
-        // NO_TRACK_MATTE, and anything a later AE invents.
         _ => return None,
     };
     // The 23.0+ form names the layer; the legacy form means the one above,
@@ -903,7 +891,6 @@ fn retime(
         }
     }
 
-    // Otherwise a stretch, if there is one, is the map.
     let stretch = ae.stretch.unwrap_or(100.0);
     if !stretch.is_finite() || stretch == 0.0 || (stretch - 100.0).abs() < 1e-9 {
         return (None, interpolation);
@@ -962,13 +949,9 @@ mod tests {
         for code in 0..=38u32 {
             for dancing in [false, true] {
                 let name = enums::blend(code, dancing);
-                // A code the table does not know comes back as its own number
-                // (the funnel rule): there is no mode to check.
                 if name.parse::<u32>().is_ok() {
                     continue;
                 }
-                // Classic is imported as its modern namesake, so it is the
-                // namesake that has to exist.
                 let modern = name.strip_prefix("CLASSIC_").unwrap_or(&name);
                 if NO_EQUIVALENT.contains(&modern) {
                     assert!(

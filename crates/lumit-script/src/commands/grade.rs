@@ -1,6 +1,3 @@
-//! A shot's grade versions and its grade group: reading them, switching the
-//! version showing, and moving the shot between groups.
-
 use lumit_core::grade::{groups, versions, GradeError, Shot};
 use lumit_core::model::{Document, LayerKind};
 use serde::Deserialize;
@@ -10,7 +7,6 @@ use uuid::Uuid;
 use super::{commit, find_comp, find_layer, present, NoArgs};
 use crate::{Host, ScriptError};
 
-/// The reason as a sentence, as an op's is.
 fn refused(e: GradeError) -> ScriptError {
     match e {
         GradeError::Op(e) => e.into(),
@@ -35,7 +31,6 @@ pub(super) struct ShotArgs {
     clip: Option<String>,
 }
 
-/// The shot the arguments name, checked against `doc`.
 fn shot_of(
     doc: &Document,
     comp: &str,

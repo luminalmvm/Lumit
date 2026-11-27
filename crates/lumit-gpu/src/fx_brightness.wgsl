@@ -10,7 +10,7 @@ struct Params {
     b: f32,        // brightness_percent / 100; 0.0 = neutral
     k: f32,        // 1 + contrast_percent / 100; 1.0 = neutral
     mix_amt: f32,  // 0..1, blended against the unprocessed input
-    matte_on: f32,     // 1 = the matte drives the control below
+    matte_on: f32,
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -37,10 +37,8 @@ fn matte_toward(value: f32, neutral: f32, k: f32) -> f32 {
     return neutral * (1.0 - k) + value * k;
 }
 
-// The mid-grey pivot the contrast half expands about (== cpu::CONTRAST_PIVOT).
 const PIVOT = 0.5;
 
-// The unpremultiplied colour of a premultiplied pixel (== cpu::unpremult).
 fn unpremult(c: vec4<f32>) -> vec3<f32> {
     if (c.a > 0.0) {
         return c.rgb / c.a;
@@ -56,13 +54,11 @@ fn brightness(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let o = textureLoad(src, xy, 0);
-    // Neutral short-circuit (== the CPU reference's early return).
     if (p.b == 0.0 && p.k == 1.0) {
         textureStore(dst, xy, o);
         return;
     }
     let u = unpremult(o);
-    // The matte pulls Brightness toward 0 and Contrast toward 1 per pixel.
     var b = p.b;
     var k = p.k;
     if (p.matte_on != 0.0) {

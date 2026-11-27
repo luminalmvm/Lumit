@@ -35,8 +35,6 @@ import 'waveform_frb.dart';
 /// borrows for itself, so the mix is drawn at the same size as a layer's wave.
 const int soundMixRows = 2;
 
-/// The outline's end of the row: the twirl, the speaker, the name, how many
-/// layers are folded, and the master fader's dB well.
 class SoundMixOutlineRow extends StatelessWidget {
   final CompositionReference comp;
 
@@ -50,7 +48,6 @@ class SoundMixOutlineRow extends StatelessWidget {
   /// revision - never a bridge call in this build.
   final double masterDb;
 
-  /// A committed move of the master fader, in dB.
   final ValueChanged<double> onMasterDb;
 
   /// The fader in hand, on every tick of a scrub. The number follows the
@@ -61,7 +58,6 @@ class SoundMixOutlineRow extends StatelessWidget {
   /// A scrub that was cancelled: whatever it staged is dropped.
   final VoidCallback onMasterDbCancel;
 
-  /// A double click on the row: the Audio workspace, where the mix is made.
   final VoidCallback? onOpen;
 
   /// A right click on the row, at the global position of the press.
@@ -187,8 +183,6 @@ class SoundMixOutlineRow extends StatelessWidget {
   }
 }
 
-/// The lane's end of the row: the mix's waveform over the stretch of comp
-/// time the lanes are showing, following the lanes' scroll.
 class SoundMixLane extends StatelessWidget {
   /// The mix summarised over the window the panel asked for, in comp seconds,
   /// or null while nothing has come back yet.
@@ -200,7 +194,6 @@ class SoundMixLane extends StatelessWidget {
   final double secondsPerPixel;
   final WaveformStyle style;
 
-  /// A double click on the lane: the Audio workspace, as on the outline row.
   final VoidCallback? onOpen;
 
   /// A right click on the lane, at the global position of the press.

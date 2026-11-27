@@ -14,8 +14,6 @@ import 'package:flutter/widgets.dart';
 
 import 'controls.dart' show ThemeScope;
 
-/// Wraps [child] in a 1px dashed border in `hairlineStrong`, cornered to the
-/// theme's control radius.
 class DashedOutline extends StatelessWidget {
   final Widget child;
 

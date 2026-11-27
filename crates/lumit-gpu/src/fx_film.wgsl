@@ -71,7 +71,6 @@ fn curve_at(at: u32, c: u32, x: f32) -> f32 {
     return a + (tables[at + (i + 1u) * 3u + c] - a) * f;
 }
 
-// == tables::grain_at.
 fn grain_at(c: u32, d: f32, top: f32) -> f32 {
     let n = f32(p.grain_n - 1u);
     let t = clamp(d / max(top, 1e-6) * n, 0.0, n);
@@ -115,7 +114,6 @@ fn inside(xy: vec2<i32>) -> bool {
     return xy.x < size.x && xy.y < size.y;
 }
 
-// == cpu::lift.
 fn lift(u: vec3<f32>) -> f32 {
     let m = max(max(u.x, u.y), u.z);
     if (p.boost <= 0.0 || m <= 0.75) {
@@ -125,7 +123,6 @@ fn lift(u: vec3<f32>) -> f32 {
     return exp2(p.boost * t * t);
 }
 
-// == cpu::in_gamut.
 fn in_gamut(rgb: vec3<f32>) -> vec3<f32> {
     let low = min(min(rgb.x, rgb.y), rgb.z);
     if (low >= 0.0) {
@@ -139,7 +136,6 @@ fn in_gamut(rgb: vec3<f32>) -> vec3<f32> {
     return max(vec3<f32>(luma) + (rgb - vec3<f32>(luma)) * t, vec3<f32>(0.0));
 }
 
-// == cpu::expose.
 @compute @workgroup_size(8, 8)
 fn film_expose(@builtin(global_invocation_id) gid: vec3<u32>) {
     let xy = vec2<i32>(gid.xy);
@@ -174,7 +170,6 @@ fn film_acc(@builtin(global_invocation_id) gid: vec3<u32>) {
     textureStore(dst, xy, vec4<f32>(sum, o.a));
 }
 
-// == cpu::couple.
 @compute @workgroup_size(8, 8)
 fn film_couple(@builtin(global_invocation_id) gid: vec3<u32>) {
     let xy = vec2<i32>(gid.xy);
@@ -191,14 +186,12 @@ fn film_couple(@builtin(global_invocation_id) gid: vec3<u32>) {
     textureStore(dst, xy, vec4<f32>(held, 1.0));
 }
 
-// == cpu::normal.
 fn normal(lane: u32, x: i32, y: i32) -> f32 {
     let u1 = max(nc_hash01(p.seed, lane * 2u, x, y, p.tick), 1e-7);
     let u2 = nc_hash01(p.seed, lane * 2u + 1u, x, y, p.tick);
     return sqrt(-2.0 * log(u1)) * cos(6.2831853 * u2);
 }
 
-// == cpu::grain_noise.
 @compute @workgroup_size(8, 8)
 fn film_noise(@builtin(global_invocation_id) gid: vec3<u32>) {
     let xy = vec2<i32>(gid.xy);
@@ -228,7 +221,6 @@ fn to_rec709(m0: vec4<f32>, m1: vec4<f32>, m2: vec4<f32>, v: vec3<f32>) -> vec3<
     );
 }
 
-// == cpu::pixel.
 fn shown(e: vec3<f32>, corr: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
     let grain_on = (p.flags & 4u) != 0u;
     if (p.shown == 3u) {

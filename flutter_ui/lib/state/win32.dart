@@ -14,8 +14,6 @@ String abiName() => Abi.current().toString();
 /// A tab is the browser build's; see win32_web.dart.
 bool openInTab(String url) => false;
 
-// --- Alt, from the keyboard itself ----------------------------------------
-
 const int _vkMenu = 0x12;
 
 typedef _GetAsyncKeyStateC = Int16 Function(Int32);
@@ -23,15 +21,12 @@ typedef _GetAsyncKeyStateD = int Function(int);
 
 _GetAsyncKeyStateD? _getAsyncKeyState;
 
-/// Whether Alt is physically down right now, on Windows.
 bool altPhysicallyDown() {
   _getAsyncKeyState ??= DynamicLibrary.open('user32.dll')
       .lookupFunction<_GetAsyncKeyStateC, _GetAsyncKeyStateD>(
           'GetAsyncKeyState');
   return (_getAsyncKeyState!(_vkMenu) & 0x8000) != 0;
 }
-
-// --- The window in front ---------------------------------------------------
 
 typedef _ForegroundC = IntPtr Function();
 typedef _ForegroundD = int Function();
@@ -57,8 +52,6 @@ bool lumitInFront() {
     calloc.free(process);
   }
 }
-
-// --- Credential Manager --------------------------------------------------
 
 /// `CREDENTIALW`, as `wincred.h` lays it out.
 final class _Credential extends Struct {

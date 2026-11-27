@@ -35,14 +35,11 @@ pub struct Blender {
     pub version: String,
 }
 
-/// Where a source's conversion stands, while it isn't simply done.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum State {
     Converting,
     NoBlender,
-    /// What Blender printed about it.
     Failed(String),
-    /// This Blender has no importer for the file's type.
     NoImporter,
     /// Stopped by hand, and left until it's asked for again.
     Stopped,
@@ -52,7 +49,6 @@ pub enum State {
 static CHOSEN: Mutex<Option<PathBuf>> = Mutex::new(None);
 /// The last Blender found, so each conversion doesn't go looking again.
 static FOUND: Mutex<Option<Blender>> = Mutex::new(None);
-/// Each source being converted, or whose last conversion failed.
 static STATES: Mutex<Option<HashMap<PathBuf, State>>> = Mutex::new(None);
 
 /// Moves each time [`choose`] or [`convert_again`] is called.
@@ -125,7 +121,6 @@ pub fn stop(source: &Path) {
     stop_where(&|path| path == source);
 }
 
-/// Stop every conversion of a file `which` picks.
 pub fn stop_where(which: &dyn Fn(&Path) -> bool) {
     if let Ok(mut states) = STATES.lock() {
         for (path, state) in states.get_or_insert_with(HashMap::new) {
@@ -136,7 +131,6 @@ pub fn stop_where(which: &dyn Fn(&Path) -> bool) {
     }
 }
 
-/// Wait a moment for the Blenders stopped to be gone, as the app quits.
 pub fn wait_for_stopped() {
     let deadline = Instant::now() + Duration::from_secs(2);
     while RUNNING.load(Ordering::Relaxed) > 0 && Instant::now() < deadline {
@@ -361,7 +355,6 @@ fn unique() -> String {
     format!("{}-{run}", std::process::id())
 }
 
-/// GLBs of earlier saves of the same source, which nothing will ask for again.
 fn forget_older(cache_dir: &Path, place: u64, keep: &Path) {
     let prefix = format!("{place:016x}-");
     for entry in std::fs::read_dir(cache_dir).into_iter().flatten().flatten() {
@@ -588,7 +581,6 @@ fn newest_first(folders: Vec<PathBuf>) -> Vec<PathBuf> {
     found.into_iter().map(|(_, path)| path).collect()
 }
 
-/// Steam's own folder and every library its `libraryfolders.vdf` names.
 #[cfg(windows)]
 fn steam_libraries(steam: &Path) -> Vec<PathBuf> {
     let vdf =

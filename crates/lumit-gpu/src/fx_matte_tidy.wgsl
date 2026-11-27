@@ -25,13 +25,11 @@ struct Params {
 @group(0) @binding(2) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var<uniform> p: Params;
 
-// The matte at a pixel, clamped to the edge (== the CPU's `at`).
 fn at(xy: vec2<i32>, size: vec2<i32>) -> f32 {
     let c = clamp(xy, vec2<i32>(0, 0), size - vec2<i32>(1, 1));
     return textureLoad(src, c, 0).r;
 }
 
-// Grow takes the brighter, shrink the darker.
 fn opv(a: f32, b: f32) -> f32 {
     if (p.grow == 1u) {
         return max(a, b);

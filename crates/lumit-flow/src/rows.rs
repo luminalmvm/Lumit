@@ -10,15 +10,12 @@ use rayon::prelude::*;
 
 use crate::{sample_scalar, FlowField, Gray, Texel, OCC_ABS, OCC_REL, VALID_DIM};
 
-/// Run `each` over `data` a row of `len` at a time, across the cores, with the
-/// row's index.
 pub(crate) fn rows<T: Send>(data: &mut [T], len: usize, each: impl Fn(usize, &mut [T]) + Sync) {
     data.par_chunks_mut(len.max(1))
         .enumerate()
         .for_each(|(y, row)| each(y, row));
 }
 
-/// [`crate::to_gray_as`].
 pub(crate) fn to_gray_as<T: Texel>(rgba: &[u8], w: usize, h: usize) -> Gray {
     let mut data = vec![0f32; w * h];
     let scale = if T::BYTES == 4 { 1.0 / 255.0 } else { 1.0 };
@@ -32,7 +29,6 @@ pub(crate) fn to_gray_as<T: Texel>(rgba: &[u8], w: usize, h: usize) -> Gray {
     Gray { w, h, data }
 }
 
-/// [`crate::downsample`].
 pub(crate) fn downsample(g: &Gray) -> Gray {
     let w = (g.w / 2).max(1);
     let h = (g.h / 2).max(1);
@@ -69,7 +65,6 @@ pub(crate) fn blur3(raw: &[f32], w: usize, h: usize) -> Vec<f32> {
     out
 }
 
-/// [`crate::agreement`].
 pub(crate) fn agreement(f: &FlowField, g: &FlowField) -> Vec<f32> {
     let (w, h) = (f.w, f.h);
     let n = w * h;

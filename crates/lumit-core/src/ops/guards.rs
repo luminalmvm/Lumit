@@ -1,5 +1,3 @@
-//! Which ops need a composition that holds layers.
-
 use super::*;
 
 /// The composition an op edits **the layers of**, or `None` when the op has

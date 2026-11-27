@@ -30,7 +30,6 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../theme/brand.dart';
 
-/// Where the drawing lives.
 const String lumitWordmarkAsset = 'assets/brand/lumit-wordmark.svg';
 
 /// The lockup's own box — the `l`'s left edge to the `t`'s right, the cap line
@@ -59,8 +58,6 @@ class LumitWordmark extends StatelessWidget {
 
   const LumitWordmark({super.key, required this.height, this.ground});
 
-  /// The colour `umi` will be drawn in. Public so the screens that place the
-  /// mark — and the tests that check them — can ask without rendering.
   Color get letters => wordmarkLetters(ground);
 
   @override

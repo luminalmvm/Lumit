@@ -59,7 +59,6 @@ struct Combo {
     ring_fresnel: f32,
 };
 
-// The empty bounce slot — lumit_core's `NO_BOUNCE`.
 const NO_BOUNCE: u32 = 0xffffffffu;
 
 // One radiometric sub-sample of a band: where in the baked
@@ -137,7 +136,7 @@ struct TraceParams {
     raster_w: f32,
     raster_h: f32,
     light_count: u32,
-    sensor_shift_mm: f32,  // focus shift
+    sensor_shift_mm: f32,
     pupil_mm: f32,         // spray radius, already × the f-stop scale
     start_z_mm: f32,
     sensor_z_mm: f32,
@@ -337,7 +336,6 @@ fn fresnel_cos(cos_i_in: f32, n1: f32, n2: f32) -> f32 {
 const REFL_LAMBDA_BINS: u32 = 69u;
 const REFL_COS_BINS: u32 = 16u;
 
-// Radiometric sub-samples per traced band (lumit_core `SPECTRAL_SUB`).
 const SPECTRAL_SUB: u32 = 8u;
 
 // Read the baked table at (surface, direction, lambda index, cos theta):
@@ -565,7 +563,6 @@ fn trace(@builtin(global_invocation_id) gid: vec3<u32>) {
     var rrel2 = 0.0;
     let lambda = combo.lambda_nm;
 
-    // Phase 1: forward through 0..=b, reflecting at b.
     for (var s_idx = 0u; s_idx <= b_idx; s_idx = s_idx + 1u) {
         let s = surfaces[s_idx];
         let hit = intersect(pos, dir, s.radius_mm, s.z_mm);
@@ -733,7 +730,6 @@ fn trace(@builtin(global_invocation_id) gid: vec3<u32>) {
             }
         }
 
-        // Phase 5: forward through d+1..n.
         for (var s_idx = d_idx + 1u; s_idx < tp.surface_count; s_idx = s_idx + 1u) {
             let s = surfaces[s_idx];
             let hit = intersect(pos, dir, s.radius_mm, s.z_mm);
@@ -764,7 +760,6 @@ fn trace(@builtin(global_invocation_id) gid: vec3<u32>) {
         }
     }
 
-    // Propagate to the (focus-shifted) sensor plane.
     if (abs(dir.z) < 1e-12) {
         rays[slot] = dead;
         return;
@@ -808,11 +803,6 @@ fn trace(@builtin(global_invocation_id) gid: vec3<u32>) {
     out._pad2 = 0.0;
     rays[slot] = out;
 }
-
-// ---------------------------------------------------------------------------
-// Per-ray splatting — the WGSL twin of lumit_core's `ray_axes` and
-// the front half of `splat_ray`, op for op.
-// ---------------------------------------------------------------------------
 
 // Shortest half-axis a splat's footprint may have, px — the anti-alias
 // floor. Must equal lumit_core's `MIN_SPLAT_AXIS_PX` (pinned by test).

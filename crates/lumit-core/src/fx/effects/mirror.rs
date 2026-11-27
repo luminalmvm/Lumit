@@ -1,16 +1,8 @@
-//! Mirror (docs/08 §3.41): one half of the frame reflected onto the other.
-//!
-//! **In plain terms.** Draw a line through the picture. Everything on one side
-//! of it is thrown away and replaced by the reflection of what is on the other
-//! side. Centre says where the line passes through, Angle which way it runs and
-//! which side is replaced.
-
 use crate::fx::{
     cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
 };
 use lumit_fx_macros::Effect;
 
-/// Mirror's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "mirror",
@@ -18,7 +10,6 @@ use lumit_fx_macros::Effect;
     version = 1,
     category = Distortion,
     cost = Cheap,
-    // A reflection about a movable axis reaches anywhere in the frame.
     roi = FullFrame,
     premultiplied = true,
 )]
@@ -30,7 +21,6 @@ pub struct Mirror {
     #[slider(label = "Centre X", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
     pub centre_x: f32,
 
-    /// px@comp; see [`centre_x`](Self::centre_x).
     #[slider(label = "Centre Y", min = 0.0, max = 2160.0, default = 540.0, unit = Px)]
     pub centre_y: f32,
 
@@ -41,7 +31,6 @@ pub struct Mirror {
     #[dial(default = 0.0, step = 15.0)]
     pub angle: f32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -68,7 +57,6 @@ impl Mirror {
     }
 }
 
-/// Mirror's behaviour.
 pub struct MirrorDef;
 
 impl EffectDef for MirrorDef {

@@ -44,7 +44,6 @@ const List<List<double>> _vectors = [
   [1, 0, 1],
 ];
 
-/// Where each vector colour sits along a hue curve.
 final List<double> gradeVectorHues = [
   for (final v in _vectors) gradeHueOf(v[0], v[1], v[2]),
 ];
@@ -103,7 +102,6 @@ List<List<double>> _wrapped(List<List<double>> points) {
   return out;
 }
 
-/// What the curve's input is, for the strip drawn under it.
 enum HueCurveInput { hue, luma, saturation }
 
 class GradeHueCurve extends StatefulWidget {
@@ -112,15 +110,12 @@ class GradeHueCurve extends StatefulWidget {
   final double width, height;
   final bool enabled;
 
-  /// Whether the curve has keys, so its line wears the animated colour.
   final bool keyed;
   final ValueChanged<List<List<double>>> onLive;
   final ValueChanged<List<List<double>>> onCommit;
 
-  /// What Reset goes back to.
   final List<List<double>> rest;
 
-  /// Rows the panel adds to the right-click menu.
   final List<Widget> Function(VoidCallback close)? moreRows;
 
   const GradeHueCurve({
@@ -221,7 +216,6 @@ class GradeHueCurveState extends State<GradeHueCurve> {
     return widget.periodic ? math.min(d, 1 - d) : d;
   }
 
-  /// Three points round [centre], [spread] either side, as one commit.
   void dropThree(double centre, double spread) => widget
       .onCommit(_out(withPointsAt([centre - spread, centre, centre + spread])));
 
@@ -366,7 +360,6 @@ class GradeHueCurveState extends State<GradeHueCurve> {
           (a[i][0] - b[i][0]).abs() < 1e-6 && (a[i][1] - b[i][1]).abs() < 1e-6
       ].every((x) => x);
 
-  /// A double-click on a point puts it back on the middle line.
   void _flatten(int i) {
     final points = _points;
     if ((points[i][1] - 0.5).abs() < 1e-6) return;
@@ -523,8 +516,6 @@ class _HueCurvePainter extends CustomPainter {
       !GradeHueCurveState._same(old.points, points);
 }
 
-/// The six vector colours as swatches: a click drops three points on that
-/// colour's place along the curve.
 class GradeVectorSwatches extends StatelessWidget {
   final bool enabled;
   final ValueChanged<double> onPick;

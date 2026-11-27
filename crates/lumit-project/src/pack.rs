@@ -31,10 +31,8 @@ use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
 use crate::{fingerprint_path, relative_between, Manifest, ProjectError};
 
-/// Every packed file's archive entry starts with this.
 pub const MEDIA_PREFIX: &str = "media/";
 
-/// How much is copied between two progress reports.
 const CHUNK: usize = 1 << 20;
 
 /// Called with the bytes copied so far and the bytes there are to copy.
@@ -42,8 +40,6 @@ const CHUNK: usize = 1 << 20;
 /// [`ProjectError::Cancelled`] and leaves nothing half-written behind.
 pub type Progress<'a> = &'a mut dyn FnMut(u64, u64) -> bool;
 
-/// One footage item's files on disk, offered to a save for packing. A proxy
-/// or the colour config is offered the same way, under its packed id.
 #[derive(Debug, Clone)]
 pub struct PackSource {
     pub item: Uuid,
@@ -54,39 +50,29 @@ pub struct PackSource {
     pub files: Vec<PathBuf>,
 }
 
-/// What [`save_packed`] wrote.
 #[derive(Debug, Clone, Default)]
 pub struct Packed {
     /// The packed map as the file holds it: the items whose bytes are in the
     /// archive, and nothing else.
     pub packed: BTreeMap<Uuid, PackedMedia>,
-    /// How many media files the archive carries.
     pub files: u64,
 }
 
-/// What [`unpack`] did.
 #[derive(Debug, Clone, Default)]
 pub struct Unpacked {
-    /// The items that now read a file [`unpack`] wrote, with the reference
-    /// that names it.
     pub moved: Vec<(Uuid, MediaRef)>,
     /// The items whose bytes could not be written out. They stay packed, so
     /// the next save still carries them.
     pub kept: BTreeMap<Uuid, PackedMedia>,
-    /// How many files were written beside the project.
     pub written: u64,
 }
 
-/// Where a packed entry's bytes come from.
 #[derive(Clone)]
 enum Held {
-    /// Entry `index` of the archive at `archive` in the caller's list.
     Archive { archive: usize, index: usize },
-    /// A file on disk.
     Disk(PathBuf),
 }
 
-/// One file of a packed folder: its name there, its size, where it is.
 #[derive(Clone)]
 struct HeldFile {
     name: String,
@@ -98,7 +84,6 @@ struct HeldFile {
 /// one that is missing or would not open.
 type Zips = Vec<Option<ZipArchive<File>>>;
 
-/// The files of each packed folder, by folder name.
 type HeldFolders = HashMap<String, Vec<HeldFile>>;
 
 /// `media/<folder>/<name>` taken apart, or `None` for an entry that is not
@@ -210,8 +195,6 @@ impl From<CopyError> for ProjectError {
     }
 }
 
-/// Copy `size` bytes of `from` into `to` a chunk at a time, reporting after
-/// each one.
 fn copy_chunks(
     from: &mut dyn Read,
     to: &mut dyn Write,
@@ -253,8 +236,6 @@ fn same_files(files: &[PathBuf], held: &[HeldFile]) -> bool {
         })
 }
 
-/// A folder name nothing in this archive uses yet, starting from the item's
-/// own id.
 fn free_folder(item: Uuid, claimed: &mut HashSet<String>) -> String {
     let base = item.to_string();
     if claimed.insert(base.clone()) {
@@ -304,15 +285,11 @@ pub fn save_packed(
     )
 }
 
-/// Writes an archive's further entries, once its footage is in and it is
-/// known which items the archive holds.
 pub(crate) type MoreEntries<'a> = &'a mut dyn FnMut(
     &mut ZipWriter<File>,
     &BTreeMap<Uuid, PackedMedia>,
 ) -> Result<(), ProjectError>;
 
-/// [`save_packed`] under another manifest, with entries of the caller's own
-/// written by `more`. What a graphics template's file is written by.
 pub(crate) fn save_packed_with(
     doc: &Document,
     path: &Path,
@@ -344,7 +321,6 @@ pub(crate) fn save_packed_with(
             .collect();
         let live = |id: Uuid| doc.packed_path(id).is_some();
 
-        // What goes in, folder by folder, and which items each one serves.
         let mut plan: Vec<(String, Vec<HeldFile>)> = Vec::new();
         let mut packed: BTreeMap<Uuid, PackedMedia> = BTreeMap::new();
         let mut claimed: HashSet<String> = HashSet::new();
@@ -352,8 +328,6 @@ pub(crate) fn save_packed_with(
         // packed once.
         let mut by_path: HashMap<PathBuf, PackedMedia> = HashMap::new();
 
-        // First the items the archive already carries, unless the file on
-        // disk has moved on from what was packed.
         for (id, was) in &doc.packed {
             if !live(*id) {
                 continue;
@@ -374,7 +348,6 @@ pub(crate) fn save_packed_with(
                     fingerprint_path(main).is_ok_and(|fp| fp.likely_same_content(&was.fingerprint))
                         && same_files(&source.files, files)
                 }
-                // Nothing on disk to compare with: the archive's copy is it.
                 _ => true,
             };
             if !unchanged {
@@ -389,7 +362,6 @@ pub(crate) fn save_packed_with(
             }
         }
 
-        // Then everything offered from disk that is not in yet.
         for source in sources {
             if packed.contains_key(&source.item) || !live(source.item) {
                 continue;
@@ -539,13 +511,11 @@ pub(crate) fn save_packed_with(
     })();
 
     if result.is_err() {
-        let _ = fs::remove_file(&tmp); // best effort; the target is untouched
+        let _ = fs::remove_file(&tmp);
     }
     result
 }
 
-/// Copy the files of `folder` that are not already at `dest_dir` out of
-/// wherever they are held.
 fn write_out(
     zips: &mut [Option<ZipArchive<File>>],
     files: &[HeldFile],
@@ -632,7 +602,6 @@ pub fn restore_packed(
     dest_root: &Path,
     progress: Progress<'_>,
 ) -> Result<(usize, Vec<Uuid>), ProjectError> {
-    // Which items need the archive's copy, and of which folder.
     let mut wanted: Vec<(Uuid, PackedMedia)> = Vec::new();
     for (id, media) in doc.packed.clone() {
         // A file an effect reads has the one path and nothing relative.
@@ -780,14 +749,13 @@ pub fn unpack(
     let (mut zips, mut held) = open_archives(archives);
     let mut out = Unpacked::default();
 
-    // The folders to write, and the items each one serves.
     let mut folders: Vec<(String, String, Fingerprint, Vec<Uuid>)> = Vec::new();
     for (id, media) in &doc.packed {
         let Some(now) = doc.packed_path(*id).map(Path::new) else {
             continue;
         };
         if now.is_file() && !now.starts_with(dest_root) {
-            continue; // the original is where it always was
+            continue;
         }
         let Some((folder, name)) = split_entry(&media.entry) else {
             out.kept.insert(*id, media.clone());
@@ -804,9 +772,6 @@ pub fn unpack(
         }
     }
 
-    // An archive that no longer has a folder leaves the copy an open read.
-    // ponytail: the top of that folder only, so a config comes back without
-    // the tables in folders below it. Walk the tree if that is ever met.
     for (folder, ..) in &folders {
         if held.contains_key(folder) {
             continue;
@@ -1086,8 +1051,6 @@ mod tests {
         packed_file_id, packed_id, EffectValue, FileParam, FootageItem, ProjectItem, ProxyRef,
     };
 
-    /// A project in `dir` with one footage item reading `dir/footage/<name>`,
-    /// which holds `bytes`.
     fn project_with(dir: &Path, name: &str, bytes: &[u8]) -> (Document, Uuid, PathBuf) {
         let file = dir.join("footage").join(name);
         fs::create_dir_all(file.parent().unwrap()).unwrap();
@@ -1119,7 +1082,6 @@ mod tests {
         }
     }
 
-    /// A reference to `dir/<relative>`, which is written holding `bytes`.
     fn file_ref(dir: &Path, relative: &str, bytes: &[u8]) -> MediaRef {
         let file = dir.join(relative);
         fs::create_dir_all(file.parent().unwrap()).unwrap();
@@ -1132,16 +1094,11 @@ mod tests {
         }
     }
 
-    /// The whole promise: pack, delete the originals, and the footage, its
-    /// proxy, the colour config and a file an effect reads are still there on
-    /// the next open and still in the file after the next save.
     #[test]
     fn packed_footage_outlives_its_original() {
         let dir = tempfile::tempdir().unwrap();
         let bytes: Vec<u8> = (0..300_000u32).map(|n| (n % 251) as u8).collect();
         let (mut doc, id, _) = project_with(dir.path(), "clip.mov", &bytes);
-        // A proxy goes in with it, and a colour config whose table sits in a
-        // folder of its own.
         let (proxy_id, config_id) = (packed_id(id), packed_id(doc.id));
         doc.proxies.insert(
             id,
@@ -1153,7 +1110,6 @@ mod tests {
         );
         doc.colour.config = Some(file_ref(dir.path(), "ocio/config.ocio", b"a config"));
         file_ref(dir.path(), "ocio/luts/grade.cube", b"a table");
-        // And a LUT on a layer, whose file is a path in a parameter.
         let look = file_ref(dir.path(), "looks/look.cube", b"a look").absolute_path;
         let mut lut = lumit_core::fx::builtins::instantiate("lut").unwrap();
         let look_id = packed_file_id(lut.id, "file", 0);
@@ -1167,7 +1123,6 @@ mod tests {
         let mut comp = comp.unwrap();
         comp.layers[0].effects.push(lut);
         doc.items.push(ProjectItem::Composition(comp));
-        // What a save is offered: each file from wherever the project reads it.
         let offered = |doc: &Document| {
             let at = |id| PathBuf::from(doc.packed_path(id).unwrap());
             let table = at(config_id).with_file_name("luts").join("grade.cube");
@@ -1189,7 +1144,6 @@ mod tests {
         fs::remove_dir_all(dir.path().join("ocio")).unwrap();
         fs::remove_dir_all(dir.path().join("looks")).unwrap();
 
-        // Reopened with the originals gone, each reads the archive's copy.
         let (mut opened, _) = crate::open(&lum).unwrap();
         let cache = dir.path().join("cache");
         let restored = restore_packed(
@@ -1206,14 +1160,11 @@ mod tests {
         };
         let copy = PathBuf::from(&f.media.absolute_path);
         assert_eq!(fs::read(&copy).unwrap(), bytes);
-        // The LUT reads its copy, and what a save writes is the path it had.
         assert!(Path::new(opened.packed_path(look_id).unwrap()).starts_with(&cache));
         let mut written = opened.clone();
         keep_original_paths(&mut written, &cache);
         assert_eq!(written.packed_path(look_id), Some(look.as_str()));
 
-        // Saved over itself with nothing on disk to pack from but those
-        // copies, the archive still carries the bytes.
         let again = save_packed(&opened, &lum, Some(&lum), &offered(&opened), &mut |_, _| {
             true
         })
@@ -1242,7 +1193,6 @@ mod tests {
         let look = reopened.packed_path(look_id).unwrap();
         assert_eq!(fs::read(look).unwrap(), b"a look");
 
-        // And unpacking writes them beside the project again.
         let unpacked = unpack(&reopened, &[lum], dir.path(), &cache, &mut |_, _| true).unwrap();
         assert!(unpacked.kept.is_empty());
         let moved: HashMap<Uuid, MediaRef> = unpacked.moved.into_iter().collect();
@@ -1257,9 +1207,6 @@ mod tests {
             b"a table"
         );
 
-        // A folder of copies goes once nobody holds it and nobody has opened
-        // it for a week. Held, it stays however old. Let go, it stays for the
-        // week, and so does one written lately with no marker.
         let root = dir.path().join("packed");
         let [held, old, unmarked, other] = [(); 4].map(|()| Uuid::now_v7());
         let folder = |id: Uuid| root.join(id.to_string());
@@ -1278,7 +1225,6 @@ mod tests {
         assert!(folder(unmarked).is_dir() && folder(other).is_dir());
     }
 
-    /// A pack that is cancelled leaves the project file exactly as it was.
     #[test]
     fn a_cancelled_pack_leaves_the_project_file_alone() {
         let dir = tempfile::tempdir().unwrap();
@@ -1306,8 +1252,6 @@ mod tests {
         assert!(left.is_empty(), "no half-written file is left behind");
     }
 
-    /// A project file is somebody else's file. An entry named to climb out of
-    /// the folder it is read into is not read at all.
     #[test]
     fn an_entry_that_points_outside_is_never_written() {
         let dir = tempfile::tempdir().unwrap();
@@ -1337,10 +1281,6 @@ mod tests {
         assert!(!dir.path().join("a").join("escaped.mov").exists());
         assert!(!dir.path().join("a").join("b").join("escaped.mov").exists());
 
-        // The packed list is the file's own word as well. An item no archive
-        // holds comes off it, or the next save would pack whatever its path
-        // names. One whose folder an archive holds stays on it, and is named
-        // as not placed, so a save carries those bytes and reads no path.
         let lum = dir.path().join("listed.lum");
         let mut zip = ZipWriter::new(File::create(&lum).unwrap());
         zip.start_file("media/held/other.mov", stored).unwrap();
