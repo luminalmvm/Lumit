@@ -86,16 +86,11 @@ Updates ▸ This version** keeps the last reason. See [Installation](/start/inst
 
 ## A plugin is missing
 
-When the start-up scan turns a plugin away, Lumit writes the reasons to `plugin-scan.txt`,
-beside `plugins.json` in Lumit's data folder:
+When the start-up scan turns a plugin away, Lumit writes the reason to `plugin-scan.txt`
+in its data folder. See [The scan report](/use/plugins/#the-scan-report).
 
-| Platform | Folder |
-| --- | --- |
-| Windows | `%APPDATA%\Lumit\Lumit\data` |
-| macOS | `~/Library/Application Support/dev.Lumit.Lumit` |
-| Linux (Flatpak) | `~/.var/app/io.github.luminalmvm.Lumit/data/lumit` |
-
-See [Plugins](/use/plugins/).
+A plugin in a folder Lumit does not scan is not in the report. See
+[Add another folder](/use/plugins/#add-another-folder).
 
 ## Disk space drops while plugins are in use
 
