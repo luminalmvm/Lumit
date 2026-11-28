@@ -3225,6 +3225,21 @@ class CompositionReference {
               contents: contents,
               transform: transform);
 
+  void renderFrameWithSolidPreview(
+          {required int frame,
+          required double scale,
+          required LayerReference layer,
+          required BridgeColourRgba colour,
+          required bool allLayers}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceRenderFrameWithSolidPreview(
+              that: this,
+              frame: frame,
+              scale: scale,
+              layer: layer,
+              colour: colour,
+              allLayers: allLayers);
+
   /// Ask for `frame` with `layer`'s text document replaced by `document` —
   /// the same live path as the two above, for the Type tool.
   ///
