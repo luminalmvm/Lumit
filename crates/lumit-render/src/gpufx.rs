@@ -838,6 +838,8 @@ impl GpuEffect for SpriteFlare {
                 lights: &lights,
                 centre: frame.centre,
                 edge_fade: frame.edge_fade * frame.px_scale,
+                burn: frame.burn,
+                defocus: frame.defocus,
                 spots: spots.map(|s| sf::SpotsOp {
                     threshold: s.threshold,
                     softness: s.softness,

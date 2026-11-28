@@ -397,6 +397,15 @@ const STREAK: &[Control] = &[
         (0.0, 100.0, 0.0, BIG),
         8.0,
     ),
+    c(
+        "offset",
+        "Offset",
+        SHAPE,
+        Slider,
+        Px,
+        (-200.0, 200.0, -BIG, BIG),
+        0.0,
+    ),
     c("taper", "Taper", SHAPE, Slider, Unit::None, UNIT, 0.5),
     c(
         "end_width",

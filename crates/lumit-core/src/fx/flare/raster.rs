@@ -41,6 +41,32 @@ pub struct Frame {
     /// How far past the frame's edge a light fades out, comp pixels. 0 is
     /// no fade.
     pub edge_fade: f32,
+    pub burn: f32,
+    pub defocus: f32,
+}
+
+#[must_use]
+pub fn burnt(c: [f32; 3], burn: f32) -> [f32; 3] {
+    let m = c[0].max(c[1]).max(c[2]);
+    if burn <= 0.0 || m <= 1.0 {
+        return c;
+    }
+    let lo = c[0].min(c[1]).min(c[2]);
+    let mid = c[0] + c[1] + c[2] - m - lo;
+    let x = 1.0 - 1.0 / m;
+    let (first, last) = (burn * x, burn * x * x * x);
+    let apart = ((mid - lo) / (0.02 * m)).clamp(0.0, 1.0);
+    let even = 0.5 * (first + last);
+    let (t_mid, t_lo) = (even + (first - even) * apart, even + (last - even) * apart);
+    [0, 1, 2].map(|k| c[k] + (m - c[k]) * if c[k] <= lo { t_lo } else { t_mid })
+}
+
+fn hot(l: &[f32]) -> f32 {
+    let m = l[0].max(l[1]).max(l[2]);
+    if m <= 0.25 {
+        return 0.0;
+    }
+    1.0 - (0.5 - 0.25 * (-4.0 * (m - 0.25)).exp()) / m
 }
 
 impl Frame {
@@ -60,6 +86,8 @@ impl Frame {
             evolution_deg: 0.0,
             time_s: 0.0,
             edge_fade: 0.0,
+            burn: 1.0,
+            defocus: 0.0,
         }
     }
 }
@@ -402,12 +430,60 @@ pub fn draw_with(
         .collect();
     // A row at a time across threads, each adding the quads in the same
     // order, so every pixel sums exactly as it would on one thread.
+    let burn = frame.burn;
+    if frame.defocus > 0.0 {
+        let stride = w as usize * 4;
+        let n = stride * h as usize;
+        let mut light = vec![0.0f32; n];
+        light
+            .par_chunks_mut(stride)
+            .enumerate()
+            .for_each(|(y, row)| {
+                for (i, p) in &placed {
+                    splat_row(i, p, w, y as u32, row, layer.as_ref());
+                }
+            });
+        let mut over: Vec<f32> = light
+            .chunks_exact(4)
+            .flat_map(|l| {
+                let k = hot(l);
+                l.iter().map(move |v| v * k)
+            })
+            .collect();
+        crate::fx::cpu::blur_gaussian(&mut over, w, h, frame.defocus, 0, 1.0);
+        for ((px, l), o) in rgba[..n]
+            .chunks_exact_mut(4)
+            .zip(light.chunks_exact(4))
+            .zip(over.chunks_exact(4))
+        {
+            let k = hot(l);
+            let soft = [0, 1, 2].map(|c| l[c] * (1.0 - k) + o[c]);
+            let b = burnt(soft, burn);
+            for k in 0..3 {
+                px[k] += b[k];
+            }
+        }
+        return;
+    }
     rgba.par_chunks_mut(w as usize * 4)
         .take(h as usize)
         .enumerate()
         .for_each(|(y, row)| {
+            if burn <= 0.0 {
+                for (i, p) in &placed {
+                    splat_row(i, p, w, y as u32, row, layer.as_ref());
+                }
+                return;
+            }
+            let mut light = vec![0.0f32; row.len()];
             for (i, p) in &placed {
-                splat_row(i, p, w, y as u32, row, layer.as_ref());
+                splat_row(i, p, w, y as u32, &mut light, layer.as_ref());
+            }
+            for (px, l) in row.chunks_exact_mut(4).zip(light.chunks_exact(4)) {
+                let b = burnt([l[0], l[1], l[2]], burn);
+                for k in 0..3 {
+                    px[k] += b[k];
+                }
             }
         });
 }

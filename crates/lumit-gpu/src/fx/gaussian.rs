@@ -6,8 +6,8 @@ use crate::GpuContext;
 
 /// A workgroup of `fx_blur.wgsl`: `TILE` pixels along the pass on each of
 /// `LINES` lines across it, as the kernel's constants of the same names.
-const TILE: u32 = 128;
-const LINES: u32 = 4;
+pub(super) const TILE: u32 = 128;
+pub(super) const LINES: u32 = 4;
 
 impl FxEngine {
     /// Blur `src` into `dst` along `p.dir`, blending against `orig`, with

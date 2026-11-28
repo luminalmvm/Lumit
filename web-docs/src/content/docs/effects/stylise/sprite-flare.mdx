@@ -40,6 +40,8 @@ Ghosts and other elements on the axis line up on the line from the light through
 | **Size** | Slider | 0 to 400; higher | 100 | Per cent |
 | **Rotation** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
 | **Colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Burn** | Slider | 0 to 100 | 100 | Per cent |
+| **Defocus** | Slider | 0 to 100; up to 500 | 0 | Pixels at composition size |
 | **Evolution** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
 | **Centre X** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
 | **Centre Y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
@@ -107,6 +109,12 @@ In the Effect Controls panel:
 - **Size**: the size of the whole flare, in per cent.
 - **Rotation**: turns the whole flare.
 - **Colour**: multiplies the light's colour.
+- **Burn**: how far light too bright for its colour runs to white, as a real light does on
+  film. A red light goes orange, yellow, then white where it is brightest, and stays red
+  where it is dim. Turn up an element's Brightness to make more of it burn.
+- **Defocus**: how far out of focus the brightest part of the flare is. Its bright
+  light spreads as a lens spreads a light too bright for it, before Burn, so a burnt middle
+  is a soft glow that runs white, yellow, orange, red; fainter lines and rays stay sharp.
 - **Evolution**: moves the shimmer of rays and the drift of orbs.
 - **Mix**: how much of the result replaces the original.
 - **Blend**: the blend mode the result is laid over the original with.
@@ -174,7 +182,7 @@ While the window is open the Viewer shows the flare as it is being edited.
 | **Glow** | A soft light round the source. |
 | **Rays** | Many fine rays of varied length. |
 | **Star** | A few bold points. |
-| **Streak** | Anamorphic lines through the light. **End width** narrows them towards their ends. |
+| **Streak** | Anamorphic lines through the light. **End width** narrows them towards their ends. **Offset** moves the lines across, off the light: two streaks at different offsets give lines above and below that do not mirror each other. |
 | **Ring** | A circle round the light. |
 | **Halo** | An arc round the light that faces the centre and grows as the light moves out. |
 | **Ghost** | One iris shape on the axis. **Notches** cuts a dent at each corner. |

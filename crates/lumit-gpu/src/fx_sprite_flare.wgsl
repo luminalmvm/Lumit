@@ -15,7 +15,11 @@ struct Frame {
     lights: u32,
     // 1 when the Texture layer's picture is bound.
     has_layer: u32,
-    _pad: f32,
+    burn: f32,
+    defocus: f32,
+    _p0: f32,
+    _p1: f32,
+    _p2: f32,
 };
 
 struct Inst {
@@ -484,6 +488,27 @@ fn sf_lights(@builtin(global_invocation_id) gid: vec3<u32>) {
 @group(0) @binding(3) var src: texture_2d<f32>;
 @group(0) @binding(4) var acc: texture_2d<f32>;
 @group(0) @binding(5) var dst: texture_storage_2d<rgba16float, write>;
+@group(0) @binding(14) var soft: texture_2d<f32>;
+@group(0) @binding(15) var over_out: texture_storage_2d<rgba16float, write>;
+
+@compute @workgroup_size(8, 8)
+fn sf_over(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let size = textureDimensions(acc);
+    if (gid.x >= size.x || gid.y >= size.y) {
+        return;
+    }
+    let at = vec2<i32>(gid.xy);
+    let l = textureLoad(acc, at, 0);
+    textureStore(over_out, at, l * hot(l.rgb));
+}
+
+fn hot(l: vec3<f32>) -> f32 {
+    let m = max(max(l.x, l.y), l.z);
+    if (m <= 0.25) {
+        return 0.0;
+    }
+    return 1.0 - (0.5 - 0.25 * exp(-4.0 * (m - 0.25))) / m;
+}
 
 @compute @workgroup_size(8, 8)
 fn sf_add(@builtin(global_invocation_id) gid: vec3<u32>) {
@@ -493,6 +518,32 @@ fn sf_add(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     let at = vec2<i32>(gid.xy);
     let base = textureLoad(src, at, 0);
-    let light = textureLoad(acc, at, 0);
-    textureStore(dst, at, vec4<f32>(base.rgb + light.rgb, base.a));
+    var l = textureLoad(acc, at, 0).rgb;
+    if (frame.defocus > 0.0) {
+        l = l * (1.0 - hot(l)) + textureLoad(soft, at, 0).rgb;
+    }
+    let light = burnt(l, frame.burn);
+    textureStore(dst, at, vec4<f32>(base.rgb + light, base.a));
+}
+
+fn burnt(c: vec3<f32>, burn: f32) -> vec3<f32> {
+    let m = max(max(c.x, c.y), c.z);
+    if (burn <= 0.0 || m <= 1.0) {
+        return c;
+    }
+    let lo = min(min(c.x, c.y), c.z);
+    let mid = c.x + c.y + c.z - m - lo;
+    let x = 1.0 - 1.0 / m;
+    let first = burn * x;
+    let last = burn * x * x * x;
+    let apart = clamp((mid - lo) / (0.02 * m), 0.0, 1.0);
+    let even = 0.5 * (first + last);
+    let t_mid = even + (first - even) * apart;
+    let t_lo = even + (last - even) * apart;
+    let t = vec3<f32>(
+        select(t_mid, t_lo, c.x <= lo),
+        select(t_mid, t_lo, c.y <= lo),
+        select(t_mid, t_lo, c.z <= lo),
+    );
+    return c + (vec3<f32>(m) - c) * t;
 }

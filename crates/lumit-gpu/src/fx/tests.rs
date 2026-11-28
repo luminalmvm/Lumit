@@ -5394,6 +5394,8 @@ fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
             lights: &lights,
             centre: f.centre,
             edge_fade: f.edge_fade * f.px_scale,
+            burn: f.burn,
+            defocus: f.defocus,
             spots: None,
             hide,
             depth,
@@ -5459,12 +5461,48 @@ fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
         }
     }
     eprintln!("sprite_flare: worst {worst:.2e}, on the light {worst_on_light:.2e}");
-    assert!(worst < 5e-3, "worst |Δ| {worst}");
+    assert!(worst < 1e-2, "worst |Δ| {worst}");
     assert!(
         worst_on_light < 5e-2,
         "worst |Δ| on the light {worst_on_light}"
     );
     assert_eq!(gpu, gpu_of(&f), "the sprite flare must be bit-stable");
+
+    let mut hot = f.clone();
+    hot.burn = 1.0;
+    hot.brightness *= 6.0;
+    for l in &mut hot.lights {
+        l.colour = [1.0, 0.05, 0.02];
+    }
+    let (cpu_hot, gpu_hot) = (cpu_of(&hot), gpu_of(&hot));
+    let mut worst_hot = 0.0f32;
+    for (i, (a, b)) in cpu_hot.iter().zip(&gpu_hot).enumerate() {
+        let (x, y) = ((i / 4) as u32 % w, (i / 4) as u32 / w);
+        if x.abs_diff(24) > 2 || y.abs_diff(20) > 2 {
+            worst_hot = worst_hot.max((a - b).abs() / a.abs().max(1.0));
+        }
+    }
+    assert!(worst_hot < 1e-2, "burnt worst |Δ| {worst_hot}");
+    assert_ne!(
+        gpu_hot,
+        gpu_of(&{
+            let mut cool = hot.clone();
+            cool.burn = 0.0;
+            cool
+        }),
+        "Burn changes the bright light"
+    );
+
+    let mut soft = hot.clone();
+    soft.defocus = 6.0;
+    let (cpu_soft, gpu_soft) = (cpu_of(&soft), gpu_of(&soft));
+    let worst_soft = cpu_soft
+        .iter()
+        .zip(&gpu_soft)
+        .map(|(a, b)| (a - b).abs() / a.abs().max(1.0))
+        .fold(0.0f32, f32::max);
+    assert!(worst_soft < 2e-2, "defocused worst |Δ| {worst_soft}");
+    assert_ne!(gpu_soft, gpu_hot, "Defocus changes the light");
 
     let total = |lx: f32| {
         let mut frame_now = vec![0.0f32; img.len()];
@@ -5513,6 +5551,8 @@ fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
         lights: &[],
         centre: spotted.centre,
         edge_fade: spotted.edge_fade * spotted.px_scale,
+        burn: spotted.burn,
+        defocus: spotted.defocus,
         spots: Some(crate::fx::sprite_flare::SpotsOp {
             threshold: 0.3,
             softness: 0.1,

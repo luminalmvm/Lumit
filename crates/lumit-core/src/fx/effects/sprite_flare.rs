@@ -250,6 +250,26 @@ pub struct SpriteFlare {
     #[colour(label = "Colour", default = [1.0, 1.0, 1.0, 1.0], max = 4.0)]
     pub tint: [f32; 4],
 
+    #[slider(
+        min = 0.0,
+        max = 100.0,
+        default = 100.0,
+        hard_min = 0.0,
+        hard_max = 100.0,
+        unit = Percent
+    )]
+    pub burn: f32,
+
+    #[slider(
+        min = 0.0,
+        max = 100.0,
+        default = 0.0,
+        hard_min = 0.0,
+        hard_max = 500.0,
+        unit = Px
+    )]
+    pub defocus: f32,
+
     /// What turns rays' shimmer and orbs' drift. A full turn comes back to
     /// the start.
     #[dial(label = "Evolution", default = 0.0)]
@@ -427,6 +447,8 @@ impl SpriteFlare {
             time_s: time,
             // The row arrives at the raster's size, the frame wants comp px.
             edge_fade: s.edge_fade.max(0.0) / px_scale,
+            burn: (s.burn / 100.0).clamp(0.0, 1.0),
+            defocus: s.defocus.max(0.0).min(500.0 * px_scale),
         }
     }
 

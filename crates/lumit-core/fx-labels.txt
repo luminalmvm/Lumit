@@ -250,6 +250,7 @@ Brushed
 Brushed metal
 Bulge
 Buoyancy
+Burn
 Burst
 Burst count
 Burst interval
@@ -485,6 +486,7 @@ Deep blue
 Deep emerald
 Deep red
 Deep yellow
+Defocus
 Deform
 Deformer
 Delay

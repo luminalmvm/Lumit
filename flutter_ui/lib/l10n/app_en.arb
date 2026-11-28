@@ -34510,6 +34510,14 @@
   "@fxSoftPastelSatin": {
     "description": "Effect presets: a Holographic foil look, pale wide bands on soft satin metal."
   },
+  "fxBurn": "Burn",
+  "@fxBurn": {
+    "description": "Effect controls: a control on Sprite flare, how far light too bright for its colour runs to white, as on film: red goes orange, yellow, then white."
+  },
+  "fxDefocus": "Defocus",
+  "@fxDefocus": {
+    "description": "Effect controls: a control on Sprite flare, how far out of focus its brightest part is: light past full spreads before Burn, so a burnt middle is a soft glow and fainter lines stay sharp."
+  },
   "fxLightRays": "Light rays",
   "@fxLightRays": {
     "description": "Effect name: light streaming out of the picture's bright parts, away from a source point."

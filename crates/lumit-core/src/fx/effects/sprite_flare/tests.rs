@@ -84,6 +84,7 @@ fn a_version_1_sprite_flare_carries_over() {
         };
         let mut frame = Frame::preview(w, h, [20.0, 18.0], 1.0);
         frame.lights[0].colour = [1.0, 0.5, 0.25];
+        frame.burn = 0.0;
         let mut new = vec![0.0; (w * h * 4) as usize];
         raster::draw(&design, &frame, w, h, &mut new);
         let (s, c) = 12f32.to_radians().sin_cos();

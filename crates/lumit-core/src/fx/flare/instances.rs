@@ -284,6 +284,7 @@ fn element(e: &Element, frame: &Frame, frame_px: [f32; 2], out: &mut Vec<Instanc
         Kind::Streak => {
             let lines = e.int("lines").clamp(1, 64) as usize;
             let spacing = e.num("spacing") * k;
+            let shift = e.num("offset") * k;
             // Taper 0.5 is a gaussian along it, 0 a flat bar, 1 a sharp point.
             let p = 2.0_f32.powf(2.0 - 2.0 * e.num("taper"));
             let extent = reach_of(p);
@@ -296,7 +297,7 @@ fn element(e: &Element, frame: &Frame, frame_px: [f32; 2], out: &mut Vec<Instanc
                 out.push(Instance {
                     shape: RAY,
                     flags: base.flags | if e.on("face") { FOLLOWS_AXIS } else { 0 },
-                    offset: [0.0, from_middle * spacing],
+                    offset: [0.0, from_middle * spacing + shift],
                     half: [size * extent, across(width)],
                     gain: gain / (1.0 + from_middle.abs()),
                     rainbow: rainbow.max(fringe),
