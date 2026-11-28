@@ -490,11 +490,8 @@ fn keep_saved_edges(e: &mut EffectInstance) {
         _ => return,
     };
     if !e.params.iter().any(|p| p.id == "edge") {
-        e.params.push(EffectParam {
-            id: "edge".to_owned(),
-            value: EffectValue::Choice(drew_with),
-            extra: serde_json::Map::new(),
-        });
+        e.params
+            .push(EffectParam::new("edge", EffectValue::Choice(drew_with)));
     }
 }
 
