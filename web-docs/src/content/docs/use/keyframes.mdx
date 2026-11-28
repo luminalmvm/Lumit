@@ -26,7 +26,8 @@ Turning the stopwatch on adds one keyframe at the playhead, holding the value al
 Turn the stopwatch off to remove every keyframe on that property. The property keeps the
 value it reads at the playhead.
 
-`Alt+K` adds a keyframe at the playhead to every selected property row, or removes the one
+`Alt+K` adds a keyframe at the playhead to every selected property row, or with no row selected
+to every row with keyframes on the selected layers, or removes the one
 already there. `Alt+Shift+P`, `S`, `R`, `T` and `A` do the same to Position, Scale,
 Rotation, Opacity and Anchor point on the selected layers, and open those rows in the
 Timeline.
@@ -150,7 +151,7 @@ selected row has a keyframe there. A mask's **Path** row is left out.
 | --- | --- | --- |
 | **Save animation preset…** | | Saves the selected layer's effect stack as a `.lumfx` preset. See [Effect presets](/use/presets/). |
 | **Apply animation preset…** | | Applies a `.lumfx` or an After Effects `.ffx` to the selected layer. |
-| **Set keyframe** | `Alt+K` | Adds a keyframe at the playhead to every selected row. It reads **Remove keyframe** when every one of them has a keyframe there, and removes those. |
+| **Set keyframe** | `Alt+K` | Adds a keyframe at the playhead to every selected row, or with none selected to every row with keyframes on the selected layers. It reads **Remove keyframe** when every one of them has a keyframe there, and removes those. |
 | **Toggle hold keyframe** | `Ctrl+Alt+H` | Makes the side going out hold, or puts it back to linear. Ticked while it holds. |
 | **Keyframe interpolation…** | `Ctrl+Alt+K` | Opens the Keyframe interpolation dialogue. |
 | **Keyframe speed…** | `Ctrl+Shift+K` | Opens the Keyframe speed dialogue. |
