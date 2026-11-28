@@ -18,6 +18,7 @@ import 'package:lumit_flutter/src/rust/api/blender.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart' show UuidValue;
 
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
@@ -313,6 +314,7 @@ class ProjectRowFrb extends StatefulWidget {
   /// The panel's whole footage selection, read when a drag starts so dragging
   /// any selected row brings the rest with it.
   final List<FootageReference> Function() selectedFootage;
+  final List<ItemReference> Function() picked;
   final VoidCallback onEndRename;
 
   /// A right press on the row, at this point in the window. The panel holds
@@ -378,6 +380,7 @@ class ProjectRowFrb extends StatefulWidget {
     required this.loneSelection,
     required this.onSelect,
     required this.selectedFootage,
+    required this.picked,
     required this.onEndRename,
     required this.onMenu,
     required this.onNewComposition,
@@ -667,35 +670,56 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
         child: row,
       );
     }
-    // A folder row takes what the other rows drag: dropping on it files the
-    // items there. Two nested targets rather than one, because a
-    // `DragTarget` is typed and the panel's rows carry two payload types — the
-    // same two the Timeline consumes.
-    final drop = widget.onDropItems;
-    if (drop != null) {
-      return DragTarget<FootageDragData>(
-        onAcceptWithDetails: (d) =>
-            drop([for (final f in d.data.footage) ItemReference.footage(f)]),
-        builder: (context, footageOver, _) => DragTarget<CompDragData>(
-          onAcceptWithDetails: (d) =>
-              drop([ItemReference.composition(d.data.comp)]),
-          builder: (context, compOver, _) => Container(
-            // The drop-target treatment (§6.5), painted over the row rather
-            // than behind it: the row draws its own fill, and a drop with no
-            // feedback is indistinguishable from one that did nothing.
-            foregroundDecoration: footageOver.isEmpty && compOver.isEmpty
-                ? null
-                : BoxDecoration(
-                    border: Border.all(color: t.accent, width: 1.5),
-                    color: t.accent.withValues(alpha: 0.1),
-                  ),
-            child: row,
-          ),
-        ),
+    if (item case ItemReference_Folder(:final field0)) {
+      final selection = widget.selected ? widget.picked() : const [];
+      final dragged = selection.length > 1
+          ? List<ItemReference>.from(selection)
+          : <ItemReference>[item];
+      final label = dragged.length > 1
+          ? l10n.projectItemCount(dragged.length)
+          : widget.name;
+      final drop = widget.onDropItems;
+      return Draggable<ProjectItemsDragData>(
+        data: ProjectItemsDragData(dragged, label),
+        dragAnchorStrategy: pointerDragAnchorStrategy,
+        feedback: _DragFeedbackFrb(name: label, icon: LumitIcon.folder),
+        child: drop == null
+            ? row
+            : DragTarget<Object>(
+                onWillAcceptWithDetails: (d) =>
+                    _dropped(d.data)
+                        ?.every((i) => !_holds(i, field0.internalid)) ??
+                    false,
+                onAcceptWithDetails: (d) => drop(_dropped(d.data)!),
+                builder: (context, over, _) => Container(
+                  foregroundDecoration: over.isEmpty
+                      ? null
+                      : BoxDecoration(
+                          border: Border.all(color: t.accent, width: 1.5),
+                          color: t.accent.withValues(alpha: 0.1),
+                        ),
+                  child: row,
+                ),
+              ),
       );
     }
     return row;
   }
+
+  static List<ItemReference>? _dropped(Object? data) => switch (data) {
+        FootageDragData(:final footage) => [
+            for (final f in footage) ItemReference.footage(f),
+          ],
+        CompDragData(:final comp) => [ItemReference.composition(comp)],
+        SolidDragData(:final solid) => [ItemReference.solid(solid)],
+        ProjectItemsDragData(:final items) => items,
+        _ => null,
+      };
+
+  static bool _holds(ItemReference item, UuidValue folder) =>
+      item is ItemReference_Folder &&
+      (item.field0.internalid == folder ||
+          item.field0.getChildren().any((c) => _holds(c, folder)));
 
   /// The twirl's slot. A shut folder has to say so, or it reads as an empty
   /// one; the caret is its own target as well, the way the Hierarchy's is —
