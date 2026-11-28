@@ -229,6 +229,7 @@ use super::effects::{
     transform::{Transform, TransformDef},
     transform_points::{TransformPoints, TransformPointsDef},
     tritone::{Tritone, TritoneDef},
+    turbiniu::{Turbiniu, TurbiniuDef},
     turbulent_displace::{TurbulentDisplace, TurbulentDisplaceDef},
     twirl::{Twirl, TwirlDef},
     type_fill::{TypeFill, TypeFillDef},
@@ -322,6 +323,7 @@ crate::catalogue![
     StrokeDef => Stroke,
     AudioSpectrumDef => AudioSpectrum,
     EnergyLineDef => EnergyLine,
+    TurbiniuDef => Turbiniu,
     // Particulate, at the Generate family's end: it makes its own pixels
     // rather than changing the ones that arrived, which is what the Generate
     // family is for, and it is the first entry to declare a data output

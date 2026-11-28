@@ -195,19 +195,24 @@ class _CurveEditorState extends State<CurveEditor> {
     return live.length >= 2 ? live : curveIdentity;
   }
 
-  /// Plot coordinates → curve coordinates. y is flipped: up is more light.
+  double get _inset => math.min(_grabRadius, widget.size / 6);
+
+  double get _side => widget.size - 2 * _inset;
+
+  /// Widget coordinates → curve coordinates. y is flipped: up is more light.
   List<double> _toCurve(Offset local) => [
-        (local.dx / widget.size).clamp(0.0, 1.0),
-        (1 - local.dy / widget.size).clamp(0.0, 1.0),
+        ((local.dx - _inset) / _side).clamp(0.0, 1.0),
+        (1 - (local.dy - _inset) / _side).clamp(0.0, 1.0),
       ];
 
   Offset _toPlot(List<double> p) =>
-      Offset(p[0] * widget.size, (1 - p[1]) * widget.size);
+      Offset(_inset + p[0] * _side, _inset + (1 - p[1]) * _side);
 
-  /// How far outside the plot [local] is, in logical pixels — zero inside.
+  /// How far outside the square [local] is, in logical pixels — zero inside.
   double _outsideBy(Offset local) {
-    final dx = math.max(math.max(-local.dx, local.dx - widget.size), 0.0);
-    final dy = math.max(math.max(-local.dy, local.dy - widget.size), 0.0);
+    final x = local.dx - _inset, y = local.dy - _inset;
+    final dx = math.max(math.max(-x, x - _side), 0.0);
+    final dy = math.max(math.max(-y, y - _side), 0.0);
     return math.max(dx, dy);
   }
 
@@ -383,10 +388,14 @@ class _CurveEditorState extends State<CurveEditor> {
     final lo = _held == 0 ? 0.0 : points[_held - 1][0] + _minGap;
     final hi =
         _held == points.length - 1 ? 1.0 : points[_held + 1][0] - _minGap;
-    setState(() {
-      points[_held] = [at[0].clamp(math.min(lo, hi), math.max(lo, hi)), at[1]];
-    });
-    widget.onLive(_dropped(d.localPosition) ?? points);
+    final next = [
+      for (var i = 0; i < points.length; i++)
+        i == _held
+            ? [at[0].clamp(math.min(lo, hi), math.max(lo, hi)).toDouble(), at[1]]
+            : points[i],
+    ];
+    setState(() => _dragging = next);
+    widget.onLive(_dropped(d.localPosition) ?? next);
   }
 
   /// The list this gesture would leave behind if it ended here: the point gone
@@ -454,15 +463,19 @@ class _CurveEditorState extends State<CurveEditor> {
       child: SizedBox(
         width: widget.size,
         height: widget.size,
-        child: CustomPaint(
-          painter: _CurvePainter(
+        child: Padding(
+          padding: EdgeInsets.all(_inset),
+          child: CustomPaint(
+            size: Size.square(_side),
+            painter: _CurvePainter(
             points: _points,
             plot: t.surface0,
             grid: t.hairline,
             diagonal: t.hairlineStrong,
             line: widget.line ?? t.textPrimary,
-            knob: t.accent,
-            warp: widget.warp,
+              knob: t.accent,
+              warp: widget.warp,
+            ),
           ),
         ),
       ),

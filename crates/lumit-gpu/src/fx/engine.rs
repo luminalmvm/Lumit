@@ -816,6 +816,7 @@ impl FxEngine {
             depth_points: Default::default(),
             sprite_flare: Default::default(),
             energy_line: super::energy_line::LazyEnergyLine::spawn(ctx),
+            turbiniu: Default::default(),
             audio_spectrum: Default::default(),
             mesh: Default::default(),
             environment: Default::default(),

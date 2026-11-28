@@ -53,6 +53,7 @@ pub mod stabilise;
 pub mod stylise;
 pub mod temporal;
 pub mod timewarp;
+pub mod turbiniu;
 pub mod utility;
 pub mod volumetric;
 
@@ -78,6 +79,7 @@ pub struct FxEngine {
     sharpen_simple: wgpu::ComputePipeline,
     sprite_flare: sprite_flare::LazySpriteFlare,
     energy_line: energy_line::LazyEnergyLine,
+    turbiniu: std::sync::OnceLock<turbiniu::TurbiniuPipelines>,
     audio_spectrum: audio_spectrum::LazyAudioSpectrum,
     pub(crate) mesh: std::sync::OnceLock<crate::mesh::MeshFx>,
     pub(crate) environment: std::sync::OnceLock<environment::EnvironmentFx>,

@@ -154,6 +154,7 @@ pub mod trail;
 pub mod transform;
 pub mod transform_points;
 pub mod tritone;
+pub mod turbiniu;
 pub mod turbulent_displace;
 pub mod twirl;
 pub mod type_fill;
