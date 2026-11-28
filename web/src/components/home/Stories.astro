@@ -27,7 +27,7 @@ const stories = [
     src: phoneShot,
     full: await fullSize(phoneShot),
     alt: "Lumit for iPhone: the Exports tab following an export on Studio PC, and a preview with its comments",
-    tag: "Lumit for iPhone",
+    tag: "Lumit for iPhone and Android",
     h: "Exports on your phone.",
     p: "Start and follow exports, and read the comments on your previews. It pairs with Lumit on your computer, and exports from the phone need Pro.",
     app: "https://apps.apple.com/app/lumit/id6824000097",
@@ -102,7 +102,12 @@ const stories = [
             {s.app && (
               <span class="mt-1 flex flex-wrap items-center gap-x-4 gap-y-2">
                 <a href={s.app}><img src="/media/app-store-badge.svg" alt="Download on the App Store" width="120" height="40" /></a>
-                <span class="text-[13px] text-fg-4">Android coming soon</span>
+                <a class="btn" href="https://cloud.lumitlab.com/android/lumit.apk">
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                    <path d="M8 2v9M4 7l4 4 4-4M2 13h12"></path>
+                  </svg>
+                  Download .apk
+                </a>
               </span>
             )}
           </figcaption>
