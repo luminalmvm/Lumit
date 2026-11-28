@@ -5,3 +5,4 @@ section below, and when the release note is written the lines move into it.
 ## Before you update
 
 - Sprite flare's light now runs to white where it is brighter than full, because **Burn** starts at 100. Set **Burn** to 0 to keep a flare as it was.
+- Depth of field pro no longer lets what is under the layer show through where its highlights are.
