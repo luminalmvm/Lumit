@@ -692,14 +692,16 @@ pub fn evaluate_property_at(
 /// itself. The point of the feature is putting a value on screen, and refusing
 /// a type would only mean the user has to wrap it in a conversion.
 ///
-/// A broken expression prints nothing rather than failing the frame — these are
-/// typed against a live preview, where a half-written expression is invalid for
-/// most of the time it takes to write it.
-pub fn evaluate_text(expression: &str, context: Option<Arc<ExpressionContext>>) -> String {
-    match eval_dynamic(expression, context, &[]) {
-        Ok(val) => val.to_string(),
-        Err(_) => String::new(),
-    }
+/// A broken expression answers why, for the Source rows to show, rather than
+/// failing the frame. The layer then draws its own words, as a number row
+/// falls back to its own value ([`crate::model::TextDocument::resolved_text`]).
+pub fn evaluate_text(
+    expression: &str,
+    context: Option<Arc<ExpressionContext>>,
+) -> Result<String, String> {
+    eval_dynamic(expression, context, &[])
+        .map(|val| val.to_string())
+        .map_err(|e| e.to_string())
 }
 
 /// Sample an expression across a span of time — what the graph editor draws as

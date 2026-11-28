@@ -26,9 +26,12 @@ fn at(time: f64) -> Arc<ExpressionContext> {
 
 #[test]
 fn a_number_prints_as_words() {
-    assert_eq!(evaluate_text("1 + 1", Some(at(0.0))), "2");
-    assert_eq!(evaluate_text("time", Some(at(3.0))), "3.0");
-    assert_eq!(evaluate_text("\"frame \" + 7", Some(at(0.0))), "frame 7");
+    assert_eq!(evaluate_text("1 + 1", Some(at(0.0))).unwrap(), "2");
+    assert_eq!(evaluate_text("time", Some(at(3.0))).unwrap(), "3.0");
+    assert_eq!(
+        evaluate_text("\"frame \" + 7", Some(at(0.0))).unwrap(),
+        "frame 7"
+    );
 }
 
 #[test]
@@ -47,7 +50,7 @@ fn the_field_is_optional_on_disk() {
 #[test]
 fn a_pooled_engine_does_not_leak_its_context() {
     assert_eq!(evaluate("time", Some(at(7.0))), 7.0);
-    assert_eq!(evaluate_text("time", None), "");
+    assert!(evaluate_text("time", None).is_err());
 }
 
 fn doc_with(layers: Vec<crate::model::Layer>) -> (Arc<Document>, Uuid) {
@@ -269,7 +272,7 @@ fn an_expression_cannot_build_something_enormous() {
     assert_eq!(evaluate("1 + 2 * 3", None), 7.0);
     assert_eq!(evaluate("if 2 > 1 { 9 } else { 0 }", None), 9.0);
     assert_eq!(evaluate("[1, 2].len()", None), 2.0);
-    assert_eq!(evaluate_text("\"frame \" + 7", None), "frame 7");
+    assert_eq!(evaluate_text("\"frame \" + 7", None).unwrap(), "frame 7");
 
     assert_eq!(evaluate("blob(50_000_000).len()", None), -1.0);
     assert_eq!(evaluate("[0].pad(5_000_000, 0).len()", None), -1.0);
