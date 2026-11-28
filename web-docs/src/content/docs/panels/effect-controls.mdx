@@ -117,10 +117,10 @@ shows while its value differs from its default, and never on a keyed one.
 | **Number** | A value box. Drag sideways to change it, or click to type a number or a sum. While dragging, `Shift` moves ten times as fast, `Ctrl` a tenth and `Alt` a hundredth. Text it cannot work out flashes the edge of the box and changes nothing. |
 | **Slider** | A number with a track beside it. **Range sliders** in [Settings ▸ Appearance](/use/settings/#appearance) shows or hides the track. |
 | **Angle** | A number and a dial. The dial winds past a full turn, and `Shift` snaps it to the parameter's step. |
-| **Colour** | A swatch that opens the [colour picker](#the-colour-picker), and a [dropper](#the-dropper) that samples from the Viewer. |
+| **Colour** | A swatch that opens the [colour picker](#the-colour-picker), and a [dropper](#the-dropper) that samples from the Viewer. Two paired colours, such as Start colour and End colour, sit one under the other with a swap button between them. It swaps the two, keyframes and expressions included, and is not drawn while either row is driven by a wire. |
 | **Checkbox** | On or off. |
 | **Dropdown** | One of a list. A list of 40 or more is searchable. |
-| **Seed** | A whole number from 0 to 4,294,967,295. |
+| **Seed** | A whole number from 0 to 4,294,967,295. Its keyframes hold until the next one. It takes no expression, link or wire. |
 | **Point** | X and Y on one row, and a dropper that picks the point on the Viewer. |
 | **Link** | The chain between the x and y boxes of some pairs. Linked, editing one scales the other by the same factor. Click it again to **Unlink**. |
 | **Curve** | A plot. Click it to add a point, or press and drag to add one and place it. Drag a point to move it, and drag one out of the plot to remove it. The two end points slide along their edges and are never removed. A curve holds 32 points at most. Neighbouring curves share one plot with a button per channel. Right-click the plot for **Add point** or **Delete point**, **Reset curve**, **Copy curve**, **Paste curve**, and the plot's size: **Small**, **Medium** or **Large**. |
@@ -153,7 +153,9 @@ a points effect with nothing wired into it reads **No stream**.
 
 A row holding an [expression](/use/expressions/) shows the expression's text and the value
 it works out in place of the value box, and a click opens the expression's editor. So does
-`Alt`+click on the stopwatch of a parameter of one number, with or without an expression.
+`Alt`+click on the stopwatch of a number, a colour or a point, with or without an
+expression. A colour holding one keeps its swatch, which shows the colour it works out.
+With no keys under the expression, the swatch and dropper do nothing.
 
 ### A row's menu
 

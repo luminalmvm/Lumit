@@ -613,12 +613,13 @@ pub(super) fn resolve_into_arena(
                 // one falls through to the stored keyframes rather than
                 // painting a number.
                 Some(Value::Colour(c)) => Value::Colour(c),
-                _ => Value::Colour(e.colour_at(p.id, lt).unwrap_or(default).map(|c| c as f32)),
+                _ => Value::Colour(
+                    e.colour_at_with_context(p.id, lt, context.clone())
+                        .unwrap_or(default)
+                        .map(|c| c as f32),
+                ),
             },
-            ParamKind::Seed => Value::Int(match e.param(p.id) {
-                Some(EffectValue::Seed(s)) => *s as i32,
-                _ => 0,
-            }),
+            ParamKind::Seed => Value::Int(e.seed_at(p.id, lt).map_or(0, |s| s as i32)),
             // A File slot, a Layer binding and a mask's geometry are decided by
             // the *caller*, which is the only thing that knows which cube
             // loaded, which layer was rendered or which masks the layer carries

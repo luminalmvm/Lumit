@@ -253,7 +253,7 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
     TResult Function(BridgeColour field0)? colour,
     TResult Function(bool field0)? bool,
     TResult Function(int field0)? choice,
-    TResult Function(int field0)? seed,
+    TResult Function(BridgeScalar field0)? seed,
     TResult Function(BridgeFileParam field0)? file,
     TResult Function(UuidValue? field0)? layer,
     TResult Function(UuidValue? field0)? clip,
@@ -319,7 +319,7 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
     required TResult Function(BridgeColour field0) colour,
     required TResult Function(bool field0) bool,
     required TResult Function(int field0) choice,
-    required TResult Function(int field0) seed,
+    required TResult Function(BridgeScalar field0) seed,
     required TResult Function(BridgeFileParam field0) file,
     required TResult Function(UuidValue? field0) layer,
     required TResult Function(UuidValue? field0) clip,
@@ -381,7 +381,7 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
     TResult? Function(BridgeColour field0)? colour,
     TResult? Function(bool field0)? bool,
     TResult? Function(int field0)? choice,
-    TResult? Function(int field0)? seed,
+    TResult? Function(BridgeScalar field0)? seed,
     TResult? Function(BridgeFileParam field0)? file,
     TResult? Function(UuidValue? field0)? layer,
     TResult? Function(UuidValue? field0)? clip,
@@ -775,7 +775,7 @@ class BridgeEffectValue_Seed extends BridgeEffectValue {
   const BridgeEffectValue_Seed(this.field0) : super._();
 
   @override
-  final int field0;
+  final BridgeScalar field0;
 
   /// Create a copy of BridgeEffectValue
   /// with the given fields replaced by the non-null parameter values.
@@ -809,7 +809,9 @@ abstract mixin class $BridgeEffectValue_SeedCopyWith<$Res>
           $Res Function(BridgeEffectValue_Seed) _then) =
       _$BridgeEffectValue_SeedCopyWithImpl;
   @useResult
-  $Res call({int field0});
+  $Res call({BridgeScalar field0});
+
+  $BridgeScalarCopyWith<$Res> get field0;
 }
 
 /// @nodoc
@@ -830,8 +832,18 @@ class _$BridgeEffectValue_SeedCopyWithImpl<$Res>
       null == field0
           ? _self.field0
           : field0 // ignore: cast_nullable_to_non_nullable
-              as int,
+              as BridgeScalar,
     ));
+  }
+
+  /// Create a copy of BridgeEffectValue
+  /// with the given fields replaced by the non-null parameter values.
+  @override
+  @pragma('vm:prefer-inline')
+  $BridgeScalarCopyWith<$Res> get field0 {
+    return $BridgeScalarCopyWith<$Res>(_self.field0, (value) {
+      return _then(_self.copyWith(field0: value));
+    });
   }
 }
 

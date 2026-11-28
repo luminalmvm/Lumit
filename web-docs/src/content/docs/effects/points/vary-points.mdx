@@ -107,9 +107,9 @@ A stream carries at most 64 names. One more is not written.
 | **Stretch x** | Slider | 0 to 400; higher | 100 | Per cent |
 | **Stretch y** | Slider | 0 to 400; higher | 100 | Per cent |
 | **Start colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
 | **Use middle colour** | Checkbox | On or off | Off | - |
 | **Middle colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
-| **Colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
 | **Both ways** | Checkbox | On or off | Off | - |
 | **Rotation** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
 | **Offset x** | Slider | -1000 to 1000; any value by typing | 0 | Pixels at composition size |
@@ -138,7 +138,7 @@ In the Effect Controls panel:
 
 - **Pattern** groups **Pattern**, **Curve**.
 - **Image** groups **Image layer**, **Map placement**, **Colour from image**.
-- **Change** groups **Size**, **Opacity**, **Stretch x**, **Stretch y**, **Start colour**, **Use middle colour**, **Middle colour**, **Colour**, **Both ways**, **Rotation**, **Offset x**, **Offset y**, **Offset z**, **Offset forward**, **Offset sideways**.
+- **Change** groups **Size**, **Opacity**, **Stretch x**, **Stretch y**, **Start colour**, **Colour**, **Use middle colour**, **Middle colour**, **Both ways**, **Rotation**, **Offset x**, **Offset y**, **Offset z**, **Offset forward**, **Offset sideways**.
 - **Colour ramp** groups **Use colour ramp**, **Red**, **Green**, **Blue**.
 - **Number** groups **Set number**, **Name**, **Store**, **Number from**, **Number to**.
 - **Point** groups **Feather**.
@@ -220,11 +220,12 @@ In the Effect Controls panel:
   own.
 - **Stretch x** and **Stretch y**: how far a point is stretched across and down where the
   pattern reads 1, in its own turned frame.
-- **Start colour**: multiplies the point's colour where the pattern reads 0.
+- **Start colour**: multiplies the point's colour where the pattern reads 0. Its
+  [swap button](/panels/effect-controls/#parameter-rows) swaps it with Colour.
+- **Colour**: multiplies the point's colour where the pattern reads 1.
 - **Use middle colour**: runs the colours from Start colour through Middle colour to
   Colour.
 - **Middle colour**: multiplies the point's colour where the pattern reads a half.
-- **Colour**: multiplies the point's colour where the pattern reads 1.
 - **Both ways**: Rotation and the Offsets read the pattern as -1 to 1 in place of 0 to 1. A
   Random or Noise pattern rolls again for each Offset.
 - **Rotation**: the turn added where the pattern reads 1.

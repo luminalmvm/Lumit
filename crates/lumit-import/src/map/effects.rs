@@ -538,6 +538,7 @@ fn collect(
         Some(value) => params.push(EffectParam {
             id,
             value,
+            seed_keys: None,
             // The name the row had, which is how an expression asks for it.
             extra: node
                 .name

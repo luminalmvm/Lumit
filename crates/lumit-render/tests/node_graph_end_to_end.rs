@@ -169,11 +169,7 @@ fn set_float(inst: &mut EffectInstance, id: &str, value: f64) {
 fn set_value(inst: &mut EffectInstance, id: &str, value: EffectValue) {
     match inst.params.iter_mut().find(|p| p.id == id) {
         Some(p) => p.value = value,
-        None => inst.params.push(EffectParam {
-            id: id.into(),
-            value,
-            extra: serde_json::Map::new(),
-        }),
+        None => inst.params.push(EffectParam::new(id, value)),
     }
 }
 

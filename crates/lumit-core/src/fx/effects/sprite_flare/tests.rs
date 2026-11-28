@@ -23,11 +23,8 @@ fn a_version_1_sprite_flare_carries_over() {
     ];
     for (id, v) in old {
         e.params.retain(|p| p.id != id);
-        e.params.push(EffectParam {
-            id: id.to_owned(),
-            value: EffectValue::Float(Property::fixed(v)),
-            extra: serde_json::Map::new(),
-        });
+        e.params
+            .push(EffectParam::new(id, EffectValue::Float(Property::fixed(v))));
     }
     let mut moving = e.clone();
     for p in &mut moving.params {

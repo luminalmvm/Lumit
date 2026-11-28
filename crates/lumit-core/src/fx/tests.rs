@@ -1823,16 +1823,14 @@ fn blur_family_split_resolves_each_effect_and_loads_legacy_as_gaussian() {
     assert_eq!(rb.packed().3, 2);
 
     let mut legacy = instantiate("blur").unwrap();
-    legacy.params.push(crate::model::EffectParam {
-        id: "mode".into(),
-        value: EffectValue::Choice(2),
-        extra: serde_json::Map::new(),
-    });
-    legacy.params.push(crate::model::EffectParam {
-        id: "edge".into(),
-        value: EffectValue::Choice(0),
-        extra: serde_json::Map::new(),
-    });
+    legacy.params.push(crate::model::EffectParam::new(
+        "mode",
+        EffectValue::Choice(2),
+    ));
+    legacy.params.push(crate::model::EffectParam::new(
+        "edge",
+        EffectValue::Choice(0),
+    ));
     let b = resolve_migrated::<effects::blur::Blur>(
         std::slice::from_ref(&legacy),
         0.0,
@@ -2285,16 +2283,14 @@ fn shake_migrates_old_zoom_pump_and_auto_scale_params() {
             "amplitude" | "frequency" | "rotation" | "seed" | "mix"
         )
     });
-    old.params.push(crate::model::EffectParam {
-        id: "zoom_pump".into(),
-        value: EffectValue::Float(crate::anim::Property::fixed(10.0)),
-        extra: Default::default(),
-    });
-    old.params.push(crate::model::EffectParam {
-        id: "auto_scale".into(),
-        value: EffectValue::Bool(false),
-        extra: Default::default(),
-    });
+    old.params.push(crate::model::EffectParam::new(
+        "zoom_pump",
+        EffectValue::Float(crate::anim::Property::fixed(10.0)),
+    ));
+    old.params.push(crate::model::EffectParam::new(
+        "auto_scale",
+        EffectValue::Bool(false),
+    ));
 
     // Both folds are resolve-time work: the old ids are not schema rows,
     // so they cannot come out of the bag on their own.
@@ -2693,11 +2689,10 @@ fn scanlines_migrates_old_darkness_into_intensity() {
             p.value = EffectValue::Float(Property::fixed(0.5));
         }
     }
-    e.params.push(crate::model::EffectParam {
-        id: "scanline_darkness".to_owned(),
-        value: EffectValue::Float(Property::fixed(80.0)),
-        extra: serde_json::Map::new(),
-    });
+    e.params.push(crate::model::EffectParam::new(
+        "scanline_darkness",
+        EffectValue::Float(Property::fixed(80.0)),
+    ));
     // 0.5 × 0.80 = 0.40. The fold reads a parameter that is not a schema row at
     // all, which is why it happens in the resolve-time hook rather than
     // coming out of the bag with the declared ones.
@@ -3794,11 +3789,10 @@ fn dof_pro_depth_rows_merge_on_open() {
         if let Some(p) = inst.params.iter_mut().find(|p| p.id == "depth") {
             p.value = EffectValue::Layer(Some(pass));
         }
-        inst.params.push(crate::model::EffectParam {
-            id: "depth_m".to_owned(),
-            value: EffectValue::Layer(saved_m),
-            extra: serde_json::Map::new(),
-        });
+        inst.params.push(crate::model::EffectParam::new(
+            "depth_m",
+            EffectValue::Layer(saved_m),
+        ));
         let mut effects = vec![inst];
         backfill_builtin_params(&mut effects);
         assert!(effects[0].params.iter().all(|p| p.id != "depth_m"));
@@ -3817,11 +3811,10 @@ fn lens_flare_background_migrates_to_the_blend_menu() {
     for (saved, want) in [(0u32, BLEND_ADD), (1, BLEND_NORMAL)] {
         let mut inst = instantiate("lens_flare").unwrap();
         inst.params.retain(|p| p.id != "blend");
-        inst.params.push(crate::model::EffectParam {
-            id: "background".to_owned(),
-            value: EffectValue::Choice(saved),
-            extra: serde_json::Map::new(),
-        });
+        inst.params.push(crate::model::EffectParam::new(
+            "background",
+            EffectValue::Choice(saved),
+        ));
         let mut effects = vec![inst];
         backfill_builtin_params(&mut effects);
         assert!(
@@ -7722,11 +7715,7 @@ fn the_two_keyers_still_load_a_save_that_holds_their_old_matte_rows() {
                 EffectValue::Choice(3),
             ),
         ] {
-            e.params.push(EffectParam {
-                id: id.to_owned(),
-                value,
-                extra: serde_json::Map::new(),
-            });
+            e.params.push(EffectParam::new(id, value));
         }
         let mut list = vec![e];
         crate::fx::builtins::backfill_builtin_params(&mut list);
@@ -9873,11 +9862,7 @@ fn clone_to_points_reads_per_copy_scale_xy_and_offset() {
 fn set_row(inst: &mut EffectInstance, id: &str, value: EffectValue) {
     match inst.params.iter_mut().find(|p| p.id == id) {
         Some(param) => param.value = value,
-        None => inst.params.push(crate::model::EffectParam {
-            id: id.to_owned(),
-            value,
-            extra: serde_json::Map::new(),
-        }),
+        None => inst.params.push(crate::model::EffectParam::new(id, value)),
     }
 }
 
@@ -10161,11 +10146,10 @@ fn clone_to_points_places_the_clone_rows() {
     assert_eq!(map_placement(&e, "clone_layer"), MapPlacement::AsPlaced);
     assert_eq!(map_placement(&e, "clone_layer_8"), MapPlacement::AsPlaced);
     assert_eq!(map_placement(&e, "path_layer"), MapPlacement::Stretch);
-    e.params.push(crate::model::EffectParam {
-        id: "layer_transform".to_owned(),
-        value: EffectValue::Bool(false),
-        extra: serde_json::Map::new(),
-    });
+    e.params.push(crate::model::EffectParam::new(
+        "layer_transform",
+        EffectValue::Bool(false),
+    ));
     let mut stack = vec![e];
     crate::fx::builtins::backfill_builtin_params(&mut stack);
     assert!(stack[0].param("layer_transform").is_none());

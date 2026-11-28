@@ -99,7 +99,10 @@ class _GraphBoxLanesState extends State<GraphBoxLanes> {
     final value = next.length == 4
         ? BridgeEffectValue.colour(
             BridgeColour(r: next[0], g: next[1], b: next[2], a: next[3]))
-        : BridgeEffectValue.float(next.single);
+        : box.values.any(
+                (v) => v.id == param && v.value is BridgeEffectValue_Seed)
+            ? BridgeEffectValue.seed(next.single)
+            : BridgeEffectValue.float(next.single);
     final comp = widget.comp;
     try {
       final instances = comp.getNodeGraphInstances();
@@ -125,7 +128,9 @@ class _GraphBoxLanesState extends State<GraphBoxLanes> {
         ...box.derivedParams,
       ])
         if (switch (values[param.id]) {
-          BridgeEffectValue_Float(:final field0) => [field0],
+          BridgeEffectValue_Float(:final field0) ||
+          BridgeEffectValue_Seed(:final field0) =>
+            [field0],
           BridgeEffectValue_Colour(:final field0) => [
               field0.r,
               field0.g,

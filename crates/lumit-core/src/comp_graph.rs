@@ -750,11 +750,7 @@ fn baked(input: &GraphInput, overrides: &[(String, EffectValue)]) -> Option<Effe
 fn set_param(inst: &mut EffectInstance, id: &str, value: EffectValue) {
     match inst.params.iter_mut().find(|p| p.id == id) {
         Some(param) => param.value = value,
-        None => inst.params.push(crate::model::EffectParam {
-            id: id.to_owned(),
-            value,
-            extra: serde_json::Map::new(),
-        }),
+        None => inst.params.push(crate::model::EffectParam::new(id, value)),
     }
 }
 
@@ -846,22 +842,20 @@ pub struct Repeat {
     pub body: Vec<Uuid>,
 }
 
-/// The numbers time `index` of `count` of the pair starting at `start` reads,
-/// with its point's or path's, by the Input ids [`CompGraph::repeat_graph`]
-/// gave them.
+/// The numbers time `index` of `count` of the pair starting at `start` reads
+/// at layer time `lt`, with its point's or path's, by the Input ids
+/// [`CompGraph::repeat_graph`] gave them.
 #[must_use]
 pub fn repeat_values(
     start: &EffectInstance,
+    lt: f64,
     index: u32,
     count: u32,
     element: &crate::fx::effects::repeat::Element,
 ) -> Vec<(String, EffectValue)> {
     use crate::anim::Property;
     use crate::fx::effects::repeat::{RepeatStart, PASS_PORTS};
-    let seed = match start.param("seed") {
-        Some(EffectValue::Seed(s)) => *s,
-        _ => 0,
-    };
+    let seed = start.seed_at("seed", lt).unwrap_or(0);
     let [i, n, u, r] = RepeatStart { seed }.pass(index, count);
     let numbers = [
         i,

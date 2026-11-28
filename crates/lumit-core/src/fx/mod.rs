@@ -3,6 +3,7 @@ pub mod builtins;
 pub mod catalogue;
 pub mod cie;
 pub mod colour_name;
+pub mod colour_pairs;
 /// A Gradient row's stops between its two colour rows.
 pub mod colour_stops;
 pub mod denoise;

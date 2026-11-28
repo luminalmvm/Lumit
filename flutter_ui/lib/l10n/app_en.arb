@@ -12067,6 +12067,10 @@
   "@tipSampleFromViewer": {
     "description": "Tooltip on the eyedropper that reads a colour off the picture. One or two words."
   },
+  "tipSwapColours": "Swap colours",
+  "@tipSwapColours": {
+    "description": "Tooltip on the button between two paired colour rows in Effect controls, such as Start colour and End colour. Pressing it swaps the two colours, keyframes and all. One or two words."
+  },
   "tipShowEverything": "Show everything",
   "@tipShowEverything": {
     "description": "Tooltip on the Project panel's filter when it is showing only missing footage. One or two words."

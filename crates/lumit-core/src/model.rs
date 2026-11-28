@@ -14,6 +14,7 @@ mod light_file;
 mod material;
 mod media_ref;
 mod parent_placement;
+mod seed;
 mod speed;
 
 /// Linear-light RGBA (docs/10-FILE-FORMAT.md §1.1).
@@ -1541,9 +1542,6 @@ impl FileParam {
 
 /// One effect parameter's value (docs/08-EFFECTS.md §1.2 types, v1 subset).
 /// Floats, angles and percentages are all `Float`; points animate per axis;
-/// colours animate per channel (scene-linear RGBA). Bool/Choice/Seed are
-/// static in v1 — the tier-1 staples don't keyframe them. `File` carries a
-/// path chosen from a dialog, animatable only by stepping (hold keys).
 /// `Layer` references another layer as an auxiliary picture (a depth pass for
 /// depth of field, docs/impl/layer-input.md), the same shape [`MatteRef`]
 /// uses.
@@ -1619,6 +1617,8 @@ pub enum EffectValue {
 pub struct EffectParam {
     pub id: String,
     pub value: EffectValue,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seed_keys: Option<Property>,
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -4879,18 +4879,12 @@ mod tests {
         let mut e = crate::fx::builtins::instantiate("dof").unwrap();
         assert_eq!(e.layer_source("depth"), LayerInputSource::EffectsAndMasks);
 
-        e.params.push(EffectParam {
-            id: "depth_after_effects".into(),
-            value: EffectValue::Bool(true),
-            extra: serde_json::Map::new(),
-        });
+        let on = EffectValue::Bool(true);
+        e.params.push(EffectParam::new("depth_after_effects", on));
         assert_eq!(e.layer_source("depth"), LayerInputSource::EffectsAndMasks);
 
-        e.params.push(EffectParam {
-            id: "depth_source".into(),
-            value: EffectValue::Choice(LayerInputSource::Masks.to_choice()),
-            extra: serde_json::Map::new(),
-        });
+        let masks = EffectValue::Choice(LayerInputSource::Masks.to_choice());
+        e.params.push(EffectParam::new("depth_source", masks));
         assert_eq!(e.layer_source("depth"), LayerInputSource::Masks);
     }
 

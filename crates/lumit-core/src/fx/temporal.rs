@@ -779,11 +779,10 @@ mod extracted_channel_tests {
         let mut inst = crate::fx::builtins::instantiate("extract_channels").unwrap();
         inst.extra
             .insert(ec::EXTRA_KEY.to_owned(), ec::channels_extra(&names));
-        inst.params.push(crate::model::EffectParam {
-            id: ec::SLOT_IDS[slot].to_owned(),
-            value: crate::model::EffectValue::Choice(option),
-            extra: serde_json::Map::new(),
-        });
+        inst.params.push(crate::model::EffectParam::new(
+            ec::SLOT_IDS[slot],
+            crate::model::EffectValue::Choice(option),
+        ));
         inst
     }
 

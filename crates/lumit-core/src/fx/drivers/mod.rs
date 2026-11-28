@@ -2837,11 +2837,10 @@ mod tests {
             expression::add_input(&mut e);
         }
         for (id, value) in [("input_1", 2.0), ("input_3", 4.0)] {
-            e.params.push(crate::model::EffectParam {
-                id: id.to_owned(),
-                value: EffectValue::Float(crate::anim::Property::fixed(value)),
-                extra: serde_json::Map::new(),
-            });
+            e.params.push(crate::model::EffectParam::new(
+                id,
+                EffectValue::Float(crate::anim::Property::fixed(value)),
+            ));
         }
         let mut three = inst("math");
         set(&mut three, "a", 3.0);

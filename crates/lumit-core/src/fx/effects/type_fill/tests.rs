@@ -165,11 +165,10 @@ fn columns_rename_the_rows() {
     let mut inst = crate::fx::builtins::instantiate("type_fill").unwrap();
     assert!(super::TypeFillDef.row_state(&inst).labels.is_empty());
     inst.params.retain(|p| p.id != "direction");
-    inst.params.push(crate::model::EffectParam {
-        id: "direction".to_owned(),
-        value: crate::model::EffectValue::Choice(1),
-        extra: serde_json::Map::new(),
-    });
+    inst.params.push(crate::model::EffectParam::new(
+        "direction",
+        crate::model::EffectValue::Choice(1),
+    ));
     let labels = super::TypeFillDef.row_state(&inst).labels;
     assert!(labels.contains(&("rows", "Columns")));
     assert!(labels.contains(&("row_shift", "Column shift")));

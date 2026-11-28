@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 use uuid::Uuid;
 
+use super::ae_parts::Parts;
 use super::interp::{fail, to_number, Interp, Res, Value};
 use super::parse::Binary;
 use super::Slot;
@@ -375,7 +376,8 @@ impl<'a> Ae<'a> {
                     Some(EffectValue::Float(p)) => Some(p),
                     _ => None,
                 };
-                let parts = match &inst.params.get(*param)?.value {
+                let row = inst.params.get(*param)?;
+                let parts = match &row.value {
                     EffectValue::Float(p) => match partner.and_then(float) {
                         Some(other) => Parts::two(p, other),
                         None => Parts::one(p),
@@ -389,7 +391,9 @@ impl<'a> Ae<'a> {
                     // A menu counts from one in After Effects, and an
                     // expression that reads one compares against that.
                     EffectValue::Choice(n) => Parts::fixed(f64::from(*n) + 1.0),
-                    EffectValue::Seed(n) => Parts::fixed(f64::from(*n)),
+                    EffectValue::Seed(n) => row
+                        .keyed_seed()
+                        .map_or(Parts::fixed(f64::from(*n)), Parts::one),
                     _ => return None,
                 };
                 Some((*comp, found, parts))
@@ -470,36 +474,6 @@ impl<'a> Ae<'a> {
             PropRef::Own => 0,
             PropRef::Transform { layer, which, .. } => mix(fold(*layer) ^ (*which as u64 + 1)),
             PropRef::Param { effect, param, .. } => mix(fold(*effect) ^ (*param as u64 + 101)),
-        }
-    }
-}
-
-/// Up to four properties (a colour's channels), then numbers that do not
-/// animate: a checkbox or a menu.
-struct Parts<'a> {
-    props: [Option<&'a Property>; 4],
-    tail: [Option<f64>; 3],
-}
-
-impl<'a> Parts<'a> {
-    fn one(p: &'a Property) -> Self {
-        Parts {
-            props: [Some(p), None, None, None],
-            tail: [None; 3],
-        }
-    }
-
-    fn two(x: &'a Property, y: &'a Property) -> Self {
-        Parts {
-            props: [Some(x), Some(y), None, None],
-            tail: [None; 3],
-        }
-    }
-
-    fn fixed(value: f64) -> Self {
-        Parts {
-            props: [None; 4],
-            tail: [Some(value), None, None],
         }
     }
 }

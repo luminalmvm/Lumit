@@ -219,6 +219,7 @@ fn instance_with_shader() -> crate::model::EffectInstance {
             animation: Animation::Keyframed(vec![key(0, 10.0), key(1, 20.0)]),
             extra: serde_json::Map::new(),
         }),
+        seed_keys: None,
         extra: serde_json::Map::new(),
     });
     inst

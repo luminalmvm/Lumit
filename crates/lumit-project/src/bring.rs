@@ -341,11 +341,10 @@ mod tests {
                 extra: serde_json::Map::new(),
             },
             enabled: true,
-            params: vec![EffectParam {
-                id: "depth".into(),
-                value: EffectValue::Layer(Some(layers[2])),
-                extra: serde_json::Map::new(),
-            }],
+            params: vec![EffectParam::new(
+                "depth",
+                EffectValue::Layer(Some(layers[2])),
+            )],
             sample_temporally: true,
             custom_name: None,
             linked_pairs: Vec::new(),

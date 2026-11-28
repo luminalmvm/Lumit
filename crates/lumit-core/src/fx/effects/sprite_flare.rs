@@ -827,11 +827,7 @@ pub fn migrate_v1(e: &mut EffectInstance, w: f64, h: f64, wired: &dyn Fn(&str) -
         let value = EffectValue::Float(crate::anim::Property::fixed(v));
         match e.params.iter_mut().find(|p| p.id == id) {
             Some(p) => p.value = value,
-            None => e.params.push(EffectParam {
-                id: id.to_owned(),
-                value,
-                extra: serde_json::Map::new(),
-            }),
+            None => e.params.push(EffectParam::new(id, value)),
         }
     }
     e.effect.version = 2;

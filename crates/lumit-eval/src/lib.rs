@@ -1191,8 +1191,11 @@ fn feed_effect_stack(
                 EffectValue::Bool(b) => {
                     h.update(&[u8::from(*b)]);
                 }
-                EffectValue::Choice(v) | EffectValue::Seed(v) => {
+                EffectValue::Choice(v) => {
                     h.update(&v.to_le_bytes());
+                }
+                EffectValue::Seed(v) => {
+                    h.update(&p.seed_at(lt).unwrap_or(*v).to_le_bytes());
                 }
                 EffectValue::File(f) => {
                     // Which file is live at this time (the hold-keyed index
@@ -1527,6 +1530,9 @@ fn feed_points_rows_at(
                     for ch in c {
                         feed_f64(h, ch.value_at(when));
                     }
+                }
+                EffectValue::Seed(_) if p.keyed_seed().is_some() => {
+                    h.update(&p.seed_at(when).unwrap_or(0).to_le_bytes());
                 }
                 _ => {}
             }
@@ -3562,11 +3568,7 @@ mod tests {
             },
             roto: None,
             enabled: true,
-            params: vec![EffectParam {
-                id: "radius".into(),
-                value: EffectValue::Float(radius),
-                extra: serde_json::Map::new(),
-            }],
+            params: vec![EffectParam::new("radius", EffectValue::Float(radius))],
             sample_temporally: true,
             custom_name: None,
             linked_pairs: Vec::new(),
@@ -3660,11 +3662,7 @@ mod tests {
             },
             roto: None,
             enabled: true,
-            params: vec![EffectParam {
-                id: "radius".into(),
-                value: EffectValue::Float(radius),
-                extra: serde_json::Map::new(),
-            }],
+            params: vec![EffectParam::new("radius", EffectValue::Float(radius))],
             sample_temporally: true,
             custom_name: None,
             linked_pairs: Vec::new(),
@@ -3756,11 +3754,10 @@ mod tests {
             let mut c = comp.clone();
             let params = &mut c.layers[0].effects[0].params;
             params.retain(|p| p.id != "depth_source");
-            params.push(EffectParam {
-                id: "depth_source".into(),
-                value: EffectValue::Choice(mode.to_choice()),
-                extra: serde_json::Map::new(),
-            });
+            params.push(EffectParam::new(
+                "depth_source",
+                EffectValue::Choice(mode.to_choice()),
+            ));
             c
         };
         let blur = || lumit_core::fx::builtins::instantiate("blur").unwrap();
@@ -3791,11 +3788,10 @@ mod tests {
 
         let legacy_bool = |comp: &Composition| {
             let mut c = comp.clone();
-            c.layers[0].effects[0].params.push(EffectParam {
-                id: "depth_after_effects".into(),
-                value: EffectValue::Bool(true),
-                extra: serde_json::Map::new(),
-            });
+            c.layers[0].effects[0].params.push(EffectParam::new(
+                "depth_after_effects",
+                EffectValue::Bool(true),
+            ));
             c
         };
         let mut legacy_src = comp.clone();
@@ -4799,4 +4795,5 @@ mod tests {
     }
 
     mod picture_free_edits;
+    mod seed_keys;
 }

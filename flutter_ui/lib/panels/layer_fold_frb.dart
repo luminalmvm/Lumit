@@ -1044,7 +1044,8 @@ List<BridgeKeyframe> laneKeysOf(LayerFoldRow row) => switch (row) {
           _ => const [],
         },
       FoldEffectParamRow(:final value) => switch (value) {
-          BridgeEffectValue_Float(:final field0) =>
+          BridgeEffectValue_Float(:final field0) ||
+          BridgeEffectValue_Seed(:final field0) =>
             keysOfScalar(field0) ?? const [],
           // A Colour's and a Point's channels key together, from one
           // stopwatch, so the first keyed channel's times are the row's.
@@ -2467,15 +2468,21 @@ bool moveLaneKeys({
           entry.layer.setEffects(effects: stack);
           return true;
         }
-        if (value is! BridgeEffectValue_Float) return false;
-        final scalar = value.field0;
+        final (scalar, wrap) = switch (value) {
+          BridgeEffectValue_Float(:final field0) =>
+            (field0, BridgeEffectValue.float),
+          BridgeEffectValue_Seed(:final field0) =>
+            (field0, BridgeEffectValue.seed),
+          _ => (null, null),
+        };
+        if (scalar == null || wrap == null) return false;
         final keys = keysOfScalar(scalar);
         if (keys == null) return false;
         final next = moved(keys);
         if (next == null) return false;
         instance.setValue(
           id: param.id,
-          value: BridgeEffectValue.float(withKeys(scalar, next, 0)),
+          value: wrap(withKeys(scalar, next, 0)),
         );
         entry.layer.setEffects(effects: stack);
         return true;

@@ -281,7 +281,7 @@ class LfxFollow extends ChangeNotifier implements EffectChannel {
         BridgeEffectValue_Float(:final field0) => _at(field0),
         BridgeEffectValue_Bool(:final field0) => field0,
         BridgeEffectValue_Choice(:final field0) => field0,
-        BridgeEffectValue_Seed(:final field0) => field0,
+        BridgeEffectValue_Seed(:final field0) => _at(field0)?.round(),
         BridgeEffectValue_Colour(:final field0) => [
             _at(field0.r),
             _at(field0.g),
@@ -446,7 +446,8 @@ class LfxFollow extends ChangeNotifier implements EffectChannel {
         throw ExtensionRefusal('bad-params', '${row.id} takes an option index');
       case BridgeParamKind_Seed():
         if (value is int && value >= 0 && value <= 0xFFFFFFFF) {
-          return BridgeEffectValue.seed(value);
+          final was = stored is BridgeEffectValue_Seed ? stored.field0 : null;
+          return BridgeEffectValue.seed(scalar(was, value));
         }
         throw ExtensionRefusal('bad-params',
             '${row.id} takes a whole number from 0 to 4294967295');

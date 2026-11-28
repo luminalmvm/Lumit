@@ -446,11 +446,10 @@ mod tests {
         let mut inst =
             crate::fx::builtins::instantiate("node_graph").expect("the catalogue knows it");
         for id in ["gain", "turn"] {
-            inst.params.push(EffectParam {
-                id: id.to_owned(),
-                value: EffectValue::Float(crate::anim::Property::fixed(4.0)),
-                extra: serde_json::Map::new(),
-            });
+            inst.params.push(EffectParam::new(
+                id,
+                EffectValue::Float(crate::anim::Property::fixed(4.0)),
+            ));
         }
 
         let plain = overrides_of(&inst, &graph, None);

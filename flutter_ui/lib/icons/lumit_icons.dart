@@ -277,6 +277,8 @@ abstract final class LumitIcons {
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11"/><path d="M2.5 2.5h11v11z" fill="currentColor"/></svg>';
   static const String separateAxes =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v12M2 8h12"/><path d="M5 5l-1 1 1 1M11 5l1 1-1 1" opacity=".6"/></svg>';
+  static const String swap =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 13V3M3 5.5L5.5 3 8 5.5"/><path d="M10.5 3v10M8 10.5l2.5 2.5 2.5-2.5"/></svg>';
   /// Animated's diamond, filled. §5 bans a filled twin of an outlined idea as a *second meaning*; this is the same meaning in a second state, which is what a selected key is, and the Timeline draws the two side by side.
   static const String selectedKey =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2l6 6-6 6-6-6z" fill="currentColor"/></svg>';
@@ -599,6 +601,7 @@ abstract final class LumitIcons {
     'Unlink': unlink,
     'Invert': invert,
     'Separate axes': separateAxes,
+    'Swap': swap,
     'Selected key': selectedKey,
     'Add effect': addEffect,
     'Bypass': bypass,

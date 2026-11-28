@@ -748,10 +748,7 @@ impl EffectDef for EnergyLineDef {
             e.float_at_with_context(id, cx.lt, cx.context.clone())
                 .unwrap_or(or)
         };
-        let seed = match e.param("seed") {
-            Some(EffectValue::Seed(s)) => *s,
-            _ => 0,
-        };
+        let seed = e.seed_at("seed", cx.lt).unwrap_or(0);
         push(EnergyLine::DERIVED_PX_SCALE, Value::Float(cx.px_scale));
         // A smooth wander between 0 and 1, so the light dips and recovers
         // rather than blinking.

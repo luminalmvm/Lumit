@@ -278,11 +278,7 @@ fn put(inst: &mut EffectInstance, id: String, value: EffectValue) -> &mut Effect
             at
         }
         None => {
-            inst.params.push(EffectParam {
-                id,
-                value,
-                extra: serde_json::Map::new(),
-            });
+            inst.params.push(EffectParam::new(id, value));
             inst.params.len() - 1
         }
     };

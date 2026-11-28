@@ -97,11 +97,6 @@ pub struct Gradient {
     #[slider(label = "Start y", min = 0.0, max = 2160.0, default = 0.0, unit = Px)]
     pub start_y: f32,
 
-    /// The colour at Start. Scene-linear and open above 1 (§2.1). Its alpha
-    /// comes through, so a ramp can fade to clear.
-    #[colour(label = "Start colour", default = [1.0, 1.0, 1.0, 1.0], max = 4.0)]
-    pub start_colour: [f32; 4],
-
     /// px@comp; see [`start_x`](Self::start_x).
     #[slider(label = "End x", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
     pub end_x: f32,
@@ -109,6 +104,11 @@ pub struct Gradient {
     /// px@comp; see [`start_x`](Self::start_x).
     #[slider(label = "End y", min = 0.0, max = 2160.0, default = 1080.0, unit = Px)]
     pub end_y: f32,
+
+    /// The colour at Start. Scene-linear and open above 1 (§2.1). Its alpha
+    /// comes through, so a ramp can fade to clear.
+    #[colour(label = "Start colour", default = [1.0, 1.0, 1.0, 1.0], max = 4.0)]
+    pub start_colour: [f32; 4],
 
     #[colour(label = "End colour", default = [0.0, 0.0, 0.0, 1.0], max = 4.0)]
     pub end_colour: [f32; 4],

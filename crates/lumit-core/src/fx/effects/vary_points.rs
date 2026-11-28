@@ -75,9 +75,9 @@ pub const VARY_GROUPS: &[ParamGroup] = &[
             "stretch_x",
             "stretch_y",
             "colour_start",
+            "colour",
             "use_colour_mid",
             "colour_mid",
-            "colour",
             "both_ways",
             "rotation",
             "offset_x",
@@ -362,6 +362,11 @@ pub struct VaryPoints {
     #[colour(label = "Start colour", default = [1.0, 1.0, 1.0, 1.0], max = 4.0)]
     pub colour_start: [f32; 4],
 
+    /// The colour a point is multiplied by where the pattern reads 1. In
+    /// between it is a mix of the two it lies between.
+    #[colour(default = [1.0, 1.0, 1.0, 1.0], max = 4.0)]
+    pub colour: [f32; 4],
+
     /// The colours run from Start colour through Middle colour to Colour,
     /// not straight from one to the other.
     #[toggle(label = "Use middle colour", default = false)]
@@ -370,11 +375,6 @@ pub struct VaryPoints {
     /// The colour a point is multiplied by where the pattern reads a half.
     #[colour(label = "Middle colour", default = [1.0, 1.0, 1.0, 1.0], max = 4.0)]
     pub colour_mid: [f32; 4],
-
-    /// The colour a point is multiplied by where the pattern reads 1. In
-    /// between it is a mix of the two it lies between.
-    #[colour(default = [1.0, 1.0, 1.0, 1.0], max = 4.0)]
-    pub colour: [f32; 4],
 
     /// Rotation and the Offsets read the pattern as -1 to 1 instead of 0 to
     /// 1, and a Random or Noise pattern rolls again for each Offset, so one

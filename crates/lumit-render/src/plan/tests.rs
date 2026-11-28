@@ -775,11 +775,10 @@ fn a_node_graph_plans_the_footage_its_boxes_read() {
     );
     let mut hidden = layer(LayerKind::Footage { item });
     hidden.switches.visible = false;
-    inst.params.push(EffectParam {
-        id: "plate".into(),
-        value: EffectValue::Layer(Some(hidden.id)),
-        extra: serde_json::Map::new(),
-    });
+    inst.params.push(EffectParam::new(
+        "plate",
+        EffectValue::Layer(Some(hidden.id)),
+    ));
     let mut host = layer(LayerKind::Null);
     let host_id = host.id;
     host.effects = vec![inst];

@@ -5638,7 +5638,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     required int fpsDen,
   }) {
     final t = ThemeScope.of(context).theme;
-    final shown = _shownChannels(ui, channels);
+    final shown = [
+      for (final c in _shownChannels(ui, channels))
+        if (!c.isSeed) c,
+    ];
     // The one shared target list (docs/07 §4.5), for the ruler's edges and
     // markers and for the pane's own key drags. Built from the read model, so
     // it costs no bridge calls.

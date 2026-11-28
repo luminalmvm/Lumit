@@ -253,11 +253,10 @@ mod tests {
     fn choose(inst: &mut EffectInstance, slot: usize, n: u32) {
         let id = SLOT_IDS[slot];
         inst.params.retain(|p| p.id != id);
-        inst.params.push(crate::model::EffectParam {
-            id: id.to_owned(),
-            value: crate::model::EffectValue::Choice(n),
-            extra: serde_json::Map::new(),
-        });
+        inst.params.push(crate::model::EffectParam::new(
+            id,
+            crate::model::EffectValue::Choice(n),
+        ));
     }
 
     /// Two callers building the same list at once still end up with one

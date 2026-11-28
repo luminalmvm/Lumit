@@ -1918,14 +1918,13 @@ fn a_plugin_is_told_its_frame_and_handed_its_neighbours() {
             extra: serde_json::Map::new(),
         },
         enabled: true,
-        params: vec![lumit_core::model::EffectParam {
-            id: "gain".to_owned(),
-            value: EffectValue::Float(lumit_core::anim::Property {
+        params: vec![lumit_core::model::EffectParam::new(
+            "gain",
+            EffectValue::Float(lumit_core::anim::Property {
                 animation: lumit_core::anim::Animation::Expression("time".to_owned()),
                 extra: serde_json::Map::new(),
             }),
-            extra: serde_json::Map::new(),
-        }],
+        )],
         sample_temporally: true,
         custom_name: None,
         linked_pairs: Vec::new(),

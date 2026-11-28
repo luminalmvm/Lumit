@@ -56,6 +56,7 @@ Future<void> showExpressionEditor({
   BridgeScalar? held,
   BridgeExpressionRow? row,
   int decimals = 2,
+  void Function(BridgeScalar_Expression draft)? onConvert,
 }) async {
   final frame =
       Provider.of<LumitUiState>(context, listen: false).playheadFrame.value;
@@ -112,7 +113,9 @@ Future<void> showExpressionEditor({
             },
     ),
   );
-  if (converted) {
+  if (converted && onConvert != null) {
+    onConvert(draft);
+  } else if (converted) {
     final keys = expressionAsKeys(ui,
         expression: draft, comp: comp, layer: layer, held: held, row: row);
     if (keys != null) onCommit(keys);

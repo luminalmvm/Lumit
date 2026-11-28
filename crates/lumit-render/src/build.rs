@@ -6197,12 +6197,8 @@ impl GraphLower<'_> {
                 break;
             }
             let mut values = view.values.to_vec();
-            values.extend(lumit_core::comp_graph::repeat_values(
-                start,
-                k,
-                times,
-                &element(k),
-            ));
+            let more = lumit_core::comp_graph::repeat_values(start, self.t, k, times, &element(k));
+            values.extend(more);
             let mut feeds = vec![GraphFeed::Step(if copies { into } else { last })];
             feeds.extend(outside.iter().map(|s| GraphFeed::Step(*s)));
             let out = self.lower(

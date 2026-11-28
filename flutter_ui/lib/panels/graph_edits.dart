@@ -102,7 +102,11 @@ void setChannelValue(
     BridgeEffectInstance instance, String key, BridgeScalar scalar) {
   final hash = key.indexOf('#');
   if (hash < 0) {
-    instance.setValue(id: key, value: BridgeEffectValue.float(scalar));
+    instance.setValue(
+        id: key,
+        value: instance.getValue(id: key) is BridgeEffectValue_Seed
+            ? BridgeEffectValue.seed(scalar)
+            : BridgeEffectValue.float(scalar));
     return;
   }
   final id = key.substring(0, hash);

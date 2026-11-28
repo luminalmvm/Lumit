@@ -32,9 +32,10 @@ The row then shows the value it gives, and a click on it, or **Edit expression**
 right-click menu, opens the editor again. In the Timeline the expression is written along
 the property's lane, and a click there opens the editor across the lane.
 
-`Alt`+click on a row's stopwatch opens the editor too, on a Transform row, an effect
-parameter of one number and the [Retime](/use/retime/#retime-on-a-layer) row. A row with
-several axes asks which axis first.
+`Alt`+click on a row's stopwatch opens the editor too, on a Transform row, an effect's
+number, colour or point and the [Retime](/use/retime/#retime-on-a-layer) row. A row with
+several axes asks which axis first. An effect's linked point does not ask, and takes one
+`[x, y]` expression on both halves.
 
 **Remove expression**, in the editor and in the row's right-click menu, takes the
 expression off. The property keeps the number it was showing, or goes back to the
@@ -49,8 +50,10 @@ row is left out.
 
 Transform properties, effect parameters and a layer's Retime take one. An effect's point
 takes one on each half, and is then drawn as two rows. On a row with several axes,
-**Add expression ▸** names the axis. A linked Scale takes one expression on both axes. A
-colour does not yet, and the menu does not offer it there.
+**Add expression ▸** names the axis. A linked Scale or point takes one expression on both
+axes. A colour takes one expression for its four channels. A list, `[r, g, b, a]`, gives each
+channel its own number, and one number goes to all four. **Convert to keyframes** keys all
+four.
 
 ## Keyframes under an expression
 

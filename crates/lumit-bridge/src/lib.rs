@@ -89,6 +89,7 @@ mod captioning;
 mod cdl;
 mod claim;
 mod closing;
+mod effect_seed;
 // The command line, which the browser build has none of.
 #[cfg(not(target_arch = "wasm32"))]
 mod cli;

@@ -630,11 +630,10 @@ mod tests {
             |inst: &EffectInstance, picture: bool| def.row_state_on(inst, picture).disabled;
         assert_eq!(greyed(&inst, false), ["channel"]);
         assert_eq!(greyed(&inst, true), ["width"]);
-        inst.params.push(crate::model::EffectParam {
-            id: "shape".into(),
-            value: crate::model::EffectValue::Choice(1),
-            extra: Default::default(),
-        });
+        inst.params.push(crate::model::EffectParam::new(
+            "shape",
+            crate::model::EffectValue::Choice(1),
+        ));
         assert_eq!(greyed(&inst, true), ["channel"]);
     }
 

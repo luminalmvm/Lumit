@@ -10884,20 +10884,6 @@
           "slider_max": 2160.0
         },
         {
-          "id": "start_colour",
-          "label": "Start colour",
-          "kind": "colour",
-          "unit": "raw",
-          "default": [
-            1.0,
-            1.0,
-            1.0,
-            1.0
-          ],
-          "slider_min": 0.0,
-          "slider_max": 4.0
-        },
-        {
           "id": "end_x",
           "label": "End x",
           "kind": "float",
@@ -10914,6 +10900,20 @@
           "default": 1080.0,
           "slider_min": 0.0,
           "slider_max": 2160.0
+        },
+        {
+          "id": "start_colour",
+          "label": "Start colour",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
         },
         {
           "id": "end_colour",
@@ -23533,15 +23533,8 @@
           "slider_max": 4.0
         },
         {
-          "id": "use_colour_mid",
-          "label": "Use middle colour",
-          "kind": "bool",
-          "unit": "raw",
-          "default": false
-        },
-        {
-          "id": "colour_mid",
-          "label": "Middle colour",
+          "id": "colour",
+          "label": "Colour",
           "kind": "colour",
           "unit": "raw",
           "default": [
@@ -23554,8 +23547,15 @@
           "slider_max": 4.0
         },
         {
-          "id": "colour",
-          "label": "Colour",
+          "id": "use_colour_mid",
+          "label": "Use middle colour",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "colour_mid",
+          "label": "Middle colour",
           "kind": "colour",
           "unit": "raw",
           "default": [
@@ -23999,9 +23999,9 @@
             "stretch_x",
             "stretch_y",
             "colour_start",
+            "colour",
             "use_colour_mid",
             "colour_mid",
-            "colour",
             "both_ways",
             "rotation",
             "offset_x",

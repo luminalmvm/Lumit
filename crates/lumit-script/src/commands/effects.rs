@@ -49,11 +49,7 @@ fn label_of<'a>(e: &EffectInstance, id: &'a str) -> &'a str {
 /// is first written. A button has nothing to store.
 fn fill(e: &mut EffectInstance, row: &ParamSchema) {
     if let Some(value) = fx::builtins::default_param_value(&row.kind) {
-        e.params.push(EffectParam {
-            id: row.id.to_owned(),
-            value,
-            extra: serde_json::Map::new(),
-        });
+        e.params.push(EffectParam::new(row.id, value));
     }
 }
 
@@ -353,7 +349,9 @@ pub(super) fn set_param(
     match own {
         Some(n) => {
             let what = label_of(e, &e.params[n].id).to_owned();
-            set_own(comp, layer, &mut e.params[n].value, &what, change)
+            set_own(comp, layer, &mut e.params[n].value, &what, change)?;
+            e.params[n].seed_keys = None;
+            Ok(())
         }
         None => set_after_effects(comp, layer, e, key, change),
     }
@@ -588,6 +586,7 @@ fn set_after_effects(
             continue;
         };
         to.value = from.value.clone();
+        to.seed_keys = None;
         let channels: Vec<&mut Property> = match &mut to.value {
             EffectValue::Float(p) => vec![p],
             EffectValue::Point(x, y) => vec![x, y],

@@ -73,11 +73,7 @@ fn param_value(inst: &EffectInstance, param: &str) -> Option<EffectValue> {
 fn set_param(inst: &mut EffectInstance, param: &str, value: EffectValue) {
     match inst.params.iter_mut().find(|p| p.id == param) {
         Some(p) => p.value = value,
-        None => inst.params.push(EffectParam {
-            id: param.to_owned(),
-            value,
-            extra: serde_json::Map::new(),
-        }),
+        None => inst.params.push(EffectParam::new(param, value)),
     }
 }
 

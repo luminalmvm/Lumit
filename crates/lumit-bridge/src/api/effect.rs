@@ -35,6 +35,7 @@ use crate::api::{
     state::PROJECTS,
     BridgeError,
 };
+use crate::effect_seed;
 use crate::frb_generated::StreamSink;
 
 /// One built-in effect as the Add-effect menu needs it: the stable `name` to
@@ -2158,7 +2159,7 @@ pub enum BridgeEffectValue {
     Colour(BridgeColour),
     Bool(bool),
     Choice(u32),
-    Seed(u32),
+    Seed(BridgeScalar),
     File(BridgeFileParam),
     Layer(Option<Uuid>),
     /// Which clip on the referenced layer a node listens to, or `None` for
@@ -2189,8 +2190,8 @@ impl BridgeEffectValue {
     /// `offset` is the owning layer's `start_offset`, carrying every key onto
     /// the composition's clock.
     #[frb(ignore)]
-    fn read_at(value: &EffectValue, offset: Rational) -> BridgeEffectValue {
-        match value {
+    fn read_at(param: &EffectParam, offset: Rational) -> BridgeEffectValue {
+        match &param.value {
             EffectValue::Float(property) => {
                 BridgeEffectValue::Float(BridgeScalar::read_at(property, offset))
             }
@@ -2206,7 +2207,7 @@ impl BridgeEffectValue {
             }),
             EffectValue::Bool(value) => BridgeEffectValue::Bool(*value),
             EffectValue::Choice(index) => BridgeEffectValue::Choice(*index),
-            EffectValue::Seed(seed) => BridgeEffectValue::Seed(*seed),
+            EffectValue::Seed(seed) => effect_seed::read(param, *seed, offset),
             EffectValue::File(file) => BridgeEffectValue::File(BridgeFileParam {
                 paths: file.paths.clone(),
                 index: BridgeScalar::read_at(&file.index, offset),
@@ -2247,11 +2248,11 @@ impl BridgeEffectValue {
     #[frb(ignore)]
     fn write_at(
         self,
-        target: &mut EffectValue,
+        param: &mut EffectParam,
         offset: Rational,
         bounds: (Option<f64>, Option<f64>),
     ) -> Result<(), BridgeError> {
-        match (self, target) {
+        match (self, &mut param.value) {
             (BridgeEffectValue::Float(scalar), EffectValue::Float(property)) => {
                 let animation = clamp_animation(scalar.animation_at(offset)?, bounds);
                 scalar.put(property, animation, offset);
@@ -2286,10 +2287,7 @@ impl BridgeEffectValue {
                 *target = index;
                 Ok(())
             }
-            (BridgeEffectValue::Seed(seed), EffectValue::Seed(target)) => {
-                *target = seed;
-                Ok(())
-            }
+            (BridgeEffectValue::Seed(seed), _) => effect_seed::write(param, seed, offset),
             (BridgeEffectValue::File(file), EffectValue::File(target)) => {
                 let animation = file.index.animation_at(offset)?;
                 *target = FileParam {
@@ -2961,11 +2959,7 @@ fn fill_derived(effect: &mut EffectInstance) -> Vec<String> {
             continue; // a button has nothing to fill
         };
         if !held.contains(param.id) {
-            effect.params.push(EffectParam {
-                id: param.id.to_owned(),
-                value,
-                extra: serde_json::Map::new(),
-            });
+            effect.params.push(EffectParam::new(param.id, value));
             added.push(param.id.to_owned());
         }
     }
@@ -2989,14 +2983,14 @@ fn derived_params_of(effect: &EffectInstance) -> Vec<BridgeParamInfo> {
 /// is driven by an expression — the two things removing the row would take
 /// with it.
 #[frb(ignore)]
-fn animation_of(value: &lumit_core::model::EffectValue) -> (bool, bool) {
+fn animation_of(param: &EffectParam) -> (bool, bool) {
     use lumit_core::anim::Animation;
     use lumit_core::model::EffectValue;
-    let channels: Vec<&lumit_core::anim::Property> = match value {
+    let channels: Vec<&lumit_core::anim::Property> = match &param.value {
         EffectValue::Float(p) => vec![p],
         EffectValue::Point(x, y) => vec![x, y],
         EffectValue::Colour(c) => c.iter().collect(),
-        _ => Vec::new(),
+        _ => param.keyed_seed().into_iter().collect(),
     };
     let keyframed = channels.iter().any(|p| p.is_animated());
     let expression = channels
@@ -3063,7 +3057,7 @@ pub(crate) fn read_instance_info(
             .iter()
             .map(|p| BridgeParamValue {
                 id: p.id.to_string(),
-                value: BridgeEffectValue::read_at(&p.value, offset),
+                value: BridgeEffectValue::read_at(p, offset),
             })
             .collect(),
         linked_pairs: effect.linked_pairs.clone(),
@@ -3289,7 +3283,7 @@ impl BridgeEffectInstance {
                 .iter()
                 .filter(|p| stored(&p.id) && !names(&p.id))
                 .map(|p| {
-                    let (keyframed, expression) = animation_of(&p.value);
+                    let (keyframed, expression) = animation_of(p);
                     BridgeUnusedParam {
                         id: p.id.clone(),
                         keyframed,
@@ -3630,10 +3624,7 @@ impl BridgeEffectInstance {
     /// no "cannot represent this one" answer any more.
     #[frb(sync)]
     pub fn get_value(&self, id: String) -> Result<BridgeEffectValue, BridgeError> {
-        Ok(BridgeEffectValue::read_at(
-            &self.param(&id)?.value,
-            self.offset,
-        ))
+        Ok(BridgeEffectValue::read_at(self.param(&id)?, self.offset))
     }
 
     /// Overwrite a parameter on this staged copy. Nothing is committed — see the
@@ -3671,9 +3662,15 @@ impl BridgeEffectInstance {
             .iter_mut()
             .find(|p| p.id == id)
             .ok_or(BridgeError::InvalidParam)?;
-        let fresh = !matches!(&param.value, EffectValue::Float(p) if p.extra.contains_key(lumit_core::expression::script::SLOT_KEY));
+        use lumit_core::expression::script::SLOT_KEY;
+        let noted = |p: &lumit_core::anim::Property| p.extra.contains_key(SLOT_KEY);
+        let fresh = match &param.value {
+            EffectValue::Float(p) => !noted(p),
+            EffectValue::Colour(channels) => !channels.iter().any(noted),
+            _ => true,
+        };
 
-        value.write_at(&mut param.value, offset, bounds)?;
+        value.write_at(param, offset, bounds)?;
         // A typed text is held to its cap here, as a number is to its range.
         if let (Some(lumit_core::fx::schema::ParamKind::Text { .. }), EffectValue::Text(text)) =
             (kind, &mut param.value)

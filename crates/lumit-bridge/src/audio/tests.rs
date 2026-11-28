@@ -449,11 +449,10 @@ fn insert_instance(name: &str, value: Property) -> lumit_core::model::EffectInst
         },
         roto: None,
         enabled: true,
-        params: vec![lumit_core::model::EffectParam {
-            id: "p1".into(),
-            value: lumit_core::model::EffectValue::Float(value),
-            extra: serde_json::Map::new(),
-        }],
+        params: vec![lumit_core::model::EffectParam::new(
+            "p1",
+            lumit_core::model::EffectValue::Float(value),
+        )],
         sample_temporally: true,
         custom_name: None,
         linked_pairs: Vec::new(),
