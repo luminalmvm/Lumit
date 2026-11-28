@@ -116,13 +116,17 @@ String _actionFor(ToolGroup group) =>
 /// One group's button on the strip, and its row in the overflow menu once
 /// folded. Selection and the armed group never fold.
 FoldItem _foldedTool(LumitTheme t, ToolGroup group, ToolsState tools,
-    {required bool seam, bool rail = false}) {
+    {required bool seam,
+    bool rail = false,
+    bool inDepth = false,
+    bool beside = false,
+    bool held = false}) {
   final member = tools.memberOf(group);
   final armed = tools.tool.group == group;
   final enabled =
       ToolMode.builtMembersOf(group).isNotEmpty && tools.arms(group);
   return FoldItem(
-    keep: armed || group == ToolGroup.select,
+    keep: armed || held || group == ToolGroup.select,
     label: member.label,
     icon: lumitIcon(member.icon,
         size: iconSize,
@@ -137,12 +141,23 @@ FoldItem _foldedTool(LumitTheme t, ToolGroup group, ToolsState tools,
       direction: rail ? Axis.vertical : Axis.horizontal,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _ToolButton(group: group, tools: tools, rail: rail),
+        _ToolItem(
+            group: group,
+            tools: tools,
+            inDepth: inDepth,
+            beside: beside && !rail,
+            held: held,
+            rail: rail),
         if (seam && group == _seamAfter) _ToolBarDivider(vertical: rail),
       ],
     ),
   );
 }
+
+bool _inDepth(LumitUiState ui) => ui.model.heldLayers.any((entry) =>
+    entry.info.switches.threeD ||
+    entry.info.kind == BridgeLayerKind.light ||
+    entry.info.kind == BridgeLayerKind.camera);
 
 class LumitToolBarFrb extends StatelessWidget {
   const LumitToolBarFrb({super.key});
@@ -155,7 +170,7 @@ class LumitToolBarFrb extends StatelessWidget {
     // Named, so a style can dress the toolbar's buttons apart from others.
     return StylePart(name: 'toolbar', child: GestureDetector(
       onSecondaryTapUp: (d) =>
-          showMenuEntries(context, d.globalPosition, _barRows(ui)),
+          showMenuEntries(context, d.globalPosition, _barRows(ui, top: true)),
       child: Container(
       height: toolBarHeightFor(t.shape),
       decoration: BoxDecoration(
@@ -169,22 +184,32 @@ class LumitToolBarFrb extends StatelessWidget {
       child: ListenableBuilder(
         // The model too: the axes only show once the comp has something
         // in depth.
-        listenable: Listenable.merge([ui.tools, ui.model]),
+        listenable: Listenable.merge([ui.tools, ui.model, ui.workspace]),
         builder: (context, _) {
-          final options = _toolOptions(t, ui, height: _lanternPill);
+          final inDepth = _inDepth(ui);
+          final beside = ui.workspace.interface.toolOptionsBeside;
+          final options =
+              beside ? null : _toolOptions(t, ui, height: _lanternPill);
           final tools = Row(
             key: const ValueKey('tool-bar-tools'),
             mainAxisSize: MainAxisSize.min,
             children: [
               Flexible(
-                child: FoldingRow(
-                  markKey: const ValueKey('tool-bar-overflow'),
-                  markWidth: _toolButtonWidth,
-                  markHeight: _toolButtonHeight,
-                  items: [
-                    for (final group in toolBarOrder)
-                      _foldedTool(t, group, ui.tools, seam: pills),
-                  ],
+                child: _ToolStrip(
+                  active: ui.tools.tool.group,
+                  builder: (held) => FoldingRow(
+                    markKey: const ValueKey('tool-bar-overflow'),
+                    markWidth: _toolButtonWidth,
+                    markHeight: _toolButtonHeight,
+                    items: [
+                      for (final group in toolBarOrder)
+                        _foldedTool(t, group, ui.tools,
+                            seam: pills,
+                            inDepth: inDepth,
+                            beside: beside,
+                            held: beside && held.contains(group)),
+                    ],
+                  ),
                 ),
               ),
               if (pills) ...[
@@ -278,9 +303,18 @@ class LumitTopLineToolsFrb extends StatelessWidget {
   }
 }
 
-List<MenuEntry> _barRows(LumitUiState ui) {
+List<MenuEntry> _barRows(LumitUiState ui, {bool top = false}) {
   final settings = ui.workspace.interface;
   return [
+    if (top)
+      MenuEntry.toggle(
+        l10n.settingsToolOptionsBeside,
+        () {
+          settings.toolOptionsBeside = !settings.toolOptionsBeside;
+          ui.workspace.settingsChanged();
+        },
+        checked: () => settings.toolOptionsBeside,
+      ),
     MenuEntry.submenu(l10n.settingsToolBarPosition, [
       for (final (position, label) in [
         (ToolBarPosition.auto, l10n.styleChoice),
@@ -373,11 +407,7 @@ class _RenderToolsFirst extends RenderBox
 /// thing to read with nothing in it.
 Widget? _toolOptions(LumitTheme t, LumitUiState ui, {required double height}) {
   final tools = ui.tools;
-  final shows = toolOptionsFor(tools.tool,
-      inDepth: ui.model.heldLayers.any((entry) =>
-          entry.info.switches.threeD ||
-          entry.info.kind == BridgeLayerKind.light ||
-          entry.info.kind == BridgeLayerKind.camera));
+  final shows = toolOptionsFor(tools.tool, inDepth: _inDepth(ui));
   if (shows == ToolOptions.none) return null;
   // The row is centred on the pill's height, as the workspace strip's are
   // on theirs; a bare child takes the top of the box it is given. The width
@@ -390,7 +420,8 @@ Widget? _toolOptions(LumitTheme t, LumitUiState ui, {required double height}) {
       widthFactor: 1,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
-        child: _ToolOptions(tools: tools, shows: shows),
+        child: _ToolOptions(
+            tools: tools, shows: shows, group: tools.tool.group),
       ),
     ),
     height: height,
@@ -462,17 +493,21 @@ class LumitToolRailFrb extends StatelessWidget {
               Expanded(
                 child: Align(
                   alignment: Alignment.topCenter,
-                  child: FoldingRow(
+                  child: _ToolStrip(
+                    active: ui.tools.tool.group,
                     axis: Axis.vertical,
-                    markKey: const ValueKey('tool-bar-overflow'),
-                    markWidth: _toolButtonWidth,
-                    markHeight:
-                        t.shape == ThemeShape.desk ? toolRailWidth : 36,
-                    items: [
-                      for (final group in toolBarOrder)
-                        _foldedTool(t, group, ui.tools,
-                            seam: true, rail: true),
-                    ],
+                    builder: (_) => FoldingRow(
+                      axis: Axis.vertical,
+                      markKey: const ValueKey('tool-bar-overflow'),
+                      markWidth: _toolButtonWidth,
+                      markHeight:
+                          t.shape == ThemeShape.desk ? toolRailWidth : 36,
+                      items: [
+                        for (final group in toolBarOrder)
+                          _foldedTool(t, group, ui.tools,
+                              seam: true, rail: true),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -581,8 +616,10 @@ ToolOptions toolOptionsFor(ToolMode tool, {bool inDepth = false}) =>
 class _ToolOptions extends StatelessWidget {
   final ToolsState tools;
   final ToolOptions shows;
+  final ToolGroup group;
 
-  const _ToolOptions({required this.tools, required this.shows});
+  const _ToolOptions(
+      {required this.tools, required this.shows, required this.group});
 
   @override
   Widget build(BuildContext context) {
@@ -608,7 +645,7 @@ class _ToolOptions extends StatelessWidget {
                     color: tools.axes == axes ? t.textPrimary : t.textMuted),
               ),
             ),
-          if (tools.tool.group == ToolGroup.rotate) ...[
+          if (group == ToolGroup.rotate) ...[
             const _ToolBarDivider(),
             for (final (sets, label, tip) in [
               (
@@ -701,9 +738,9 @@ class _ToolOptions extends StatelessWidget {
       );
     }
     if (shows == ToolOptions.shape) {
-      return _ShapeOptions(tools: tools, group: tools.tool.group);
+      return _ShapeOptions(tools: tools, group: group);
     }
-    final paint = tools.paintOf(tools.tool.group);
+    final paint = tools.paintOf(group);
     return Row(
       children: [
         // No None here: text and paint always lay a colour down.
@@ -711,7 +748,7 @@ class _ToolOptions extends StatelessWidget {
           label: l10n.toolFill,
           colour: paint.fill,
           resetTo: ToolColour.white,
-          onPicked: (colour) => tools.setPaint(tools.tool.group, fill: colour),
+          onPicked: (colour) => tools.setPaint(group, fill: colour),
         ),
         const SizedBox(width: 6),
         if (shows == ToolOptions.paint) ...[
@@ -1176,6 +1213,454 @@ class _ToolBarDivider extends StatelessWidget {
   }
 }
 
+class _StripScope extends InheritedWidget {
+  final _Slide slide;
+
+  final double room;
+
+  const _StripScope({
+    required this.slide,
+    required this.room,
+    required super.child,
+  });
+
+  static _StripScope of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_StripScope>()!;
+
+  @override
+  bool updateShouldNotify(_StripScope old) => room != old.room;
+}
+
+class _ToolStrip extends StatefulWidget {
+  final ToolGroup active;
+  final Axis axis;
+  final Widget Function(Set<ToolGroup> held) builder;
+
+  const _ToolStrip({
+    required this.active,
+    required this.builder,
+    this.axis = Axis.horizontal,
+  });
+
+  @override
+  State<_ToolStrip> createState() => _ToolStripState();
+}
+
+class _ToolStripState extends State<_ToolStrip>
+    with SingleTickerProviderStateMixin {
+  late final _Slide _slide = _Slide(this)..active = widget.active;
+  bool _hovered = false;
+  final Set<ToolGroup> _held = {};
+
+  void _tune() {
+    final scope = ThemeScope.of(context);
+    final t = scope.theme;
+    _slide
+      ..shape = t.shape
+      ..rail = widget.axis == Axis.vertical
+      ..disc = _lanternPill - 2 * t.tokens.pillInset
+      ..spec = scope.motion.slide
+      ..lead = scope.motion.slideLead;
+  }
+
+  @override
+  void didUpdateWidget(_ToolStrip old) {
+    super.didUpdateWidget(old);
+    if (widget.active == old.active) return;
+    if (_hovered) _held.add(old.active);
+    _tune();
+    _slide.moveTo(widget.active);
+  }
+
+  @override
+  void dispose() {
+    _slide.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _tune();
+    final t = ThemeScope.of(context).theme;
+    return LayoutBuilder(
+      builder: (context, c) {
+        final fixed = _toolButtonWidth * (toolBarOrder.length + 1) + 14;
+        final room = widget.axis == Axis.vertical
+            ? 0.0
+            : max(c.maxWidth / 3, c.maxWidth - fixed);
+        return _StripScope(
+          slide: _slide,
+          room: room,
+          child: MouseRegion(
+            onEnter: (_) => _hovered = true,
+            onExit: (_) {
+              _hovered = false;
+              if (_held.isEmpty) return;
+              setState(_held.clear);
+              _slide.follow();
+            },
+            child: Stack(
+              key: _slide.stripKey,
+              children: [
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: CustomPaint(painter: _TrayPainter(_slide, t)),
+                  ),
+                ),
+                widget.builder(_held),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _Slide extends ChangeNotifier {
+  _Slide(TickerProvider vsync)
+      : controller = AnimationController(vsync: vsync) {
+    controller
+      ..addListener(notifyListeners)
+      ..addStatusListener((_) => notifyListeners());
+  }
+
+  final AnimationController controller;
+  final GlobalKey stripKey = GlobalKey();
+  final Map<ToolGroup, GlobalKey> _cells = {};
+
+  ToolGroup? active;
+  ToolGroup? _prev;
+  ThemeShape shape = ThemeShape.studio;
+  bool rail = false;
+  double disc = 26;
+  Curve lead = Curves.easeOutCubic;
+  MotionSpec _spec = MotionSpec.still;
+  Rect? _from;
+
+  set spec(MotionSpec spec) {
+    _spec = spec;
+    controller.duration = spec.duration;
+  }
+
+  GlobalKey cellKey(ToolGroup group) =>
+      _cells.putIfAbsent(group, () => GlobalKey());
+
+  RenderBox? _box(GlobalKey key) {
+    final box = key.currentContext?.findRenderObject();
+    return box is RenderBox && box.attached && box.hasSize ? box : null;
+  }
+
+  bool get fades => shape == ThemeShape.desk;
+
+  double get shown => fades && controller.value < 1
+      ? _spec.curve.transform(controller.value)
+      : 1;
+
+  Rect? _target(ToolGroup? group) {
+    final strip = _box(stripKey);
+    final item = group == null ? null : _box(cellKey(group));
+    if (strip == null || item == null) return null;
+    final rect = item.localToGlobal(Offset.zero, ancestor: strip) & item.size;
+    if (shape != ThemeShape.lantern) return rect;
+    final cell =
+        Rect.fromLTWH(rect.left, rect.top, _toolButtonWidth, rect.height);
+    final head =
+        Rect.fromCenter(center: cell.center, width: disc, height: disc);
+    final inset = (_toolButtonWidth - disc) / 2;
+    final grown = rect.right - cell.right;
+    final right = rect.right -
+        inset * (1 - (grown / (2 * inset)).clamp(0.0, 1.0).toDouble());
+    return Rect.fromLTRB(
+        head.left, head.top, max(head.right, right), head.bottom);
+  }
+
+  Rect? tray() {
+    final to = _target(active);
+    final from = _from;
+    final v = controller.value;
+    if (to == null) return from;
+    if (fades || from == null || v >= 1) return to;
+    final behind = _spec.curve.transform(v);
+    final ahead = lead.transform(v);
+    final onward = rail ? to.top >= from.top : to.left >= from.left;
+    double mix(double a, double b, double k) => a + (b - a) * k;
+    final far = onward ? ahead : behind;
+    final near = onward ? behind : ahead;
+    return rail
+        ? Rect.fromLTRB(
+            mix(from.left, to.left, behind),
+            mix(from.top, to.top, near),
+            mix(from.right, to.right, behind),
+            mix(from.bottom, to.bottom, far))
+        : Rect.fromLTRB(
+            mix(from.left, to.left, near),
+            mix(from.top, to.top, behind),
+            mix(from.right, to.right, far),
+            mix(from.bottom, to.bottom, behind));
+  }
+
+  Rect ink(Rect tray) => shape == ThemeShape.lantern
+      ? Rect.fromLTWH(tray.left, tray.top, disc, disc)
+      : tray;
+
+  Rect? faded() => !fades || controller.value >= 1 || _prev == null
+      ? null
+      : _target(_prev) ?? _from;
+
+  void moveTo(ToolGroup group) {
+    if (group == active) return;
+    _from = tray();
+    _prev = active;
+    active = group;
+    if (_from != null) controller.forward(from: 0);
+  }
+
+  void follow() {
+    if (controller.isAnimating) return;
+    _from = null;
+    _prev = null;
+    controller.forward(from: 0);
+  }
+
+  Shader mask(BuildContext context, Rect bounds, Color colour) {
+    final box = context.findRenderObject();
+    final strip = _box(stripKey);
+    final tray = strip == null ? null : this.tray();
+    final old = strip == null ? null : faded();
+    final clear = colour.withValues(alpha: 0);
+    final length = rail ? bounds.height : bounds.width;
+    var lo = 0.0;
+    var hi = 0.0;
+    var lit = colour;
+    if (strip != null && box is RenderBox && box.attached) {
+      final at = box.localToGlobal(Offset.zero, ancestor: strip);
+      for (final (rect, weight) in [
+        if (tray != null) (ink(tray), shown),
+        if (old != null) (old, 1 - shown),
+      ]) {
+        final covered = rect.shift(-at);
+        lo = ((rail ? covered.top : covered.left) / length)
+            .clamp(0.0, 1.0)
+            .toDouble();
+        hi = ((rail ? covered.bottom : covered.right) / length)
+            .clamp(0.0, 1.0)
+            .toDouble();
+        if (hi > lo) {
+          lit = colour.withValues(alpha: colour.a * weight);
+          break;
+        }
+      }
+    }
+    final none = hi <= lo;
+    return LinearGradient(
+      begin: rail ? Alignment.topCenter : Alignment.centerLeft,
+      end: rail ? Alignment.bottomCenter : Alignment.centerRight,
+      colors: none ? [clear, clear] : [clear, clear, lit, lit, clear, clear],
+      stops: none ? null : [0, lo, lo, hi, hi, 1],
+    ).createShader(bounds);
+  }
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+}
+
+class _TrayPainter extends CustomPainter {
+  final _Slide slide;
+  final LumitTheme t;
+
+  _TrayPainter(this.slide, this.t) : super(repaint: slide);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final tray = slide.tray();
+    if (tray == null) return;
+    switch (t.shape) {
+      case ThemeShape.studio:
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+              tray, Radius.circular(t.tokens.actionRadius)),
+          Paint()..color = t.accent.withValues(alpha: 0.16),
+        );
+      case ThemeShape.desk:
+        void rule(Rect at, double weight) => canvas.drawRect(
+              slide.rail
+                  ? Rect.fromLTWH(at.left, at.top, 2, at.height)
+                  : Rect.fromLTWH(at.left, at.top, at.width, 2),
+              Paint()..color = t.accent.withValues(alpha: t.accent.a * weight),
+            );
+        rule(tray, slide.shown);
+        final old = slide.faded();
+        if (old != null) rule(old, 1 - slide.shown);
+      case ThemeShape.lantern:
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(tray, Radius.circular(tray.height / 2)),
+          Paint()..color = t.accent.withValues(alpha: 0.18),
+        );
+        canvas.drawOval(slide.ink(tray), Paint()..color = t.accent);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_TrayPainter old) => old.t != t || old.slide != slide;
+}
+
+class _Inked extends StatelessWidget {
+  final _Slide slide;
+  final Color ink;
+  final Widget child;
+
+  const _Inked({required this.slide, required this.ink, required this.child});
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: slide,
+        child: child,
+        builder: (context, face) => ShaderMask(
+          blendMode: BlendMode.srcATop,
+          shaderCallback: (bounds) => slide.mask(context, bounds, ink),
+          child: face,
+        ),
+      );
+}
+
+class _TrayClip extends CustomClipper<Rect> {
+  final _Slide slide;
+  final GlobalKey key;
+
+  _TrayClip(this.slide, this.key) : super(reclip: slide);
+
+  @override
+  Rect getClip(Size size) {
+    final whole = Offset.zero & size;
+    final box = key.currentContext?.findRenderObject();
+    final strip = slide._box(slide.stripKey);
+    final tray = slide.tray();
+    if (tray == null || strip == null || box is! RenderBox || !box.attached) {
+      return whole;
+    }
+    final at = box.localToGlobal(Offset.zero, ancestor: strip);
+    final shown = whole.intersect(tray.shift(-at));
+    return shown.isEmpty ? Rect.zero : shown;
+  }
+
+  @override
+  bool shouldReclip(_TrayClip old) => old.slide != slide || old.key != key;
+}
+
+class _ToolItem extends StatelessWidget {
+  final ToolGroup group;
+  final ToolsState tools;
+  final bool rail;
+  final bool inDepth;
+  final bool beside;
+  final bool held;
+
+  const _ToolItem({
+    required this.group,
+    required this.tools,
+    required this.rail,
+    required this.inDepth,
+    required this.beside,
+    required this.held,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final slide = _StripScope.of(context).slide;
+    final face = tools.memberOf(group);
+    final button = _ToolButton(group: group, tools: tools, rail: rail);
+    if (!beside || toolOptionsFor(face, inDepth: true) == ToolOptions.none) {
+      return KeyedSubtree(key: slide.cellKey(group), child: button);
+    }
+    final shows = toolOptionsFor(face, inDepth: inDepth);
+    return Row(
+      key: slide.cellKey(group),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        button,
+        _Pocket(
+          group: group,
+          tools: tools,
+          shows: shows,
+          open: tools.tool.group == group && shows != ToolOptions.none,
+          held: held && shows != ToolOptions.none,
+        ),
+      ],
+    );
+  }
+}
+
+class _Pocket extends StatefulWidget {
+  final ToolGroup group;
+  final ToolsState tools;
+  final ToolOptions shows;
+  final bool open;
+  final bool held;
+
+  const _Pocket({
+    required this.group,
+    required this.tools,
+    required this.shows,
+    required this.open,
+    required this.held,
+  });
+
+  @override
+  State<_Pocket> createState() => _PocketState();
+}
+
+class _PocketState extends State<_Pocket> {
+  ToolOptions? _kind;
+  final GlobalKey _clip = GlobalKey();
+  bool _shown = false;
+  bool _opening = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final spec = ThemeScope.of(context).motion.slide;
+    final scope = _StripScope.of(context);
+    final room = scope.room;
+    if (widget.shows != ToolOptions.none) _kind = widget.shows;
+    final kind = _kind;
+    _opening = widget.open && (_opening || !_shown);
+    _shown = widget.open || widget.held;
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(end: _shown ? 1 : 0),
+      duration: spec.duration,
+      curve: spec.curve,
+      child: kind == null
+          ? null
+          : ConstrainedBox(
+              constraints:
+                  BoxConstraints(maxWidth: room, maxHeight: _toolButtonHeight),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Padding(
+                  padding: const EdgeInsetsDirectional.only(start: 2, end: 6),
+                  child: _ToolOptions(
+                      tools: widget.tools, shows: kind, group: widget.group),
+                ),
+              ),
+            ),
+      builder: (context, p, body) => p <= 0 || body == null
+          ? const SizedBox.shrink()
+          : ClipRect(
+              key: _clip,
+              clipper: _opening ? _TrayClip(scope.slide, _clip) : null,
+              child: Align(
+                alignment: AlignmentDirectional.centerStart,
+                widthFactor: p,
+                child: body,
+              ),
+            ),
+    );
+  }
+}
+
 class _ToolButton extends StatefulWidget {
   final ToolGroup group;
   final ToolsState tools;
@@ -1214,35 +1699,20 @@ class _ToolButtonState extends State<_ToolButton> {
     // So is one this machine may not arm, because it can only look.
     final enabled = members.isNotEmpty && widget.tools.arms(widget.group);
 
-    // 15-DESIGN §5's icon states, exactly: secondary at rest, primary on hover,
-    // accent when this is the tool in your hand — and muted for a group that
-    // cannot be armed at all. Lantern fills the armed button with the accent
-    // instead, so its glyph takes the colour a primary button's label does.
+    // 15-DESIGN §5's icon states: secondary at rest, primary on hover, muted
+    // for a group that cannot be armed. The armed look is the highlight's.
     final filled = t.tokens.roomed;
     final desk = t.shape == ThemeShape.desk;
     final colour = !enabled
         ? t.textDisabled
-        : active
-            ? (filled ? t.surface0 : t.accent)
-            : _hover
-                ? t.textPrimary
-                : t.textSecondary;
-    final Color? fill = filled
-        ? null
-        : active
-            ? (desk ? null : t.accent.withValues(alpha: 0.16))
-            : _hover
-                ? t.surface4
-                : null;
+        : _hover
+            ? t.textPrimary
+            : t.textSecondary;
+    final ink = filled ? t.surface0 : t.accent;
+    final Color? fill = !filled && !active && _hover ? t.surface4 : null;
     final disc = _lanternPill - 2 * t.tokens.pillInset;
-    final index = BorderSide(color: t.accent, width: 2);
     final decoration = desk
-        ? BoxDecoration(
-            color: fill,
-            border: active
-                ? (widget.rail ? Border(left: index) : Border(top: index))
-                : null,
-          )
+        ? BoxDecoration(color: fill)
         : BoxDecoration(
             color: fill,
             borderRadius: BorderRadius.circular(t.tokens.actionRadius),
@@ -1252,9 +1722,8 @@ class _ToolButtonState extends State<_ToolButton> {
         : desk
             ? toolRailWidth
             : 36.0;
-    // Arming a tool is a key press, many times an hour, so the mark moves
-    // at once, on the tool armed and the one let go. The hover light moves
-    // as a hover does, and the glyph goes with the fill behind it.
+    // Arming a tool is a key press, many times an hour, so the hover light
+    // goes at once from the tool armed and the one let go.
     final switched = _wasActive != null && _wasActive != active;
     _wasActive = active;
     final step = active || switched
@@ -1295,32 +1764,36 @@ class _ToolButtonState extends State<_ToolButton> {
                       height: disc,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: active
-                            ? t.accent
-                            : _hover
-                                ? t.surface4
-                                : null,
+                        color: !active && _hover ? t.surface4 : null,
                       ),
                     ),
                   ),
-                Center(
-                  child: TweenAnimationBuilder<Color?>(
-                    tween: ColorTween(end: colour),
-                    duration: step.duration,
-                    curve: step.curve,
-                    builder: (context, ink, _) => lumitIcon(member.icon,
-                        size: iconSize, color: ink ?? colour),
+                _Inked(
+                  slide: _StripScope.of(context).slide,
+                  ink: ink,
+                  child: Stack(
+                    children: [
+                      Center(
+                        child: TweenAnimationBuilder<Color?>(
+                          tween: ColorTween(end: colour),
+                          duration: step.duration,
+                          curve: step.curve,
+                          builder: (context, tint, _) => lumitIcon(member.icon,
+                              size: iconSize, color: tint ?? colour),
+                        ),
+                      ),
+                      if (members.length > 1)
+                        Positioned(
+                          right: 4,
+                          bottom: 4,
+                          child: CustomPaint(
+                            size: const Size(4, 4),
+                            painter: _FlyoutMarkPainter(colour),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
-                if (members.length > 1)
-                  Positioned(
-                    right: 4,
-                    bottom: 4,
-                    child: CustomPaint(
-                      size: const Size(4, 4),
-                      painter: _FlyoutMarkPainter(colour),
-                    ),
-                  ),
               ],
             ),
           ),
