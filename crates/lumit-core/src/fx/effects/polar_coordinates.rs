@@ -52,6 +52,13 @@ pub struct PolarCoordinates {
     )]
     pub interpolation: f32,
 
+    #[choice(
+        label = "Edges",
+        options = *crate::fx::builtins::EDGE_OPTIONS,
+        default = 2
+    )]
+    pub edge: u32,
+
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -75,6 +82,7 @@ impl PolarCoordinates {
         cpu::PolarParams {
             to_polar: self.conversion == 0,
             interp: (self.interpolation / 100.0).clamp(0.0, 1.0),
+            edge: self.edge.min(2),
             mix: (self.mix / 100.0).clamp(0.0, 1.0),
         }
     }

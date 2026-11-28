@@ -44,6 +44,7 @@ pub mod particulate;
 pub mod particulate_params;
 pub mod particulate_scene;
 pub mod particulate_sim;
+pub mod patch_warp;
 pub mod points_draw;
 pub mod points_field;
 pub mod slices;
