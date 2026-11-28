@@ -16552,6 +16552,7 @@ fn dof_pro(
     fstop: f32,
     fringing: f32,
     rays: u32,
+    threshold: f32,
 ) -> Vec<f32> {
     use lumit_core::fx::lens_blur;
     let optics = lens_blur::BokehLens {
@@ -16610,7 +16611,7 @@ fn dof_pro(
         size: 1.0,
         blades: 9,
         rotation_deg: 0.0,
-        threshold: 1e9,
+        threshold,
         boost: 1.0,
         mix: 1.0,
         max_span_px: lens_blur::MAX_SPAN_PX,
@@ -16632,8 +16633,9 @@ fn ray_traced_depth_of_field_matches_the_thin_lens() {
         return;
     };
     let (w, h) = (640u32, 360u32);
-    let render =
-        |img: &[f32], metres: f32, fstop: f32| dof_pro(&ctx, img, w, h, metres, fstop, 1.0, 300);
+    let render = |img: &[f32], metres: f32, fstop: f32| {
+        dof_pro(&ctx, img, w, h, metres, fstop, 1.0, 300, 1e9)
+    };
 
     let mut checker = vec![0f32; (w * h * 4) as usize];
     for (i, px) in checker.chunks_mut(4).enumerate() {
@@ -16694,7 +16696,11 @@ fn depth_of_field_pro_blurs_up_to_the_frame_edge() {
         })
         .collect();
     for rays in [0, 300] {
-        let px = dof_pro(&ctx, &stripes, w, h, 0.4, 1.4, 0.0, rays);
+        let px = dof_pro(&ctx, &stripes, w, h, 0.4, 1.4, 0.0, rays, 0.5);
+        assert!(
+            px.chunks(4).all(|p| p[3] == 1.0),
+            "{rays} rays: an opaque picture came back see-through"
+        );
         let mean = |x0: u32, n: u32| {
             (x0..x0 + n)
                 .map(|x| px[((h / 2 * w + x) * 4 + 1) as usize])

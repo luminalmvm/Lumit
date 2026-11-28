@@ -201,13 +201,15 @@ fn hi_frac(c: vec4<f32>) -> f32 {
 // What a pixel puts into the gather. A wide blur's highlight goes to the
 // sprites instead. A narrow one stays and is boosted here, eased in from no
 // blur, so Blur size can run down to 0 without the highlights jumping.
+// Alpha stays here whole, as how see-through the pixel is: the sprites are
+// light only, and an opaque picture sums to nothing and comes back exactly 1.
 fn gathered(c: vec4<f32>, span: f32) -> vec4<f32> {
     let k = hi_frac(c);
     if (span >= SPRITE_SPAN) {
-        return c * (1.0 - k);
+        return vec4<f32>(c.rgb * (1.0 - k), 1.0 - c.a);
     }
     let b = mix(1.0, p.boost, clamp(span - 0.5, 0.0, 1.0));
-    return vec4<f32>(c.rgb * (1.0 + k * (b - 1.0)), c.a);
+    return vec4<f32>(c.rgb * (1.0 + k * (b - 1.0)), 1.0 - c.a);
 }
 
 // A pixel past the frame's edge, read mirrored back into it, as if the picture
@@ -419,15 +421,15 @@ fn lb_gather(@builtin(global_invocation_id) gid: vec3<u32>) {
             textureStore(acc_out, xy, c_me);
             return;
         }
-        textureStore(acc_out, xy, vec4<f32>(back.rgb / max(back_w, tiny), back.a / back_w.g));
+        textureStore(acc_out, xy, vec4<f32>(back.rgb / max(back_w, tiny), saturate(1.0 - back.a / back_w.g)));
         return;
     }
-    let f = vec4<f32>(front.rgb / max(front_w, tiny), front.a / front_w.g);
+    let f = vec4<f32>(front.rgb / max(front_w, tiny), saturate(1.0 - front.a / front_w.g));
     if (back_w.g <= 1e-30) {
         textureStore(acc_out, xy, f);
         return;
     }
-    let b = vec4<f32>(back.rgb / max(back_w, tiny), back.a / back_w.g);
+    let b = vec4<f32>(back.rgb / max(back_w, tiny), saturate(1.0 - back.a / back_w.g));
     // The front layer's cover: its kernels' light summed, whole at 1.
     var cover = clamp(front_w, vec3<f32>(0.0), vec3<f32>(1.0));
     if (me_front) {
@@ -567,7 +569,7 @@ fn lb_sprite_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32
     let px = at + 0.5 + t * local.x + r * local.y;
     out.pos = vec4<f32>(px.x / f32(p.w) * 2.0 - 1.0, 1.0 - px.y / f32(p.h) * 2.0, 0.0, 1.0);
     out.local = local;
-    out.colour = vec4<f32>(hi.rgb * p.boost, hi.a);
+    out.colour = vec4<f32>(hi.rgb * p.boost, 0.0);
     out.at = o;
     out.src_px = at;
     return out;
@@ -586,7 +588,7 @@ fn lb_sprite_fs(in: SpriteOut) -> @location(0) vec4<f32> {
     let fine = log2(f32(p.kernel_res) / (2.0 * in.at.x));
     let level = u32(clamp(ceil(fine), 0.0, f32(textureNumLevels(atlas) - 1u)));
     let w = kernel_local(u32(in.at.z), in.at.w, in.at.x, in.local, level);
-    return vec4<f32>(in.colour.rgb * w, in.colour.a * w.g);
+    return vec4<f32>(in.colour.rgb * w, 0.0);
 }
 
 @compute @workgroup_size(8, 8)
@@ -600,10 +602,7 @@ fn lb_finish(@builtin(global_invocation_id) gid: vec3<u32>) {
         textureStore(dst, xy, zebra(xy, vec4<f32>(me.y, me.y, me.y, 1.0), me.x));
         return;
     }
-    // The highlights add their coverage on top of the gather's, so an opaque
-    // picture comes back above 1 where they land. Coverage stops at whole.
-    var blurred = textureLoad(acc, xy, 0);
-    blurred.a = min(blurred.a, 1.0);
+    let blurred = textureLoad(acc, xy, 0);
     textureStore(dst, xy, zebra(xy, mix(textureLoad(src, xy, 0), blurred, p.mix_amt), me.x));
 }
 
@@ -1220,7 +1219,7 @@ fn march(r: Ray) -> vec3<f32> {
 // The source as rays see it: what is over the highlight threshold boosted.
 fn lit(c: vec4<f32>) -> vec4<f32> {
     let k = hi_frac(c);
-    return vec4<f32>(c.rgb * (1.0 + k * (p.boost - 1.0)), c.a);
+    return vec4<f32>(c.rgb * (1.0 + k * (p.boost - 1.0)), 1.0 - c.a);
 }
 
 @compute @workgroup_size(8, 8)
@@ -1300,7 +1299,7 @@ fn lb_ray_resolve(@builtin(global_invocation_id) gid: vec3<u32>) {
     let me = textureLoad(src, xy, 0);
     // A pixel none of whose rays got through keeps its own colour.
     let rgb = select(me.rgb, c.rgb / max(wt.xyz, vec3<f32>(1e-6)), wt.xyz > vec3<f32>(1e-6));
-    let a = select(me.a, c.a / max(wt.y, 1e-6), wt.y > 1e-6);
+    let a = select(me.a, saturate(1.0 - c.a / max(wt.y, 1e-6)), wt.y > 1e-6);
     textureStore(acc_out, xy, vec4<f32>(rgb, a));
 }
 
