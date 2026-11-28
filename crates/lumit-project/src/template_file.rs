@@ -224,40 +224,15 @@ pub fn info_of(
     })
 }
 
-fn sources(held: &Document) -> Vec<PackSource> {
-    let footage = held.items.iter().filter_map(|item| match item {
-        ProjectItem::Footage(f) => Some((f.id, f.media.on_disk())),
-        _ => None,
-    });
-    footage
-        .chain(held.effect_files())
-        .filter(|(_, path)| Path::new(path).is_file())
-        .map(|(item, path)| PackSource {
-            item,
-            files: vec![PathBuf::from(path)],
-        })
-        .collect()
-}
-
-/// Write the file, whole or not at all. Packs every footage file `held`
-/// names that is on disk. A file that is missing is left out, and its item
-/// keeps its path.
+/// Write the file, whole or not at all. Packs the files `sources` offers,
+/// which the caller lists in full: every frame of an image sequence, the
+/// files a 3D model reads and the colour config's tables. An item it does
+/// not offer keeps its path.
 ///
 /// `info` is written with what the archive ended up holding: each font
 /// handed over in `fonts` gets its entry, and `footage` lists the media
 /// entries. `progress` hears the bytes of footage copied and the bytes there
 /// are.
-pub fn write(
-    path: &Path,
-    held: &Document,
-    info: &TemplateInfo,
-    pictures: &Pictures,
-    fonts: &[FontFile],
-    progress: &mut dyn FnMut(u64, u64),
-) -> Result<(), ProjectError> {
-    write_from(path, held, info, pictures, fonts, &sources(held), progress)
-}
-
 pub fn write_from(
     path: &Path,
     held: &Document,
@@ -712,7 +687,22 @@ mod tests {
         let id = Uuid::now_v7();
         let info = info_of(&held, comp, "Lower third", id, 3, "2026-11-11T14:03:22Z").unwrap();
         let path = dir.path().join("lower-third.lumt");
-        write(&path, &held, &info, &pictures, &fonts, &mut |_, _| {}).unwrap();
+        let frames = [dir.path().join("plate.png"), dir.path().join("plate2.png")];
+        fs::write(&frames[1], b"the next frame").unwrap();
+        let sources = [PackSource {
+            item: plate,
+            files: frames.to_vec(),
+        }];
+        write_from(
+            &path,
+            &held,
+            &info,
+            &pictures,
+            &fonts,
+            &sources,
+            &mut |_, _| {},
+        )
+        .unwrap();
 
         let listed = read_info(&path).unwrap();
         assert_eq!((listed.id, listed.version, listed.comp), (id, 3, comp));
@@ -739,6 +729,8 @@ mod tests {
         let unpacked = file_of(&opened, plate);
         assert!(unpacked.starts_with(&media));
         assert_eq!(fs::read(&unpacked).unwrap(), b"a plate's worth of bytes");
+        let next = unpacked.with_file_name("plate2.png");
+        assert_eq!(fs::read(next).unwrap(), b"the next frame");
         assert!(!file_of(&opened, gone).is_file());
         assert!(opened.packed.is_empty());
 
