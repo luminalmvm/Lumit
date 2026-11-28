@@ -3427,8 +3427,8 @@ Future<MarkerSettings?> showMarkerSettingsFrb({
 }) =>
     showLumitModal<MarkerSettings>(
       context: context,
-      initialSize: Size(320, spans ? 184 : 150),
-      minSize: Size(280, spans ? 176 : 142),
+      initialSize: Size(340, spans ? 184 : 150),
+      minSize: Size(324, spans ? 176 : 142),
       builder: (close) =>
           _MarkerSettingsDialog(marker: marker, spans: spans, onDone: close),
     );
