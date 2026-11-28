@@ -2030,15 +2030,8 @@ class Workspace extends ChangeNotifier {
     save();
   }
 
-  void resetWorkspaceLayout() {
-    dock = defaultLayout();
-    // The default arrangement is Edit's (see `presetLayout`), so the strip
-    // ticks Edit rather than nothing after a reset.
-    activePreset = WorkspacePreset.edit;
-    activeUserWorkspace = null;
-    notifyListeners();
-    save();
-  }
+  void resetWorkspaceLayout() =>
+      applyWorkspacePreset(activePreset ?? WorkspacePreset.edit);
 
   /// Rearrange to one of the four shipped presets (docs/07 §1.6). Only the
   /// arrangement changes: no panel closes, reloads or re-evaluates anything.
