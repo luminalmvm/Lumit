@@ -113,6 +113,7 @@ Future<void> _start(List<String> args) async {
   state.launchStyle = stylePathFromArgs(args);
   state.launchTemplate = templatePathFromArgs(args);
   final ui = LumitUiState(state);
+  faultTheme = () => ui.workspace.theme;
   // A double-clicked theme is in use before anything is drawn.
   await openPresetOrTheme(state, ui, args);
   // Up once the settings are read, so it speaks the person's language.
