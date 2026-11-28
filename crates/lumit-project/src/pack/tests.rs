@@ -158,6 +158,14 @@ fn packed_footage_outlives_its_original() {
         fs::read(media.join("config/luts/grade.cube")).unwrap(),
         b"a table"
     );
+    // From the read-out copy alone, as when the archive has gone.
+    let elsewhere = dir.path().join("elsewhere");
+    let unpacked = unpack(&reopened, &[], &elsewhere, &cache, &mut |_, _| true).unwrap();
+    assert!(unpacked.kept.is_empty());
+    assert_eq!(
+        fs::read(elsewhere.join("media/config/luts/grade.cube")).unwrap(),
+        b"a table"
+    );
 
     let root = dir.path().join("packed");
     let [held, old, unmarked, other] = [(); 4].map(|()| Uuid::now_v7());

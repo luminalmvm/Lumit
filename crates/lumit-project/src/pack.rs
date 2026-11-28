@@ -776,20 +776,8 @@ pub fn unpack(
         if held.contains_key(folder) {
             continue;
         }
-        let files: Vec<HeldFile> = fs::read_dir(dest_root.join(folder))
-            .into_iter()
-            .flatten()
-            .flatten()
-            .filter_map(|entry| {
-                let meta = entry.metadata().ok().filter(fs::Metadata::is_file)?;
-                let name = entry.file_name().to_string_lossy().into_owned();
-                (!name.starts_with('.')).then(|| HeldFile {
-                    name,
-                    size: meta.len(),
-                    from: Held::Disk(entry.path()),
-                })
-            })
-            .collect();
+        let mut files = Vec::new();
+        read_out_files(&dest_root.join(folder), "", &mut files);
         if !files.is_empty() {
             held.insert(folder.clone(), files);
         }
@@ -867,6 +855,36 @@ pub fn unpack(
         }
     }
     Ok(out)
+}
+
+/// The files an open read out into `dir`, each named by its path from there
+/// as the archive entry was, so a colour config's tables keep their folders.
+/// A name starting with a dot is a copy cut short or the folder's marker.
+fn read_out_files(dir: &Path, under: &str, into: &mut Vec<HeldFile>) {
+    for entry in fs::read_dir(dir).into_iter().flatten().flatten() {
+        let leaf = entry.file_name().to_string_lossy().into_owned();
+        let Ok(meta) = entry.metadata() else {
+            continue;
+        };
+        if leaf.starts_with('.') {
+            continue;
+        }
+        let name = if under.is_empty() {
+            leaf
+        } else {
+            format!("{under}/{leaf}")
+        };
+        // A link is never followed out of the folder.
+        if meta.is_dir() {
+            read_out_files(&entry.path(), &name, into);
+        } else if meta.is_file() {
+            into.push(HeldFile {
+                name,
+                size: meta.len(),
+                from: Held::Disk(entry.path()),
+            });
+        }
+    }
 }
 
 /// Where under `media_dir` a packed folder is written, and what its main file
