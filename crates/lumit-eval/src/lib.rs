@@ -2191,7 +2191,7 @@ fn feed_source(
             // and the identity embeds the width it was decoded at.
             let effective = flow_effective_at(
                 &layer.interpolation,
-                layer.retime.as_ref(),
+                || layer.speed_at(lt),
                 *item,
                 lt,
                 comp_fps,
@@ -2473,7 +2473,7 @@ fn feed_source(
                     ClipSource::Footage(item) => {
                         let seq_interp = flow_effective_at(
                             &clip.interpolation,
-                            clip.retime.as_ref(),
+                            || lumit_core::retime::property_speed_at(clip.retime.as_ref(), lt),
                             item,
                             lt,
                             comp_fps,
@@ -2637,7 +2637,7 @@ fn wants_flow(
 /// stale picture, and only one of those is a bug.
 fn flow_effective_at<'a>(
     interpolation: &'a lumit_core::retime::Interpolation,
-    retime: Option<&lumit_core::anim::Property>,
+    speed: impl FnOnce() -> f64,
     item: Uuid,
     lt: f64,
     comp_fps: f64,
@@ -2650,8 +2650,7 @@ fn flow_effective_at<'a>(
     let Some(native) = stamper.source_fps(item) else {
         return interpolation;
     };
-    let speed = lumit_core::retime::property_speed_at(retime, lt);
-    if p.engages(p.read_fps_at(lt, native), comp_fps, speed) {
+    if p.engages(p.read_fps_at(lt, native), comp_fps, speed()) {
         interpolation
     } else {
         &NEAREST

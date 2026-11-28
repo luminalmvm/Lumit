@@ -15,6 +15,7 @@ mod material;
 mod media_ref;
 mod parent_placement;
 mod seed;
+mod speed;
 
 /// Linear-light RGBA (docs/10-FILE-FORMAT.md §1.1).
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
