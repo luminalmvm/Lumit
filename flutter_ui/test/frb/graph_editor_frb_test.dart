@@ -28,7 +28,7 @@ Future<void> pressStrip(WidgetTester tester, String key, String label) async {
     await tester.tap(button);
     return;
   }
-  await tester.tap(find.byKey(const ValueKey('tl-key-commands-overflow')));
+  await tester.tap(find.byKey(const ValueKey('tl-lane-bar-overflow')));
   await tester.pumpAndSettle();
   await tester.tap(find.text(label).last);
 }
@@ -541,7 +541,7 @@ void main() {
       expect(pill, findsOneWidget);
       expect(
           find.descendant(
-              of: find.byType(KeyCommandStrip),
+              of: find.byType(LaneBottomBar),
               matching: find.byKey(const ValueKey('graph-lens-speed'))),
           findsNothing);
       final graph = tester.getRect(find.byType(GraphEditorFrb));
