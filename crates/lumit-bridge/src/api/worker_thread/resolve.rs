@@ -75,9 +75,11 @@ impl Drop for Transfer {
 
 pub(crate) enum Preview {
     Memory(u32, u32, Vec<u8>),
+    #[cfg_attr(not(feature = "shared-texture"), allow(dead_code))]
     Shared(u32, u32, u64),
 }
 
+#[frb(ignore)]
 pub(crate) struct Request {
     pub composition: String,
     pub seconds: f64,
