@@ -226,6 +226,7 @@ void main() {
           'settings-themed-surround',
           'settings-viewer-bars',
           'settings-tool-bar-position',
+          'settings-tool-options-beside',
           'settings-range-sliders',
           'settings-command-box',
           'settings-icon-set',

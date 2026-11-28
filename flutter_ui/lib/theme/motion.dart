@@ -52,6 +52,7 @@ const Duration _ms120 = Duration(milliseconds: 120);
 const Duration _ms130 = Duration(milliseconds: 130);
 const Duration _ms140 = Duration(milliseconds: 140);
 const Duration _ms150 = Duration(milliseconds: 150);
+const Duration _ms160 = Duration(milliseconds: 160);
 const Duration _ms180 = Duration(milliseconds: 180);
 const Duration _ms200 = Duration(milliseconds: 200);
 const Duration _ms220 = Duration(milliseconds: 220);
@@ -61,6 +62,8 @@ const Duration _ms320 = Duration(milliseconds: 320);
 const Curve _out = Curves.easeOutCubic;
 
 const Curve _detent = Curves.easeOutQuart;
+
+const Curve _glide = Cubic(0.22, 1, 0.36, 1);
 
 /// Landing a little past the mark and coming back, once. About a twentieth of
 /// the distance, so half a row dropped lands under a pixel long.
@@ -105,6 +108,9 @@ class Motion {
   final MotionSpec zoom;
 
   final MotionSpec mark;
+
+  final MotionSpec slide;
+  final Curve slideLead;
 
   final MotionSpec pop;
   final double popScale;
@@ -174,6 +180,8 @@ class Motion {
     required this.scroll,
     required this.zoom,
     required this.mark,
+    required this.slide,
+    required this.slideLead,
     required this.pop,
     required this.popScale,
     required this.toggle,
@@ -235,6 +243,8 @@ class Motion {
         scroll: MotionSpec.still,
         zoom: MotionSpec.still,
         mark: MotionSpec.still,
+        slide: MotionSpec.still,
+        slideLead: Curves.linear,
         pop: MotionSpec.still,
         popScale: 1,
         toggle: MotionSpec.still,
@@ -278,6 +288,8 @@ class Motion {
       scroll: MotionSpec.still,
       zoom: MotionSpec.still,
       mark: snap,
+      slide: snap,
+      slideLead: Curves.easeOut,
       pop: MotionSpec.still,
       popScale: 1,
       toggle: snap,
@@ -319,6 +331,8 @@ class Motion {
     scroll: MotionSpec(_ms140, _out),
     zoom: MotionSpec(_ms120, _out),
     mark: MotionSpec(_ms120, _out),
+    slide: MotionSpec(_ms200, _glide),
+    slideLead: _glide,
     pop: MotionSpec(_ms110, _out),
     popScale: 0.5,
     toggle: MotionSpec(_ms120, _out),
@@ -357,6 +371,8 @@ class Motion {
     scroll: MotionSpec(_ms90, _detent),
     zoom: MotionSpec(_ms80, _detent),
     mark: MotionSpec(_ms80, _detent),
+    slide: MotionSpec(_ms160, _detent),
+    slideLead: _detent,
     pop: MotionSpec.still,
     popScale: 1,
     toggle: MotionSpec(_ms80, Curves.linear),
@@ -395,6 +411,8 @@ class Motion {
     scroll: MotionSpec(_ms180, _out),
     zoom: MotionSpec(_ms150, _out),
     mark: MotionSpec(_ms150, _out),
+    slide: MotionSpec(_ms200, _out),
+    slideLead: _glide,
     pop: MotionSpec(_ms140, _landSoft),
     popScale: 0.4,
     toggle: MotionSpec(_ms150, _landSoft),
