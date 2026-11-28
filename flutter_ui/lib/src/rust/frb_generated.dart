@@ -38525,7 +38525,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         );
       case 5:
         return BridgeEffectValue_Seed(
-          dco_decode_u_32(raw[1]),
+          dco_decode_box_autoadd_bridge_scalar(raw[1]),
         );
       case 6:
         return BridgeEffectValue_File(
@@ -49251,7 +49251,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         var var_field0 = sse_decode_u_32(deserializer);
         return BridgeEffectValue_Choice(var_field0);
       case 5:
-        var var_field0 = sse_decode_u_32(deserializer);
+        var var_field0 = sse_decode_box_autoadd_bridge_scalar(deserializer);
         return BridgeEffectValue_Seed(var_field0);
       case 6:
         var var_field0 = sse_decode_box_autoadd_bridge_file_param(deserializer);
@@ -61722,7 +61722,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_u_32(field0, serializer);
       case BridgeEffectValue_Seed(field0: final field0):
         sse_encode_i_32(5, serializer);
-        sse_encode_u_32(field0, serializer);
+        sse_encode_box_autoadd_bridge_scalar(field0, serializer);
       case BridgeEffectValue_File(field0: final field0):
         sse_encode_i_32(6, serializer);
         sse_encode_box_autoadd_bridge_file_param(field0, serializer);

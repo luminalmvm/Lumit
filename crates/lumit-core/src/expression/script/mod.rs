@@ -19,6 +19,7 @@
 //! the helpers. [`essential`] reads a copy's value for a template's control.
 
 mod ae;
+mod ae_parts;
 mod essential;
 pub(crate) mod interp;
 mod lex;

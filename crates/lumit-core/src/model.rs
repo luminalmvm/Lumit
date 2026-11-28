@@ -1541,9 +1541,10 @@ impl FileParam {
 
 /// One effect parameter's value (docs/08-EFFECTS.md §1.2 types, v1 subset).
 /// Floats, angles and percentages are all `Float`; points animate per axis;
-/// colours animate per channel (scene-linear RGBA). Bool/Choice/Seed are
-/// static in v1 — the tier-1 staples don't keyframe them. `File` carries a
-/// path chosen from a dialog, animatable only by stepping (hold keys).
+/// colours animate per channel (scene-linear RGBA). Bool and Choice are
+/// static in v1; a Seed holds its keys beside it ([`EffectParam::seed_keys`]).
+/// `File` carries a path chosen from a dialog, animatable only by stepping
+/// (hold keys).
 /// `Layer` references another layer as an auxiliary picture (a depth pass for
 /// depth of field, docs/impl/layer-input.md), the same shape [`MatteRef`]
 /// uses.
@@ -1619,6 +1620,9 @@ pub enum EffectValue {
 pub struct EffectParam {
     pub id: String,
     pub value: EffectValue,
+    /// A Seed row's hold keys, when it has any (`seed.rs`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seed_keys: Option<Property>,
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }

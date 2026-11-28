@@ -1022,8 +1022,10 @@ sealed class BridgeEffectValue with _$BridgeEffectValue {
   const factory BridgeEffectValue.choice(
     int field0,
   ) = BridgeEffectValue_Choice;
+
+  /// A seed, or its keys. Keys always hold, and an expression is refused.
   const factory BridgeEffectValue.seed(
-    int field0,
+    BridgeScalar field0,
   ) = BridgeEffectValue_Seed;
   const factory BridgeEffectValue.file(
     BridgeFileParam field0,

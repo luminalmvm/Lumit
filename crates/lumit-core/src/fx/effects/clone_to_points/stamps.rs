@@ -327,9 +327,7 @@ impl CloneToPoints {
         c.choose_by = choice("choose_by", c.choose_by);
         c.time_offset = choice("time_offset", c.time_offset);
         c.per_clone = choice("per_clone", c.per_clone);
-        if let Some(EffectValue::Seed(seed)) = e.param("seed") {
-            c.seed = *seed;
-        }
+        c.seed = e.seed_at("seed", lt).unwrap_or(c.seed);
         c.time_step = number("time_step").map_or(c.time_step, |v| v as f32);
         c.time_samples = number("time_samples").map_or(c.time_samples, |v| v as i32);
         c.max_renders = number("max_renders").map_or(c.max_renders, |v| v as i32);

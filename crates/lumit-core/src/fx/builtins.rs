@@ -758,6 +758,7 @@ fn migrate_lens_flare_background(e: &mut EffectInstance) {
         } else {
             crate::fx::lens_flare::BLEND_ADD
         }),
+        seed_keys: None,
         extra: serde_json::Map::new(),
     });
 }
@@ -790,6 +791,7 @@ fn migrate_audio_level_source(e: &mut EffectInstance) {
         } else {
             crate::fx::drivers::audio_level::SOURCE_THIS_COMP
         }),
+        seed_keys: None,
         extra: serde_json::Map::new(),
     });
 }

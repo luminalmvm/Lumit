@@ -1191,8 +1191,11 @@ fn feed_effect_stack(
                 EffectValue::Bool(b) => {
                     h.update(&[u8::from(*b)]);
                 }
-                EffectValue::Choice(v) | EffectValue::Seed(v) => {
+                EffectValue::Choice(v) => {
                     h.update(&v.to_le_bytes());
+                }
+                EffectValue::Seed(v) => {
+                    h.update(&p.seed_at(lt).unwrap_or(*v).to_le_bytes());
                 }
                 EffectValue::File(f) => {
                     // Which file is live at this time (the hold-keyed index
@@ -1527,6 +1530,10 @@ fn feed_points_rows_at(
                     for ch in c {
                         feed_f64(h, ch.value_at(when));
                     }
+                }
+                // Only a keyed seed, so an unkeyed one keys as it always did.
+                EffectValue::Seed(_) if p.keyed_seed().is_some() => {
+                    h.update(&p.seed_at(when).unwrap_or(0).to_le_bytes());
                 }
                 _ => {}
             }
@@ -4790,4 +4797,5 @@ mod tests {
     }
 
     mod picture_free_edits;
+    mod seed_keys;
 }

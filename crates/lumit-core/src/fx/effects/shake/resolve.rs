@@ -19,10 +19,7 @@ pub(super) fn derived(cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) 
     let x_freq = fl("x_freq").unwrap_or(1.0).max(0.0);
     let y_freq = fl("y_freq").unwrap_or(1.0).max(0.0);
     let z_freq = fl("z_freq").unwrap_or(1.0).max(0.0);
-    let seed = match e.param("seed") {
-        Some(EffectValue::Seed(s)) => *s,
-        _ => 0,
-    };
+    let seed = e.seed_at("seed", lt).unwrap_or(0);
     // Independent noise channels sampled at local time × frequency (per
     // axis, §3.4) — deterministic, hop-free, identical on every machine
     // (§2.4). One sampler drives the frame-time wobble and the motion-blur

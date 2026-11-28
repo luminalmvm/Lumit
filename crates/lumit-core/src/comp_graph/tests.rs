@@ -695,7 +695,7 @@ fn a_repeat_pair_holds_the_boxes_between_it() {
     let GraphNode::Fx(start_box) = &start else {
         panic!("the start is a box");
     };
-    let values = repeat_values(start_box, 2, 5, &Default::default());
+    let values = repeat_values(start_box, 0.0, 2, 5, &Default::default());
     assert_eq!(values.len(), crate::fx::effects::repeat::PASS_PORTS.len());
     assert!(values
         .iter()

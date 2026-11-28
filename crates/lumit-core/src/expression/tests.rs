@@ -332,6 +332,7 @@ fn rigged() -> (Arc<Document>, Uuid, Uuid) {
     let named = |id: &str, name: &str, property: Property| EffectParam {
         id: id.into(),
         value: EffectValue::Float(property),
+        seed_keys: None,
         extra: [("name".to_owned(), serde_json::json!(name))]
             .into_iter()
             .collect(),

@@ -458,10 +458,7 @@ fn latest_hit(
     op: u32,
     fl: &dyn Fn(&str, f64) -> f64,
 ) -> Option<(f32, f32, [f32; 3])> {
-    let seed = match e.param("seed") {
-        Some(EffectValue::Seed(s)) => *s,
-        _ => 0,
-    };
+    let seed = e.seed_at("seed", lt).unwrap_or(0);
     // Frames are comp frames. With no comp in play a jolt still lands.
     let fps = if markers.fps > 0.0 { markers.fps } else { 30.0 };
     // Rounded, so a frame's time does not land a hair either side of it.

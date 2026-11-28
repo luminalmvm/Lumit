@@ -349,7 +349,10 @@ pub(super) fn set_param(
     match own {
         Some(n) => {
             let what = label_of(e, &e.params[n].id).to_owned();
-            set_own(comp, layer, &mut e.params[n].value, &what, change)
+            set_own(comp, layer, &mut e.params[n].value, &what, change)?;
+            // A seed set here replaces its keys.
+            e.params[n].seed_keys = None;
+            Ok(())
         }
         None => set_after_effects(comp, layer, e, key, change),
     }
@@ -584,6 +587,8 @@ fn set_after_effects(
             continue;
         };
         to.value = from.value.clone();
+        // A seed set here replaces its keys, as on the own-id path.
+        to.seed_keys = None;
         let channels: Vec<&mut Property> = match &mut to.value {
             EffectValue::Float(p) => vec![p],
             EffectValue::Point(x, y) => vec![x, y],

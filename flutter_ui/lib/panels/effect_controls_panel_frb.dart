@@ -2964,8 +2964,11 @@ class _EffectSection extends StatelessWidget {
       enabled: info.enabled,
       summaryKeys: [
         for (final v in info.values)
-          if (v.value case BridgeEffectValue_Float(
-              field0: BridgeScalar_Keyframed(:final field0)))
+          if (v.value
+              case BridgeEffectValue_Float(
+                    field0: BridgeScalar_Keyframed(:final field0)) ||
+                  BridgeEffectValue_Seed(
+                    field0: BridgeScalar_Keyframed(:final field0)))
             ...field0,
       ],
       // **A target you can hit** (owner, desk test). The checkbox's own 14px

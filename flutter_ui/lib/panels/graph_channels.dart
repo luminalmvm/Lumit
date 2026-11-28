@@ -168,6 +168,9 @@ class GraphChannel {
 
   bool get isPath => isMaskPath || isShapePath;
 
+  /// A seed's keys hold, so it has keys to edit but no curve to draw.
+  bool get isSeed => param?.kind is BridgeParamKind_Seed;
+
   /// The row an expression on this channel sits on, so it reads its own
   /// number of a point. Null for a channel that is neither a transform
   /// property nor an effect parameter.
@@ -444,7 +447,8 @@ List<GraphChannel> graphChannels({
           for (final v in fx.values) {
             if (v.id != param.id) continue;
             switch (v.value) {
-              case BridgeEffectValue_Float(:final field0):
+              case BridgeEffectValue_Float(:final field0) ||
+                    BridgeEffectValue_Seed(:final field0):
                 scalar = field0;
               case BridgeEffectValue_Colour(:final field0):
                 parts = [field0.r, field0.g, field0.b, field0.a];

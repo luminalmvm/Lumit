@@ -140,6 +140,7 @@ pub fn set_controls(inst: &mut EffectInstance, controls: &[Control]) {
                 ControlKind::Menu => EffectValue::Choice(d[0].max(0.0) as u32),
                 ControlKind::Colour => EffectValue::Colour(d.map(Property::fixed)),
             },
+            seed_keys: None,
             extra: serde_json::Map::new(),
         });
     }

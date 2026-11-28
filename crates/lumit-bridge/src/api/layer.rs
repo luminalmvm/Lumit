@@ -7827,7 +7827,7 @@ impl LayerReference {
                     lumit_core::model::EffectValue::Float(prop) => animated(prop),
                     lumit_core::model::EffectValue::Point(x, y) => animated(x) || animated(y),
                     lumit_core::model::EffectValue::Colour(ch) => ch.iter().any(animated),
-                    _ => false,
+                    _ => p.keyed_seed().is_some(),
                 }),
             })
             .map(|fx| fx.id.to_string())

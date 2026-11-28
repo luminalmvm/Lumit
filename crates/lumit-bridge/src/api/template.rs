@@ -513,12 +513,12 @@ fn animated(comp: &Composition, target: &Target) -> bool {
             .iter()
             .chain(&layer.styles)
             .find(|e| e.id == *effect)
-            .and_then(|e| e.param(param))
-            .is_some_and(|value| match value {
+            .and_then(|e| e.params.iter().find(|p| p.id == *param))
+            .is_some_and(|row| match &row.value {
                 lumit_core::model::EffectValue::Float(p) => p.is_animated(),
                 lumit_core::model::EffectValue::Point(x, y) => x.is_animated() || y.is_animated(),
                 lumit_core::model::EffectValue::Colour(c) => c.iter().any(|p| p.is_animated()),
-                _ => false,
+                _ => row.keyed_seed().is_some(),
             }),
         Target::Text { .. } => match &layer.kind {
             LayerKind::Text { document } => {

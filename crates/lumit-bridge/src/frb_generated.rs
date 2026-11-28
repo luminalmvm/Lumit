@@ -40759,7 +40759,7 @@ impl SseDecode for crate::api::effect::BridgeEffectValue {
                 return crate::api::effect::BridgeEffectValue::Choice(var_field0);
             }
             5 => {
-                let mut var_field0 = <u32>::sse_decode(deserializer);
+                let mut var_field0 = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
                 return crate::api::effect::BridgeEffectValue::Seed(var_field0);
             }
             6 => {
@@ -68994,7 +68994,7 @@ impl SseEncode for crate::api::effect::BridgeEffectValue {
             }
             crate::api::effect::BridgeEffectValue::Seed(field0) => {
                 <i32>::sse_encode(5, serializer);
-                <u32>::sse_encode(field0, serializer);
+                <crate::api::effect::BridgeScalar>::sse_encode(field0, serializer);
             }
             crate::api::effect::BridgeEffectValue::File(field0) => {
                 <i32>::sse_encode(6, serializer);

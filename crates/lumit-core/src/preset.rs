@@ -160,6 +160,9 @@ pub fn shift_keys(effects: &mut [EffectInstance], delta: crate::time::Rational) 
 fn for_each_property(effects: &[EffectInstance], visit: &mut impl FnMut(&crate::anim::Property)) {
     for effect in effects {
         for param in &effect.params {
+            if let Some(keys) = &param.seed_keys {
+                visit(keys);
+            }
             match &param.value {
                 crate::model::EffectValue::Float(p) => visit(p),
                 crate::model::EffectValue::Point(x, y) => {
@@ -173,8 +176,8 @@ fn for_each_property(effects: &[EffectInstance], visit: &mut impl FnMut(&crate::
                 }
                 crate::model::EffectValue::File(f) => visit(&f.index),
                 // Carry no animation: a bool, a dropdown choice, a random
-                // seed, a layer reference, a clip reference, a mask-path
-                // reference, a tone
+                // seed (its keys sit beside it), a layer reference, a clip
+                // reference, a mask-path reference, a tone
                 // curve and a colour name are all static in v1 (docs/03 §8).
                 // A mask path's *shape* animates, but it animates on the mask,
                 // not here - this value is only which mask; a curve's shape is
@@ -201,6 +204,9 @@ fn for_each_property_mut(
 ) {
     for effect in effects {
         for param in &mut effect.params {
+            if let Some(keys) = &mut param.seed_keys {
+                visit(keys);
+            }
             match &mut param.value {
                 crate::model::EffectValue::Float(p) => visit(p),
                 crate::model::EffectValue::Point(x, y) => {

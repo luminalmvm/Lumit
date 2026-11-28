@@ -211,6 +211,9 @@ struct Frame {
     /// How much of the picture before is left, and the inverse affine it is
     /// sampled through. `None` keeps nothing.
     carry: Option<(f32, [f32; 4], [f32; 2])>,
+    /// The seed at this frame's own time, so a keyed seed walks the same
+    /// from a kept picture as from the start.
+    seed: u32,
 }
 
 fn frame_at(
@@ -301,6 +304,7 @@ fn frame_at(
         feather: (row("feather", 100.0) / 100.0).clamp(0.0, 1.0),
         projection: projection.map(|p| p.m),
         carry,
+        seed: inst.seed_at("seed", lt).unwrap_or(0),
     })
 }
 
@@ -330,7 +334,6 @@ fn one(
     h: u32,
     before: Option<&Tex>,
     f: &Frame,
-    seed: u32,
     sprite: Option<&Tex>,
 ) -> Tex {
     let base = match (before, f.carry) {
@@ -362,7 +365,7 @@ fn one(
             mix: 1.0,
             projection: f.projection,
             field: FieldTest::None,
-            seed,
+            seed: f.seed,
             mode: u32::from(sprite.is_some()),
             sprite,
         },
@@ -477,17 +480,7 @@ pub(crate) fn draw(
         let Some(made) = frame_at(trails, effect, k as f64 * dt, dt, px_scale, streak) else {
             break;
         };
-        let next = one(
-            fx,
-            ctx,
-            input,
-            w,
-            h,
-            picture.as_ref(),
-            &made,
-            inst.seed,
-            sprite,
-        );
+        let next = one(fx, ctx, input, w, h, picture.as_ref(), &made, sprite);
         if let Some(old) = picture.take().filter(|_| !held) {
             ctx.recycle(old);
         }
@@ -526,7 +519,7 @@ pub(crate) fn draw(
                     mix: 1.0,
                     projection: made.projection,
                     field: FieldTest::None,
-                    seed: inst.seed,
+                    seed: made.seed,
                     mode: u32::from(sprite.is_some()),
                     sprite,
                 },

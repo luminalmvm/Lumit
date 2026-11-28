@@ -412,11 +412,11 @@ class EffectParamRowFrb extends StatelessWidget {
                 fixedColumns: fixed,
                 navigatorApart: valueColumn != null,
                 // Alt+click: the expression editor over the row.
-                onExpression: () => _altExpression(context, scalars),
-                onWrite: (next) => _set(next.length == 4
-                    ? BridgeEffectValue.colour(BridgeColour(
-                        r: next[0], g: next[1], b: next[2], a: next[3]))
-                    : BridgeEffectValue.float(next.single)),
+                // A seed takes keys and nothing else.
+                onExpression: _seed
+                    ? null
+                    : () => _altExpression(context, scalars),
+                onWrite: (next) => _set(_valueOfScalars(next)),
               );
 
     // The driven mark is not greyed with the rest of the row: it is the one
@@ -514,10 +514,7 @@ class EffectParamRowFrb extends StatelessWidget {
               : FxKeyLane(
                   rowKey: '$id-${param.id}',
                   scalars: scalars,
-                  onWrite: (next) => _set(next.length == 4
-                      ? BridgeEffectValue.colour(BridgeColour(
-                          r: next[0], g: next[1], b: next[2], a: next[3]))
-                      : BridgeEffectValue.float(next.single)),
+                  onWrite: (next) => _set(_valueOfScalars(next)),
                 ),
         ),
         ),
@@ -845,7 +842,9 @@ class EffectParamRowFrb extends StatelessWidget {
       },
       // Named as Paste link runs, so a layer or effect renamed since the copy
       // is written under its name now.
-      linkTo: (link) => _linkRef(link, ui.model.byId(ownerLayerId)),
+      linkTo: _seed
+          ? null
+          : (link) => _linkRef(link, ui.model.byId(ownerLayerId)),
       linkFrom: _link(scalars),
       keys: numeric ? keys : null,
       reset: driven != null || fallback == null
@@ -859,7 +858,7 @@ class EffectParamRowFrb extends StatelessWidget {
           : expression != null && owner != null
               ? () => copiedAxes([worked(expression, owner)])
               : null,
-      paste: !numeric || !float
+      paste: !numeric || !float || _seed
           ? null
           : (text) {
               final n = pastedAxes(text, 1);
@@ -887,7 +886,7 @@ class EffectParamRowFrb extends StatelessWidget {
                 a: scalars[3],
               )));
             },
-      setExpression: !numeric || currentLayer == null
+      setExpression: !numeric || _seed || currentLayer == null
           ? null
           : float
               ? () => _set(BridgeEffectValue.float(BridgeScalar.expression(
@@ -943,14 +942,14 @@ class EffectParamRowFrb extends StatelessWidget {
                       if (keys != null) _set(keys);
                     }
                   : null,
-      graphPath: scalars == null
+      graphPath: scalars == null || _seed
           ? null
           : rowPath ??
               ParamRowPath.of(context) ??
               '${effectPath('$ownerLayerId', '$effectId')}/${param.id}',
       // The row as a socket, for Drive with. The range decides how far a
       // drive moves it, and the number showing is where it starts from.
-      drive: scalars == null || currentLayer == null
+      drive: scalars == null || _seed || currentLayer == null
           ? null
           : () {
               final (low, high) = driveRange(param.kind);
@@ -1002,8 +1001,22 @@ class EffectParamRowFrb extends StatelessWidget {
         _ => null,
       };
     }
+    // A seed keys too, always held: two seeds have nothing between them.
+    if (value case BridgeEffectValue_Seed(:final field0) when _seed) {
+      return [field0];
+    }
     return null;
   }
+
+  /// The way back from [_animatableScalarsOf]: the value these channels make.
+  BridgeEffectValue _valueOfScalars(List<BridgeScalar> next) => next.length == 4
+      ? BridgeEffectValue.colour(
+          BridgeColour(r: next[0], g: next[1], b: next[2], a: next[3]))
+      : _seed
+          ? BridgeEffectValue.seed(next.single)
+          : BridgeEffectValue.float(next.single);
+
+  bool get _seed => param.kind is BridgeParamKind_Seed;
 
   /// What this row is to an expression written elsewhere: the effect on the
   /// layer's stack by its heading name, and the row by its label. A driver's
@@ -1057,6 +1070,7 @@ class EffectParamRowFrb extends StatelessWidget {
   }
 
   PropertyLink? _link(List<BridgeScalar>? scalars) {
+    if (_seed) return null;
     if (scalars == null ||
         scalars.length != 1 ||
         driven != null ||
@@ -1578,13 +1592,16 @@ class EffectParamRowFrb extends StatelessWidget {
             width: effectCellWidth,
             child: DragValueField(
               key: ValueKey<String>('fx-seed-$id-${param.id}'),
-              value: field0,
+              value: scalarValueAt(field0, comp, frame)?.round() ?? 0,
               min: 0,
               max: 0xFFFFFFFF,
               speed: 1,
               resetTo: 0,
-              onChanged: (v) =>
-                  _set(BridgeEffectValue.seed(v.toInt().clamp(0, 0xFFFFFFFF))),
+              onChanged: (v) => _set(BridgeEffectValue.seed(scalarWithValueAt(
+                  field0,
+                  v.toInt().clamp(0, 0xFFFFFFFF).toDouble(),
+                  comp,
+                  frame))),
             ),
           );
         }
@@ -3893,7 +3910,8 @@ BridgeEffectValue? defaultEffectValue(BridgeParamKind kind) => switch (kind) {
           b: BridgeScalar.static_(_channel(default_, 2)),
           a: BridgeScalar.static_(_channel(default_, 3, fallback: 1)),
         )),
-      BridgeParamKind_Seed() => const BridgeEffectValue.seed(0),
+      BridgeParamKind_Seed() =>
+        const BridgeEffectValue.seed(BridgeScalar.static_(0)),
       BridgeParamKind_File() => BridgeEffectValue.file(
           const BridgeFileParam(paths: [], index: BridgeScalar.static_(0))),
       BridgeParamKind_ColourName() => const BridgeEffectValue.text(''),
