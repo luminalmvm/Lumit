@@ -3563,11 +3563,7 @@ mod tests {
             },
             roto: None,
             enabled: true,
-            params: vec![EffectParam {
-                id: "radius".into(),
-                value: EffectValue::Float(radius),
-                extra: serde_json::Map::new(),
-            }],
+            params: vec![EffectParam::new("radius", EffectValue::Float(radius))],
             sample_temporally: true,
             custom_name: None,
             linked_pairs: Vec::new(),
@@ -3661,11 +3657,7 @@ mod tests {
             },
             roto: None,
             enabled: true,
-            params: vec![EffectParam {
-                id: "radius".into(),
-                value: EffectValue::Float(radius),
-                extra: serde_json::Map::new(),
-            }],
+            params: vec![EffectParam::new("radius", EffectValue::Float(radius))],
             sample_temporally: true,
             custom_name: None,
             linked_pairs: Vec::new(),
@@ -3757,11 +3749,10 @@ mod tests {
             let mut c = comp.clone();
             let params = &mut c.layers[0].effects[0].params;
             params.retain(|p| p.id != "depth_source");
-            params.push(EffectParam {
-                id: "depth_source".into(),
-                value: EffectValue::Choice(mode.to_choice()),
-                extra: serde_json::Map::new(),
-            });
+            params.push(EffectParam::new(
+                "depth_source",
+                EffectValue::Choice(mode.to_choice()),
+            ));
             c
         };
         let blur = || lumit_core::fx::builtins::instantiate("blur").unwrap();
@@ -3792,11 +3783,10 @@ mod tests {
 
         let legacy_bool = |comp: &Composition| {
             let mut c = comp.clone();
-            c.layers[0].effects[0].params.push(EffectParam {
-                id: "depth_after_effects".into(),
-                value: EffectValue::Bool(true),
-                extra: serde_json::Map::new(),
-            });
+            c.layers[0].effects[0].params.push(EffectParam::new(
+                "depth_after_effects",
+                EffectValue::Bool(true),
+            ));
             c
         };
         let mut legacy_src = comp.clone();

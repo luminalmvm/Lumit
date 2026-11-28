@@ -363,11 +363,10 @@ fn a_layer_read_as_a_matte_source_draws_its_own_plane() {
     let mut set_matte = lumit_core::fx::builtins::instantiate("set_matte").expect("a built-in");
     match set_matte.params.iter_mut().find(|p| p.id == "matte") {
         Some(p) => p.value = EffectValue::Layer(Some(source_id)),
-        None => set_matte.params.push(EffectParam {
-            id: "matte".into(),
-            value: EffectValue::Layer(Some(source_id)),
-            extra: serde_json::Map::new(),
-        }),
+        None => set_matte.params.push(EffectParam::new(
+            "matte",
+            EffectValue::Layer(Some(source_id)),
+        )),
     }
     assert_eq!(
         set_matte.layer_ref("matte"),

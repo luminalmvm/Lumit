@@ -79,10 +79,11 @@ fn a_plugins_window_is_asked_with_its_own_values() {
         },
         enabled: true,
         params: radius
-            .map(|radius| lumit_core::model::EffectParam {
-                id: "radius".to_owned(),
-                value: EffectValue::Float(lumit_core::anim::Property::fixed(radius)),
-                extra: serde_json::Map::new(),
+            .map(|radius| {
+                lumit_core::model::EffectParam::new(
+                    "radius",
+                    EffectValue::Float(lumit_core::anim::Property::fixed(radius)),
+                )
             })
             .into_iter()
             .collect(),

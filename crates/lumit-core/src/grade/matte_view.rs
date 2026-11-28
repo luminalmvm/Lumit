@@ -103,10 +103,9 @@ fn mark(effects: &mut Vec<EffectInstance>, view: MatteView) -> Option<()> {
     if let Some(p) = node.params.iter_mut().find(|p| p.id == "combine" && alone) {
         p.value = EffectValue::Choice(0);
     }
-    node.params.push(EffectParam {
-        id: MATTE_VIEW_ROW.to_owned(),
-        value: EffectValue::Choice(view.mode as u32),
-        extra: serde_json::Map::new(),
-    });
+    node.params.push(EffectParam::new(
+        MATTE_VIEW_ROW,
+        EffectValue::Choice(view.mode as u32),
+    ));
     Some(())
 }

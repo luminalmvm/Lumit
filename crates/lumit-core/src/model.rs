@@ -14,6 +14,7 @@ mod light_file;
 mod material;
 mod media_ref;
 mod parent_placement;
+mod seed;
 
 /// Linear-light RGBA (docs/10-FILE-FORMAT.md §1.1).
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -4877,18 +4878,12 @@ mod tests {
         let mut e = crate::fx::builtins::instantiate("dof").unwrap();
         assert_eq!(e.layer_source("depth"), LayerInputSource::EffectsAndMasks);
 
-        e.params.push(EffectParam {
-            id: "depth_after_effects".into(),
-            value: EffectValue::Bool(true),
-            extra: serde_json::Map::new(),
-        });
+        let on = EffectValue::Bool(true);
+        e.params.push(EffectParam::new("depth_after_effects", on));
         assert_eq!(e.layer_source("depth"), LayerInputSource::EffectsAndMasks);
 
-        e.params.push(EffectParam {
-            id: "depth_source".into(),
-            value: EffectValue::Choice(LayerInputSource::Masks.to_choice()),
-            extra: serde_json::Map::new(),
-        });
+        let masks = EffectValue::Choice(LayerInputSource::Masks.to_choice());
+        e.params.push(EffectParam::new("depth_source", masks));
         assert_eq!(e.layer_source("depth"), LayerInputSource::Masks);
     }
 

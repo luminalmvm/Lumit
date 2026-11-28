@@ -384,11 +384,7 @@ pub fn stabilise_points(layer: LayerReference, effect: Uuid, frame: i64) -> Brid
 fn set(inst: &mut EffectInstance, id: &str, value: EffectValue) {
     match inst.params.iter_mut().find(|p| p.id == id) {
         Some(p) => p.value = value,
-        None => inst.params.push(EffectParam {
-            id: id.to_string(),
-            value,
-            extra: serde_json::Map::new(),
-        }),
+        None => inst.params.push(EffectParam::new(id, value)),
     }
 }
 

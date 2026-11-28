@@ -569,11 +569,7 @@ fn effect_with_every_kind() -> lumit_core::model::EffectInstance {
     };
     use lumit_core::time::Rational;
 
-    let param = |id: &str, value: EffectValue| EffectParam {
-        id: id.into(),
-        value,
-        extra: serde_json::Map::new(),
-    };
+    let param = |id: &str, value: EffectValue| EffectParam::new(id, value);
 
     let mut carries_extra = serde_json::Map::new();
     carries_extra.insert("expression".into(), serde_json::json!("time * 2"));

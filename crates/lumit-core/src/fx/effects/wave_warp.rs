@@ -206,9 +206,8 @@ pub(crate) fn migrate_v1(e: &mut EffectInstance) {
     if e.params.iter().any(|p| p.id == "wave_speed") {
         return;
     }
-    e.params.push(EffectParam {
-        id: "wave_speed".to_owned(),
-        value: EffectValue::Float(crate::anim::Property::fixed(0.0)),
-        extra: serde_json::Map::new(),
-    });
+    e.params.push(EffectParam::new(
+        "wave_speed",
+        EffectValue::Float(crate::anim::Property::fixed(0.0)),
+    ));
 }

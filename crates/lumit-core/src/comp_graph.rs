@@ -750,11 +750,7 @@ fn baked(input: &GraphInput, overrides: &[(String, EffectValue)]) -> Option<Effe
 fn set_param(inst: &mut EffectInstance, id: &str, value: EffectValue) {
     match inst.params.iter_mut().find(|p| p.id == id) {
         Some(param) => param.value = value,
-        None => inst.params.push(crate::model::EffectParam {
-            id: id.to_owned(),
-            value,
-            extra: serde_json::Map::new(),
-        }),
+        None => inst.params.push(crate::model::EffectParam::new(id, value)),
     }
 }
 

@@ -8368,11 +8368,10 @@ pub(crate) mod tests {
         if let Some(graph) = comp.graph.as_ref() {
             lumit_core::fx::effects::node_graph::bind(&mut inst, comp.id, graph);
         }
-        inst.params.push(lumit_core::model::EffectParam {
-            id: "amount".into(),
-            value: lumit_core::model::EffectValue::Float(Property::fixed(1.5)),
-            extra: serde_json::Map::new(),
-        });
+        inst.params.push(lumit_core::model::EffectParam::new(
+            "amount",
+            lumit_core::model::EffectValue::Float(Property::fixed(1.5)),
+        ));
         let id = comp.id;
         doc.items.push(ProjectItem::Composition(comp));
         (id, inst)

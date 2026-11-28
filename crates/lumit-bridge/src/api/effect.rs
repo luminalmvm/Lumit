@@ -2961,11 +2961,7 @@ fn fill_derived(effect: &mut EffectInstance) -> Vec<String> {
             continue; // a button has nothing to fill
         };
         if !held.contains(param.id) {
-            effect.params.push(EffectParam {
-                id: param.id.to_owned(),
-                value,
-                extra: serde_json::Map::new(),
-            });
+            effect.params.push(EffectParam::new(param.id, value));
             added.push(param.id.to_owned());
         }
     }

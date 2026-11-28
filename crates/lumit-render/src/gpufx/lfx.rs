@@ -480,11 +480,10 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
         missing.effect.namespace = lumit_core::model::EffectNamespace::Lfx;
         missing.effect.match_name = lfx::match_name("nowhere", "tape");
         missing.effect.version = 3;
-        missing.params.push(lumit_core::model::EffectParam {
-            id: "wobble".into(),
-            value: EffectValue::Float(Property::fixed(0.7)),
-            extra: serde_json::Map::new(),
-        });
+        missing.params.push(lumit_core::model::EffectParam::new(
+            "wobble",
+            EffectValue::Float(Property::fixed(0.7)),
+        ));
         for p in &mut missing.params {
             if p.id == "mix" {
                 p.value = EffectValue::Float(Property::fixed(40.0));
@@ -671,11 +670,9 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
             for (id, value) in rows {
                 match fx.params.iter_mut().find(|p| p.id == *id) {
                     Some(p) => p.value = value.clone(),
-                    None => fx.params.push(lumit_core::model::EffectParam {
-                        id: (*id).into(),
-                        value: value.clone(),
-                        extra: serde_json::Map::new(),
-                    }),
+                    None => fx
+                        .params
+                        .push(lumit_core::model::EffectParam::new(*id, value.clone())),
                 }
             }
             let (doc, comp) = project(vec![fx]);

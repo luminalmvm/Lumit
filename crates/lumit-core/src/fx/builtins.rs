@@ -354,11 +354,8 @@ pub fn instantiate_for_raster(match_name: &str, w: f64, h: f64) -> Option<Effect
             });
             if point {
                 for (id, v) in [(x.id, dx * w / 1920.0), (y.id, dy * h / 1080.0)] {
-                    inst.params.push(EffectParam {
-                        id: id.to_owned(),
-                        value: EffectValue::Float(Property::fixed(v)),
-                        extra: serde_json::Map::new(),
-                    });
+                    inst.params
+                        .push(EffectParam::new(id, EffectValue::Float(Property::fixed(v))));
                 }
             }
         }
@@ -479,11 +476,7 @@ pub fn backfill_builtin_params(effects: &mut [EffectInstance]) {
                 value = EffectValue::Choice(MapPlacement::Stretch as u32);
             }
             if !e.params.iter().any(|have| have.id == p.id) {
-                e.params.push(EffectParam {
-                    id: p.id.to_owned(),
-                    value,
-                    extra: serde_json::Map::new(),
-                });
+                e.params.push(EffectParam::new(p.id, value));
             }
         }
     }
@@ -821,11 +814,7 @@ fn migrate_dof_pro_depth(e: &mut EffectInstance) {
     }
     match e.params.iter_mut().find(|p| p.id == "depth") {
         Some(depth) => depth.value = metres.value,
-        None => e.params.push(EffectParam {
-            id: "depth".to_owned(),
-            value: metres.value,
-            extra: serde_json::Map::new(),
-        }),
+        None => e.params.push(EffectParam::new("depth", metres.value)),
     }
 }
 
@@ -946,13 +935,7 @@ pub fn instantiate(match_name: &str) -> Option<EffectInstance> {
             .iter()
             // A button declares no value, so a fresh instance carries no row
             // for it.
-            .filter_map(|p| {
-                Some(EffectParam {
-                    id: p.id.to_owned(),
-                    value: default_param_value(&p.kind)?,
-                    extra: serde_json::Map::new(),
-                })
-            })
+            .filter_map(|p| Some(EffectParam::new(p.id, default_param_value(&p.kind)?)))
             .collect(),
         sample_temporally: true,
         custom_name: None,

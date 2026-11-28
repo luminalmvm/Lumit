@@ -204,11 +204,7 @@ mod tests {
     fn set(fx: &mut EffectInstance, id: &str, value: EffectValue) {
         match fx.params.iter_mut().find(|p| p.id == id) {
             Some(param) => param.value = value,
-            None => fx.params.push(EffectParam {
-                id: id.to_owned(),
-                value,
-                extra: serde_json::Map::new(),
-            }),
+            None => fx.params.push(EffectParam::new(id, value)),
         }
     }
 

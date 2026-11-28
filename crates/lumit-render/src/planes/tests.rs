@@ -424,11 +424,10 @@ fn project(
         let mut depth =
             lumit_core::fx::builtins::instantiate(lumit_core::planes::DEPTH).expect("a built-in");
         depth.id = Uuid::from_u128(42);
-        depth.params.push(EffectParam {
-            id: "model".into(),
-            value: lumit_core::model::EffectValue::Choice(model),
-            extra: serde_json::Map::new(),
-        });
+        depth.params.push(EffectParam::new(
+            "model",
+            lumit_core::model::EffectValue::Choice(model),
+        ));
         effects.push(depth);
     }
 
