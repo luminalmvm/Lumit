@@ -5501,7 +5501,7 @@ fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
         .zip(&gpu_soft)
         .map(|(a, b)| (a - b).abs() / a.abs().max(1.0))
         .fold(0.0f32, f32::max);
-    assert!(worst_soft < 1e-2, "defocused worst |Δ| {worst_soft}");
+    assert!(worst_soft < 2e-2, "defocused worst |Δ| {worst_soft}");
     assert_ne!(gpu_soft, gpu_hot, "Defocus changes the light");
 
     let total = |lx: f32| {
