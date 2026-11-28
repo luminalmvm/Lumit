@@ -16,6 +16,7 @@
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/state/app_state.dart';
+import 'package:lumit_flutter/state/ui_state.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -53,6 +54,22 @@ Future<bool> showLayerSettingsFrb({
   }
 
   final project = Provider.of<LumitState>(context, listen: false).project;
+  final ui = Provider.of<LumitUiState>(context, listen: false);
+  var previewed = false;
+  void preview(BridgeColourRgba colour, bool all) {
+    final comp = ui.selectedComp;
+    if (comp == null) return;
+    previewed = true;
+    try {
+      comp.renderFrameWithSolidPreview(
+          frame: ui.playheadFrame.value,
+          scale: ui.viewerScale,
+          layer: layer,
+          colour: colour,
+          allLayers: all);
+    } catch (_) {}
+  }
+
   final applied = await showLumitModal<bool>(
     context: context,
     id: 'layer-settings',
@@ -63,6 +80,7 @@ Future<bool> showLayerSettingsFrb({
       name: name,
       definition: definition,
       sharedBy: sharedBy,
+      onPreview: solid == null ? null : preview,
       onConfirm: (wanted, def, all) {
         try {
           asOneUndoStep(project, () {
@@ -82,6 +100,9 @@ Future<bool> showLayerSettingsFrb({
       onCancel: () => close(false),
     ),
   );
+  if (applied != true && previewed && definition != null) {
+    preview(definition.colour, true);
+  }
   return applied ?? false;
 }
 
@@ -154,6 +175,7 @@ class _LayerSettingsBody extends StatefulWidget {
   final BridgeSolidDef? definition;
   final void Function(String, BridgeSolidDef?, bool) onConfirm;
   final VoidCallback onCancel;
+  final void Function(BridgeColourRgba colour, bool all)? onPreview;
 
   /// How many layers use this solid. Above one, the window asks whether the
   /// change is for this layer alone or for all of them.
@@ -170,6 +192,7 @@ class _LayerSettingsBody extends StatefulWidget {
     required this.definition,
     required this.onConfirm,
     required this.onCancel,
+    this.onPreview,
     this.sharedBy = 1,
     this.fresh = false,
     this.suggest,
@@ -311,6 +334,7 @@ class _LayerSettingsBodyState extends State<_LayerSettingsBody> {
                               when was != null && _name.text == suggest(was)) {
                             _name.text = suggest(now);
                           }
+                          widget.onPreview?.call(now, _all);
                         }),
                       ),
                     ),
@@ -323,7 +347,13 @@ class _LayerSettingsBodyState extends State<_LayerSettingsBody> {
                         key: const ValueKey('layer-settings-all'),
                         value: _all,
                         label: l10n.layerSettingsAllLayers,
-                        onChanged: (on) => setState(() => _all = on),
+                        onChanged: (on) {
+                          setState(() => _all = on);
+                          if (_colour case final colour?
+                              when colour != widget.definition?.colour) {
+                            widget.onPreview?.call(colour, on);
+                          }
+                        },
                       ),
                     ),
                 ],

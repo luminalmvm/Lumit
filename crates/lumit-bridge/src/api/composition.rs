@@ -2648,6 +2648,7 @@ impl CompositionReference {
             masks: None,
             clip_retime: None,
             clip_span: None,
+            solid: None,
             retime: None,
         }))
     }
@@ -2684,6 +2685,7 @@ impl CompositionReference {
             masks: None,
             clip_retime: None,
             clip_span: None,
+            solid: None,
             retime: None,
         }))
     }
@@ -2721,6 +2723,7 @@ impl CompositionReference {
             masks: None,
             clip_retime: None,
             clip_span: None,
+            solid: None,
             retime: None,
         }))
     }
@@ -2757,6 +2760,7 @@ impl CompositionReference {
             masks: None,
             clip_retime: Some((clip, retime)),
             clip_span: None,
+            solid: None,
             retime: None,
         }))
     }
@@ -2790,6 +2794,7 @@ impl CompositionReference {
             masks: None,
             clip_retime: None,
             clip_span: Some((clip, start_frame, end_frame)),
+            solid: None,
             retime: None,
         }))
     }
@@ -2829,6 +2834,7 @@ impl CompositionReference {
             masks: None,
             clip_retime: None,
             clip_span: None,
+            solid: None,
             retime: Some(retime),
         }))
     }
@@ -3098,6 +3104,7 @@ impl CompositionReference {
             masks: None,
             clip_retime: None,
             clip_span: None,
+            solid: None,
             retime: None,
         }))
     }
@@ -3132,6 +3139,7 @@ impl CompositionReference {
             masks: None,
             clip_retime: None,
             clip_span: None,
+            solid: None,
             retime: None,
         }))
     }
@@ -3169,6 +3177,7 @@ impl CompositionReference {
             masks: None,
             clip_retime: None,
             clip_span: None,
+            solid: None,
             retime: None,
         }))
     }
@@ -3204,6 +3213,7 @@ impl CompositionReference {
             masks: None,
             clip_retime: None,
             clip_span: None,
+            solid: None,
             retime: None,
         }))
     }
@@ -3232,6 +3242,7 @@ impl CompositionReference {
             contents: None,
             clip_retime: None,
             clip_span: None,
+            solid: None,
             retime: None,
             masks: Some(masks),
         }))
