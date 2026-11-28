@@ -332,12 +332,14 @@ fn displacement_map(fx: &mut Fx<'_, '_>) {
 fn polar_coordinates(fx: &mut Fx<'_, '_>) {
     fx.carry(1, "interpolation", Unit::Direct);
     fx.choice(2, "conversion", &[0, 1], "Rectangular to polar");
+    fx.set("edge", EffectValue::Choice(0));
 }
 
 fn twirl(fx: &mut Fx<'_, '_>) {
     fx.carry(1, "angle", Unit::Direct);
     fx.carry(2, "radius", Unit::LayerPct);
     fx.point(3, "centre_x", "centre_y", Unit::Px);
+    fx.set("edge", EffectValue::Choice(0));
 }
 
 /// AE `ADBE Spherize` → Spherize (docs/11 §5): **AE's one signed Radius becomes
@@ -349,6 +351,7 @@ fn spherize(fx: &mut Fx<'_, '_>) {
     fx.carry(1, "radius", Unit::Scale(sign));
     fx.set("bulge", float(if sign < 0.0 { -100.0 } else { 100.0 }));
     fx.point(2, "centre_x", "centre_y", Unit::Px);
+    fx.set("edge", EffectValue::Choice(0));
 }
 
 fn ripple(fx: &mut Fx<'_, '_>) {
@@ -360,6 +363,7 @@ fn ripple(fx: &mut Fx<'_, '_>) {
     fx.carry(6, "wave_height", Unit::Px);
     fx.carry(4, "wave_speed", Unit::Direct);
     fx.carry(7, "evolution", Unit::Direct);
+    fx.set("edge", EffectValue::Choice(1));
 }
 
 fn wave_warp(fx: &mut Fx<'_, '_>) {
@@ -430,6 +434,7 @@ fn warp(fx: &mut Fx<'_, '_>) {
     );
     fx.drop_ae(2); // Warp Axis
     fx.carry(3, "bend", Unit::Direct);
+    fx.set("edge", EffectValue::Choice(0));
     fx.carry(4, "horizontal_distortion", Unit::Direct);
     fx.carry(5, "vertical_distortion", Unit::Direct);
     fx.differs(

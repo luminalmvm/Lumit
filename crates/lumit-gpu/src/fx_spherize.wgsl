@@ -16,7 +16,7 @@ struct Params {
     bulge: f32,          // -1..1; the sign chooses the map, the magnitude blends
     mix_amt: f32,        // 0..1, blended against the unprocessed input
     matte_on: f32,       // 1 = the matte scales Bulge
-    _pad1: f32,
+    edge: u32,
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -39,7 +39,26 @@ fn matte_k(xy: vec2<i32>) -> f32 {
 
 const PI: f32 = 3.1415927;
 
-// == cpu::bilinear_edge with the Transparent policy (edge == 0).
+fn edge_idx(i: i32, len: i32) -> i32 {
+    if (i >= 0 && i < len) {
+        return i;
+    }
+    if (p.edge == 1u) {
+        return clamp(i, 0, len - 1);
+    }
+    if (p.edge == 2u) {
+        var m = i;
+        if (m < 0) {
+            m = -m;
+        } else {
+            m = 2 * (len - 1) - m;
+        }
+        return clamp(m, 0, len - 1);
+    }
+    return -1;
+}
+
+// == cpu::bilinear_edge.
 // The tap NEVER loads out of bounds. A guard that early-returns before the
 // textureLoad reads correctly on paper, but the load is side-effect-free and
 // gets hoisted above the branch; on at least one Windows backend the hoisted
@@ -49,12 +68,13 @@ const PI: f32 = 3.1415927;
 // and costs one `select`. (Found by the §1.6 oracle for Polar coordinates,
 // docs/08 §3.50 — the first kernel in the batch whose samples leave the frame.)
 fn tap(x: i32, y: i32, size: vec2<i32>) -> vec4<f32> {
-    let inside = x >= 0 && x < size.x && y >= 0 && y < size.y;
-    let c = clamp(vec2<i32>(x, y), vec2<i32>(0, 0), size - vec2<i32>(1, 1));
-    return select(vec4<f32>(0.0, 0.0, 0.0, 0.0), textureLoad(src, c, 0), inside);
+    let xi = edge_idx(x, size.x);
+    let yi = edge_idx(y, size.y);
+    let c = clamp(vec2<i32>(xi, yi), vec2<i32>(0, 0), size - vec2<i32>(1, 1));
+    return select(textureLoad(src, c, 0), vec4<f32>(0.0), xi < 0 || yi < 0);
 }
 
-fn bilinear_transparent(sx: f32, sy: f32, size: vec2<i32>) -> vec4<f32> {
+fn bilinear_edge(sx: f32, sy: f32, size: vec2<i32>) -> vec4<f32> {
     let fx = sx - 0.5;
     let fy = sy - 0.5;
     let x0 = floor(fx);
@@ -107,6 +127,6 @@ fn spherize(@builtin(global_invocation_id) gid: vec3<u32>) {
         sx = p.centre.x + dx * scale;
         sy = p.centre.y + dy * scale;
     }
-    let v = bilinear_transparent(sx, sy, size);
+    let v = bilinear_edge(sx, sy, size);
     textureStore(dst, xy, o * (1.0 - p.mix_amt) + v * p.mix_amt);
 }

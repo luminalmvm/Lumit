@@ -470,7 +470,9 @@ pub fn on_layer(layer: &Layer) -> Option<&EffectInstance> {
 /// layer works on the comp beneath it, and a box of smoke draws in its comp's walk.
 #[must_use]
 pub fn keeps_own_comp(l: &Layer) -> bool {
-    (l.is_adjustment() && l.switches.fx && l.effects.iter().any(|e| e.enabled))
+    (l.is_adjustment()
+        && (l.blend != crate::model::BlendMode::Normal
+            || (l.switches.fx && l.effects.iter().any(|e| e.enabled))))
         || on_layer(l).is_some()
 }
 

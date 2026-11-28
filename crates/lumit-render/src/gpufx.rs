@@ -1850,7 +1850,7 @@ impl GpuEffect for PolarCoordinates {
         _aux: AuxSlot<'_>,
     ) -> Tex {
         let pc = effects::polar_coordinates::PolarCoordinates::read(p).packed();
-        fx.polar_coordinates(ctx, tex, w, h, pc.to_polar, pc.interp, pc.mix)
+        fx.polar_coordinates(ctx, tex, w, h, pc.to_polar, pc.interp, pc.mix, pc.edge)
     }
 }
 
@@ -1881,6 +1881,7 @@ impl GpuEffect for Twirl {
                 radius: t.radius,
                 inv_radius: t.inv_radius,
                 angle: t.angle,
+                edge: t.edge,
                 mix: t.mix,
             },
         )
@@ -1914,6 +1915,7 @@ impl GpuEffect for Spherize {
                 radius: s.radius,
                 inv_radius: s.inv_radius,
                 bulge: s.bulge,
+                edge: s.edge,
                 mix: s.mix,
             },
         )
@@ -1951,6 +1953,7 @@ impl GpuEffect for Ripple {
                 inv_width: r.inv_width,
                 turns: r.turns,
                 asymmetric: r.asymmetric,
+                edge: r.edge,
                 mix: r.mix,
             },
         )
@@ -2017,7 +2020,7 @@ impl GpuEffect for BezierWarp {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::distort::BezierWarpOp {
+            &lumit_gpu::fx::patch_warp::BezierWarpOp {
                 pts: b.pts,
                 steps: b.steps,
                 mix: b.mix,
@@ -2052,7 +2055,7 @@ impl GpuEffect for MeshWarp {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::distort::MeshWarpOp {
+            &lumit_gpu::fx::patch_warp::MeshWarpOp {
                 rows: m.rows,
                 columns: m.columns,
                 pts: m.pts,
@@ -2093,6 +2096,7 @@ impl GpuEffect for Warp {
                 bend: a.bend,
                 h_distort: a.h_distort,
                 v_distort: a.v_distort,
+                edge: a.edge,
                 mix: a.mix,
             },
         )

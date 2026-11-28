@@ -1443,6 +1443,43 @@ impl Realiser<'_> {
             // A Tile above 100 % output on an adjustment layer therefore reads
             // as the plain clipped tiling it always did.
             let processed = lumit_gpu::fx::fit_centred(&self.ctx, processed, tw, th);
+            let processed = if l.blend == lumit_gpu::composite::Blend::Normal {
+                processed
+            } else {
+                let over = lumit_gpu::composite::CompositeLayer {
+                    texture: &processed,
+                    size: (width as f32, height as f32),
+                    position: (0.0, 0.0),
+                    anchor: (0.0, 0.0),
+                    scale: (100.0, 100.0),
+                    rotation_deg: 0.0,
+                    opacity: 100.0,
+                    matte: None,
+                    blend: l.blend,
+                    z: 0.0,
+                    rotation_x_deg: 0.0,
+                    rotation_y_deg: 0.0,
+                    three_d: false,
+                    layer_mask: None,
+                    pre: None,
+                    premultiplied: true,
+                };
+                self.compositor.composite_joined(
+                    &self.ctx,
+                    width,
+                    height,
+                    [0.0; 4],
+                    &[over],
+                    None,
+                    Some(&below),
+                    self.render_scale,
+                    1,
+                    None,
+                    &[],
+                    &[],
+                    l.display_blend,
+                )
+            };
             let coverage = self.coverage_texture(camera, width, height, l);
             acc = Some(self.fx.adjust_blend(
                 &self.ctx,
