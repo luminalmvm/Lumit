@@ -825,8 +825,8 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
   /// badges used to crush it to three letters. So the badges take what is
   /// left past that, and the ones that do not fit are left out, the last
   /// first. What a row is stays on the name's tooltip, badge or no badge.
-  /// The badges that want acting on, missing and undecodable, are not among
-  /// these and are never left out.
+  /// The badges that want acting on, missing and undecodable, come before the
+  /// quiet ones, so they are the last left out.
   Widget _nameAndBadges(LumitTheme t) {
     final id = projectItemId(item);
     final badges = [
@@ -849,6 +849,11 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
       },
       if (widget.onUpdate != null)
         ('update-$id', l10n.templateUpdate, t.accent),
+      if (widget.missing) ('relink-$id', l10n.projectItemMissing, t.warning),
+      if (widget.undecodable)
+        ('undecodable-$id', l10n.projectItemUndecodable, t.warning),
+      if (widget.missingPictures.isNotEmpty)
+        ('pictures-$id', l10n.projectItemMissing, t.warning),
       // Reading from its proxy. **Quiet on purpose**: a proxy is a fact
       // about which file the item is being read from, not something that
       // wants acting on, so it takes the badge family's shape at
@@ -862,11 +867,6 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
       // its reason.
       if (widget.standIn)
         ('stand-in-$id', l10n.projectItemStandIn, t.textMuted),
-      if (widget.missing) ('relink-$id', l10n.projectItemMissing, t.warning),
-      if (widget.undecodable)
-        ('undecodable-$id', l10n.projectItemUndecodable, t.warning),
-      if (widget.missingPictures.isNotEmpty)
-        ('pictures-$id', l10n.projectItemMissing, t.warning),
     ];
     final name = _nameOrEditor(t);
     if (badges.isEmpty && widget.people.isEmpty) return name;
