@@ -16696,7 +16696,6 @@ fn depth_of_field_pro_blurs_up_to_the_frame_edge() {
         })
         .collect();
     for rays in [0, 300] {
-        // The bright stripes are highlights, drawn as light on top.
         let px = dof_pro(&ctx, &stripes, w, h, 0.4, 1.4, 0.0, rays, 0.5);
         assert!(
             px.chunks(4).all(|p| p[3] == 1.0),

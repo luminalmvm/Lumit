@@ -1217,7 +1217,6 @@ fn march(r: Ray) -> vec3<f32> {
 }
 
 // The source as rays see it: what is over the highlight threshold boosted.
-// Alpha as how see-through it is, as the gather sums it.
 fn lit(c: vec4<f32>) -> vec4<f32> {
     let k = hi_frac(c);
     return vec4<f32>(c.rgb * (1.0 + k * (p.boost - 1.0)), 1.0 - c.a);

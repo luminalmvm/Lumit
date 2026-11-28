@@ -67,6 +67,5 @@
 /// * 37: a comp shown at two times in one frame draws its footage at both, where
 ///   both drew one and the wrong picture could be banked under the other's name.
 /// * 39: an adjustment layer's blend mode is used, where it drew as Normal.
-/// * 40: Depth of field pro keeps an opaque picture opaque where its
-///   highlights are.
+/// * 40: Depth of field pro keeps an opaque picture opaque under its highlights.
 pub const ALGO_VERSION: u32 = 40;
