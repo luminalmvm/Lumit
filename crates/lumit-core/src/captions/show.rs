@@ -242,11 +242,7 @@ fn heard_in(
         })
     };
     match &layer.kind {
-        LayerKind::Footage { item } => heard(
-            *item,
-            layer.source_time_at(lt),
-            speed(layer.retime.as_ref(), lt),
-        ),
+        LayerKind::Footage { item } => heard(*item, layer.source_time_at(lt), layer.speed_at(lt)),
         // In a dissolve the later clip is the one coming in.
         LayerKind::Sequence { clips } => {
             clips
@@ -276,7 +272,7 @@ fn heard_in(
         LayerKind::Precomp { comp } => {
             let nested = doc.comp(*comp)?;
             let inner = crate::model::nested_source_time(layer, nested, lt);
-            let outer = speed(layer.retime.as_ref(), lt);
+            let outer = layer.speed_at(lt);
             nested
                 .layers
                 .iter()
@@ -318,7 +314,7 @@ fn place(
     match &layer.kind {
         LayerKind::Footage { item: own } if *own == item => {
             let lt = outer(s)?;
-            let speed = crate::retime::property_speed_at(layer.retime.as_ref(), lt);
+            let speed = layer.speed_at(lt);
             let at = offset + lt;
             near(at).then_some((at, speed))
         }
@@ -351,7 +347,7 @@ fn place(
                 .min_by(|a, b| (a.0 - inner_t).abs().total_cmp(&(b.0 - inner_t).abs()))?;
             let lt = outer(inner)?;
             let at = offset + lt;
-            let outer_speed = crate::retime::property_speed_at(layer.retime.as_ref(), lt);
+            let outer_speed = layer.speed_at(lt);
             near(at).then_some((at, speed * outer_speed))
         }
         _ => None,
