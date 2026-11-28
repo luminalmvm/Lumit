@@ -25,6 +25,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge.dart';
 
 import '../l10n/strings.dart';
 import '../src/rust/api/keymap.dart';
+import 'key_layout.dart';
 import 'os_keys.dart';
 import 'workspace.dart';
 import 'package:lumit_flutter/state/platform.dart'
@@ -99,7 +100,14 @@ String? keyName(LogicalKeyboardKey key) {
 /// keymap and its shareable file stay platform-neutral because of that
 /// translation, so a keymap written on a Mac still reads on Windows.
 String? chordText(KeyEvent event) {
-  final name = keyName(event.logicalKey);
+  final logical = event.logicalKey;
+  final label = logical.keyLabel;
+  final name = _namedKeys[logical] ??
+      (label.length == 1 && RegExp('[A-Za-z]').hasMatch(label)
+          ? label.toUpperCase()
+          : null) ??
+      keyLayout.nameAt(event.physicalKey) ??
+      keyName(logical);
   if (name == null) return null;
   final keys = HardwareKeyboard.instance.logicalKeysPressed;
   bool held(LogicalKeyboardKey a, LogicalKeyboardKey b) =>
@@ -125,6 +133,10 @@ final Map<String, LogicalKeyboardKey> _keysByName = {
   for (final e in _namedKeys.entries.toList().reversed) e.value: e.key,
 };
 
+String _keyOf(String chord) =>
+    // `Mod++` would split into an empty last part; the trailing `+` *is* the key.
+    chord == '+' || chord.endsWith('++') ? '+' : chord.split('+').last;
+
 /// A chord as macOS's own menu bar wants it: a [SingleActivator] for the native
 /// `PlatformMenuItem` to draw beside its row.
 ///
@@ -134,12 +146,12 @@ final Map<String, LogicalKeyboardKey> _keysByName = {
 /// spell as a logical key, so a row shows no shortcut rather than the wrong one.
 SingleActivator? activatorForChord(String chord) {
   if (chord.isEmpty) return null;
-  // `Mod++` would split into an empty last part; the trailing `+` *is* the key.
-  final keyText = chord.endsWith('+') ? '+' : chord.split('+').last;
+  final keyText = _keyOf(chord);
   final mods = chord.substring(0, chord.length - keyText.length).split('+');
+  final legend = keyLayout.legend(keyText);
   final key = _keysByName[keyText] ??
-      (keyText.length == 1
-          ? LogicalKeyboardKey(keyText.toLowerCase().codeUnitAt(0))
+      (legend.length == 1
+          ? LogicalKeyboardKey(legend.toLowerCase().codeUnitAt(0))
           : null);
   if (key == null) return null;
   return SingleActivator(
@@ -160,19 +172,25 @@ SingleActivator? activatorForChord(String chord) {
 String chordLabel(String chord) {
   if (chord.isEmpty) return '';
   final mac = defaultTargetPlatform == TargetPlatform.macOS;
+  final key = _keyOf(chord);
+  final legend = keyLayout.legend(key);
   return chord
-      .replaceAll('*', 'Numpad *')
-      .replaceAll('Mod+', mac ? '⌘' : 'Ctrl+')
-      .replaceAll('Alt+', mac ? '⌥' : 'Alt+')
-      .replaceAll('Shift+', mac ? '⇧' : 'Shift+')
-      .replaceAll('ArrowLeft', '←')
-      .replaceAll('ArrowRight', '→')
-      .replaceAll('ArrowUp', '↑')
-      .replaceAll('ArrowDown', '↓')
-      .replaceAll('PageUp', 'Page Up')
-      .replaceAll('PageDown', 'Page Down')
-      // The mark alone is a speck at a menu's size.
-      .replaceAll('`', 'Backtick');
+          .substring(0, chord.length - key.length)
+          .replaceAll('Mod+', mac ? '⌘' : 'Ctrl+')
+          .replaceAll('Alt+', mac ? '⌥' : 'Alt+')
+          .replaceAll('Shift+', mac ? '⇧' : 'Shift+') +
+      switch (key) {
+        '*' => 'Numpad *',
+        'ArrowLeft' => '←',
+        'ArrowRight' => '→',
+        'ArrowUp' => '↑',
+        'ArrowDown' => '↓',
+        'PageUp' => 'Page Up',
+        'PageDown' => 'Page Down',
+        // The mark alone is a speck at a menu's size.
+        _ when legend == '`' => 'Backtick',
+        _ => legend,
+      };
 }
 
 /// How far a wheel event moved, on whichever axis carries it. Some platforms
@@ -193,6 +211,58 @@ class KeymapState extends ChangeNotifier {
   KeymapState({Workspace? workspace}) : _workspace = workspace {
     _restore();
     refresh();
+    keyLayout.override = workspace?.keyLayout;
+    keyLayout.addListener(notifyListeners);
+    keyLayout.refresh().then((_) => _placeKeys());
+  }
+
+  @override
+  void dispose() {
+    keyLayout.removeListener(notifyListeners);
+    super.dispose();
+  }
+
+  void setKeyLayout(String? id) {
+    _workspace
+      ?..keyLayout = id
+      ..save();
+    keyLayout.override = id;
+    keyLayout.refresh();
+    notifyListeners();
+  }
+
+  static const Map<String, int> _virtualKeys = {
+    ';': 0xBA, '=': 0xBB, ',': 0xBC, '-': 0xBD, '.': 0xBE, '/': 0xBF,
+    '`': 0xC0, '[': 0xDB, r'\': 0xDC, ']': 0xDD, '"': 0xDE, 'ß': 0xDF,
+    'SS': 0xDF, 'Â': 0xE2,
+  };
+
+  Future<void> _placeKeys() async {
+    final workspace = _workspace;
+    if (workspace == null ||
+        workspace.keysByPlace ||
+        keyLayout.windowsLayout == null) {
+      return;
+    }
+    final moves = <(BridgeKeyBinding, String)>[];
+    for (final group in _groups) {
+      for (final b in group.bindings) {
+        final key = _keyOf(b.chord);
+        final virtualKey = _virtualKeys[key];
+        final name =
+            virtualKey == null ? null : keyLayout.nameOfVirtualKey(virtualKey);
+        if (name != null && name != key && b.chord != b.stock) {
+          moves.add(
+              (b, b.chord.substring(0, b.chord.length - key.length) + name));
+        }
+      }
+    }
+    workspace
+      ..keysByPlace = true
+      ..save();
+    for (final (b, chord) in moves) {
+      await rebind(b.context, b.action, chord);
+    }
   }
 
   final Workspace? _workspace;
@@ -274,12 +344,15 @@ class KeymapState extends ChangeNotifier {
     final hits = keymapSearch(query: _query.trim())
         .map((b) => '${b.context}/${b.action}')
         .toSet();
+    final shown = _query.trim().toLowerCase();
     return _groups
         .map((g) => BridgeKeymapGroup(
               context: g.context,
               label: g.label,
               bindings: g.bindings
-                  .where((b) => hits.contains('${b.context}/${b.action}'))
+                  .where((b) =>
+                      hits.contains('${b.context}/${b.action}') ||
+                      chordLabel(b.chord).toLowerCase().contains(shown))
                   .toList(),
             ))
         .where((g) => g.bindings.isNotEmpty)

@@ -1177,7 +1177,7 @@ class EffectParamRowFrb extends StatelessWidget {
       // engine a compile error rather than a blank row.
       case BridgeParamKind_Action():
         return const SizedBox.shrink();
-      case BridgeParamKind_Curve():
+      case BridgeParamKind_Curve(:final default_):
         if (value case BridgeEffectValue_Curve(:final field0)) {
           // The lone-curve case. Curves' five channels fold into one tabbed
           // editor before they ever reach here (the panel's `_paramRows`),
@@ -1198,6 +1198,7 @@ class EffectParamRowFrb extends StatelessWidget {
           Widget editor(double size) => CurveEditor(
                 key: ValueKey<String>('fx-curve-$id-${param.id}-$size'),
                 points: curvePointsOf(field0),
+                rest: curvePointsOf(default_),
                 size: size,
                 warp: warp,
                 onLive: (p) => _setLive(curveValue(p)),
@@ -1212,6 +1213,7 @@ class EffectParamRowFrb extends StatelessWidget {
               cursor: SystemMouseCursors.click,
               child: GestureDetector(
                 key: ValueKey<String>('fx-curve-thumb-$id-${param.id}'),
+                behavior: HitTestBehavior.opaque,
                 onTap: () {
                   // The popup keeps what it last committed, so the plot
                   // stays where the drag left it.
@@ -1234,6 +1236,7 @@ class EffectParamRowFrb extends StatelessWidget {
                       child: StatefulBuilder(
                         builder: (context, again) => CurveEditor(
                           points: points,
+                          rest: curvePointsOf(default_),
                           size: 210,
                           warp: warp,
                           onLive: (p) => _setLive(curveValue(p)),

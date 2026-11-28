@@ -20,7 +20,9 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/widgets.dart';
 import 'package:uuid/uuid.dart';
 
-import 'package:lumit_flutter/src/rust/api/effect.dart' show BridgeKeyframe;
+import 'package:lumit_flutter/src/rust/api/effect.dart'
+    show BridgeEffectInstance, BridgeKeyframe;
+import 'package:lumit_flutter/src/rust/api/layer.dart' show LayerReference;
 
 import '../icons/icons.dart';
 import '../theme/theme.dart';
@@ -313,6 +315,82 @@ Widget fxEnableSwitch({
 /// outlines), so a drop indicator is recognisably one.
 const double fxDropLineWidth = 2;
 
+typedef EffectDrag = ({String layer, String effect});
+
+void fxMoveEffect(LayerReference layer, List<BridgeEffectInstance> stack,
+    String from, String onto, bool after) {
+  final it = stack.indexWhere((e) => '${e.id()}' == from);
+  final at = stack.indexWhere((e) => '${e.id()}' == onto);
+  if (it < 0 || at < 0) return;
+  final slot = at + (after ? 1 : 0);
+  final to = slot > it ? slot - 1 : slot;
+  if (to == it) return;
+  try {
+    layer.reorderEffect(effect: stack[it], newIndex: to);
+  } catch (_) {}
+}
+
+class FxDropZone<T extends Object> extends StatefulWidget {
+  final bool Function(T data) accepts;
+  final void Function(T data, bool after) onDropped;
+  final Widget child;
+
+  const FxDropZone({
+    super.key,
+    required this.accepts,
+    required this.onDropped,
+    required this.child,
+  });
+
+  @override
+  State<FxDropZone<T>> createState() => _FxDropZoneState<T>();
+}
+
+class _FxDropZoneState<T extends Object> extends State<FxDropZone<T>> {
+  bool? _after;
+
+  void _aim(bool? after) {
+    if (after != _after && mounted) setState(() => _after = after);
+  }
+
+  bool _below(Offset at) {
+    final box = context.findRenderObject();
+    if (box is! RenderBox || !box.hasSize) return false;
+    return box.globalToLocal(at).dy > box.size.height / 2;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return DragTarget<T>(
+      onWillAcceptWithDetails: (d) => widget.accepts(d.data),
+      onMove: (d) => _aim(_below(d.offset)),
+      onLeave: (_) => _aim(null),
+      onAcceptWithDetails: (d) {
+        final after = _below(d.offset);
+        _aim(null);
+        widget.onDropped(d.data, after);
+      },
+      builder: (context, over, _) => Stack(
+        fit: StackFit.passthrough,
+        children: [
+          widget.child,
+          if (over.isNotEmpty && _after != null)
+            Positioned(
+              key: const ValueKey('fx-drop-line'),
+              left: 0,
+              right: 0,
+              top: _after! ? null : 0,
+              bottom: _after! ? 0 : null,
+              height: fxDropLineWidth,
+              child: IgnorePointer(child: ColoredBox(color: t.accent)),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 /// What every surface that lights an effect draws its pick from: the layer the
 /// picked effects are on, and the instances themselves in stack order.
 ///
@@ -426,14 +504,10 @@ class FxSection extends StatelessWidget {
   /// stack without the heading being rebuilt.
   final String? dragKey;
 
-  /// A heading dropped on this one: the [dragKey] it came from. Called only
-  /// when [dragKey] is set and the two differ.
-  final void Function(String from)? onDropped;
-
-  /// Whether the effect dragged from [from] lands below this heading, which is
-  /// which edge the drop line is drawn on. Asked while the pointer is over
-  /// this heading, so the answer is read from the list as it is now.
-  final bool Function(String from)? landsBelow;
+  /// A heading dropped on this card: the [dragKey] it came from, and whether
+  /// it lands after this one. Called only when [dragKey] is set and the two
+  /// differ.
+  final void Function(String from, bool after)? onDropped;
 
   final List<Widget> rows;
 
@@ -478,7 +552,6 @@ class FxSection extends StatelessWidget {
     this.twirlKey,
     this.dragKey,
     this.onDropped,
-    this.landsBelow,
     this.renaming = false,
     this.onRenamed,
     this.onRenameCancelled,
@@ -536,7 +609,18 @@ class FxSection extends StatelessWidget {
 
     // Round mode keeps the bubble the sharp shape does without; the rows inside
     // are identical either way.
-    if (t.tokens.cardRadius <= 0) return column;
+    final card = t.tokens.cardRadius <= 0 ? column : _card(t, column);
+    final key = dragKey;
+    final dropped = onDropped;
+    if (key == null || dropped == null) return card;
+    return FxDropZone<String>(
+      accepts: (from) => from != key,
+      onDropped: dropped,
+      child: card,
+    );
+  }
+
+  Widget _card(LumitTheme t, Widget column) {
     return Container(
       margin: const EdgeInsets.fromLTRB(6, 4, 6, 4),
       decoration: BoxDecoration(
@@ -555,61 +639,22 @@ class FxSection extends StatelessWidget {
     );
   }
 
-  /// The heading, wrapped in the drag-and-drop that reorders the stack when
-  /// this section has a place in one. Dragging the *name* is how a stack is
+  /// The heading, wrapped in the drag that reorders the stack when this
+  /// section has a place in one. Dragging the *name* is how a stack is
   /// reordered everywhere else in the application (layers in the Timeline,
   /// items in the Project panel), so an effect stack reorders the same way.
-  ///
-  /// **The drop indicator** (owner, desk test). The heading used to take a
-  /// line along its top edge whichever way the drag came from, which said the
-  /// wrong thing half the time: dropping an effect from *above* onto this one
-  /// puts it after this one, and a line drawn above it pointed at the gap it
-  /// was not going into. The line is now drawn on the edge the effect will
-  /// actually land against — under the heading when it is travelling down the
-  /// stack, over it when it is travelling up — so it reads as the insertion
-  /// point rather than as a highlight on the row.
   Widget _draggableHeading(LumitTheme t) {
     final key = dragKey;
     if (key == null || onDropped == null) return _heading(t);
-    return DragTarget<String>(
-      onWillAcceptWithDetails: (d) => d.data != key,
-      onAcceptWithDetails: (d) => onDropped!(d.data),
-      builder: (context, candidate, _) {
-        // Which side the gap is on: a heading dragged from above this one
-        // lands below it, and one from below lands above it.
-        final from = candidate.isEmpty ? null : candidate.first;
-        final line = BorderSide(color: t.accent, width: fxDropLineWidth);
-        return Draggable<String>(
-          data: key,
-          // The pointer carries the effect's name and nothing else: a
-          // full-width card under the cursor hides the stack it is being
-          // placed into.
-          feedback: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: t.surface2,
-              borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-              border: Border.all(color: t.accent),
-            ),
-            child: Text(title, style: t.small),
-          ),
-          childWhenDragging: Opacity(opacity: 0.4, child: _heading(t)),
-          child: from == null
-              ? _heading(t)
-              : DecoratedBox(
-                  key: const ValueKey('fx-drop-line'),
-                  // Foreground, so the line sits over the heading's own fill
-                  // rather than being painted under it.
-                  position: DecorationPosition.foreground,
-                  decoration: BoxDecoration(
-                    border: landsBelow?.call(from) ?? false
-                        ? Border(bottom: line)
-                        : Border(top: line),
-                  ),
-                  child: _heading(t),
-                ),
-        );
-      },
+    return Draggable<String>(
+      data: key,
+      dragAnchorStrategy: pointerDragAnchorStrategy,
+      // The pointer carries the effect's name and nothing else: a
+      // full-width card under the cursor hides the stack it is being
+      // placed into.
+      feedback: fxDragChip(t, title),
+      childWhenDragging: Opacity(opacity: 0.4, child: _heading(t)),
+      child: _heading(t),
     );
   }
 
@@ -1145,3 +1190,13 @@ Widget fxTextAction(
     ),
   );
 }
+
+Widget fxDragChip(LumitTheme t, String title) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: t.surface2,
+        borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+        border: Border.all(color: t.accent),
+      ),
+      child: Text(title, style: t.small),
+    );

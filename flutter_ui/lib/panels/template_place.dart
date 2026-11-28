@@ -6,7 +6,6 @@ import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/cut.dart' show BridgeCutResult;
-import 'package:lumit_flutter/src/rust/api/effect.dart' show BridgeRational;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/template/library.dart';
 import 'package:uuid/uuid.dart';
@@ -17,7 +16,7 @@ import '../shell/settings_account.dart' show askBefore;
 import '../state/copies.dart' show focusCopyWords;
 import '../state/dock.dart';
 import '../state/template_library.dart';
-import 'layer_fold_frb.dart' show timeOfSubframe;
+import 'layer_fold_frb.dart' show startLayersAt;
 
 const int _titleSeconds = 5;
 
@@ -62,7 +61,7 @@ Future<void> placeTemplateInTimeline(LumitState app, LumitUiState ui,
     if (template == null) return;
     final layer = comp.addPrecompLayer(comp: template, row: row);
     made = layer;
-    if (atFrame != null) _startAt(comp, layer, atFrame);
+    if (atFrame != null) startLayersAt(comp, [layer], atFrame);
   } catch (_) {
     // A composition cannot place itself. The engine refuses and nothing is
     // placed.
@@ -72,25 +71,6 @@ Future<void> placeTemplateInTimeline(LumitState app, LumitUiState ui,
   app.notifyDocumentChanged();
   ui.model.refresh();
   if (made case final layer?) ui.setSelection([layer]);
-}
-
-void _startAt(CompositionReference comp, LayerReference layer, int frame) {
-  final settings = comp.getSettings();
-  final (fpsNum, fpsDen) = (settings.fpsNum, settings.fpsDen);
-  final fps = fpsNum / max(1, fpsDen);
-  final span = layer.getSpan();
-  double seconds(BridgeRational r) => r.num / max(1, r.den);
-  final length =
-      ((seconds(span.outPoint) - seconds(span.inPoint)) * fps).round();
-  final lead =
-      ((seconds(span.startOffset) - seconds(span.inPoint)) * fps).round();
-  layer.setSpan(
-    span: BridgeSpan(
-      inPoint: timeOfSubframe(frame.toDouble(), fpsNum, fpsDen),
-      outPoint: timeOfSubframe((frame + length).toDouble(), fpsNum, fpsDen),
-      startOffset: timeOfSubframe((frame + lead).toDouble(), fpsNum, fpsDen),
-    ),
-  );
 }
 
 /// The template at [path] as one clip in [comp] at [frame], on [target] or a

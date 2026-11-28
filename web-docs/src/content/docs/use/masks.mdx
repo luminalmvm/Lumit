@@ -48,8 +48,13 @@ layer is selected.
 - `Ctrl+Alt`-click a point to switch it between corner and smooth, and `Ctrl+Alt`-drag one
   to pull out a pair of handles.
 - `Delete` removes the selected points.
-- `Ctrl+Shift+T` puts a box round the selected points. A drag in it turns them about its
-  middle, in steps of 15° with `Shift`. `Enter`, `Esc` or a click takes the box down.
+- `Ctrl+Shift+T` puts a box round the selected points, with eight handles. Drag a corner
+  handle to scale the points both ways from the opposite corner, or an edge handle to scale
+  them one way; `Shift` keeps their proportions and `Alt` scales from the middle. Drag past
+  the far side to flip them. A drag inside the box moves the points, and a drag outside it
+  turns them about its middle, in steps of 15° with `Shift`. The box follows the points, also
+  after an undo. Each drag is one undo step, however many paths it changes. `Enter`, `Esc` or
+  a click takes the box down.
 
 On a path that is keyframed, an edit sets a keyframe at the playhead.
 

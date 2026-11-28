@@ -1,8 +1,8 @@
 // The keyboard picture on Settings → Shortcuts: every key, lit when the keymap
 // gives it something to do with the modifiers chosen.
 //
-// It draws what KeymapState already holds and decides nothing. The layout is
-// the US one, since the keymap names a key by what is printed on it.
+// It draws what KeymapState already holds and decides nothing. Each cap takes
+// its name and its print from the keyboard layout (state/key_layout.dart).
 
 import 'dart:math' as math;
 
@@ -11,6 +11,7 @@ import 'package:lumit_flutter/src/rust/api/keymap.dart';
 
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
+import '../state/key_layout.dart';
 import '../state/keymap.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
@@ -23,8 +24,10 @@ typedef _Cap = (String?, double);
 List<_Cap> _caps(String keys, [double width = 1]) =>
     [for (final key in keys.split(' ')) (key, width)];
 
-/// The board, twenty units wide: the main block, then the navigation keys.
-final List<List<_Cap>> _rows = [
+const double _nav = 1.25;
+
+/// The board: the main block, then the navigation keys.
+List<List<_Cap>> _rows(bool iso) => [
   [
     ('Escape', 1.5),
     (null, 0.5),
@@ -38,26 +41,28 @@ final List<List<_Cap>> _rows = [
     ..._caps('` 1 2 3 4 5 6 7 8 9 0 - ='),
     ('Backspace', 2),
     (null, 0.5),
-    ..._caps('Insert Home PageUp', 1.5),
+    ..._caps('Insert Home PageUp', _nav),
   ],
   [
     ('Tab', 1.5),
     ..._caps('Q W E R T Y U I O P [ ]'),
-    ('\\', 1.5),
+    iso ? (null, 1.5) : ('\\', 1.5),
     (null, 0.5),
-    ..._caps('Delete End PageDown', 1.5),
+    ..._caps('Delete End PageDown', _nav),
   ],
   [
     ('', 1.75),
     ..._caps("A S D F G H J K L ; '"),
-    ('Enter', 2.25),
+    if (iso) ('\\', 1),
+    iso ? (null, 1.25) : ('Enter', 2.25),
   ],
   [
-    ('Shift', 2.25),
+    ('Shift', iso ? 1.25 : 2.25),
+    if (iso) ('IntlBackslash', 1),
     ..._caps('Z X C V B N M , . /'),
     ('Shift', 2.75),
-    (null, 2),
-    ('ArrowUp', 1.5),
+    (null, 0.5 + _nav),
+    ('ArrowUp', _nav),
   ],
   [
     ('Mod', 1.5),
@@ -68,11 +73,69 @@ final List<List<_Cap>> _rows = [
     ('', 1),
     ('Mod', 1.5),
     (null, 0.5),
-    ..._caps('ArrowLeft ArrowDown ArrowRight', 1.5),
+    ..._caps('ArrowLeft ArrowDown ArrowRight', _nav),
   ],
 ];
 
-const double _boardUnits = 20;
+const double _boardUnits = 15.5 + 3 * _nav;
+
+Path _isoEnter(Rect rect, double notch, double step, double radius) {
+  final points = [
+    rect.topLeft,
+    rect.topRight,
+    rect.bottomRight,
+    Offset(rect.left + notch, rect.bottom),
+    Offset(rect.left + notch, rect.top + step),
+    Offset(rect.left, rect.top + step),
+  ];
+  final path = Path();
+  for (var i = 0; i < points.length; i++) {
+    final at = points[i];
+    final before = points[(i + points.length - 1) % points.length];
+    final after = points[(i + 1) % points.length];
+    Offset toward(Offset p) {
+      final d = p - at;
+      return at + d / d.distance * math.min(radius, d.distance / 2);
+    }
+
+    final start = toward(before);
+    i == 0 ? path.moveTo(start.dx, start.dy) : path.lineTo(start.dx, start.dy);
+    final end = toward(after);
+    path.quadraticBezierTo(at.dx, at.dy, end.dx, end.dy);
+  }
+  return path..close();
+}
+
+class _IsoEnterBorder extends ShapeBorder {
+  final Color edge;
+  final double notch;
+  final double step;
+  final double radius;
+
+  const _IsoEnterBorder(this.edge, this.notch, this.step, this.radius);
+
+  @override
+  EdgeInsetsGeometry get dimensions => EdgeInsets.zero;
+
+  @override
+  Path getInnerPath(Rect rect, {TextDirection? textDirection}) =>
+      getOuterPath(rect);
+
+  @override
+  Path getOuterPath(Rect rect, {TextDirection? textDirection}) =>
+      _isoEnter(rect.deflate(0.5), notch, step, radius);
+
+  @override
+  void paint(Canvas canvas, Rect rect, {TextDirection? textDirection}) =>
+      canvas.drawPath(
+          getOuterPath(rect),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..color = edge);
+
+  @override
+  ShapeBorder scale(double t) => this;
+}
 
 const double _largestKey = 34;
 
@@ -102,10 +165,23 @@ String _legend(String key) {
     // Already on the number pad here, so the star needs no saying so.
     '*' => '*',
     // On a key cap the mark is the key, where a menu spells it out.
-    '`' => '`',
+    _ when keyLayout.legend(key) == '`' => '`',
     _ => chordLabel(key).replaceFirst(' ', '\n'),
   };
 }
+
+String _layoutName(String id) => switch (id) {
+      'us' => l10n.keymapLayoutUs,
+      'uk' => l10n.keymapLayoutUk,
+      'de' => l10n.keymapLayoutGerman,
+      'fr' => l10n.keymapLayoutFrench,
+      'es' => l10n.keymapLayoutSpanish,
+      'it' => l10n.keymapLayoutItalian,
+      'sv' => l10n.keymapLayoutSwedish,
+      'de-ch' => l10n.keymapLayoutSwissGerman,
+      'ru' => l10n.keymapLayoutRussian,
+      _ => l10n.keymapLayoutAutomatic,
+    };
 
 class KeymapKeyboard extends StatefulWidget {
   final KeymapState keymap;
@@ -129,7 +205,10 @@ class _KeymapKeyboardState extends State<KeymapKeyboard> {
         key,
       ].join('+');
 
-  Widget _cap(LumitTheme t, String key, double width, double unit, bool keyed) {
+  Widget _cap(
+      LumitTheme t, String place, double width, double unit, Set<String> drawn,
+      {double rows = 1}) {
+    final key = keyLayout.nameFor(place);
     final modifier = _modifiers.contains(key);
     final bindings = key.isEmpty || modifier
         ? const <BridgeKeyBinding>[]
@@ -158,12 +237,17 @@ class _KeymapKeyboardState extends State<KeymapKeyboard> {
 
     Widget cap = Container(
       margin: const EdgeInsets.all(1),
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: fill,
-        border: Border.all(color: edge),
-        borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-      ),
+      alignment: rows > 1 ? const Alignment(0, -0.5) : Alignment.center,
+      decoration: rows > 1
+          ? ShapeDecoration(
+              color: fill,
+              shape: _IsoEnterBorder(
+                  edge, unit / 4, unit - 2, t.tokens.controlRadius))
+          : BoxDecoration(
+              color: fill,
+              border: Border.all(color: edge),
+              borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+            ),
       child: FittedBox(
         fit: BoxFit.scaleDown,
         child: Padding(
@@ -202,9 +286,9 @@ class _KeymapKeyboardState extends State<KeymapKeyboard> {
     }
     return SizedBox(
       // Shift, Alt and Ctrl are drawn twice, and one name can't key two caps.
-      key: keyed ? ValueKey('keymap-key-$key') : null,
+      key: drawn.add(key) ? ValueKey('keymap-key-$key') : null,
       width: width * unit,
-      height: unit,
+      height: rows * unit,
       child: cap,
     );
   }
@@ -268,22 +352,36 @@ class _KeymapKeyboardState extends State<KeymapKeyboard> {
       padding: const EdgeInsets.symmetric(horizontal: settingsRowPadding),
       child: LayoutBuilder(builder: (context, constraints) {
         final unit = math.min(constraints.maxWidth / _boardUnits, _largestKey);
+        final drawn = <String>{};
+        final iso = keyLayout.iso;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            for (final row in _rows)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: () {
-                  final drawn = <String>{};
-                  return [
-                    for (final (key, width) in row)
-                      key == null
-                          ? SizedBox(width: width * unit, height: unit)
-                          : _cap(t, key, width, unit, drawn.add(key)),
-                  ];
-                }(),
-              ),
+            Stack(
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (final row in _rows(iso))
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          for (final (place, width) in row)
+                            place == null
+                                ? SizedBox(width: width * unit, height: unit)
+                                : _cap(t, place, width, unit, drawn),
+                        ],
+                      ),
+                  ],
+                ),
+                if (iso)
+                  Positioned(
+                    left: 13.5 * unit,
+                    top: 2 * unit,
+                    child: _cap(t, 'Enter', 1.5, unit, drawn, rows: 2),
+                  ),
+              ],
+            ),
             const SizedBox(height: 6),
             ConstrainedBox(
               constraints: const BoxConstraints(minHeight: settingsRowHeight),
@@ -295,6 +393,21 @@ class _KeymapKeyboardState extends State<KeymapKeyboard> {
                   _swatch(t, t.surface4, t.hairline, l10n.keyAnywhere),
                   const SizedBox(width: 10),
                   _swatch(t, null, t.accent, l10n.keymapKeyboardPanel),
+                  const SizedBox(width: 16),
+                  Text(l10n.keymapLayout, style: t.small),
+                  const SizedBox(width: 6),
+                  SizedBox(
+                    width: 120,
+                    height: settingsControlHeight,
+                    child: BareDropdown<String>(
+                      key: const ValueKey('keymap-layout'),
+                      value: keyLayout.override ?? '',
+                      options: ['', ...keyLayouts.keys],
+                      label: _layoutName,
+                      onChanged: (id) =>
+                          widget.keymap.setKeyLayout(id.isEmpty ? null : id),
+                    ),
+                  ),
                 ],
               ),
             ),

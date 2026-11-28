@@ -199,7 +199,7 @@ void main() {
       await tester.pumpAndSettle();
 
       area = p.comp.getWorkArea();
-      expect(p.comp.frameAtTime(time: area!.outPoint), 60);
+      expect(p.comp.frameAtTime(time: area!.outPoint), 61);
       expect(p.comp.frameAtTime(time: area.inPoint), 20,
           reason: 'setting the out point leaves the in point alone');
 

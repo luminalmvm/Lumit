@@ -182,8 +182,8 @@ fn el_combine(@builtin(global_invocation_id) gid: vec3<u32>) {
     let near = p.glow_colour.rgb * (max(glow, 0.0) * p.glow_gain + core.z * p.halo);
     let light = (core.x * rim + near) * p.flicker;
     let alpha = clamp(max(light.r, max(light.g, light.b)), 0.0, 1.0);
-    // Straight in and out, as the compositor reads a layer (draw::combine).
-    let before = vec4<f32>(s.rgb * s.a, s.a);
+    // Premultiplied in and out, as the compositor reads a stack's picture (draw::combine).
+    let before = s;
     var under = vec4<f32>(0.0);
     if (p.composite != 0u) {
         under = before;
@@ -191,9 +191,5 @@ fn el_combine(@builtin(global_invocation_id) gid: vec3<u32>) {
     let lit = vec4<f32>(under.rgb + light, under.a + alpha * (1.0 - under.a));
     let m = p.mix_amt;
     let o = before * (1.0 - m) + lit * m;
-    if (o.a <= 0.0) {
-        textureStore(dst, xy, vec4<f32>(0.0));
-        return;
-    }
-    textureStore(dst, xy, vec4<f32>(o.rgb / o.a, o.a));
+    textureStore(dst, xy, o);
 }

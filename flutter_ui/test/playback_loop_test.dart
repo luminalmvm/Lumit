@@ -10,12 +10,12 @@ void main() {
     // The regression: the first frame to arrive was already past the end, so
     // the loop pulled the playhead back inside before anything had been seen.
     expect(
-      playbackLoop(workStart: 40, workEnd: 90, playhead: 91, lastFrame: 300),
+      playbackLoop(workStart: 40, workEnd: 90, playhead: 90, lastFrame: 300),
       isNull,
     );
     expect(
-      playbackLoop(workStart: 40, workEnd: 90, playhead: 90, lastFrame: 300),
-      (start: 40, end: 90),
+      playbackLoop(workStart: 40, workEnd: 90, playhead: 89, lastFrame: 300),
+      (start: 40, end: 89),
     );
     expect(
       playbackLoop(
@@ -69,7 +69,7 @@ void workAreaPastTheEndTests() {
     );
     expect(
       playbackLoop(workStart: 10, workEnd: 200, playhead: 0, lastFrame: 419),
-      (start: 10, end: 200),
+      (start: 10, end: 199),
     );
   });
 }

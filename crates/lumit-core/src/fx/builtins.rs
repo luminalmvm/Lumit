@@ -443,6 +443,9 @@ pub fn backfill_builtin_params(effects: &mut [EffectInstance]) {
         migrate_dof_pro_depth(e);
         crate::fx::effects::wave_warp::migrate_v1(e);
         crate::fx::effects::gradient::migrate_v1(e);
+        if e.effect.match_name == "turbiniu" {
+            e.effect.version = e.effect.version.max(s.version);
+        }
         // A Map placement row missing beside a Layer row that was saved: that
         // map was stretched, so it goes on being stretched.
         let stretched: Vec<&str> = s

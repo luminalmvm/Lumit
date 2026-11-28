@@ -66,4 +66,4 @@
 ///   Scale, Crop and Blend fade out as Amplitude reaches 0.
 /// * 37: a comp shown at two times in one frame draws its footage at both, where
 ///   both drew one and the wrong picture could be banked under the other's name.
-pub const ALGO_VERSION: u32 = 37;
+pub const ALGO_VERSION: u32 = 38;

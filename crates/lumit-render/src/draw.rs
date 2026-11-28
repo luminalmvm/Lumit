@@ -877,6 +877,10 @@ impl CompLayerDraw {
         !matches!(self.source, DrawSource::Pixels { .. })
     }
 
+    pub(crate) fn picture_premultiplied(&self) -> bool {
+        self.premultiplied() || !self.fx.is_empty()
+    }
+
     /// Whether this draw reads the comp's picture away from its own pixels,
     /// so a frame with it can't be drawn as a cropped region: an adjustment
     /// layer, the haze, the environment, a motion-blurred layer, or a 3D

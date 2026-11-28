@@ -3496,6 +3496,17 @@ fn comp_walk(
                         let layer = layer.map(|l| l.id);
                         return audio_spectrum_levels::levels(doc, comp, e, layer, slt, t_comp);
                     }
+                    "turbiniu"
+                        if param == "mask_2"
+                            && lumit_core::mask::mask_index_for_path_param(
+                                layer.map_or(&[][..], |l| &l.masks[..]),
+                                e.mask_ref(param),
+                                self_default,
+                            )
+                            .is_none() =>
+                    {
+                        return lumit_core::mask::effect_path_at(e, "mask_1", true, layer, slt);
+                    }
                     _ => {}
                 }
                 // The one rule the driver walk also asks, so a wire reads

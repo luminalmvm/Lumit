@@ -14116,6 +14116,2087 @@
       "matte_role": "strength"
     },
     {
+      "slug": "turbiniu",
+      "match_name": "turbiniu",
+      "label": "Turbiniu",
+      "version": 4,
+      "category": "Generate",
+      "category_slug": "generate",
+      "params": [
+        {
+          "id": "blending",
+          "label": "Overlap mode",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Source over",
+            "Additive"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "multisampling",
+          "label": "Edge sampling",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 1,
+          "options": [
+            "Single sample",
+            "Five samples"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "iterations",
+          "label": "Stroke count",
+          "kind": "int",
+          "unit": "raw",
+          "default": 3,
+          "slider_min": 1.0,
+          "slider_max": 100.0,
+          "hard_min": 1.0,
+          "hard_max": 10000.0
+        },
+        {
+          "id": "curve_segments",
+          "label": "Path resolution",
+          "kind": "int",
+          "unit": "raw",
+          "default": 250,
+          "slider_min": 1.0,
+          "slider_max": 250.0,
+          "hard_min": 1.0,
+          "hard_max": 10000.0
+        },
+        {
+          "id": "distribution_ramp",
+          "label": "Spacing profile",
+          "kind": "curve",
+          "unit": "raw",
+          "default": [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        {
+          "id": "distortion_coordinates",
+          "label": "Sampling domain",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 1,
+          "options": [
+            "Image coordinates",
+            "Path coordinates",
+            "Sample order"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "distortion_amplitude",
+          "label": "Warp distance",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 10.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "distortion_frequency",
+          "label": "Pattern frequency",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 10.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "distortion_scale_x",
+          "label": "Horizontal stretch",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 10.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "distortion_scale_y",
+          "label": "Vertical stretch",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 10.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "distortion_offset_x",
+          "label": "Horizontal shift",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -10.0,
+          "slider_max": 10.0
+        },
+        {
+          "id": "distortion_offset_y",
+          "label": "Vertical shift",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -10.0,
+          "slider_max": 10.0
+        },
+        {
+          "id": "distortion_evolution",
+          "label": "Pattern phase",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -10.0,
+          "slider_max": 10.0
+        },
+        {
+          "id": "distortion_loop",
+          "label": "Phase period",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 10.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "distortion_line_offset",
+          "label": "Horizontal step per stroke",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -10.0,
+          "slider_max": 10.0
+        },
+        {
+          "id": "distortion_seed",
+          "label": "Pattern seed",
+          "kind": "int",
+          "unit": "raw",
+          "default": 0,
+          "slider_min": 0.0,
+          "slider_max": 1000.0,
+          "hard_min": 0.0,
+          "hard_max": 32768.0
+        },
+        {
+          "id": "distortion_ramp",
+          "label": "Strength profile",
+          "kind": "curve",
+          "unit": "raw",
+          "default": [
+            [
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        {
+          "id": "distortion_ramp_offset",
+          "label": "Profile shift",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "distortion_ramp_scale",
+          "label": "Profile span",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "distortion_ramp_loop",
+          "label": "Repeat profile",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "primitives",
+          "label": "Draw as",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Strokes",
+            "Marks"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "point_segments",
+          "label": "Mark sides",
+          "kind": "int",
+          "unit": "raw",
+          "default": 8,
+          "slider_min": 3.0,
+          "slider_max": 32.0,
+          "hard_min": 3.0,
+          "hard_max": 128.0
+        },
+        {
+          "id": "visible_points",
+          "label": "Mark fill rate",
+          "kind": "int",
+          "unit": "raw",
+          "default": 100,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "angle",
+          "label": "Mark heading",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
+        },
+        {
+          "id": "rotation_along_lines",
+          "label": "Follow tangent",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "rotation_noise_coordinates",
+          "label": "Sampling domain",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 1,
+          "options": [
+            "Image coordinates",
+            "Path coordinates",
+            "Sample order"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "rotation_noise_amplitude",
+          "label": "Heading deviation",
+          "kind": "float",
+          "unit": "degrees",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 10.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "rotation_noise_frequency",
+          "label": "Pattern frequency",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 10.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "rotation_noise_scale_x",
+          "label": "Horizontal stretch",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 10.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "rotation_noise_scale_y",
+          "label": "Vertical stretch",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 10.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "rotation_noise_offset_x",
+          "label": "Horizontal shift",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -10.0,
+          "slider_max": 10.0
+        },
+        {
+          "id": "rotation_noise_offset_y",
+          "label": "Vertical shift",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -10.0,
+          "slider_max": 10.0
+        },
+        {
+          "id": "rotation_noise_evolution",
+          "label": "Pattern phase",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -10.0,
+          "slider_max": 10.0
+        },
+        {
+          "id": "rotation_noise_loop",
+          "label": "Phase period",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 10.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "rotation_noise_line_offset",
+          "label": "Phase step per stroke",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -10.0,
+          "slider_max": 10.0
+        },
+        {
+          "id": "rotation_noise_seed",
+          "label": "Pattern seed",
+          "kind": "int",
+          "unit": "raw",
+          "default": 0,
+          "slider_min": 0.0,
+          "slider_max": 1000.0,
+          "hard_min": 0.0,
+          "hard_max": 32768.0
+        },
+        {
+          "id": "rotation_noise_ramp",
+          "label": "Strength profile",
+          "kind": "curve",
+          "unit": "raw",
+          "default": [
+            [
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        {
+          "id": "rotation_noise_ramp_offset",
+          "label": "Profile shift",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "rotation_noise_ramp_scale",
+          "label": "Profile span",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "rotation_noise_ramp_loop",
+          "label": "Repeat profile",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "alpha_noise_coordinates",
+          "label": "Sampling domain",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 1,
+          "options": [
+            "Image coordinates",
+            "Path coordinates",
+            "Sample order"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "alpha_noise_amplitude",
+          "label": "Coverage variation",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 10.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "alpha_noise_frequency",
+          "label": "Pattern frequency",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 10.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "alpha_noise_scale_x",
+          "label": "Horizontal stretch",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 10.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "alpha_noise_scale_y",
+          "label": "Vertical stretch",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 10.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "alpha_noise_offset_x",
+          "label": "Horizontal shift",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -10.0,
+          "slider_max": 10.0
+        },
+        {
+          "id": "alpha_noise_offset_y",
+          "label": "Vertical shift",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -10.0,
+          "slider_max": 10.0
+        },
+        {
+          "id": "alpha_noise_evolution",
+          "label": "Pattern phase",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -10.0,
+          "slider_max": 10.0
+        },
+        {
+          "id": "alpha_noise_loop",
+          "label": "Phase period",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 10.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "alpha_noise_line_offset",
+          "label": "Phase step per stroke",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -10.0,
+          "slider_max": 10.0
+        },
+        {
+          "id": "alpha_noise_seed",
+          "label": "Pattern seed",
+          "kind": "int",
+          "unit": "raw",
+          "default": 0,
+          "slider_min": 0.0,
+          "slider_max": 1000.0,
+          "hard_min": 0.0,
+          "hard_max": 32768.0
+        },
+        {
+          "id": "alpha_noise_brightness",
+          "label": "Base coverage",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": -1.0,
+          "slider_max": 1.0,
+          "hard_min": -2.0,
+          "hard_max": 2.0
+        },
+        {
+          "id": "alpha_noise_ramp",
+          "label": "Strength profile",
+          "kind": "curve",
+          "unit": "raw",
+          "default": [
+            [
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        {
+          "id": "alpha_noise_ramp_offset",
+          "label": "Profile shift",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "alpha_noise_ramp_scale",
+          "label": "Profile span",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "alpha_noise_ramp_loop",
+          "label": "Repeat profile",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "alpha_sinus_amplitude",
+          "label": "Wave depth",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -1.0,
+          "slider_max": 1.0
+        },
+        {
+          "id": "alpha_sinus_frequency",
+          "label": "Wave rate",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -20.0,
+          "slider_max": 20.0,
+          "hard_min": -1000.0,
+          "hard_max": 1000.0
+        },
+        {
+          "id": "alpha_sinus_offset",
+          "label": "Wave phase",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -1.0,
+          "slider_max": 1.0
+        },
+        {
+          "id": "alpha_sinus_line_offset",
+          "label": "Phase step per stroke",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -1.0,
+          "slider_max": 1.0
+        },
+        {
+          "id": "alpha_sinus_constant",
+          "label": "Coverage bias",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -1.0,
+          "slider_max": 1.0
+        },
+        {
+          "id": "stroke_offset",
+          "label": "Path travel",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0,
+          "hard_min": -10000.0,
+          "hard_max": 10000.0
+        },
+        {
+          "id": "stroke_begin",
+          "label": "Trim in",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0,
+          "hard_min": -100.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "stroke_end",
+          "label": "Trim out",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 200.0
+        },
+        {
+          "id": "stroke_loop",
+          "label": "Wrap trim",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "cap_begin",
+          "label": "Leading tip",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Flat",
+            "Solid arrow",
+            "Open arrow",
+            "Rounded"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "arrow_length_begin",
+          "label": "Leading tip reach",
+          "kind": "float",
+          "unit": "px",
+          "default": 15.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 1000.0
+        },
+        {
+          "id": "arrow_angle_begin",
+          "label": "Leading tip spread",
+          "kind": "float",
+          "unit": "degrees",
+          "default": 45.0,
+          "slider_min": -180.0,
+          "slider_max": 180.0,
+          "hard_min": -180.0,
+          "hard_max": 180.0
+        },
+        {
+          "id": "cap_end",
+          "label": "Trailing tip",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Flat",
+            "Solid arrow",
+            "Open arrow",
+            "Rounded"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "arrow_length_end",
+          "label": "Trailing tip reach",
+          "kind": "float",
+          "unit": "px",
+          "default": 15.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 1000.0
+        },
+        {
+          "id": "arrow_angle_end",
+          "label": "Trailing tip spread",
+          "kind": "float",
+          "unit": "degrees",
+          "default": 45.0,
+          "slider_min": -180.0,
+          "slider_max": 180.0,
+          "hard_min": -180.0,
+          "hard_max": 180.0
+        },
+        {
+          "id": "distribution_random",
+          "label": "Spacing jitter",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "offset_random",
+          "label": "Travel jitter",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "gradient_random",
+          "label": "Palette jitter",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "thickness_random",
+          "label": "Width jitter",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "opacity_random",
+          "label": "Coverage jitter",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "random_seed",
+          "label": "Variation seed",
+          "kind": "int",
+          "unit": "raw",
+          "default": 0,
+          "slider_min": 0.0,
+          "slider_max": 1000.0,
+          "hard_min": 0.0,
+          "hard_max": 32768.0
+        },
+        {
+          "id": "gradient_blending",
+          "label": "Palette combine",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Sum",
+            "Product"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "cross_colours_count",
+          "label": "Palette size",
+          "kind": "int",
+          "unit": "raw",
+          "default": 1,
+          "slider_min": 1.0,
+          "slider_max": 5.0,
+          "hard_min": 1.0,
+          "hard_max": 5.0
+        },
+        {
+          "id": "cross_colour_1",
+          "label": "Palette swatch 1",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "cross_colour_2",
+          "label": "Palette swatch 2",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "cross_colour_3",
+          "label": "Palette swatch 3",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "cross_colour_4",
+          "label": "Palette swatch 4",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "cross_colour_5",
+          "label": "Palette swatch 5",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "cross_gradient",
+          "label": "Across-stroke colour profile",
+          "kind": "curve",
+          "unit": "raw",
+          "default": [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        {
+          "id": "cross_gradient_offset",
+          "label": "Across-stroke palette shift",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "cross_gradient_scale",
+          "label": "Across-stroke palette span",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "cross_gradient_loop",
+          "label": "Repeat across-stroke palette",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "dry_brush",
+          "label": "Dry brush",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "dry_brush_ramp",
+          "label": "Dry brush profile",
+          "kind": "curve",
+          "unit": "raw",
+          "default": [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        {
+          "id": "dry_brush_scale",
+          "label": "Dry brush grain",
+          "kind": "float",
+          "unit": "px",
+          "default": 40.0,
+          "slider_min": 1.0,
+          "slider_max": 200.0,
+          "hard_min": 0.5,
+          "hard_max": 10000.0
+        },
+        {
+          "id": "edge_roughness",
+          "label": "Edge roughness",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "edge_roughness_depth",
+          "label": "Rough edge depth",
+          "kind": "float",
+          "unit": "percent",
+          "default": 35.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "edge_roughness_scale",
+          "label": "Rough edge grain",
+          "kind": "float",
+          "unit": "px",
+          "default": 12.0,
+          "slider_min": 1.0,
+          "slider_max": 100.0,
+          "hard_min": 0.5,
+          "hard_max": 10000.0
+        },
+        {
+          "id": "coverage_hardness",
+          "label": "Coverage hardness",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "density_colour",
+          "label": "Density colour",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "density_colour_thin",
+          "label": "Thin paint colour",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.8,
+            0.45,
+            0.15,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "density_colour_mid",
+          "label": "Mid paint colour",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.55,
+            0.08,
+            0.05,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "density_colour_dense",
+          "label": "Dense paint colour",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.05,
+            0.02,
+            0.03,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "mask_1",
+          "label": "First path",
+          "kind": "mask_path",
+          "unit": "raw",
+          "self_default": true
+        },
+        {
+          "id": "mask_1_feather",
+          "label": "Edge softness",
+          "kind": "float",
+          "unit": "px",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 10.0,
+          "hard_min": 0.0,
+          "hard_max": 1000.0
+        },
+        {
+          "id": "mask_1_density",
+          "label": "Sample spacing profile",
+          "kind": "curve",
+          "unit": "raw",
+          "default": [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        {
+          "id": "mask_1_thickness",
+          "label": "Stroke width",
+          "kind": "float",
+          "unit": "px",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 10.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "mask_1_thickness_ramp",
+          "label": "Width profile",
+          "kind": "curve",
+          "unit": "raw",
+          "default": [
+            [
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        {
+          "id": "mask_1_thickness_ramp_offset",
+          "label": "Width profile shift",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "mask_1_thickness_ramp_scale",
+          "label": "Width profile span",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "mask_1_thickness_ramp_loop",
+          "label": "Repeat width profile",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "mask_1_invert",
+          "label": "Reverse guide",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "mask_1_opacity",
+          "label": "Base coverage",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        },
+        {
+          "id": "mask_1_opacity_ramp",
+          "label": "Coverage profile",
+          "kind": "curve",
+          "unit": "raw",
+          "default": [
+            [
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        {
+          "id": "mask_1_opacity_ramp_offset",
+          "label": "Coverage profile shift",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "mask_1_opacity_ramp_scale",
+          "label": "Coverage profile span",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "mask_1_opacity_ramp_loop",
+          "label": "Repeat coverage profile",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "mask_1_colours_count",
+          "label": "Palette size",
+          "kind": "int",
+          "unit": "raw",
+          "default": 1,
+          "slider_min": 1.0,
+          "slider_max": 5.0,
+          "hard_min": 1.0,
+          "hard_max": 5.0
+        },
+        {
+          "id": "mask_1_colour_1",
+          "label": "Palette swatch 1",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "mask_1_colour_2",
+          "label": "Palette swatch 2",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "mask_1_colour_3",
+          "label": "Palette swatch 3",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "mask_1_colour_4",
+          "label": "Palette swatch 4",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "mask_1_colour_5",
+          "label": "Palette swatch 5",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "mask_1_gradient",
+          "label": "Along-path colour profile",
+          "kind": "curve",
+          "unit": "raw",
+          "default": [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        {
+          "id": "mask_1_gradient_offset",
+          "label": "Along-path palette shift",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "mask_1_gradient_random",
+          "label": "Palette shift jitter",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "mask_1_gradient_loop",
+          "label": "Repeat along-path palette",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "mask_1_sine_operation",
+          "label": "Wave combine",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Sum",
+            "Product"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "mask_1_sine_1_amplitude",
+          "label": "Wave 1 depth",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0,
+          "hard_min": -10000.0,
+          "hard_max": 10000.0
+        },
+        {
+          "id": "mask_1_sine_1_frequency",
+          "label": "Wave 1 rate",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": -10.0,
+          "slider_max": 10.0
+        },
+        {
+          "id": "mask_1_sine_1_offset",
+          "label": "Wave 1 phase",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -10.0,
+          "slider_max": 10.0
+        },
+        {
+          "id": "mask_1_sine_2_amplitude",
+          "label": "Wave 2 depth",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0,
+          "hard_min": -10000.0,
+          "hard_max": 10000.0
+        },
+        {
+          "id": "mask_1_sine_2_frequency",
+          "label": "Wave 2 rate",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": -10.0,
+          "slider_max": 10.0
+        },
+        {
+          "id": "mask_1_sine_2_offset",
+          "label": "Wave 2 phase",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -10.0,
+          "slider_max": 10.0
+        },
+        {
+          "id": "mask_2",
+          "label": "Second path",
+          "kind": "mask_path",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "clone_mask_1",
+          "label": "Inherit first guide style",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "mask_2_feather",
+          "label": "Edge softness",
+          "kind": "float",
+          "unit": "px",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 10.0,
+          "hard_min": 0.0,
+          "hard_max": 1000.0
+        },
+        {
+          "id": "mask_2_density",
+          "label": "Sample spacing profile",
+          "kind": "curve",
+          "unit": "raw",
+          "default": [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        {
+          "id": "mask_2_thickness",
+          "label": "Stroke width",
+          "kind": "float",
+          "unit": "px",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 10.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "mask_2_thickness_ramp",
+          "label": "Width profile",
+          "kind": "curve",
+          "unit": "raw",
+          "default": [
+            [
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        {
+          "id": "mask_2_thickness_ramp_offset",
+          "label": "Width profile shift",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "mask_2_thickness_ramp_scale",
+          "label": "Width profile span",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "mask_2_thickness_ramp_loop",
+          "label": "Repeat width profile",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "mask_2_invert",
+          "label": "Reverse guide",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "mask_2_opacity",
+          "label": "Base coverage",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        },
+        {
+          "id": "mask_2_opacity_ramp",
+          "label": "Coverage profile",
+          "kind": "curve",
+          "unit": "raw",
+          "default": [
+            [
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        {
+          "id": "mask_2_opacity_ramp_offset",
+          "label": "Coverage profile shift",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "mask_2_opacity_ramp_scale",
+          "label": "Coverage profile span",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "mask_2_opacity_ramp_loop",
+          "label": "Repeat coverage profile",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "mask_2_colours_count",
+          "label": "Palette size",
+          "kind": "int",
+          "unit": "raw",
+          "default": 1,
+          "slider_min": 1.0,
+          "slider_max": 5.0,
+          "hard_min": 1.0,
+          "hard_max": 5.0
+        },
+        {
+          "id": "mask_2_colour_1",
+          "label": "Palette swatch 1",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "mask_2_colour_2",
+          "label": "Palette swatch 2",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "mask_2_colour_3",
+          "label": "Palette swatch 3",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "mask_2_colour_4",
+          "label": "Palette swatch 4",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "mask_2_colour_5",
+          "label": "Palette swatch 5",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "mask_2_gradient",
+          "label": "Along-path colour profile",
+          "kind": "curve",
+          "unit": "raw",
+          "default": [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        {
+          "id": "mask_2_gradient_offset",
+          "label": "Along-path palette shift",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "mask_2_gradient_random",
+          "label": "Palette shift jitter",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "mask_2_gradient_loop",
+          "label": "Repeat along-path palette",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "mask_2_sine_operation",
+          "label": "Wave combine",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Sum",
+            "Product"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "mask_2_sine_1_amplitude",
+          "label": "Wave 1 depth",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0,
+          "hard_min": -10000.0,
+          "hard_max": 10000.0
+        },
+        {
+          "id": "mask_2_sine_1_frequency",
+          "label": "Wave 1 rate",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": -10.0,
+          "slider_max": 10.0
+        },
+        {
+          "id": "mask_2_sine_1_offset",
+          "label": "Wave 1 phase",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -10.0,
+          "slider_max": 10.0
+        },
+        {
+          "id": "mask_2_sine_2_amplitude",
+          "label": "Wave 2 depth",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0,
+          "hard_min": -10000.0,
+          "hard_max": 10000.0
+        },
+        {
+          "id": "mask_2_sine_2_frequency",
+          "label": "Wave 2 rate",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": -10.0,
+          "slider_max": 10.0
+        },
+        {
+          "id": "mask_2_sine_2_offset",
+          "label": "Wave 2 phase",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -10.0,
+          "slider_max": 10.0
+        },
+        {
+          "id": "mix",
+          "label": "Effect amount",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [
+        {
+          "label": "Stroke spacing",
+          "params": [
+            "distribution_ramp"
+          ],
+          "collapsed": false
+        },
+        {
+          "label": "Path warp",
+          "params": [
+            "distortion_coordinates",
+            "distortion_amplitude",
+            "distortion_frequency",
+            "distortion_scale_x",
+            "distortion_scale_y",
+            "distortion_offset_x",
+            "distortion_offset_y",
+            "distortion_evolution",
+            "distortion_loop",
+            "distortion_line_offset",
+            "distortion_seed",
+            "distortion_ramp",
+            "distortion_ramp_offset",
+            "distortion_ramp_scale",
+            "distortion_ramp_loop"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Mark shape",
+          "params": [
+            "primitives",
+            "point_segments",
+            "visible_points",
+            "angle",
+            "rotation_along_lines"
+          ],
+          "collapsed": false
+        },
+        {
+          "label": "Heading variation",
+          "params": [
+            "rotation_noise_coordinates",
+            "rotation_noise_amplitude",
+            "rotation_noise_frequency",
+            "rotation_noise_scale_x",
+            "rotation_noise_scale_y",
+            "rotation_noise_offset_x",
+            "rotation_noise_offset_y",
+            "rotation_noise_evolution",
+            "rotation_noise_loop",
+            "rotation_noise_line_offset",
+            "rotation_noise_seed",
+            "rotation_noise_ramp",
+            "rotation_noise_ramp_offset",
+            "rotation_noise_ramp_scale",
+            "rotation_noise_ramp_loop"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Coverage texture",
+          "params": [
+            "alpha_noise_coordinates",
+            "alpha_noise_amplitude",
+            "alpha_noise_frequency",
+            "alpha_noise_scale_x",
+            "alpha_noise_scale_y",
+            "alpha_noise_offset_x",
+            "alpha_noise_offset_y",
+            "alpha_noise_evolution",
+            "alpha_noise_loop",
+            "alpha_noise_line_offset",
+            "alpha_noise_seed",
+            "alpha_noise_brightness",
+            "alpha_noise_ramp",
+            "alpha_noise_ramp_offset",
+            "alpha_noise_ramp_scale",
+            "alpha_noise_ramp_loop"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Coverage wave",
+          "params": [
+            "alpha_sinus_amplitude",
+            "alpha_sinus_frequency",
+            "alpha_sinus_offset",
+            "alpha_sinus_line_offset",
+            "alpha_sinus_constant"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Path trim",
+          "params": [
+            "stroke_offset",
+            "stroke_begin",
+            "stroke_end",
+            "stroke_loop"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Stroke tips",
+          "params": [
+            "cap_begin",
+            "arrow_length_begin",
+            "arrow_angle_begin",
+            "cap_end",
+            "arrow_length_end",
+            "arrow_angle_end"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Stroke variation",
+          "params": [
+            "distribution_random",
+            "offset_random",
+            "gradient_random",
+            "thickness_random",
+            "opacity_random",
+            "random_seed"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Across-stroke colour",
+          "params": [
+            "gradient_blending",
+            "cross_colours_count",
+            "cross_colour_1",
+            "cross_colour_2",
+            "cross_colour_3",
+            "cross_colour_4",
+            "cross_colour_5",
+            "cross_gradient",
+            "cross_gradient_offset",
+            "cross_gradient_scale",
+            "cross_gradient_loop"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Brush texture",
+          "params": [
+            "dry_brush",
+            "dry_brush_ramp",
+            "dry_brush_scale",
+            "edge_roughness",
+            "edge_roughness_depth",
+            "edge_roughness_scale",
+            "coverage_hardness"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Paint density colour",
+          "params": [
+            "density_colour",
+            "density_colour_thin",
+            "density_colour_mid",
+            "density_colour_dense"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "First guide",
+          "params": [
+            "mask_1",
+            "mask_1_feather",
+            "mask_1_density",
+            "mask_1_thickness",
+            "mask_1_thickness_ramp",
+            "mask_1_thickness_ramp_offset",
+            "mask_1_thickness_ramp_scale",
+            "mask_1_thickness_ramp_loop",
+            "mask_1_invert",
+            "mask_1_opacity",
+            "mask_1_opacity_ramp",
+            "mask_1_opacity_ramp_offset",
+            "mask_1_opacity_ramp_scale",
+            "mask_1_opacity_ramp_loop",
+            "mask_1_colours_count",
+            "mask_1_colour_1",
+            "mask_1_colour_2",
+            "mask_1_colour_3",
+            "mask_1_colour_4",
+            "mask_1_colour_5",
+            "mask_1_gradient",
+            "mask_1_gradient_offset",
+            "mask_1_gradient_random",
+            "mask_1_gradient_loop",
+            "mask_1_sine_operation",
+            "mask_1_sine_1_amplitude",
+            "mask_1_sine_1_frequency",
+            "mask_1_sine_1_offset",
+            "mask_1_sine_2_amplitude",
+            "mask_1_sine_2_frequency",
+            "mask_1_sine_2_offset"
+          ],
+          "collapsed": false
+        },
+        {
+          "label": "Second guide",
+          "params": [
+            "mask_2",
+            "clone_mask_1",
+            "mask_2_feather",
+            "mask_2_density",
+            "mask_2_thickness",
+            "mask_2_thickness_ramp",
+            "mask_2_thickness_ramp_offset",
+            "mask_2_thickness_ramp_scale",
+            "mask_2_thickness_ramp_loop",
+            "mask_2_invert",
+            "mask_2_opacity",
+            "mask_2_opacity_ramp",
+            "mask_2_opacity_ramp_offset",
+            "mask_2_opacity_ramp_scale",
+            "mask_2_opacity_ramp_loop",
+            "mask_2_colours_count",
+            "mask_2_colour_1",
+            "mask_2_colour_2",
+            "mask_2_colour_3",
+            "mask_2_colour_4",
+            "mask_2_colour_5",
+            "mask_2_gradient",
+            "mask_2_gradient_offset",
+            "mask_2_gradient_random",
+            "mask_2_gradient_loop",
+            "mask_2_sine_operation",
+            "mask_2_sine_1_amplitude",
+            "mask_2_sine_1_frequency",
+            "mask_2_sine_1_offset",
+            "mask_2_sine_2_amplitude",
+            "mask_2_sine_2_frequency",
+            "mask_2_sine_2_offset"
+          ],
+          "collapsed": false
+        }
+      ],
+      "matte_role": "strength"
+    },
+    {
       "slug": "particulate",
       "match_name": "particulate",
       "label": "Particulate",
@@ -32690,7 +34771,7 @@
           "label": "Threshold",
           "kind": "float",
           "unit": "raw",
-          "default": 0.9,
+          "default": 0.5,
           "slider_min": 0.0,
           "slider_max": 4.0,
           "hard_min": 0.0
@@ -32711,7 +34792,7 @@
           "label": "Ambient",
           "kind": "float",
           "unit": "raw",
-          "default": 0.0,
+          "default": 0.15,
           "slider_min": 0.0,
           "slider_max": 1.0,
           "hard_min": 0.0
