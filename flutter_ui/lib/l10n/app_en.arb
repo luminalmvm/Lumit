@@ -15525,9 +15525,9 @@
   "@aeBundleFromAep": {
     "description": "Status line notice when the Bridge bundle folder chooser was pointed at a folder holding an .aep instead of a bundle. Names both routes; lumit-bridge.jsx is a file name and stays untranslated."
   },
-  "aeAepUnreadable": "This .aep project could not be read. Export a bundle with lumit-bridge.jsx and import that folder.",
+  "aeAepUnreadable": "This .aep project could not be read. Export a bundle with lumit-bridge.jsx, zip its folder and import the zip.",
   "@aeAepUnreadable": {
-    "description": "Status line notice when the After Effects import could not read the .aep file it was given. Calm, and points at the Bridge route as the way through; lumit-bridge.jsx is a file name and stays untranslated."
+    "description": "Status line notice when the After Effects import could not read the .aep file it was given. Calm, and points at the Bridge route as the way through: File › Import .aep project… takes a zip of the bundle folder, not the folder. lumit-bridge.jsx is a file name and stays untranslated."
   },
   "aeCouldNotImport": "There is no Lumit bundle at {path}",
   "@aeCouldNotImport": {
