@@ -4719,7 +4719,7 @@
   },
   "fxExpression": "Expression",
   "@fxExpression": {
-    "description": "Driver name in the Graph panel — a box whose outputs are what an expression returns."
+    "description": "Driver name in the Graph panel — a box whose outputs are what an expression returns. Also the row in a text layer's Source section whose words come from an expression."
   },
   "fxExtractChannels": "Extract channels",
   "@fxExtractChannels": {

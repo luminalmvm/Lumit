@@ -174,7 +174,7 @@ class _SourceRowsFrbState extends State<SourceRowsFrb> {
       // what the layer says again once this one is empty.
       _row(
         t,
-        'Expression',
+        l10n.fxExpression,
         SizedBox(
           child: HouseTextField(
             key: const ValueKey('src-text-expression'),
