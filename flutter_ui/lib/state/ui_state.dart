@@ -103,6 +103,7 @@ import 'package:lumit_flutter/state/comp_time.dart';
 import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/state/dropper.dart';
 import 'package:lumit_flutter/state/viewer_views.dart';
+import 'package:lumit_flutter/state/key_layout.dart';
 import 'package:lumit_flutter/state/keymap.dart';
 import 'package:lumit_flutter/state/library.dart';
 import 'package:lumit_flutter/state/animated_mask_paths.dart';
@@ -3203,6 +3204,7 @@ class LumitUiState extends ChangeNotifier {
       // believed to have none is asked after on coming back to it, at most
       // once in five minutes. What was waiting on Pro follows the account.
       onResume: () {
+        unawaited(keyLayout.refresh());
         final now = DateTime.now();
         if (!account.signedIn ||
             account.pro ||

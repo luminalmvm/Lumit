@@ -7,7 +7,8 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/shell/menu_bar_frb.dart';
 import 'package:lumit_flutter/state/clipboard.dart';
 import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
-import 'package:lumit_flutter/panels/fx_section.dart' show FxQuiet;
+import 'package:lumit_flutter/panels/fx_section.dart'
+    show FxDropZone, FxQuiet;
 import 'package:lumit_flutter/panels/effect_param_row_frb.dart'
     show
         effectLabelOf,
@@ -294,9 +295,9 @@ void main() {
       expect(p.layer.getEffects(), hasLength(1));
     });
 
-    /// Dragging an effect's name to another effect's name moves it there — the
-    /// gesture the owner asked for and the one every other list in the
-    /// application already uses (docs/07 §6).
+    /// Dragging an effect's name onto the lower half of another's card puts it
+    /// after that one, the gesture every other list in the application
+    /// already uses (docs/07 §6).
     testWidgets('an effect is reordered by dragging its heading',
         (tester) async {
       final p = withLayer();
@@ -307,13 +308,15 @@ void main() {
       final before = p.layer.getEffects().map((e) => e.name()).toList();
       expect(before, ['blur', 'sharpen']);
 
-      final from = heading(effectLabelOf('sharpen'));
-      final onto = heading(effectLabelOf('blur'));
+      final from = heading(effectLabelOf('blur'));
+      final onto = tester.getRect(find.ancestor(
+          of: heading(effectLabelOf('sharpen')),
+          matching: find.byType(FxDropZone<String>)));
       final drag = await tester.startGesture(tester.getCenter(from));
       // Past the drag threshold in steps, so the Draggable starts and the
       // target under the pointer is entered before the release.
       await tester.pump(const Duration(milliseconds: 20));
-      await drag.moveTo(tester.getCenter(onto));
+      await drag.moveTo(Offset(onto.center.dx, onto.top + onto.height * 0.75));
       await tester.pump(const Duration(milliseconds: 20));
       await drag.up();
       await tester.pumpAndSettle();

@@ -38,6 +38,7 @@ mod lens_blur_pipes;
 pub mod lens_dirt;
 pub mod lens_flare;
 pub mod light_leak;
+pub mod light_rays;
 pub mod lighting;
 pub mod particulate;
 pub mod particulate_params;
@@ -53,12 +54,16 @@ pub mod stabilise;
 pub mod stylise;
 pub mod temporal;
 pub mod timewarp;
+pub mod turbiniu;
 pub mod utility;
 pub mod volumetric;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod denoise_tests;
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod light_rays_tests;
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests;
@@ -78,6 +83,7 @@ pub struct FxEngine {
     sharpen_simple: wgpu::ComputePipeline,
     sprite_flare: sprite_flare::LazySpriteFlare,
     energy_line: energy_line::LazyEnergyLine,
+    turbiniu: std::sync::OnceLock<turbiniu::TurbiniuPipelines>,
     audio_spectrum: audio_spectrum::LazyAudioSpectrum,
     pub(crate) mesh: std::sync::OnceLock<crate::mesh::MeshFx>,
     pub(crate) environment: std::sync::OnceLock<environment::EnvironmentFx>,
@@ -283,6 +289,7 @@ pub struct FxEngine {
     light_leak: wgpu::ComputePipeline,
     /// Flicker: this frame's gains on the picture in one pass.
     flicker: wgpu::ComputePipeline,
+    premultiply: wgpu::ComputePipeline,
     slices: wgpu::ComputePipeline,
     glow_bright: wgpu::ComputePipeline,
     glow_combine: wgpu::ComputePipeline,
@@ -356,6 +363,7 @@ pub struct FxEngine {
     lens_dirt: lens_dirt::LazyLensDirt,
     /// Holographic foil, built the first time one is drawn.
     holographic_foil: holographic_foil::LazyHolographicFoil,
+    light_rays: light_rays::LazyLightRays,
     /// Hologram, built the first time one is drawn.
     hologram: hologram::LazyHologram,
     film: film::LazyFilm,

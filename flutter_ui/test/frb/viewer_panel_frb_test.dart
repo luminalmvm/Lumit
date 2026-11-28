@@ -1229,6 +1229,31 @@ void main() {
           (p.layer.getTransform().scaleX as BridgeScalar_Static).field0;
       expect(after, greaterThan(before),
           reason: 'pulling the corner away from the anchor grows the layer');
+
+      BridgeKeyframe key(int frame) => BridgeKeyframe(
+            time: p.comp.timeOfFrame(frame: frame),
+            value: 50,
+            interpIn: const BridgeSideInterp.linear(),
+            interpOut: const BridgeSideInterp.linear(),
+          );
+      halveIt(p.layer);
+      p.layer.setTransform(
+          prop: BridgeTransformProp.scaleX,
+          value: BridgeScalar.keyframed([key(0), key(30)]));
+      p.uiState.model.refresh();
+      await tester.pumpAndSettle();
+      final again = await tester.startGesture(box.bottomRight);
+      await tester.pump();
+      for (var i = 0; i < 6; i++) {
+        await again.moveBy(const Offset(10, 6));
+        await tester.pump();
+      }
+      await again.up();
+      await tester.pumpAndSettle();
+      final keys =
+          (p.layer.getTransform().scaleX as BridgeScalar_Keyframed).field0;
+      expect(keys.map((k) => k.value), [greaterThan(50), 50],
+          reason: 'the key at the playhead took the drag, the other stayed');
     });
 
     Future<

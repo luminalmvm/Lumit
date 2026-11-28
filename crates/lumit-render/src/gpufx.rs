@@ -33,6 +33,7 @@ mod energy_line;
 pub mod lfx;
 pub mod ofx;
 mod stabilise;
+mod turbiniu;
 
 type Tex = wgpu::Texture;
 
@@ -443,6 +444,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &crate::gpufx_luma_fade::LumaFadeFx,
     &crate::gpufx_move::MoveFx,
     &crate::gpufx_light_leak::LightLeakFx,
+    &crate::gpufx_light_rays::LightRaysFx,
     &crate::gpufx_flicker::FlickerFx,
     &crate::gpufx_holographic_foil::HolographicFoilFx,
     &crate::gpufx_hologram::HologramFx,
@@ -462,6 +464,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &Scribble,
     &Stroke,
     &energy_line::EnergyLine,
+    &turbiniu::Turbiniu,
     &stabilise::Stabilise,
     &audio_spectrum::AudioSpectrum,
     &crate::gpufx_particulate::Particulate,

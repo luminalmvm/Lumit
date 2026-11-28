@@ -693,10 +693,13 @@ class CompositionReference {
   /// Place `footage` in this composition as new layers, the first given on
   /// top, as one undo step.
   ///
-  /// `end_to_end` lays them one after another, each starting where the one
-  /// before it ends, as Premiere and Vegas lay a multi-item drop. The
-  /// composition grows to the last one's end if it runs past it, as a cut
-  /// does. Without it they all start together, as After Effects stacks them.
+  /// They start at frame `start_frame`, the drop's time or the playhead, held
+  /// inside the comp; `None` is frame 0. `end_to_end` lays them one after
+  /// another from there, each starting where the one before it ends, as
+  /// Premiere and Vegas lay a multi-item drop. The composition grows to the
+  /// last one's end if it runs past it, as a cut does. Without it they all
+  /// start together, as After Effects stacks them. A still outside such a
+  /// run ends with the comp.
   ///
   /// Each layer is what [`Self::add_footage_layer`] makes of its item, with
   /// `as_sequence` and `arrival` as there. The first 3D model in a comp with
@@ -709,7 +712,8 @@ class CompositionReference {
           int? row,
           BridgeStreamsArrival? arrival,
           required bool endToEnd,
-          List<String>? lightNames}) =>
+          List<String>? lightNames,
+          int? startFrame}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceAddFootageLayers(
               that: this,
@@ -718,7 +722,8 @@ class CompositionReference {
               row: row,
               arrival: arrival,
               endToEnd: endToEnd,
-              lightNames: lightNames);
+              lightNames: lightNames,
+              startFrame: startFrame);
 
   /// Append the built-in effect named `name` to a group header's stack — the
   /// group arm of `LayerReference::add_effect`, and the same road every

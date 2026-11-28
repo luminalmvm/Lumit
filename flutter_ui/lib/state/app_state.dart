@@ -1389,19 +1389,18 @@ class LumitState extends ChangeNotifier {
   }) async {
     final project = this.project;
     if (project == null) return null;
+    final ui = Provider.of<LumitUiState>(context, listen: false);
     final comp = await showNewCompositionFrb(
       context: context,
       project: project,
       footage: footage,
       endToEnd: endToEnd,
-      asSequence: Provider.of<LumitUiState>(context, listen: false)
-          .workspace
-          .interface
-          .videoAsSequenceLayer,
-      arrival:
-          Provider.of<LumitUiState>(context, listen: false).streamsArrival,
+      asSequence: ui.workspace.interface.videoAsSequenceLayer,
+      arrival: ui.streamsArrival,
+      remembered: compSettingsFromJson(ui.workspace.lastCompSettings),
     );
     if (comp == null) return null;
+    if (footage.isEmpty) _rememberCompSettings(ui, comp);
     notifyDocumentChanged();
     return comp;
   }
@@ -1423,12 +1422,17 @@ class LumitState extends ChangeNotifier {
       context: context,
       project: project,
       nodeGraph: true,
+      remembered: compSettingsFromJson(ui.workspace.lastCompSettings),
     );
     if (comp == null) return null;
+    _rememberCompSettings(ui, comp);
     ui.setSelectedComp(comp);
     notifyDocumentChanged();
     return comp;
   }
+
+  void _rememberCompSettings(LumitUiState ui, CompositionReference comp) =>
+      ui.workspace.rememberCompSettings(compSettingsJson(comp.getSettings()));
 
   void handleChange(ScopedChange event) {
     // The item tree changed shape: the cached comp list is stale.

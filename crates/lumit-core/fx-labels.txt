@@ -8,12 +8,14 @@
 16 mm
 2 kHz
 250 Hz
+3-colour gradient
 31 Hz
 35 mm
 35 mm stills
 3D
 3D point
 4 kHz
+5-colour gradient
 500 Hz
 63 Hz
 64
@@ -23,13 +25,19 @@
 A
 APS-C
 Accumulation motion blur
+Acid
 Across
+Across-stroke colour
+Across-stroke colour profile
+Across-stroke palette shift
+Across-stroke palette span
 Adaptive
 Add
 Add grain
 Add input
 Add to picked
 Add up
+Additive
 Adjust
 Adjust time by
 AgX
@@ -46,9 +54,12 @@ All frames
 All points
 Along
 Along edges
+Along-path colour profile
+Along-path palette shift
 Alpha
 Alpha bias
 Alpha blur
+Alpha edges
 Alpha from
 Alternate
 Alternate rows
@@ -143,7 +154,9 @@ Bandwidth (nm)
 Bars
 Base colour
 Base colour layer
+Base coverage
 Base roughness
+Based on
 Basic
 Beam
 Beat markers
@@ -174,6 +187,7 @@ Black range
 Black saturation
 Blades
 Blend
+Blend mode
 Blistered turbulence
 Blobs
 Block
@@ -198,6 +212,7 @@ Blur radius
 Blur size
 Boolean
 Boolean layer
+Boost light
 Border
 Both
 Both ways
@@ -230,6 +245,7 @@ Broadband, green
 Broadcast safe
 Brush hardness
 Brush size
+Brush texture
 Brushed
 Brushed metal
 Bulge
@@ -352,6 +368,7 @@ Colour overlay
 Colour ramp
 Colour variation
 Colour warper
+Colourise
 Colours
 Column mix
 Column widths
@@ -408,6 +425,15 @@ Count nested inputs
 Cover left
 Cover right
 Coverage
+Coverage bias
+Coverage hardness
+Coverage jitter
+Coverage profile
+Coverage profile shift
+Coverage profile span
+Coverage texture
+Coverage variation
+Coverage wave
 Crackle
 Cranal
 Crease height (µm)
@@ -448,6 +474,7 @@ Darken
 Darker
 Darker colour
 Datamosh
+Dawn
 Daylight
 De-esser
 Death
@@ -465,7 +492,9 @@ Deformer
 Delay
 Denoise
 Denominator
+Dense paint colour
 Density
+Density colour
 Density layer
 Dents
 Depth
@@ -526,6 +555,7 @@ Down
 Draft
 Drag
 Draw along
+Draw as
 Drift
 Drive
 Drivers
@@ -535,7 +565,11 @@ Drop shadow
 Drop the rest
 Droplets
 Dry
+Dry brush
+Dry brush grain
+Dry brush profile
 Duration
+Dusk
 Dust
 Dynamic
 Dynamic progressive
@@ -554,7 +588,11 @@ Edge colour
 Edge fade
 Edge margin
 Edge repeat
+Edge roughness
+Edge sampling
 Edge sharpness
+Edge softness
+Edge thickness
 Edge type
 Edge width (nm)
 Edges
@@ -562,6 +600,7 @@ Edit expression…
 Edit flare…
 Edit lens…
 Edit shader…
+Effect amount
 Efficiency
 Eight hues
 Ektachrome 100
@@ -589,6 +628,7 @@ Element 8
 Element 9
 Ellipse
 Ellipse outline
+Ember
 Emboss
 Emission colour
 Emission layer
@@ -629,6 +669,7 @@ Expansion
 Explosion
 Exposure
 Expression
+Extend beyond layer
 Extra scale
 Extract channels
 Extrusion depth
@@ -679,12 +720,15 @@ Fire
 Fire brightness
 Fire colour
 Fire core
+First guide
+First path
 Fish
 Fisheye
 Fit cell
 Fit piece
 Fit to size
 Five
+Five samples
 Flag
 Flake curve
 Flake layers
@@ -694,6 +738,7 @@ Flake tilt
 Flare options
 Flash
 Flash colour
+Flat
 Flicker
 Flicker speed
 Flight
@@ -721,6 +766,7 @@ Foil only
 Follow
 Follow layer rotation
 Follow motion
+Follow tangent
 Follow the vectors
 For
 Force on all layers
@@ -846,6 +892,8 @@ Hard mix
 Hardness
 Harmonics
 Haze
+Heading deviation
+Heading variation
 Height
 Height map
 Hex
@@ -884,6 +932,9 @@ Horizontal blocks
 Horizontal channel
 Horizontal distortion
 Horizontal phase shift
+Horizontal shift
+Horizontal step per stroke
+Horizontal stretch
 How to treat
 Hue
 Hue and saturation
@@ -905,6 +956,7 @@ IOR
 Ice
 Ice blue
 Image
+Image coordinates
 Image layer
 In high
 In low
@@ -915,6 +967,7 @@ Include spaces
 Incoming
 Index
 Inflate
+Inherit first guide style
 Initial speed
 Ink over foil
 Inner bevel
@@ -950,6 +1003,7 @@ Iris centre y
 Iris points
 Iris wipe
 Irregularity
+Isotope
 Iterations
 Jagged
 Jitter x
@@ -976,6 +1030,7 @@ Label points
 Label rotation
 Label scale
 Lacquer index
+Lagoon
 Laser
 Latitude
 Lattice
@@ -989,6 +1044,9 @@ Layer size
 Layer time
 Layer's box
 Layout
+Leading tip
+Leading tip reach
+Leading tip spread
 Learn
 Left
 Left and right
@@ -1024,6 +1082,7 @@ Light flicker
 Light from
 Light leak
 Light range
+Light rays
 Light saturation
 Light size
 Light tint
@@ -1097,10 +1156,17 @@ Map slope
 Map softness
 Map white to
 Maps
+Mark fill rate
+Mark heading
+Mark shape
+Mark sides
 Markers
+Marks
 Mask
+Mask feather
 Mask path
 Mask points
+Mask radius
 Mask/Path
 Master
 Material
@@ -1136,6 +1202,9 @@ Mesh warp
 Metallic
 Method
 Micro Four Thirds
+Mid paint colour
+Mid-high
+Mid-low
 Middle
 Middle colour
 Midtone
@@ -1234,6 +1303,7 @@ On transparent
 On trigger
 Once at start
 One after another
+One colour
 One point
 Opacity
 Opacity %
@@ -1241,6 +1311,7 @@ Opacity by
 Opacity layer
 Opacity over life
 Opaque print
+Open arrow
 Open graph
 Open top
 Operate on alpha
@@ -1248,6 +1319,7 @@ Operation
 Optical
 Orange
 Orange peel (µm)
+Orchid
 Order
 Order by
 Orientation
@@ -1273,12 +1345,23 @@ Output width
 Outside
 Outside colour
 Outside mask
+Overlap mode
 Overlay
 PAL
 Padding x
 Padding y
 Paint
+Paint density colour
 Paint style
+Palette combine
+Palette jitter
+Palette shift jitter
+Palette size
+Palette swatch 1
+Palette swatch 2
+Palette swatch 3
+Palette swatch 4
+Palette swatch 5
 Panel
 Parallel
 Parametric EQ
@@ -1293,11 +1376,19 @@ Parts
 Pass
 Passes
 Path
+Path coordinates
 Path layer
 Path overlap
+Path resolution
+Path travel
+Path trim
+Path warp
 Paths
 Pattern
 Pattern depth (mm)
+Pattern frequency
+Pattern phase
+Pattern seed
 Pattern size (mm)
 Peak
 Per
@@ -1312,6 +1403,8 @@ Phase
 Phase from
 Phase offset
 Phase per copy
+Phase period
+Phase step per stroke
 Phase x
 Phase y
 Phaser
@@ -1352,6 +1445,7 @@ Plane
 Planes
 Plasma
 Plastic
+Plum
 Point
 Point 1 x
 Point 1 y
@@ -1390,6 +1484,7 @@ Power
 Poxo
 Pre
 Pre-delay
+Pre-process
 Preserve luminance
 Preserve luminosity
 Preset
@@ -1399,7 +1494,10 @@ Print stock
 Prism
 Producer x
 Producer y
+Product
 Profile
+Profile shift
+Profile span
 Projected from
 Projection time
 Propagate
@@ -1439,8 +1537,10 @@ Range
 Raster
 Rate
 Ratio
+Ray length
 Ray traced
 Rays
+Rays opacity
 Read
 Reading
 Rec. 709
@@ -1460,6 +1560,7 @@ Red phase
 Reds
 Reduce
 Reduce brightness
+Reduce flicker
 Reduce saturation
 Reduction
 Reference
@@ -1489,9 +1590,14 @@ Removed noise
 Render
 Rendered
 Repeat
+Repeat across-stroke palette
+Repeat along-path palette
+Repeat coverage profile
 Repeat edge pixels
 Repeat end
+Repeat profile
 Repeat start
+Repeat width profile
 Repeat words
 Repeats
 Replace colour
@@ -1509,6 +1615,8 @@ Reverb only
 Reverb reduction
 Reverb time
 Reverse
+Reverse guide
+Revolutions in loop
 Rig rotation
 Right
 Right bottom tangent x
@@ -1549,11 +1657,14 @@ Rotation x
 Rotation y
 Rotation z
 Roto brush
+Rough edge depth
+Rough edge grain
 Roughen
 Roughen edges
 Roughness
 Round
 Round corners
+Rounded
 Roundness
 Row gap
 Row open
@@ -1562,13 +1673,17 @@ Row stagger
 Rows
 Rows/columns jitter
 Rubber
+Rust
 Safe margin
 Same
 Same as Per
+Sample order
 Sample size
+Sample spacing profile
 Sample x
 Sample y
 Samples
+Sampling domain
 Sand size
 Sand tilt
 Sandblast
@@ -1607,7 +1722,9 @@ Screen softness
 Scribble
 Scrim
 Seal
+Second guide
 Second input
+Second path
 Second tint
 Seconds
 Security seal
@@ -1658,6 +1775,7 @@ Sheet width (mm)
 Shift per row
 Shift x
 Shift y
+Shimmer
 Short waves
 Show
 Show points
@@ -1677,6 +1795,7 @@ Simulation
 Sine
 Single
 Single layer, straw
+Single sample
 Six hues
 Size
 Size by
@@ -1721,6 +1840,7 @@ Soft pastel satin
 Softbox
 Softness
 Solar
+Solid arrow
 Sort
 Sort by
 Sort distribution
@@ -1732,10 +1852,17 @@ Source green
 Source height
 Source layer
 Source luminance
+Source opacity
+Source over
+Source point X
+Source point Y
+Source point affects shimmer
 Source red
 Source width
 Space
 Spacing
+Spacing jitter
+Spacing profile
 Spacing x
 Spacing y
 Spacing z
@@ -1825,6 +1952,7 @@ Streak
 Streak length
 Streaks
 Strength
+Strength profile
 Stretch
 Stretch to fit
 Stretch x
@@ -1836,7 +1964,11 @@ Stripes
 Strobe
 Stroke
 Stroke colour
+Stroke count
 Stroke emboss
+Stroke spacing
+Stroke tips
+Stroke variation
 Stroke width
 Strokes
 Strong
@@ -1857,6 +1989,7 @@ Subject depth (mm)
 Subscale
 Subtract
 Subtract from layer
+Sum
 Sunburst
 Super 16
 Super 35
@@ -1888,9 +2021,11 @@ Texture layer
 Textures
 Texturize
 The stock's own
+Thermal
 Thickness
 Thickness max
 Thickness min
+Thin paint colour
 This comp
 Three
 Threshold
@@ -1936,6 +2071,9 @@ Torch
 Toxic
 Track points
 Trail
+Trailing tip
+Trailing tip reach
+Trailing tip spread
 Trails
 Transform
 Transform points
@@ -1943,18 +2081,22 @@ Transition
 Transition width
 Transmission
 Travel
+Travel jitter
 Tremolo
 Triangle
 Triangles
 Trigger
 Trim
 Trim bottom
+Trim in
 Trim left
+Trim out
 Trim right
 Trim top
 Tritone
 True peak
 Tungsten
+Turbiniu
 Turbulence
 Turbulence amount
 Turbulence scale
@@ -1966,6 +2108,7 @@ Turbulent smooth
 Turn
 Turn points
 Turns
+Twilight
 Twirl
 Twist
 Twitch frequency
@@ -1998,7 +2141,9 @@ Use hue
 Use inner radius
 Use light colour
 Use light intensity
+Use loop
 Use luma
+Use mask
 Use masks
 Use middle colour
 Use point colour
@@ -2012,6 +2157,7 @@ VL noise
 Value
 Value noise
 Variation
+Variation seed
 Varnish
 Vary by
 Vary points
@@ -2029,6 +2175,8 @@ Vertical axis
 Vertical blocks
 Vertical channel
 Vertical distortion
+Vertical shift
+Vertical stretch
 Vibrancy
 Vibrato
 Video
@@ -2059,9 +2207,20 @@ Warming filter (81)
 Warming filter (85)
 Warming filter (LBA)
 Warp
+Warp distance
 Wave
+Wave 1 depth
+Wave 1 phase
+Wave 1 rate
+Wave 2 depth
+Wave 2 phase
+Wave 2 rate
 Wave angle
+Wave combine
+Wave depth
 Wave height
+Wave phase
+Wave rate
 Wave speed
 Wave type
 Wave warp
@@ -2088,6 +2247,10 @@ Whole sound
 Widen
 Widest pitch (nm)
 Width
+Width jitter
+Width profile
+Width profile shift
+Width profile span
 Wiggle
 Wiggle type
 Wiggles per second
@@ -2113,6 +2276,7 @@ Word gap
 Words
 Work area
 Wrap
+Wrap trim
 X
 X amount
 X frequency

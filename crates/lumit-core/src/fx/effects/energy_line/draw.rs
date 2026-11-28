@@ -128,9 +128,9 @@ pub fn sample(halo: &[f32], w: u32, h: u32, x: f32, y: f32) -> f32 {
     top + (bottom - top) * ty
 }
 
-/// The light over the picture that arrived. Both are straight alpha, which is
-/// how the compositor reads a layer's picture: the picture is weighted by its
-/// alpha, the light added to it, and the sum handed back straight.
+/// The light over the picture that arrived. Both are premultiplied, which is
+/// how the compositor reads a stack's picture: the light is added to the
+/// picture, and the sum handed back premultiplied.
 #[must_use]
 pub fn combine(src: [f32; 4], core: [f32; 3], halo: f32, look: &Look) -> [f32; 4] {
     let [cov, heat, near] = core;
@@ -144,7 +144,7 @@ pub fn combine(src: [f32; 4], core: [f32; 3], halo: f32, look: &Look) -> [f32; 4
         *l = (core + glow) * look.flicker;
     }
     let alpha = light[0].max(light[1]).max(light[2]).clamp(0.0, 1.0);
-    let before = [src[0] * src[3], src[1] * src[3], src[2] * src[3], src[3]];
+    let before = src;
     let under = if look.composite { before } else { [0.0; 4] };
     let lit = [
         under[0] + light[0],
@@ -157,10 +157,7 @@ pub fn combine(src: [f32; 4], core: [f32; 3], halo: f32, look: &Look) -> [f32; 4
     for (i, o) in out.iter_mut().enumerate() {
         *o = before[i] * (1.0 - m) + lit[i] * m;
     }
-    if out[3] <= 0.0 {
-        return [0.0; 4];
-    }
-    [out[0] / out[3], out[1] / out[3], out[2] / out[3], out[3]]
+    out
 }
 
 /// The whole effect on a `w × h` premultiplied RGBA picture.

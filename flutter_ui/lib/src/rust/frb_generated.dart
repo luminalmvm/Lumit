@@ -496,7 +496,8 @@ abstract class BridgeLibApi extends BaseApi {
       int? row,
       BridgeStreamsArrival? arrival,
       required bool endToEnd,
-      List<String>? lightNames});
+      List<String>? lightNames,
+      int? startFrame});
 
   void crateApiCompositionCompositionReferenceAddGroupEffect(
       {required CompositionReference that,
@@ -7212,7 +7213,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       int? row,
       BridgeStreamsArrival? arrival,
       required bool endToEnd,
-      List<String>? lightNames}) {
+      List<String>? lightNames,
+      int? startFrame}) {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
@@ -7223,6 +7225,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_opt_box_autoadd_bridge_streams_arrival(arrival, serializer);
         sse_encode_bool(endToEnd, serializer);
         sse_encode_opt_list_String(lightNames, serializer);
+        sse_encode_opt_CastedPrimitive_i_64(startFrame, serializer);
         return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 111)!;
       },
       codec: SseCodec(
@@ -7239,7 +7242,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         row,
         arrival,
         endToEnd,
-        lightNames
+        lightNames,
+        startFrame
       ],
       apiImpl: this,
     ));
@@ -7256,7 +7260,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
               "row",
               "arrival",
               "endToEnd",
-              "lightNames"
+              "lightNames",
+              "startFrame"
             ],
           );
 

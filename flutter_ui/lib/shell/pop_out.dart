@@ -29,6 +29,7 @@ import 'package:flutter/widgets.dart';
 
 import '../state/background.dart' show onWindowEvent;
 import '../state/dock.dart' show FloatingFrame;
+import '../state/key_layout.dart';
 import 'pop_out_handle.dart'
     if (dart.library.js_interop) 'pop_out_handle_web.dart';
 
@@ -196,6 +197,9 @@ abstract final class NativeWindows {
         return true;
       case 'displaysChanged':
         displaysChanged?.call();
+        return true;
+      case 'keyboardLayoutChanged':
+        keyLayout.refresh();
         return true;
     }
     return false;

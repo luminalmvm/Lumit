@@ -3699,7 +3699,7 @@ Future<void> showRulerMenu(
         setWork?.call(workAreaWith(
           comp: comp,
           current: comp.getWorkArea(),
-          wanted: frame,
+          wanted: picked == 'work-in' ? frame : frame + 1,
           isStart: picked == 'work-in',
         ));
       } catch (_) {}

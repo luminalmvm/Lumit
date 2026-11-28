@@ -136,15 +136,17 @@ Viewer](/panels/viewer/#moving-a-layer).
   and `Shift` adds them to the selection.
 - An unselected layer under the pointer shows its box faintly.
 
-The scale and rotation handles show while one layer is selected. A layer with a keyframed
-Scale or Rotation has neither.
+The scale and rotation handles show while one layer is selected. On a keyframed Scale or
+Rotation a drag sets a keyframe at the playhead, as one undo step. A layer with an
+expression on Scale or Rotation has neither.
 
 A 3D layer, a camera and a light have [3D handles](/use/camera/#3d-handles).
 
 ### The Rotation tool
 
 With the **Rotation** tool (`W`), a drag anywhere on the picture turns the selected layers,
-each about its own anchor point. `Shift` turns in steps of 45°.
+each about its own anchor point, as one undo step. `Shift` turns in steps of 45°. A
+keyframed Rotation takes a keyframe at the playhead.
 
 ### The motion path
 

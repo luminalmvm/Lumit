@@ -262,6 +262,11 @@ impl Realiser<'_> {
         let tex = if l.fx.is_empty() {
             tex
         } else {
+            let tex = if l.premultiplied() {
+                tex
+            } else {
+                self.fx.premultiply(&self.ctx, &tex)
+            };
             let (w, h) = (tex.width(), tex.height());
             // Neighbour source frames a temporal effect (echo) reads;
             // empty for a plain stack, so this uploads nothing then.
@@ -311,6 +316,13 @@ impl Realiser<'_> {
                             .neighbours
                             .iter()
                             .map(|(offset, rgba, nw, nh)| (*offset, upload(rgba, *nw, *nh)))
+                            .collect(),
+                    };
+                    let neighbours = match l.premultiplied() {
+                        true => neighbours,
+                        false => neighbours
+                            .into_iter()
+                            .map(|(offset, t)| (offset, self.fx.premultiply(&self.ctx, &t)))
                             .collect(),
                     };
                     // The dense motion fields, one per offset a

@@ -14,7 +14,7 @@ use super::*;
 /// The §1.6 oracle corpus: a diagonal gradient, a hard alpha edge down
 /// the middle, and an HDR spike — already fp16-quantised, so comparisons
 /// isolate the kernel maths from upload rounding.
-fn corpus(w: u32, h: u32) -> Vec<f32> {
+pub(super) fn corpus(w: u32, h: u32) -> Vec<f32> {
     let mut img = vec![0.0f32; (w * h * 4) as usize];
     for y in 0..h {
         for x in 0..w {
@@ -32,7 +32,7 @@ fn corpus(w: u32, h: u32) -> Vec<f32> {
     img.iter().map(|v| f16_to_f32(f16_bits(*v))).collect()
 }
 
-fn worst_diff(a: &[f32], b: &[f32]) -> f32 {
+pub(super) fn worst_diff(a: &[f32], b: &[f32]) -> f32 {
     a.iter()
         .zip(b)
         .map(|(x, y)| (x - y).abs())
@@ -16681,4 +16681,68 @@ fn depth_of_field_pro_blurs_up_to_the_frame_edge() {
             );
         }
     }
+}
+
+#[test]
+fn turbiniu_draws_over_the_layer() {
+    let Some(ctx) = crate::test_support::lease() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = ctx.fx();
+    let (w, h) = (16u32, 16u32);
+    let img: Vec<f32> = (0..w * h).flat_map(|_| [0.25f32, 0.5, 0.75, 1.0]).collect();
+    let tex = upload_linear_f32(&ctx, &img, w, h);
+    let white = |x: f32, y: f32| [x, y, 1.0, 1.0, 1.0, 1.0];
+    let square = [
+        white(0.0, 0.0),
+        white(8.0, 0.0),
+        white(0.0, 16.0),
+        white(8.0, 0.0),
+        white(8.0, 16.0),
+        white(0.0, 16.0),
+    ];
+    let px = |out: &[f32], x: u32| {
+        let i = ((8 * w + x) * 4) as usize;
+        [out[i], out[i + 1], out[i + 2], out[i + 3]]
+    };
+    let close = |a: [f32; 4], b: [f32; 4]| a.iter().zip(&b).all(|(p, q)| (p - q).abs() < 2e-3);
+
+    let none = fx.turbiniu(&ctx, &tex, &[], false, false, 1.0);
+    let none = readback_linear_f32(&ctx, &none, w, h).unwrap();
+    assert_eq!(none, img, "no strokes leave the layer as it was");
+
+    let full = fx.turbiniu(&ctx, &tex, &square, false, false, 1.0);
+    let full = readback_linear_f32(&ctx, &full, w, h).unwrap();
+    assert!(
+        close(px(&full, 4), [1.0, 1.0, 1.0, 1.0]),
+        "{:?}",
+        px(&full, 4)
+    );
+    assert!(
+        close(px(&full, 12), [0.25, 0.5, 0.75, 1.0]),
+        "{:?}",
+        px(&full, 12)
+    );
+
+    let half = fx.turbiniu(&ctx, &tex, &square, false, false, 0.5);
+    let half = readback_linear_f32(&ctx, &half, w, h).unwrap();
+    assert!(
+        close(px(&half, 4), [0.625, 0.75, 0.875, 1.0]),
+        "{:?}",
+        px(&half, 4)
+    );
+    assert!(
+        close(px(&half, 12), [0.25, 0.5, 0.75, 1.0]),
+        "{:?}",
+        px(&half, 12)
+    );
+
+    let added = fx.turbiniu(&ctx, &tex, &square, true, false, 1.0);
+    let added = readback_linear_f32(&ctx, &added, w, h).unwrap();
+    assert!(
+        close(px(&added, 4), [1.25, 1.5, 1.75, 1.0]),
+        "{:?}",
+        px(&added, 4)
+    );
 }

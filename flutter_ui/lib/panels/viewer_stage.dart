@@ -460,8 +460,8 @@ class ViewerStage extends StatelessWidget {
         // A keyed position is dragged by its body from wherever it is
         // grabbed, as in After Effects, and takes a key at the playhead; its
         // keys can still be dragged on the motion path. Only an expression
-        // leaves it no value for a drag to set. Keyed scale or rotation
-        // grows no handles.
+        // leaves it no value for a drag to set, and the same holds for scale
+        // and rotation.
         draggable: positionStill ||
             (tf.positionX is! BridgeScalar_Expression &&
                 tf.positionY is! BridgeScalar_Expression),
@@ -469,9 +469,9 @@ class ViewerStage extends StatelessWidget {
         // and a model's box has no flat side for the handles.
         scalable: !light &&
             cube == null &&
-            isStill(tf.scaleX) &&
-            isStill(tf.scaleY) &&
-            isStill(tf.rotation),
+            tf.scaleX is! BridgeScalar_Expression &&
+            tf.scaleY is! BridgeScalar_Expression &&
+            tf.rotation is! BridgeScalar_Expression,
         rotationDegrees: rotation,
         orientDegrees: turnOf(entry)?.degrees ?? 0,
         marker: light,
