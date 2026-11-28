@@ -1419,6 +1419,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
         thumbnails: _thumbnails,
         thumb: _thumbnails ? _thumbs[id] : null,
         selectedFootage: () => _selectedFootage,
+        picked: () => _picked,
         onSelect: (modifier) => _select(id, modifier),
         onEndRename: () => setState(() => _renamingId = null),
         onMenu: (at) => _itemMenu(item, at),

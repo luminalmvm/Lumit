@@ -11,6 +11,7 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart' show readEffectPreset;
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/solid.dart';
 import 'package:uuid/uuid.dart' show UuidValue;
 
@@ -47,6 +48,13 @@ class SolidDragData {
 
   final String label;
   const SolidDragData(this.solid, this.label);
+}
+
+class ProjectItemsDragData {
+  final List<ItemReference> items;
+
+  final String label;
+  const ProjectItemsDragData(this.items, this.label);
 }
 
 /// A graphics template dragged from the library in Effects & presets. It is
