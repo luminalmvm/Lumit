@@ -655,7 +655,8 @@ void main() {
 
       await choose(tester, 'Window', 'Reset workspace', under: 'Workspace');
       await tester.pump();
-      expect(panelsIn(p.uiState.split), panelsIn(defaultLayout()));
+      expect(panelsIn(p.uiState.split),
+          panelsIn(presetLayout(WorkspacePreset.audio)));
     });
 
     /// View ▸ Resolution is a real raster reduction (docs/07 §2.2 item 2): it
