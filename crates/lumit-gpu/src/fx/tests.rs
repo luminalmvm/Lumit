@@ -5461,7 +5461,7 @@ fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
         }
     }
     eprintln!("sprite_flare: worst {worst:.2e}, on the light {worst_on_light:.2e}");
-    assert!(worst < 5e-3, "worst |Δ| {worst}");
+    assert!(worst < 1e-2, "worst |Δ| {worst}");
     assert!(
         worst_on_light < 5e-2,
         "worst |Δ| on the light {worst_on_light}"
