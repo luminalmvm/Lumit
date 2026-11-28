@@ -22460,6 +22460,19 @@
   "@planeFailedRuntimeMissing": {
     "description": "Status line on an effect that reads a shot with a trained model, when the analysis was refused: the library every model needs is missing. It is installed from the Addons page in Settings."
   },
+  "planeFailedRuntimeFailed": "The model runtime would not load",
+  "@planeFailedRuntimeFailed": {
+    "description": "Status line on an effect that reads a shot with a trained model, when the analysis failed: the library every model needs is installed and would not open on this computer."
+  },
+  "planeFailedRuntimeFailedWhy": "The model runtime would not load: {reason}",
+  "@planeFailedRuntimeFailedWhy": {
+    "description": "As planeFailedRuntimeFailed, followed by the library's own reason, which is untranslated English from the library.",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
   "planeFailedPackMissing": "The model this effect asks for is not installed",
   "@planeFailedPackMissing": {
     "description": "Status line on an effect that reads a shot with a trained model, when the analysis was refused: the runtime is there and the model pack the effect's Model row names is not installed. Another pack may be installed for the same job; it is not a substitute."

@@ -62,6 +62,7 @@ void main() {
         firstFrame: firstFrame,
         lastFrame: lastFrame,
         clipFrames: clipFrames,
+        runtimeReason: '',
       );
 
   group('Depth (frb)', () {

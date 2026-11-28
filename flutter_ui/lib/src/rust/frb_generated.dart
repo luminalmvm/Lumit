@@ -41142,8 +41142,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgePlaneStatus dco_decode_bridge_plane_status(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 8)
-      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
+    if (arr.length != 9)
+      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
     return BridgePlaneStatus(
       stage: dco_decode_bridge_plane_stage(arr[0]),
       done: dco_decode_u_32(arr[1]),
@@ -41153,6 +41153,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       firstFrame: dco_decode_opt_CastedPrimitive_i_64(arr[5]),
       lastFrame: dco_decode_opt_CastedPrimitive_i_64(arr[6]),
       clipFrames: dco_decode_u_32(arr[7]),
+      runtimeReason: dco_decode_String(arr[8]),
     );
   }
 
@@ -52075,6 +52076,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_firstFrame = sse_decode_opt_CastedPrimitive_i_64(deserializer);
     var var_lastFrame = sse_decode_opt_CastedPrimitive_i_64(deserializer);
     var var_clipFrames = sse_decode_u_32(deserializer);
+    var var_runtimeReason = sse_decode_String(deserializer);
     return BridgePlaneStatus(
         stage: var_stage,
         done: var_done,
@@ -52083,7 +52085,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         provider: var_provider,
         firstFrame: var_firstFrame,
         lastFrame: var_lastFrame,
-        clipFrames: var_clipFrames);
+        clipFrames: var_clipFrames,
+        runtimeReason: var_runtimeReason);
   }
 
   @protected
@@ -63822,6 +63825,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_opt_CastedPrimitive_i_64(self.firstFrame, serializer);
     sse_encode_opt_CastedPrimitive_i_64(self.lastFrame, serializer);
     sse_encode_u_32(self.clipFrames, serializer);
+    sse_encode_String(self.runtimeReason, serializer);
   }
 
   @protected

@@ -44359,12 +44359,13 @@ impl SseDecode for crate::api::planes::BridgePlaneFailure {
         let mut inner = <i32>::sse_decode(deserializer);
         return match inner {
             0 => crate::api::planes::BridgePlaneFailure::RuntimeMissing,
-            1 => crate::api::planes::BridgePlaneFailure::PackMissing,
-            2 => crate::api::planes::BridgePlaneFailure::ModelFailed,
-            3 => crate::api::planes::BridgePlaneFailure::Busy,
-            4 => crate::api::planes::BridgePlaneFailure::Unreadable,
-            5 => crate::api::planes::BridgePlaneFailure::NoFrames,
-            6 => crate::api::planes::BridgePlaneFailure::Cancelled,
+            1 => crate::api::planes::BridgePlaneFailure::RuntimeFailed,
+            2 => crate::api::planes::BridgePlaneFailure::PackMissing,
+            3 => crate::api::planes::BridgePlaneFailure::ModelFailed,
+            4 => crate::api::planes::BridgePlaneFailure::Busy,
+            5 => crate::api::planes::BridgePlaneFailure::Unreadable,
+            6 => crate::api::planes::BridgePlaneFailure::NoFrames,
+            7 => crate::api::planes::BridgePlaneFailure::Cancelled,
             _ => unreachable!("Invalid variant for BridgePlaneFailure: {}", inner),
         };
     }
@@ -44398,6 +44399,7 @@ impl SseDecode for crate::api::planes::BridgePlaneStatus {
         let mut var_firstFrame = <Option<i64>>::sse_decode(deserializer);
         let mut var_lastFrame = <Option<i64>>::sse_decode(deserializer);
         let mut var_clipFrames = <u32>::sse_decode(deserializer);
+        let mut var_runtimeReason = <String>::sse_decode(deserializer);
         return crate::api::planes::BridgePlaneStatus {
             stage: var_stage,
             done: var_done,
@@ -44407,6 +44409,7 @@ impl SseDecode for crate::api::planes::BridgePlaneStatus {
             first_frame: var_firstFrame,
             last_frame: var_lastFrame,
             clip_frames: var_clipFrames,
+            runtime_reason: var_runtimeReason,
         };
     }
 }
@@ -61706,12 +61709,13 @@ impl flutter_rust_bridge::IntoDart for crate::api::planes::BridgePlaneFailure {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         match self {
             Self::RuntimeMissing => 0.into_dart(),
-            Self::PackMissing => 1.into_dart(),
-            Self::ModelFailed => 2.into_dart(),
-            Self::Busy => 3.into_dart(),
-            Self::Unreadable => 4.into_dart(),
-            Self::NoFrames => 5.into_dart(),
-            Self::Cancelled => 6.into_dart(),
+            Self::RuntimeFailed => 1.into_dart(),
+            Self::PackMissing => 2.into_dart(),
+            Self::ModelFailed => 3.into_dart(),
+            Self::Busy => 4.into_dart(),
+            Self::Unreadable => 5.into_dart(),
+            Self::NoFrames => 6.into_dart(),
+            Self::Cancelled => 7.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -61764,6 +61768,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::planes::BridgePlaneStatus {
             self.first_frame.into_into_dart().into_dart(),
             self.last_frame.into_into_dart().into_dart(),
             self.clip_frames.into_into_dart().into_dart(),
+            self.runtime_reason.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -71651,12 +71656,13 @@ impl SseEncode for crate::api::planes::BridgePlaneFailure {
         <i32>::sse_encode(
             match self {
                 crate::api::planes::BridgePlaneFailure::RuntimeMissing => 0,
-                crate::api::planes::BridgePlaneFailure::PackMissing => 1,
-                crate::api::planes::BridgePlaneFailure::ModelFailed => 2,
-                crate::api::planes::BridgePlaneFailure::Busy => 3,
-                crate::api::planes::BridgePlaneFailure::Unreadable => 4,
-                crate::api::planes::BridgePlaneFailure::NoFrames => 5,
-                crate::api::planes::BridgePlaneFailure::Cancelled => 6,
+                crate::api::planes::BridgePlaneFailure::RuntimeFailed => 1,
+                crate::api::planes::BridgePlaneFailure::PackMissing => 2,
+                crate::api::planes::BridgePlaneFailure::ModelFailed => 3,
+                crate::api::planes::BridgePlaneFailure::Busy => 4,
+                crate::api::planes::BridgePlaneFailure::Unreadable => 5,
+                crate::api::planes::BridgePlaneFailure::NoFrames => 6,
+                crate::api::planes::BridgePlaneFailure::Cancelled => 7,
                 _ => {
                     unimplemented!("");
                 }
@@ -71697,6 +71703,7 @@ impl SseEncode for crate::api::planes::BridgePlaneStatus {
         <Option<i64>>::sse_encode(self.first_frame, serializer);
         <Option<i64>>::sse_encode(self.last_frame, serializer);
         <u32>::sse_encode(self.clip_frames, serializer);
+        <String>::sse_encode(self.runtime_reason, serializer);
     }
 }
 
