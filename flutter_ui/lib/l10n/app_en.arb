@@ -702,9 +702,9 @@
   "@deletePuppetPin": {
     "description": "Context-menu item on a puppet pin's Timeline row: remove that pin."
   },
-  "faultPanelTitle": "This panel could not be drawn",
+  "faultPanelTitle": "This part could not be drawn",
   "@faultPanelTitle": {
-    "description": "Heading of the box that replaces a panel whose contents failed to draw. The line under it is the fault's own words, which are not translated."
+    "description": "Heading of the box drawn in place of any part of the window that failed to draw: a whole panel, one row of a list or a single control. The line under it is the fault's own words, which are not translated."
   },
   "faultPanelWhere": "Recorded in {file}",
   "@faultPanelWhere": {
@@ -714,6 +714,14 @@
         "type": "String"
       }
     }
+  },
+  "faultCopy": "Copy details",
+  "@faultCopy": {
+    "description": "Button in the box drawn in place of a part of the window that failed to draw. Puts the fault's own words and the path of the report file on the clipboard, to paste into a bug report."
+  },
+  "faultCopied": "Copied",
+  "@faultCopied": {
+    "description": "Takes the place of the Copy details label on the fault box's button once it has been clicked."
   },
   "foldPuppet": "Puppet",
   "@foldPuppet": {

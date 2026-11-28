@@ -14,10 +14,12 @@ When Lumit cannot finish starting, it opens a window headed **Lumit could not st
 window gives the reason and the path of `lumit-diagnostics.log`, the file the same line
 was written to. Both can be selected and copied.
 
-## A panel reads "This panel could not be drawn"
+## Part of the window reads "This part could not be drawn"
 
-A panel that fails to draw is replaced by a box with that heading, the first line of the
-fault, and the file it was recorded in. The other panels carry on.
+A panel, row or control that fails to draw is replaced by a box with that heading, the
+first line of the fault, and the file it was recorded in. **Copy details** puts the fault
+and the file's path on the clipboard. A box one row high shows the heading and the fault
+only. The rest of the window carries on.
 
 ## Windows shows "Windows protected your PC"
 
