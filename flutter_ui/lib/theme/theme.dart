@@ -953,7 +953,10 @@ class LumitTheme {
     Color(0xff3cc9c0), // teal — cameras
     Color(0xff6673e6), // indigo — sequences
     Color(0xffd45cb8), // magenta — adjustments
-    Color(0xffe0704a), // coral — nulls
+    Color(0xffe0704a), // coral — nulls, then lime, yellow and rose
+    Color(0xff9bd04a),
+    Color(0xffe8d44d),
+    Color(0xffe2607f),
   ];
 
   /// How many chips the palette holds, so the picker draws exactly the set
