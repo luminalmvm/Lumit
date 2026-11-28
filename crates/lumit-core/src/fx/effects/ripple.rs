@@ -86,6 +86,13 @@ pub struct Ripple {
     #[slider(label = "Wave speed", min = -5.0, max = 5.0, default = 1.0, unit = Raw)]
     pub wave_speed: f32,
 
+    #[choice(
+        label = "Edges",
+        options = *crate::fx::builtins::EDGE_OPTIONS,
+        default = 2
+    )]
+    pub edge: u32,
+
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -124,6 +131,7 @@ impl Ripple {
             inv_width: 1.0 / self.wave_width.max(1e-3),
             turns: self.evolution / 360.0 + travel,
             asymmetric: self.wave_type == 1,
+            edge: self.edge.min(2),
             mix: (self.mix / 100.0).clamp(0.0, 1.0),
         }
     }

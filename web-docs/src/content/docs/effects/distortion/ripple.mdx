@@ -31,6 +31,7 @@ Rings of distortion spread out from a point, fading away with distance.
 | **Wave width** | Slider | 1 to 400; higher | 90 | Pixels at composition size |
 | **Evolution** | Dial | Any angle; snaps every 45° while a modifier is held | 0° | Degrees |
 | **Wave speed** | Slider | -5 to 5; any value by typing | 1 | - |
+| **Edges** | Dropdown | None · Edge repeat · Mirror repeat | Mirror repeat | - |
 | **Mix** | Slider | 0 to 100 | 100 | Per cent |
 | **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
 | **Matte** | Layer | Any layer in the composition | None | - |
@@ -53,6 +54,9 @@ In the Effect Controls panel:
 - **Wave width**: the distance from one crest to the next.
 - **Evolution**: adjusts the phase of the ripple.
 - **Wave speed**: how many rings spread out each second.
+- **Edges**: what fills the area the effect reads from outside the frame. **None** leaves
+  it empty. **Edge repeat** smears the border pixel outward and **Mirror repeat** reflects
+  the picture back.
 - **Mix**: how much of the result replaces the original.
 - **Blend**: the blend mode the result is laid over the original with.
 - **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).

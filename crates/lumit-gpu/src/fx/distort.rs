@@ -233,7 +233,7 @@ struct PolarParams {
     interp: f32,
     mix_amt: f32,
     to_polar: u32,
-    _pad0: u32,
+    edge: u32,
 }
 
 /// One resolved Twirl (docs/08 §3.51). Mirrors
@@ -248,6 +248,7 @@ pub struct TwirlOp {
     pub inv_radius: f32,
     /// Radians; positive turns the picture clockwise on screen.
     pub angle: f32,
+    pub edge: u32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
 }
@@ -262,7 +263,7 @@ struct TwirlParams {
     mix_amt: f32,
     /// 1 = scale Angle by the matte.
     matte_on: f32,
-    _pad1: f32,
+    edge: u32,
 }
 
 /// One resolved Spherize (docs/08 §3.52). Mirrors
@@ -277,6 +278,7 @@ pub struct SpherizeOp {
     pub inv_radius: f32,
     /// Bulge ÷ 100, −1..1: the sign chooses the map, the magnitude blends.
     pub bulge: f32,
+    pub edge: u32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
 }
@@ -291,7 +293,7 @@ struct SpherizeParams {
     mix_amt: f32,
     /// 1 = scale Bulge by the matte.
     matte_on: f32,
-    _pad1: f32,
+    edge: u32,
 }
 
 /// One resolved Ripple (docs/08 §3.53). Mirrors
@@ -312,6 +314,7 @@ pub struct RippleOp {
     pub turns: f32,
     /// Add the tangential half of the wave, so a pixel walks a small circle.
     pub asymmetric: bool,
+    pub edge: u32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
 }
@@ -329,7 +332,7 @@ struct RippleParams {
     asymmetric: u32,
     /// 1 = scale Wave height by the matte.
     matte_on: f32,
-    _pad1: u32,
+    edge: u32,
     _pad2: u32,
 }
 
@@ -385,6 +388,7 @@ pub struct WarpOp {
     pub h_distort: f32,
     /// Vertical distortion ÷ 100; see [`h_distort`](Self::h_distort).
     pub v_distort: f32,
+    pub edge: u32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
 }
@@ -399,7 +403,7 @@ struct WarpParams {
     style: u32,
     /// 1 = scale Bend and both distortions by the matte.
     matte_on: f32,
-    _pad1: u32,
+    edge: u32,
     _pad2: u32,
 }
 
@@ -433,7 +437,7 @@ impl FxEngine {
                 mix_amt: op.mix,
                 asymmetric: u32::from(op.asymmetric),
                 matte_on: f32::from(matte.is_some()),
-                _pad1: 0,
+                edge: op.edge,
                 _pad2: 0,
             }),
         );
@@ -501,7 +505,7 @@ impl FxEngine {
                 mix_amt: op.mix,
                 style: op.style,
                 matte_on: f32::from(matte.is_some()),
-                _pad1: 0,
+                edge: op.edge,
                 _pad2: 0,
             }),
         );
@@ -587,9 +591,6 @@ impl FxEngine {
     /// Apply one Polar coordinates (docs/08 §3.50) to a linear working texture,
     /// returning a new texture of the same size. Three transcendentals and one
     /// bilinear tap a pixel.
-    ///
-    /// Three scalars rather than an op struct, like [`Self::mirror`]: an effect
-    /// with a direction and two fractions does not need a named bundle.
     #[allow(clippy::too_many_arguments)]
     pub fn polar_coordinates(
         &self,
@@ -600,6 +601,7 @@ impl FxEngine {
         to_polar: bool,
         interp: f32,
         mix: f32,
+        edge: u32,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-polar-out");
         self.dispatch(
@@ -614,7 +616,7 @@ impl FxEngine {
                 interp,
                 mix_amt: mix,
                 to_polar: u32::from(to_polar),
-                _pad0: 0,
+                edge,
             }),
         );
         out
@@ -646,7 +648,7 @@ impl FxEngine {
                 angle: op.angle,
                 mix_amt: op.mix,
                 matte_on: f32::from(matte.is_some()),
-                _pad1: 0.0,
+                edge: op.edge,
             }),
         );
         out
@@ -678,7 +680,7 @@ impl FxEngine {
                 bulge: op.bulge,
                 mix_amt: op.mix,
                 matte_on: f32::from(matte.is_some()),
-                _pad1: 0.0,
+                edge: op.edge,
             }),
         );
         out

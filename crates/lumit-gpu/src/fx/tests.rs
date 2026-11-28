@@ -9816,10 +9816,13 @@ fn wgsl_polar_coordinates_matches_the_cpu_oracle() {
     faded.mix = 50.0;
     let mut off = base;
     off.mix = 0.0;
+    let mut mirrored = back;
+    mirrored.edge = 2;
 
     for (name, c) in [
         ("to-polar", base),
         ("to-rect", back),
+        ("mirrored-edges", mirrored),
         ("half-bent", half),
         ("interp-zero", none),
         ("mixed", faded),
@@ -9828,7 +9831,7 @@ fn wgsl_polar_coordinates_matches_the_cpu_oracle() {
         let p = c.packed();
         let mut cpu = img.clone();
         lumit_core::fx::cpu::polar_coordinates(&mut cpu, w, h, &p);
-        let out = fx.polar_coordinates(&ctx, &tex, w, h, p.to_polar, p.interp, p.mix);
+        let out = fx.polar_coordinates(&ctx, &tex, w, h, p.to_polar, p.interp, p.mix, p.edge);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
         let worst = worst_diff(&cpu, &gpu);
         eprintln!("polar_coordinates {name}: worst {worst}");
@@ -9933,6 +9936,8 @@ fn wgsl_twirl_matches_the_cpu_oracle() {
     faded.mix = 50.0;
     let mut off = base;
     off.mix = 0.0;
+    let mut mirrored = wide;
+    mirrored.edge = 2;
 
     let op_of = |t: Twirl| {
         let p = t.packed();
@@ -9941,6 +9946,7 @@ fn wgsl_twirl_matches_the_cpu_oracle() {
             radius: p.radius,
             inv_radius: p.inv_radius,
             angle: p.angle,
+            edge: p.edge,
             mix: p.mix,
         }
     };
@@ -9949,6 +9955,7 @@ fn wgsl_twirl_matches_the_cpu_oracle() {
         ("hard", hard),
         ("backwards", backwards),
         ("wide", wide),
+        ("mirrored-edges", mirrored),
         ("off-centre", offcentre),
         ("angle-zero", straight),
         ("radius-zero", tiny),
@@ -10055,6 +10062,9 @@ fn wgsl_spherize_matches_the_cpu_oracle() {
     faded.mix = 50.0;
     let mut off = base;
     off.mix = 0.0;
+    let mut mirrored = wide;
+    mirrored.bulge = -100.0;
+    mirrored.edge = 2;
 
     let op_of = |s: Spherize| {
         let p = s.packed();
@@ -10063,6 +10073,7 @@ fn wgsl_spherize_matches_the_cpu_oracle() {
             radius: p.radius,
             inv_radius: p.inv_radius,
             bulge: p.bulge,
+            edge: p.edge,
             mix: p.mix,
         }
     };
@@ -10071,6 +10082,7 @@ fn wgsl_spherize_matches_the_cpu_oracle() {
         ("pinch", pinch),
         ("gentle", gentle),
         ("wide", wide),
+        ("mirrored-edges", mirrored),
         ("off-centre", offcentre),
         ("bulge-zero", flat),
         ("radius-zero", tiny),
@@ -10177,6 +10189,8 @@ fn wgsl_ripple_matches_the_cpu_oracle() {
     faded.mix = 50.0;
     let mut off = base;
     off.mix = 0.0;
+    let mut mirrored = base;
+    mirrored.edge = 2;
 
     let op_of = |r: Ripple| {
         let p = r.packed(0.0);
@@ -10188,6 +10202,7 @@ fn wgsl_ripple_matches_the_cpu_oracle() {
             inv_width: p.inv_width,
             turns: p.turns,
             asymmetric: p.asymmetric,
+            edge: p.edge,
             mix: p.mix,
         }
     };
@@ -10196,6 +10211,7 @@ fn wgsl_ripple_matches_the_cpu_oracle() {
         ("symmetric", symmetric),
         ("evolved", turned),
         ("tight", tight),
+        ("mirrored-edges", mirrored),
         ("off-centre", offcentre),
         ("height-zero", flat),
         ("radius-zero", tiny),
@@ -10581,6 +10597,7 @@ fn wgsl_warp_matches_the_cpu_oracle() {
             bend: p.bend,
             h_distort: p.h_distort,
             v_distort: p.v_distort,
+            edge: p.edge,
             mix: p.mix,
         }
     };
@@ -10626,7 +10643,14 @@ fn wgsl_warp_matches_the_cpu_oracle() {
     faded.mix = 50.0;
     let mut off = tapered;
     off.mix = 0.0;
-    for (name, a) in [("tapered", tapered), ("mixed", faded), ("mix-zero", off)] {
+    let mut mirrored = tapered;
+    mirrored.edge = 2;
+    for (name, a) in [
+        ("tapered", tapered),
+        ("mirrored-edges", mirrored),
+        ("mixed", faded),
+        ("mix-zero", off),
+    ] {
         let mut cpu = img.clone();
         lumit_core::fx::cpu::warp(&mut cpu, w, h, &a.packed());
         let out = fx.warp(&ctx, &tex, w, h, None, &op_of(a));
@@ -14456,6 +14480,7 @@ fn the_matte_scales_the_twirl_angle() {
         radius: p.radius,
         inv_radius: p.inv_radius,
         angle: p.angle,
+        edge: p.edge,
         mix: p.mix,
     };
     check_matte_claim(
@@ -14511,6 +14536,7 @@ fn the_matte_scales_the_spherize_bulge() {
         radius: p.radius,
         inv_radius: p.inv_radius,
         bulge: p.bulge,
+        edge: p.edge,
         mix: p.mix,
     };
     check_matte_claim(
@@ -14555,6 +14581,7 @@ fn the_matte_scales_the_ripple_height() {
         inv_width: p.inv_width,
         turns: p.turns,
         asymmetric: p.asymmetric,
+        edge: p.edge,
         mix: p.mix,
     };
     check_matte_claim(
@@ -14637,6 +14664,7 @@ fn the_matte_scales_the_warp_bend() {
         bend: p.bend,
         h_distort: p.h_distort,
         v_distort: p.v_distort,
+        edge: p.edge,
         mix: p.mix,
     };
     check_matte_claim(
