@@ -14,7 +14,7 @@ use super::*;
 /// The §1.6 oracle corpus: a diagonal gradient, a hard alpha edge down
 /// the middle, and an HDR spike — already fp16-quantised, so comparisons
 /// isolate the kernel maths from upload rounding.
-fn corpus(w: u32, h: u32) -> Vec<f32> {
+pub(super) fn corpus(w: u32, h: u32) -> Vec<f32> {
     let mut img = vec![0.0f32; (w * h * 4) as usize];
     for y in 0..h {
         for x in 0..w {
@@ -32,7 +32,7 @@ fn corpus(w: u32, h: u32) -> Vec<f32> {
     img.iter().map(|v| f16_to_f32(f16_bits(*v))).collect()
 }
 
-fn worst_diff(a: &[f32], b: &[f32]) -> f32 {
+pub(super) fn worst_diff(a: &[f32], b: &[f32]) -> f32 {
     a.iter()
         .zip(b)
         .map(|(x, y)| (x - y).abs())

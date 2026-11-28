@@ -38,6 +38,7 @@ mod lens_blur_pipes;
 pub mod lens_dirt;
 pub mod lens_flare;
 pub mod light_leak;
+pub mod light_rays;
 pub mod lighting;
 pub mod particulate;
 pub mod particulate_params;
@@ -60,6 +61,9 @@ pub mod volumetric;
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod denoise_tests;
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod light_rays_tests;
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests;
@@ -359,6 +363,7 @@ pub struct FxEngine {
     lens_dirt: lens_dirt::LazyLensDirt,
     /// Holographic foil, built the first time one is drawn.
     holographic_foil: holographic_foil::LazyHolographicFoil,
+    light_rays: light_rays::LazyLightRays,
     /// Hologram, built the first time one is drawn.
     hologram: hologram::LazyHologram,
     film: film::LazyFilm,

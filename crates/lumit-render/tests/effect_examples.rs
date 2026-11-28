@@ -418,6 +418,13 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
             ("tilt_y", f(6.0)),
             ("backdrop", choice(3)),
         ],
+        "light_rays" => vec![
+            ("threshold", f(50.0)),
+            ("boost_light", f(3.0)),
+            ("colourise", choice(4)),
+            ("source_x", f(1120.0)),
+            ("source_y", f(-150.0)),
+        ],
 
         _ => Vec::new(),
     }

@@ -663,6 +663,10 @@ pub trait EffectDef: Sync + Send + 'static {
         [0, 0]
     }
 
+    fn spread_px_within(&self, p: super::params::Params<'_>, _picture: [f32; 4]) -> [f32; 2] {
+        self.spread_px(p)
+    }
+
     /// Where this op's picture can reach, given where the picture it is
     /// handed reaches: `[left, top, right, bottom]` in the raster pixels its
     /// places are measured in. A node graph box gives its picture that much

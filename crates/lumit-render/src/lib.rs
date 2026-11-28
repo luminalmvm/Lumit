@@ -74,6 +74,7 @@ mod gpufx_hologram;
 mod gpufx_holographic_foil;
 mod gpufx_jolt;
 mod gpufx_light_leak;
+mod gpufx_light_rays;
 mod gpufx_luma_fade;
 mod gpufx_move;
 mod gpufx_particulate;

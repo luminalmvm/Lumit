@@ -75,6 +75,7 @@ pub mod lens_distort;
 pub mod lens_flare;
 pub mod levels;
 pub mod light_leak;
+pub mod light_rays;
 pub mod light_wrap;
 pub mod lightning;
 pub mod linear_wipe;

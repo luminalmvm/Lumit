@@ -34510,6 +34510,154 @@
   "@fxSoftPastelSatin": {
     "description": "Effect presets: a Holographic foil look, pale wide bands on soft satin metal."
   },
+  "fxLightRays": "Light rays",
+  "@fxLightRays": {
+    "description": "Effect name: light streaming out of the picture's bright parts, away from a source point."
+  },
+  "fxPreProcess": "Pre-process",
+  "@fxPreProcess": {
+    "description": "Effect controls: a heading on Light rays over what is done to the picture before the rays are drawn."
+  },
+  "fxUseMask": "Use mask",
+  "@fxUseMask": {
+    "description": "Effect controls: a switch on Light rays; only a circle around the source point throws rays."
+  },
+  "fxMaskRadius": "Mask radius",
+  "@fxMaskRadius": {
+    "description": "Effect controls: a control on Light rays, the size of the circle Use mask keeps, in pixels."
+  },
+  "fxMaskFeather": "Mask feather",
+  "@fxMaskFeather": {
+    "description": "Effect controls: a control on Light rays, how far past the mask's radius the circle fades out, in pixels."
+  },
+  "fxSourcePointX": "Source point X",
+  "@fxSourcePointX": {
+    "description": "Effect controls: a control on Light rays, where the rays start, across."
+  },
+  "fxSourcePointY": "Source point Y",
+  "@fxSourcePointY": {
+    "description": "Effect controls: a control on Light rays, where the rays start, down."
+  },
+  "fxRayLength": "Ray length",
+  "@fxRayLength": {
+    "description": "Effect controls: a control on Light rays, how far the rays reach."
+  },
+  "fxSourcePointAffectsShimmer": "Source point affects shimmer",
+  "@fxSourcePointAffectsShimmer": {
+    "description": "Effect controls: a switch on Light rays; moving the source point moves the shimmer."
+  },
+  "fxReduceFlicker": "Reduce flicker",
+  "@fxReduceFlicker": {
+    "description": "Effect controls: a switch on Light rays; a calmer shimmer while the source point moves."
+  },
+  "fxUseLoop": "Use loop",
+  "@fxUseLoop": {
+    "description": "Effect controls: a switch on Light rays; the shimmer repeats after a number of turns of Phase."
+  },
+  "fxRevolutionsInLoop": "Revolutions in loop",
+  "@fxRevolutionsInLoop": {
+    "description": "Effect controls: a control on Light rays, how many turns of Phase make one loop of the shimmer."
+  },
+  "fxBoostLight": "Boost light",
+  "@fxBoostLight": {
+    "description": "Effect controls: a control on Light rays that brightens the rays, up to burning them out to white."
+  },
+  "fxColourise": "Colourise",
+  "@fxColourise": {
+    "description": "Effect controls: a menu on Light rays: how the rays are coloured, and ready-made colourings."
+  },
+  "fxOneColour": "One colour",
+  "@fxOneColour": {
+    "description": "Effect controls: a Colourise choice on Light rays, the rays in a single colour."
+  },
+  "fx3ColourGradient": "3-colour gradient",
+  "@fx3ColourGradient": {
+    "description": "Effect controls: a Colourise choice on Light rays, the rays coloured by brightness from three colours."
+  },
+  "fx5ColourGradient": "5-colour gradient",
+  "@fx5ColourGradient": {
+    "description": "Effect controls: a Colourise choice on Light rays, the rays coloured by brightness from five colours."
+  },
+  "fxEmber": "Ember",
+  "@fxEmber": {
+    "description": "Effect presets: a Light rays colouring, red shadows through orange to pale yellow."
+  },
+  "fxRust": "Rust",
+  "@fxRust": {
+    "description": "Effect presets: a Light rays colouring, brown through orange to peach."
+  },
+  "fxAcid": "Acid",
+  "@fxAcid": {
+    "description": "Effect presets: a Light rays colouring, dark green through lime to pale yellow-green."
+  },
+  "fxLagoon": "Lagoon",
+  "@fxLagoon": {
+    "description": "Effect presets: a Light rays colouring, dark green through sea green to pale cyan."
+  },
+  "fxOrchid": "Orchid",
+  "@fxOrchid": {
+    "description": "Effect presets: a Light rays colouring, deep blue through violet to pale pink."
+  },
+  "fxPlum": "Plum",
+  "@fxPlum": {
+    "description": "Effect presets: a Light rays colouring, dark purple through magenta to pink."
+  },
+  "fxDusk": "Dusk",
+  "@fxDusk": {
+    "description": "Effect presets: a Light rays colouring, muted mauves to white."
+  },
+  "fxTwilight": "Twilight",
+  "@fxTwilight": {
+    "description": "Effect presets: a Light rays colouring, dark violet through rust to cream."
+  },
+  "fxDawn": "Dawn",
+  "@fxDawn": {
+    "description": "Effect presets: a five-colour Light rays colouring, navy through mauve and rose to pale peach."
+  },
+  "fxIsotope": "Isotope",
+  "@fxIsotope": {
+    "description": "Effect presets: a five-colour Light rays colouring, greens from near black to yellow-green."
+  },
+  "fxThermal": "Thermal",
+  "@fxThermal": {
+    "description": "Effect presets: a five-colour Light rays colouring like a heat camera, blue through green and orange to red."
+  },
+  "fxMidHigh": "Mid-high",
+  "@fxMidHigh": {
+    "description": "Effect controls: a colour on Light rays, between Midtones and Highlights in the five-colour gradient."
+  },
+  "fxMidLow": "Mid-low",
+  "@fxMidLow": {
+    "description": "Effect controls: a colour on Light rays, between Shadows and Midtones in the five-colour gradient."
+  },
+  "fxBasedOn": "Based on",
+  "@fxBasedOn": {
+    "description": "Effect controls: a menu on Light rays, what the colours are picked by: lightness, a channel or the alpha's edges."
+  },
+  "fxAlphaEdges": "Alpha edges",
+  "@fxAlphaEdges": {
+    "description": "Effect controls: a Based on choice on Light rays, the edges of the layer's alpha."
+  },
+  "fxEdgeThickness": "Edge thickness",
+  "@fxEdgeThickness": {
+    "description": "Effect controls: a control on Light rays, how wide the alpha edges are, in pixels."
+  },
+  "fxSourceOpacity": "Source opacity",
+  "@fxSourceOpacity": {
+    "description": "Effect controls: a control on Light rays, how much of the picture shows under the rays."
+  },
+  "fxRaysOpacity": "Rays opacity",
+  "@fxRaysOpacity": {
+    "description": "Effect controls: a control on Light rays, how strong the rays are."
+  },
+  "fxBlendMode": "Blend mode",
+  "@fxBlendMode": {
+    "description": "Effect controls: a menu on Light rays, how the rays go onto the picture; None shows the rays alone."
+  },
+  "fxExtendBeyondLayer": "Extend beyond layer",
+  "@fxExtendBeyondLayer": {
+    "description": "Effect controls: a switch on Light rays; the layer is given room so its rays are not cut off at its bounding box."
+  },
   "resolveImportRunning": "Another Resolve import is running.",
   "@resolveImportRunning": {
     "description": "Error sent back to DaVinci Resolve when a second Resolve selection import is asked for while one is still running."
