@@ -316,7 +316,7 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
 
   ShapePaint get _paint {
     final box = _target;
-    final tools = widget.uiState.tools;
+    final tools = widget.uiState.tools.paintOf(widget.uiState.tools.tool.group);
     final held = box == null
         ? null
         : shapeTargets(widget.uiState, only: box.id).firstOrNull;

@@ -75,7 +75,7 @@ double _now(BridgeScalar s, CompositionReference comp, int frame) =>
         ? s.field0
         : sampledScalar(s, timeOfFrame(comp, frame));
 
-ShapePaint paintOfShape(BridgeShapeItem item, ToolsState tools,
+ShapePaint paintOfShape(BridgeShapeItem item, ToolPaint tools,
     CompositionReference comp, int frame) {
   ToolColour colour(BridgeColour c) => ToolColour(
       _now(c.r, comp, frame), _now(c.g, comp, frame), _now(c.b, comp, frame));
@@ -88,7 +88,7 @@ ShapePaint paintOfShape(BridgeShapeItem item, ToolsState tools,
   );
 }
 
-ShapePaint paintOfTools(ToolsState tools) => (
+ShapePaint paintOfTools(ToolPaint tools) => (
       fillOn: tools.fillOn,
       fill: tools.fill,
       strokeOn: tools.strokeOn,

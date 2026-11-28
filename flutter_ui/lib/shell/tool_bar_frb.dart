@@ -700,15 +700,18 @@ class _ToolOptions extends StatelessWidget {
         ],
       );
     }
-    if (shows == ToolOptions.shape) return _ShapeOptions(tools: tools);
+    if (shows == ToolOptions.shape) {
+      return _ShapeOptions(tools: tools, group: tools.tool.group);
+    }
+    final paint = tools.paintOf(tools.tool.group);
     return Row(
       children: [
         // No None here: text and paint always lay a colour down.
         _Swatch(
           label: l10n.toolFill,
-          colour: tools.fill,
+          colour: paint.fill,
           resetTo: ToolColour.white,
-          onPicked: (colour) => tools.fill = colour,
+          onPicked: (colour) => tools.setPaint(tools.tool.group, fill: colour),
         ),
         const SizedBox(width: 6),
         if (shows == ToolOptions.paint) ...[
@@ -798,8 +801,9 @@ class _ToolOptions extends StatelessWidget {
 
 class _ShapeOptions extends StatefulWidget {
   final ToolsState tools;
+  final ToolGroup group;
 
-  const _ShapeOptions({required this.tools});
+  const _ShapeOptions({required this.tools, required this.group});
 
   @override
   State<_ShapeOptions> createState() => _ShapeOptionsState();
@@ -830,11 +834,12 @@ class _ShapeOptionsState extends State<_ShapeOptions> {
         final comp = ui.selectedComp;
         if (targets.isEmpty || comp == null) {
           _width = null;
-          return _row(ui, const [], paintOfTools(widget.tools));
+          return _row(ui, const [], paintOfTools(widget.tools.paintOf(widget.group)));
         }
         final shape = shownShape(targets.first);
         Widget live() => _row(ui, targets,
-            paintOfShape(shape, widget.tools, comp, ui.playheadFrame.value));
+            paintOfShape(shape, widget.tools.paintOf(widget.group), comp,
+                ui.playheadFrame.value));
         final moves = [
           for (final colour in [shape.fill, shape.stroke])
             if (colour != null) ...[colour.r, colour.g, colour.b],
@@ -872,6 +877,7 @@ class _ShapeOptionsState extends State<_ShapeOptions> {
 
   Widget _row(LumitUiState ui, List<ShapeTarget> targets, ShapePaint paint) {
     final tools = widget.tools;
+    final group = widget.group;
     final target = targets.firstOrNull;
     return Row(
       children: [
@@ -880,7 +886,7 @@ class _ShapeOptionsState extends State<_ShapeOptions> {
           colour: paint.fill,
           resetTo: ToolColour.white,
           onPicked: (colour) => target == null
-              ? tools.fill = colour
+              ? tools.setPaint(group, fill: colour)
               : _commit(ui, targets, fillColourEdit(colour)),
           onPreview: target == null
               ? null
@@ -888,7 +894,7 @@ class _ShapeOptionsState extends State<_ShapeOptions> {
           onClosed: target == null ? null : () => _drop(ui, target),
           on: paint.fillOn,
           onToggle: (on) => target == null
-              ? tools.fillOn = on
+              ? tools.setPaint(group, fillOn: on)
               : _commit(ui, targets, fillOnEdit(on, paint.fill)),
         ),
         const SizedBox(width: 6),
@@ -897,7 +903,7 @@ class _ShapeOptionsState extends State<_ShapeOptions> {
           colour: paint.stroke,
           resetTo: ToolColour.black,
           onPicked: (colour) => target == null
-              ? tools.stroke = colour
+              ? tools.setPaint(group, stroke: colour)
               : _commit(ui, targets, strokeColourEdit(colour)),
           onPreview: target == null
               ? null
@@ -905,7 +911,7 @@ class _ShapeOptionsState extends State<_ShapeOptions> {
           onClosed: target == null ? null : () => _drop(ui, target),
           on: paint.strokeOn,
           onToggle: (on) => target == null
-              ? tools.strokeOn = on
+              ? tools.setPaint(group, strokeOn: on)
               : _commit(ui, targets, strokeOnEdit(on, paint.stroke)),
         ),
         const SizedBox(width: 6),
@@ -917,7 +923,7 @@ class _ShapeOptionsState extends State<_ShapeOptions> {
           max: 1000,
           suffix: ' px',
           onChanged: (v) => target == null
-              ? tools.strokeWidth = v
+              ? tools.setPaint(group, strokeWidth: v)
               : _commit(ui, targets, strokeWidthEdit(v, paint.stroke)),
           onChangeLive: target == null
               ? null
