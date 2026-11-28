@@ -217,6 +217,7 @@ pub struct Analysis {
     pub min_area: f32,
     pub max_area: f32,
     pub max_distance: f32,
+    pub frames: u32,
 }
 
 impl Analysis {
@@ -252,6 +253,7 @@ impl Analysis {
                 min_area: at("min_area", 16.0),
                 max_area: at("max_area", 1_000_000.0),
                 max_distance: at("max_distance", 50.0),
+                frames: choice("frames", 0),
             }
         } else {
             Analysis {
@@ -266,6 +268,7 @@ impl Analysis {
                 min_area: 0.0,
                 max_area: 0.0,
                 max_distance: 0.0,
+                frames: choice("frames", 0),
             }
         })
     }
