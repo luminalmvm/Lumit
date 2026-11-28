@@ -1,10 +1,6 @@
 use super::Layer;
 
 impl Layer {
-    /// How fast the layer's source runs at layer time `lt`, 1.0 being 100%.
-    /// An expression on Retime is read as [`Layer::source_time_at`] reads it,
-    /// with the comp's time. Read without, it holds still, and Flow never
-    /// engages.
     pub fn speed_at(&self, lt: f64) -> f64 {
         match &self.retime {
             Some(r) if matches!(r.animation, crate::anim::Animation::Expression(_)) => {

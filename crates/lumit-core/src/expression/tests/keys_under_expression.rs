@@ -70,7 +70,6 @@ fn a_retime_loops_with_loop_out() {
     assert!((layer.source_time_at(1.0) - 1.0).abs() < 1e-9);
     assert!((layer.source_time_at(3.0) - 1.0).abs() < 1e-9);
     assert!((layer.source_time_at(5.5) - 1.5).abs() < 1e-9);
-    // Flow reads the speed, and a still one keeps it off.
     assert!((layer.speed_at(5.5) - 1.0).abs() < 1e-6);
     // The layer starting later moves the keys with it.
     layer.start_offset.0 = Rational::new(10, 1).unwrap();
