@@ -3266,7 +3266,7 @@ class _EffectSection extends StatelessWidget {
             ?.info
             .copy;
 
-    ({String label, VoidCallback onSwap})? swapFor(
+    VoidCallback? swapFor(
         BridgeParamInfo param, BridgeParamInfo? next) {
       if (next == null ||
           folded.contains(next.id) ||
@@ -3276,7 +3276,7 @@ class _EffectSection extends StatelessWidget {
               .any((p) => p.first == param.id && p.second == next.id)) {
         return null;
       }
-      return (label: next.label, onSwap: () => _swapColours(param.id));
+      return () => _swapColours(param.id);
     }
 
     Widget rowFor(BridgeParamInfo param) {
@@ -3671,7 +3671,7 @@ class _SwapPair extends StatefulWidget {
   final Widget first;
   final Widget second;
   final String swapKey;
-  final ({String label, VoidCallback onSwap}) swap;
+  final VoidCallback swap;
   final bool lined;
 
   const _SwapPair({
@@ -3731,13 +3731,13 @@ class _SwapPairState extends State<_SwapPair> {
             targetAnchor: Alignment.center,
             followerAnchor: Alignment.center,
             child: LumitTooltip(
-              message: l10n.tipSwapColours(engineLabel(swap.label)),
+              message: l10n.tipSwapColours,
               child: HoverMark(
                 swells: true,
                 builder: (context, lit) => GestureDetector(
                   key: ValueKey<String>(swapKey),
                   behavior: HitTestBehavior.opaque,
-                  onTap: swap.onSwap,
+                  onTap: swap,
                   child: SizedBox(
                     width: 18,
                     height: 18,

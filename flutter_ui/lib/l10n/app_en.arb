@@ -12067,15 +12067,9 @@
   "@tipSampleFromViewer": {
     "description": "Tooltip on the eyedropper that reads a colour off the picture. One or two words."
   },
-  "tipSwapColours": "Swap with {label}",
+  "tipSwapColours": "Swap colours",
   "@tipSwapColours": {
-    "description": "Tooltip on the button between two paired colour rows in Effect controls, such as Start colour and End colour. Pressing it swaps the two colours, keyframes and all. The placeholder is the other row's name.",
-    "placeholders": {
-      "label": {
-        "type": "String",
-        "example": "End colour"
-      }
-    }
+    "description": "Tooltip on the button between two paired colour rows in Effect controls, such as Start colour and End colour. Pressing it swaps the two colours, keyframes and all. One or two words."
   },
   "tipShowEverything": "Show everything",
   "@tipShowEverything": {
