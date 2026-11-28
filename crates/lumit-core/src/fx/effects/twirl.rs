@@ -59,6 +59,13 @@ pub struct Twirl {
     #[slider(label = "Centre Y", min = 0.0, max = 2160.0, default = 540.0, unit = Px)]
     pub centre_y: f32,
 
+    #[choice(
+        label = "Edges",
+        options = *crate::fx::builtins::EDGE_OPTIONS,
+        default = 2
+    )]
+    pub edge: u32,
+
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -86,6 +93,7 @@ impl Twirl {
             // radius` test short-circuits before the reciprocal is used anyway.
             inv_radius: 1.0 / radius.max(1e-3),
             angle: self.angle.to_radians(),
+            edge: self.edge.min(2),
             mix: (self.mix / 100.0).clamp(0.0, 1.0),
         }
     }

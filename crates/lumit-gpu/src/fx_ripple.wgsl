@@ -19,7 +19,7 @@ struct Params {
     mix_amt: f32,        // 0..1, blended against the unprocessed input
     asymmetric: u32,     // 1 = add the tangential half of the wave
     matte_on: f32,       // 1 = the matte scales Wave height
-    _pad1: u32,
+    edge: u32,
     _pad2: u32,
 };
 
@@ -43,14 +43,33 @@ fn matte_k(xy: vec2<i32>) -> f32 {
 
 const TAU: f32 = 6.2831855;
 
-// == cpu::bilinear_edge with the Repeat policy (edge == 1): a ring wider than
-// the frame's own half-height reaches outside it, and a transparent edge would
-// punch a bite out of the picture where the crest was.
-fn tap(x: i32, y: i32, size: vec2<i32>) -> vec4<f32> {
-    return textureLoad(src, vec2<i32>(clamp(x, 0, size.x - 1), clamp(y, 0, size.y - 1)), 0);
+fn edge_idx(i: i32, len: i32) -> i32 {
+    if (i >= 0 && i < len) {
+        return i;
+    }
+    if (p.edge == 1u) {
+        return clamp(i, 0, len - 1);
+    }
+    if (p.edge == 2u) {
+        var m = i;
+        if (m < 0) {
+            m = -m;
+        } else {
+            m = 2 * (len - 1) - m;
+        }
+        return clamp(m, 0, len - 1);
+    }
+    return -1;
 }
 
-fn bilinear_repeat(sx: f32, sy: f32, size: vec2<i32>) -> vec4<f32> {
+fn tap(x: i32, y: i32, size: vec2<i32>) -> vec4<f32> {
+    let xi = edge_idx(x, size.x);
+    let yi = edge_idx(y, size.y);
+    let c = clamp(vec2<i32>(xi, yi), vec2<i32>(0, 0), size - vec2<i32>(1, 1));
+    return select(textureLoad(src, c, 0), vec4<f32>(0.0), xi < 0 || yi < 0);
+}
+
+fn bilinear_edge(sx: f32, sy: f32, size: vec2<i32>) -> vec4<f32> {
     let fx = sx - 0.5;
     let fy = sy - 0.5;
     let x0 = floor(fx);
@@ -106,6 +125,6 @@ fn ripple(@builtin(global_invocation_id) gid: vec3<u32>) {
             sy = py + ny * sn * env;
         }
     }
-    let v = bilinear_repeat(sx, sy, size);
+    let v = bilinear_edge(sx, sy, size);
     textureStore(dst, xy, o * (1.0 - p.mix_amt) + v * p.mix_amt);
 }

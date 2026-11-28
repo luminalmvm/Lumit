@@ -8877,6 +8877,19 @@
           "hard_max": 100.0
         },
         {
+          "id": "edge",
+          "label": "Edges",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 2,
+          "options": [
+            "None",
+            "Edge repeat",
+            "Mirror repeat"
+          ],
+          "dividers_after": []
+        },
+        {
           "id": "mix",
           "label": "Mix",
           "kind": "float",
@@ -8999,6 +9012,19 @@
           "default": 540.0,
           "slider_min": 0.0,
           "slider_max": 2160.0
+        },
+        {
+          "id": "edge",
+          "label": "Edges",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 2,
+          "options": [
+            "None",
+            "Edge repeat",
+            "Mirror repeat"
+          ],
+          "dividers_after": []
         },
         {
           "id": "mix",
@@ -9130,6 +9156,19 @@
           "default": 540.0,
           "slider_min": 0.0,
           "slider_max": 2160.0
+        },
+        {
+          "id": "edge",
+          "label": "Edges",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 2,
+          "options": [
+            "None",
+            "Edge repeat",
+            "Mirror repeat"
+          ],
+          "dividers_after": []
         },
         {
           "id": "mix",
@@ -9299,6 +9338,19 @@
           "default": 1.0,
           "slider_min": -5.0,
           "slider_max": 5.0
+        },
+        {
+          "id": "edge",
+          "label": "Edges",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 2,
+          "options": [
+            "None",
+            "Edge repeat",
+            "Mirror repeat"
+          ],
+          "dividers_after": []
         },
         {
           "id": "mix",
@@ -9980,6 +10032,19 @@
           "slider_max": 100.0,
           "hard_min": -100.0,
           "hard_max": 100.0
+        },
+        {
+          "id": "edge",
+          "label": "Edges",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 2,
+          "options": [
+            "None",
+            "Edge repeat",
+            "Mirror repeat"
+          ],
+          "dividers_after": []
         },
         {
           "id": "mix",

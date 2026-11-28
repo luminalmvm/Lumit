@@ -3848,6 +3848,33 @@ fn a_saved_wave_holds_still() {
 }
 
 #[test]
+fn a_saved_distortion_keeps_its_edges() {
+    for (name, drew_with) in [
+        ("warp", 0),
+        ("spherize", 0),
+        ("twirl", 0),
+        ("polar_coordinates", 0),
+        ("ripple", 1),
+    ] {
+        let mut saved = instantiate(name).unwrap();
+        saved.params.retain(|p| p.id != "edge");
+        let mut effects = vec![saved, instantiate(name).unwrap()];
+        backfill_builtin_params(&mut effects);
+        let edge = |e: &EffectInstance| e.param("edge").cloned();
+        assert_eq!(
+            edge(&effects[0]),
+            Some(EffectValue::Choice(drew_with)),
+            "{name} saved before it"
+        );
+        assert_eq!(
+            edge(&effects[1]),
+            Some(EffectValue::Choice(2)),
+            "{name} added now"
+        );
+    }
+}
+
+#[test]
 fn radial_blurs_percent_centre_converts_to_pixels_on_load() {
     let (w, h) = (1920.0, 1080.0);
     let mut inst = instantiate("radial_blur").unwrap();

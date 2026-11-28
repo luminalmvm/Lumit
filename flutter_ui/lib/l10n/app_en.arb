@@ -2873,6 +2873,10 @@
   "@settingsToolBarPosition": {
     "description": "Settings window: the name of the row choosing whether the toolbar is a strip across the top or a rail down the left."
   },
+  "settingsToolOptionsBeside": "Options beside the tool",
+  "@settingsToolOptionsBeside": {
+    "description": "Settings window and the toolbar's right-click menu: the switch that opens the armed tool's options right beside its button instead of after the tools."
+  },
   "shapeDesk": "Desk",
   "@shapeDesk": {
     "description": "Settings window: the Desk choice for the Shape setting, flush panels on a four-pixel module."

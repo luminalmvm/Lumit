@@ -15,7 +15,7 @@ struct Params {
     mix_amt: f32,        // 0..1, blended against the unprocessed input
     style: u32,          // 0..12, docs/08 §3.56's table order
     matte_on: f32,       // 1 = the matte scales Bend and both distortions
-    _pad1: u32,
+    edge: u32,
     _pad2: u32,
 };
 
@@ -39,15 +39,35 @@ fn matte_k(xy: vec2<i32>) -> f32 {
 
 const PI: f32 = 3.1415927;
 
-// == cpu::bilinear_edge with the Transparent policy (edge == 0); the tap never
-// loads out of bounds (docs/08 §3.50's note).
-fn tap(x: i32, y: i32, size: vec2<i32>) -> vec4<f32> {
-    let inside = x >= 0 && x < size.x && y >= 0 && y < size.y;
-    let c = clamp(vec2<i32>(x, y), vec2<i32>(0, 0), size - vec2<i32>(1, 1));
-    return select(vec4<f32>(0.0, 0.0, 0.0, 0.0), textureLoad(src, c, 0), inside);
+fn edge_idx(i: i32, len: i32) -> i32 {
+    if (i >= 0 && i < len) {
+        return i;
+    }
+    if (p.edge == 1u) {
+        return clamp(i, 0, len - 1);
+    }
+    if (p.edge == 2u) {
+        var m = i;
+        if (m < 0) {
+            m = -m;
+        } else {
+            m = 2 * (len - 1) - m;
+        }
+        return clamp(m, 0, len - 1);
+    }
+    return -1;
 }
 
-fn bilinear_transparent(sx: f32, sy: f32, size: vec2<i32>) -> vec4<f32> {
+// == cpu::bilinear_edge; the tap never loads out of bounds
+// (docs/08 §3.50's note).
+fn tap(x: i32, y: i32, size: vec2<i32>) -> vec4<f32> {
+    let xi = edge_idx(x, size.x);
+    let yi = edge_idx(y, size.y);
+    let c = clamp(vec2<i32>(xi, yi), vec2<i32>(0, 0), size - vec2<i32>(1, 1));
+    return select(textureLoad(src, c, 0), vec4<f32>(0.0), xi < 0 || yi < 0);
+}
+
+fn bilinear_edge(sx: f32, sy: f32, size: vec2<i32>) -> vec4<f32> {
     let fx = sx - 0.5;
     let fy = sy - 0.5;
     let x0 = floor(fx);
@@ -152,6 +172,6 @@ fn warp(@builtin(global_invocation_id) gid: vec3<u32>) {
     let dv = m.y / (1.0 + p.h_distort * k * m.x);
     let sx = px + (du - u) * half_w;
     let sy = py + (dv - v) * half_h;
-    let val = bilinear_transparent(sx, sy, size);
+    let val = bilinear_edge(sx, sy, size);
     textureStore(dst, xy, o * (1.0 - p.mix_amt) + val * p.mix_amt);
 }

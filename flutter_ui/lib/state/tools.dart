@@ -292,7 +292,25 @@ class ToolColour {
 
   @override
   int get hashCode => Object.hash(r, g, b);
+
+  BridgeColourRgba get rgba => BridgeColourRgba(r: r, g: g, b: b, a: 1);
 }
+
+typedef ToolPaint = ({
+  ToolColour fill,
+  bool fillOn,
+  ToolColour stroke,
+  bool strokeOn,
+  double strokeWidth,
+});
+
+const ToolPaint _shippedPaint = (
+  fill: ToolColour.white,
+  fillOn: true,
+  stroke: ToolColour.black,
+  strokeOn: true,
+  strokeWidth: 2,
+);
 
 /// A tool colour as something a canvas can paint with.
 ///
@@ -394,14 +412,12 @@ class ToolsState extends ChangeNotifier {
         _axes = GizmoAxes.local;
         _rotateSets = RotateSets.orientation;
       case ToolGroup.type:
-        _fill = ToolColour.white;
+        _paints.remove(group);
         _textSize = plainTextSize;
       case ToolGroup.shape || ToolGroup.pen:
-        _fill = ToolColour.white;
-        _stroke = ToolColour.black;
-        _strokeWidth = 2;
+        _paints.remove(group);
       case ToolGroup.paint:
-        _fill = ToolColour.white;
+        _paints.remove(group);
         _brushSize = 20;
         _brushHardness = 80;
         _brushShape = BridgeBrushShape.round;
@@ -440,27 +456,39 @@ class ToolsState extends ChangeNotifier {
     notifyListeners();
   }
 
-  ToolColour _fill = ToolColour.white;
-  ToolColour get fill => _fill;
-  set fill(ToolColour value) {
-    if (_fill == value) return;
-    _fill = value;
+  final Map<ToolGroup, ToolPaint> _paints = {};
+
+  ToolPaint paintOf(ToolGroup group) => _paints[group] ?? _shippedPaint;
+
+  void setPaint(
+    ToolGroup group, {
+    ToolColour? fill,
+    bool? fillOn,
+    ToolColour? stroke,
+    bool? strokeOn,
+    double? strokeWidth,
+  }) {
+    final was = paintOf(group);
+    final ToolPaint now = (
+      fill: fill ?? was.fill,
+      fillOn: fillOn ?? was.fillOn,
+      stroke: stroke ?? was.stroke,
+      strokeOn: strokeOn ?? was.strokeOn,
+      strokeWidth: (strokeWidth ?? was.strokeWidth).clamp(0.0, 1000.0),
+    );
+    if (now == was) return;
+    _paints[group] = now;
     notifyListeners();
   }
 
-  bool _fillOn = true;
-  bool get fillOn => _fillOn;
-  set fillOn(bool value) {
-    if (_fillOn == value) return;
-    _fillOn = value;
-    notifyListeners();
-  }
+  ToolColour get fill => paintOf(_tool.group).fill;
+
+  bool get fillOn => paintOf(_tool.group).fillOn;
 
   /// The fill as the bridge wants it. Opaque: a fill's transparency is the
   /// layer's Opacity, which is a transform property and animatable, rather than
   /// a fourth number hidden in a swatch.
-  BridgeColourRgba get fillRgba =>
-      BridgeColourRgba(r: _fill.r, g: _fill.g, b: _fill.b, a: 1);
+  BridgeColourRgba get fillRgba => fill.rgba;
 
   double _textSize = plainTextSize;
   double get textSize => _textSize;
@@ -496,30 +524,11 @@ class ToolsState extends ChangeNotifier {
   ///
   /// Live since shape layers landed: a width of zero draws no outline, which is
   /// how a fill-only shape is made.
-  ToolColour _stroke = ToolColour.black;
-  ToolColour get stroke => _stroke;
-  set stroke(ToolColour value) {
-    if (_stroke == value) return;
-    _stroke = value;
-    notifyListeners();
-  }
+  ToolColour get stroke => paintOf(_tool.group).stroke;
 
-  bool _strokeOn = true;
-  bool get strokeOn => _strokeOn;
-  set strokeOn(bool value) {
-    if (_strokeOn == value) return;
-    _strokeOn = value;
-    notifyListeners();
-  }
+  bool get strokeOn => paintOf(_tool.group).strokeOn;
 
-  double _strokeWidth = 2;
-  double get strokeWidth => _strokeWidth;
-  set strokeWidth(double value) {
-    final next = value.clamp(0.0, 1000.0);
-    if (_strokeWidth == next) return;
-    _strokeWidth = next;
-    notifyListeners();
-  }
+  double get strokeWidth => paintOf(_tool.group).strokeWidth;
 
   /// The **brush**: how wide a paint stroke is in layer pixels, how hard its
   /// edge is and how opaque the mark it leaves. Its own settings rather
