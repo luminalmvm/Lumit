@@ -124,7 +124,7 @@ mixin TextTargetState<T extends StatefulWidget> on State<T> {
   BridgeTextDocument _newText(ToolsState tools) => BridgeTextDocument(
         text: '',
         size: tools.textSize,
-        fill: tools.fillRgba,
+        fill: tools.paintOf(ToolGroup.type).fill.rgba,
         pathOffset: const BridgeScalar.static_(0),
         animators: const [],
         style: tools.textStyle,
@@ -181,7 +181,8 @@ mixin TextTargetState<T extends StatefulWidget> on State<T> {
       final next = change(target.held);
       ui.tools
         ..textSize = next.size
-        ..fill = ToolColour(next.fill.r, next.fill.g, next.fill.b)
+        ..setPaint(ToolGroup.type,
+            fill: ToolColour(next.fill.r, next.fill.g, next.fill.b))
         ..textStyle = next.style
         ..paragraphStyle = next.paragraph;
       return;

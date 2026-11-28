@@ -49,6 +49,7 @@ final Map<String, Object?> shippedSettings = () {
     'settings-themed-surround': w.themedViewerSurround,
     'settings-viewer-bars': i.viewerBars,
     'settings-tool-bar-position': i.toolBarPosition,
+    'settings-tool-options-beside': i.toolOptionsBeside,
     'settings-range-sliders': i.rangeSliders,
     'settings-command-box': i.commandBox,
     'settings-icon-set': i.iconSet,

@@ -81,6 +81,7 @@ void main() {
       compact: true,
       viewerBars: ViewerBars.bottom,
       toolBarPosition: ToolBarPosition.left,
+      toolOptionsBeside: true,
       rangeSliders: false,
       rightClickOpensNodeSearch: true,
       tabOpensNodeSearch: false,
@@ -148,6 +149,7 @@ void main() {
     expect(back.compact, isTrue);
     expect(back.viewerBars, ViewerBars.bottom);
     expect(back.toolBarPosition, ToolBarPosition.left);
+    expect(back.toolOptionsBeside, isTrue);
     expect(back.rangeSliders, isFalse);
     expect(back.rightClickOpensNodeSearch, isTrue);
     expect(back.tabOpensNodeSearch, isFalse);
@@ -174,7 +176,7 @@ void main() {
     expect(back.transcriptLift, isTrue);
     // Every field is one of the above: a new one added without a line here is
     // a setting nothing checks survives the file.
-    expect(all.toJson().keys.length, 68);
+    expect(all.toJson().keys.length, 69);
   });
 
   // The whole first-run rule in two lines: no file means ask, a file means
