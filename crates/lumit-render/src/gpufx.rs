@@ -2017,7 +2017,7 @@ impl GpuEffect for BezierWarp {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::distort::BezierWarpOp {
+            &lumit_gpu::fx::patch_warp::BezierWarpOp {
                 pts: b.pts,
                 steps: b.steps,
                 mix: b.mix,
@@ -2052,7 +2052,7 @@ impl GpuEffect for MeshWarp {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::distort::MeshWarpOp {
+            &lumit_gpu::fx::patch_warp::MeshWarpOp {
                 rows: m.rows,
                 columns: m.columns,
                 pts: m.pts,

@@ -5,6 +5,7 @@ use super::distort::*;
 use super::generate::*;
 use super::lens_blur::*;
 use super::lens_flare::*;
+use super::patch_warp::*;
 use super::split::*;
 use super::stylise::*;
 use super::temporal::*;
