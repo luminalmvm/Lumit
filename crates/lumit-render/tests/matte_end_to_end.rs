@@ -340,6 +340,32 @@ fn the_matte_dropdown_on_an_adjustment_layer_gates_its_stack() {
         lumit_gpu::no_adapter();
         return;
     };
+    let (rgba, w) = matted_adjustment(&mut r, lumit_core::model::BlendMode::Normal, 100.0);
+
+    let lifted = lumit_core::pixels::srgb_encode(0.5);
+    let source = lumit_core::pixels::srgb_encode(0.25);
+    assert_ne!(lifted, source, "the Exposure must actually do something");
+    for x in LIT {
+        assert_eq!(
+            px(&rgba, w, x),
+            lifted,
+            "column {x} is under the layer matte: the adjustment applies in full"
+        );
+    }
+    for x in DARK {
+        assert_eq!(
+            px(&rgba, w, x),
+            source,
+            "column {x} is past the layer matte: the adjustment is held off"
+        );
+    }
+}
+
+fn matted_adjustment(
+    r: &mut HeadlessRenderer,
+    blend: lumit_core::model::BlendMode,
+    opacity: f64,
+) -> (Vec<u8>, u32) {
     let grey_def = Uuid::now_v7();
     let white_def = Uuid::now_v7();
     let mut doc = Document::new();
@@ -369,6 +395,8 @@ fn the_matte_dropdown_on_an_adjustment_layer_gates_its_stack() {
         inverted: false,
         source: lumit_core::model::LayerInputSource::default(),
     });
+    adjust.blend = blend;
+    adjust.transform.opacity = lumit_core::anim::Property::fixed(opacity);
 
     let base = layer("base", LayerKind::Solid { def: grey_def });
     let comp = comp_of("Comp", vec![matte_layer, adjust, base]);
@@ -376,23 +404,28 @@ fn the_matte_dropdown_on_an_adjustment_layer_gates_its_stack() {
     doc.items.push(ProjectItem::Composition(comp));
     let doc = Arc::new(doc);
     let (rgba, w, _h) = r.render_rgba(&doc, comp_id, 0, 1.0).expect("render");
+    (rgba, w)
+}
 
-    let lifted = lumit_core::pixels::srgb_encode(0.5);
+#[test]
+fn an_adjustment_layer_blends_by_its_mode_under_its_matte_and_opacity() {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    let (rgba, w) = matted_adjustment(&mut r, lumit_core::model::BlendMode::Multiply, 50.0);
+    let (plate, lifted, opacity) = (0.25, 0.5, 0.5);
+    let want = lumit_core::pixels::srgb_encode(plate * (1.0 - opacity) + lifted * plate * opacity);
     let source = lumit_core::pixels::srgb_encode(0.25);
-    assert_ne!(lifted, source, "the Exposure must actually do something");
     for x in LIT {
-        assert_eq!(
-            px(&rgba, w, x),
-            lifted,
-            "column {x} is under the layer matte: the adjustment applies in full"
+        let got = px(&rgba, w, x);
+        assert!(
+            (i16::from(got) - i16::from(want)).abs() <= 1,
+            "column {x}: half a Multiply over the plate, got {got} want {want}"
         );
     }
     for x in DARK {
-        assert_eq!(
-            px(&rgba, w, x),
-            source,
-            "column {x} is past the layer matte: the adjustment is held off"
-        );
+        assert_eq!(px(&rgba, w, x), source, "column {x} is past the matte");
     }
 }
 

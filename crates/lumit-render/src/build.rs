@@ -4550,7 +4550,16 @@ fn comp_walk(
                     }
                     ab
                 });
-                if fx.is_empty() && temporal_below.is_none() && accumulation_below.is_none() {
+                let blend = if layer.is_adjustment() {
+                    blend_of(layer.blend)
+                } else {
+                    lumit_gpu::composite::Blend::Normal
+                };
+                if fx.is_empty()
+                    && temporal_below.is_none()
+                    && accumulation_below.is_none()
+                    && blend == lumit_gpu::composite::Blend::Normal
+                {
                     continue;
                 }
 
@@ -4592,7 +4601,7 @@ fn comp_walk(
                     // multiplies into the coverage the blend uses (realise.rs).
                     matte,
                     display_blend: false,
-                    blend: lumit_gpu::composite::Blend::Normal,
+                    blend,
                     mask_cov: (native && !layer.masks.is_empty()).then(|| {
                         // Adjustment masks live in comp space (comp-sized
                         // natural), same as the property panel treats them.

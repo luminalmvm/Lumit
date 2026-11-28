@@ -838,7 +838,7 @@
   "crates/lumit-core/tests/graphics_templates/data.rs": 2,
   "crates/lumit-core/tests/graphics_templates/main.rs": 2,
   "crates/lumit-core/tests/layer_groups.rs": 13,
-  "crates/lumit-eval/src/algo.rs": 68,
+  "crates/lumit-eval/src/algo.rs": 69,
   "crates/lumit-eval/src/blend_tag.rs": 4,
   "crates/lumit-eval/src/edge_key.rs": 11,
   "crates/lumit-eval/src/epoch.rs": 40,
