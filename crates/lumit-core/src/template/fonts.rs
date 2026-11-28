@@ -5,7 +5,8 @@
 
 use uuid::Uuid;
 
-use super::Value;
+use super::{Template, Value};
+use crate::fx::effects::template as values;
 use crate::model::{Document, LayerKind};
 
 #[must_use]
@@ -27,6 +28,19 @@ pub fn used(doc: &Document, comp: Uuid) -> Vec<(String, String)> {
         for layer in &c.layers {
             if let LayerKind::Text { document } = &layer.kind {
                 add(&document.style.family, &document.style.face);
+            }
+        }
+        // A copy of another template keeps the fonts it set for itself in
+        // its rows, not in a Text layer.
+        for inst in c.effects().filter(|inst| values::comp_of(inst).is_some()) {
+            let template = Template {
+                controls: values::held(inst).controls,
+                ..Template::default()
+            };
+            for setting in values::settings_at(inst, &template, 0.0, None, None) {
+                if let Value::Font { family, face } = &setting.value {
+                    add(family, face);
+                }
             }
         }
         if let Some(template) = c.template() {
