@@ -1936,6 +1936,11 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               }),
             ),
           ),
+          _flag(t, 'settings-tool-options-beside', l10n.settingsToolOptionsBeside,
+              value: settings.toolOptionsBeside, set: (on) {
+            settings.toolOptionsBeside = on;
+            ui.workspace.settingsChanged();
+          }),
           _flag(t, 'settings-range-sliders', l10n.settingsRangeSliders,
               value: settings.rangeSliders, set: (on) {
             settings.rangeSliders = on;
