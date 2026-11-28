@@ -4525,12 +4525,12 @@ mod tests {
         let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
         let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
         let cut = row(vec![clip_a.clone(), clip_b.clone()]);
-        // Pinned under ALGO_VERSION 39, which renamed every frame.
+        // Pinned under ALGO_VERSION 40, which renamed every frame.
         assert_eq!(
             (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
             (
-                10_991_311_696_600_339_586_898_468_257_015_771_328,
-                285_399_519_622_223_874_903_838_762_712_073_095_825
+                121_904_752_002_553_138_433_212_294_008_473_459_933,
+                81_906_824_575_257_275_316_757_728_574_062_438_238
             )
         );
 

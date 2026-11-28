@@ -3153,6 +3153,7 @@ pub struct PolarParams {
     /// Interpolation ÷ 100: how far along its own path into the other space each
     /// pixel is drawn from. 0 is the bit-exact identity.
     pub interp: f32,
+    pub edge: u32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
 }
@@ -3195,7 +3196,7 @@ pub fn polar_coordinates(rgba: &mut [f32], w: u32, h: u32, p: &PolarParams) {
                 h,
                 px + (qx - px) * p.interp,
                 py + (qy - py) * p.interp,
-                0,
+                p.edge,
             );
             for c in 0..4 {
                 rgba[i + c] = original[i + c] * (1.0 - p.mix) + v[c] * p.mix;
@@ -3217,6 +3218,7 @@ pub struct TwirlParams {
     pub inv_radius: f32,
     /// Angle in radians; positive turns the picture clockwise on screen.
     pub angle: f32,
+    pub edge: u32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
 }
@@ -3227,7 +3229,7 @@ pub struct TwirlParams {
 ///
 /// A rotation about the centre preserves the radius, so a twirl never samples
 /// outside its own circle; the only samples that leave the frame are the ones
-/// whose circle already hung over the edge, and those read transparent.
+/// whose circle already hung over the edge.
 ///
 /// Mix 0, Angle 0 and Radius 0 are all the bit-exact identity.
 pub fn twirl(rgba: &mut [f32], w: u32, h: u32, p: &TwirlParams) {
@@ -3260,7 +3262,7 @@ pub fn twirl_matted(rgba: &mut [f32], w: u32, h: u32, p: &TwirlParams, matte: &[
                     p.centre[1] - dx * sin + dy * cos,
                 )
             };
-            let v = bilinear_edge(&original, w, h, sx, sy, 0);
+            let v = bilinear_edge(&original, w, h, sx, sy, p.edge);
             for c in 0..4 {
                 rgba[i + c] = original[i + c] * (1.0 - p.mix) + v[c] * p.mix;
             }
@@ -3279,6 +3281,7 @@ pub struct SpherizeParams {
     /// Bulge ÷ 100, −1..1. The sign chooses the map, the magnitude blends
     /// toward it; 0 is the exact identity.
     pub bulge: f32,
+    pub edge: u32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
 }
@@ -3329,7 +3332,7 @@ pub fn spherize_matted(rgba: &mut [f32], w: u32, h: u32, p: &SpherizeParams, mat
                 let scale = (rho + (target - rho) * bulge.abs()) / rho;
                 (p.centre[0] + dx * scale, p.centre[1] + dy * scale)
             };
-            let v = bilinear_edge(&original, w, h, sx, sy, 0);
+            let v = bilinear_edge(&original, w, h, sx, sy, p.edge);
             for c in 0..4 {
                 rgba[i + c] = original[i + c] * (1.0 - p.mix) + v[c] * p.mix;
             }
@@ -3358,6 +3361,7 @@ pub struct RippleParams {
     /// Asymmetric adds the tangential half of the wave, a quarter-turn out of
     /// phase, so a pixel walks a small circle instead of sliding.
     pub asymmetric: bool,
+    pub edge: u32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
 }
@@ -3411,10 +3415,7 @@ pub fn ripple_matted(rgba: &mut [f32], w: u32, h: u32, p: &RippleParams, matte: 
                     (px + nx * sin * env, py + ny * sin * env)
                 }
             };
-            // Repeat edges, as §3.54's and §3.38's warps use: a ring wider than
-            // the frame's own half-height reaches outside it, and a transparent
-            // edge would punch a bite out of the picture where the crest was.
-            let v = bilinear_edge(&original, w, h, sx, sy, 1);
+            let v = bilinear_edge(&original, w, h, sx, sy, p.edge);
             for c in 0..4 {
                 rgba[i + c] = original[i + c] * (1.0 - p.mix) + v[c] * p.mix;
             }
@@ -3725,6 +3726,7 @@ pub struct WarpParams {
     pub h_distort: f32,
     /// Vertical distortion ÷ 100; see [`h_distort`](Self::h_distort).
     pub v_distort: f32,
+    pub edge: u32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
 }
@@ -3815,7 +3817,7 @@ pub fn warp_matted(rgba: &mut [f32], w: u32, h: u32, p: &WarpParams, matte: &[f3
             let dv = m[1] / (1.0 + p.h_distort * k * m[0]);
             let sx = px + (du - u) * half_w;
             let sy = py + (dv - v) * half_h;
-            let val = bilinear_edge(&original, w, h, sx, sy, 0);
+            let val = bilinear_edge(&original, w, h, sx, sy, p.edge);
             for c in 0..4 {
                 rgba[i + c] = original[i + c] * (1.0 - p.mix) + val[c] * p.mix;
             }

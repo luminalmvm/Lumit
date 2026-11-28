@@ -95,6 +95,13 @@ pub struct Warp {
     )]
     pub vertical_distortion: f32,
 
+    #[choice(
+        label = "Edges",
+        options = *crate::fx::builtins::EDGE_OPTIONS,
+        default = 2
+    )]
+    pub edge: u32,
+
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -125,6 +132,7 @@ impl Warp {
             h_distort: (self.horizontal_distortion / 100.0)
                 .clamp(-Self::MAX_TAPER, Self::MAX_TAPER),
             v_distort: (self.vertical_distortion / 100.0).clamp(-Self::MAX_TAPER, Self::MAX_TAPER),
+            edge: self.edge.min(2),
             mix: (self.mix / 100.0).clamp(0.0, 1.0),
         }
     }
