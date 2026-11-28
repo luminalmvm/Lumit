@@ -7,8 +7,10 @@ use lumit_core::sequence::ClipSource;
 use uuid::Uuid;
 
 use crate::api::{
-    assets::{linear_of, BridgeSolidDef},
+    assets::{linear_of, BridgeColourRgba, BridgeSolidDef},
+    composition::CompositionReference,
     layer::LayerReference,
+    worker_thread::{RenderCompRequestWithPreview, WorkerRequest},
     BridgeError,
 };
 
@@ -117,5 +119,76 @@ impl LayerReference {
             kind: Box::new(LayerKind::Solid { def: id }),
         });
         self.commit(Op::Batch { ops })
+    }
+}
+
+impl CompositionReference {
+    #[frb(sync)]
+    pub fn render_frame_with_solid_preview(
+        &self,
+        frame: u64,
+        scale: f32,
+        layer: LayerReference,
+        colour: BridgeColourRgba,
+        all_layers: bool,
+    ) -> Result<(), BridgeError> {
+        self.dispatch(WorkerRequest::RenderCompWithPreview(
+            RenderCompRequestWithPreview {
+                comp: self.clone(),
+                frame,
+                scale,
+                layer: Some(layer),
+                graph_instances: None,
+                effects: None,
+                drivers: None,
+                transform: None,
+                text: None,
+                paint: None,
+                contents: None,
+                masks: None,
+                clip_retime: None,
+                clip_span: None,
+                solid: Some((colour, all_layers)),
+                retime: None,
+            },
+        ))
+    }
+}
+
+#[frb(ignore)]
+pub(crate) fn stage_solid(
+    doc: &mut Document,
+    layer: &LayerReference,
+    colour: BridgeColourRgba,
+    all_layers: bool,
+) {
+    let def = match doc
+        .comp(layer.comp_id)
+        .and_then(|c| c.layers.iter().find(|l| l.id == layer.layer_id))
+    {
+        Some(lumit_core::model::Layer {
+            kind: LayerKind::Solid { def },
+            ..
+        }) => *def,
+        _ => return,
+    };
+    let shared = users(doc, def) > 1;
+    let Some(ProjectItem::Solid(solid)) = doc.item_mut(def) else {
+        return;
+    };
+    if all_layers || !shared {
+        solid.colour = linear_of(colour);
+        return;
+    }
+    let mut own = solid.clone();
+    own.id = Uuid::now_v7();
+    own.colour = linear_of(colour);
+    let id = own.id;
+    doc.items.push(ProjectItem::Solid(own));
+    if let Some(l) = doc
+        .comp_mut(layer.comp_id)
+        .and_then(|c| c.layers.iter_mut().find(|l| l.id == layer.layer_id))
+    {
+        l.kind = LayerKind::Solid { def: id };
     }
 }

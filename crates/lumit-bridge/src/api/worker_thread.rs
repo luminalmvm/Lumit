@@ -2903,6 +2903,7 @@ pub struct RenderCompRequestWithPreview {
     /// One clip's edges as comp frames, while one of them is being dragged,
     /// so the Viewer shows the frame at the edge.
     pub clip_span: Option<(Uuid, i64, i64)>,
+    pub solid: Option<(crate::api::assets::BridgeColourRgba, bool)>,
     /// The layer's own Retime map, while a key of it is being dragged
     /// in the graph editor. Exactly `clip_retime`'s reason, for the property
     /// rather than a clip: the map decides which source frame is decoded, so
@@ -4861,6 +4862,10 @@ fn render_comp_with_preview(
     let staged_effects = req
         .effects
         .filter(|staged| !lumit_core::grade::groups::stage(&mut document, staged));
+
+    if let (Some(layer), Some((colour, all))) = (&req.layer, req.solid) {
+        crate::api::layer_solid::stage_solid(&mut document, layer, colour, all);
+    }
 
     let comp = document
         .comp_mut(req.layer.map_or(req.comp.id, |l| l.comp_id))
