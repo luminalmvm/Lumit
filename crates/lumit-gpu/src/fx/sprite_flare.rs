@@ -238,7 +238,17 @@ impl SpriteFlareFx {
             ],
             c,
         );
-        let soft_pipe = compute(&soft_bgl, &soft_module, "blur_pass");
+        let soft_pipe = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("blur_pass"),
+            layout: Some(&layout(&soft_bgl)),
+            module: &soft_module,
+            entry_point: Some("blur_pass"),
+            compilation_options: wgpu::PipelineCompilationOptions {
+                zero_initialize_workgroup_memory: false,
+                ..Default::default()
+            },
+            cache: None,
+        });
         let lights_bgl = bind_layout(
             device,
             "fx-sprite-flare-lights",
