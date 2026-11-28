@@ -372,7 +372,12 @@
         },
         frameRate: { get: function () { return this.conformFrameRate; } },
         file: { get: function () { return this._item.file; } },
-        isStill: { get: function () { return false; } },
+        isStill: {
+            get: function () {
+                var info = itemInfo(this._item._id);
+                return !info.sequence && !!info.media && info.media.width > 0 && !info.media.duration;
+            },
+        },
     });
 
     function FootageItem(id) {
