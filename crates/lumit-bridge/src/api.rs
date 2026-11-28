@@ -17,6 +17,7 @@ pub mod captions;
 pub mod clip_edits;
 pub mod clip_group;
 pub mod colour;
+pub mod colour_expression;
 pub mod comp_graph;
 pub mod composition;
 pub mod cut;

@@ -3671,7 +3671,14 @@ impl BridgeEffectInstance {
             .iter_mut()
             .find(|p| p.id == id)
             .ok_or(BridgeError::InvalidParam)?;
-        let fresh = !matches!(&param.value, EffectValue::Float(p) if p.extra.contains_key(lumit_core::expression::script::SLOT_KEY));
+        // A colour counts as new only while none of its channels has a slot.
+        use lumit_core::expression::script::SLOT_KEY;
+        let noted = |p: &lumit_core::anim::Property| p.extra.contains_key(SLOT_KEY);
+        let fresh = match &param.value {
+            EffectValue::Float(p) => !noted(p),
+            EffectValue::Colour(channels) => !channels.iter().any(noted),
+            _ => true,
+        };
 
         value.write_at(&mut param.value, offset, bounds)?;
         // A typed text is held to its cap here, as a number is to its range.

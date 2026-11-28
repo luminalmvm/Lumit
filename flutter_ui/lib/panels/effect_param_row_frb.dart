@@ -31,6 +31,7 @@ import 'package:lumit_flutter/src/rust/api/shape.dart' show BridgeGradientStop;
 import 'package:lumit_flutter/src/rust/api/template.dart' show BridgeRowRef;
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/effect_colour_pairs.dart';
+import 'package:lumit_flutter/src/rust/api/colour_expression.dart';
 import 'package:lumit_flutter/src/rust/api/graph.dart'
     show BridgeInputRef, BridgeNodeRef, BridgeOutputRef_Driver, BridgePortType;
 import 'package:provider/provider.dart';
@@ -69,6 +70,7 @@ import 'graph_panel.dart' show portColour;
 import 'keyframe_controls_frb.dart';
 import 'layer_fold_frb.dart' show effectPath;
 import 'param_row_menu.dart';
+import 'timeline_extras_frb.dart' show showMenuAt;
 import 'property_link.dart';
 import 'package:syntax_highlight/syntax_highlight.dart';
 
@@ -679,21 +681,26 @@ class EffectParamRowFrb extends StatelessWidget {
   /// is written only when the editor is closed with a change.
   void _altExpression(BuildContext context, List<BridgeScalar> scalars) {
     final owner = currentLayer;
-    if (owner == null || scalars.length != 1) return;
-    if (param.kind is BridgeParamKind_Colour) return;
+    final colour = param.kind is BridgeParamKind_Colour;
+    if (owner == null || scalars.length != (colour ? 4 : 1)) return;
     final box = context.findRenderObject();
     if (box is! RenderBox || !box.attached) return;
-    final held = scalars.single;
+    final held = scalars.firstWhere((s) => s is BridgeScalar_Expression,
+        orElse: () => scalars.first);
     final fresh = held is! BridgeScalar_Expression;
-    final frame =
-        Provider.of<LumitUiState>(context, listen: false).playheadFrame.value;
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final time = timeOfFrame(comp, ui.playheadFrame.value);
+    BridgeEffectValue valueOf(BridgeScalar next) =>
+        colour ? _colourOf(scalars, next) : BridgeEffectValue.float(next);
     showExpressionEditor(
       context: context,
       over: box.localToGlobal(Offset.zero) & box.size,
       value: held is BridgeScalar_Expression
           ? held
           : BridgeScalar_Expression(
-              sampledScalar(held, timeOfFrame(comp, frame)).toString(),
+              colour
+                  ? '[${[for (final s in scalars) sampledScalar(s, time)].join(', ')}]'
+                  : sampledScalar(held, time).toString(),
               newExpressionLanguage(context)),
       fresh: fresh,
       held: held,
@@ -702,10 +709,108 @@ class EffectParamRowFrb extends StatelessWidget {
       row: BridgeExpressionRow.effect(effect: effectId, param: param.id),
       decimals: param.kind is BridgeParamKind_Int ? 0 : 2,
       // A new one is not previewed: a cancel would write it back.
-      onLive:
-          fresh ? null : (draft) => _setLive(BridgeEffectValue.float(draft)),
-      onCommit: (next) => _set(BridgeEffectValue.float(next)),
+      onLive: fresh ? null : (draft) => _setLive(valueOf(draft)),
+      onCommit: (next) => _set(valueOf(next)),
+      onRemove:
+          colour ? () => _set(_colourTakenOff(owner, scalars, time)) : null,
+      onConvert: colour
+          ? (draft) {
+              if (_colourAsKeys(ui, owner, _colourOf(scalars, draft))
+                  case final keys?) {
+                _set(keys);
+              }
+            }
+          : null,
     );
+  }
+
+  BridgeColour _colourFrom(List<BridgeScalar> s) =>
+      BridgeColour(r: s[0], g: s[1], b: s[2], a: s[3]);
+
+  BridgeEffectValue _colourOf(List<BridgeScalar> was, BridgeScalar next) {
+    BridgeScalar on(BridgeScalar channel) => switch ((next, channel)) {
+          (
+            BridgeScalar_Expression(:final field0, :final field1),
+            BridgeScalar_Expression(:final field2)
+          ) =>
+            BridgeScalar.expression(field0, field1, field2),
+          _ => next,
+        };
+    return BridgeEffectValue.colour(BridgeColour(
+        r: on(was[0]), g: on(was[1]), b: on(was[2]), a: on(was[3])));
+  }
+
+  /// The colour as its expressions work it out, on this row or on the
+  /// colour row [id] of the same effect.
+  List<double> _colourWorked(
+          LayerReference owner, BridgeColour colour, BridgeRational time,
+          [String? id]) =>
+      sampleColourWithContext(
+          colour: colour,
+          time: time,
+          layer: owner,
+          effect: effectId,
+          param: id ?? param.id);
+
+  /// [_colourWorked] for the swatch, held per time and document so a
+  /// rebuild at the same frame asks nothing.
+  List<double> _colourShown(BuildContext context, LayerReference owner,
+      BridgeColour colour, BridgeRational time,
+      [String? id]) {
+    final revision =
+        Provider.of<LumitUiState>(context, listen: false).model.heldRevision;
+    if (_workedColoursRevision != revision || _workedColours.length >= 512) {
+      _workedColours.clear();
+      _workedColoursRevision = revision;
+    }
+    return _workedColours[(
+      colour,
+      owner.internallayerId,
+      effectId,
+      id ?? param.id,
+      time
+    )] ??= _colourWorked(owner, colour, time, id);
+  }
+
+  BridgeEffectValue _colourTakenOff(
+      LayerReference owner, List<BridgeScalar> was, BridgeRational time) {
+    final worked = _colourWorked(owner, _colourFrom(was), time);
+    BridgeScalar off(int i) => was[i] is BridgeScalar_Expression
+        ? expressionTakenOff(was[i], worked[i])
+        : was[i];
+    return BridgeEffectValue.colour(
+        BridgeColour(r: off(0), g: off(1), b: off(2), a: off(3)));
+  }
+
+  /// Null when the layer is not in the open composition, as for
+  /// [expressionAsKeys].
+  BridgeEffectValue? _colourAsKeys(
+      LumitUiState ui, LayerReference owner, BridgeEffectValue value) {
+    final info = ui.model.byId(owner.internallayerId)?.info;
+    if (info == null || value is! BridgeEffectValue_Colour) return null;
+    final keys = [for (var i = 0; i < 4; i++) <BridgeKeyframe>[]];
+    try {
+      for (var frame = info.inFrame;
+          frame <= math.max(info.inFrame, info.outFrame - 1);
+          frame++) {
+        final time = timeOfFrame(comp, frame);
+        final worked = _colourWorked(owner, value.field0, time);
+        for (var i = 0; i < 4; i++) {
+          keys[i].add(BridgeKeyframe(
+            time: time,
+            value: worked[i],
+            interpIn: const BridgeSideInterp.linear(),
+            interpOut: const BridgeSideInterp.linear(),
+          ));
+        }
+      }
+    } catch (_) {
+      // The layer or its comp went away under the press.
+      return null;
+    }
+    BridgeScalar keyed(int i) => BridgeScalar.keyframed(keys[i]);
+    return BridgeEffectValue.colour(
+        BridgeColour(r: keyed(0), g: keyed(1), b: keyed(2), a: keyed(3)));
   }
 
   ParamMenu _menu(BuildContext context, KeyframeControlsFrb? keys) {
@@ -717,6 +822,11 @@ class EffectParamRowFrb extends StatelessWidget {
     };
     final numeric = scalars != null && expression == null && driven == null;
     final float = param.kind is! BridgeParamKind_Colour;
+    final colourExpression = numeric &&
+        !float &&
+        scalars.any((s) => s is BridgeScalar_Expression);
+    // A pick has nowhere to go on an expression with no keys under it.
+    final colourHeld = colourExpression && scalars.any(_bareExpression);
     final ui = Provider.of<LumitUiState>(context, listen: false);
     final playhead = ui.playheadFrame;
     double read(BridgeScalar s) =>
@@ -758,10 +868,15 @@ class EffectParamRowFrb extends StatelessWidget {
                   scalars.first, n[0], comp, playhead.value)));
             },
       colour: numeric && !float
-          ? () => PickedColour(
-              read(scalars[0]), read(scalars[1]), read(scalars[2]))
+          ? () {
+              final c = colourExpression && owner != null
+                  ? _colourWorked(owner, _colourFrom(scalars),
+                      timeOfFrame(comp, playhead.value))
+                  : [for (final s in scalars) read(s)];
+              return PickedColour(c[0], c[1], c[2]);
+            }
           : null,
-      pasteColour: !numeric || float
+      pasteColour: !numeric || float || colourHeld
           ? null
           : (picked) {
               final frame = playhead.value;
@@ -772,21 +887,36 @@ class EffectParamRowFrb extends StatelessWidget {
                 a: scalars[3],
               )));
             },
-      setExpression: numeric && float && currentLayer != null
-          ? () => _set(BridgeEffectValue.float(BridgeScalar.expression(
-              read(scalars.first).toString(), newExpressionLanguage(context))))
-          : null,
-      removeExpression: expression == null
+      setExpression: !numeric || currentLayer == null
           ? null
+          : float
+              ? () => _set(BridgeEffectValue.float(BridgeScalar.expression(
+                  read(scalars.first).toString(),
+                  newExpressionLanguage(context))))
+              : colourExpression
+                  ? null
+                  : () {
+                      tookSetExpression();
+                      _altExpression(context, scalars);
+                    },
+      removeExpression: expression == null
+          ? colourExpression && owner != null
+              ? () => _set(_colourTakenOff(
+                  owner, scalars, timeOfFrame(comp, playhead.value)))
+              : null
           : () => _set(BridgeEffectValue.float(expressionTakenOff(
               expression,
               sampleScalarWithContext(
                   scalar: expression,
                   time: timeOfFrame(comp, playhead.value),
                   layer: currentLayer!)))),
-      editExpression: expression == null || owner == null
+      editExpression: owner == null
           ? null
-          : () {
+          : expression == null
+              ? colourExpression
+                  ? () => _altExpression(context, scalars)
+                  : null
+              : () {
               final box = context.findRenderObject();
               if (box is! RenderBox || !box.attached) return;
               showExpressionEditor(
@@ -802,9 +932,17 @@ class EffectParamRowFrb extends StatelessWidget {
                 onCommit: (next) => _set(BridgeEffectValue.float(next)),
               );
             },
-      convertExpression: expression == null || currentLayer == null
+      convertExpression: owner == null
           ? null
-          : () => _convertExpression(ui, expression),
+          : expression != null
+              ? () => _convertExpression(ui, expression)
+              : colourExpression
+                  ? () {
+                      final keys = _colourAsKeys(ui, owner,
+                          BridgeEffectValue.colour(_colourFrom(scalars)));
+                      if (keys != null) _set(keys);
+                    }
+                  : null,
       graphPath: scalars == null
           ? null
           : rowPath ??
@@ -1295,11 +1433,24 @@ class EffectParamRowFrb extends StatelessWidget {
       case BridgeParamKind_Gradient(:final from, :final to):
         if (value case BridgeEffectValue_Gradient(:final field0)) {
           double at(BridgeScalar s) => scalarValueAt(s, comp, frame) ?? 0;
-          BridgeColourRgba end(String row) => switch (siblings[row]) {
-                BridgeEffectValue_Colour(:final field0) => BridgeColourRgba(
-                    r: at(field0.r), g: at(field0.g), b: at(field0.b), a: 1),
-                _ => const BridgeColourRgba(r: 1, g: 1, b: 1, a: 1),
-              };
+          BridgeColourRgba end(String row) {
+            final v = siblings[row];
+            if (v is! BridgeEffectValue_Colour) {
+              return const BridgeColourRgba(r: 1, g: 1, b: 1, a: 1);
+            }
+            final c = v.field0;
+            final owner = currentLayer;
+            final worked = owner != null &&
+                    [c.r, c.g, c.b, c.a].any((s) => s is BridgeScalar_Expression)
+                ? _colourShown(
+                    context, owner, c, timeOfFrame(comp, frame), row)
+                : null;
+            return BridgeColourRgba(
+                r: worked?[0] ?? at(c.r),
+                g: worked?[1] ?? at(c.g),
+                b: worked?[2] ?? at(c.b),
+                a: 1);
+          }
           final ramp = GradientRamp(
             startColour: end(from),
             startOpacity: 100,
@@ -2021,10 +2172,19 @@ class EffectParamRowFrb extends StatelessWidget {
     // and not changed, which is half of "keyframe a colour" missing.
     double chan(BridgeScalar s) => sampledScalar(s, timeOfFrame(comp, frame));
     final t = ThemeScope.of(context).theme;
+    final owner = currentLayer;
+    final worked = owner != null &&
+            [colour.r, colour.g, colour.b, colour.a]
+                .any((s) => s is BridgeScalar_Expression)
+        ? _colourShown(context, owner, colour, timeOfFrame(comp, frame))
+        : null;
+    final now = PickedColour(worked?[0] ?? chan(colour.r),
+        worked?[1] ?? chan(colour.g), worked?[2] ?? chan(colour.b));
+    // A pick has nowhere to go on an expression with no keys under it, so
+    // the swatch and dropper answer nothing, as on a driven row.
+    final held = [colour.r, colour.g, colour.b, colour.a].any(_bareExpression);
 
-    final shown = PickedColour(chan(colour.r), chan(colour.g), chan(colour.b))
-        .onScreen
-        .clipped;
+    final shown = now.onScreen.clipped;
 
     // The value written for a picked colour: the three channels clamped to the
     // parameter's declared range, with alpha left alone.
@@ -2051,42 +2211,44 @@ class EffectParamRowFrb extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          GestureDetector(
-            key: ValueKey<String>('fx-colour-$id-${param.id}'),
-            behavior: HitTestBehavior.opaque,
-            onTap: () async {
-              final box = context.findRenderObject();
-              if (box is! RenderBox) return;
-              await showColourPicker(
-                context: context,
-                position: box.localToGlobal(Offset(0, box.size.height + 4)),
-                initial: PickedColour(
-                    chan(colour.r), chan(colour.g), chan(colour.b)),
-                // An effect colour is scene-linear in a float working depth
-                // (fp16 today, docs/06 §3.1): 0–1 is black to white, and the
-                // parameter's own range says how far past that it may go — an
-                // HDR tint really does sit above 1, and a 0–255 dial could not
-                // reach it. When the project depth switch lands (docs/06 §3.1),
-                // an 8 bpc project is what passes `bytes` here.
-                scale: ColourScale.unit,
-                min: min,
-                max: max,
-                linear: true,
-                onPreview: (picked) => _setLive(valueOf(picked)),
-                onCommit: (picked) => _set(valueOf(picked)),
-              );
-            },
-            child: HoverMark(
-              swells: true,
-              builder: (_, lit) => Container(
-                width: colourSwatchWidth,
-                height: 18,
-                decoration: BoxDecoration(
-                  color: shown,
-                  borderRadius: BorderRadius.circular(t.tokens.wellRadius),
-                  border: Border.all(
-                      color: Color.lerp(
-                          t.hairlineStrong, t.textPrimary, 0.7 * lit)!),
+          IgnorePointer(
+            ignoring: held,
+            child: GestureDetector(
+              key: ValueKey<String>('fx-colour-$id-${param.id}'),
+              behavior: HitTestBehavior.opaque,
+              onTap: () async {
+                final box = context.findRenderObject();
+                if (box is! RenderBox) return;
+                await showColourPicker(
+                  context: context,
+                  position: box.localToGlobal(Offset(0, box.size.height + 4)),
+                  initial: now,
+                  // An effect colour is scene-linear in a float working depth
+                  // (fp16 today, docs/06 §3.1): 0–1 is black to white, and the
+                  // parameter's own range says how far past that it may go — an
+                  // HDR tint really does sit above 1, and a 0–255 dial could not
+                  // reach it. When the project depth switch lands (docs/06 §3.1),
+                  // an 8 bpc project is what passes `bytes` here.
+                  scale: ColourScale.unit,
+                  min: min,
+                  max: max,
+                  linear: true,
+                  onPreview: (picked) => _setLive(valueOf(picked)),
+                  onCommit: (picked) => _set(valueOf(picked)),
+                );
+              },
+              child: HoverMark(
+                swells: true,
+                builder: (_, lit) => Container(
+                  width: colourSwatchWidth,
+                  height: 18,
+                  decoration: BoxDecoration(
+                    color: shown,
+                    borderRadius: BorderRadius.circular(t.tokens.wellRadius),
+                    border: Border.all(
+                        color: Color.lerp(
+                            t.hairlineStrong, t.textPrimary, 0.7 * lit)!),
+                  ),
                 ),
               ),
             ),
@@ -2096,23 +2258,26 @@ class EffectParamRowFrb extends StatelessWidget {
           // it (docs/07 §6.1). **Dragging sweeps it**: the parameter
           // takes the colour under the pointer as it travels, previewed the
           // whole way, and the release is the one edit.
-          DropperButton(
-            id: 'fx-$id-${param.id}',
-            tip: l10n.tipSampleFromViewer,
-            arm: (ui) => ui.armDropper(DropperArm(
+          IgnorePointer(
+            ignoring: held,
+            child: DropperButton(
               id: 'fx-$id-${param.id}',
-              reads: DropperReads.colour,
-              label: engineLabel(param.label),
-              // The very value the picker writes, so a colour lifted off the
-              // picture and a colour chosen in the dialogue cannot be clamped
-              // or shaped differently. The sample is already scene-linear,
-              // exactly as the parameter stores it.
-              onPreview: (sample) =>
-                  _setLive(valueOf(PickedColour(sample.r, sample.g, sample.b))),
-              onPick: (sample) =>
-                  _set(valueOf(PickedColour(sample.r, sample.g, sample.b))),
-              onRevert: () => _setLive(BridgeEffectValue.colour(colour)),
-            )),
+              tip: l10n.tipSampleFromViewer,
+              arm: (ui) => ui.armDropper(DropperArm(
+                id: 'fx-$id-${param.id}',
+                reads: DropperReads.colour,
+                label: engineLabel(param.label),
+                // The very value the picker writes, so a colour lifted off the
+                // picture and a colour chosen in the dialogue cannot be clamped
+                // or shaped differently. The sample is already scene-linear,
+                // exactly as the parameter stores it.
+                onPreview: (sample) =>
+                    _setLive(valueOf(PickedColour(sample.r, sample.g, sample.b))),
+                onPick: (sample) =>
+                    _set(valueOf(PickedColour(sample.r, sample.g, sample.b))),
+                onRevert: () => _setLive(BridgeEffectValue.colour(colour)),
+              )),
+            ),
           ),
         ],
       ),
@@ -2579,6 +2744,112 @@ class EffectPointRowFrb extends StatelessWidget {
     );
   }
 
+  void _altExpression(BuildContext context, BridgeScalar sx, BridgeScalar sy) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final id = ownerLayerId;
+    final owner = id == null ? null : ui.model.byId(id)?.layer;
+    final box = context.findRenderObject();
+    if (owner == null || box is! RenderBox || !box.attached) return;
+    final over = box.localToGlobal(Offset.zero) & box.size;
+    final time = timeOfFrame(comp, ui.playheadFrame.value);
+    void open(BridgeParamInfo half, BridgeScalar held) {
+      final fresh = held is! BridgeScalar_Expression;
+      BridgeExpressionRow rowOf(BridgeParamInfo p) =>
+          BridgeExpressionRow.effect(effect: effectId, param: p.id);
+      BridgeScalar heldOf(BridgeParamInfo p) => p == xParam ? sx : sy;
+      // Linked, both halves take the write, each its own when [of] says so.
+      void write(BridgeScalar Function(BridgeParamInfo p) of,
+          {bool live = false}) {
+        final halves = linked ? [xParam, yParam] : [half];
+        final values = {
+          for (final p in halves) p.id: BridgeEffectValue.float(of(p)),
+        };
+        if (!live && values.length == 2 && onWritePair != null) {
+          return onWritePair!(effectId, values);
+        }
+        values.forEach((p, v) => (live ? onLive : onWrite)(effectId, p, v));
+      }
+
+      showExpressionEditor(
+        context: context,
+        over: over,
+        value: held is BridgeScalar_Expression
+            ? held
+            : BridgeScalar_Expression(
+                linked
+                    ? '[${sampledScalar(sx, time)}, ${sampledScalar(sy, time)}]'
+                    : sampledScalar(held, time).toString(),
+                newExpressionLanguage(context)),
+        fresh: fresh,
+        held: held,
+        comp: comp,
+        layer: owner,
+        row: rowOf(half),
+        // A new one is not previewed: a cancel would write it back.
+        onLive: fresh ? null : (draft) => write((_) => draft, live: true),
+        onRemove: !linked
+            ? null
+            : () {
+                if (fresh) return;
+                write((p) => switch (heldOf(p)) {
+                      final BridgeScalar_Expression e => expressionTakenOff(
+                          e,
+                          sampleScalarWithContext(
+                              scalar: e,
+                              time: time,
+                              layer: owner,
+                              row: rowOf(p))),
+                      final other => other,
+                    });
+              },
+        onConvert: !linked
+            ? null
+            : (draft) {
+                final keys = {
+                  for (final p in [xParam, yParam])
+                    p: expressionAsKeys(ui,
+                        expression: draft,
+                        comp: comp,
+                        layer: owner,
+                        held: heldOf(p),
+                        row: rowOf(p)),
+                };
+                if (keys.values.every((k) => k != null)) {
+                  write((p) => keys[p]!);
+                }
+              },
+        // A new one taken off again leaves the row as it was.
+        onCommit: (next) {
+          if (fresh && next is! BridgeScalar_Expression) return;
+          write((_) => next);
+        },
+      );
+    }
+
+    if (linked) {
+      // The half that holds an expression, so it opens and not a new one.
+      final y = sx is! BridgeScalar_Expression && sy is BridgeScalar_Expression;
+      open(y ? yParam : xParam, y ? sy : sx);
+      return;
+    }
+    showMenuAt<void>(
+      context: context,
+      position: over.topLeft,
+      width: 110,
+      rows: (close) => [
+        for (final (i, (half, held)) in [(xParam, sx), (yParam, sy)].indexed)
+          MenuRow(
+            key: ValueKey<String>('alt-expression-$i'),
+            onPressed: () {
+              close(null);
+              open(half, held);
+            },
+            child: MenuLabel(axisName(i)),
+          ),
+      ],
+    );
+  }
+
   Widget _build(BuildContext context, int frame) {
     final t = ThemeScope.of(context).theme;
     final id = effectId;
@@ -2603,6 +2874,9 @@ class EffectPointRowFrb extends StatelessWidget {
             scalars: [sx, sy],
             comp: comp,
             onSeek: onSeek,
+            onExpression: canSetExpression
+                ? () => _altExpression(context, sx, sy)
+                : null,
             rowKey: '$id-${xParam.id}-pair',
             fixedColumns: twoColumn,
             navigatorApart: !twoColumn,
@@ -2859,12 +3133,15 @@ class EffectPointRowFrb extends StatelessWidget {
       defaultEffectValue(xParam.kind),
       defaultEffectValue(yParam.kind),
     );
-    VoidCallback setHalf(BridgeParamInfo param, BridgeScalar scalar) =>
-        () => onWrite(
-            id,
-            param.id,
-            BridgeEffectValue.float(BridgeScalar.expression(
-                read(scalar).toString(), newExpressionLanguage(context))));
+    // Linked, the first half's puts one [x, y] on both, as Alt+click does.
+    VoidCallback setHalf(BridgeParamInfo param, BridgeScalar scalar) => () {
+          final both = linked && param == xParam && sx != null && sy != null;
+          final value = BridgeEffectValue.float(BridgeScalar.expression(
+              both ? '[${read(sx)}, ${read(sy)}]' : read(scalar).toString(),
+              newExpressionLanguage(context)));
+          if (!both) return onWrite(id, param.id, value);
+          writeBoth(value, value);
+        };
     final menu = ParamMenu(
       control: switch (controlRow) {
         final row? => ControlRow(comp, row),
@@ -3304,6 +3581,16 @@ final ValueNotifier<Set<UuidValue>> bakesRunning = ValueNotifier(const {});
 /// effect not named here draws its Action rows as its schema says.
 final ValueNotifier<Map<UuidValue, Set<String>>> actionsResting =
     ValueNotifier(const {});
+
+/// An expression with no keys kept under it.
+bool _bareExpression(BridgeScalar s) =>
+    s is BridgeScalar_Expression && (s.field2?.isEmpty ?? true);
+
+/// The swatch's colours worked out by their expressions, by colour, layer,
+/// effect, parameter and time, for one document revision.
+final Map<(BridgeColour, UuidValue, UuidValue, String, BridgeRational),
+    List<double>> _workedColours = {};
+int? _workedColoursRevision;
 
 final Map<String, List<BridgeEnabledWhen>> _enabledWhenSchema = {};
 

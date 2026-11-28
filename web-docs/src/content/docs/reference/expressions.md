@@ -97,8 +97,9 @@ Where there is no answer the list comes back empty.
 
 ### What a Rhai expression comes to
 
-A property takes one number. `true` reads as 1 and `false` as 0. Anything else, and an
-expression that fails, reads as −1.
+A property takes one number. `true` reads as 1 and `false` as 0. From a list, half of a
+point or a channel of a colour takes its own. Anything else, and an expression that fails,
+reads as −1.
 
 ### Rhai limits
 
@@ -300,8 +301,9 @@ project gives the same numbers on every machine.
 ### What a JavaScript expression comes to
 
 A property takes one number. From an array it takes its own: the first for the x half of a
-point, the second for the y half. An expression that fails, or comes to something that is
-not a number, leaves the property at `value`.
+point, the second for the y half, and one of four for a channel of a colour, in the order
+red, green, blue, alpha. An expression that fails, or comes to something that is not a
+number, leaves the property at `value`.
 
 ### JavaScript limits
 

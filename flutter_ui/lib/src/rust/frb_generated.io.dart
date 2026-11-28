@@ -13,6 +13,7 @@ import 'api/cache.dart';
 import 'api/captions.dart';
 import 'api/clip_edits.dart';
 import 'api/colour.dart';
+import 'api/colour_expression.dart';
 import 'api/comp_graph.dart';
 import 'api/composition.dart';
 import 'api/cut.dart';

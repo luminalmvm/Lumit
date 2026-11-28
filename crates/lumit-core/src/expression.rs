@@ -30,6 +30,7 @@ use crate::model::Document;
 use rhai::{exported_module, Dynamic, Engine, Scope};
 use uuid::Uuid;
 
+pub mod channel;
 mod comp;
 mod layer;
 mod math;
@@ -331,7 +332,7 @@ fn own_on_layer(context: &ExpressionContext, expression: &str) -> Option<script:
 fn own_of_row(context: &ExpressionContext, row: Row<'_>) -> Option<script::OwnKeys> {
     let comp = context.document.comp(context.comp?)?;
     let layer = comp.layers.iter().find(|l| Some(l.id) == context.layer)?;
-    let (props, axis) = point_row::point_of_row(layer, row)?;
+    let (props, axis) = point_row::point_of_row(comp, layer, row)?;
     Some(script::OwnKeys {
         keys: crate::anim::keys_kept_in(&props.get(axis)?.extra)?,
         offset: layer.start_offset.0.to_f64(),
@@ -415,11 +416,20 @@ fn carrier<'c>(
 
 /// A row an expression can sit on: a transform property, or an effect
 /// parameter by the effect's id and its own. An effect's point is the pair
-/// of rows its schema names `<stem>_x` and `<stem>_y`.
+/// of rows its schema names `<stem>_x` and `<stem>_y`. A colour's channel is
+/// its parameter and which of the four it is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Row<'a> {
     Transform(crate::model::TransformProp),
-    Effect { effect: Uuid, param: &'a str },
+    Effect {
+        effect: Uuid,
+        param: &'a str,
+    },
+    Channel {
+        effect: Uuid,
+        param: &'a str,
+        channel: usize,
+    },
 }
 
 /// What `value` reads on a property: the number under its expression, or
@@ -470,6 +480,9 @@ pub fn note_transform_point(
 
 pub fn note_effect_point(inst: &mut crate::model::EffectInstance, param: &str) {
     use crate::model::EffectValue;
+    if channel::note_colour(inst, param) {
+        return;
+    }
     let Some(pair) = crate::fx::builtins::schema(&inst.effect.match_name)
         .and_then(|schema| schema.pairs().find(|p| p.x == param || p.y == param))
     else {
@@ -500,12 +513,12 @@ pub fn note_effect_point(inst: &mut crate::model::EffectInstance, param: &str) {
 pub fn slot_of_row(context: &ExpressionContext, row: Row<'_>, own: Option<f64>) -> Slot {
     let layer = context.comp.zip(context.layer).and_then(|(comp, layer)| {
         let comp = context.document.comp(comp)?;
-        comp.layers.iter().find(|l| l.id == layer)
+        Some((comp, comp.layers.iter().find(|l| l.id == layer)?))
     });
-    let Some(layer) = layer else {
+    let Some((comp, layer)) = layer else {
         return Slot::default();
     };
-    let Some((props, axis)) = point_row::point_of_row(layer, row) else {
+    let Some((props, axis)) = point_row::point_of_row(comp, layer, row) else {
         return Slot::default();
     };
     let Some(this) = props.get(axis) else {
@@ -578,7 +591,7 @@ pub fn within_steps<T>(steps: u32, work: impl FnOnce() -> T) -> T {
 /// Run a Rhai expression for the one number a property wants. `-1` when it
 /// fails.
 pub fn evaluate(expression: &str, context: Option<Arc<ExpressionContext>>) -> f64 {
-    convert_result(eval_dynamic(expression, context, &[]))
+    convert_result(eval_dynamic(expression, context, &[]), Slot::default())
 }
 
 pub fn evaluate_in(
@@ -607,7 +620,7 @@ pub fn evaluate_with(
     slot: Slot,
 ) -> f64 {
     match language {
-        Language::Rhai => evaluate(expression, context),
+        Language::Rhai => convert_result(eval_dynamic(expression, context, &[]), slot),
         Language::JavaScript => javascript_number(expression, context.as_deref(), slot),
     }
 }
@@ -667,7 +680,7 @@ pub fn evaluate_property_at(
         });
     }
     match Language::of(extra) {
-        Language::Rhai => evaluate(expression, context),
+        Language::Rhai => convert_result(eval_dynamic(expression, context, &[]), Slot::read(extra)),
         Language::JavaScript => {
             javascript_number(expression, context.as_deref(), Slot::read(extra))
         }
@@ -716,14 +729,14 @@ pub fn evaluate_range(
     // A curve is a few hundred samples. More than a screen is wide draws
     // nothing new, and the number comes from outside.
     let samples = samples.clamp(0, 8192);
+    let slot = context.map_or_else(Slot::default, |c| match row {
+        Some(row) => slot_of_row(c, row, None),
+        None => slot_on_layer(c, expression),
+    });
     if language == Language::JavaScript {
         if program_for(expression).is_err() {
             return Vec::new();
         }
-        let slot = context.map_or_else(Slot::default, |c| match row {
-            Some(row) => slot_of_row(c, row, None),
-            None => slot_on_layer(c, expression),
-        });
         let own = context.and_then(|c| match row {
             Some(row) => own_of_row(c, row),
             None => own_on_layer(c, expression),
@@ -760,7 +773,10 @@ pub fn evaluate_range(
                     None => Dynamic::UNIT,
                 });
 
-                convert_result(engine.eval_ast_with_scope::<Dynamic>(&mut scope, &ast))
+                convert_result(
+                    engine.eval_ast_with_scope::<Dynamic>(&mut scope, &ast),
+                    slot,
+                )
             })
             .collect()
     })
@@ -865,7 +881,7 @@ pub fn fault_in(
         Ok(ExprValue::Number(n)) if !n.is_finite() => Some("not a finite number".into()),
         Ok(ExprValue::Number(_)) => None,
         // JavaScript gives a property the number that is its own of a list.
-        Ok(_) if language == Language::JavaScript => None,
+        Ok(_) if language == Language::JavaScript || slot.values().len() > 1 => None,
         Ok(_) => Some("an array - a property takes one number".into()),
     }
 }
@@ -883,8 +899,17 @@ fn list_value(numbers: &[f64]) -> Result<ExprValue, String> {
     }
 }
 
-fn convert_result(result: Result<Dynamic, Box<rhai::EvalAltResult>>) -> f64 {
+/// A Rhai answer as the one number a property wants. A point's or a colour's
+/// row takes its own number of a list; a row on its own takes one number.
+fn convert_result(result: Result<Dynamic, Box<rhai::EvalAltResult>>, slot: Slot) -> f64 {
     let Ok(val) = result else { return -1.0 };
+    if slot.values().len() > 1 && val.is_array() {
+        return val
+            .try_cast::<rhai::Array>()
+            .and_then(|items| items.into_iter().nth(usize::from(slot.axis)))
+            .and_then(as_f64)
+            .unwrap_or(-1.0);
+    }
     as_f64(val).unwrap_or(-1.0)
 }
 
