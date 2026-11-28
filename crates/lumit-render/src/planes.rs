@@ -291,6 +291,8 @@ pub enum Progress {
 pub enum PlaneFailure {
     #[error("no model runtime is installed")]
     RuntimeMissing,
+    #[error("the model runtime would not load")]
+    RuntimeFailed,
     #[error("no model pack is installed for this task")]
     PackMissing,
     #[error("the model would not run")]
@@ -313,9 +315,8 @@ impl PlaneFailure {
     fn of(e: &lumit_ml::error::MlError) -> Self {
         use lumit_ml::error::MlError as E;
         match e {
-            E::RuntimeMissing | E::RuntimeFailed(_) | E::RuntimeInUse => {
-                PlaneFailure::RuntimeMissing
-            }
+            E::RuntimeMissing | E::RuntimeInUse => PlaneFailure::RuntimeMissing,
+            E::RuntimeFailed(_) => PlaneFailure::RuntimeFailed,
             E::PackMissing(_) | E::NotInstalled => PlaneFailure::PackMissing,
             E::Cancelled => PlaneFailure::Cancelled,
             E::PackUnreadable | E::Invalid(_) | E::Busy | E::ModelFailed(_) | E::ShapeMismatch => {

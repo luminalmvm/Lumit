@@ -62,8 +62,13 @@ enum PlaneCard {
 ///
 /// A missing runtime and a missing pack are two sentences rather than one
 /// because they send the user to two different buttons on the Addons page.
-String planeFailureSentence(BridgePlaneFailure failure) => switch (failure) {
+String planeFailureSentence(BridgePlaneFailure failure,
+        [String reason = '']) =>
+    switch (failure) {
       BridgePlaneFailure.runtimeMissing => l10n.planeFailedRuntimeMissing,
+      BridgePlaneFailure.runtimeFailed => reason.isEmpty
+          ? l10n.planeFailedRuntimeFailed
+          : l10n.planeFailedRuntimeFailedWhy(reason),
       BridgePlaneFailure.packMissing => l10n.planeFailedPackMissing,
       BridgePlaneFailure.modelFailed => l10n.planeFailedModelFailed,
       BridgePlaneFailure.busy => l10n.planeFailedBusy,
@@ -92,7 +97,7 @@ String planeStatusSentence(PlaneCard card, BridgePlaneStatus? status) {
     case BridgePlaneStage.failed:
       return status.failure == null
           ? ''
-          : planeFailureSentence(status.failure!);
+          : planeFailureSentence(status.failure!, status.runtimeReason);
   }
 }
 

@@ -66,6 +66,7 @@ pub enum BridgePlaneStage {
 pub enum BridgePlaneFailure {
     /// No model runtime is installed.
     RuntimeMissing,
+    RuntimeFailed,
     /// Nothing installed does this effect's task.
     PackMissing,
     /// A pack that would not open, or a run the model turned down.
@@ -86,6 +87,7 @@ fn failure_of(e: lumit_render::planes::PlaneFailure) -> BridgePlaneFailure {
     use lumit_render::planes::PlaneFailure as F;
     match e {
         F::RuntimeMissing => BridgePlaneFailure::RuntimeMissing,
+        F::RuntimeFailed => BridgePlaneFailure::RuntimeFailed,
         F::PackMissing => BridgePlaneFailure::PackMissing,
         F::ModelFailed => BridgePlaneFailure::ModelFailed,
         F::Busy => BridgePlaneFailure::Busy,
@@ -118,6 +120,7 @@ pub struct BridgePlaneStatus {
     /// How many frames the clip has, against which the span is whole or
     /// partial. Zero when nothing has been read.
     pub clip_frames: u32,
+    pub runtime_reason: String,
 }
 
 /// The planes-tier `effect` on `layer`, as its status row draws it.
@@ -173,6 +176,10 @@ pub(crate) fn status_of(
         first_frame: run.as_ref().map(|r| r.first_frame),
         last_frame: run.as_ref().map(|r| r.last_frame),
         clip_frames: run.as_ref().map_or(0, |r| r.clip_frames as u32),
+        runtime_reason: match lumit_ml::runtime::status() {
+            lumit_ml::runtime::RuntimeStatus::Failed { detail } => detail,
+            _ => String::new(),
+        },
     })
 }
 

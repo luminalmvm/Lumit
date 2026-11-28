@@ -32,6 +32,7 @@ BridgePlaneStatus planeStatus(
 enum BridgePlaneFailure {
   /// No model runtime is installed.
   runtimeMissing,
+  runtimeFailed,
 
   /// Nothing installed does this effect's task.
   packMissing,
@@ -104,6 +105,7 @@ class BridgePlaneStatus {
   /// How many frames the clip has, against which the span is whole or
   /// partial. Zero when nothing has been read.
   final int clipFrames;
+  final String runtimeReason;
 
   const BridgePlaneStatus({
     required this.stage,
@@ -114,6 +116,7 @@ class BridgePlaneStatus {
     this.firstFrame,
     this.lastFrame,
     required this.clipFrames,
+    required this.runtimeReason,
   });
 
   @override
@@ -125,7 +128,8 @@ class BridgePlaneStatus {
       provider.hashCode ^
       firstFrame.hashCode ^
       lastFrame.hashCode ^
-      clipFrames.hashCode;
+      clipFrames.hashCode ^
+      runtimeReason.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -139,5 +143,6 @@ class BridgePlaneStatus {
           provider == other.provider &&
           firstFrame == other.firstFrame &&
           lastFrame == other.lastFrame &&
-          clipFrames == other.clipFrames;
+          clipFrames == other.clipFrames &&
+          runtimeReason == other.runtimeReason;
 }
