@@ -78,6 +78,7 @@ pub(crate) enum Preview {
     Shared(u32, u32, u64),
 }
 
+#[frb(ignore)]
 pub(crate) struct Request {
     pub composition: String,
     pub seconds: f64,
