@@ -168,7 +168,6 @@ class GraphChannel {
 
   bool get isPath => isMaskPath || isShapePath;
 
-  /// A seed's keys hold, so it has keys to edit but no curve to draw.
   bool get isSeed => param?.kind is BridgeParamKind_Seed;
 
   /// The row an expression on this channel sits on, so it reads its own

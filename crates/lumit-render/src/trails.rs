@@ -211,8 +211,6 @@ struct Frame {
     /// How much of the picture before is left, and the inverse affine it is
     /// sampled through. `None` keeps nothing.
     carry: Option<(f32, [f32; 4], [f32; 2])>,
-    /// The seed at this frame's own time, so a keyed seed walks the same
-    /// from a kept picture as from the start.
     seed: u32,
 }
 

@@ -3266,8 +3266,6 @@ class _EffectSection extends StatelessWidget {
             ?.info
             .copy;
 
-    // The swap between two paired colours, while both are shown, one under
-    // the other, and neither is driven.
     ({String label, VoidCallback onSwap})? swapFor(
         BridgeParamInfo param, BridgeParamInfo? next) {
       if (next == null ||
@@ -3669,10 +3667,6 @@ class _ParamGroupSection extends StatelessWidget {
       );
 }
 
-/// Two paired colour rows, with the swap button on the line between them in
-/// the column after the droppers. They are one widget so the button answers
-/// the pointer on both halves. [lined] draws the section's line between them,
-/// broken where the button sits so it shows on any background.
 class _SwapPair extends StatefulWidget {
   final Widget first;
   final Widget second;
@@ -3701,8 +3695,6 @@ class _SwapPairState extends State<_SwapPair> {
     final t = ThemeScope.of(context).theme;
     final strip = FxKeyStripScope.widthOf(context);
     return LayoutBuilder(builder: (context, c) {
-      // Past the stopwatch and the name, then the swatch, the dropper and
-      // the gap after it, as the colour row lays them out.
       final at = fxKeyColumnWidth +
           4 +
           fxLabelWidthFor(c.maxWidth - strip) +
@@ -3713,7 +3705,6 @@ class _SwapPairState extends State<_SwapPair> {
           4;
       Widget line() => SizedBox(
           height: 1, child: lined ? ColoredBox(color: t.hairline) : null);
-      // The line runs into the section's 10px side padding, as its own do.
       final between = SizedBox(
         height: lined ? 5 : 0,
         child: OverflowBox(
@@ -3732,8 +3723,6 @@ class _SwapPairState extends State<_SwapPair> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [first, between, second],
         ),
-        // A follower is hit where it is drawn, so the button answers on
-        // both rows.
         Positioned(
           left: 0,
           top: 0,

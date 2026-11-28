@@ -1,15 +1,7 @@
-//! A Seed row's keys. A seed is a whole number, and two seeds have nothing
-//! between them, so every key holds until the next.
-//!
-//! The keys sit beside the value rather than in it, so a project with none
-//! saves the same bytes it always did. With keys, the value is the first
-//! key's seed, which is what an older build reads and renders throughout.
-
 use super::{EffectInstance, EffectParam, EffectValue};
 use crate::anim::{Animation, Property};
 
 impl EffectParam {
-    /// A row holding `value` and nothing beside it.
     #[must_use]
     pub fn new(id: impl Into<String>, value: EffectValue) -> Self {
         Self {
@@ -20,13 +12,11 @@ impl EffectParam {
         }
     }
 
-    /// The keys a Seed row holds, when it has any.
     #[must_use]
     pub fn keyed_seed(&self) -> Option<&Property> {
         self.seed_keys.as_ref().filter(|keys| keys.is_animated())
     }
 
-    /// A Seed row's seed at layer time `lt`, or `None` for any other row.
     #[must_use]
     pub fn seed_at(&self, lt: f64) -> Option<u32> {
         let EffectValue::Seed(seed) = self.value else {
@@ -38,8 +28,6 @@ impl EffectParam {
         )
     }
 
-    /// Put `animation` on a Seed row: a seed, or keys that all hold. An
-    /// expression, or any other row, is refused with `false`.
     pub fn set_seed(&mut self, animation: Animation) -> bool {
         let EffectValue::Seed(seed) = &mut self.value else {
             return false;
@@ -71,14 +59,12 @@ impl EffectParam {
 }
 
 impl EffectInstance {
-    /// The seed row `id` holds at layer time `lt`.
     #[must_use]
     pub fn seed_at(&self, id: &str, lt: f64) -> Option<u32> {
         self.params.iter().find(|p| p.id == id)?.seed_at(lt)
     }
 }
 
-/// The nearest seed: the cast saturates, so a negative or NaN gives 0.
 fn whole(v: f64) -> u32 {
     v.round() as u32
 }

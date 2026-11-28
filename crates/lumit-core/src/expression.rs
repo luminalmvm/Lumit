@@ -416,8 +416,6 @@ fn carrier<'c>(
 
 /// A row an expression can sit on: a transform property, or an effect
 /// parameter by the effect's id and its own. An effect's point is the pair
-/// of rows its schema names `<stem>_x` and `<stem>_y`. A colour's channel is
-/// its parameter and which of the four it is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Row<'a> {
     Transform(crate::model::TransformProp),
@@ -899,8 +897,6 @@ fn list_value(numbers: &[f64]) -> Result<ExprValue, String> {
     }
 }
 
-/// A Rhai answer as the one number a property wants. A point's or a colour's
-/// row takes its own number of a list; a row on its own takes one number.
 fn convert_result(result: Result<Dynamic, Box<rhai::EvalAltResult>>, slot: Slot) -> f64 {
     let Ok(val) = result else { return -1.0 };
     if slot.values().len() > 1 && val.is_array() {

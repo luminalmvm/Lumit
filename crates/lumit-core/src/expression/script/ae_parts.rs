@@ -1,7 +1,5 @@
 use crate::anim::Property;
 
-/// Up to four properties (a colour's channels), then numbers that do not
-/// animate: a checkbox or a menu.
 pub(super) struct Parts<'a> {
     pub(super) props: [Option<&'a Property>; 4],
     pub(super) tail: [Option<f64>; 3],

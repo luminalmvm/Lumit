@@ -1531,7 +1531,6 @@ fn feed_points_rows_at(
                         feed_f64(h, ch.value_at(when));
                     }
                 }
-                // Only a keyed seed, so an unkeyed one keys as it always did.
                 EffectValue::Seed(_) if p.keyed_seed().is_some() => {
                     h.update(&p.seed_at(when).unwrap_or(0).to_le_bytes());
                 }

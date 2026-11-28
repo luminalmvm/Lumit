@@ -2159,7 +2159,6 @@ pub enum BridgeEffectValue {
     Colour(BridgeColour),
     Bool(bool),
     Choice(u32),
-    /// A seed, or its keys. Keys always hold, and an expression is refused.
     Seed(BridgeScalar),
     File(BridgeFileParam),
     Layer(Option<Uuid>),
@@ -3663,7 +3662,6 @@ impl BridgeEffectInstance {
             .iter_mut()
             .find(|p| p.id == id)
             .ok_or(BridgeError::InvalidParam)?;
-        // A colour counts as new only while none of its channels has a slot.
         use lumit_core::expression::script::SLOT_KEY;
         let noted = |p: &lumit_core::anim::Property| p.extra.contains_key(SLOT_KEY);
         let fresh = match &param.value {

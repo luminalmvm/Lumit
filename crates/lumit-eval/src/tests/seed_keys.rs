@@ -1,7 +1,5 @@
 use super::*;
 
-/// A keyed seed keys each frame by the seed it shows, and nothing else: an
-/// unkeyed seed saves and keys exactly as before.
 #[test]
 fn a_keyed_seed_keys_the_seed_each_frame_shows() {
     let mut doc = Document::new();
@@ -31,7 +29,6 @@ fn a_keyed_seed_keys_the_seed_each_frame_shows() {
     assert_eq!(json(&with(Animation::Static(old))), json(&shaken));
 
     let reseeded = with(Animation::Static(old + 1.0));
-    // Linear keys, held all the same: the frame between the two shows the first.
     let key_at = |s: i64, value: f64| Keyframe {
         time: Rational::new(s, 1).unwrap(),
         value,

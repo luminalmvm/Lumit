@@ -104,8 +104,6 @@ double logSliderTravel(double value, double min, double max) {
 
 const double effectCellWidth = 78;
 
-/// A colour row's swatch, the gap after it and its dropper. The swap button
-/// between two colour rows lines up past all three.
 const double colourSwatchWidth = 28;
 const double colourSwatchGap = 6;
 const double dropperWidth = 18;
@@ -412,7 +410,6 @@ class EffectParamRowFrb extends StatelessWidget {
                 fixedColumns: fixed,
                 navigatorApart: valueColumn != null,
                 // Alt+click: the expression editor over the row.
-                // A seed takes keys and nothing else.
                 onExpression: _seed
                     ? null
                     : () => _altExpression(context, scalars),
@@ -737,8 +734,6 @@ class EffectParamRowFrb extends StatelessWidget {
         r: on(was[0]), g: on(was[1]), b: on(was[2]), a: on(was[3])));
   }
 
-  /// The colour as its expressions work it out, on this row or on the
-  /// colour row [id] of the same effect.
   List<double> _colourWorked(
           LayerReference owner, BridgeColour colour, BridgeRational time,
           [String? id]) =>
@@ -749,8 +744,6 @@ class EffectParamRowFrb extends StatelessWidget {
           effect: effectId,
           param: id ?? param.id);
 
-  /// [_colourWorked] for the swatch, held per time and document so a
-  /// rebuild at the same frame asks nothing.
   List<double> _colourShown(BuildContext context, LayerReference owner,
       BridgeColour colour, BridgeRational time,
       [String? id]) {
@@ -779,8 +772,6 @@ class EffectParamRowFrb extends StatelessWidget {
         BridgeColour(r: off(0), g: off(1), b: off(2), a: off(3)));
   }
 
-  /// Null when the layer is not in the open composition, as for
-  /// [expressionAsKeys].
   BridgeEffectValue? _colourAsKeys(
       LumitUiState ui, LayerReference owner, BridgeEffectValue value) {
     final info = ui.model.byId(owner.internallayerId)?.info;
@@ -802,7 +793,6 @@ class EffectParamRowFrb extends StatelessWidget {
         }
       }
     } catch (_) {
-      // The layer or its comp went away under the press.
       return null;
     }
     BridgeScalar keyed(int i) => BridgeScalar.keyframed(keys[i]);
@@ -822,7 +812,6 @@ class EffectParamRowFrb extends StatelessWidget {
     final colourExpression = numeric &&
         !float &&
         scalars.any((s) => s is BridgeScalar_Expression);
-    // A pick has nowhere to go on an expression with no keys under it.
     final colourHeld = colourExpression && scalars.any(_bareExpression);
     final ui = Provider.of<LumitUiState>(context, listen: false);
     final playhead = ui.playheadFrame;
@@ -1001,14 +990,12 @@ class EffectParamRowFrb extends StatelessWidget {
         _ => null,
       };
     }
-    // A seed keys too, always held: two seeds have nothing between them.
     if (value case BridgeEffectValue_Seed(:final field0) when _seed) {
       return [field0];
     }
     return null;
   }
 
-  /// The way back from [_animatableScalarsOf]: the value these channels make.
   BridgeEffectValue _valueOfScalars(List<BridgeScalar> next) => next.length == 4
       ? BridgeEffectValue.colour(
           BridgeColour(r: next[0], g: next[1], b: next[2], a: next[3]))
@@ -2197,8 +2184,6 @@ class EffectParamRowFrb extends StatelessWidget {
         : null;
     final now = PickedColour(worked?[0] ?? chan(colour.r),
         worked?[1] ?? chan(colour.g), worked?[2] ?? chan(colour.b));
-    // A pick has nowhere to go on an expression with no keys under it, so
-    // the swatch and dropper answer nothing, as on a driven row.
     final held = [colour.r, colour.g, colour.b, colour.a].any(_bareExpression);
 
     final shown = now.onScreen.clipped;
@@ -2240,12 +2225,6 @@ class EffectParamRowFrb extends StatelessWidget {
                   context: context,
                   position: box.localToGlobal(Offset(0, box.size.height + 4)),
                   initial: now,
-                  // An effect colour is scene-linear in a float working depth
-                  // (fp16 today, docs/06 §3.1): 0–1 is black to white, and the
-                  // parameter's own range says how far past that it may go — an
-                  // HDR tint really does sit above 1, and a 0–255 dial could not
-                  // reach it. When the project depth switch lands (docs/06 §3.1),
-                  // an 8 bpc project is what passes `bytes` here.
                   scale: ColourScale.unit,
                   min: min,
                   max: max,
@@ -2284,10 +2263,6 @@ class EffectParamRowFrb extends StatelessWidget {
                 id: 'fx-$id-${param.id}',
                 reads: DropperReads.colour,
                 label: engineLabel(param.label),
-                // The very value the picker writes, so a colour lifted off the
-                // picture and a colour chosen in the dialogue cannot be clamped
-                // or shaped differently. The sample is already scene-linear,
-                // exactly as the parameter stores it.
                 onPreview: (sample) =>
                     _setLive(valueOf(PickedColour(sample.r, sample.g, sample.b))),
                 onPick: (sample) =>
@@ -2774,7 +2749,6 @@ class EffectPointRowFrb extends StatelessWidget {
       BridgeExpressionRow rowOf(BridgeParamInfo p) =>
           BridgeExpressionRow.effect(effect: effectId, param: p.id);
       BridgeScalar heldOf(BridgeParamInfo p) => p == xParam ? sx : sy;
-      // Linked, both halves take the write, each its own when [of] says so.
       void write(BridgeScalar Function(BridgeParamInfo p) of,
           {bool live = false}) {
         final halves = linked ? [xParam, yParam] : [half];
@@ -2802,7 +2776,6 @@ class EffectPointRowFrb extends StatelessWidget {
         comp: comp,
         layer: owner,
         row: rowOf(half),
-        // A new one is not previewed: a cancel would write it back.
         onLive: fresh ? null : (draft) => write((_) => draft, live: true),
         onRemove: !linked
             ? null
@@ -2835,7 +2808,6 @@ class EffectPointRowFrb extends StatelessWidget {
                   write((p) => keys[p]!);
                 }
               },
-        // A new one taken off again leaves the row as it was.
         onCommit: (next) {
           if (fresh && next is! BridgeScalar_Expression) return;
           write((_) => next);
@@ -2844,7 +2816,6 @@ class EffectPointRowFrb extends StatelessWidget {
     }
 
     if (linked) {
-      // The half that holds an expression, so it opens and not a new one.
       final y = sx is! BridgeScalar_Expression && sy is BridgeScalar_Expression;
       open(y ? yParam : xParam, y ? sy : sx);
       return;
@@ -3150,7 +3121,6 @@ class EffectPointRowFrb extends StatelessWidget {
       defaultEffectValue(xParam.kind),
       defaultEffectValue(yParam.kind),
     );
-    // Linked, the first half's puts one [x, y] on both, as Alt+click does.
     VoidCallback setHalf(BridgeParamInfo param, BridgeScalar scalar) => () {
           final both = linked && param == xParam && sx != null && sy != null;
           final value = BridgeEffectValue.float(BridgeScalar.expression(
@@ -3599,12 +3569,9 @@ final ValueNotifier<Set<UuidValue>> bakesRunning = ValueNotifier(const {});
 final ValueNotifier<Map<UuidValue, Set<String>>> actionsResting =
     ValueNotifier(const {});
 
-/// An expression with no keys kept under it.
 bool _bareExpression(BridgeScalar s) =>
     s is BridgeScalar_Expression && (s.field2?.isEmpty ?? true);
 
-/// The swatch's colours worked out by their expressions, by colour, layer,
-/// effect, parameter and time, for one document revision.
 final Map<(BridgeColour, UuidValue, UuidValue, String, BridgeRational),
     List<double>> _workedColours = {};
 int? _workedColoursRevision;
