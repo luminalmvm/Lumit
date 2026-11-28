@@ -19,14 +19,9 @@ const double _zoomGlyphSmall = 9;
 const double _zoomGlyphLarge = 14;
 
 /// The lanes' bottom bar (docs/07 §4.5-§4.6): the zoom slider between its two
-/// landscapes, the magnet, and the horizontal scrollbar that moves the zoomed
-/// view — and **nothing else, in either view**.
-///
-/// The key commands and the graph's own commands used to stand here too, which
-/// made the bar under the lanes the longest strip of buttons in the panel while
-/// the strip under the outline had room to spare. They moved to the outline's
-/// foot (`KeyCommandStrip`), beside the column toggles: they act on what is
-/// selected in the outline above them, so that is where the eye already is.
+/// landscapes, the magnet, the view's own buttons, and the horizontal
+/// scrollbar that moves the zoomed view. In graph view the view's buttons are
+/// the graph's key commands and framing, under the curves they act on.
 ///
 /// A panel bottom bar, and so a **secondary row**: `t.density.secondaryRow`.
 /// The outline reserves the same height below its own rows —
@@ -63,8 +58,8 @@ class LaneBottomBar extends StatelessWidget {
   final double perFrame;
   final double fps;
 
-  /// What the view under this bar adds after the magnet: the graph's own
-  /// framing buttons. Empty for the lanes.
+  /// What the view under this bar adds after the magnet: the graph's key
+  /// commands and framing buttons. Empty for the lanes.
   final List<FoldItem> viewButtons;
 
   const LaneBottomBar({
@@ -211,13 +206,16 @@ class LaneBottomBar extends StatelessWidget {
       // header wears at the other end of the panel.
       color: t.surface2,
       padding: const EdgeInsets.symmetric(horizontal: 10),
-      child: Row(
+      child: LayoutBuilder(
+        builder: (context, box) => Row(
         children: [
           // The zoom never folds; the magnet and the view's own buttons fold
-          // into the overflow mark when the panel is squeezed, where they used
-          // to scroll out of sight. Loose, so at any ordinary width it takes
-          // exactly what it needs and the scrollbar keeps the rest.
-          Flexible(
+          // into the overflow mark when the panel is squeezed. Capped rather
+          // than flexible, so it takes what it needs and the scrollbar the
+          // rest; a flexible half folded the graph's buttons on a wide bar.
+          ConstrainedBox(
+            constraints: BoxConstraints(
+                maxWidth: (box.maxWidth - 48).clamp(0.0, double.infinity)),
             child: FoldingRow(
               markKey: const ValueKey('tl-lane-bar-overflow'),
               markWidth: iconSize + 8,
@@ -316,6 +314,7 @@ class LaneBottomBar extends StatelessWidget {
             ),
           ),
         ],
+      ),
       ),
       ),
     );

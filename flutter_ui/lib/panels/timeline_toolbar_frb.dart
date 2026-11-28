@@ -554,137 +554,60 @@ List<(String, String)> _newLayerKinds() => [
       ('layer.new.bus', l10n.menuBus),
     ];
 
-/// **The key commands, at the outline's foot** — the interpolation words and
-/// what goes with them, standing under the list they act on.
-///
-/// They stood on the lane bar until the owner moved them here: that bar had
-/// grown into the longest strip of buttons in the panel while this end of the
-/// same row had room to spare, and the commands act on a *key selection*,
-/// which is made in the outline above them. The bar under the lanes is left
-/// with the two things that are about the lanes — the zoom and the scrollbar.
-///
-/// The word *Interpolation* went with the move. It labelled the four words
-/// beside it, and Linear / Easy ease / Hold / Ease need no telling what they
-/// are; a kicker naming a run of kickers only spent room the outline's foot
-/// has less of than the lane bar had.
-///
-/// Two shapes, one per view. In **Layers** it is the keyframe strip:
-/// the four interpolations — and nothing after them, since the owner removed
-/// Reverse, Copy and Paste at playhead from the bar (2026-08-31).
-/// In **graph view** it is the graph's own commands (docs/07 §5.3): the eases,
-/// the tangent modes and Break handles (the graph is chosen in its own
-/// corner, [GraphLensSwitch]). Both shapes draw glyphs named by their
-/// tooltips, so the two views share one face.
+/// A key command drawn as a glyph of the set, its word the tooltip and the
+/// semantic label, folded with the gap before it into a [FoldItem].
+FoldItem _keyCommand(
+  BuildContext context,
+  LumitTheme t,
+  String keyName,
+  String mark,
+  String word, {
+  required void Function(BuildContext buttonContext) onPressed,
+  String? tip,
+  String? action,
+  bool on = false,
+  double gap = 2,
+}) =>
+    FoldItem(
+      label: word,
+      selected: on,
+      icon: glyph.LumitIcon(mark, size: iconSize, colour: t.textSecondary),
+      onPressed: () => onPressed(context),
+      child: Padding(
+        padding: EdgeInsets.only(left: gap),
+        child: LumitTooltip(
+          message: tip ?? word,
+          action: action,
+          child: Builder(
+            builder: (buttonContext) => HouseButton(
+              key: ValueKey<String>(keyName),
+              small: true,
+              frameless: true,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              onPressed: () => onPressed(buttonContext),
+              child: glyph.LumitIcon(mark,
+                  size: iconSize,
+                  colour: on ? t.textPrimary : t.textMuted,
+                  semanticLabel: word),
+            ),
+          ),
+        ),
+      ),
+    );
+
+/// **The key commands, at the outline's foot**, in Layers: the four
+/// interpolations, acting on the key selection made in the outline above.
+/// Graph view carries its own set on the graph's bar, [graphKeyCommands].
 class KeyCommandStrip extends StatelessWidget {
-  final bool strip;
-
-  final GraphLens? lens;
-
-  /// Break handles: on, a handle drag in the graph moves one side only.
-  final bool breakHandles;
-  final VoidCallback? onToggleBreakHandles;
   final ValueChanged<BridgeSideInterp>? onInterp;
-
-  final ValueChanged<TangentMode>? onTangentMode;
-
-  /// The Easing… button pressed, with the button's own context so a popup can
-  /// be anchored to it. Whether that is a popup or a docked panel is the
-  /// panel's decision, not this strip's.
-  final ValueChanged<BuildContext>? onOpenEasing;
 
   final ValueChanged<BuildContext>? onEaseBlock;
 
-  const KeyCommandStrip({
-    super.key,
-    this.strip = false,
-    this.lens,
-    this.breakHandles = false,
-    this.onToggleBreakHandles,
-    this.onInterp,
-    this.onTangentMode,
-    this.onOpenEasing,
-    this.onEaseBlock,
-  });
-
-  /// A strip command drawn as a glyph of the set: the interpolation
-  /// entries, whose shapes — a line, an eased curve, a step, a curve that
-  /// overshoots — say more at 16px than four capitalised words did. The word
-  /// is the tooltip, which is the control's name, and the semantic label for
-  /// a reader.
-  Widget _glyphButton(
-    LumitTheme t, {
-    required String keyName,
-    required String mark,
-    required String word,
-    required VoidCallback onPressed,
-    String? tip,
-    String? action,
-    bool on = false,
-  }) =>
-      LumitTooltip(
-        message: tip ?? word,
-        action: action,
-        child: HouseButton(
-          key: ValueKey<String>(keyName),
-          small: true,
-          frameless: true,
-          // The comp-toggle buttons' own padding: a 16px glyph plus the
-          // button's 1px edge is the whole of an 18px bottom bar.
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          onPressed: onPressed,
-          child: glyph.LumitIcon(mark,
-              size: iconSize,
-              colour: on ? t.textPrimary : t.textMuted,
-              semanticLabel: word),
-        ),
-      );
+  const KeyCommandStrip({super.key, this.onInterp, this.onEaseBlock});
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    // One button and the gap before it, folded together, and its row in the
-    // overflow menu. Two gaps run through this strip: 2 between the chips of
-    // one segmented run, 12 between one run and the next, so the runs read
-    // as groups rather than as one long strip of buttons.
-    FoldItem item(Widget button,
-            {required String label,
-            required VoidCallback onPressed,
-            String? mark,
-            double gap = 0,
-            bool on = false,
-            bool keep = false}) =>
-        FoldItem(
-          keep: keep,
-          label: label,
-          selected: on,
-          icon: mark == null
-              ? null
-              : glyph.LumitIcon(mark, size: iconSize, colour: t.textSecondary),
-          onPressed: onPressed,
-          child: Padding(padding: EdgeInsets.only(left: gap), child: button),
-        );
-    FoldItem glyphItem(String keyName, String mark, String word,
-        {required VoidCallback onPressed,
-        String? tip,
-        String? action,
-        bool on = false,
-        double gap = 2}) {
-      return item(
-          _glyphButton(t,
-              keyName: keyName,
-              mark: mark,
-              word: word,
-              tip: tip,
-              action: action,
-              on: on,
-              onPressed: onPressed),
-          label: word,
-          mark: mark,
-          on: on,
-          gap: gap,
-          onPressed: onPressed);
-    }
-
     return Container(
       key: const ValueKey('tl-key-commands'),
       height: t.density.secondaryRow,
@@ -698,110 +621,88 @@ class KeyCommandStrip extends StatelessWidget {
           markWidth: iconSize + 8,
           markHeight: t.density.secondaryRow - 2,
           items: [
-            if (strip) ...[
-              glyphItem('keys-interp-linear', LumitIcons.linear, l10n.easeLinear,
-                  gap: 0,
-                  onPressed: () =>
-                      onInterp?.call(const BridgeSideInterp.linear())),
-              glyphItem('keys-interp-bezier', LumitIcons.easeInOut,
-                  l10n.easeEasy,
-                  action: 'graph.ease',
-                  onPressed: () => onInterp?.call(easyEase)),
-              glyphItem('keys-interp-hold', LumitIcons.hold, l10n.easeHold,
-                  onPressed: () =>
-                      onInterp?.call(const BridgeSideInterp.hold())),
-              item(
-                  Padding(
-                    padding: const EdgeInsets.only(left: 2),
-                    child: Builder(
-                      builder: (buttonContext) => _glyphButton(t,
-                          keyName: 'keys-interp-ease',
-                          mark: LumitIcons.ease,
-                          word: l10n.keysEase,
-                          onPressed: () => onEaseBlock?.call(buttonContext)),
-                    ),
-                  ),
-                  label: l10n.keysEase,
-                  mark: LumitIcons.ease,
-                  onPressed: () => onEaseBlock?.call(context)),
-            ],
-            if (lens != null) ...[
-              glyphItem('graph-interp-linear', LumitIcons.linear,
-                  l10n.easeLinear,
-                  tip: l10n.tipLinearKeyframes,
-                  gap: 0,
-                  onPressed: () =>
-                      onInterp?.call(const BridgeSideInterp.linear())),
-              glyphItem('graph-interp-bezier', LumitIcons.easeInOut,
-                  l10n.easeEasy,
-                  tip: l10n.tipEasyEase,
-                  action: 'graph.ease',
-                  onPressed: () => onInterp?.call(easyEase)),
-              glyphItem('graph-interp-hold', LumitIcons.hold, l10n.easeHold,
-                  tip: l10n.tipHoldKeyframes,
-                  onPressed: () =>
-                      onInterp?.call(const BridgeSideInterp.hold())),
-              // The shaped ease, one step along from the one-click three: same
-              // selection, a curve instead of a constant. Its own Builder so
-              // the popup can find where this button is; the popup layout
-              // slides it up into view.
-              //
-              // Value lens only. The box draws a shape against the value's own
-              // travel, so a curve stamped while the speed lens is up would
-              // land on the value graph — a change the user cannot see in the
-              // view they drew it in. The one-click three above stay in both
-              // lenses: a side's interp means the same thing either way.
-              if (lens == GraphLens.value)
-                item(
-                    Padding(
-                      padding: const EdgeInsets.only(left: 2),
-                      child: Builder(
-                        builder: (buttonContext) => _glyphButton(t,
-                            keyName: 'graph-interp-easing',
-                            mark: LumitIcons.bezier,
-                            word: l10n.easeCustom,
-                            tip: l10n.tipEasingEditor,
-                            onPressed: () => onOpenEasing?.call(buttonContext)),
-                      ),
-                    ),
-                    label: l10n.easeCustom,
-                    mark: LumitIcons.bezier,
-                    onPressed: () => onOpenEasing?.call(context)),
-              // Tangents — Auto / Clamp / Free (§6.3), after the ease
-              // presets. A run of three like the eases
-              // beside them, and unlit for the same reason: these are things
-              // to *do* to the selection, and a selection spanning two modes
-              // has no one answer to light. Which mode a side is in is legible
-              // where it matters — in the handle, which stops following its
-              // neighbours the moment it is dragged.
-              glyphItem('graph-tangent-auto', LumitIcons.auto,
-                  l10n.graphTangentAuto,
-                  tip: l10n.tipTangentAuto,
-                  gap: 12,
-                  onPressed: () => onTangentMode?.call(TangentMode.auto)),
-              glyphItem('graph-tangent-clamp', LumitIcons.clamp,
-                  l10n.graphTangentClamp,
-                  tip: l10n.tipTangentClamp,
-                  onPressed: () => onTangentMode?.call(TangentMode.clamp)),
-              glyphItem('graph-tangent-free', LumitIcons.free,
-                  l10n.graphTangentFree,
-                  tip: l10n.tipTangentFree,
-                  onPressed: () => onTangentMode?.call(TangentMode.free)),
-              glyphItem('graph-break-handles', LumitIcons.unlink,
-                  l10n.graphBreakHandles,
-                  tip: breakHandles
-                      ? l10n.tipBreakHandlesOn
-                      : l10n.tipBreakHandlesOff,
-                  gap: 12,
-                  on: breakHandles,
-                  onPressed: () => onToggleBreakHandles?.call()),
-            ],
+            _keyCommand(context, t, 'keys-interp-linear', LumitIcons.linear,
+                l10n.easeLinear,
+                gap: 0,
+                onPressed: (_) =>
+                    onInterp?.call(const BridgeSideInterp.linear())),
+            _keyCommand(context, t, 'keys-interp-bezier', LumitIcons.easeInOut,
+                l10n.easeEasy,
+                action: 'graph.ease',
+                onPressed: (_) => onInterp?.call(easyEase)),
+            _keyCommand(
+                context, t, 'keys-interp-hold', LumitIcons.hold, l10n.easeHold,
+                onPressed: (_) =>
+                    onInterp?.call(const BridgeSideInterp.hold())),
+            _keyCommand(
+                context, t, 'keys-interp-ease', LumitIcons.ease, l10n.keysEase,
+                onPressed: (at) => onEaseBlock?.call(at)),
           ],
         ),
       ),
     );
   }
 }
+
+/// The graph's own key commands (docs/07 §5.3), on the graph's bar beside the
+/// curves they shape: the eases, the tangent modes and Break handles. Runs are
+/// 12 apart, buttons within a run 2. Unlit, as a selection spanning two modes
+/// has no one answer to light; Break handles is a switch and lights.
+///
+/// Easing… is value lens only: a shape stamped while the speed lens is up
+/// would land on the value graph, out of sight.
+List<FoldItem> graphKeyCommands(
+  BuildContext context,
+  LumitTheme t, {
+  required GraphLens lens,
+  required bool breakHandles,
+  required VoidCallback onToggleBreakHandles,
+  required ValueChanged<BridgeSideInterp> onInterp,
+  required ValueChanged<TangentMode> onTangentMode,
+  required ValueChanged<BuildContext> onOpenEasing,
+}) =>
+    [
+      _keyCommand(context, t, 'graph-interp-linear', LumitIcons.linear,
+          l10n.easeLinear,
+          tip: l10n.tipLinearKeyframes,
+          gap: 12,
+          onPressed: (_) => onInterp(const BridgeSideInterp.linear())),
+      _keyCommand(context, t, 'graph-interp-bezier', LumitIcons.easeInOut,
+          l10n.easeEasy,
+          tip: l10n.tipEasyEase,
+          action: 'graph.ease',
+          onPressed: (_) => onInterp(easyEase)),
+      _keyCommand(
+          context, t, 'graph-interp-hold', LumitIcons.hold, l10n.easeHold,
+          tip: l10n.tipHoldKeyframes,
+          onPressed: (_) => onInterp(const BridgeSideInterp.hold())),
+      if (lens == GraphLens.value)
+        _keyCommand(context, t, 'graph-interp-easing', LumitIcons.bezier,
+            l10n.easeCustom,
+            tip: l10n.tipEasingEditor, onPressed: onOpenEasing),
+      _keyCommand(
+          context, t, 'graph-tangent-auto', LumitIcons.auto,
+          l10n.graphTangentAuto,
+          tip: l10n.tipTangentAuto,
+          gap: 12,
+          onPressed: (_) => onTangentMode(TangentMode.auto)),
+      _keyCommand(
+          context, t, 'graph-tangent-clamp', LumitIcons.clamp,
+          l10n.graphTangentClamp,
+          tip: l10n.tipTangentClamp,
+          onPressed: (_) => onTangentMode(TangentMode.clamp)),
+      _keyCommand(
+          context, t, 'graph-tangent-free', LumitIcons.free,
+          l10n.graphTangentFree,
+          tip: l10n.tipTangentFree,
+          onPressed: (_) => onTangentMode(TangentMode.free)),
+      _keyCommand(context, t, 'graph-break-handles', LumitIcons.unlink,
+          l10n.graphBreakHandles,
+          tip: breakHandles ? l10n.tipBreakHandlesOn : l10n.tipBreakHandlesOff,
+          gap: 12,
+          on: breakHandles,
+          onPressed: (_) => onToggleBreakHandles()),
+    ];
 
 /// The outline's end of the bottom bar (§12A.1): one kicker per
 /// column group, lit while that group is drawn.

@@ -4103,6 +4103,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
             {required String tip,
             String? action,
             required bool on,
+            double gap = 2,
             required VoidCallback onPressed}) =>
         FoldItem(
           label: label,
@@ -4111,7 +4112,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           selected: on,
           onPressed: onPressed,
           child: Padding(
-            padding: const EdgeInsets.only(left: 2),
+            padding: EdgeInsets.only(left: gap),
             child: LumitTooltip(
               message: tip,
               action: action,
@@ -4135,6 +4136,17 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       GraphScope.comp => l10n.tipGraphScopeComp,
     };
     return [
+      ...graphKeyCommands(
+        context,
+        t,
+        lens: _graphLens,
+        breakHandles: _graphBreakHandles,
+        onToggleBreakHandles: () =>
+            setState(() => _graphBreakHandles = !_graphBreakHandles),
+        onInterp: _applyInterp,
+        onTangentMode: _applyTangentMode,
+        onOpenEasing: _openEasing,
+      ),
       button(
           'graph-scope',
           switch (_graphScope) {
@@ -4144,6 +4156,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           },
           scopeTip,
           tip: scopeTip,
+          gap: 12,
           on: _graphScope != GraphScope.selected,
           onPressed: () => setState(() => _graphScope = GraphScope
               .values[(_graphScope.index + 1) % GraphScope.values.length])),
@@ -5563,43 +5576,23 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
               onOpen: () => _openAudioWorkspace(ui),
               onMenu: (at) => _soundMixMenu(ui, comp, at),
             ),
-          // The outline's own end of the bottom bar: the key commands and the
-          // column-group toggles, where the lane side carries the zoom and the
-          // scrollbar. The block was already reserved to keep the two
-          // halves the same height — it now has something in it.
-          //
-          // One row, two runs. The strip is loose, so at any ordinary outline
-          // width it takes exactly the room its buttons need and the toggles
-          // keep the rest; squeezed, neither run overflows — the strip folds
-          // into its overflow mark and the toggles scroll, each inside its
-          // own share.
-          //
-          // In Layers the strip is four glyphs and never needs squeezing, so
-          // it is laid out at its own width and the toggles really do keep
-          // the rest. As a flexible half it left the toggles scrolling inside
-          // the other half with empty bar beside them.
+          // The outline's own end of the bottom bar: in Layers the key
+          // commands at their own width, then the column-group toggles, which
+          // keep the rest and scroll when squeezed. Graph view carries its key
+          // commands on the graph's bar instead.
           GestureDetector(
             behavior: HitTestBehavior.opaque,
             onSecondaryTapUp: (d) => _showColumnMenu(d.globalPosition),
             child: Row(children: [
-            Flexible(
-              flex: _graph ? 1 : 0,
-              child: KeyCommandStrip(
-                strip: !_graph,
-                lens: _graph ? _graphLens : null,
-                breakHandles: _graphBreakHandles,
-                onToggleBreakHandles: () => setState(
-                    () => _graphBreakHandles = !_graphBreakHandles),
+            if (!_graph)
+              KeyCommandStrip(
                 onInterp: (side) => _applyInterp(side),
-                onTangentMode: _applyTangentMode,
-                onOpenEasing: _openEasing,
                 onEaseBlock: (buttonContext) {
                   final box = buttonContext.findRenderObject();
                   if (box is! RenderBox) return;
                   _openEasePopover(box.localToGlobal(Offset.zero));
                 },
               ),
-            ),
             Expanded(
                 child: ColumnToggles(
               key: const ValueKey('tl-column-toggles'),
