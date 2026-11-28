@@ -25,6 +25,7 @@ Converts a picture from rectangular coordinates to polar coordinates, and vice v
 | --- | --- | --- | --- | --- |
 | **Conversion** | Dropdown | Rectangular to polar · Polar to rectangular | Rectangular to polar | - |
 | **Interpolation** | Slider | 0 to 100 | 100 | Per cent |
+| **Edges** | Dropdown | None · Edge repeat · Mirror repeat | Mirror repeat | - |
 | **Mix** | Slider | 0 to 100 | 100 | Per cent |
 | **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
 | **Matte** | Layer | Any layer in the composition | None | - |
@@ -42,6 +43,9 @@ In the Effect Controls panel:
 - **Conversion**: which conversion to do.
 - **Interpolation**: how far between fully converting and not altering at all the 
   effect is.
+- **Edges**: what fills the area the effect reads from outside the frame. **None** leaves
+  it empty. **Edge repeat** smears the border pixel outward and **Mirror repeat** reflects
+  the picture back.
 - **Mix**: how much of the result replaces the original.
 - **Blend**: the blend mode the result is laid over the original with.
 - **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).

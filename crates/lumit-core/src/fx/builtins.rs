@@ -446,6 +446,7 @@ pub fn backfill_builtin_params(effects: &mut [EffectInstance]) {
         if e.effect.match_name == "turbiniu" {
             e.effect.version = e.effect.version.max(s.version);
         }
+        keep_saved_edges(e);
         // A Map placement row missing beside a Layer row that was saved: that
         // map was stretched, so it goes on being stretched.
         let stretched: Vec<&str> = s
@@ -486,6 +487,21 @@ pub fn backfill_builtin_params(effects: &mut [EffectInstance]) {
                 });
             }
         }
+    }
+}
+
+fn keep_saved_edges(e: &mut EffectInstance) {
+    let drew_with = match e.effect.match_name.as_str() {
+        "warp" | "spherize" | "twirl" | "polar_coordinates" => 0,
+        "ripple" => 1,
+        _ => return,
+    };
+    if !e.params.iter().any(|p| p.id == "edge") {
+        e.params.push(EffectParam {
+            id: "edge".to_owned(),
+            value: EffectValue::Choice(drew_with),
+            extra: serde_json::Map::new(),
+        });
     }
 }
 
