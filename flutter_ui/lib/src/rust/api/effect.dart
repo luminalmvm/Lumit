@@ -670,6 +670,8 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   /// in yet is a passthrough rather than a failure.
   BridgeShaderStatus shaderStatus();
 
+  void swapColours({required String id});
+
   /// **Sync parameters** (registry §4 rule 2): adopt every row this
   /// instance's state derives and the document lacks, at its default, on
   /// the **staged** copy. `LayerReference::set_effects` is the commit, so the

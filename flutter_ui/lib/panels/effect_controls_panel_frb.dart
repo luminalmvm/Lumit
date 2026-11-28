@@ -2885,6 +2885,20 @@ class _EffectSection extends StatelessWidget {
     onStackChanged();
   }
 
+  void _swapColours(String first) {
+    final stack = _instances();
+    for (final instance in stack) {
+      if (instance.id() != info.id) continue;
+      try {
+        instance.swapColours(id: first);
+        layer.setEffects(effects: stack);
+      } catch (_) {
+      }
+      break;
+    }
+    onStackChanged();
+  }
+
   @override
   Widget build(BuildContext context) {
     final id = info.id;
@@ -3249,6 +3263,21 @@ class _EffectSection extends StatelessWidget {
             ?.info
             .copy;
 
+    // The swap between two paired colours, while both are shown, one under
+    // the other, and neither is driven.
+    ({String label, VoidCallback onSwap})? swapFor(
+        BridgeParamInfo param, BridgeParamInfo? next) {
+      if (next == null ||
+          folded.contains(next.id) ||
+          driven['$id/${param.id}'] != null ||
+          driven['$id/${next.id}'] != null ||
+          !cachedListColourPairs(info.name)
+              .any((p) => p.first == param.id && p.second == next.id)) {
+        return null;
+      }
+      return (label: next.label, onSwap: () => _swapColours(param.id));
+    }
+
     Widget rowFor(BridgeParamInfo param) {
       return marked(
           param.id,
@@ -3336,7 +3365,7 @@ class _EffectSection extends StatelessWidget {
     // two over-life curves sit under the Particle kicker, and before this they
     // came out as two stacked plots, which is the shape the curve fold
     // exists to prevent.
-    List<Widget> foldRows(List<BridgeParamInfo> run) {
+    List<Widget> foldRows(List<BridgeParamInfo> run, {bool lined = true}) {
       final out = <Widget>[];
       var i = 0;
       while (i < run.length) {
@@ -3401,6 +3430,15 @@ class _EffectSection extends StatelessWidget {
             canSetExpression: true,
           )));
           i += 2;
+        } else if (swapFor(param, next) case final swap?) {
+          out.add(_SwapPair(
+            first: rowFor(param),
+            second: rowFor(next!),
+            swapKey: 'fx-swap-${param.id}',
+            swap: swap,
+            lined: lined,
+          ));
+          i += 2;
         } else {
           out.add(rowFor(param));
           i += 1;
@@ -3445,7 +3483,7 @@ class _EffectSection extends StatelessWidget {
             open: filter.isNotEmpty || isGroupOpen(path, group.collapsed),
             onToggle: () => onToggleGroup(path, group.collapsed),
             onReset: _resetRows(id, run),
-            rows: foldRows(run),
+            rows: foldRows(run, lined: false),
           ));
         }
       } else if (memberOf.containsKey(param.id)) {
@@ -3461,7 +3499,7 @@ class _EffectSection extends StatelessWidget {
             !byFirstMember.containsKey(params[i].id) &&
             !memberOf.containsKey(params[i].id) &&
             flat.length < 2 &&
-            param.id.endsWith('_x')) {
+            (param.id.endsWith('_x') || swapFor(param, params[i]) != null)) {
           flat.add(params[i]);
           i += 1;
         }
@@ -3626,6 +3664,107 @@ class _ParamGroupSection extends StatelessWidget {
             ),
         ],
       );
+}
+
+/// Two paired colour rows, with the swap button on the line between them in
+/// the column after the droppers. They are one widget so the button answers
+/// the pointer on both halves. [lined] draws the section's line between them,
+/// broken where the button sits so it shows on any background.
+class _SwapPair extends StatefulWidget {
+  final Widget first;
+  final Widget second;
+  final String swapKey;
+  final ({String label, VoidCallback onSwap}) swap;
+  final bool lined;
+
+  const _SwapPair({
+    required this.first,
+    required this.second,
+    required this.swapKey,
+    required this.swap,
+    required this.lined,
+  });
+
+  @override
+  State<_SwapPair> createState() => _SwapPairState();
+}
+
+class _SwapPairState extends State<_SwapPair> {
+  final link = LayerLink();
+
+  @override
+  Widget build(BuildContext context) {
+    final _SwapPair(:first, :second, :swapKey, :swap, :lined) = widget;
+    final t = ThemeScope.of(context).theme;
+    final strip = FxKeyStripScope.widthOf(context);
+    return LayoutBuilder(builder: (context, c) {
+      // Past the stopwatch and the name, then the swatch, the dropper and
+      // the gap after it, as the colour row lays them out.
+      final at = fxKeyColumnWidth +
+          4 +
+          fxLabelWidthFor(c.maxWidth - strip) +
+          6 +
+          colourSwatchWidth +
+          colourSwatchGap +
+          dropperWidth +
+          4;
+      Widget line() => SizedBox(
+          height: 1, child: lined ? ColoredBox(color: t.hairline) : null);
+      // The line runs into the section's 10px side padding, as its own do.
+      final between = SizedBox(
+        height: lined ? 5 : 0,
+        child: OverflowBox(
+          maxWidth: c.maxWidth + 20,
+          minWidth: c.maxWidth + 20,
+          child: Row(children: [
+            SizedBox(width: 10 + at, child: line()),
+            CompositedTransformTarget(
+                link: link, child: const SizedBox(width: 18, height: 1)),
+            Expanded(child: line()),
+          ]),
+        ),
+      );
+      return Stack(children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [first, between, second],
+        ),
+        // A follower is hit where it is drawn, so the button answers on
+        // both rows.
+        Positioned(
+          left: 0,
+          top: 0,
+          child: CompositedTransformFollower(
+            link: link,
+            targetAnchor: Alignment.center,
+            followerAnchor: Alignment.center,
+            child: LumitTooltip(
+              message: l10n.tipSwapColours(engineLabel(swap.label)),
+              child: HoverMark(
+                swells: true,
+                builder: (context, lit) => GestureDetector(
+                  key: ValueKey<String>(swapKey),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: swap.onSwap,
+                  child: SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: Center(
+                      child: glyph.LumitIcon(
+                        LumitIcons.swap,
+                        size: iconSize,
+                        colour: Color.lerp(t.textSecondary, t.textPrimary, lit),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ]);
+    });
+  }
 }
 
 class _TransformSection extends StatelessWidget {

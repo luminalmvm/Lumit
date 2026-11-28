@@ -526,6 +526,10 @@
      "body": "<path d=\"M8 2v12M2 8h12\"/><path d=\"M5 5l-1 1 1 1M11 5l1 1-1 1\" opacity=\".6\"/>"
     },
     {
+     "name": "Swap",
+     "body": "<path d=\"M5.5 13V3M3 5.5L5.5 3 8 5.5\"/><path d=\"M10.5 3v10M8 10.5l2.5 2.5 2.5-2.5\"/>"
+    },
+    {
      "name": "Selected key",
      "body": "<path d=\"M8 2l6 6-6 6-6-6z\" fill=\"currentColor\"/>",
      "comment": "Animated's diamond, filled. §5 bans a filled twin of an outlined idea as a *second meaning*; this is the same meaning in a second state, which is what a selected key is, and the Timeline draws the two side by side."

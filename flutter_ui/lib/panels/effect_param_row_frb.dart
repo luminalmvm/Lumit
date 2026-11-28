@@ -30,6 +30,7 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/shape.dart' show BridgeGradientStop;
 import 'package:lumit_flutter/src/rust/api/template.dart' show BridgeRowRef;
 import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/effect_colour_pairs.dart';
 import 'package:lumit_flutter/src/rust/api/graph.dart'
     show BridgeInputRef, BridgeNodeRef, BridgeOutputRef_Driver, BridgePortType;
 import 'package:provider/provider.dart';
@@ -100,6 +101,12 @@ double logSliderTravel(double value, double min, double max) {
 }
 
 const double effectCellWidth = 78;
+
+/// A colour row's swatch, the gap after it and its dropper. The swap button
+/// between two colour rows lines up past all three.
+const double colourSwatchWidth = 28;
+const double colourSwatchGap = 6;
+const double dropperWidth = 18;
 
 /// How many characters a choice's option can hold and still read whole in the
 /// ordinary dropdown. A longer one takes the column.
@@ -2072,7 +2079,7 @@ class EffectParamRowFrb extends StatelessWidget {
             child: HoverMark(
               swells: true,
               builder: (_, lit) => Container(
-                width: 28,
+                width: colourSwatchWidth,
                 height: 18,
                 decoration: BoxDecoration(
                   color: shown,
@@ -2084,7 +2091,7 @@ class EffectParamRowFrb extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: colourSwatchGap),
           // The dropper: lift this colour off the picture instead of choosing
           // it (docs/07 §6.1). **Dragging sweeps it**: the parameter
           // takes the colour under the pointer as it travels, previewed the
@@ -3317,6 +3324,11 @@ final Map<String, List<BridgeParamPair>> _pairSchema = {};
 List<BridgeParamPair> cachedListPairs(String effect) =>
     _pairSchema[effect] ??= listPairs(effect: effect);
 
+final Map<String, List<BridgeColourPair>> _colourPairSchema = {};
+
+List<BridgeColourPair> cachedListColourPairs(String effect) =>
+    _colourPairSchema[effect] ??= listColourPairs(effect: effect);
+
 String? pairStemOf(String effect, String xId) {
   for (final pair in cachedListPairs(effect)) {
     if (pair.x == xId) return pair.stem;
@@ -3939,7 +3951,7 @@ class DropperButton extends StatelessWidget {
             child: HoverMark(
               swells: true,
               builder: (context, over) => SizedBox(
-                width: 18,
+                width: dropperWidth,
                 height: 18,
                 child: Center(
                   child: LumitIcon(

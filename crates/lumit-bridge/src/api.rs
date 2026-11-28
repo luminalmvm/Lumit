@@ -23,6 +23,7 @@ pub mod cut;
 pub mod denoise;
 pub mod drive;
 pub mod effect;
+pub mod effect_colour_pairs;
 pub mod effect_duplicate;
 pub mod effect_presets;
 pub mod export;

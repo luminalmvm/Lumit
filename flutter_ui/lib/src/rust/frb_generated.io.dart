@@ -21,6 +21,7 @@ import 'api/cut/transcript.dart';
 import 'api/denoise.dart';
 import 'api/drive.dart';
 import 'api/effect.dart';
+import 'api/effect_colour_pairs.dart';
 import 'api/effect_presets.dart';
 import 'api/export.dart';
 import 'api/expressions.dart';
@@ -894,6 +895,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeColourNameRole dco_decode_bridge_colour_name_role(dynamic raw);
+
+  @protected
+  BridgeColourPair dco_decode_bridge_colour_pair(dynamic raw);
 
   @protected
   BridgeColourProblem dco_decode_bridge_colour_problem(dynamic raw);
@@ -2251,6 +2255,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeColourDisplay> dco_decode_list_bridge_colour_display(dynamic raw);
+
+  @protected
+  List<BridgeColourPair> dco_decode_list_bridge_colour_pair(dynamic raw);
 
   @protected
   List<BridgeColourProblem> dco_decode_list_bridge_colour_problem(dynamic raw);
@@ -4100,6 +4107,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeColourPair sse_decode_bridge_colour_pair(SseDeserializer deserializer);
+
+  @protected
   BridgeColourProblem sse_decode_bridge_colour_problem(
       SseDeserializer deserializer);
 
@@ -5673,6 +5683,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeColourDisplay> sse_decode_list_bridge_colour_display(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeColourPair> sse_decode_list_bridge_colour_pair(
       SseDeserializer deserializer);
 
   @protected
@@ -7745,6 +7759,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeColourNameRole self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_colour_pair(
+      BridgeColourPair self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_colour_problem(
       BridgeColourProblem self, SseSerializer serializer);
 
@@ -9486,6 +9504,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_list_bridge_colour_display(
       List<BridgeColourDisplay> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_colour_pair(
+      List<BridgeColourPair> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_bridge_colour_problem(
