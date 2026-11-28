@@ -224,10 +224,9 @@ pub fn info_of(
     })
 }
 
-/// Write the file, whole or not at all. Packs the files `sources` offers,
-/// which the caller lists in full: every frame of an image sequence, the
-/// files a 3D model reads and the colour config's tables. An item it does
-/// not offer keeps its path.
+/// Write the file, whole or not at all. Packs the files `sources` offers:
+/// every frame of a sequence, a 3D model's extra files and the colour
+/// config's tables. An item it does not offer keeps its path.
 ///
 /// `info` is written with what the archive ended up holding: each font
 /// handed over in `fonts` gets its entry, and `footage` lists the media

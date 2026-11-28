@@ -30,8 +30,6 @@ pub fn used(doc: &Document, comp: Uuid) -> Vec<(String, String)> {
                 add(&document.style.family, &document.style.face);
             }
         }
-        // A copy of another template keeps the fonts it set for itself in
-        // its rows, not in a Text layer.
         for inst in c.effects().filter(|inst| values::comp_of(inst).is_some()) {
             let template = Template {
                 controls: values::held(inst).controls,

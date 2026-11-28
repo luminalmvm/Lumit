@@ -857,9 +857,6 @@ pub fn unpack(
     Ok(out)
 }
 
-/// The files an open read out into `dir`, each named by its path from there
-/// as the archive entry was, so a colour config's tables keep their folders.
-/// A name starting with a dot is a copy cut short or the folder's marker.
 fn read_out_files(dir: &Path, under: &str, into: &mut Vec<HeldFile>) {
     for entry in fs::read_dir(dir).into_iter().flatten().flatten() {
         let leaf = entry.file_name().to_string_lossy().into_owned();
@@ -874,7 +871,6 @@ fn read_out_files(dir: &Path, under: &str, into: &mut Vec<HeldFile>) {
         } else {
             format!("{under}/{leaf}")
         };
-        // A link is never followed out of the folder.
         if meta.is_dir() {
             read_out_files(&entry.path(), &name, into);
         } else if meta.is_file() {
