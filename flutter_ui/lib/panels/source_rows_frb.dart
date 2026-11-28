@@ -17,6 +17,7 @@ import 'package:lumit_flutter/panels/effect_param_row_frb.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/expressions.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/retime.dart';
@@ -26,7 +27,10 @@ import 'package:lumit_flutter/widgets/autofill.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
+import '../icons/lumit_icon.dart';
+import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
+import '../state/comp_time.dart';
 import '../theme/theme.dart';
 import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
@@ -62,6 +66,8 @@ class SourceRowsFrb extends StatefulWidget {
 class _SourceRowsFrbState extends State<SourceRowsFrb> {
   TextEditingController? _text;
   TextEditingController? _expression;
+  String? _fault;
+  String? _faultOf;
 
   @override
   void dispose() {
@@ -105,6 +111,21 @@ class _SourceRowsFrbState extends State<SourceRowsFrb> {
       _expression?.dispose();
       _expression = ExpressionTextEditingController(text: expression);
     }
+    final asked = '${widget.layer.internallayerId}/$expression';
+    if (asked != _faultOf) {
+      _faultOf = asked;
+      _fault = expression.trim().isEmpty
+          ? null
+          : textExpressionFault(
+              expression: expression,
+              time: timeOfFrame(
+                  widget.comp,
+                  Provider.of<LumitUiState>(context, listen: false)
+                      .playheadFrame
+                      .value),
+              layer: widget.layer);
+    }
+    final fault = _fault;
 
     void write({
       String? body,
@@ -161,6 +182,15 @@ class _SourceRowsFrbState extends State<SourceRowsFrb> {
             width: double.infinity,
             style: t.mono,
             submitOnLostFocus: true,
+            leading: fault == null
+                ? null
+                : LumitTooltip(
+                    message: fault,
+                    maxWidth: 360,
+                    child: LumitIcon(LumitIcons.missing,
+                        size: 12, colour: t.error),
+                  ),
+            leadingInteractive: fault != null,
             autofill: ExpressionAutofillGenerator(),
             onSubmitted: (value) => write(expression: value),
           ),
