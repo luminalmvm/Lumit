@@ -608,6 +608,8 @@ class InterfaceSettings {
   /// width to spare and height to keep.
   ToolBarPosition toolBarPosition;
 
+  bool toolOptionsBeside;
+
   /// Whether a ranged parameter draws a track and thumb beside its number.
   ///
   /// On by default, because that is the row the spec draws and what every
@@ -716,6 +718,7 @@ class InterfaceSettings {
     this.compact = false,
     this.viewerBars = ViewerBars.auto,
     this.toolBarPosition = ToolBarPosition.auto,
+    this.toolOptionsBeside = false,
     this.rangeSliders = true,
     this.commandBox = true,
     this.rightClickOpensNodeSearch = false,
@@ -790,6 +793,7 @@ class InterfaceSettings {
         'compact': compact,
         'viewer_bars': viewerBars.name,
         'tool_bar_position': toolBarPosition.name,
+        'tool_options_beside': toolOptionsBeside,
         'range_sliders': rangeSliders,
         'command_box': commandBox,
         'right_click_opens_node_search': rightClickOpensNodeSearch,
@@ -943,6 +947,7 @@ class InterfaceSettings {
           (p) => p.name == j['tool_bar_position'],
           orElse: () => ToolBarPosition.auto,
         ),
+        toolOptionsBeside: j['tool_options_beside'] as bool? ?? false,
         // Absent means on: every install before the switch existed drew the
         // track, and a settings file written then keeps it.
         rangeSliders: j['range_sliders'] as bool? ?? true,

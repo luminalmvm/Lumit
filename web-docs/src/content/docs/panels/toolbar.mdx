@@ -10,6 +10,9 @@ import Shot from "../../../components/Shot.astro";
 The toolbar displays all available tools. Tools with several options open a flyout, and
 pressing the shortcut again steps through them.
 
+The highlight slides to the tool armed, or jumps with **Motion** at **None** in
+[Settings ▸ Appearance](/use/settings/#appearance). In the Desk style it fades across.
+
 In a narrow window the tools that do not fit go into **⋯** at the end of the row. Selection
 and the armed tool always stay on the row.
 
@@ -88,8 +91,15 @@ Vertical text is not built, and is left off the toolbar.
 
 ## Tool options
 
-If a tool has additional customisation, such as fill colour or stroke width, then these options appear to the 
-right-hand side of the tools when available.
+If a tool has additional customisation, such as fill colour or stroke width, then these
+options appear after the tools while it is armed. A set too long for its space scrolls. With
+the toolbar on the [left](#where-the-toolbar-stands) they are on the top line.
+
+**Options beside the tool**, in [Settings ▸ Appearance](/use/settings/#appearance) and in
+the top toolbar's right-click menu, opens them beside the armed tool's button instead,
+inside its highlight. They close when another tool is armed. Armed with the pointer on the
+tools, the earlier tool's options stay open until the pointer leaves. The switch is off as
+shipped, and does nothing with the toolbar on the left.
 
 | Tool | Options | As shipped |
 | --- | --- | --- |
@@ -109,6 +119,8 @@ right-hand side of the tools when available.
   See [Fills and strokes](/use/shapes/#fills-and-strokes).
 - **Hardness** runs from 0%, a brush that fades from its centre, to 100%, a hard edge.
 - **Pressure** lets a stylus's pressure widen the mark.
+
+Shape, Pen, Type and Paint each keep their own **Fill**, **Stroke** and **Width**.
 
 The options are kept until Lumit is closed, and are not saved with the project. **Reset
 tool options** in a tool's right-click menu puts that tool's back as shipped.

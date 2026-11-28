@@ -31,7 +31,7 @@ pub fn pair(
     };
     let native = nested.frame_rate.fps();
     let rate = p.read_fps_at(lt, native);
-    let speed = crate::retime::property_speed_at(layer.retime.as_ref(), lt);
+    let speed = layer.speed_at(lt);
     if !(native > 0.0 && p.engages(rate, comp_fps, speed)) {
         return None;
     }

@@ -626,3 +626,23 @@ fn template_data_is_linked_and_unlinked_through_its_op() {
     };
     assert!(ops::apply(&mut kit.doc, &nowhere).is_err());
 }
+
+#[test]
+fn a_font_a_copy_sets_for_itself_is_one_its_template_uses() {
+    let (mut kit, template) = kit::kit_with_template();
+    let mut inst = values::instance_for(kit.tpl, &template);
+    let brand = Value::Font {
+        family: "Brand".into(),
+        face: "Bold".into(),
+    };
+    assert!(values::set_value(
+        &mut inst,
+        control(&template, "font"),
+        &brand
+    ));
+    let show = kit::show(&mut kit, Some(inst), None);
+
+    let used = lumit_core::template::fonts::used(&kit.doc, show);
+    assert!(used.contains(&("Brand".into(), "Bold".into())));
+    assert!(used.contains(&("Inter".into(), "Regular".into())));
+}

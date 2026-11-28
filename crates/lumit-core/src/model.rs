@@ -14,6 +14,7 @@ mod light_file;
 mod material;
 mod media_ref;
 mod parent_placement;
+mod speed;
 
 /// Linear-light RGBA (docs/10-FILE-FORMAT.md §1.1).
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -2911,9 +2912,10 @@ impl TextDocument {
             return std::borrow::Cow::Owned(crate::captions::show::at(captions, &context).text);
         }
         match (&self.expression, &self.keys) {
-            (Some(e), _) => {
-                std::borrow::Cow::Owned(crate::expression::evaluate_text(e, Some(context)))
-            }
+            (Some(e), _) => match crate::expression::evaluate_text(e, Some(context)) {
+                Ok(words) => std::borrow::Cow::Owned(words),
+                Err(_) => std::borrow::Cow::Borrowed(&self.text),
+            },
             (None, Some(keys)) => {
                 std::borrow::Cow::Borrowed(keys.word_at(crate::text::keys::layer_time(&context)))
             }

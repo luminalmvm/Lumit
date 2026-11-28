@@ -28,7 +28,13 @@ import '../panels/graph_edits.dart';
 import '../panels/graph_maths.dart';
 import '../panels/preset_save.dart';
 import '../panels/layer_fold_frb.dart'
-    show asOneUndoStep, transformGroupPath;
+    show
+        asOneUndoStep,
+        everyFoldPath,
+        foldRowPath,
+        laneKeysOf,
+        layerFoldRows,
+        transformGroupPath;
 import '../panels/text_animation_presets.dart' show textPresetRows;
 import '../panels/transform_rows_frb.dart'
     show TransformSection, transformGroups;
@@ -217,10 +223,11 @@ bool toggleKeysAtPlayhead(
   return true;
 }
 
-/// Animation ▸ Set keyframe: a key at the playhead on every picked row, or the
-/// ones already there taken away, which is when the row says so.
+/// Animation ▸ Set keyframe: a key at the playhead on every picked row, else on
+/// the selected layers' keyed rows, or the ones there taken away.
 MenuEntry setKeyframeRow(LumitState app, LumitUiState ui) {
-  final channels = _keyable(selectedChannels(ui));
+  final picked = selectedChannels(ui);
+  final channels = _keyable(picked.isNotEmpty ? picked : _keyedRows(ui));
   return MenuEntry(
     _allKeyedAtPlayhead(ui, channels)
         ? l10n.tipRemoveKeyframe
@@ -228,6 +235,22 @@ MenuEntry setKeyframeRow(LumitState app, LumitUiState ui) {
     channels.isEmpty ? null : () => toggleKeysAtPlayhead(app, ui, channels),
     action: 'keyframe.toggle',
   );
+}
+
+List<GraphChannel> _keyedRows(LumitUiState ui) {
+  final ids = ui.selectedLayerIds;
+  return graphChannels(layers: ui.model.layers, selected: [
+    for (final entry in ui.model.layers)
+      if (ids.contains(entry.layer.internallayerId))
+        for (final row in layerFoldRows(
+          entry: entry,
+          open: everyFoldPath,
+          hasAudio: true,
+          volumeDb: entry.info.volumeDb,
+        ))
+          if (laneKeysOf(row).isNotEmpty)
+            foldRowPath('${entry.layer.internallayerId}', row),
+  ]);
 }
 
 /// The keyframe command for one Transform property of the selected layers:
