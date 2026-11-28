@@ -90,7 +90,7 @@ pub fn shown(layer: &Layer, comp_fps: f64, lt: f64, rate: f64, a: &Analysis) -> 
     }
     let (blend_on, sample_fps) = match layer.kind {
         LayerKind::Footage { .. } => {
-            let speed = crate::retime::property_speed_at(layer.retime.as_ref(), lt);
+            let speed = layer.speed_at(lt);
             let flow = match &layer.interpolation {
                 Interpolation::Flow(p) => p
                     .engages(p.read_fps_at(lt, rate), comp_fps, speed)

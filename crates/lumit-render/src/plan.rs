@@ -1033,7 +1033,7 @@ pub fn collect_comp_jobs(
                 // at 100% or faster every comp frame lands on a source frame,
                 // so there is no in-between frame to invent and the policy
                 // degrades to Nearest. `always` overrides.
-                let speed = lumit_core::retime::property_speed_at(layer.retime.as_ref(), lt);
+                let speed = layer.speed_at(lt);
                 let comp_fps = comp.frame_rate.fps();
                 let flow = match &layer.interpolation {
                     Interpolation::Flow(p) => p
